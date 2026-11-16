@@ -10,6 +10,7 @@ import { warmMenu } from "./header-menus.js";
 import { ssGet, ssSet } from "./storage.js";
 import { mgReduceMotion } from "./motion.js";
 import { launchMark, whenLaunchLanded } from "./launch-mark.js";
+import { bootFirstSignin, firstSigninStands, onFirstSigninClosed } from "./signin.js";
 import { fifthPhase } from "./fifth.js";
 
 let eReadyDone=false;
@@ -78,6 +79,7 @@ function deskLaunch(){
 
 function wireOnOpen(){
   deskLaunch();
+  bootFirstSignin(whenLaunchLanded);
   /* The saved interface language is on the chrome before the first paint. The landing
      waits only for what must follow it: the menu's warm copy, drawn once nothing moves. */
   markEReady();
@@ -92,7 +94,7 @@ function wireOnOpen(){
   // Re-assert after layout (paint / sticky chrome can steal focus)
   requestAnimationFrame(()=>requestAnimationFrame(focusFirstEntryOnOpen));
   /* Under a launch the Load button is hidden until the landing, which is when it takes the focus. */
-  formed(focusEmptyLoadOnOpen);
+  formed(()=>{ if(firstSigninStands()) onFirstSigninClosed(focusEmptyLoadOnOpen); else focusEmptyLoadOnOpen(); });
   // A shift crosses 12:00 or 18:00 with the page still open - re-render on the boundary
   // so the greeting never goes stale mid-session.
   lastGreet=greeting();

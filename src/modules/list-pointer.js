@@ -20,8 +20,10 @@ import { hooks } from "./hooks.js";
 import { withAgentName } from "./agent.js";
 import { activeHeard, tabPathStep } from "./tabs.js";
 import { useEditionMark } from "./edition-marks.js";
+import { flagPressed, showFlagAnswer } from "./card-flag-desk.js";
 import { eHost, eHotkey, eHotkeyLabel } from "./host.js";
 import { nsGet, nsSet } from "./storage.js";
+import { openRewordMenu, approveReword, revertReword } from "./card-reword.js";
 
 // ---- card drag-reorder (within same relevance band only) ----------------
 let cardDrag=null, cardSwapLock=0, cardSuppressClick=false;
@@ -400,6 +402,20 @@ function wireListPointer(){
     }
     if(cardSuppressClick){ cardSuppressClick=false; return; }
     if(txtSuppressClick){ txtSuppressClick=false; return; }
+    const flagMark=e.target.closest('.chead [data-act="flag-answer"]');
+    if(flagMark){
+      e.preventDefault(); e.stopPropagation();
+      const card=flagMark.closest(".card");
+      if(card && card.dataset.id) showFlagAnswer(card.dataset.id);
+      return;
+    }
+    const rwBtn=e.target.closest(".rw-ans button[data-rw]");
+    if(rwBtn){
+      e.preventDefault(); e.stopPropagation();
+      const card=rwBtn.closest(".card"), id=card && card.dataset.id;
+      if(id){ if(rwBtn.dataset.rw==="approve") approveReword(id); else revertReword(id); }
+      return;
+    }
     const actBtn=e.target.closest(".cacts button");
     if(actBtn){
       e.preventDefault(); e.stopPropagation();
@@ -410,6 +426,8 @@ function wireListPointer(){
       if(act==="fav"){ if(id) flipCardsAround(()=>toggleFavourite(id)); }
       else if(act==="edit") hooks.openCardEditor(id);
       else if(act==="note") toggleNotePane(actBtn, id);
+      else if(act==="flag"){ if(id) flagPressed(id); }
+      else if(act==="reword") openRewordMenu(actBtn, id);
       else if(act==="hide") flipCardsAround(()=>hooks.hideCard(id), card.classList.contains("is-hidden") ? null : {leave:id});
       return;
     }
@@ -465,7 +483,7 @@ function manualToastMsg(m, l, vi, total){
     const h = eHost(), hk = eHotkey();
     if(h && typeof h.openPicker === "function" && hk && hk.held){
       nsSet("PickerHint", "1");
-      return t("Copied. Next time, {KEYS} opens the replies over any window and pastes the one chosen.").replace("{KEYS}", eHotkeyLabel(hk.accel));
+      return t("Copied: paste it into the chat with Ctrl+V. Next time, {KEYS} opens Quick replies over any window and pastes the one chosen.").replace("{KEYS}", eHotkeyLabel(hk.accel));
     }
   }
   return copiedToastMsg(m, l, vi, total);

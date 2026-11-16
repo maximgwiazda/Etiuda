@@ -31,11 +31,12 @@
  * READING THE SHAPE OF THE EDIT, NOT THE BEHAVIOUR, and its reddening under `noop` proves
  * nothing. Run the control before believing the sweep.
  *
- * THE TREE. A mutation is written, the artefact rebuilt, the chain run, and the three touched
- * paths restored with `git checkout --`, which restores TO HEAD: this file must be committed
- * before the sweep or the sweep deletes it. The run refuses to start on a dirty src/ or engine/,
- * and refuses to continue if a restore leaves anything behind. Records go OUTSIDE the tree,
- * beside gate-run's, because a record of a run is not part of the tree it judges.
+ * THE TREE. A mutation is written, the artefact rebuilt, the chain run, and the touched paths
+ * brought back. A path git tracks is checked out to HEAD, which is why this file must be
+ * committed before a sweep. An engine output git does not track is rebuilt from the restored
+ * source, so the page comes back either way. The run refuses to start on a dirty src/ or
+ * engine/, and refuses to continue if a restore leaves anything behind. Records go OUTSIDE
+ * the tree, beside gate-run's, because a record of a run is not part of the tree it judges.
  *
  * THE READING IS A SECOND IMPLEMENTATION. The steps come from package.json split on `&&`, the
  * same rule tools/gate-run.mjs uses, but the counting here is this file's own: `baseline`
@@ -47,6 +48,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { OUTPUTS, RECORD_FILE } from './build.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MODULES = path.join(ROOT, 'src', 'modules');
@@ -63,8 +65,20 @@ function die(msg, how) {
 function git(args) {
   return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' });
 }
-function dirty() {
-  return git(['status', '--porcelain', '--', 'src', 'engine']).trim();
+/* Untracked copies of the build's own outputs are the build's, not a dirty source. A tracked
+   change still is, and so is any other untracked file. */
+export function dirty() {
+  const quiet = new Set([...OUTPUTS, RECORD_FILE].map(abs =>
+    path.relative(ROOT, abs).split(path.sep).join('/')));
+  return git(['status', '--porcelain', '--untracked-files=all', '--', 'src', 'engine'])
+    .split(/\r?\n/)
+    .filter(line => {
+      if (!line) return false;
+      if (!line.startsWith('?? ')) return true;
+      const rel = line.slice(3).trim().replace(/\\/g, '/').replace(/^"|"$/g, '');
+      return !quiet.has(rel);
+    })
+    .join('\n');
 }
 
 /* ------------------------------------------------------------------ the mutation */
@@ -185,9 +199,35 @@ function build() {
 
 /* ------------------------------------------------------------------ one case */
 
+/* A directory counts as tracked when any file under it is. checkout of a path git does not
+   track throws, so those paths are skipped and named. */
+export function checkoutKnown(paths) {
+  const tracked = [], skipped = [];
+  for (const p of paths) {
+    if (git(['ls-files', '--', p]).trim()) tracked.push(p);
+    else skipped.push(p);
+  }
+  if (tracked.length) git(['checkout', '--', ...tracked]);
+  return { tracked, skipped };
+}
+
+const engineOutput = new Set([...OUTPUTS, RECORD_FILE].map(abs =>
+  path.relative(ROOT, abs).split(path.sep).join('/')));
+
+/* Once the source is back, an output that was not checked out is written by the build. */
+export function restoreAblation(paths) {
+  const result = checkoutKnown(paths);
+  const skippedOutput = result.skipped.some(p => engineOutput.has(String(p).split(path.sep).join('/')));
+  if (skippedOutput) {
+    const b = build();
+    if (b.exit !== 0) die('the build did not write the page', b.text);
+  }
+  return result;
+}
+
 function restore(rel) {
   const paths = TOUCHED.map(p => p.replace('__NAME__', rel));
-  git(['checkout', '--', ...paths]);
+  restoreAblation(paths);
   const left = dirty();
   if (left) die('the tree did not come back after ' + rel + ': ' + left.replace(/\n/g, ' ; '),
     'nothing further is run; restore by hand before trusting anything');
@@ -282,6 +322,8 @@ function head() {
 
 if (cmd === 'baseline') {
   const h = head();
+  const built = build();
+  if (built.exit !== 0) die('the build did not write the page', built.text);
   const steps = stepsOf(CHAINS);
   const t0 = Date.now();
   const gates = runChain(steps, false);
@@ -335,7 +377,7 @@ if (cmd === 'total') {
         : 'the artefact carries no marker', artefact: art, gates: [] };
     else out = { artefact: art, gates: runChain(steps, false) };
   } finally {
-    git(['checkout', '--', 'src/modules', 'engine/etiuda.html', 'engine/etiuda.csp.json']);
+    restoreAblation(['src/modules', 'engine/etiuda.html', 'engine/etiuda.csp.json', 'engine/bubble.css']);
     const l = dirty();
     if (l) die('the tree did not come back: ' + l.replace(/\n/g, ' ; '));
   }

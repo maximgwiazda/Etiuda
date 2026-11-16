@@ -293,7 +293,9 @@ function shellLaunch(who, exe, args, options) {
   }
   /* The main-process crash guard: loaded into Electron before the app so an uncaught exception prints to stderr rather than raising a native dialog. */
   const guard = path.join(__dirname, "no-crash-dialog.js").replace(/\\/g, "/");
-  const guardOpt = '--require "' + guard + '"';
+  /* And reg.exe stood in, so the launched shell reads no part of this machine's registry (tests/reg-stand-preload.cjs). */
+  const regStandAt = path.join(__dirname, "reg-stand-preload.cjs").replace(/\\/g, "/");
+  const guardOpt = '--require "' + guard + '" --require "' + regStandAt + '"';
   opts.env.NODE_OPTIONS = opts.env.NODE_OPTIONS ? opts.env.NODE_OPTIONS + " " + guardOpt : guardOpt;
   return spawn(exe, args, opts);
 }

@@ -1,5 +1,5 @@
 import { eApplyCatalog, eResetCatalog, eCatalog, eCatalogAccepted, storedCatalog } from "./catalog.js";
-import { layerNsOf, orbitOldLayer, setLayer } from "./storage.js";
+import { layerNsOf, setLayer } from "./storage.js";
 
 /* The catalog this start applies, or null for the empty desk. */
 function bootCatalog(){
@@ -19,7 +19,6 @@ function applyBootCatalog(){
   E_APPLIED=bootCatalog();
   if(E_APPLIED) eApplyCatalog(E_APPLIED);
   setLayer(layerNsOf(E_APPLIED));
-  orbitOldLayer();
 }
 
 export {

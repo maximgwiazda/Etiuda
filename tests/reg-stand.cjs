@@ -27,6 +27,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { syncBuiltinESMExports } = require("node:module");
+const STAND = Symbol.for("etiuda.reg-stand");
 
 const norm = (x) => String(x).replace(/\//g, "\\");
 const HIVE = /^(?:HKLM|HKEY_LOCAL_MACHINE)(?:\\|$)/i;
@@ -140,6 +141,8 @@ function regStand(real, opts) {
       return pass(file, "spawn", arguments);
     },
   });
+  /* The shell refuses a reg call outside Electron unless the function making it carries this mark (shell/win-proxy.cjs, regOpts). */
+  for (const k of ["execFileSync", "execFile", "execSync", "exec", "spawnSync"]) real[k][STAND] = true;
   syncBuiltinESMExports();
   const policyReads = () => calls.export + calls.query + calls.other;
   /* On Windows at least one policy read answered here and no other key of the machine's hive asked for; off Windows,
@@ -153,4 +156,17 @@ function regStand(real, opts) {
   return { calls, held, said, total: policyReads };
 }
 
-module.exports = { regStand, connectionsBlob, connDump };
+/* A leg's own stand-in for child_process's run functions, marked so the shell's guard (shell/win-proxy.cjs, regOpts) lets its
+ * reg calls through. Node's own functions are never marked: a leg that passes one is refused here, since marking it would let
+ * every later reg call in the process reach the machine. Returns the first function. */
+function markStand(...fns) {
+  const own = Object.values(require("node:child_process"));
+  for (const f of fns) {
+    if (typeof f !== "function") continue;
+    if (own.includes(f) && f[STAND] !== true) throw new Error("reg-stand: node's own child_process function is not a stand-in");
+    f[STAND] = true;
+  }
+  return fns[0];
+}
+
+module.exports = { regStand, markStand, connectionsBlob, connDump };

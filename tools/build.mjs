@@ -9,7 +9,8 @@
 //
 // The build options are `bundler-probe`'s, unchanged, so the conditions spec 9 binds are proved
 // by that probe rather than restated here.
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -24,9 +25,12 @@ export const PIN_FILE = join(ROOT, 'engine', 'etiuda.csp.json');
 // The bubble, published on its own so a second program renders the family from these bytes
 // rather than from a copy of them. See bubbleCss() below.
 export const CSS_FILE = join(ROOT, 'engine', 'bubble.css');
-// Every file this build writes. tests/build-fresh.mjs reads this rather than a list of its own,
-// so a new output cannot be added here and left outside the freshness gate.
+// The files a reader of the page needs. tests/build-fresh.mjs reads this list rather than one of
+// its own, so a new output cannot be added here and left outside the freshness gate.
+// The build record is a fourth file, written beside these and left out of this list on purpose:
+// it is gitignored, and the freshness gate compares committed bytes.
 export const OUTPUTS = [OUT_FILE, PIN_FILE, CSS_FILE];
+export const RECORD_FILE = join(ROOT, 'engine', 'etiuda.build.json');
 const ANCHOR = '/*@APP*/\n';
 const BUB_BEGIN = '/*@BUBBLE-BEGIN*/\n', BUB_END = '/*@BUBBLE-END*/\n';
 
@@ -102,6 +106,147 @@ export function stampFor(previous, htmlAt, day) {
   return kept && htmlAt(kept) === previous ? kept : day;
 }
 
+/* A day the caller handed in. Empty is the same as absent. Anything else that is not a real
+   calendar day is refused before a single file is written, and the value itself is not repeated. */
+export function calendarDay(s) {
+  if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const y = +s.slice(0, 4), m = +s.slice(5, 7), d = +s.slice(8, 10);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+export function handedDay() {
+  const raw = process.env.ETIUDA_BUILD_DAY;
+  if (raw === undefined || raw === '') return null;
+  if (!calendarDay(raw)) throw new Error('ETIUDA_BUILD_DAY is not a day (YYYY-MM-DD); nothing was written'); /* plant:build-day */
+  return raw;
+}
+
+/* What a clean tree is judged on. A change outside this list does not move the day. A change
+   to a file's time alone is not a change: git status is the record. */
+export const INPUTS = [
+  'src',
+  'tools/build.mjs',
+  'tools/bundler-probe/build.mjs',
+  'shell/license_en.txt',
+  'shell/license_pl.txt',
+];
+
+export const COMMIT_DAY = 'ETIUDA_BUILD_COMMIT_DAY';
+/* Off unless ETIUDA_BUILD_COMMIT_DAY is exactly 1. On, the day is the committer date the
+   commit records (git log -1 --format=%cs). That recorded date does not depend on the
+   machine's time zone, and a shallow clone reads the same day. Today is used only when an
+   input is uncommitted. A tree with no repository takes the handed-in day, or today. */
+export function commitDayOn() {
+  return process.env[COMMIT_DAY] === '1';
+}
+
+function gitOut(args) {
+  try {
+    const out = execFileSync('git', args, {
+      cwd: ROOT,
+      encoding: 'utf8',
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return { ok: true, out: out || '' };
+  } catch (e) {
+    const err = String((e && e.stderr) || '') + String((e && e.message) || '');
+    const noRepo = !!(e && (e.status === 128 || /not a git repository/i.test(err)));
+    return { ok: false, noRepo, err };
+  }
+}
+
+/* null when this folder is not a repository, true when an input differs from the commit. */
+export function inputsDirty() {
+  const st = gitOut(['status', '--porcelain', '--untracked-files=all', '--', ...INPUTS]);
+  if (!st.ok) {
+    if (st.noRepo) return null;
+    throw new Error('the build could not read git status; nothing was written');
+  }
+  return st.out.trim() !== '';
+}
+
+function committerDay() {
+  const r = gitOut(['log', '-1', '--format=%cs']);
+  if (!r.ok) return null;
+  const line = r.out.trim();
+  return calendarDay(line) ? line : null;
+}
+
+function dayUnhanded(previous, htmlAt) {
+  if (!commitDayOn()) return stampFor(previous, htmlAt, today());
+  const dirty = inputsDirty();
+  if (dirty === null || dirty === true) return today();
+  return committerDay() || today();
+}
+
+function dayFor(previous, htmlAt) {
+  const handed = handedDay();
+  if (handed) return handed;
+  return dayUnhanded(previous, htmlAt);
+}
+
+/* One digest of every input, in path order. A symlink is not walked, so a link cannot add a
+   directory the tree did not mean to hash. The bytes are the file's own, and the path is a
+   forward-slash path from the repository root. */
+function inputFiles() {
+  const found = [];
+  const walk = rel => {
+    const abs = join(ROOT, ...rel.split('/'));
+    const st = lstatSync(abs);
+    if (st.isSymbolicLink()) return;
+    if (st.isDirectory()) {
+      for (const ent of readdirSync(abs, { withFileTypes: true })) {
+        if (ent.isSymbolicLink()) continue;
+        const child = rel + '/' + ent.name;
+        if (ent.isDirectory()) walk(child);
+        else if (ent.isFile()) found.push(child);
+      }
+      return;
+    }
+    if (st.isFile()) found.push(rel);
+  };
+  for (const rel of INPUTS) walk(rel.split('\\').join('/'));
+  found.sort();
+  return found;
+}
+function inputDigest() {
+  const h = createHash('sha256');
+  for (const rel of inputFiles()) {
+    const body = readFileSync(join(ROOT, ...rel.split('/')));
+    h.update(rel + '\0' + createHash('sha256').update(body).digest('hex') + '\n', 'utf8');
+  }
+  return h.digest('hex');
+}
+
+/* Whether the three outputs are this source at the day a build now would stamp. File times are
+   not read. A second bundle is not built: when the input digest matches and the page's stamp
+   matches the record, that stamp is the day, unless a handed-in day or the commit-day switch
+   names a different one. */
+export function outputsCurrent() {
+  try {
+    for (const file of OUTPUTS) if (!existsSync(file)) return false;
+    let record;
+    try { record = JSON.parse(readFileSync(RECORD_FILE, 'utf8')); }
+    catch { return false; }
+    if (!record || record.kind !== 'etiuda-build-record' || record.schema !== 1) return false;
+    if (typeof record.day !== 'string' || typeof record.inputs !== 'string') return false;
+    if (record.inputs !== inputDigest()) return false;
+    let html = '';
+    try { html = readFileSync(OUT_FILE, 'utf8'); } catch { return false; }
+    if (builtStamp(html) !== record.day) return false;
+    let handed = null;
+    try { handed = handedDay(); } catch { return false; }
+    if (handed) return handed === record.day;
+    if (!commitDayOn()) return true;
+    const dirty = inputsDirty();
+    const day = (dirty === null || dirty === true) ? today() : (committerDay() || today());
+    return day === record.day;
+  } catch {
+    return false;
+  }
+}
+
 // LF in this tree. A CR reaching the artifact would report as every line changed in the next
 // diff, so it is refused at the source rather than explained afterwards.
 function read(name) {
@@ -112,6 +257,7 @@ function read(name) {
 
 export async function build() {
   const t0 = Date.now();
+  handedDay();
   // absWorkingDir pins the module banners esbuild writes above each module to paths relative to
   // this repository. Without it they are relative to the caller's directory, and this artifact
   // is published.
@@ -132,9 +278,10 @@ export async function build() {
   const htmlAt = day => template.split(ANCHOR).join(bundle.split(BUILT_SLOT).join(JSON.stringify(day)));
   let previous = '';
   try { previous = readFileSync(OUT_FILE, 'utf8'); } catch { /* a first build */ }
-  const day = stampFor(previous, htmlAt, today());
+  const day = dayFor(previous, htmlAt);
   const html = htmlAt(day);
   if (builtStamp(html) !== day) throw new Error('the build day ' + day + ' cannot be read back out of the artifact');
+  const inputs = inputDigest();
   writeFileSync(OUT_FILE, html, 'utf8');
   const hashes = scriptHashes(html);
   if (hashes.length !== 2)
@@ -142,17 +289,25 @@ export async function build() {
   writeFileSync(PIN_FILE, JSON.stringify({ kind: 'etiuda-script-hashes', schema: 1, hashes }) + '\n', 'utf8');
   const css = bubbleCss(template);
   writeFileSync(CSS_FILE, css, 'utf8');
+  writeFileSync(RECORD_FILE, JSON.stringify({
+    kind: 'etiuda-build-record', schema: 1, day, inputs,
+  }) + '\n', 'utf8');
   return { bytes: Buffer.byteLength(html, 'utf8'), bundleBytes: Buffer.byteLength(bundle, 'utf8'),
            cssBytes: Buffer.byteLength(css, 'utf8'),
            sha256: sha256(html), hashes, ms: Date.now() - t0 };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const before = (() => { try { return sha256(readFileSync(OUT_FILE, 'utf8')); } catch { return '(absent)'; } })();
-  const r = await build();
-  console.log('engine/etiuda.html  ' + r.bytes + ' bytes, ' + r.bundleBytes + ' of them the bundle, ' + r.ms + ' ms');
-  console.log('  was ' + before.slice(0, 16));
-  console.log('  now ' + r.sha256.slice(0, 16));
-  console.log('engine/etiuda.csp.json  ' + r.hashes.length + ' pinned script hash(es)');
-  console.log('engine/bubble.css  ' + r.cssBytes + ' bytes');
+  try {
+    const before = (() => { try { return sha256(readFileSync(OUT_FILE, 'utf8')); } catch { return '(absent)'; } })();
+    const r = await build();
+    console.log('engine/etiuda.html  ' + r.bytes + ' bytes, ' + r.bundleBytes + ' of them the bundle, ' + r.ms + ' ms');
+    console.log('  was ' + before.slice(0, 16));
+    console.log('  now ' + r.sha256.slice(0, 16));
+    console.log('engine/etiuda.csp.json  ' + r.hashes.length + ' pinned script hash(es)');
+    console.log('engine/bubble.css  ' + r.cssBytes + ' bytes');
+  } catch (e) {
+    console.error(e && e.message ? e.message : String(e));
+    process.exit(1);
+  }
 }

@@ -46,7 +46,8 @@ function linuxIcons() {
 // THE CARET HELPER (shell/caret.cs) is compiled for every Windows pack by the C# compiler Windows
 // carries, into the output folder like the Linux icons, and goes beside the asar where the shell finds
 // it. Without the compiler nothing is written and the pack carries no helper, which tools/package.mjs
-// refuses for an installer. -noconfig keeps csc's default libraries out, Windows Forms among them.
+// refuses for an installer. -noconfig keeps csc's default libraries out, Windows Forms among them; UI Automation's two client
+// libraries, which the selection is read through, come from the WPF folder beside the compiler.
 const CARET = path.resolve(output, ".caret", "caret.exe");
 function caretHelper() {
   const csc = path.join(process.env.WINDIR || "C:/Windows", "Microsoft.NET", "Framework64", "v4.0.30319", "csc.exe");
@@ -56,7 +57,8 @@ function caretHelper() {
   }
   fs.mkdirSync(path.dirname(CARET), { recursive: true });
   require("node:child_process").execFileSync(csc, ["-noconfig", "-nologo", "-optimize", "-target:winexe", "-platform:anycpu",
-    "-r:System.dll", "-out:" + CARET, path.resolve(__dirname, "shell", "caret.cs")], { stdio: "inherit" });
+    "-r:System.dll", "-lib:" + path.join(path.dirname(csc), "WPF"), "-r:UIAutomationClient.dll", "-r:UIAutomationTypes.dll",
+    "-out:" + CARET, path.resolve(__dirname, "shell", "caret.cs")], { stdio: "inherit" });
 }
 
 // GOOGLE'S CLIENT SECRET (tools/signin-secret.cjs): copied into resources only when ETIUDA_GOOGLE_CLIENT_SECRET is set for the

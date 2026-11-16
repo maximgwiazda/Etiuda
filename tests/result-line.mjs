@@ -29,7 +29,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { WINDOWS_VAR } from "./engine.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -43,7 +43,7 @@ const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. One leg is platform-bound: where a short
    path cannot be made it prints SKIP, and the floor counts that skip so both runs still meet it. */
-const EXPECTED = 121;  /* 113, +5 an area run carrying on after a test-only fix (ar1 to ar5), +3 what a test reads or starts by name (ar6 to ar8) */
+const EXPECTED = 138;  /* 113, +5 an area run carrying on after a test-only fix (ar1 to ar5), +3 what a test reads or starts by name (ar6 to ar8), +1 the same tree carries its own greens (ar9), +3 the same outside carries the floor and a single argument gate (ar10 to ar12), +5 what the base saw a lister list (ar13 to ar17), +7 what the preload sees (ar18 to ar24), +1 a real area line records it (ar25) */
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
@@ -87,11 +87,12 @@ function areaResumeLegs() {
     args: n === "d" ? ["--x"] : [] }));
   const line = (b, extra) => JSON.stringify(Object.assign({ gate: "area", tree: l.lab, head: b.head, gitTree: b.tree,
     counts: { exitCode: 1 }, gates: ["a", "b", "w", "d", "pick", "c"].map(n => ({ gate: "tests-" + n, exit: n === "c" ? 1 : 0 })) }, extra || {}));
-  const ask = () => {
+  const ask = (steps, mark) => {
     const driver = path.join(l.root, "ask.mjs");
     fs.writeFileSync(driver, "import { pathToFileURL } from 'node:url';\n"
       + "const m = await import(pathToFileURL(" + JSON.stringify(path.join(l.lab, "tools", "gate-run.mjs")) + ").href);\n"
-      + "const r = m.planAreaResume(" + JSON.stringify(l.lab) + ", " + JSON.stringify(STEPS) + ", process.argv[2], " + JSON.stringify(chains) + ");\n"
+      + "const r = m.planAreaResume(" + JSON.stringify(l.lab) + ", " + JSON.stringify(steps || STEPS) + ", process.argv[2], " + JSON.stringify(chains)
+      + (mark === undefined ? "" : ", " + JSON.stringify(mark)) + ");\n"
       + "console.log(JSON.stringify({ reason: r.reason || '', carried: r.carried || null, run: r.steps ? r.steps.map(x => x.file) : null }));\n");
     const tree = g("rev-parse", "HEAD^{tree}").stdout.trim();
     const r = spawnSync(process.execPath, [driver, tree], { cwd: l.lab, encoding: "utf8", timeout: 30000,
@@ -122,6 +123,90 @@ function areaResumeLegs() {
   fs.writeFileSync(chains, line({ head: first.head, tree: third.tree }) + "\n");
   const e = ask();
   check(e.carried === null && /no area run/.test(e.reason), "ar5 a base whose recorded git tree is not its head's is not carried on from: " + said(e));
+
+  /* ar9: THE SAME TREE, stopped by a red with nothing changed since (a load flake): every green plain gate carries, a gate that lists
+     a folder included, since nothing it could list has changed; the gate that ended the run, the floor and a gate with an argument
+     still run (Claude alpha's question of 2026-11-15: a stop cost a rerun of about 130 gates because little carried). */
+  const now = { head: g("rev-parse", "--short", "HEAD").stdout.trim(), tree: g("rev-parse", "HEAD^{tree}").stdout.trim() };
+  fs.writeFileSync(chains, line(now) + "\n");
+  const f = ask();
+  check(JSON.stringify(f.carried) === '["tests-a","tests-b","tests-w"]',
+    "ar9 on the same tree a stopped run's greens carry, the folder-lister w included; c (ended the run), d (an argument) and the floor run: " + said(f));
+
+  /* ar10 to ar12: THE SAME TREE WITH THE SAME OUTSIDE (outsideMark; Claude alpha's count of 2026-11-15). Where the stopped run's mark
+     of what it read from outside the tree is the mark now, the floor's pick and the argument gate d carry too; a changed mark carries
+     them not; an argument gate whose file is run twice in the plan never carries, since both runs share one gate name. */
+  fs.writeFileSync(chains, line(now, { outside: "mark-1" }) + "\n");
+  const h = ask(undefined, "mark-1");
+  check(JSON.stringify(h.carried) === '["tests-a","tests-b","tests-w","tests-d","tests-pick"]',
+    "ar10 on the same tree with the same outside mark the floor's pick and the argument gate d carry too; c (ended the run) runs: " + said(h));
+  const i = ask(undefined, "mark-2");
+  check(JSON.stringify(i.carried) === '["tests-a","tests-b","tests-w"]',
+    "ar11 a changed outside mark carries the floor and the argument gate not: " + said(i));
+  const twice = STEPS.concat([{ file: "tests/d.mjs", cmd: "node tests/d.mjs --y", args: ["--y"] }]);
+  const k = ask(twice, "mark-1");
+  check(JSON.stringify(k.carried) === '["tests-a","tests-b","tests-w","tests-pick"]',
+    "ar12 an argument gate whose file runs twice in the plan does not carry, the two runs sharing one gate name: " + said(k));
+
+  /* ar13 to ar17: WHAT THE BASE SAW A GATE LIST (tools/listed-preload.mjs; Claude alpha's count of 2026-11-16: fold 98's area resumed
+     twice after a tests-only mend and reran 121 of 146 gates). After a change under tests/ alone, the folder-lister w carries where
+     its last run listed nothing under tests/ ("reads": "none"), runs where it listed tests/ or left no record, carries on a base
+     that carried it as quiet, and runs whatever its record where its own file changed. */
+  const base2 = { head: g("rev-parse", "--short", "HEAD").stdout.trim(), tree: g("rev-parse", "HEAD^{tree}").stdout.trim() };
+  const readsW = r => ["a", "b", "w", "d", "pick", "c"].map(n => Object.assign({ gate: "tests-" + n, exit: n === "c" ? 1 : 0 }, n === "w" && r ? { reads: r } : {}));
+  commit({ "tests/a.mjs": OK + "// third\n" }, "a third");
+  fs.writeFileSync(chains, line(base2, { gates: readsW("none") }) + "\n");
+  const m13 = ask();
+  check(JSON.stringify(m13.carried) === '["tests-b","tests-w"]',
+    "ar13 after a change under tests/ alone the folder-lister w carries where its last run listed nothing under tests/: " + said(m13));
+  fs.writeFileSync(chains, line(base2, { gates: readsW("tests") }) + "\n");
+  const m14 = ask();
+  check(JSON.stringify(m14.carried) === '["tests-b"]', "ar14 a lister whose last run listed tests/ runs again: " + said(m14));
+  fs.writeFileSync(chains, line(base2, { gates: readsW(null) }) + "\n");
+  const m15 = ask();
+  check(JSON.stringify(m15.carried) === '["tests-b"]', "ar15 a lister with no record runs again: " + said(m15));
+  fs.writeFileSync(chains, line(base2, { gates: readsW(null).filter(x => x.gate !== "tests-w"), carried: ["tests-w"], quiet: ["tests-w"] }) + "\n");
+  const m16 = ask();
+  check(JSON.stringify(m16.carried) === '["tests-b","tests-w"]', "ar16 a base that carried w as quiet lends it again: " + said(m16));
+  commit({ "tests/w.mjs": 'import fs from "node:fs";\nfs.readdirSync(".");\n' + OK + "// changed\n" }, "w changed");
+  fs.writeFileSync(chains, line(base2, { gates: readsW("none") }) + "\n");
+  const m17 = ask();
+  check(JSON.stringify(m17.carried) === '["tests-b"]', "ar17 a quiet lister whose own file changed runs again: " + said(m17));
+}
+
+/* ---- 24 (m to s). WHAT THE PRELOAD SEES (tools/listed-preload.mjs). Each case is one node process started with the preload in
+   NODE_OPTIONS, the way an area gate starts, in a lab with src/ and tests/; the record says "tests" for what a change under tests/
+   could alter, and only "loaded" otherwise. A program that is not node is started without the preload's variables. */
+function listedPreloadLegs() {
+  const l = makeLab("listed", {}, { files: { "src/a.mjs": "export const a = 1;\n", "tests/fixtures/x.json": "{}\n" } });
+  const pre = path.join(ROOT, "tools", "listed-preload.mjs");
+  const flag = "--import " + pathToFileURL(pre).href;
+  let n = 0;
+  const seen = code => {
+    const out = path.join(l.root, "listed-" + (++n) + ".txt");
+    const r = spawnSync(process.execPath, ["--input-type=module", "-e", code], { cwd: l.lab, encoding: "utf8", timeout: 30000,
+      env: Object.assign({}, process.env, { ETIUDA_LISTED_OUT: out, ETIUDA_LISTED_ROOT: l.lab, NODE_OPTIONS: flag }) });
+    let text = "";
+    try { text = fs.readFileSync(out, "utf8"); } catch (e) {}
+    return { loaded: /^loaded /m.test(text), tests: /^tests /m.test(text), text: text.trim().replace(/\r?\n/g, " | "), stdout: String(r.stdout).trim() };
+  };
+  const quiet = seen("import fs from 'node:fs'; fs.readdirSync('src'); fs.readFileSync('tests/fixtures/x.json');");
+  check(quiet.loaded && !quiet.tests, "ar18 a process that lists src/ and reads a file under tests/ by name records only that it loaded: " + quiet.text);
+  const named = seen("import { readdirSync } from 'node:fs'; readdirSync('tests/fixtures');");
+  check(named.tests, "ar19 a named import of readdirSync listing a folder under tests/ is recorded: " + named.text);
+  const root = seen("import { readdir } from 'node:fs/promises'; await readdir('.');");
+  check(root.tests, "ar20 the promise readdir of the root is recorded, the root listing tests/ among its entries: " + root.text);
+  const git = seen("import cp from 'node:child_process'; cp.spawnSync('git', ['rev-parse', '--git-dir']); cp.spawnSync('git', ['ls-files']);");
+  check(git.tests && /git ls-files/.test(git.text) && !/rev-parse/.test(git.text), "ar21 git ls-files is recorded and rev-parse is not: " + git.text);
+  const child = seen("import cp from 'node:child_process'; cp.spawnSync(process.execPath, ['-e', 'require(\"fs\").readdirSync(\"tests\")']);");
+  check(child.tests && (child.text.match(/loaded /g) || []).length === 2, "ar22 a node child started with the inherited environment loads the preload and its listing is recorded: " + child.text);
+  const bare = seen("import cp from 'node:child_process'; cp.spawnSync(process.execPath, ['-e', '1'], { env: { PATH: process.env.PATH } });");
+  check(bare.tests && /without the preload/.test(bare.text), "ar23 a node child started without the preload counts: " + bare.text);
+  const echo = process.platform === "win32" ? "cp.spawnSync('cmd', ['/c', 'echo [%ETIUDA_LISTED_OUT%]'], { encoding: 'utf8' })"
+    : "cp.spawnSync('sh', ['-c', 'echo [$ETIUDA_LISTED_OUT]'], { encoding: 'utf8' })";
+  const plain = seen("import cp from 'node:child_process'; console.log(" + echo + ".stdout.trim());");
+  check(plain.tests && (plain.stdout === "[%ETIUDA_LISTED_OUT%]" || plain.stdout === "[]"),
+    "ar24 a program that is not node counts and is started without the preload's variables: " + plain.text + "; it printed " + plain.stdout);
 }
 
 
@@ -188,6 +273,9 @@ function makeLab(kind, stubs, opts) {
   fs.copyFileSync(path.join(ROOT, "tools", "machine-lock.mjs"), path.join(lab, "tools", "machine-lock.mjs"));
   if (opts && opts.gatesFor && fs.existsSync(path.join(ROOT, "tools", "gates-for.mjs"))) {
     fs.copyFileSync(path.join(ROOT, "tools", "gates-for.mjs"), path.join(lab, "tools", "gates-for.mjs"));
+    /* A lab that runs area mode carries the record of what each gate listed (tools/listed-preload.mjs, ar25); the others keep
+       their file counts (9a, 9f, 9g), and an area gate in a lab without it has no record and is never carried by it. */
+    fs.copyFileSync(path.join(ROOT, "tools", "listed-preload.mjs"), path.join(lab, "tools", "listed-preload.mjs"));
   }
   const scripts = {};
   for (const name of Object.keys(stubs)) {
@@ -1740,6 +1828,11 @@ async function main() {
     + (mappedChain && mappedChain.repo) + " " + (mappedChain && mappedChain.plan)
     + ", fail-closed " + (closedChain && closedChain.plan)
     + ", gate tools " + toolsPlan.plan);
+  /* ar25: a real area run records what each gate listed: g1 reads src/leaf.mjs by name and lists nothing, so its gate entry says
+     "none" and the line's quiet list holds it (tools/listed-preload.mjs, loaded through NODE_OPTIONS). */
+  const g1Entry = mappedChain && Array.isArray(mappedChain.gates) ? mappedChain.gates.find(x => x.gate === "tests-g1") : null;
+  check(!!g1Entry && g1Entry.reads === "none" && Array.isArray(mappedChain.quiet) && mappedChain.quiet.includes("tests-g1"),
+    "ar25 a real area run records what each gate listed: tests-g1 " + JSON.stringify(g1Entry) + ", quiet " + JSON.stringify(mappedChain && mappedChain.quiet));
   fs.unlinkSync(path.join(areaLab.lab, "electron-builder.js"));
 
   fs.writeFileSync(path.join(areaLab.lab, "src", "major.mjs"), "export const m = 1;\n");
@@ -2147,6 +2240,7 @@ async function main() {
   /* ---- 18 (e to h). A TEST-ONLY DIFF RERUNS ONLY THE CHANGED TESTS (see inheritLegs) ----------- */
   inheritLegs();
   areaResumeLegs();
+  listedPreloadLegs();
   areaResumeByNameLegs();
 
   /* ---- 19. REAL PROFILE TOUCH DETECTION IN AREA AND PROFILE RUNS --------------------------------- */

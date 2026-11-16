@@ -17,7 +17,10 @@
  * not a number the prose cites first (da15); the query and the items are quoted data in every adapter's prompt (da16); with
  * no built-in candidate the page still builds a shortlist and the organisation's order stands (da17, da18); and that order
  * repaints the picker's strip alone, so the row under the pointer keeps its mark (da19). While the service is slow it is asked
- * once a minute at most (da20), and the picker's note names the cap the shell sends (da21). Each guard
+ * once a minute at most (da20), and the picker's note names the cap the shell sends (da21). The second kind of request, a
+ * reword at a press (dw1 to dw7): nothing offered or sent without a configuration or with the person's choice off, exactly
+ * the instruction, the model's name and the words sent, the host shown the host called, nothing at an opening, the answer
+ * cleaned and bounded, three failures pausing, a press under stale policy facts waiting, and nothing of it kept on disk (dw8). Each guard
  * is lifted once, in a copy held in memory, and its leg must then fail. No leg reaches a network: every fetch is a
  * stand-in, and the global fetch throws.
  */
@@ -33,16 +36,18 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHELL = path.join(ROOT, "shell");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 60;
+const EXPECTED = 101;
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* The shell-to-page event that carries each re-order's outcome; the page-to-shell sync request "etiuda:ai-state" is another. */
 const RANKING_CH = "etiuda:ai-ranking";
 
-let asserted = 0, failed = 0;
+let asserted = 0, failed = 0, notRun = 0;
 function check(ok, line) {
   asserted++;
   if (ok) console.log("  ok   " + line);
   else { failed++; console.log("  FAIL " + line); }
 }
+function skipPlant(line) { notRun++; console.log("  NOT RUN " + line); }
 /* A section that throws says so and stops there; the floor below then counts the checks it did not reach. */
 async function block(fn) {
   try { await fn(); } catch (e) { failed++; console.log("  FAIL a section stopped: " + String(e && e.message || e).split(/\r?\n/)[0]); }
@@ -93,8 +98,9 @@ const MAIN_TAIL = "\n__test.setWindow = w => { theWindow = w; }; __test.embedSug
   + " __test.deskReorder = typeof deskReorder === 'undefined' ? { ask: async () => null } : deskReorder;"
   + " __test.orgSearch = typeof orgSearch === 'function' ? orgSearch : async () => {};"
   + " __test.deskAiProbe = typeof deskAiProbe === 'function' ? deskAiProbe : async () => ({});"
-  /* Machine policy is read as none, so the real reader never runs reg.exe in a leg. */
-  + " if (typeof joinPolicyFacts === 'function') joinPolicyRead = joinPolicyFacts('');";
+  + " __test.deskAiConfig = typeof deskAiConfig === 'function' ? deskAiConfig : () => null;"
+  /* Machine policy is __test.policyText, and no look at the real key ever starts, unless a leg stubs child_process. */
+  + " if (!__test.useRealPolicyReader && typeof joinPolicyFacts === 'function') { joinPolicyRead = joinPolicyFacts(__test.policyText || ''); if (typeof joinPolicyReadAt !== 'undefined') joinPolicyReadAt = Date.now(); if (typeof joinPolicyAskedAt !== 'undefined') joinPolicyAskedAt = Date.now(); if (typeof joinPolicyAsking !== 'undefined') joinPolicyAsking = true; }";
 const ENGINE = { sender: { id: 1, once: () => {} }, senderFrame: { parent: null, url: "file:///C:/lab/engine/etiuda.html" } };
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 
@@ -141,9 +147,11 @@ function loadMain(opts) {
     utilityProcess: inert,
   };
   const aiCopy = o.aiSrc ? aiFrom(o.aiSrc) : null;
+  /* A leg's own child_process is a stand-in, marked so the shell's guard lets its reg calls through (tests/reg-stand.cjs). */
+  if (o.childProcess) nodeRequire("./reg-stand.cjs").markStand(o.childProcess.execFileSync, o.childProcess.execFile);
   const fakeRequire = n => (n === "electron" ? electron : aiCopy && /desk-ai\.cjs$/.test(String(n)) ? aiCopy
-    : o.fs && n === "node:fs" ? o.fs : nodeRequire(n));
-  const T = {};
+    : o.fs && n === "node:fs" ? o.fs : o.childProcess && n === "node:child_process" ? o.childProcess : nodeRequire(n));
+  const T = { policyText: o.policyText || "", useRealPolicyReader: !!o.childProcess };
   const quiet = { log: () => {}, error: () => {}, warn: () => {}, info: () => {} };
   new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test", (o.mainSrc || MAIN_SRC) + MAIN_TAIL)(
     fakeRequire, SHELL, path.join(SHELL, "main.js"), { exports: {} }, {}, quiet, T);
@@ -786,7 +794,7 @@ await block(async () => {
   const r = await cacheDrive();
   check(r.two.setting === 1 && r.two.key === 1 && r.asked === 2 && r.saved && r.after === 3 && r.model === "plant-model-2",
     "da13 two searches read the setting and the key once between them, and a save makes the next read fresh: " + JSON.stringify(r));
-  const lifted = await cacheDrive(edited(MAIN_SRC, "  if (deskAiKept && deskAiKept.from === joinPolicyRead) return deskAiKept.now;\n", ""));
+  const lifted = await cacheDrive(edited(MAIN_SRC, "  if (deskAiKept && deskAiKept.from === joinPolicyRead && deskAiKept.stamp === stamp) return deskAiKept.now; /* plant:desk-ai-key-stamp */\n", ""));
   check(lifted.two.setting > 1, "da13p with the kept configuration lifted, the leg above fails: " + JSON.stringify(lifted.two));
 });
 
@@ -1000,9 +1008,678 @@ await block(async () => {
     "da21 the picker's note names the cap the shell sends, " + MESSAGE_MAX_CHARS + " characters, in English and Polish: " + (line ? "found" : "no line"));
 });
 
+/* da22 (review finding 2): a rejected policy AiEndpoint withholds the policy key and sends nothing, never falling back to the
+   provider's published address. */
+function policyExportText(rows) {
+  const esc = s => String(s).replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
+  const line = ([n, t, v]) => "\"" + esc(n) + "\"=" + (t === "REG_DWORD" ? "dword:" + (Number(v) >>> 0).toString(16).padStart(8, "0") : "\"" + esc(v) + "\"");
+  return ["Windows Registry Editor Version 5.00", "", "[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]"].concat(rows.map(line), [""]).join("\r\n") + "\r\n";
+}
+async function badPolicyEndpointDrive(provider, endpoint, mainSrc) {
+  const fetch = fetchOf(() => ({ status: 200, text: chatSaying("[2,1]") }));
+  const policyText = policyExportText([
+    ["DeskOrganisationModel", "REG_DWORD", 1],
+    ["AiProvider", "REG_SZ", provider],
+    ["AiEndpoint", "REG_SZ", endpoint],
+    ["AiModel", "REG_SZ", "plant-model"],
+    ["AiKey", "REG_SZ", "sk-test-0000"],
+  ]);
+  const ctx = loadMain({ fetch, mainSrc, policyText, answer: (op, a) => op === "search-shortlist" ? { q: a.q, gen: 1, cards: ["c1", "c2"], intents: [] } : openAnswer(op) });
+  builtinFrom(ctx.T, [{ id: "t:post", score: 0.9 }]);
+  const cfg = ctx.T.deskAiConfig();
+  const e = Object.assign({ returnValue: undefined }, ENGINE);
+  ctx.on["etiuda:desk-ai-settings"](e);
+  const st = e.returnValue;
+  const tested = await ctx.handle["etiuda:desk-ai-test"](ENGINE);
+  ctx.on["etiuda:search-set"](ENGINE, true);
+  await ctx.handle["etiuda:search-prepare"](ENGINE, ROWS);
+  await ctx.handle["etiuda:search-rank"](ENGINE, "lantern wick");
+  await tick(AI.SETTLE_MS + 60);
+  await openPicker(ctx, MESSAGE, 80);
+  return { cfg, st, tested, fetches: fetch.calls.length, urls: fetch.calls.map(c => c.url) };
+}
+await block(async () => {
+  const bads = [
+    ["openai", "http://bad.example/v1/"],
+    ["anthropic", "https://user:pw@bad.example/v1/"],
+    ["google", "https://bad.example/v1/?q=1"],
+    ["openai", "https://bad.example/v1/#frag"],
+  ];
+  const runs = [];
+  for (const [p, ep] of bads) runs.push(await badPolicyEndpointDrive(p, ep));
+  const good = await badPolicyEndpointDrive("openai", "https://good.example/v1/");
+  check(runs.every(r => r.cfg === null && r.fetches === 0 && r.tested && r.tested.ok === false && r.st && r.st.ready === false && r.st.keyAway === true && r.st.at === "")
+    && good.cfg !== null && good.fetches >= 2 && good.urls.every(u => u.indexOf("https://good.example/v1/") === 0),
+    "da22 a rejected policy AiEndpoint withholds the policy key and sends nothing, while a valid one sends: bad fetches "
+    + JSON.stringify(runs.map(r => r.fetches)) + ", good fetches " + good.fetches);
+  if (PLANTS_OFF) skipPlant("da22p lifting plant:policy-bad-endpoint sends the policy key to the provider's published address (ETIUDA_PLANTS=off)");
+  else {
+    const lifted = await badPolicyEndpointDrive("openai", "http://bad.example/v1/",
+      edited(MAIN_SRC, "const endpointBad = Array.isArray(o.ignored) && o.ignored.indexOf(\"AiEndpoint\") > -1; /* plant:policy-bad-endpoint */",
+        "const endpointBad = false;"));
+    check(lifted.fetches > 0 && lifted.urls.some(u => u.indexOf("https://api.openai.com/v1/") === 0),
+      "da22p with plant:policy-bad-endpoint lifted, the policy key leaks to the published address and the leg above fails: "
+      + JSON.stringify({ fetches: lifted.fetches, urls: lifted.urls }));
+  }
+});
+
+/* da23 (review finding 3): a policy key with neither a provider nor an address sends nothing, even when the person picks
+   openai, anthropic or google with no custom address. */
+async function unpinnedPolicyKeyDrive(personProvider, policyExtraRows, mainSrc) {
+  const fetch = fetchOf(() => ({ status: 200, text: chatSaying("[2,1]") }));
+  const rows = [
+    ["DeskOrganisationModel", "REG_DWORD", 1],
+    ["AiModel", "REG_SZ", "plant-model"],
+    ["AiKey", "REG_SZ", "sk-test-0000"],
+  ].concat(policyExtraRows || []);
+  const ctx = loadMain({ fetch, mainSrc, policyText: policyExportText(rows),
+    answer: (op, a) => op === "search-shortlist" ? { q: a.q, gen: 1, cards: ["c1", "c2"], intents: [] } : openAnswer(op) });
+  if (personProvider) {
+    fs.writeFileSync(path.join(ctx.electron.app.getPath("userData"), "desk-ai.json"),
+      JSON.stringify({ format: 1, kind: "etiuda-desk-ai", choice: "organisation", provider: personProvider, endpoint: "", model: "" }));
+  }
+  builtinFrom(ctx.T, [{ id: "t:post", score: 0.9 }]);
+  const cfg = ctx.T.deskAiConfig();
+  const e = Object.assign({ returnValue: undefined }, ENGINE);
+  ctx.on["etiuda:desk-ai-settings"](e);
+  const st = e.returnValue;
+  const tested = await ctx.handle["etiuda:desk-ai-test"](ENGINE);
+  ctx.on["etiuda:search-set"](ENGINE, true);
+  await ctx.handle["etiuda:search-prepare"](ENGINE, ROWS);
+  await ctx.handle["etiuda:search-rank"](ENGINE, "lantern wick");
+  await tick(AI.SETTLE_MS + 60);
+  await openPicker(ctx, MESSAGE, 80);
+  return { cfg, st, tested, fetches: fetch.calls.length, urls: fetch.calls.map(c => c.url) };
+}
+await block(async () => {
+  const blocked = [];
+  for (const p of ["", "openai", "anthropic", "google"]) blocked.push(await unpinnedPolicyKeyDrive(p, []));
+  blocked.push(await unpinnedPolicyKeyDrive("openai", [["AiProvider", "REG_SZ", "nosuch"]]));
+  const pinnedProvider = await unpinnedPolicyKeyDrive("anthropic", [["AiProvider", "REG_SZ", "openai"]]);
+  const pinnedEndpoint = await unpinnedPolicyKeyDrive("openai", [["AiEndpoint", "REG_SZ", "https://good.example/v1/"]]);
+  check(blocked.every(r => r.cfg === null && r.fetches === 0 && r.tested && r.tested.ok === false && r.tested.why === "keyNoService"
+      && r.st && r.st.ready === false && r.st.keyAway === true && r.st.keyNoService === true)
+    && pinnedProvider.cfg !== null && pinnedProvider.fetches >= 2 && pinnedProvider.urls.every(u => u.indexOf("https://api.openai.com/v1/") === 0)
+    && pinnedEndpoint.cfg !== null && pinnedEndpoint.fetches >= 2 && pinnedEndpoint.urls.every(u => u.indexOf("https://good.example/v1/") === 0),
+    "da23 a policy key with neither a provider nor an address sends nothing for a test, search or picker, while naming one in policy sends: "
+    + "blocked fetches " + JSON.stringify(blocked.map(r => r.fetches)) + ", whys " + JSON.stringify(blocked.map(r => r.tested && r.tested.why))
+    + ", pinned fetches " + JSON.stringify([pinnedProvider.fetches, pinnedEndpoint.fetches]));
+  if (PLANTS_OFF) skipPlant("da23p lifting plant:policy-key-pinned-service sends the policy key to the person's chosen vendor (ETIUDA_PLANTS=off)");
+  else {
+    const lifted = await unpinnedPolicyKeyDrive("openai", [],
+      edited(MAIN_SRC, "const keyUnpinned = !!o.key && !provider.managed && !endpoint.managed && !endpointBad; /* plant:policy-key-pinned-service */",
+        "const keyUnpinned = false;"));
+    check(lifted.fetches > 0 && lifted.urls.some(u => u.indexOf("https://api.openai.com/v1/") === 0),
+      "da23p with plant:policy-key-pinned-service lifted, the policy key goes to the person's chosen vendor and the leg above fails: "
+      + JSON.stringify({ fetches: lifted.fetches, urls: lifted.urls }));
+  }
+});
+
+/* da24 (review finding 4, policy): policy is re-read at most once a minute so turning the switch off or removing AiKey
+   stops a running desk's next ask, without reading reg on every query inside the minute. */
+async function policyRereadDrive(nextRows, mainSrc) {
+  const realNow = Date.now;
+  let clockShift = 0, reads = 0;
+  Date.now = () => realNow() + clockShift;
+  try {
+    let currentRows = [
+      ["DeskOrganisationModel", "REG_DWORD", 1],
+      ["AiProvider", "REG_SZ", "openai"],
+      ["AiModel", "REG_SZ", "plant-model"],
+      ["AiKey", "REG_SZ", "sk-test-0000"],
+    ];
+    const writeRows = file => fs.writeFileSync(file, Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(policyExportText(currentRows), "utf16le")]));
+    /* The first read waits (execFileSync); the minute's look does not (execFile), and answers on a later turn. */
+    const fakeCp = {
+      execFile: (tool, args, opts, cb) => { reads++; setTimeout(() => { try { writeRows(args[2]); cb(null, "", ""); } catch (e) { cb(e); } }, 10); },
+      execFileSync: (tool, args) => { reads++; writeRows(args[2]); },
+    };
+    const fetch = fetchOf(() => ({ status: 200, text: chatSaying("[2,1]") }));
+    const ctx = loadMain({ fetch, mainSrc, childProcess: fakeCp,
+      answer: (op, a) => op === "search-shortlist" ? { q: a.q, gen: 1, cards: ["c1", "c2"], intents: [] } : openAnswer(op) });
+    builtinFrom(ctx.T, [{ id: "t:post", score: 0.9 }]);
+    ctx.on["etiuda:search-set"](ENGINE, true);
+    await ctx.handle["etiuda:search-prepare"](ENGINE, ROWS);
+    await ctx.handle["etiuda:search-rank"](ENGINE, "lantern wick");
+    await tick(AI.SETTLE_MS + 60);
+    clockShift += 100;
+    await ctx.handle["etiuda:search-rank"](ENGINE, "kettle tea");
+    await tick(AI.SETTLE_MS + 60);
+    const readsWithin = reads, fetchesBefore = fetch.calls.length;
+    currentRows = nextRows;
+    clockShift += 60001;
+    ctx.T.deskAiConfig();
+    await tick(60);
+    const cfgAfter = ctx.T.deskAiConfig();
+    await ctx.handle["etiuda:search-rank"](ENGINE, "parcel post");
+    await tick(AI.SETTLE_MS + 60);
+    await openPicker(ctx, MESSAGE, 80);
+    return { readsWithin, readsAfter: reads, fetchesBefore, fetchesAfter: fetch.calls.length, cfgAfter };
+  } finally {
+    Date.now = realNow;
+  }
+}
+await block(async () => {
+  const off = await policyRereadDrive([
+    ["DeskOrganisationModel", "REG_DWORD", 0],
+    ["AiProvider", "REG_SZ", "openai"],
+    ["AiModel", "REG_SZ", "plant-model"],
+    ["AiKey", "REG_SZ", "sk-test-0000"],
+  ]);
+  const noKey = await policyRereadDrive([
+    ["DeskOrganisationModel", "REG_DWORD", 1],
+    ["AiProvider", "REG_SZ", "openai"],
+    ["AiModel", "REG_SZ", "plant-model"],
+  ]);
+  check(off.readsWithin === 1 && off.readsAfter === 2 && off.fetchesBefore === 2 && off.fetchesAfter === 2 && off.cfgAfter === null
+    && noKey.readsWithin === 1 && noKey.readsAfter === 2 && noKey.fetchesBefore === 2 && noKey.fetchesAfter === 2 && noKey.cfgAfter === null,
+    "da24 policy is cached within a minute and re-read after a minute, so turning DeskOrganisationModel off or removing AiKey stops the next send: "
+    + "off " + JSON.stringify(off) + ", noKey " + JSON.stringify(noKey));
+  if (PLANTS_OFF) skipPlant("da24p lifting plant:policy-look-later keeps sending after policy turns off (ETIUDA_PLANTS=off)");
+  else {
+    const lifted = await policyRereadDrive([["DeskOrganisationModel", "REG_DWORD", 0]],
+      edited(MAIN_SRC, "  if (Date.now() - joinPolicyAskedAt >= POLICY_LOOK_MS) policyLookLater(); /* plant:policy-look-later */", ""));
+    check(lifted.fetchesAfter > lifted.fetchesBefore,
+      "da24p with plant:policy-look-later lifted, the running desk keeps sending after policy turns off and the leg above fails: "
+      + JSON.stringify(lifted));
+  }
+});
+
+/* da26 (the test architect's edit on review 28's finding 4): the minute's look at machine policy, reached from a search keystroke,
+   does not hold the main process. A recording stand-in for the registry counts reg calls made with and without waiting: past the
+   minute, the keystroke makes no call that waits, one that does not, and the facts it brings are in force for the next send. */
+async function keystrokeRegDrive(mainSrc, lookMs, quietMs) {
+  const realNow = Date.now;
+  let clockShift = 0, waited = 0, notWaited = 0;
+  Date.now = () => realNow() + clockShift;
+  try {
+    let rows = [["DeskOrganisationModel", "REG_DWORD", 1], ["AiProvider", "REG_SZ", "openai"], ["AiModel", "REG_SZ", "plant-model"], ["AiKey", "REG_SZ", "sk-test-0000"]];
+    const write = file => fs.writeFileSync(file, Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(policyExportText(rows), "utf16le")]));
+    const fakeCp = {
+      execFileSync: (tool, args) => { waited++; write(args[2]); },
+      execFile: (tool, args, opts, cb) => { notWaited++; setTimeout(() => { try { write(args[2]); cb(null, "", ""); } catch (e) { cb(e); } }, lookMs || 20); },
+    };
+    const fetch = fetchOf(() => ({ status: 200, text: chatSaying("[2,1]") }));
+    const ctx = loadMain({ fetch, mainSrc, childProcess: fakeCp,
+      answer: (op, a) => op === "search-shortlist" ? { q: a.q, gen: 1, cards: ["c1", "c2"], intents: [] } : openAnswer(op) });
+    builtinFrom(ctx.T, [{ id: "t:post", score: 0.9 }]);
+    ctx.on["etiuda:search-set"](ENGINE, true);
+    await ctx.handle["etiuda:search-prepare"](ENGINE, ROWS);
+    await ctx.handle["etiuda:search-rank"](ENGINE, "lantern wick");
+    await tick(AI.SETTLE_MS + 60);
+    const atStart = { waited, notWaited }, fetchesBefore = fetch.calls.length;
+    rows = [["DeskOrganisationModel", "REG_DWORD", 0]];
+    clockShift += quietMs || 60001;
+    const w0 = waited, n0 = notWaited;
+    await ctx.handle["etiuda:search-rank"](ENGINE, "kettle tea");
+    const keystroke = { waited: waited - w0, notWaited: notWaited - n0 };
+    await tick(AI.SETTLE_MS + 60);
+    const fetchesGap = fetch.calls.length;
+    await tick((lookMs || 20) + 60);
+    await ctx.handle["etiuda:search-rank"](ENGINE, "parcel post");
+    await tick(AI.SETTLE_MS + 60);
+    return { atStart, keystroke, fetchesBefore, fetchesGap, fetchesAfter: fetch.calls.length, cfgAfter: ctx.T.deskAiConfig() };
+  } finally {
+    Date.now = realNow;
+  }
+}
+await block(async () => {
+  const r = await keystrokeRegDrive();
+  check(r.atStart.waited === 1 && r.keystroke.waited === 0 && r.keystroke.notWaited === 1 && r.fetchesAfter === r.fetchesBefore && r.cfgAfter === null,
+    "da26 past the minute, a search keystroke starts machine policy's look without waiting for reg (none waited on, one not), and once it"
+    + " lands the policy turned off stops the sends: " + JSON.stringify(r));
+  if (PLANTS_OFF) skipPlant("da26p lifting plant:policy-look-later leaves the look undone and the desk sending (ETIUDA_PLANTS=off)");
+  else {
+    const lines = MAIN_SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:policy-look-later") >= 0);
+    let p = null;
+    if (at >= 0) { lines.splice(at, 1); p = await keystrokeRegDrive(lines.join("\n")); }
+    check(!!p && p.keystroke.notWaited === 0 && p.fetchesAfter > p.fetchesBefore,
+      "da26p lifting plant:policy-look-later leaves the look undone and the desk sending after the policy turned off: " + JSON.stringify(p));
+  }
+});
+
+/* da27: after a quiet spell the facts are older than the look and its grace, so the first send waits for the look rather than go
+   under them: the look here takes 1 s, the keystroke sends nothing in that time, and nothing once the policy it finds is off. */
+await block(async () => {
+  const r = await keystrokeRegDrive(undefined, 1000, 10 * 60 * 1000);
+  check(r.keystroke.waited === 0 && r.keystroke.notWaited === 1 && r.fetchesGap === r.fetchesBefore && r.fetchesAfter === r.fetchesBefore,
+    "da27 after ten quiet minutes a keystroke sends nothing while the look is out, and nothing once it finds the policy off: " + JSON.stringify(r));
+  if (PLANTS_OFF) skipPlant("da27p rewriting plant:send-policy-fresh sends under ten-minute-old facts (ETIUDA_PLANTS=off)");
+  else {
+    const p = await keystrokeRegDrive(edited(MAIN_SRC, "  return c && !policyFresh() ? null : c; /* plant:send-policy-fresh */", "  return c;"), 1000, 10 * 60 * 1000);
+    check(p.fetchesGap > p.fetchesBefore, "da27p rewriting plant:send-policy-fresh sends under ten-minute-old facts while the look is out: " + JSON.stringify(p));
+  }
+});
+
+/* da25 (review finding 4, key file): deleting desk-ai-key.json from userData stops the running desk's next ask without a save or restart. */
+async function keyFileRemovedDrive(mainSrc) {
+  const fetch = fetchOf(() => ({ status: 200, text: chatSaying("[2,1]") }));
+  const ctx = loadMain({ fetch, mainSrc, safeStorage: SEAL,
+    answer: (op, a) => op === "search-shortlist" ? { q: a.q, gen: 1, cards: ["c1", "c2"], intents: [] } : openAnswer(op) });
+  builtinFrom(ctx.T, [{ id: "t:post", score: 0.9 }]);
+  writeOrgSetting(ctx);
+  ctx.on["etiuda:search-set"](ENGINE, true);
+  await ctx.handle["etiuda:search-prepare"](ENGINE, ROWS);
+  await ctx.handle["etiuda:search-rank"](ENGINE, "lantern wick");
+  await tick(AI.SETTLE_MS + 60);
+  const before = fetch.calls.length;
+  fs.unlinkSync(path.join(ctx.electron.app.getPath("userData"), "desk-ai-key.json"));
+  const cfgAfter = ctx.T.deskAiConfig();
+  await ctx.handle["etiuda:search-rank"](ENGINE, "kettle tea");
+  await tick(AI.SETTLE_MS + 60);
+  await openPicker(ctx, MESSAGE, 80);
+  return { before, after: fetch.calls.length, cfgAfter };
+}
+await block(async () => {
+  const r = await keyFileRemovedDrive();
+  check(r.before === 1 && r.after === 1 && r.cfgAfter === null,
+    "da25 deleting desk-ai-key.json stops a running desk's next ask without a save or restart: " + JSON.stringify(r));
+  if (PLANTS_OFF) skipPlant("da25p lifting plant:desk-ai-key-stamp keeps sending after desk-ai-key.json is deleted (ETIUDA_PLANTS=off)");
+  else {
+    const lifted = await keyFileRemovedDrive(edited(MAIN_SRC,
+      "if (deskAiKept && deskAiKept.from === joinPolicyRead && deskAiKept.stamp === stamp) return deskAiKept.now; /* plant:desk-ai-key-stamp */",
+      "if (deskAiKept && deskAiKept.from === joinPolicyRead) return deskAiKept.now;"));
+    check(lifted.after > lifted.before,
+      "da25p with plant:desk-ai-key-stamp lifted, the running desk keeps sending after desk-ai-key.json is deleted and the leg above fails: "
+      + JSON.stringify(lifted));
+  }
+});
+
+/* ==== THE SECOND KIND OF REQUEST: a reword at a press (shell/desk-ai.cjs createReword, shell/main.js etiuda:pick-reword and
+   etiuda:desk-reword). What leaves is held byte for byte against a body this file writes for itself; planted names of a
+   catalog, a customer and a second card, handed to the route beside the words and in the configuration, never appear. ==== */
+const REWORD_WORDS = "hi sorry for late reply,\r\nwe check your order {DATE:short} and write you back";
+const REWORD_SENT = "hi sorry for late reply,\nwe check your order {DATE:short} and write you back";
+const RW_PLANTS = ["PLANT-CATALOG-NAME-5512", "PLANT-CUSTOMER-Wiktoria-Zabka", "PLANT-SECOND-CARD-8830", "PLANT-TEAM-4410", "PLANT-LICENCE-7731"];
+const RW_ARG = { act: "shorter", words: REWORD_WORDS, how: RW_PLANTS[0], to: RW_PLANTS[1], catalog: RW_PLANTS[0], customer: RW_PLANTS[1],
+  card2: { id: "c2", text: RW_PLANTS[2] }, who: RW_PLANTS[1] };
+const RW_CONFIG = Object.assign({ team: RW_PLANTS[3], licence: RW_PLANTS[4], catalog: RW_PLANTS[0] }, CONFIG);
+/* The body as it must be, written here from the shape and not by the module's own builder. */
+function rewordBodyWanted(model, instruction, words) {
+  return Buffer.from(JSON.stringify({ model, messages: [{ role: "system", content: AI.REWORD_PROMPT },
+    { role: "user", content: "Instruction: " + JSON.stringify(instruction) + "\n\nText (data): " + JSON.stringify(words) }] }), "utf8");
+}
+const isReword = c => Buffer.from((c && c.init && c.init.body) || []).toString("utf8").indexOf("Text (data): ") > -1;
+/* One opening of the picker on words read as a selection, its window loaded and shown; `editable` as the helper said. */
+async function openOnSelection(ctx, words, editable) {
+  const press = ctx.T.bumpPress();
+  ctx.T.pickWithClip(press, Promise.resolve(null), words, true, editable);
+  await until(() => ctx.T.pickWin(), 2000);
+  const pw = ctx.T.pickWin();
+  if (pw) (pw.wc["did-finish-load"] || []).splice(0).forEach(fn => fn());
+  await until(() => pw && pw.visible, 2000);
+  const sends = pw ? pw.sends.filter(s => s.ch === "etiuda:pick-open").map(s => JSON.parse(s.args[0])) : [];
+  return { pw, open: sends[sends.length - 1] || {}, from: pw ? { sender: { id: pw.webContents.id }, senderFrame: { parent: null } } : null };
+}
+async function rewordDrive(o) {
+  const opts = o || {};
+  const fetch = opts.fetch || fetchOf(() => ({ status: 200, text: chatSaying("Sorry for the late reply. We will check your order {DATE:short}.") }));
+  const ctx = loadMain({ fetch, aiSrc: opts.aiSrc, mainSrc: opts.mainSrc, answer: (op) => op === "open" ? { ai: true, words: {}, look: {} } : null });
+  ctx.T.setConfig(() => opts.config === undefined ? RW_CONFIG : opts.config);
+  const pick = await openOnSelection(ctx, "parcel", true);
+  const fromPick = pick.from ? await ctx.handle["etiuda:pick-reword"](pick.from, opts.arg || RW_ARG) : null;
+  const fromDesk = await ctx.handle["etiuda:desk-reword"](ENGINE, opts.arg || RW_ARG);
+  const e = Object.assign({ returnValue: undefined }, ENGINE);
+  ctx.on["etiuda:ai-state"](e);
+  return { ctx, fetch, open: pick.open, fromPick, fromDesk, state: e.returnValue, rewords: fetch.calls.filter(isReword) };
+}
+const plantsIn = calls => RW_PLANTS.filter(p => calls.some(c => (c.url + JSON.stringify(c.init.headers || {}) + Buffer.from(c.init.body || []).toString("utf8")).indexOf(p) > -1));
+
+/* dw1: with deskAiConfig() null there is no foot offered and no reword sent from either window. */
+await block(async () => {
+  const off = await rewordDrive({ config: null });
+  check(off.fetch.calls.length === 0 && !("reword" in off.open) && off.fromPick && off.fromPick.ok === false && off.fromDesk.ok === false
+    && off.state && off.state.reword === "",
+    "dw1 with deskAiConfig() null the opening offers no reword, a press from the picker or the desk sends nothing, and ai-state names no host: "
+    + JSON.stringify({ fetches: off.fetch.calls.length, offered: "reword" in off.open, pick: off.fromPick, desk: off.fromDesk, state: off.state }));
+  const on = await rewordDrive({});
+  check(on.rewords.length === 2 && on.open.reword && on.open.reword.host === "api.openai.com" && on.fromPick.ok === true && on.fromDesk.ok === true,
+    "dw1c with a configuration the same drive offers the foot and each press sends once, so the count above can see a request: "
+    + JSON.stringify({ rewords: on.rewords.length, offered: on.open.reword, pick: on.fromPick && on.fromPick.ok, desk: on.fromDesk && on.fromDesk.ok }));
+  if (PLANTS_OFF) skipPlant("dw1p the offer made without a configuration (ETIUDA_PLANTS=off)");
+  else {
+    const lifted = await rewordDrive({ config: null, mainSrc: edited(MAIN_SRC, "    if (rewordCfg) open.reword = { host: rewordHost(rewordCfg) }; /* plant:reword-offer */",
+      "    open.reword = { host: rewordHost(rewordCfg) };") });
+    check("reword" in lifted.open, "dw1p with plant:reword-offer lifted, the opening offers the foot with no configuration and the leg above fails: "
+      + JSON.stringify(lifted.open.reword));
+  }
+});
+
+/* dw2: what leaves, byte for byte: the act's instruction, the model's name and the words, to the configured address, the key
+   only as its bearer; nothing else handed to the route or kept in the configuration. */
+await block(async () => {
+  const r = await rewordDrive({});
+  const call = r.rewords[1] || { url: "", init: { headers: {}, body: Buffer.alloc(0) } };
+  const want = rewordBodyWanted("plant-model", "Make it shorter, keeping what it says.", REWORD_SENT);
+  const body = Buffer.from(call.init.body || []);
+  const heads = Object.keys(call.init.headers || {}).sort().join(",");
+  check(body.equals(want) && call.url === "https://api.openai.com/v1/chat/completions" && heads === "authorization,content-type"
+    && call.init.headers.authorization === "Bearer " + CONFIG.key && call.init.redirect === "error" && call.init.credentials === "omit"
+    && plantsIn(r.rewords).length === 0 && r.fromDesk.text === "Sorry for the late reply. We will check your order {DATE:short}.",
+    "dw2 a card's reword sends exactly the instruction, the model's name and the words (" + body.length + " bytes, equal to the body written here: "
+    + body.equals(want) + "), to " + call.url + " with headers " + heads + ", and none of " + RW_PLANTS.length + " planted names handed beside them: "
+    + JSON.stringify(plantsIn(r.rewords)));
+  /* The other acts' instructions, the translation by its language, the agent's own instruction on one line, and what is refused. */
+  const acts = [];
+  for (const [arg, instr] of [[{ act: "spelling" }, "Correct the spelling, grammar and punctuation, and change nothing else."],
+    [{ act: "friendlier" }, "Make it friendlier and warmer, keeping what it says."], [{ act: "formal" }, "Make it more formal, keeping what it says."],
+    [{ act: "translate", to: "pl" }, "Translate it into Polish."], [{ act: "translate", to: "en" }, "Translate it into English."],
+    [{ act: "own", how: "  as a\r\npoem " }, "as a poem"]]) {
+    const one = await rewordDrive({ arg: Object.assign({ words: "Thank you." }, arg) });
+    acts.push(Buffer.from(one.rewords[1].init.body).equals(rewordBodyWanted("plant-model", instr, "Thank you.")));
+  }
+  const refused = [];
+  for (const arg of [{ act: "translate", to: "de", words: "x" }, { act: "own", how: "", words: "x" }, { act: "own", how: "y".repeat(AI.HOW_CHARS + 1), words: "x" },
+    { act: "rewrite", words: "x" }, { act: "shorter", words: "   " }, { act: "shorter", words: "z".repeat(AI.REWORD_CHARS + 1) }]) {
+    const one = await rewordDrive({ arg });
+    refused.push(one.rewords.length === 0 && one.fromDesk.why === (arg.words.length > AI.REWORD_CHARS ? "toolong" : "refused"));
+  }
+  check(acts.every(Boolean) && refused.every(Boolean),
+    "dw2b each act's instruction, the translation by language and the agent's own instruction on one line are sent as written here, and an unknown "
+    + "act or language, no instruction, an instruction or words over the cap, or no words send nothing: acts " + JSON.stringify(acts) + ", refused " + JSON.stringify(refused));
+  if (PLANTS_OFF) skipPlant("dw2p the whole of what the route was handed put into the request (ETIUDA_PLANTS=off)");
+  else {
+    const lifted = await rewordDrive({ aiSrc: edited(AI_SRC, "\"Instruction: \" + JSON.stringify(instruction)", "\"Instruction: \" + JSON.stringify(instruction) + JSON.stringify(a) + JSON.stringify(config)") });
+    check(plantsIn(lifted.rewords).length > 0, "dw2p with the route's whole argument and the configuration put into the request, the leg above finds the plants: "
+      + JSON.stringify(plantsIn(lifted.rewords)));
+  }
+  if (PLANTS_OFF) skipPlant("dw2q words over the cap cut rather than refused (ETIUDA_PLANTS=off)");
+  else {
+    const lifted = await rewordDrive({ arg: { act: "shorter", words: "z".repeat(AI.REWORD_CHARS + 1) },
+      aiSrc: edited(AI_SRC, "  return t && t.length <= max ? t : null;", "  return t ? t.slice(0, max) : null;") });
+    check(lifted.rewords.length > 0, "dw2q with the cap made a cut, words over it are sent in part and the leg above fails: " + lifted.rewords.length + " sent");
+  }
+});
+
+/* dw3: the address the screen names is the address called, for a service's own address and one the organisation gave. */
+await block(async () => {
+  const GIVEN = { provider: "compatible", endpoint: "https://gateway.example.test/llm/v1/", model: "plant-model", key: "k-0001", managed: {} };
+  async function hosts(mainSrc) {
+    const out = [];
+    for (const config of [CONFIG, GIVEN]) {
+      const r = await rewordDrive({ config, mainSrc });
+      const called = r.rewords[0] ? new URL(r.rewords[0].url).host : "";
+      out.push({ shown: r.open.reword && r.open.reword.host, desk: r.state && r.state.reword, called });
+    }
+    return out;
+  }
+  const r = await hosts();
+  check(r.every(h => h.called && h.shown === h.called && h.desk === h.called) && r[1].called === "gateway.example.test",
+    "dw3 the host the picker and the desk are given is the host each press calls, for a service's own address and the organisation's: " + JSON.stringify(r));
+  if (PLANTS_OFF) skipPlant("dw3p the host named from the service's table rather than the configuration (ETIUDA_PLANTS=off)");
+  else {
+    const lifted = await hosts(edited(MAIN_SRC, "try { return c ? new URL(deskAi.endpointFor(c)).host : \"\"; }",
+      "try { return c ? new URL(deskAi.PROVIDERS[c.provider].endpoint || \"https://service.example.test/\").host : \"\"; }"));
+    check(lifted.some(h => h.shown !== h.called), "dw3p with the host read from the service's table, the organisation's address is misnamed and the leg above fails: "
+      + JSON.stringify(lifted));
+  }
+});
+
+/* dw4: the person's switch, through the real reader: with the organisation's model not chosen nothing is offered or sent. */
+async function rewordReaderDrive(choice, mainSrc) {
+  const kept = HARNESS_VARS.map(k => [k, process.env[k]]);
+  HARNESS_VARS.forEach(k => { delete process.env[k]; });
+  try {
+    const fetch = fetchOf(() => ({ status: 200, text: chatSaying("Thanks.") }));
+    const ctx = loadMain({ fetch, mainSrc, safeStorage: SEAL, answer: (op) => op === "open" ? { ai: true, words: {}, look: {} } : null });
+    writeOrgSetting(ctx);
+    const file = path.join(ctx.electron.app.getPath("userData"), "desk-ai.json");
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("\"choice\":\"organisation\"", "\"choice\":\"" + choice + "\""));
+    const pick = await openOnSelection(ctx, "parcel", null);
+    const fromDesk = await ctx.handle["etiuda:desk-reword"](ENGINE, { act: "shorter", words: "Thank you." });
+    return { offered: !!pick.open.reword, ok: fromDesk.ok, fetches: fetch.calls.filter(isReword).length };
+  } finally {
+    HARNESS_VARS.forEach(k => { delete process.env[k]; });
+    kept.forEach(([k, v]) => { if (v !== undefined) process.env[k] = v; });
+  }
+}
+await block(async () => {
+  const off = await rewordReaderDrive("builtin"), on = await rewordReaderDrive("organisation");
+  check(!off.offered && off.fetches === 0 && on.offered && on.fetches === 1,
+    "dw4 with the person's choice on the built-in model, the real reader offers no reword and a press sends nothing; on the organisation's it offers and sends: "
+    + JSON.stringify({ off, on }));
+  if (PLANTS_OFF) skipPlant("dw4p the switch taken out of deskAiConfig (ETIUDA_PLANTS=off)");
+  else {
+    const lifted = await rewordReaderDrive("builtin", edited(MAIN_SRC, "  if (!j.on || !deskAiReadyOf(j, now.key)) return null;", "  if (!deskAiReadyOf(j, now.key)) return null;"));
+    check(lifted.offered && lifted.fetches > 0, "dw4p with the switch taken out of deskAiConfig, the built-in choice offers and sends and the leg above fails: "
+      + JSON.stringify(lifted));
+  }
+});
+
+/* dw5: nothing is sent at an opening; only a press sends, once. */
+await block(async () => {
+  const fetch = fetchOf(() => ({ status: 200, text: chatSaying("Thanks.") }));
+  const ctx = loadMain({ fetch, answer: (op) => op === "open" ? { ai: true, words: {}, look: {} } : null });
+  ctx.T.setConfig(() => CONFIG);
+  for (const ed of [true, null, false]) await openOnSelection(ctx, REWORD_WORDS, ed);
+  const opened = fetch.calls.length;
+  const pick = await openOnSelection(ctx, REWORD_WORDS, true);
+  await ctx.handle["etiuda:pick-reword"](pick.from, { act: "spelling", words: REWORD_WORDS });
+  check(opened === 0 && fetch.calls.length === 1, "dw5 four openings on selected words, editable, unknown and read-only, send nothing; one press sends once: "
+    + JSON.stringify({ opened, after: fetch.calls.length }));
+});
+
+/* dw6: the answer is text: its control characters out, its line breaks LF, over the cap not shown; and the door's failures are
+   named, three in a row pausing the presses for a minute. */
+await block(async () => {
+  const say = text => fetchOf(() => ({ status: 200, text: chatSaying(text) }));
+  async function answer(fetch, aiSrc) {
+    const A = aiSrc ? aiFrom(aiSrc) : AI;
+    return A.createReword({ config: () => CONFIG, fetch }).ask({ act: "shorter", words: "Thank you." });
+  }
+  const ctl = await answer(say("Hi\u0007 there\r\n<b>soon</b>\u001b[2J\u0085"));
+  const big = await answer(say("w".repeat(AI.REWORD_ANSWER_CHARS + 1)));
+  const busy = await answer(fetchOf(() => ({ status: 429, text: "" })));
+  const err = await answer(fetchOf(() => ({ status: 500, text: "" })));
+  const cut = await answer(fetchOf(() => ({ status: 200, text: JSON.stringify({ choices: [{ message: { content: "Hi" }, finish_reason: "length" }] }) })));
+  check(ctl.ok && ctl.text === "Hi  there\n<b>soon</b> [2J" && big.ok === false && big.why === "answer" && busy.why === "busy" && err.why === "answer" && cut.ok === false,
+    "dw6 the answer's control characters are out and its line breaks LF, markup kept as characters for the page to show as text; one over "
+    + AI.REWORD_ANSWER_CHARS + " characters, a 429, a 500 and a cut answer are not results: " + JSON.stringify({ ctl, big, busy: busy.why, err: err.why, cut: cut.ok }));
+  const failing = fetchOf(() => ({ status: 500, text: "" }));
+  const rw = AI.createReword({ config: () => CONFIG, fetch: failing });
+  const whys = [];
+  for (let i = 0; i < 4; i++) whys.push((await rw.ask({ act: "shorter", words: "Thank you." })).why);
+  check(failing.calls.length === 3 && whys.join(",") === "answer,answer,answer,paused",
+    "dw6b three failed presses in a row pause the presses for a minute, and the fourth sends nothing: " + JSON.stringify({ sent: failing.calls.length, whys }));
+  if (PLANTS_OFF) skipPlant("dw6p the answer passed on uncleaned (ETIUDA_PLANTS=off)");
+  else {
+    const lifted = await answer(say("Hi\u0007 there"), edited(AI_SRC, "  return rewordClean(replyText(provider, status, bytes), REWORD_ANSWER_CHARS);",
+      "  return replyText(provider, status, bytes);"));
+    check(lifted.ok && /\u0007/.test(lifted.text), "dw6p with the answer passed on uncleaned, a control character reaches the page and the leg above fails");
+  }
+});
+
+/* dw7: a press made while machine policy's facts are stale waits for the look and sends nothing while it is out. */
+await block(async () => {
+  if (process.platform !== "win32") { skipPlant("dw7 machine policy is read on Windows alone"); skipPlant("dw7p (not Windows)"); return; }
+  async function stale(mainSrc) {
+    const fetch = fetchOf(() => ({ status: 200, text: chatSaying("Thanks.") }));
+    const ctx = loadMain({ fetch, mainSrc: (mainSrc || MAIN_SRC) + "\n__test.stalePolicy = () => { joinPolicyReadAt = 1; };" });
+    ctx.T.setConfig(() => CONFIG);
+    ctx.T.stalePolicy();
+    const t0 = Date.now();
+    const r = await ctx.handle["etiuda:desk-reword"](ENGINE, { act: "shorter", words: "Thank you." });
+    return { why: r.why || "", ms: Date.now() - t0, fetches: fetch.calls.length };
+  }
+  const r = await stale();
+  check(r.fetches === 0 && r.why === "unavailable" && r.ms >= 1900,
+    "dw7 a press under machine policy's stale facts waits for the look, about two seconds, and sends nothing while it is out: " + JSON.stringify(r));
+  if (PLANTS_OFF) skipPlant("dw7p the press sent under stale facts (ETIUDA_PLANTS=off)");
+  else {
+    const lifted = await stale(edited(MAIN_SRC, "    const c = deskAiSendConfig(); /* plant:reword-config */", "    const c = deskAiConfig();"));
+    check(lifted.fetches === 1, "dw7p with plant:reword-config rewritten to the unfreshened reader, the press sends under stale facts and the leg above fails: "
+      + JSON.stringify(lifted));
+  }
+});
+
+/* dw8: the shell keeps nothing of a reword: after a press from each window, no file in its folder holds the words or the result. */
+await block(async () => {
+  const OUTW = "Quillmarrow reworded words for the folder walk";
+  const fetch = fetchOf(() => ({ status: 200, text: chatSaying(OUTW) }));
+  const ctx = loadMain({ fetch, answer: (op) => op === "open" ? { ai: true, words: {}, look: {} } : null });
+  ctx.T.setConfig(() => CONFIG);
+  const pick = await openOnSelection(ctx, "Zebrafinch words selected in the chat", true);
+  const a = await ctx.handle["etiuda:pick-reword"](pick.from, { act: "shorter", words: "Zebrafinch words selected in the chat" });
+  const b = await ctx.handle["etiuda:desk-reword"](ENGINE, { act: "formal", words: "Zebrafinch words of a card" });
+  const ud = ctx.electron.app.getPath("userData"), found = [];
+  const walk = dir => { for (const n of fs.readdirSync(dir)) { const at = path.join(dir, n), st = fs.statSync(at);
+    if (st.isDirectory()) walk(at); else { const t = fs.readFileSync(at).toString("utf8"); if (/Zebrafinch|Quillmarrow/.test(t)) found.push(n); } } };
+  walk(ud);
+  const clean = found.splice(0);
+  /* The control: the same walk finds the words once a file holds them, so its empty answer is not a blind one. */
+  fs.writeFileSync(path.join(ud, "control.txt"), "Zebrafinch");
+  walk(ud);
+  const seen = found.splice(0);
+  found.push(...clean);
+  check(a.ok && b.ok && found.length === 0 && seen.join() === "control.txt" && fetch.calls.length === 2,
+    "dw8 after a reword from the picker and one from the desk, no file in the shell's folder holds the words sent or the result: " + JSON.stringify({ found, sent: fetch.calls.length }));
+});
+
+/* dw9: THE PERSON'S OWN SWITCH FOR REWORDING (shell/main.js etiuda:reword-set, the file desk-reword.json beside desk-ai.json): off for
+   themselves, the opening offers nothing, the picker's two channels and the desk's refuse, ai-state names no host to send to, and no request
+   is made by any route, whatever the organisation's configuration or policy says. On by default; the ordering's own switch is not touched. */
+async function rewordSwitchDrive(o) {
+  const opts = o || {};
+  const fetch = fetchOf(() => ({ status: 200, text: chatSaying("Sorry for the late reply.") }));
+  const ctx = loadMain({ fetch, mainSrc: opts.mainSrc, fs: opts.fs, answer: (op) => op === "open" ? { ai: true, words: {}, look: {} } : null });
+  ctx.T.setConfig(() => RW_CONFIG);
+  if (opts.file !== undefined) fs.writeFileSync(path.join(ctx.electron.app.getPath("userData"), "desk-reword.json"), opts.file);
+  const set = on => ctx.on["etiuda:reword-set"] ? ctx.on["etiuda:reword-set"](ENGINE, on) : (() => { throw new Error("no etiuda:reword-set channel"); })();
+  if (opts.offFirst) set(false);
+  const pick = await openOnSelection(ctx, "parcel", true);
+  if (opts.offAfter) set(false);
+  const fromPick = pick.from ? await ctx.handle["etiuda:pick-reword"](pick.from, RW_ARG) : null;
+  const fromDesk = await ctx.handle["etiuda:desk-reword"](ENGINE, RW_ARG);
+  const e = Object.assign({ returnValue: undefined }, ENGINE);
+  ctx.on["etiuda:ai-state"](e);
+  return { ctx, fetch, set, open: pick.open, fromPick, fromDesk, state: e.returnValue, rewords: fetch.calls.filter(isReword) };
+}
+await block(async () => {
+  const off = await rewordSwitchDrive({ offFirst: true });
+  check(off.rewords.length === 0 && !("reword" in off.open) && off.fromPick && off.fromPick.ok === false && off.fromDesk.ok === false
+    && off.fromPick.why === "switch" && off.fromDesk.why === "switch" && off.state && off.state.reword === "" && off.state.rewordOn === false && off.state.rewordAt === "api.openai.com" && off.state.org === true,
+    "dw9 with the person's switch off, the opening offers no reword, both presses are refused, ai-state names no host to send to though the organisation's model stays in force, and no request is made: "
+    + JSON.stringify({ rewords: off.rewords.length, offered: "reword" in off.open, pick: off.fromPick, desk: off.fromDesk, state: off.state }));
+  /* The canary: the switch turned off AFTER an opening that offered the foot, so a press from that open window, or the desk, still reaches the door. */
+  const late = await rewordSwitchDrive({ offAfter: true });
+  check(late.open.reword && late.fromPick && late.fromPick.ok === false && late.fromDesk.ok === false && late.fromPick.why === "switch" && late.fromDesk.why === "switch" && late.rewords.length === 0,
+    "dw9b the switch turned off after an opening that offered the foot: a press from that window and one from the desk are refused at the shell and the stand-in service records no request: "
+    + JSON.stringify({ offered: late.open.reword, pick: late.fromPick, desk: late.fromDesk, rewords: late.rewords.length }));
+  /* On again, the file as the person's own desk setting, and the other switches untouched. */
+  const ctl = await rewordSwitchDrive({ offFirst: true });
+  const ud = ctl.ctx.electron.app.getPath("userData"), file = path.join(ud, "desk-reword.json");
+  const offDoc = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : null;
+  ctl.set(true);
+  const onDoc = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : null;
+  const e2 = Object.assign({ returnValue: undefined }, ENGINE);
+  ctl.ctx.on["etiuda:ai-state"](e2);
+  const again = await ctl.ctx.handle["etiuda:desk-reword"](ENGINE, RW_ARG);
+  await ctl.ctx.T.deskReorder.ask("parcel post", ["a", "b"]);
+  const orders = ctl.fetch.calls.filter(c => !isReword(c)).length;
+  check(offDoc && offDoc.off === true && offDoc.kind === "etiuda-desk-reword" && onDoc && onDoc.off === false && !fs.existsSync(path.join(ud, "desk-ai.json"))
+    && e2.returnValue.reword === "api.openai.com" && e2.returnValue.rewordOn === true && again.ok === true && ctl.rewords.length === 0 && orders === 1,
+    "dw9c the switch is the person's own file beside the desk's settings, written by the person's choice alone; on again, the desk's press sends once; the ordering's call is made either way: "
+    + JSON.stringify({ offDoc, onDoc, again: again.ok, orders }));
+  if (PLANTS_OFF) skipPlant("dw9p the door's refusals lifted (ETIUDA_PLANTS=off)");
+  else {
+    let src = MAIN_SRC;
+    for (const k of ["reword-switch-door-pick", "reword-switch-door-desk", "reword-switch-send"]) {
+      const line = src.split("\n").filter(l => l.indexOf("plant:" + k) >= 0);
+      if (line.length !== 1) throw new Error("plant mark " + k + " found " + line.length + " times");
+      src = src.replace(line[0], line[0].replace(/ *(?:\|\||&&) !?rewordWanted\(\)| *if \(!rewordWanted\(\)\) return null;/, ""));
+    }
+    const lifted = await rewordSwitchDrive({ offAfter: true, mainSrc: src });
+    check(src !== MAIN_SRC && lifted.rewords.length > 0, "dw9p with the switch's three refusals lifted (both channels and the config), a press after the switch is off reaches the service and dw9b fails: " + lifted.rewords.length + " sent");
+  }
+  if (PLANTS_OFF) skipPlant("dw9q the offer and the state made while the switch is off (ETIUDA_PLANTS=off)");
+  else {
+    let src = MAIN_SRC;
+    for (const k of ["reword-switch-offer", "reword-switch-state"]) {
+      const line = src.split("\n").filter(l => l.indexOf("plant:" + k) >= 0);
+      if (line.length !== 1) throw new Error("plant mark " + k + " found " + line.length + " times");
+      src = src.replace(line[0], line[0].replace(/rewordWanted\(\) \? /, "true ? "));
+    }
+    const lifted = await rewordSwitchDrive({ offFirst: true, mainSrc: src });
+    check(src !== MAIN_SRC && "reword" in lifted.open && lifted.state.reword !== "", "dw9q with the offer and the state not reading the switch, the opening offers the foot and ai-state names a host while it is off and dw9 fails");
+  }
+});
+
+/* dw11: EVERY CASE WHERE NOTHING WAS SENT SAYS WHICH (the page shows a sentence for each, and "nothing was sent" is said only of these, each tied
+   to a canary that records no request): the person's switch off ("switch"), the organisation's model no longer set at the press ("model"), a choice
+   the desk cannot read, which is not the person's own off ("unavailable"), the service paused after three failures ("paused"), and words over the cap
+   ("toolong"); every other refusal of what could not be built stays "refused". The stand-in service records no reword in any of them. */
+await block(async () => {
+  const gone = await (async () => {
+    const fetch = fetchOf(() => ({ status: 200, text: chatSaying("Sorry.") }));
+    const ctx = loadMain({ fetch, answer: (op) => op === "open" ? { ai: true, words: {}, look: {} } : null });
+    let config = RW_CONFIG;
+    ctx.T.setConfig(() => config);
+    const pick = await openOnSelection(ctx, "parcel", true);
+    config = null;
+    const fromPick = await ctx.handle["etiuda:pick-reword"](pick.from, RW_ARG), fromDesk = await ctx.handle["etiuda:desk-reword"](ENGINE, RW_ARG);
+    return { offered: !!pick.open.reword, fromPick, fromDesk, sent: fetch.calls.filter(isReword).length };
+  })();
+  const broken = await rewordSwitchDrive({ file: "{not json" });
+  const long = await rewordDrive({ arg: Object.assign({}, RW_ARG, { how: "", to: "", words: "z".repeat(AI.REWORD_CHARS + 1) }) });
+  const empty = await rewordDrive({ arg: Object.assign({}, RW_ARG, { how: "", to: "", words: "   " }) });
+  check(gone.offered && gone.fromPick.why === "model" && gone.fromDesk.why === "model" && gone.sent === 0
+    && broken.fromPick.why === "unavailable" && broken.fromDesk.why === "unavailable" && broken.rewords.length === 0
+    && AI.REWORD_CHARS === 4000 && long.fromDesk.why === "toolong" && long.fromPick.why === "toolong" && long.rewords.length === 0
+    && empty.fromDesk.why === "refused" && empty.rewords.length === 0,
+    "dw11 the model gone at the press says 'model', an unreadable choice 'unavailable', words over the 4000 cap 'toolong' and no words 'refused', and the stand-in service records nothing in any of them: "
+    + JSON.stringify({ gone: [gone.fromPick.why, gone.fromDesk.why, gone.sent], broken: [broken.fromPick.why, broken.fromDesk.why], long: [long.fromPick.why, long.fromDesk.why], empty: empty.fromDesk.why }));
+  if (PLANTS_OFF) skipPlant("dw11p every refusal called 'refused' again (ETIUDA_PLANTS=off)");
+  else {
+    const line = AI_SRC.split("\n").filter(l => l.indexOf("plant:reword-toolong") >= 0);
+    if (line.length !== 1) throw new Error("plant mark reword-toolong found " + line.length + " times");
+    const lifted = await rewordDrive({ aiSrc: AI_SRC.replace(line[0], line[0].replace(/return \{ ok: false, why: "toolong" \};/, 'return { ok: false, why: "refused" };')),
+      arg: Object.assign({}, RW_ARG, { how: "", to: "", words: "z".repeat(AI.REWORD_CHARS + 1) }) });
+    check(lifted.fromDesk.why === "refused", "dw11p with the over-long refusal called 'refused' again, a long text says the generic line's cause and dw11 fails: " + lifted.fromDesk.why);
+  }
+});
+
+/* dw10: THE SWITCH READS FAIL CLOSED. Once a person has turned rewording off, nothing short of their turning it on can make the desk send
+   their words: a file the desk cannot read for any reason but its never having been written, one that is not its own kind or format, or a
+   write that did not land when they turned it off, all behave as off: the offer absent, both doors refusing, the stand-in service recording
+   nothing. Only a file never written (ENOENT) is on, as the desk is for a person who never touched the switch. */
+const BROKEN = name => err => new Proxy(fs, { get: (t, k) => k === "readFileSync" ? (f, ...a) => { if (/desk-reword\.json$/.test(String(f))) { const e = new Error(err); e.code = err; throw e; } return t.readFileSync(f, ...a); } : t[k] });
+const shut = d => d.rewords.length === 0 && !("reword" in d.open) && d.fromPick && d.fromPick.ok === false && d.fromDesk.ok === false
+  && ["switch", "unavailable"].indexOf(d.fromPick.why) > -1 && d.fromPick.why === d.fromDesk.why
+  && d.state.reword === "" && d.state.rewordOn === false && d.state.org === true;
+await block(async () => {
+  const OWN = { format: 1, kind: "etiuda-desk-reword" };
+  const files = { corrupt: "{not json", empty: "", "another kind": JSON.stringify(Object.assign({}, OWN, { kind: "other", off: false })),
+    "another format": JSON.stringify(Object.assign({}, OWN, { format: 2, off: false })), "no choice in it": JSON.stringify(OWN), "not an object": "[]" };
+  const shutFiles = [];
+  for (const [name, file] of Object.entries(files)) { const d = await rewordSwitchDrive({ file }); if (!shut(d)) shutFiles.push(name); }
+  check(shutFiles.length === 0,
+    "dw10 a corrupt file, an empty one, one of another kind or format, one with no choice in it and one that is not an object all behave as off: the offer absent, both doors refusing, nothing sent; failing: " + JSON.stringify(shutFiles));
+  const shutReads = [];
+  for (const code of ["EBUSY", "EACCES", "EIO", "EPERM"]) { const d = await rewordSwitchDrive({ file: JSON.stringify(Object.assign({}, OWN, { off: false })), fs: BROKEN()(code) }); if (!shut(d)) shutReads.push(code); }
+  check(shutReads.length === 0,
+    "dw10b a read error other than ENOENT, even over a file that says on, behaves as off (offer absent, both doors refusing, nothing sent); failing: " + JSON.stringify(shutReads));
+  const enoent = await rewordSwitchDrive({ fs: BROKEN()("ENOENT") }), never = await rewordSwitchDrive({});
+  const FAILING_WRITE = new Proxy(fs, { get: (t, k) => k === "writeFileSync" ? (f, ...a) => { if (/desk-reword\.json/.test(String(f))) { const e = new Error("EACCES"); e.code = "EACCES"; throw e; } return t.writeFileSync(f, ...a); } : t[k] });
+  const unwritten = await rewordSwitchDrive({ fs: FAILING_WRITE, offFirst: true });
+  check(enoent.rewords.length === 2 && enoent.open.reword && enoent.state.rewordOn === true && never.rewords.length === 2 && never.state.rewordOn === true && shut(unwritten),
+    "dw10c ENOENT alone reads as on (a file never written, or the stand-in's ENOENT), and a switch turned off whose write did not land is off all the same: "
+    + JSON.stringify({ enoent: enoent.rewords.length, never: never.rewords.length, unwritten: { rewords: unwritten.rewords.length, offered: "reword" in unwritten.open, state: unwritten.state } }));
+  if (PLANTS_OFF) skipPlant("dw10p the old fail-open read put back (ETIUDA_PLANTS=off)");
+  else {
+    let src = MAIN_SRC;
+    for (const k of ["reword-read-closed", "reword-parse-closed"]) {
+      const line = src.split("\n").filter(l => l.indexOf("plant:" + k) >= 0);
+      if (line.length !== 1) throw new Error("plant mark " + k + " found " + line.length + " times");
+      src = src.replace(line[0], line[0].replace(/return [^;]*;(?= *})/, 'return "on";'));
+    }
+    const a = await rewordSwitchDrive({ file: "{not json", mainSrc: src }), b = await rewordSwitchDrive({ file: JSON.stringify(Object.assign({}, OWN, { off: true })), fs: BROKEN()("EBUSY"), mainSrc: src });
+    check(src !== MAIN_SRC && a.rewords.length > 0 && b.rewords.length > 0, "dw10p with the old fail-open read put back (any error reads as on), a corrupt file and a busy file send and dw10 and dw10b fail: " + JSON.stringify([a.rewords.length, b.rewords.length]));
+  }
+});
+
 check(wallHits === 0, "da0 no leg called the global fetch: " + wallHits);
-const done = asserted === EXPECTED;
-if (!done) console.log("  FAIL the file ran " + asserted + " checks, not the " + EXPECTED + " it declares");
-console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);
-console.log(failed === 0 && done ? "RESULT: ok " + asserted + " check(s)" : "RESULT: FAIL " + failed + " of " + asserted);
+const done = asserted + notRun === EXPECTED;
+if (!done) console.log("  FAIL the file ran " + (asserted + notRun) + " checks (" + asserted + " ran, " + notRun + " not run), not the " + EXPECTED + " it declares");
+console.log("#counts checks=" + asserted + " failed=" + failed + " notRun=" + notRun + " expected=" + EXPECTED);
+console.log(failed === 0 && done ? "RESULT: ok " + asserted + " check(s)" + (notRun ? ", " + notRun + " NOT RUN" : "") : "RESULT: FAIL " + failed + " of " + asserted);
 process.exit(Math.min(63, failed + (done ? 0 : 1)));

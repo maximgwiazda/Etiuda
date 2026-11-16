@@ -1,5 +1,6 @@
-/* The glass rim: a 1px line of light along the top and bottom edges of a macro, the intent panel and a dialog,
- * in the dark themes only, brightest at the top's left and the bottom's right, the sides nearly dark, static.
+/* The glass rim: a 1px line of light along the top edge of a macro, the intent panel and a dialog, and a quieter
+ * one along the foot (the top at --rim-foot, a fifth), in the dark themes only, brightest at the top's left and
+ * the bottom's right, the sides nearly dark, static.
  *
  *   ETIUDA_FIXTURES=<folder> node tests/glass-rim.js
  *
@@ -12,9 +13,10 @@
  * A lit top and bottom and a dark side is the claim, and so is a peak below the first pass's (bdf6120).
  * A 1px line reads thicker the brighter it is, so thickness is read as brightness at both ends of the top and of
  * the bottom (30 px in from each corner): an edge's dimmer end must hold at least 60 per cent of its brighter
- * end, and the top must read as the bottom does, end for end (the bottom-right as the top-left, the bottom-left
- * as the top-right) within 8 per cent. The row profile is read on the same slab as the 1.25 case, at a device
- * pixel ratio of 1 and of 2, each with the top on a whole CSS pixel: one row, no second line under the rim.
+ * end, and the foot must read as the top at a fifth, end for end (the bottom-right against the top-left, the
+ * bottom-left against the top-right): between 15 and 25 per cent of it. The row profile is read on the same slab
+ * as the 1.25 case, at a device pixel ratio of 1 and of 2, each with the top on a whole CSS pixel: one row, no
+ * second line under the rim.
  *
  * THE FRACTIONAL RATIOS (125 and 150 per cent displays). A masked ring is not snapped to device pixels, so it split
  * the line over two rows, differently at the top and the bottom, and only where an edge lands between device pixels.
@@ -25,22 +27,28 @@
  * above half of the line's own peak; two device pixels of a 1px border at a ratio of 2 are one row), and the
  * equivalent width (that light over the peak, in CSS pixels) within 0.1 of a pixel between them. Light below half
  * the peak is not the line. The control is the previous pass's masked ring injected in
- * the same launch, which must read the two apart. It centres the lone slab whose top or bottom, times the ratio, has
+ * the same launch, which must read the two apart. THE ROWS ARE READ WITH THE FOOT AT THE TOP'S STRENGTH
+ * (--rim-foot:1 injected in those launches): how a ring snaps is its geometry, the same border at any strength, and
+ * a split of the line over two rows cannot be told from 8-bit noise at a fifth of the light. The foot's own strength
+ * is 9gr13's. It centres the lone slab whose top or bottom, times the ratio, has
  * a fractional part nearest one half. At 1.25 and 1.5 the box stays at that centred position, since those
  * reads are about an edge between device pixels. At 1.25 that same slab is also read at ratios 1 and 2, after the top has been moved onto a whole CSS pixel.
  *
  * THE OTHER RAISED SURFACES. The menus, Quick facts, the opened pill bar and the peeking intent panel wear the same ring
- * inside their border and their bevel is off, in dark; in light none of them does. Each is opened in a launch of its own
- * and read twice: computed style (the ring painted, the bevel's bright line gone), and pixels (the bottom edge's right end,
- * 30 px in, against the row 9 px inside it: lit by the rim, darkened by the old bevel's foot, flat with neither). The old
- * look (the ring hidden, the bevel back) is injected in the same launch as the control. The small controls (a pill, a
+ * as one line laid over their border, and their bevel is off, in dark; in light none of them does. The menu, a dialog,
+ * Quick facts and the peeking panel paint it on their own transparent border (background-clip:border-area); the opened
+ * pill bar's is its slot's ::after (tests/desk-one-line.mjs holds the one line, its box and the foot's strength on all
+ * six surfaces). Each is opened in a launch of its own and read twice: computed style (the ring painted, the bevel's
+ * bright line gone), and pixels (the bottom edge's right end, 30 px in, against the row 9 px inside it: lit by the
+ * rim's foot, darkened by the old bevel's foot). The old look (the ring's gradient made transparent, the bevel back)
+ * is injected in the same launch as the control. The small controls (a pill, a
  * button, the add button, the toast) must paint no ring. A click must reach what is inside each ring: the centre of a
  * leaf inside a macro, a dialog and those four is hit-tested and must resolve inside the surface, not to it.
  *
  * THE CONTROLS, IN THE SAME LAUNCH. The pixel read is run again with the first pass's gradient (360 x 58, peak
  * .92) and with the first draft's (240 x 96, which lit the sides nearly as far): the first pass must read the
  * brighter peak, and the draft the lower ratio, so a read that cannot tell them apart goes red. The previous
- * pass's (9e44127, peak .58 top and .46 bottom, a faint .05 line) must fail the ends and the top-to-bottom reads. The light theme is photographed the same way and must show no lift, which also
+ * pass's (9e44127, peak .58 top and .46 bottom, a faint .05 line) must fail the ends read and the foot read (its foot is nearly as bright as its top). The light theme is photographed the same way and must show no lift, which also
  * proves the read sees a ring when there is one.
  *
  * Exit code is the number of failed checks, capped at 63 (E.exitOf), 78 where the run produced no verdict. */
@@ -70,6 +78,8 @@ const MASKED = ":root:not([data-theme=light]) .txt::after{inset:-1px!important;p
   + "background-origin:padding-box!important;background-clip:border-box!important;"
   + "-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0)!important;-webkit-mask-composite:xor!important;"
   + "mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0)!important;mask-composite:exclude!important}";
+/* The row reads' foot at the top's strength: see THE FRACTIONAL RATIOS above. */
+const FOOT_FULL = ":root:not([data-theme=light]){--rim-foot:1!important}";
 let b; let fails = 0; let checks = 0; let reachedEnd = false;
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
 const errs = [];
@@ -356,6 +366,7 @@ async function atRatio(ratio, mode) {
     const q = await b2.newPage();
     q.on("dialog", d => d.accept());
     await bootAndDismiss(q, RUN2.url);
+    await q.addStyleTag({ content: FOOT_FULL });
     await setTheme(q, "dark");
     const packed = await loneSlabs(q);
     const pickAt = mode === "real" ? 1.25 : ratio;
@@ -389,10 +400,12 @@ async function atRatio(ratio, mode) {
 /* The other raised surfaces. Each is opened, then read: the ring's pseudo and the shadow, and the bottom edge's right end
    (30 px in) less the row 9 px inside it, at 1:1 in the page's own pixels. The reads are named by the surface. */
 const OLD_BEVEL = "inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(0,0,0,.38),inset 1px 0 0 rgba(255,255,255,.05)";
-const OLD_LOOK = ":root:not([data-theme=light]) .menu::after,:root:not([data-theme=light]) .facts-panel::after,"
-  + ":root:not([data-theme=light]) .pills-slot.pills-overflow .pills::after,:root:not([data-theme=light]) #intentRail::after{display:none!important}"
+/* The ring is one gradient wherever it is drawn, so making it transparent hides it on every surface at once and leaves
+   each surface's own border line; the bevel goes back on the two that had one. */
+const OLD_LOOK = ":root:not([data-theme=light]){--rim:linear-gradient(transparent,transparent)!important}"
   + ":root:not([data-theme=light]) .facts-panel,:root:not([data-theme=light]) .pills-slot.pills-overflow .pills{--bevel:" + OLD_BEVEL + "!important}";
-const RAISED = [["menu", "#settingsMenu"], ["facts", "#factsPanel"], ["pills", "#pills"], ["peek", "#intentRail"]];
+/* Name, the surface, and where its ring is painted: on the surface's own border (no third entry), or on a host's pseudo. */
+const RAISED = [["menu", "#settingsMenu"], ["facts", "#factsPanel"], ["pills", "#pills", "#pillsSlot", "::after"], ["peek", "#intentRail"]];
 
 /* A click passes through the ring: the centre of a leaf inside the surface must resolve to something inside it. A ring that
    takes pointer events lands the point on the surface itself, since a pseudo-element's box answers for its element. */
@@ -412,13 +425,16 @@ const hitThrough = (pg, sel) => pg.evaluate(sel => {
            hit: hit ? hit.tagName.toLowerCase() + (hit === el ? " (the surface itself)" : "") : "nothing" };
 }, sel);
 
-const surfaceRead = (pg, sel) => pg.evaluate(async sel => {
+const surfaceRead = (pg, sel, host, pseudo) => pg.evaluate(async (sel, host, pseudo) => {
   const el = document.querySelector(sel);
   if (!el) return null;
-  const a = getComputedStyle(el, "::after"), q = el.getBoundingClientRect();
-  return { rim: a.content !== "none" && a.content !== "normal" && +a.opacity > 0.5, bg: a.backgroundImage,
+  const at = host ? document.querySelector(host) : el;
+  if (!at) return null;
+  const a = getComputedStyle(at, pseudo || null), q = el.getBoundingClientRect();
+  const painted = pseudo ? a.content !== "none" && a.content !== "normal" && +a.opacity > 0.5 : /border-area/.test(a.backgroundClip);
+  return { rim: painted, bg: a.backgroundImage, clip: a.backgroundClip,
            shadow: getComputedStyle(el).boxShadow, x: q.left, y: q.top, w: q.width, h: q.height };
-}, sel);
+}, sel, host || null, pseudo || null);
 
 async function surfaceLift(pg, r) {
   const png = await pg.screenshot({ captureBeyondViewport: false, encoding: "base64" });
@@ -438,7 +454,7 @@ async function surfaceLift(pg, r) {
 }
 
 /* Open one surface, read it, put it away. The peek needs a window too narrow to dock the panel. */
-async function openAndRead(pg, name, sel, lift) {
+async function openAndRead(pg, name, sel, lift, host, pseudo) {
   if (name === "menu") { await pg.click("#settingsBtn"); await sleep(900); }
   else if (name === "facts") { await pg.click("#factsBtn"); await sleep(900); }
   else if (name === "pills") {
@@ -448,7 +464,7 @@ async function openAndRead(pg, name, sel, lift) {
     await pg.setViewport({ width: 760, height: 900, deviceScaleFactor: 1 }); await sleep(1200);
     await pg.mouse.move(2, 400); await sleep(1400);
   }
-  const r = await surfaceRead(pg, sel);
+  const r = await surfaceRead(pg, sel, host, pseudo);
   if (r && lift) { r.hit = await hitThrough(pg, sel); r.lift = await surfaceLift(pg, r); }
   if (name === "menu") await pg.keyboard.press("Escape");
   else if (name === "facts") await pg.evaluate(() => { const b = document.getElementById("factsBtn"); if (b.getAttribute("aria-expanded") === "true") b.click(); });
@@ -469,7 +485,7 @@ async function surfaces() {
     await bootAndDismiss(q, RUN3.url);
     const out = { dark: {}, old: {}, light: {}, small: [] };
     await setTheme(q, "dark");
-    for (const [n, sel] of RAISED) out.dark[n] = await openAndRead(q, n, sel, true);
+    for (const [n, sel, host, pseudo] of RAISED) out.dark[n] = await openAndRead(q, n, sel, true, host, pseudo);
     out.small = await q.evaluate(() => [".pill", ".btn", "#addCardFab", "#toast", ".seg button"].map(s => {
       const el = [...document.querySelectorAll(s)].find(e => e.offsetWidth > 0) || document.querySelector(s);
       const a = el && getComputedStyle(el, "::after");
@@ -477,9 +493,9 @@ async function surfaces() {
     }));
     await q.addStyleTag({ content: OLD_LOOK });
     await setTheme(q, "dark");
-    for (const [n, sel] of RAISED) out.old[n] = await openAndRead(q, n, sel, true);
+    for (const [n, sel, host, pseudo] of RAISED) out.old[n] = await openAndRead(q, n, sel, true, host, pseudo);
     await setTheme(q, "light");
-    for (const [n, sel] of RAISED) out.light[n] = await openAndRead(q, n, sel, false);
+    for (const [n, sel, host, pseudo] of RAISED) out.light[n] = await openAndRead(q, n, sel, false, host, pseudo);
     return out;
   } finally {
     try { if (b3) await b3.close(); } catch (x) {}
@@ -488,13 +504,16 @@ async function surfaces() {
 }
 const liftLine = o => RAISED.map(([n]) => n + " " + (o[n] ? o[n].lift + " [" + Math.round(o[n].x) + "," + Math.round(o[n].y) + " " + Math.round(o[n].w) + "x" + Math.round(o[n].h) + "]" : "none")).join(", ");
 
-/* The thickness reads: each edge's dimmer end against its brighter, and the top against the bottom end for end. */
+/* The thickness reads: each edge's dimmer end against its brighter. The foot read: the bottom against the top end for
+   end (the bottom-right against the top-left, the bottom-left against the top-right), which --rim-foot sets at a fifth. */
+const FOOT_LOW = 0.15, FOOT_HIGH = 0.25;
 const ends = m => ({
   topRatio: Math.min(m.top, m.tr) / Math.max(m.top, m.tr, 1),
   botRatio: Math.min(m.bot, m.bl) / Math.max(m.bot, m.bl, 1),
-  tbGap: Math.max(Math.abs(m.top - m.bot) / Math.max(m.top, m.bot, 1), Math.abs(m.tr - m.bl) / Math.max(m.tr, m.bl, 1)) });
+  footNear: m.bot / Math.max(m.top, 1), footFar: m.bl / Math.max(m.tr, 1) });
+const footHeld = e => e.footNear >= FOOT_LOW && e.footNear <= FOOT_HIGH && e.footFar >= FOOT_LOW && e.footFar <= FOOT_HIGH;
 const endsLine = (m, e) => "top " + m.top + " and " + m.tr + " (ratio " + e.topRatio.toFixed(2) + "), bottom " + m.bot + " and " + m.bl
-  + " (ratio " + e.botRatio.toFixed(2) + "), top against bottom end for end differ by " + (100 * e.tbGap).toFixed(1) + " per cent";
+  + " (ratio " + e.botRatio.toFixed(2) + "), the foot against the top end for end " + e.footNear.toFixed(2) + " and " + e.footFar.toFixed(2);
 const liftLog = (label, m) => console.log("       " + label + ", " + D + " px from the corner, less the edge at rest (" + m.rest + "): top " + m.top + ", side " + m.side
   + ", peak (best of 10, 20, 30 px) " + m.peak + ", top at 120 px " + m.far + ", top at the middle " + m.mid
   + ", bottom " + m.bot + ", right side " + m.bside + ", macro " + Math.round(m.h) + " px high, top edge " + m.y.toFixed(3) + ", grid " + m.whole);
@@ -547,15 +566,16 @@ async function readMarked(pg, three, label) {
     const dlg = await p.evaluate(() => {
       const card = document.querySelector(".modal:not([hidden]) .modal-card");
       if (!card) return null;
-      const a = getComputedStyle(card, "::after");
-      return { rim: a.content !== "none" && a.content !== "normal", pos: a.position, w: card.offsetWidth, h: card.offsetHeight };
+      const a = getComputedStyle(card);
+      return { rim: /border-area/.test(a.backgroundClip) && (a.backgroundImage.match(/radial-gradient/g) || []).length === 2,
+               w: card.offsetWidth, h: card.offsetHeight };
     });
     const hitDialog = await hitThrough(p, ".modal:not([hidden]) .modal-card");
     await p.keyboard.press("Escape");
     await p.waitForFunction(() => !document.querySelector(".modal:not([hidden])"), { timeout: 10000 }).catch(() => {});
     await sleep(600);
-    check(!!dlg && dlg.rim && dlg.pos === "absolute" && dlg.w > 200 && dlg.h > 100,
-      "9gr4 dark: a dialog, open (" + (dlg && dlg.w) + " x " + (dlg && dlg.h) + "), paints the rim");
+    check(!!dlg && dlg.rim && dlg.w > 200 && dlg.h > 100,
+      "9gr4 dark: a dialog, open (" + (dlg && dlg.w) + " x " + (dlg && dlg.h) + "), paints the rim on its own border");
 
     const packed = await loneSlabs(p);
     const three = threeSlabs(packed);
@@ -567,17 +587,17 @@ async function readMarked(pg, three, label) {
     for (const m of darks) console.log("       the line's ends, slab " + Math.round(m.h) + " px, brightness above rest: " + endsLine(m, ends(m)));
     const mine = darks[1] || { top: 0, side: 1, peak: 0 };
     const pred5 = m => m.whole && m.h >= 70 && m.top >= 50 && m.top >= 4 * Math.max(m.side, 1);
-    const pred10 = m => m.bot >= 40 && m.bot >= 4 * Math.max(m.bside, 1) && m.far >= 10 && m.mid >= 4;
+    const pred10 = m => m.bot >= 8 && m.bot >= 4 * Math.max(m.bside, 1) && m.far >= 10 && m.mid >= 4;
     const pred12 = m => { const e = ends(m); return m.whole && e.topRatio >= 0.6 && e.botRatio >= 0.6; };
-    const pred13 = m => { const e = ends(m); return m.whole && e.tbGap <= 0.08; };
+    const pred13 = m => m.whole && footHeld(ends(m));
     check(darks.length === 3 && darks.every(pred5),
       "9gr5 dark: along the top the rim is at least 50 and at least four times its brightness down the side, at " + D + " px, on " + slabVerdict(darks, pred5));
     check(darks.length === 3 && darks.every(pred10),
-      "9gr10 dark: the bottom's right is lit and its side dark likewise, and the line holds along the top (120 px, middle), on " + slabVerdict(darks, pred10));
+      "9gr10 dark: the bottom's right is lit (at least 8, the quieter foot) and its side dark likewise, and the line holds along the top (120 px, middle), on " + slabVerdict(darks, pred10));
     check(darks.length === 3 && darks.every(pred12),
       "9gr12 dark: along the top and along the bottom the dimmer end holds at least 60 per cent of the brighter, so the line reads as one thickness, on " + slabVerdict(darks, pred12));
     check(darks.length === 3 && darks.every(pred13),
-      "9gr13 dark: the top line reads as the bottom line does, end for end, within 8 per cent, on " + slabVerdict(darks, pred13));
+      "9gr13 dark: the foot line is the top line at a fifth, end for end (between 15 and 25 per cent of it), on " + slabVerdict(darks, pred13));
 
     await p.addStyleTag({ content: ":root:not([data-theme=light]){--rim:" + PASS1 + "!important}" });
     await setTheme(p, "dark");
@@ -601,11 +621,11 @@ async function readMarked(pg, three, label) {
     const pass2s = three ? await readMarked(p, three, "dark with the previous pass's gradient (9e44127)") : [];
     for (const m of pass2s) console.log("       previous pass, slab " + Math.round(m.h) + " px: " + endsLine(m, ends(m)));
     const predGR12 = (mine, pass2) => {
-      const e2 = ends(pass2), eMine = ends(mine);
-      return e2.topRatio < 0.5 && e2.botRatio < 0.5 && e2.tbGap > 0.08 && eMine.tbGap < e2.tbGap;
+      const e2 = ends(pass2);
+      return e2.topRatio < 0.5 && e2.botRatio < 0.5 && !footHeld(e2) && footHeld(ends(mine));
     };
     check(darks.length === 3 && pass2s.length === 3 && darks.every((m, i) => predGR12(m, pass2s[i])),
-      "9GR12 control: the previous pass's gradient fails both reads (ends under half, top and bottom apart), so they can tell it from this one, on " + pairVerdict(darks, pass2s, predGR12));
+      "9GR12 control: the previous pass's gradient fails both reads (ends under half, a foot outside the fifth's band), so they can tell it from this one, on " + pairVerdict(darks, pass2s, predGR12));
 
     const f125 = await atRatio(1.25, "masked");
     const f1 = await atRatio(1, "real");
@@ -615,7 +635,7 @@ async function readMarked(pg, three, label) {
     console.log("       ratio " + f1.dpr + ", this ring: " + edgeLine(f1.now));
     console.log("       ratio " + f2.dpr + ", this ring: " + edgeLine(f2.now));
     check(f125.dpr === 1.25 && sameRows(f125.now) && f1.dpr === 1 && sameRows(f1.now) && f2.dpr === 2 && sameRows(f2.now),
-      "9gr14 dark at a device pixel ratio of 1.25: the top and the bottom line are one row each, as wide as each other (within 0.1 px) at both ends and the middle, on the "
+      "9gr14 dark at a device pixel ratio of 1.25, the foot at the top's strength for the read: the top and the bottom line are one row each, as wide as each other (within 0.1 px) at both ends and the middle, on the "
       + Math.round(f125.photoH) + " px slab (fractional part " + f125.photoFrac.toFixed(3) + "), and at ratios 1 (" + Math.round(f1.photoH) + " px) and 2 (" + Math.round(f2.photoH) + " px)");
     check(f125.dpr === 1.25 && seenApart(f125.old),
       "9GR14 control at 1.25: the masked ring of eacc361 reads the top and the bottom apart, so the read can tell it from this one, on the "
@@ -624,7 +644,7 @@ async function readMarked(pg, three, label) {
     console.log("       ratio " + f150.dpr + ", this ring: " + edgeLine(f150.now));
     console.log("       ratio " + f150.dpr + ", the masked ring (eacc361): " + edgeLine(f150.old));
     check(f150.dpr === 1.5 && sameRows(f150.now),
-      "9gr15 dark at a device pixel ratio of 1.5: the top and the bottom line are one row each, as wide as each other (within 0.1 px) at both ends and the middle, on the "
+      "9gr15 dark at a device pixel ratio of 1.5, the foot at the top's strength for the read: the top and the bottom line are one row each, as wide as each other (within 0.1 px) at both ends and the middle, on the "
       + Math.round(f150.photoH) + " px slab");
     check(f150.dpr === 1.5 && seenApart(f150.old),
       "9GR15 control at 1.5: the masked ring of eacc361 reads the top and the bottom apart, so the read can tell it from this one, on the "
@@ -637,10 +657,10 @@ async function readMarked(pg, three, label) {
     check(names.every(n => sf.dark[n] && sf.dark[n].rim && (sf.dark[n].bg.match(/radial-gradient/g) || []).length === 2
         && !/255, 255, 255, 0\.16\) 0px 1px 0px 0px inset/.test(sf.dark[n].shadow)),
       "9gr16 dark: the menu, Quick facts, the opened pill bar and the peeking intent panel each paint the ring, and the bevel's bright top line is off");
-    check(names.every(n => sf.dark[n] && sf.dark[n].lift >= 40),
-      "9gr17 dark: at the right end of the bottom edge of each of those four the rim lifts the row at least 40 above the row 9 px inside it");
-    check(names.every(n => sf.old[n] && sf.old[n].lift < 20) && names.every(n => sf.dark[n] && sf.old[n] && sf.dark[n].lift - sf.old[n].lift >= 40),
-      "9GR17 control: with the ring hidden and the old bevel back the same read is under 20 on each, at least 40 below this one's, so it can tell the old look from the new");
+    check(names.every(n => sf.dark[n] && sf.dark[n].lift >= 20),
+      "9gr17 dark: at the right end of the bottom edge of each of those four the rim's quieter foot lifts the row at least 20 above the row 9 px inside it");
+    check(names.every(n => sf.old[n] && sf.old[n].lift < 20) && names.every(n => sf.dark[n] && sf.old[n] && sf.dark[n].lift - sf.old[n].lift >= 12),
+      "9GR17 control: with the ring hidden and the old bevel back the same read is under 20 on each, at least 12 below this one's, so it can tell the old look from the new");
     check(names.every(n => sf.light[n] && !sf.light[n].rim) && sf.light.facts && /255, 255, 255\)/.test(sf.light.facts.shadow),
       "9gr18 light: none of the four paints the ring, and Quick facts keeps its bevel");
     check(sf.small.length === 5 && sf.small.every(x => !x.rim),

@@ -13,9 +13,10 @@
  * added beside its ready-to-show line, begun when the page's navigation commits and so before any frame of it: the
  * first frame it is handed is the first the page presented, and its pixels are counted, every one. The opening's first
  * frame is its ground alone, the theme's #f7f8fa or #0f1013 over the whole window, the mark not yet faded in.
- *   of1  the desk set to the theme the system is NOT in: the first frame is that theme's ground over at least 99.5 per
+ *   of1  the desk set to light: the first frame is that theme's ground over at least 99.5 per
  *        cent of the window, and no pixel of it is the other theme's ground
- *   of2  the desk set to the system's own theme: the same, in that theme, so both themes are read on any machine
+ *   of2  the desk set to dark: the same, in that theme. One of the two is the system's and the other is not, whichever the
+ *        system holds, so the system's theme is never read (a test run reads no part of this machine's registry)
  *   of3  in of1's launch, the opening's first drawn frame (launchState().first) comes within 50 ms of the page's first
  *        paint, both on the page's clock: the opening plays at once
  *   of4  THE CONTROL: the same reading on a quiet desk (eMotionOff, which plays no opening) finds the empty desk and not
@@ -28,11 +29,10 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { execFileSync } = require("node:child_process");
 const E = require("./engine.js");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-if (process.platform !== "win32") E.refuse("tests/opening-frame.js reads the system theme from the Windows registry, so it runs on Windows only");
+if (process.platform !== "win32") E.refuse("tests/opening-frame.js measures the Windows desk's first frame, so it runs on Windows only");
 E.windowWall("tests/opening-frame.js");
 E.refuseWhileElectronLive("tests/opening-frame.js");
 const PRIO = E.belowNormal();
@@ -44,14 +44,6 @@ let fails = 0, checks = 0;
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
 const READY_SHOW = '  win.once("ready-to-show", showWhenReady);';
 
-function systemTheme() {
-  const out = execFileSync("C:\\Windows\\System32\\reg.exe",
-    ["query", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", "/v", "AppsUseLightTheme"],
-    { encoding: "utf8", windowsHide: true });
-  const m = /AppsUseLightTheme\s+REG_DWORD\s+0x([0-9a-f]+)/i.exec(out);
-  if (!m) throw new Error("the registry gave no AppsUseLightTheme");
-  return parseInt(m[1], 16) ? "light" : "dark";
-}
 function electronExe() {
   const dir = path.join(E.ROOT, "node_modules", "electron");
   return path.join(dir, "dist", fs.readFileSync(path.join(dir, "path.txt"), "utf8").trim());
@@ -86,7 +78,7 @@ async function launch(theme, quiet) {
   if (hits !== 1) throw new Error("the ready-to-show line matched " + hits + " times in shell/main.js, expected 1");
   fs.writeFileSync(main, src.split(READY_SHOW).join(PROBE), "utf8");
   const UD = path.join(APP, "userdata");
-  const keys = { eTourDone_v3: "1", eTourInvite_v3: "1", eNameAsked: "1", eAgent: "Probe", eTheme: theme };
+  const keys = { eTourDone_v3: "1", eTourInvite_v3: "1", eFirstSigninSeen: "1", eNameAsked: "1", eAgent: "Probe", eTheme: theme };
   if (quiet) keys.eMotionOff = "1";
   fs.writeFileSync(path.join(UD, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, app: "harness",
     saved: new Date().toISOString(), keys: keys }), "utf8");
@@ -120,8 +112,8 @@ async function launch(theme, quiet) {
 (async () => {
   let done = false;
   try {
-    const sys = systemTheme(), other = sys === "light" ? "dark" : "light";
-    console.log("       the system's theme, read from the registry: " + sys);
+    /* BOTH THEMES, so one of them is the system's and the other is not, whichever the system holds: the system's own theme is
+       not read, since a test run reads no part of this machine's registry. */
     const share = (f, t) => f[t] / f.n;
     const ground = async (n, theme, why) => {
       const r = await launch(theme, false);
@@ -132,8 +124,9 @@ async function launch(theme, quiet) {
         + foe + " pixels are the other theme's ground (none allowed)");
       return r;
     };
-    const a = await ground("of1", other, "the system is " + sys);
-    await ground("of2", sys, "the system's own");
+    const other = "light";
+    const a = await ground("of1", other, "one of the two themes");
+    await ground("of2", "dark", "the other");
     const L = a.page && a.page.launch, paint = a.page && a.page.paint;
     check(!!L && typeof L.first === "number" && L.first > 0 && typeof paint === "number" && L.first <= paint + OPEN_WITHIN_MS,
       "of3 the opening's first drawn frame at " + (L && L.first != null ? Math.round(L.first) : "none") + " ms, the page's first paint at "

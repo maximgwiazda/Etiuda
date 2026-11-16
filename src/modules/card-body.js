@@ -2,7 +2,7 @@ import { CONTENT_LANGS } from "./content-model.js";
 import { ICON_EDIT, ICON_EYE_OPEN, ICON_EYE_SHUT, ICON_STAR_OFF, ICON_STAR_ON, _NOTE, _svg } from "./icons.js";
 import { stampHtml } from "./card-chain.js";
 import { cardDrag } from "./list-pointer.js";
-import { altLabelAt, cardCommits, cardLang, cardTitle, noteFor, parts } from "./card-model.js";
+import { altLabelAt, cardCommits, cardLang, cardTitle, noteFor, parts, rewordShown } from "./card-model.js";
 import { catMarkHtml, catSlot } from "./cat-identity.js";
 import { esc } from "./esc.js";
 import { escFilled, fill, FILL_A, FILL_B, FILL_M_A, FILL_M_B } from "./intent-text.js";
@@ -14,6 +14,8 @@ import { movedCardIds } from "./card-order.js";
 import { railActive } from "./rail-panel.js";
 import { t } from "./ui-lang.js";
 import { entrySel, lang, intentIdxs, editionView } from "./app-state.js";
+import { flagButtonHtml, flagMarkHtml } from "./card-flag-desk.js";
+import { rewordButtonHtml, rewordChipHtml, rewordAnswersHtml } from "./card-reword.js";
 
 /* The card body, extracted so a language flip can rebuild one card at a time - the
    render map and the flip's idle chunks must write the same bytes (verifyPool checks).
@@ -22,7 +24,8 @@ function cardBodyHtml(m,i,ctx){
   const hit=ctx.hit, catHit=ctx.catHit, fav=ctx.fav, band=ctx.band,
         other=ctx.other, dragTip=ctx.dragTip;
   let cardH="";
-    cardH+='<div class="card'+(m._hidden?" is-hidden":"")+(hit?" intent-hit":"")+(catHit?" cat-hit":"")
+    const rw=rewordShown(m);
+    cardH+='<div class="card'+(m._hidden?" is-hidden":"")+(rw?" rw-on":"")+(hit?" intent-hit":"")+(catHit?" cat-hit":"")
       +(cardDrag&&cardDrag.moved&&cardDrag.key===m.id?" dragging":"")
       +'" data-i="'+i+'" data-id="'+esc(m.id||'')+'" data-rank="'+esc(band)+'"'
       +(catSlot(m.c)>=0?' data-ec="'+catSlot(m.c)+'"':'')
@@ -31,7 +34,8 @@ function cardBodyHtml(m,i,ctx){
     /* data-i18n-skip: a card title is the employer's content, and so is the name on the mark's
        slot. Nothing sweeps the card list today, but the marker travels with the markup. A card
        has exactly one category, so the mark is simply its own - no counting, unlike a rail row. */
-    cardH+=catMarkHtml(m.c)+'<span class="ctitle" data-i18n-skip>'+esc(cardTitle(m))+'</span>'+(cardCommits(m)?stampHtml("cstamp"):"");
+    cardH+=catMarkHtml(m.c)+'<span class="ctitle" data-i18n-skip>'+esc(cardTitle(m))+'</span>'+(cardCommits(m)?stampHtml("cstamp"):"")
+      +flagMarkHtml(String(m.id||""));
     /* Captured rather than appended inline: a kept card has its badges added and removed by
        patchCard(), and they must be the same bytes a rebuild would have written. */
     const hitBadge='<span class="cbadge hit" title="'+esc(t("Linked to the selected intent"))+'">'+esc(t("Linked"))+'</span>';
@@ -57,9 +61,10 @@ function cardBodyHtml(m,i,ctx){
       : (fav ? "Put this card away: it greys out at the foot of this category and loses its star"
              : "Put this card away: it greys out at the foot of this category"));
     const _note=noteFor(m);
-    cardH+='<span class="cacts">'
+    cardH+='<span class="cacts">'+rewordButtonHtml()
       +(_note ? '<button type="button" data-act="note" title="'+esc(t("Internal note"))+'" aria-label="'+esc(t("Internal note"))+'" aria-expanded="false">'+_svg("ic",_NOTE)+'</button>' : '')
       +'<button type="button" data-act="edit" title="'+esc(t("Edit this card"))+'" aria-label="'+esc(t("Edit this card"))+'">'+ICON_EDIT+'</button>'
+      +flagButtonHtml(String(m.id||""))
       +'<button type="button" class="'+(m._hidden?"":"danger")+'" data-act="hide" title="'+esc(hideTip)+'" aria-label="'+esc(hideTip)+'">'+(m._hidden?ICON_EYE_SHUT:ICON_EYE_OPEN)+'</button>'
       +'<button type="button" class="star-btn'+(fav?" on":"")+'" data-act="fav" title="'+esc(favTip)+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(fav?"true":"false")+'">'+(fav?ICON_STAR_ON:ICON_STAR_OFF)+'</button>'
       +'</span></div>';
@@ -69,6 +74,7 @@ function cardBodyHtml(m,i,ctx){
      Written as "is it Polish" while there were two, which tinted nothing at all on a desk
      whose primary is Polish. */
   const ps=parts(m,_L), cls=_L===CONTENT_LANGS[0]?"":" plx", edDiff=editionDiffParts(m,_L,ps);
+    if(rw) cardH+=rewordChipHtml(rw);
     if(ps.length){
       // _L, never lang: on a pinned card the badge must name the language actually shown.
       const many=ps.length>1, word=m.seq?t("STEP"):_L.toUpperCase();
@@ -88,6 +94,7 @@ function cardBodyHtml(m,i,ctx){
       cardH+='<div class="miss">'+esc(t("No {LANG} version for this card").replace("{LANG}",_L.toUpperCase()))
          +' - '+esc(t("switch to {LANG} to use it").replace("{LANG}",other.toUpperCase()))+'.</div>';
     }
+    if(rw) cardH+=rewordAnswersHtml();
     // In-card chips only when the side rail is off - otherwise the left panel is the list.
     const sws=(lang==="pl"?(m.swpl||m.sw):(m.sw||m.swpl));
     if(sws && !railActive()) cardH+=swapStripHtml(sws);

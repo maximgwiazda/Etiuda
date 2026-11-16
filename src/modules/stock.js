@@ -6,11 +6,13 @@ const M=[];
    pencil at the top of this panel is the only way in. */
 const FACTS_BUILT_IN=`Quick facts are yours to write.
 
-Use the pencil above to edit it - fees, deadlines, links, anything you use often.
+The pencil above opens them for editing:
+fees, deadlines, links, anything used often.
 
-A catalog can ship its own, and loading it replaces what is here.
+A catalog can bring its own,
+and loading it replaces what is here.
 
-What you type stays in this browser only.`;
+What is typed here stays in this browser.`;
 let FACTS=FACTS_BUILT_IN;
 
 /* Empty by default: who is on a chat is the business's property - shipping "booker" or
@@ -39,5 +41,5 @@ function setCatalogWho(list){ WHO_BASE=list; }
 function resetStock(){ M.length=0; FACTS=FACTS_BUILT_IN; WHO_BASE=[]; }
 
 export {
-  M, FACTS, WHO_BASE, normWhoList, setCatalogFacts, setCatalogWho, resetStock,
+  M, FACTS, FACTS_BUILT_IN, WHO_BASE, normWhoList, setCatalogFacts, setCatalogWho, resetStock,
 };

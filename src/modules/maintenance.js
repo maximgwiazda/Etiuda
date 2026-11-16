@@ -7,7 +7,7 @@ import { catalogMacroCount, sampleUntouched } from "./catalog-file.js";
 import { catalogLoaded } from "./catalog-boot.js";
 import { remPx, colMode, colFloor, colCount, COL_GAP } from "./columns.js";
 import { CATS, CONTENT_LANGS } from "./content-model.js";
-import { dismissModal, closeModal, openDialog, edDirty, modalFront } from "./dialog.js";
+import { dismissModal, closeModal, edDirty, modalFront } from "./dialog.js";
 import { E_VERSION } from "./env.js";
 import { eHost, eCatalogFile, eCatalogIn, eCatalogBuiltIn, eCatalogFolder, E_CATALOG_FOLDER_KEY, E_CATALOG_SCRIPT } from "./host.js";
 import { lsGet, lsKeys, nsGet, E_NS, E_LS_OK, E_SS_OK, eDeskFileShown, eSaveTrouble, eLastSaved, eHomeless, eDeskHome,
@@ -15,7 +15,7 @@ import { lsGet, lsKeys, nsGet, E_NS, E_LS_OK, E_SS_OK, eDeskFileShown, eSaveTrou
 import { ejectCatalog } from "./local-memory.js";
 import { tabs } from "./tabs.js";
 import { mgSystemStill, M_STILL_Q } from "./motion.js";
-import { tc, fileStamp, t, toast } from "./ui-lang.js";
+import { tc, fileStamp, t, toast, hugDottedGround } from "./ui-lang.js";
 import { cutLeaves, dismissNode } from "./motion.js";
 import { hangBubble } from "./bubble.js";
 import { openScreenTab, registerScreen } from "./screen-tabs.js";
@@ -24,7 +24,7 @@ import { RAIL_DOCK_MIN, railLocked, railMaxWidth } from "./rail-panel.js";
 import { pageScroller } from "./page-scroll.js";
 import { intentOrder } from "./intent-id.js";
 import { esc } from "./esc.js";
-import { list, modalEl, modalCard, $ } from "./dom.js";
+import { list, $ } from "./dom.js";
 import { systemTheme, themeChoice, themeTrace, traceNote } from "./theme.js";
 import { copy } from "./mark.js";
 import { pillsLocked } from "./pills-box.js";
@@ -444,13 +444,8 @@ function mtMaintBody(){
    nothing in the readings can hold focus - the buttons sit in the pinned row. */
 let mtLiveT=0;
 function mtGridEl(){
-  if(modalEl && !modalEl.hidden && modalCard && modalCard.classList.contains("mt-modal")){
-    return modalCard.querySelector(".mt-grid");
-  }
   const sh=typeof document!=="undefined"?document.getElementById("screenHost"):null;
-  if(sh && !sh.hidden){
-    return sh.querySelector(".mt-grid");
-  }
+  if(sh && !sh.hidden) return sh.querySelector(".mt-grid");
   return null;
 }
 function mtPanelOpen(){
@@ -470,6 +465,7 @@ function mtRefreshLive(){
       if(head) head.textContent=t("Readings");
     }
     g.outerHTML=mtGridHtml();
+    if(root) hugDottedGround(root);
   },120);
 }
 /* Width crossings arrive as resize, which the one listener already carries. These are the
@@ -692,6 +688,7 @@ function wireMtShell(root){
     if(title&&page) title.textContent=page.name;
     const lede=root.querySelector("#mtLede");
     if(lede) lede.textContent=mtOn==="health"?"":(mtLede()[mtOn]||"");
+    hugDottedGround(root);
   };
   buttons.forEach(b=>{ b.onclick=()=>show(b.getAttribute("data-mt")); });
   const gear=root.querySelector("#mtSettings");
@@ -707,23 +704,9 @@ registerScreen("maintenance", {
     host.innerHTML = mtShellHtml();
     wireMaintenanceActions(host, closeFn);
     wireMtShell(host.querySelector ? host.querySelector(".sx.lm-mt") : null);
+    hugDottedGround(host);
   }
 });
-
-function openMaintenanceModal(backFn){
-  openDialog({
-    cls: "mt-modal",
-    back: backFn||null,
-    title: "Maintenance",
-    body: mtMaintBody()+'<p class="mt-moved" id="mtMoved">'+esc(t(MT_MOVED))+'</p>',
-    actions: '<div class="mf-left">'
-      +'<button type="button" class="btn danger" id="mtEject">'+esc(t("Eject catalog"))+'</button>'
-      +'</div>'
-      +'<button type="button" class="btn" id="mtCopy" title="'+esc(t("Copy the report: counts and environment only, never your content"))+'">'+esc(t("Copy report"))+'</button>'
-      +'<button type="button" class="btn primary" id="mtClose">'+esc(t("Done"))+'</button>',
-    wire: () => wireMaintenanceActions(null, () => dismissModal())
-  });
-}
 
 function openMaintenance(backFn){
   /* An editor holding typed, unsaved changes keeps them: the shortcut does nothing rather than close it with no way
@@ -732,15 +715,10 @@ function openMaintenance(backFn){
     try { toast(t("Maintenance can open once the edit in progress is saved or cancelled.")); } catch(_) {}
     return;
   }
-  /* A resting editor is held under Maintenance by openDialog and comes back when it closes. */
   if(typeof closeModal === "function" && modalFront()){
     try { closeModal(); } catch(_) {}
   }
-  try {
-    openScreenTab("maintenance");
-    return;
-  } catch (_) {}
-  openMaintenanceModal(backFn);
+  openScreenTab("maintenance");
 }
 
 export {
@@ -749,7 +727,6 @@ export {
   wireMaintenanceWatch,
   mtRefreshLive,
   openMaintenance,
-  openMaintenanceModal,
   mtGridHtml,
   wireMaintenanceActions,
   mtHealthTiles,

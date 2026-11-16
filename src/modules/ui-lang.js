@@ -116,6 +116,53 @@ UI_STRINGS.pl={
   "Create a card":"Utwórz kartę",
   "Create a card in {CAT}":"Utwórz kartę w kategorii {CAT}",
   "A different word may do better.":"Inne słowo może trafić lepiej.",
+  "The words you selected. Type to change them.":"Zaznaczone słowa. Można je zmienić, pisząc.",
+  "Your own words?":"Własne słowa?",
+  "Fix spelling":"Popraw pisownię",
+  "Shorter":"Krócej",
+  "Friendlier":"Przyjaźniej",
+  "More formal":"Bardziej oficjalnie",
+  "Into Polish":"Na polski",
+  "Into English":"Na angielski",
+  "A press sends only the words above to {ADDRESS}, your organisation's AI service.":"Kliknięcie wysyła tylko powyższe słowa do {ADDRESS}, usługi AI organizacji.",
+  "You selected":"Zaznaczony tekst",
+  "Sent to {ADDRESS}: only the words you selected. Read the result before you send it.":"Do {ADDRESS} trafiły tylko zaznaczone słowa. Wynik należy przeczytać przed wysłaniem.",
+  "Enter puts it in place of your selection":"Enter wstawia go w miejsce zaznaczenia",
+  "Back to the replies":"Wróć do odpowiedzi",
+  "Waiting for the service at {ADDRESS}…":"Oczekiwanie na usługę pod adresem {ADDRESS}…",
+  "Reword":"Przeredaguj",
+  "Reword this card":"Przeredaguj tę kartę",
+  "Or say how, then press Enter":"Albo opis zmiany, potem Enter",
+  "Sends this card's words to {ADDRESS}. The card itself changes only if you approve the result.":"Wysyła treść tej karty do {ADDRESS}. Sama karta zmieni się tylko po zatwierdzeniu wyniku.",
+  "Reworded: {ACT}":"Przeredagowano: {ACT}",
+  "Reworded as described":"Przeredagowano według opisu",
+  "Not saved.":"Niezapisane.",
+  "Shown until Etiuda is next opened, unless you approve it.":"Widoczne do ponownego uruchomienia Etiudy, chyba że zostanie zatwierdzone.",
+  "Approve":"Zatwierdź",
+  "Keep these words as your own edit of the card":"Zachowaj tę treść jako własną zmianę karty",
+  "Revert":"Przywróć",
+  "Show the card as it was":"Pokaż kartę w pierwotnej postaci",
+  "The result lost a name this card fills in, or one of its steps, so it is not shown. The card is as it was; another try may keep them.":"W wyniku zabrakło nazwy, którą karta wypełnia, albo jednego z jej kroków, więc nie został pokazany. Karta pozostała bez zmian; kolejna próba może je zachować.",
+  "The service at {ADDRESS} did not answer in time. Your words are as you wrote them.":"Usługa pod adresem {ADDRESS} nie odpowiedziała na czas. Zaznaczony tekst pozostał bez zmian.",
+  "The service at {ADDRESS} did not answer in time. The card is as it was.":"Usługa pod adresem {ADDRESS} nie odpowiedziała na czas. Karta pozostała bez zmian.",
+  "The service at {ADDRESS} is busy; a later try may go through. Your words are as you wrote them.":"Usługa pod adresem {ADDRESS} jest zajęta; późniejsza próba może się udać. Zaznaczony tekst pozostał bez zmian.",
+  "The service at {ADDRESS} is busy; a later try may go through. The card is as it was.":"Usługa pod adresem {ADDRESS} jest zajęta; późniejsza próba może się udać. Karta pozostała bez zmian.",
+  "No result came back from {ADDRESS}. Your words are as you wrote them.":"Z adresu {ADDRESS} nie nadszedł wynik. Zaznaczony tekst pozostał bez zmian.",
+  "No result came back from {ADDRESS}. The card is as it was.":"Z adresu {ADDRESS} nie nadszedł wynik. Karta pozostała bez zmian.",
+  "The service at {ADDRESS} failed three times in a row, so Etiuda waits before asking it again; nothing was sent. Your words are as you wrote them.":"Usługa pod adresem {ADDRESS} zawiodła trzy razy z rzędu, więc Etiuda odczeka, zanim znów się do niej zwróci; nic nie zostało wysłane. Zaznaczony tekst pozostał bez zmian.",
+  "The service at {ADDRESS} failed three times in a row, so Etiuda waits before asking it again; nothing was sent. The card is as it was.":"Usługa pod adresem {ADDRESS} zawiodła trzy razy z rzędu, więc Etiuda odczeka, zanim znów się do niej zwróci; nic nie zostało wysłane. Karta pozostała bez zmian.",
+  "These words are over 4000 characters, more than can be sent, so nothing was sent. Your words are as you wrote them.":"Tekst ma ponad 4000 znaków, więcej, niż można wysłać, więc nic nie zostało wysłane. Zaznaczony tekst pozostał bez zmian.",
+  "These words are over 4000 characters, more than can be sent, so nothing was sent. The card is as it was.":"Tekst ma ponad 4000 znaków, więcej, niż można wysłać, więc nic nie zostało wysłane. Karta pozostała bez zmian.",
+  "Rewording is turned off on this computer, so nothing was sent. Your words are as you wrote them.":"Przeredagowanie jest wyłączone na tym komputerze, więc nic nie zostało wysłane. Zaznaczony tekst pozostał bez zmian.",
+  "Rewording is turned off on this computer, so nothing was sent. The card is as it was.":"Przeredagowanie jest wyłączone na tym komputerze, więc nic nie zostało wysłane. Karta pozostała bez zmian.",
+  "The organisation's model is no longer set, so nothing was sent. Your words are as you wrote them.":"Model organizacji nie jest już ustawiony, więc nic nie zostało wysłane. Zaznaczony tekst pozostał bez zmian.",
+  "The organisation's model is no longer set, so nothing was sent. The card is as it was.":"Model organizacji nie jest już ustawiony, więc nic nie zostało wysłane. Karta pozostała bez zmian.",
+  "Rewording is not available just now, so nothing was sent. Your words are as you wrote them.":"Przeredagowanie jest teraz niedostępne, więc nic nie zostało wysłane. Zaznaczony tekst pozostał bez zmian.",
+  "Rewording is not available just now, so nothing was sent. The card is as it was.":"Przeredagowanie jest teraz niedostępne, więc nic nie zostało wysłane. Karta pozostała bez zmian.",
+  "The result came back empty, so it is not shown. The card is as it was; another try may do better.":"Wynik nadszedł pusty, więc nie został pokazany. Karta pozostała bez zmian; kolejna próba może się udać.",
+  "One of this card's alternatives came back with no words, so the result is not shown. The card is as it was; another try may do better.":"Jeden z wariantów karty wrócił bez treści, więc wynik nie został pokazany. Karta pozostała bez zmian; kolejna próba może się udać.",
+  "Rewording":"Przeredagowanie",
+  "Reword on cards and Your own words? in Quick replies send the card's words or the selected words to the organisation's model at {ADDRESS}, only when pressed. Turned off, both are gone and nothing is sent; the choice is yours, on this computer.":"Przycisk Przeredaguj na kartach i Własne słowa? w Szybkich odpowiedziach wysyłają treść karty albo zaznaczony tekst do modelu organizacji pod adresem {ADDRESS}, tylko po kliknięciu. Po wyłączeniu oba znikają i nic nie jest wysyłane; to osobisty wybór na tym komputerze.",
   "Press":"Naciśnij",
   "{KEY} clears the search and the intents and shows every card.":"{KEY} czyści wyszukiwanie i intencje i pokazuje wszystkie karty.",
   "Etiuda is ready for its first replies.":"Etiuda czeka na pierwsze odpowiedzi.",
@@ -236,7 +283,7 @@ UI_STRINGS.pl={
   "step":"krok",
   "Ready to paste: {TITLE}, {WHAT}":"Gotowe do wklejenia: {TITLE}, {WHAT}",
   "A commitment, ready to paste: {TITLE}, {WHAT}":"Gotowe do wklejenia zobowiązanie: {TITLE}, {WHAT}",
-  "Copied. Next time, {KEYS} opens the replies over any window and pastes the one chosen.":"Skopiowano. Następnym razem {KEYS} otworzy odpowiedzi nad dowolnym oknem i wklei wybraną.",
+  "Copied: paste it into the chat with Ctrl+V. Next time, {KEYS} opens Quick replies over any window and pastes the one chosen.":"Skopiowano: wystarczy wkleić odpowiedź w czacie skrótem Ctrl+V. Następnym razem {KEYS} otworzy Szybkie odpowiedzi nad dowolnym oknem i wklei wybraną.",
   "All":"Wszystkie",
   "cards":"karty",
   "categories":"kategorie",
@@ -280,7 +327,7 @@ UI_STRINGS.pl={
   "Welcome to Etiuda":"Witamy w Etiudzie",
   "Conversations":"Rozmowy",
   "Customer name and role":"Imię klienta i rola",
-  "Category pills":"Pasek kategorii",
+  "The category bar":"Pasek kategorii",
   "Intent panel":"Panel intencji",
   "Cards":"Karty",
   "A card's buttons":"Przyciski karty",
@@ -289,6 +336,7 @@ UI_STRINGS.pl={
   "English / Polish":"Angielski / polski",
   "Light and dark":"Jasny i ciemny",
   "Ready for the first customer":"Gotowe na pierwszego klienta",
+  "Ready to practise":"Gotowe do ćwiczeń",
   "Categories & cards":"Kategorie i karty",
   "Intent":"Intencja",
   "Intents":"Intencje",
@@ -387,6 +435,7 @@ UI_STRINGS.pl={
   "This version: {VERSION}":"Ta wersja: {VERSION}",
   "Newest available: {VERSION}":"Najnowsza dostępna: {VERSION}",
   "This is the newest version.":"To najnowsza wersja.",
+  "No version newer than this build has been published.":"Nie opublikowano wersji nowszej niż ta.",
   "Whether a newer version exists could not be checked just now. This one works as it is.":"Nie udało się teraz sprawdzić, czy jest nowsza wersja. Ta działa bez zmian.",
   "Focus {PAX}":"Kursor w {PAX}",
   "Focus ROLE":"Kursor w ROLE",
@@ -492,6 +541,7 @@ UI_STRINGS.pl={
   "Older catalog file found":"Znaleziono starszy plik katalogu",
   "Load it anyway":"Wczytaj mimo to",
   "This edition is older than the one in use on this desk, so some of its replies may be out of date.":"To wydanie jest starsze niż to, którego się tu używa, więc część odpowiedzi może być nieaktualna.",
+  "By its own edition number, this file is older than the catalog in use on this desk.":"Według własnego numeru wydania ten plik jest starszy niż katalog używany na tym stanowisku.",
   "Open the older edition":"Otwórz starsze wydanie",
   "Keep the newer one":"Zostaw nowsze",
   "This file is signed with the key {KEY}, which is not the team lead's.":"Ten plik jest podpisany kluczem {KEY}, który nie jest kluczem lidera zespołu.",
@@ -594,6 +644,8 @@ UI_STRINGS.pl={
   "Intent panel hidden":"Panel intencji ukryty",
   "Quick facts saved":"Zapisano szybkie fakty",
   "Quick facts match built-in default":"Szybkie fakty zgodne z wbudowanymi",
+  "Quick facts are yours to write.\n\nThe pencil above opens them for editing:\nfees, deadlines, links, anything used often.\n\nA catalog can bring its own,\nand loading it replaces what is here.\n\nWhat is typed here stays on this computer.":"Szybkie fakty można uzupełnić samodzielnie.\n\nOłówek powyżej otwiera je do edycji:\nopłaty, terminy, odnośniki, wszystko, czego często się używa.\n\nKatalog może zawierać własne,\na jego wczytanie zastępuje to, co jest tutaj.\n\nTo, co się tu wpisze, zostaje na tym komputerze.",
+  "Quick facts are yours to write.\n\nThe pencil above opens them for editing:\nfees, deadlines, links, anything used often.\n\nA catalog can bring its own,\nand loading it replaces what is here.\n\nWhat is typed here stays in this browser.":"Szybkie fakty można uzupełnić samodzielnie.\n\nOłówek powyżej otwiera je do edycji:\nopłaty, terminy, odnośniki, wszystko, czego często się używa.\n\nKatalog może zawierać własne,\na jego wczytanie zastępuje to, co jest tutaj.\n\nTo, co się tu wpisze, zostaje w tej przeglądarce.",
   "is now a supporting category":"jest teraz kategorią wspierającą",
   "is an ordinary category":"jest zwykłą kategorią",
   "No {LANG} version for this card":"Ta karta nie ma jeszcze wersji {LANG}",
@@ -686,7 +738,6 @@ UI_STRINGS.pl={
   "In an editor: the language tab before this one":"W edytorze: poprzedni język",
   "In an editor: the language tab after this one":"W edytorze: następny język",
   "Switch the language being edited":"Przełącz edytowany język",
-  "Restored your cards and stars from an earlier build.":"Przywrócono własne karty i gwiazdki z wcześniejszej wersji.",
   "Your intent edits and stars are set aside: this catalog cannot say which intent each belongs to.":"Odłożono własne zmiany i gwiazdki przy intencjach: ten katalog nie wskazuje, której intencji dotyczą.",
   "Edited cards this catalog does not have are kept as your own: {CARDS}.":"Zmienione karty, których ten katalog nie ma, zostają jako własne: {CARDS}.",
   "Starred cards this catalog does not have are off your list: {CARDS}.":"Karty z gwiazdką, których ten katalog nie ma, znikają z listy: {CARDS}.",
@@ -895,7 +946,7 @@ UI_STRINGS.pl={
   "This version of Etiuda, what is new in it, and its licence":"Ta wersja Etiudy, jej nowości i licencja",
   "Interface language, appearance and keyboard shortcuts":"Język interfejsu, wygląd i skróty klawiszowe",
   "Hide the category bar; hold Ctrl to peek at it while hidden":"Ukryj pasek kategorii; przytrzymaj Ctrl, aby na niego zerknąć",
-  "Hide the intent panel; its chips then appear on the first card that uses {INTENT}":"Ukryj panel intencji; przyciski intencji pojawią się wtedy na pierwszej karcie, która używa {INTENT}",
+  "Hide the intent panel; its chips then appear on the first card that uses {INTENT}":"Ukryj panel intencji; przyciski intencji pojawią się wtedy na pierwszej karcie, która używa INTENCJA",
   "AGENT":"AGENT",
   "PAX":"PAX",
   "INTENT":"INTENCJA",
@@ -932,6 +983,8 @@ UI_STRINGS.pl={
   "Showing Polish cards; click or press {KEY} for English":"Widoczne karty po polsku; kliknij albo naciśnij {KEY}, aby przejść na angielski",
   "Scroll tabs left":"Przewiń rozmowy w lewo",
   "Scroll tabs right":"Przewiń rozmowy w prawo",
+  "Open tabs":"Otwarte zakładki",
+  "All open tabs":"Wszystkie otwarte zakładki",
   "The new tab starts with cleared fields and your settings kept.":"Nowa rozmowa ma puste pola i zachowane ustawienia.",
   "New tab (same shared settings; cleared PAX, intent, ROLE, categories)":"Nowa rozmowa (te same wspólne ustawienia; wyczyszczone PAX, intencja, ROLE, kategorie)",
   "One tab for each customer you are talking to, each with its own PAX, intent, ROLE and categories":"Osobna rozmowa dla każdego klienta, z własnym PAX, intencją, ROLE i kategoriami",
@@ -981,6 +1034,20 @@ UI_STRINGS.pl={
   "Back":"Wstecz",
   "Next":"Dalej",
   "Done":"Gotowe",
+  "This looks wrong":"Coś się nie zgadza",
+  "Sent to the lead":"Przekazano liderowi zespołu",
+  "The lead will see it in Studio, and the answer comes with the team's next edition. If you know what is wrong, add it here; it is fine not to know.":"Lider zespołu zobaczy to w Studio, a odpowiedź przyjdzie z następnym wydaniem zespołu. Jeśli wiadomo, co się nie zgadza, można to tu dopisać; nie trzeba tego wiedzieć.",
+  "What looks wrong (optional), then Enter":"Co się nie zgadza (nieobowiązkowo), potem Enter",
+  "Take it back":"Wycofaj",
+  "With the lead":"U lidera",
+  "Answered":"Jest odpowiedź",
+  "The lead has answered":"Jest odpowiedź lidera zespołu",
+  "Left as it is.":"Bez zmian.",
+  "The card has been mended.":"Kartę poprawiono.",
+  "The note can be up to 500 characters long.":"Notatka może mieć najwyżej 500 znaków.",
+  "The note holds a character it cannot keep, such as a line break or a tab.":"Notatka zawiera znak, którego nie może zachować, na przykład podział wiersza lub tabulator.",
+  "This desk has already sent as many flags on this catalog as it can, so this one was not sent.":"To stanowisko wysłało już tyle zgłoszeń do tego katalogu, ile może, więc tego nie wysłano.",
+  "Room comes back as the lead answers.":"Miejsce zwalnia się, gdy lider zespołu odpowiada.",
   "Save":"Zapisz",
   "Cancel":"Anuluj",
   "Delete":"Usuń",
@@ -992,6 +1059,7 @@ UI_STRINGS.pl={
   "Library…":"Biblioteka…",
   "Settings…":"Ustawienia…",
   "Show tour…":"Pokaż przewodnik…",
+  "Continue the tour ({N} of {OF})":"Wróć do przewodnika (krok {N} z {OF})",
   "About Etiuda":"O Etiudzie",
   "Hide intent panel":"Ukryj panel intencji",
   "Show intent panel":"Pokaż panel intencji",
@@ -1013,17 +1081,18 @@ UI_STRINGS.pl={
   "Off, it matches words only.":"Wyłączone dopasowuje tylko słowa.",
   /* The organisation's model (board 992): the copywriter's words, 2026-11-11, but for the lines marked as placeholders. */
   "Suggest intents with the organisation's model":"Propozycje intencji przy użyciu modelu organizacji",
-  "Sends a copied message to the organisation's model at {HOST} and suggests the intents it is closest to. Off, suggestions come from matching words.":"Wysyła skopiowaną wiadomość do modelu organizacji pod adresem {HOST} i proponuje najbliższe jej intencje. Wyłączone: propozycje wynikają z dopasowania słów.",
-  "The organisation's model ranks the suggestions; the copied message is sent to {HOST}.":"Model organizacji ustala kolejność propozycji; skopiowana wiadomość trafia do {HOST}.",
+  "Sends a copied message, with up to 12 short pieces of the cards being ranked, to the organisation's model at {HOST} and suggests the intents it is closest to. Off, suggestions come from matching words.":"Wysyła skopiowaną wiadomość, razem z najwyżej 12 krótkimi fragmentami porządkowanych kart, do modelu organizacji pod adresem {HOST} i proponuje najbliższe jej intencje. Wyłączone: propozycje wynikają z dopasowania słów.",
+  "The organisation's model ranks the suggestions; the copied message and up to 12 short pieces of the cards are sent to {HOST}.":"Model organizacji ustala kolejność propozycji; skopiowana wiadomość i najwyżej 12 krótkich fragmentów kart trafiają do {HOST}.",
   "Suggestions from the organisation's model":"Propozycje z modelu organizacji",
   "Search by meaning with the organisation's model":"Wyszukiwanie według znaczenia przy użyciu modelu organizacji",
-  "From the third letter typed, the main search adds the cards and intents closest in meaning after those that match the words, ranked by the organisation's model at {HOST}, to which the search text is sent. Off, it matches words only.":"Od trzeciej wpisanej litery główne wyszukiwanie pokazuje, po wynikach pasujących do słów, karty i intencje najbliższe znaczeniem, uporządkowane przez model organizacji pod adresem {HOST}, do którego trafia tekst wyszukiwania. Wyłączone dopasowuje tylko słowa.",
-  "The organisation's model ranks the search beside word matches; the search text is sent to {HOST}.":"Model organizacji porządkuje wyniki obok dopasowań słów; tekst wyszukiwania trafia do {HOST}.",
+  "From the third letter typed, the main search adds the cards and intents closest in meaning after those that match the words, ranked by the organisation's model at {HOST}, to which the search text is sent with up to 12 short pieces of the cards being ranked. Off, it matches words only.":"Od trzeciej wpisanej litery główne wyszukiwanie pokazuje, po wynikach pasujących do słów, karty i intencje najbliższe znaczeniem, uporządkowane przez model organizacji pod adresem {HOST}, do którego trafia tekst wyszukiwania razem z najwyżej 12 krótkimi fragmentami porządkowanych kart. Wyłączone dopasowuje tylko słowa.",
+  "The organisation's model ranks the search beside word matches; the search text and up to 12 short pieces of the cards are sent to {HOST}.":"Model organizacji porządkuje wyniki obok dopasowań słów; tekst wyszukiwania i najwyżej 12 krótkich fragmentów kart trafiają do {HOST}.",
   "The model that ranks search and suggestions":"Model, który ustala kolejność wyszukiwania i propozycji",
   "Built-in, on this computer":"Wbudowany, na tym komputerze",
   "The organisation's":"Model organizacji",
   "The built-in model sends nothing anywhere.":"Wbudowany model niczego nigdzie nie wysyła.",
-  "The search text and the copied message the suggestions are made from are sent to {HOST}, and nowhere else.":"Tekst wyszukiwania i skopiowana wiadomość, z której powstają propozycje, trafiają do {HOST} i nigdzie indziej.",
+  "The search text, the copied message the suggestions are made from and up to 12 short pieces of the cards being ranked are sent to {HOST}, and nowhere else.":"Tekst wyszukiwania, skopiowana wiadomość, z której powstają propozycje, i najwyżej 12 krótkich fragmentów porządkowanych kart trafiają do {HOST} i nigdzie indziej.",
+  "The search text, the copied message the suggestions are made from and up to 12 short pieces of the cards being ranked are sent to {HOST}, and nowhere else; so, at your press, are the words or the card you ask it to reword.":"Tekst wyszukiwania, skopiowana wiadomość, z której powstają propozycje, i najwyżej 12 krótkich fragmentów porządkowanych kart trafiają do {HOST} i nigdzie indziej; po kliknięciu trafia tam też tekst albo karta do przeredagowania.",
   "Set by the organisation":"Ustawione przez organizację",
   "Whoever manages Etiuda for the organisation can change this.":"Zmienić to może osoba, która zarządza Etiudą w organizacji.",
   "Group Policy names an AI service setting Etiuda cannot use, so it is ignored: {NAME}":"Zasady grupy ustawiają dla usługi AI wartość, której Etiuda nie może użyć, więc zostaje pominięta: {NAME}",
@@ -1043,8 +1112,8 @@ UI_STRINGS.pl={
   "Connected: {HOST} answered, model {MODEL}.":"Połączono: {HOST} odpowiada, model {MODEL}.",
   "Connected: {HOST} answered in {SECONDS} s, model {MODEL}.":"Połączono: {HOST}, odpowiedź w {SECONDS} s, model {MODEL}.",
   "organisation's model too slow to reorder":"model organizacji zbyt wolny, by zmieniać kolejność",
-  "{HOST} usually takes more than 4 seconds to answer, too long to reorder a list already being read, so the built-in model's order stands.":"{HOST} na ogół odpowiada dłużej niż 4 sekundy, za długo, by zmieniać kolejność listy, która jest już czytana, więc zostaje kolejność modelu wbudowanego.",
-  "{HOST} usually takes more than 4 seconds to answer, too long to reorder a list already being read, so the word matches' order stands.":"{HOST} na ogół odpowiada dłużej niż 4 sekundy, za długo, by zmieniać kolejność listy, która jest już czytana, więc zostaje kolejność dopasowań słów.",
+  "{HOST} usually takes more than 4 seconds to answer, too long to reorder a list already being read, so the built-in model's order stands, and the desk still sends one query a minute to {HOST}.":"{HOST} na ogół odpowiada dłużej niż 4 sekundy, za długo, by zmieniać kolejność listy, która jest już czytana, więc zostaje kolejność modelu wbudowanego, a stanowisko nadal wysyła do {HOST} jedno zapytanie na minutę.",
+  "{HOST} usually takes more than 4 seconds to answer, too long to reorder a list already being read, so the word matches' order stands, and the desk still sends one query a minute to {HOST}.":"{HOST} na ogół odpowiada dłużej niż 4 sekundy, za długo, by zmieniać kolejność listy, która jest już czytana, więc zostaje kolejność dopasowań słów, a stanowisko nadal wysyła do {HOST} jedno zapytanie na minutę.",
   "The AI service is set by the organisation's Group Policy, so this setting cannot be changed here.":"Usługę AI ustawiono w zasadach grupy organizacji, więc tego ustawienia nie można tu zmienić.",
   "The AI service named in the settings is not one Etiuda knows, so nothing was sent: {NAME}":"Etiuda nie zna usługi AI wskazanej w ustawieniach, więc nic nie zostało wysłane: {NAME}",
   "The AI service's address must be a full https address with no user name, query or fragment, so nothing was sent: {URL}":"Adres usługi AI musi być pełnym adresem https, bez nazwy użytkownika, zapytania i fragmentu, więc nic nie zostało wysłane: {URL}",
@@ -1052,13 +1121,17 @@ UI_STRINGS.pl={
   "No AI service is set up yet. One is chosen from the Menu, under Settings, then Data and defaults.":"Usługa AI nie jest jeszcze ustawiona. Wybiera się ją z menu, w Ustawieniach, w części Dane i ustawienia domyślne.",
   "No model is named for the AI service, so nothing was sent. The model is named from the Menu, under Settings, then Data and defaults.":"Dla usługi AI nie wskazano modelu, więc nic nie zostało wysłane. Model wskazuje się z menu, w Ustawieniach, w części Dane i ustawienia domyślne.",
   "The organisation's Group Policy sets the AI service's key, and that key goes only to the address the policy sets or to the service's own, never to an address typed here, so nothing was sent.":"Klucz usługi AI ustawiono w zasadach grupy organizacji, a ten klucz trafia tylko pod adres z tych zasad albo pod własny adres usługi, nigdy pod adres wpisany tutaj, więc nic nie zostało wysłane.",
+  "Your organisation has set a key for an AI service without naming the service, so nothing is sent. Its IT department can name it.":"Organizacja ustawiła klucz do usługi AI, ale nie wskazała tej usługi, więc nic nie jest wysyłane. Może ją wskazać dział IT organizacji.",
+  "Not sent: the organisation set a key without naming its service.":"Nie wysłano: organizacja ustawiła klucz bez wskazania usługi.",
   "The AI service did not answer in time, so the request was given up.":"Usługa AI nie odpowiedziała na czas, więc zapytanie przerwano.",
   "The AI service is busy and asked Etiuda to wait; a later try may go through.":"Usługa AI jest zajęta i poprosiła Etiudę o odczekanie; późniejsza próba może się udać.",
   "organisation's model":"model organizacji",
-  "The organisation's model at {HOST} ranks the search and the suggestions. The search text and the copied message the suggestions are made from are sent there.":"Model organizacji pod adresem {HOST} ustala kolejność wyszukiwania i propozycji. Trafia tam tekst wyszukiwania i skopiowana wiadomość, z której powstają propozycje.",
-  "The organisation's model at {HOST} ranks the search. The search text is sent there.":"Model organizacji pod adresem {HOST} ustala kolejność wyszukiwania. Trafia tam tekst wyszukiwania.",
-  "The organisation's model at {HOST} ranks the suggestions. The copied message they are made from is sent there.":"Model organizacji pod adresem {HOST} ustala kolejność propozycji. Trafia tam skopiowana wiadomość, z której powstają.",
-  "The organisation's model at {HOST} is set, and with both switches off nothing is sent to it.":"Model organizacji pod adresem {HOST} jest ustawiony, a przy obu przełącznikach wyłączonych nic do niego nie trafia.",
+  "The organisation's model at {HOST} ranks the search and the suggestions. The search text, the copied message the suggestions are made from, and up to 12 short pieces of the cards being ranked are sent there.":"Model organizacji pod adresem {HOST} ustala kolejność wyszukiwania i propozycji. Trafia tam tekst wyszukiwania, skopiowana wiadomość, z której powstają propozycje, i najwyżej 12 krótkich fragmentów porządkowanych kart.",
+  "The organisation's model at {HOST} ranks the search. The search text is sent there, with up to 12 short pieces of the cards being ranked.":"Model organizacji pod adresem {HOST} ustala kolejność wyszukiwania. Trafia tam tekst wyszukiwania, razem z najwyżej 12 krótkimi fragmentami porządkowanych kart.",
+  "The organisation's model at {HOST} ranks the suggestions. The copied message they are made from is sent there, with up to 12 short pieces of the cards being ranked.":"Model organizacji pod adresem {HOST} ustala kolejność propozycji. Trafia tam skopiowana wiadomość, z której powstają, razem z najwyżej 12 krótkimi fragmentami porządkowanych kart.",
+  "At your press, the words or the card you ask it to reword go there too.":"Po kliknięciu trafia tam też tekst albo karta do przeredagowania.",
+  "The organisation's model at {HOST} is set, and with both switches and Rewording off, nothing is sent to it.":"Model organizacji pod adresem {HOST} jest ustawiony, a przy wyłączonych obu przełącznikach i Przeredagowaniu nic do niego nie trafia.",
+  "The organisation's model at {HOST} is set. With both switches off, only the words or the card you ask it to reword are sent to it, at your press.":"Model organizacji pod adresem {HOST} jest ustawiony. Przy wyłączonych obu przełącznikach trafia do niego tylko, po kliknięciu, tekst albo karta do przeredagowania.",
   "organisation's model not answering, built-in model ranking":"model organizacji nie odpowiada, kolejność ustala model wbudowany",
   "{HOST} has not answered three times in a row, so the built-in model ranks on this computer, sending nothing, and the desk asks {HOST} again in a minute.":"{HOST} nie odpowiedział trzy razy z rzędu, więc kolejność ustala model wbudowany na tym komputerze, niczego nie wysyłając, a stanowisko zapyta {HOST} ponownie za minutę.",
   "organisation's model not answering, word matches only":"model organizacji nie odpowiada, tylko dopasowanie słów",
@@ -1142,7 +1215,7 @@ UI_STRINGS.pl={
   "Press the alternative (Esc to cancel, Ctrl+Backspace to clear)":"Oczekiwanie na skrót alternatywny (Esc anuluje, Ctrl+Backspace usuwa)",
   "Alternative cleared":"Usunięto skrót alternatywny",
   "Back to the default":"Przywrócono domyślny skrót",
-  "search replies":"szukaj odpowiedzi",
+  "Type a word to find a reply":"Wpisz słowo, by znaleźć odpowiedź",
   "Replies":"Odpowiedzi",
   "The reply copied last":"Ostatnio skopiowana odpowiedź",
   "{N} reply":"{N} odpowiedź",
@@ -1152,26 +1225,28 @@ UI_STRINGS.pl={
   "{SHOWN} of {COUNT}":"{SHOWN} z {COUNT}",
   "Etiuda fills the reply in for this conversation":"Etiuda dopasuje odpowiedź do tej rozmowy",
   "Click to switch replies to the next language":"Kliknięcie przełącza odpowiedzi na następny język",
-  "{KEY} copies":"{KEY} kopiuje",
+  "{KEY} copies, and pastes where it can":"{KEY} wkleja lub kopiuje",
   "{KEY} in {LANG}":"{KEY} w języku {LANG}",
   "{KEY} closes":"{KEY} zamyka",
   "Pasted":"Wklejono",
   "Copied, press Ctrl+V":"Skopiowano: Ctrl+V wklei odpowiedź",
   "{KEYS} belongs to another program just now.":"{KEYS} należy teraz do innego programu.",
-  "A combination of Etiuda's own, chosen in Settings, brings the replies over any window.":"Własna kombinacja Etiudy, wybrana w Ustawieniach, przywoła odpowiedzi nad dowolne okno.",
+  "A combination of Etiuda's own, chosen in Settings, opens Quick replies over any window.":"Własna kombinacja Etiudy, wybrana w Ustawieniach, otwiera Szybkie odpowiedzi nad dowolnym oknem.",
   "Choose a combination":"Wybierz kombinację",
   "The replies beside the pointer, over any program: {KEYS} brings them from anywhere, and Settings is where the combination is changed.":"Odpowiedzi obok wskaźnika, nad każdym programem: kombinacja {KEYS} przywołuje je z dowolnego miejsca, a zmienić ją można w Ustawieniach.",
   "The replies beside the pointer, over any program; a combination that brings them from anywhere is chosen in Settings.":"Odpowiedzi obok wskaźnika, nad każdym programem; kombinację, która przywoła je z dowolnego miejsca, wybiera się w Ustawieniach.",
-  "Replies over any window":"Odpowiedzi nad dowolnym oknem",
-  "{KEY} brings these replies over any program, beside the pointer: a word finds the reply, and Enter copies it and goes back to the window you were in. Press {KEY} to try it; Esc closes it.":"{KEY} przywołuje te odpowiedzi obok wskaźnika, nad każdym programem: wystarczy wpisać słowo, a Enter skopiuje odpowiedź i wróci do poprzedniego okna. Można spróbować od razu, naciskając {KEY}; Esc zamyka listę.",
-  "Bring the replies over any window":"Przywołaj odpowiedzi nad dowolne okno",
+  "A conversation":"Rozmowa",
+  "The next steps are about a conversation. Click a conversation's tab to carry on.":"Kolejne kroki dotyczą rozmowy. Proszę kliknąć zakładkę rozmowy, aby przejść dalej.",
+  "Quick replies":"Szybkie odpowiedzi",
+  "A word finds the reply. <kbd>Enter</kbd> copies it, and pastes it into the window you were in wherever Windows allows. <kbd>Esc</kbd> closes Quick replies.":"Wystarczy wpisać słowo. <kbd>Enter</kbd> kopiuje odpowiedź i wkleja ją do poprzedniego okna, jeśli Windows na to pozwala. <kbd>Esc</kbd> zamyka Szybkie odpowiedzi.",
+  "{KEY} opens Quick replies over any program, beside the pointer. To try it, press {KEY} or click <b>Quick replies</b> here.":"{KEY} otwiera Szybkie odpowiedzi nad każdym programem, obok wskaźnika. Aby spróbować, proszę nacisnąć {KEY} albo kliknąć tu <b>Szybkie odpowiedzi</b>.",
   "Suggested from the copied message":"Propozycje na podstawie skopiowanej wiadomości",
   "Intents suggested from the message on the clipboard. None is chosen until one is clicked.":"Intencje zaproponowane na podstawie wiadomości ze schowka. Żadna nie jest wybrana, dopóki się jej nie kliknie.",
   "Suggestions taken: {N}":"Wybrane propozycje: {N}",
   "Openings with suggestions: {N}":"Otwarcia z propozycjami: {N}",
-  "When the picker opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. The message is read only as the picker opens, and never kept or sent; the statistics count only how often suggestions appeared and how many were taken.":"Gdy wybór intencji otwiera się, a w schowku jest wiadomość klienta wyraźnie wskazująca na jakieś intencje, nad listą pojawia się do pięciu z nich. Żadna nie jest wybrana, dopóki się jej nie kliknie. Wiadomość jest odczytywana tylko przy otwarciu wyboru i nigdy nie jest zapisywana ani wysyłana; statystyki liczą jedynie, ile razy pojawiły się propozycje i ile z nich wybrano.",
-  "When the picker opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. While the organisation's model is on, the copied message, at most its first 1,500 characters, is sent to {HOST} as the picker opens, so that the model there can suggest the intents; this desk keeps no copy of it. The statistics count only how often suggestions appeared and how many were taken.":"Gdy wybór intencji otwiera się, a w schowku jest wiadomość klienta wyraźnie wskazująca na jakieś intencje, nad listą pojawia się do pięciu z nich. Żadna nie jest wybrana, dopóki się jej nie kliknie. Gdy włączony jest model organizacji, skopiowana wiadomość, najwyżej 1500 pierwszych znaków, trafia przy otwarciu wyboru do {HOST}, aby tamtejszy model mógł zaproponować intencje; to stanowisko nie zachowuje jej kopii. Statystyki liczą jedynie, ile razy pojawiły się propozycje i ile z nich wybrano.",
-  "Works from any program; Enter copies a reply and goes back to the window you were in.":"Działa w każdym programie; Enter kopiuje odpowiedź i wraca do poprzedniego okna.",
+  "When Quick replies opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. The message is read only as Quick replies opens, and never kept or sent; the statistics count only how often suggestions appeared and how many were taken.":"Gdy otwierają się Szybkie odpowiedzi, a w schowku jest wiadomość klienta wyraźnie wskazująca na jakieś intencje, nad listą pojawia się do pięciu z nich. Żadna nie jest wybrana, dopóki się jej nie kliknie. Wiadomość jest odczytywana tylko przy otwarciu Szybkich odpowiedzi i nigdy nie jest zapisywana ani wysyłana; statystyki liczą jedynie, ile razy pojawiły się propozycje i ile z nich wybrano.",
+  "When Quick replies opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. While the organisation's model is on, the copied message, at most its first 1,500 characters, is sent to {HOST} as Quick replies opens, with up to 12 short pieces of the cards being ranked, so that the model there can suggest the intents; this desk keeps no copy of it. The statistics count only how often suggestions appeared and how many were taken.":"Gdy otwierają się Szybkie odpowiedzi, a w schowku jest wiadomość klienta wyraźnie wskazująca na jakieś intencje, nad listą pojawia się do pięciu z nich. Żadna nie jest wybrana, dopóki się jej nie kliknie. Gdy włączony jest model organizacji, skopiowana wiadomość, najwyżej 1500 pierwszych znaków, trafia przy otwarciu Szybkich odpowiedzi do {HOST}, razem z najwyżej 12 krótkimi fragmentami porządkowanych kart, aby tamtejszy model mógł zaproponować intencje; to stanowisko nie zachowuje jej kopii. Statystyki liczą jedynie, ile razy pojawiły się propozycje i ile z nich wybrano.",
+  "Works from any program; Enter copies a reply and pastes it into the window you were in, wherever Windows allows.":"Działa w każdym programie; Enter kopiuje odpowiedź i wkleja ją do poprzedniego okna, jeśli Windows na to pozwala.",
   "Another program uses this combination just now; a different one will do.":"Tej kombinacji używa teraz inny program; wybór innej to rozwiąże.",
   "{KEYS} already belongs to another program; a different combination will do.":"{KEYS} należy już do innego programu; wybór innej kombinacji to rozwiąże.",
   "Browsers and chat tools already answer most combinations like {KEYS}; Ctrl+Shift with Space or a function key stays free.":"Przeglądarki i czaty same reagują na większość kombinacji takich jak {KEYS}; Ctrl+Shift ze spacją lub klawiszem funkcyjnym pozostaje wolne.",
@@ -1215,10 +1290,12 @@ UI_STRINGS.pl={
   "This file is an earlier edition than the one loaded now.":"Ten plik to wcześniejsze wydanie niż wczytane teraz.",
   "The tour of Etiuda's controls, one at a time":"Przewodnik po Etiudzie, krok po kroku",
   "The tour waits in the Menu, under Show tour…":"Przewodnik czeka w Menu, pod Pokaż przewodnik…",
-  "To begin, the name your replies are signed with. Customers see it at the foot of each one, and it can be changed at any time in Settings.":"Na początek podpis: imię, które klienci zobaczą pod każdą odpowiedzią. Można je zmienić w każdej chwili w Ustawieniach.",
+  "To begin, the name your replies are signed with. Customers see it at the foot of each one, and it can be changed at any time in Settings, under Account.":"Na początek podpis: imię, które klienci zobaczą pod każdą odpowiedzią. Można je zmienić w każdej chwili w Ustawieniach, w części Konto.",
   "A catalog of replies":"Katalog odpowiedzi",
-  "Replies come in a catalog. Click <b>Load catalog file</b> and choose the team's catalog file in {FOLDER}. The tour carries on as soon as it is in place.":"Gotowe odpowiedzi przynosi katalog. Proszę kliknąć <b>Wczytaj plik katalogu</b> i wybrać plik katalogu zespołu z folderu {FOLDER}. Przewodnik poprowadzi dalej, gdy tylko katalog będzie na miejscu.",
-  "Replies come in a catalog. Click <b>Load catalog file</b> and choose the file. The tour carries on as soon as it is in place, and the catalog stays in this browser, ready whenever you come back.":"Gotowe odpowiedzi przynosi katalog. Proszę kliknąć <b>Wczytaj plik katalogu</b> i wybrać plik. Przewodnik poprowadzi dalej, gdy tylko katalog będzie na miejscu, a sam katalog zostanie w tej przeglądarce i poczeka na każdy powrót.",
+  "Replies come in a catalog. Click <b>Next</b> to open the practice catalog in {FOLDER} and try Etiuda before your team's own arrives, or <b>Load catalog file</b> to choose another.":"Odpowiedzi są w katalogu. Proszę kliknąć <b>Dalej</b>, aby otworzyć przykładowy katalog z folderu {FOLDER} i wypróbować Etiudę, zanim dotrze katalog zespołu, albo <b>Wczytaj plik katalogu</b>, aby wybrać inny.",
+  "Replies come in a catalog. Click <b>Next</b> to open {FILE} in {FOLDER}, or <b>Load catalog file</b> to choose another.":"Gotowe odpowiedzi przynosi katalog. Proszę kliknąć <b>Dalej</b>, aby otworzyć {FILE} z folderu {FOLDER}, albo <b>Wczytaj plik katalogu</b>, żeby wybrać inny.",
+  "Replies come in a catalog. Click <b>Load catalog file</b> and choose the team's catalog file in {FOLDER}; <b>Next</b> stays off until a catalog is in place.":"Gotowe odpowiedzi przynosi katalog. Proszę kliknąć <b>Wczytaj plik katalogu</b> i wybrać plik katalogu zespołu z folderu {FOLDER}; przycisk <b>Dalej</b> jest nieaktywny, dopóki katalog nie zostanie wczytany.",
+  "Replies come in a catalog. Click <b>Load catalog file</b> and choose the file; <b>Next</b> stays off until a catalog is in place, and the catalog stays in this browser, ready whenever you come back.":"Gotowe odpowiedzi przynosi katalog. Proszę kliknąć <b>Wczytaj plik katalogu</b> i wybrać plik; przycisk <b>Dalej</b> jest nieaktywny, dopóki katalog nie zostanie wczytany, a sam katalog zostanie w tej przeglądarce i poczeka na każdy powrót.",
   "comes with Etiuda":"dołączony do Etiudy",
   "Signed":"Podpisany",
   "Unsigned":"Niepodpisany",
@@ -1226,17 +1303,19 @@ UI_STRINGS.pl={
   "This file has changed since it was signed.":"Ten plik zmienił się od czasu podpisania.",
   "This file is signed with a key this computer does not know.":"Ten plik podpisano kluczem, którego nie zna ten komputer.",
   "The catalog loaded now is signed, and this edition is not.":"Wczytany teraz katalog jest podpisany, a to wydanie nie.",
-  "The customer's name goes here as the chat gives it, surname and capitals included, and every reply greets them by first name, in Polish in the vocative (ANNA KOWALSKA becomes <b>Anno</b>). The wheel beside it says who is on the chat, for internal comments.":"Tu wkleja się imię klienta prosto z czatu, z nazwiskiem i wielkimi literami, a każda odpowiedź zwraca się do niego po imieniu, po polsku w wołaczu (z ANNY KOWALSKIEJ robi się <b>Anno</b>). Kółko obok określa, kto jest po drugiej stronie czatu, na użytek komentarzy wewnętrznych.",
+  "The customer's name goes here as the chat gives it, surname and capitals included, and every reply greets them by first name, in Polish in the vocative (ANNA KOWALSKA becomes <b>Anno</b>). The wheel beside it chooses who in the team this reply names.":"Tu wkleja się imię klienta prosto z czatu, z nazwiskiem i wielkimi literami, a każda odpowiedź zwraca się do tej osoby po imieniu, po polsku w wołaczu (ANNA KOWALSKA zamienia się w <b>Anno</b>). Kółko obok wybiera osobę z zespołu, którą wymienia ta odpowiedź.",
   "The customer's name":"Imię klienta",
-  "The customer's name goes here as the chat gives it, surname and capitals included, and every reply greets them by first name, in Polish in the vocative (ANNA KOWALSKA becomes <b>Anno</b>).":"Tu wkleja się imię klienta prosto z czatu, z nazwiskiem i wielkimi literami, a każda odpowiedź zwraca się do niego po imieniu, po polsku w wołaczu (z ANNY KOWALSKIEJ robi się <b>Anno</b>).",
+  "The customer's name goes here as the chat gives it, surname and capitals included, and every reply greets them by first name, in Polish in the vocative (ANNA KOWALSKA becomes <b>Anno</b>).":"Tu wkleja się imię klienta prosto z czatu, z nazwiskiem i wielkimi literami, a każda odpowiedź zwraca się do tej osoby po imieniu, po polsku w wołaczu (ANNA KOWALSKA zamienia się w <b>Anno</b>).",
   "A word near what the customer means, such as 'refund', is enough: the intents on the left rank themselves and the cards narrow to match, in both languages. <kbd>Enter</kbd> picks the marked intent, and <kbd>Esc</kbd> clears the box.":"Wystarczy słowo bliskie temu, o co pyta klient, na przykład 'zwrot': intencje po lewej ułożą się według trafności, a karty zawężą do pasujących, w obu językach. <kbd>Enter</kbd> wybiera zaznaczoną intencję, a <kbd>Esc</kbd> czyści pole.",
-  "An intent names what the customer has come about. A click on one brings its replies forward, ringed <b class=\"t-go\">green</b>, with its phrase filling <span class=\"fillmiss\">INTENT</span> wherever a reply uses it. <kbd>Ctrl</kbd>+click picks several, and the star keeps the ones used most at the top.":"Intencja mówi, z czym klient przychodzi. Kliknięcie którejś wysuwa jej odpowiedzi do przodu, obwiedzione na <b class=\"t-go\">zielono</b>, a jej fraza trafia wszędzie tam, gdzie w odpowiedzi stoi <span class=\"fillmiss\">INTENT</span>. <kbd>Ctrl</kbd>+kliknięcie wybiera kilka, a gwiazdka trzyma na górze te używane najczęściej.",
+  "An intent names what the customer has come about. A click on one brings its replies forward, ringed <b class=\"t-go\">green</b>, with its phrase filling <span class=\"fillmiss\">INTENT</span> wherever a reply uses it. <kbd>Ctrl</kbd>+click picks several, and the star keeps the ones used most at the top.":"Intencja mówi, z czym klient przychodzi. Kliknięcie którejś wysuwa jej odpowiedzi do przodu, obwiedzione na <b class=\"t-go\">zielono</b>, a jej fraza trafia wszędzie tam, gdzie w odpowiedzi stoi <span class=\"fillmiss\">INTENCJA</span>. <kbd>Ctrl</kbd>+kliknięcie wybiera kilka, a gwiazdka trzyma na górze te używane najczęściej.",
   "A click on a reply copies the whole of it, greeting, name and signature filled in, ready to paste into the chat. A card marked <b>1/2</b> or <b>STEP 1/3</b> holds several, each copied on its own. <kbd>↑</kbd> <kbd>↓</kbd> and <kbd>Enter</kbd> do the same from the keyboard.":"Kliknięcie odpowiedzi kopiuje ją w całości, z powitaniem, imieniem i podpisem, gotową do wklejenia w czacie. Karta z oznaczeniem <b>1/2</b> albo <b>KROK 1/3</b> mieści kilka odpowiedzi, a każdą kopiuje się osobno. Z klawiatury to samo robią <kbd>↑</kbd> <kbd>↓</kbd> i <kbd>Enter</kbd>.",
+  "These replies are examples to practise with, not for a live chat.":"Te odpowiedzi to przykłady do ćwiczeń, nie do prawdziwej rozmowy.",
+  "Before the first customer, load your team's catalog.":"Przed pierwszym klientem trzeba wczytać katalog zespołu.",
   "A click on a category shows only its cards, and <kbd>Ctrl</kbd>+click keeps several. A <b class=\"t-go\">green</b> ring marks one holding a card for the chosen intent, and a <b class=\"t-acc\">blue</b> one a supporting category, useful for any question.":"Kliknięcie kategorii zostawia tylko jej karty, a <kbd>Ctrl</kbd>+kliknięcie pozwala wybrać kilka. <b class=\"t-go\">Zielona</b> obwódka oznacza kategorię z kartą dla wybranej intencji, a <b class=\"t-acc\">niebieska</b> kategorię wspierającą, przydatną przy każdym pytaniu.",
   "Each customer on the chat gets a tab of their own here, with their name, intent and language, so a reply never carries the wrong name. <b>+</b> or {NEW} opens another conversation, {KEY} moves to the next and {PREV} to the one before.":"Każdy klient na czacie ma tu osobną rozmowę, z własnym imieniem, intencją i językiem, więc żadna odpowiedź nie pójdzie z cudzym imieniem. Kolejną rozmowę otwiera <b>+</b> albo skrót {NEW}, {KEY} przechodzi do następnej, a {PREV} do poprzedniej.",
   "Replies in this conversation follow the language chosen here, so each customer is answered in their own. {KEY} switches it from anywhere.":"Odpowiedzi w tej rozmowie idą w języku wybranym tutaj, więc każdy klient dostaje odpowiedź w swoim. {KEY} przełącza język z dowolnego miejsca.",
   "The star lifts a card to the top of its category, and under <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> into <b class=\"t-fav\"><span data-icon=\"star\"></span>Favourites</b>.<br>The eye puts it away, greyed at the foot of its category, and brings it back from there.<br>The pencil opens it for editing, and <b>Reset</b> in the editor brings back the catalog's own words.<br>Click the pencil on this card.":"Gwiazdka przenosi kartę na początek jej kategorii, a w widoku <span class=\"t-pill\"><span data-icon=\"all\"></span>Wszystkie</span> do <b class=\"t-fav\"><span data-icon=\"star\"></span>Ulubionych</b>.<br>Oko odkłada ją na bok, szarą, na dół kategorii, i stamtąd też ją przywraca.<br>Ołówek otwiera ją do poprawek, a <b>Przywróć</b> w edytorze wraca do treści z katalogu.<br>Proszę kliknąć ołówek na tej karcie.",
-  "<span class=\"t-sec\">Content</span> holds the text in both languages and the internal note; the folds below hold the keywords, the category, the linked intents and the finer settings. <b>Cancel</b> leaves everything as it was.":"<span class=\"t-sec\">Treść</span> to tekst w obu językach i notatka wewnętrzna; w zwiniętych sekcjach poniżej są słowa kluczowe, kategoria, powiązane intencje i ustawienia zaawansowane. <b>Anuluj</b> zostawia wszystko bez zmian.",
+  "<span class=\"t-sec\">Content</span> holds the text in both languages and the internal note; the folds below hold the keywords, the category, the linked intents, the next replies and the advanced settings. <b>Cancel</b> leaves everything as it was.":"<span class=\"t-sec\">Treść</span> to tekst w obu językach i notatka wewnętrzna; w zwiniętych sekcjach poniżej są słowa kluczowe, kategoria, powiązane intencje, kolejne odpowiedzi i ustawienia zaawansowane. <b>Anuluj</b> zostawia wszystko bez zmian.",
   "Click <b>+</b> to write a card of your own, in the category open now or in any other chosen in the editor.":"Proszę kliknąć <b>+</b>, żeby napisać własną kartę: trafi do otwartej teraz kategorii albo do innej, wybranej w edytorze.",
   "A new card":"Nowa karta",
   "A blank card: the reply in both languages, a title and a category. <b>Save</b> keeps it, and <b>Cancel</b> leaves nothing behind.":"Pusta karta: odpowiedź w obu językach, tytuł i kategoria. <b>Zapisz</b> zachowuje kartę, a <b>Anuluj</b> nie zostawia po niej śladu.",
@@ -1248,13 +1327,15 @@ UI_STRINGS.pl={
   "Everything that is not a card: the Library, Settings, the panels' switches, and this tour again under <b>Show tour…</b>.":"Wszystko, co nie jest kartą: Biblioteka, Ustawienia, przełączniki paneli i ten przewodnik, pod <b>Pokaż przewodnik…</b>.",
   "Click <b>Menu</b>: the rest of Etiuda opens from there.":"Proszę kliknąć <b>Menu</b>: stamtąd otwiera się cała reszta Etiudy.",
   "Click <b>Library</b> in the Menu: the whole catalog is there.":"Cały katalog jest w <b>Bibliotece</b>; proszę ją otworzyć z Menu.",
-  "<b><span data-icon=\"settings\"></span> → Library</b> holds every card, intent and category, to add, edit, hide or move. Catalog files are loaded here too, and your own improvements go out from here as a file for whoever keeps the wording.":"<b><span data-icon=\"settings\"></span> → Biblioteka</b> mieści każdą kartę, intencję i kategorię, do dodania, edycji, ukrycia albo przeniesienia. Tu wczytuje się też pliki katalogów i stąd wysyła się własne poprawki, jako plik dla osoby, która dba o treść.",
-  "<b><span data-icon=\"settings\"></span> → Settings</b>: your name, the language of the buttons, the look and the shortcuts. Nothing here touches a card.":"<b><span data-icon=\"settings\"></span> → Ustawienia</b>: imię agenta, język przycisków, wygląd i skróty. Nic tutaj nie zmienia kart.",
+  "The Library has a tab of its own, beside the conversations. The whole catalog is here.":"Biblioteka ma własną zakładkę, obok rozmów. Jest w niej cały katalog.",
+  "Its parts are on the left: <b>Categories & cards</b>, <b>Intents</b>, <b>ROLE suggestions</b> and <b>Catalog & data</b>, where a catalog is loaded and your own improvements go out as a file for whoever keeps the wording.":"Jej części są po lewej: <b>Kategorie i karty</b>, <b>Intencje</b>, <b>Podpowiedzi ROLE</b> oraz <b>Katalog i dane</b>, gdzie wczytuje się katalog i skąd wysyła się własne poprawki, jako plik dla osoby, która dba o treść.",
+  "A click on a row opens it, to edit, hide or move.":"Kliknięcie wiersza otwiera go do edycji, ukrycia albo przeniesienia.",
+  "Settings has a tab of its own too. Nothing here touches a card.":"Ustawienia też mają własną zakładkę. Nic tutaj nie zmienia kart.",
+  "The parts are on the left: your name is under <b>Account</b>, the language under <b>General</b>, the look under <b>Appearance</b>, and every shortcut, Quick replies' included, under <b>Keyboard shortcuts</b>.":"Części są po lewej: imię jest w <b>Koncie</b>, język w <b>Ogólnych</b>, wygląd aplikacji w <b>Wyglądzie</b>, a wszystkie skróty, także do Szybkich odpowiedzi, w <b>Skrótach klawiszowych</b>.",
   "One more tab: open the <span data-icon=\"settings\"></span> Menu again and click <b>Settings</b>.":"Jeszcze jedna zakładka: wystarczy znów otworzyć <span data-icon=\"settings\"></span> Menu i wybrać <b>Ustawienia</b>.",
   "It opens in a tab of its own, and the tour goes there with it.":"Otworzy się we własnej zakładce, a przewodnik przejdzie tam razem z nią.",
   "Once the window is open, the tour goes inside with it.":"Po otwarciu okna przewodnik zajrzy do środka.",
   "The tour carries on once this window is closed.":"Przewodnik ruszy dalej, gdy to okno się zamknie.",
-  "The tour carries on once this tab is closed.":"Przewodnik ruszy dalej, gdy ta zakładka się zamknie.",
   "That is the whole tour. <b>Show tour…</b> in the <span data-icon=\"settings\"></span> Menu brings it back, and <b>Settings</b> lists every shortcut.":"To cały przewodnik. <b>Pokaż przewodnik…</b> w <span data-icon=\"settings\"></span> Menu otwiera go ponownie, a wszystkie skróty są w <b>Ustawieniach</b>.",
   "Etiuda offers you the newest catalog file from {FOLDER}; one kept anywhere else loads with Load catalog file.":"Etiuda proponuje najnowszy plik katalogu z {FOLDER}; plik z innego miejsca można wczytać przyciskiem Wczytaj plik katalogu.",
   "There is no catalog file in {FOLDER} yet. One kept anywhere else loads with Load catalog file.":"W folderze {FOLDER} nie ma jeszcze pliku katalogu. Plik z innego miejsca można wczytać przyciskiem Wczytaj plik katalogu.",
@@ -1505,6 +1586,13 @@ UI_STRINGS.pl={
   "Signing in needs a keyring, and none is open on this computer.":"Logowanie wymaga magazynu kluczy, a na tym komputerze żaden nie jest otwarty.",
   "Installing or unlocking GNOME Keyring or KDE Wallet, then reopening Etiuda, lets this computer sign in.":"Po zainstalowaniu lub odblokowaniu GNOME Keyring albo Portfela KDE i ponownym otwarciu Etiudy ten komputer będzie mógł się zalogować.",
   "Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.":"Logowanie przenosi na ten komputer miejsce w licencji i zespół, który przyjął to konto. Etiuda do użytku prywatnego, poza pracą, nie wymaga logowania.",
+  "What happens":"Co się stanie",
+  "The browser opens the sign-in page":"W przeglądarce otwiera się strona logowania",
+  "You choose your account there":"Tam wybiera się konto",
+  "Etiuda carries on here by itself":"Etiuda sama przechodzi dalej",
+  "No licence key to keep":"Bez klucza licencji do pilnowania",
+  "Signing in":"Logowanie",
+  "The desk opens as it is, and Sign in stays in the bar at the top for later.":"Stanowisko otworzy się bez zmian, a przycisk Zaloguj się zostaje na pasku u góry na później.",
   "Led by {LEAD}":"Prowadzi {LEAD}",
   "No team yet":"Jeszcze bez zespołu",
   "Seat":"Miejsce w licencji",
@@ -1559,12 +1647,10 @@ UI_STRINGS.pl={
   "To join, a new invitation from the team's lead is needed.":"Aby dołączyć, potrzebne jest nowe zaproszenie od lidera zespołu.",
   /* Claudette's words, 2026-10-27 01:23. */
   "The catalogs on this desk stay as they are. A new invitation from the team's lead lets it in again.":"Katalogi na tym stanowisku zostają bez zmian. Nowe zaproszenie od lidera zespołu wpuści je ponownie.",
-  "Once this desk joins, the team's lead can see which catalog it uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk: its content reaches the lead only if the lead turns on copies of unlisted catalogs in Studio, and this desk is told before anything is sent. A catalog the team does not list can be marked private here, and is then never sent. The desk's use counts only in the team's totals, never on its own.":"Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie). Kopię katalogu z listy zespołu Studio lidera może pobrać w każdej chwili, bez pytania tutaj, zapieczętowaną dla zespołu. Każdy inny katalog zostaje na tym stanowisku: jego treść trafi do lidera tylko wtedy, gdy lider włączy w Studiu kopie katalogów spoza listy, a to stanowisko zostanie o tym powiadomione, zanim cokolwiek zostanie wysłane. Katalog spoza listy zespołu można tutaj oznaczyć jako prywatny i wtedy nigdy nie jest wysyłany. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
-  "The team's lead can see which catalog this desk uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk, since copies of unlisted catalogs are off. A catalog the team does not list can be marked private here, and is then never sent. The desk's use counts only in the team's totals, never on its own.":"Lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie). Kopię katalogu z listy zespołu Studio lidera może pobrać w każdej chwili, bez pytania tutaj, zapieczętowaną dla zespołu. Każdy inny katalog zostaje na tym stanowisku, bo kopie katalogów spoza listy są wyłączone. Katalog spoza listy zespołu można tutaj oznaczyć jako prywatny i wtedy nigdy nie jest wysyłany. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
+  "Once this desk joins, the team's lead can see which catalog it uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk: its content reaches the lead only if the lead turns on copies of unlisted catalogs in Studio, and this desk is told before anything is sent. A catalog the team does not list can be marked private here, and is then never sent. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, and Studio shows them in the team's totals.":"Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie). Kopię katalogu z listy zespołu Studio lidera może pobrać w każdej chwili, bez pytania tutaj, zapieczętowaną dla zespołu. Każdy inny katalog zostaje na tym stanowisku: jego treść trafi do lidera tylko wtedy, gdy lider włączy w Studiu kopie katalogów spoza listy, a to stanowisko zostanie o tym powiadomione, zanim cokolwiek zostanie wysłane. Katalog spoza listy zespołu można tutaj oznaczyć jako prywatny i wtedy nigdy nie jest wysyłany. Studio lidera wymienia to stanowisko z nazwy, chyba że organizacja wyłączy nazwy, razem z używanym katalogiem, jego wydaniem i okresem zliczania, i wymienia je dalej, gdy przestanie się odzywać. Własne dane stanowiska trafiają do lidera zapieczętowane, a Studio pokazuje je w sumach zespołu.",
+  "The team's lead can see which catalog this desk uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk, since copies of unlisted catalogs are off. A catalog the team does not list can be marked private here, and is then never sent. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, and Studio shows them in the team's totals.":"Lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie). Kopię katalogu z listy zespołu Studio lidera może pobrać w każdej chwili, bez pytania tutaj, zapieczętowaną dla zespołu. Każdy inny katalog zostaje na tym stanowisku, bo kopie katalogów spoza listy są wyłączone. Katalog spoza listy zespołu można tutaj oznaczyć jako prywatny i wtedy nigdy nie jest wysyłany. Studio lidera wymienia to stanowisko z nazwy, chyba że organizacja wyłączy nazwy, razem z używanym katalogiem, jego wydaniem i okresem zliczania, i wymienia je dalej, gdy przestanie się odzywać. Własne dane stanowiska trafiają do lidera zapieczętowane, a Studio pokazuje je w sumach zespołu.",
   /* Claudette's words, 2026-11-08, board 962 stage 0b: the switch on (with {DATE} and {BY} from the desk's content view), its
      notices, and the private mark, offered only on a catalog the team does not list. No caller in the engine yet. */
-  "Once this desk joins, the team's lead can see which catalog it uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. It can also take a copy of any other catalog, sealed for the team's lead alone, and this desk's own changes to such a catalog go to the lead: copies of unlisted catalogs were turned on {DATE}, confirmed by {BY}. A catalog the team does not list can be marked private here, and is then never sent. The desk's use counts only in the team's totals, never on its own.":"Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie). Kopię katalogu z listy zespołu Studio lidera może pobrać w każdej chwili, bez pytania tutaj, zapieczętowaną dla zespołu. Może też pobrać kopię każdego innego katalogu, zapieczętowaną wyłącznie dla lidera zespołu, a własne zmiany tego stanowiska w takim katalogu trafiają do lidera: kopie katalogów spoza listy włączono {DATE} (potwierdzenie: {BY}). Katalog spoza listy zespołu można tutaj oznaczyć jako prywatny i wtedy nigdy nie jest wysyłany. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
-  "The team's lead can see which catalog this desk uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. It can also take a copy of any other catalog, sealed for the team's lead alone, and this desk's own changes to such a catalog go to the lead: copies of unlisted catalogs were turned on {DATE}, confirmed by {BY}. A catalog the team does not list can be marked private here, and is then never sent. The desk's use counts only in the team's totals, never on its own.":"Lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie). Kopię katalogu z listy zespołu Studio lidera może pobrać w każdej chwili, bez pytania tutaj, zapieczętowaną dla zespołu. Może też pobrać kopię każdego innego katalogu, zapieczętowaną wyłącznie dla lidera zespołu, a własne zmiany tego stanowiska w takim katalogu trafiają do lidera: kopie katalogów spoza listy włączono {DATE} (potwierdzenie: {BY}). Katalog spoza listy zespołu można tutaj oznaczyć jako prywatny i wtedy nigdy nie jest wysyłany. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
   "The team's lead has turned on copies of unlisted catalogs, confirmed by {BY} on {DATE}. From now on, the lead's Studio can take a copy of a catalog the team does not list, sealed for the lead alone, and this desk's own changes to such a catalog go to the lead. A catalog marked private here is never sent.":"W zespole włączono kopie katalogów spoza listy (potwierdzenie: {BY}, {DATE}). Od teraz Studio lidera może pobrać kopię katalogu spoza listy zespołu, zapieczętowaną wyłącznie dla lidera, a własne zmiany tego stanowiska w takim katalogu trafiają do lidera. Katalog oznaczony tutaj jako prywatny nigdy nie jest wysyłany.",
   "The team's lead has turned off copies of unlisted catalogs, so the lead's Studio can no longer take a copy of a catalog the team does not list. What this desk had shared of one has been withdrawn. What the team's lead has already opened cannot be taken back.":"W zespole wyłączono kopie katalogów spoza listy, więc Studio lidera nie może już pobrać kopii katalogu spoza listy zespołu. To, co stanowisko udostępniło z takiego katalogu, zostało wycofane. Tego, co lider zespołu już otworzył, nie da się odebrać.",
   "Private":"Prywatny",
@@ -1800,6 +1886,11 @@ function toastHtml(m, refusal, stamped){
   if(stamped) return '<span>'+esc(m)+'</span><span class="t-stamp">'+ICON_STAMP+esc(t("Commits the firm"))+'</span>';
   return null;
 }
+function toastDurationMs(m, ms, stamped){
+  const len=String(m||"").trim().length+(stamped?t("Commits the firm").length+2:0);
+  const byLen=Math.max(TOAST_MS, Math.round(900+len*55));
+  return Math.max(+ms||0, byLen);
+}
 function toast(m, ms, refusal, stamped){
   toastSerial++;
   /* Every message the app speaks passes through here, so this is the one place a toast needs
@@ -1820,7 +1911,7 @@ function toast(m, ms, refusal, stamped){
   clearTimeout(tt); clearTimeout(toastSwap);
   if(dip){ el.classList.add("swap"); toastSwap=setTimeout(put,M_MS.dismiss); }
   else put();
-  tt=setTimeout(()=>el.classList.remove("show"),(ms||TOAST_MS)+(dip?M_MS.dismiss:0));
+  tt=setTimeout(()=>el.classList.remove("show"),toastDurationMs(m,ms,stamped)+(dip?M_MS.dismiss:0));
 }
 /* A REFUSAL IS NOT A CONFIRMATION: its own ground and the warning glyph, and a longer life. */
 function toastRefusal(m){ toast(m, TOAST_REFUSAL_MS, true); }
@@ -1884,15 +1975,26 @@ const I18N_ATTRS=["title","aria-label","placeholder"];
    The sweep neither translates nor descends into them, which lets it cover regions mixing
    engine words with the employer's; without it an intent named exactly like a UI string
    would be silently rewritten. */
+const TW_SHOW_ELEMENT=1, TW_FILTER_ACCEPT=1, TW_FILTER_REJECT=2;
 function translateTree(root){
   /* NOT "return early on English". Every node this touched remembers its English source, and
      t() on English hands that source straight back - so running the sweep is exactly how the
      English is put back. Returning early meant a language could be entered and never left. */
-  if(!root) return;
-  const els=root.querySelectorAll ? root.querySelectorAll("*") : [];
-  const all=root.nodeType===1 ? [root].concat(Array.prototype.slice.call(els)) : Array.prototype.slice.call(els);
-  all.forEach(el=>{
-    if(el.closest && el.closest("[data-i18n-skip]")) return;
+  if(!root || root.nodeType!==1) return 0;
+  /* A stand-in with no nodeType is not an element, and the old list was empty for it too. */
+  const marked=el=>!!(el && el.nodeType===1 && el.hasAttribute && el.hasAttribute("data-i18n-skip"));
+  /* Born on the root, the walker only filters the nodes it moves to. A marked root is refused
+     before the walk, or its children would be entered. */
+  if(marked(root)) return 0;
+  /* A root inside a marked ancestor is refused too, as the old sweep's closest() refused it. */
+  if(typeof root.closest==="function" && root.closest("[data-i18n-skip]")) return 0;
+  const doc=root.ownerDocument || (typeof document!=="undefined" ? document : null);
+  let visited=0;
+  const one=el=>{
+    /* Count every element the walker returned. A marked one in the count means the walk entered
+       a skipped subtree; the filter's reject is what keeps it out. */
+    visited++;
+    if(marked(el)) return;
     I18N_ATTRS.forEach(a=>{
       const v=el.getAttribute && el.getAttribute(a);
       if(!v) return;
@@ -1904,7 +2006,7 @@ function translateTree(root){
     });
     /* Text only where the element holds nothing but text: a button, a label, a heading. Anything
        with element children is left alone, because replacing its text would delete them. */
-    if(el.children && el.children.length===0 && el.textContent && el.textContent.trim()){
+    if(!(el.classList && el.classList.contains("e-dot-hug")) && el.children && el.children.length===0 && el.textContent && el.textContent.trim()){
       const src=el.getAttribute("data-i18n-text") || el.textContent.trim();
       const out=t(src);
       if(out!==el.textContent.trim()){ el.setAttribute("data-i18n-text", src); el.textContent=out; }
@@ -1922,7 +2024,193 @@ function translateTree(root){
         if(out!==txt){ n.eI18nSrc=src; n.nodeValue=raw.replace(txt, out); }
       });
     }
+  };
+  one(root);
+  if(doc && typeof doc.createTreeWalker==="function"){
+    const walker=doc.createTreeWalker(root, TW_SHOW_ELEMENT, {acceptNode:node=>marked(node)?TW_FILTER_REJECT:TW_FILTER_ACCEPT});
+    for(let node=walker.nextNode(); node; node=walker.nextNode()) one(node);
+    hugDottedGround(root);
+    return visited;
+  }
+  /* A document with no walker (a test's stand-in; every page the desk draws has one): the same walk by hand, the same
+     elements in the same order, a marked element and everything under it left out. */
+  const down=el=>{ Array.prototype.forEach.call(el.children || [], c=>{ if(c && c.nodeType===1 && !marked(c)){ one(c); down(c); } }); };
+  down(root);
+  hugDottedGround(root);
+  return visited;
+}
+/* GROUND-RULE HUGGER: finds every visible element standing directly on a dotted ground (nothing
+   opaque between it and the dots), never by a list of text class names, and moves its inline
+   words into an inline .e-dot-hug span so cleared pixels hug every line and never wipe beside a
+   short line. Existing nodes are moved rather than rewritten, keeping all text-node handles.
+   A card is not entered: nothing inside it stands on the dots. */
+const DG_CTRL_SEL="button,a,input,select,textarea,.chip,kbd,.btn,.seg,[role=button],.cell-chip,.count";
+function dgAlpha(c){
+  if(!c || c==="transparent") return 0;
+  let m=c.match(/\/\s*([\d.]+%?)\s*\)/);
+  if(m) return m[1].endsWith("%") ? parseFloat(m[1])/100 : parseFloat(m[1]);
+  m=c.match(/^rgba\(([^)]+)\)/);
+  if(m) return parseFloat(m[1].split(",")[3]);
+  return 1;
+}
+function dgTargets(root){
+  const out=[];
+  if(!root || root.nodeType!==1) return out;
+  const closest=typeof root.closest==="function" ? root.closest.bind(root) : null;
+  const sx=closest && closest(".sx-page");
+  if(sx){ out.push({ground:sx, start:root}); return out; }
+  const main=closest && closest(".stage > .scroller main");
+  if(main){ out.push({ground:main, start:root}); return out; }
+  const fs=closest && closest(".fs-left");
+  if(fs){ out.push({ground:fs, start:root}); return out; }
+  if(typeof root.querySelectorAll==="function"){
+    root.querySelectorAll(".sx-page").forEach(p=>out.push({ground:p, start:p}));
+    root.querySelectorAll(".stage > .scroller main").forEach(m=>out.push({ground:m, start:m}));
+    root.querySelectorAll(".fs-left").forEach(f=>out.push({ground:f, start:f}));
+  }
+  return out;
+}
+function dgTrimRun(run){
+  while(run.length && ((run[0].nodeType===3 && (!run[0].nodeValue || !run[0].nodeValue.trim())) || (run[0].nodeType===1 && run[0].tagName==="BR"))) run.shift();
+  while(run.length && ((run[run.length-1].nodeType===3 && (!run[run.length-1].nodeValue || !run[run.length-1].nodeValue.trim())) || (run[run.length-1].nodeType===1 && run[run.length-1].tagName==="BR"))) run.pop();
+  return run;
+}
+function dgRunHasWords(run){
+  for(let i=0;i<run.length;i++){
+    const n=run[i];
+    if(n.nodeType===3 && n.nodeValue && n.nodeValue.trim()) return true;
+    if(n.nodeType===1 && n.textContent && n.textContent.trim()) return true;
+  }
+  return false;
+}
+function hugDottedGround(root){
+  hugDottedGround.cardIn=0;
+  if(!root || root.nodeType!==1 || typeof getComputedStyle!=="function") return 0;
+  const doc=root.ownerDocument || (typeof document!=="undefined" ? document : null);
+  if(!doc) return 0;
+  const targets=dgTargets(root);
+  if(!targets.length) return 0;
+  /* Two-phase Read then Write: collecting every style/wrap decision before mutating the DOM
+     avoids interleaved style-recalc thrashing on large trees like Library with full catalogs. */
+  const wraps=[], icons=[], inlineCtrls=[], blockCtrls=[];
+  let cardIn=0;
+  targets.forEach(({ground, start})=>{
+    if(start!==ground){
+      for(let p=start.parentElement; p && p!==ground; p=p.parentElement){
+        if(p.classList && p.classList.contains("card")) return;
+        if(dgAlpha(getComputedStyle(p).backgroundColor)>=0.95) return;
+      }
+    }
+    const visit=el=>{
+      if(!el || el.nodeType!==1 || el.hidden || el.hasAttribute("data-dg")) return;
+      /* A card is its own ground. The line the plant removes: without it the walk enters the cards. */
+      if(el.classList && el.classList.contains("card")) return;
+      if(typeof el.closest==="function" && el.closest(".card")) cardIn++;
+      if(el.classList && el.classList.contains("e-dot-hug")) return;
+      const cs=getComputedStyle(el);
+      if(cs.display==="none") return;
+      if(cs.clip==="rect(0px, 0px, 0px, 0px)" || cs.clipPath==="inset(50%)") return;
+      const bgAlpha=dgAlpha(cs.backgroundColor);
+      const elOp=parseFloat(cs.opacity);
+      const effBg=bgAlpha * (Number.isNaN(elOp) ? 1 : elOp);
+      if(el!==ground){
+        const tag=(el.tagName||"").toUpperCase();
+        if(tag==="SVG" || tag==="IMG"){
+          if(effBg<0.95 && el.classList) icons.push(el);
+          return;
+        }
+        if(effBg>=0.95) return;
+        if(typeof el.matches==="function" && el.matches(DG_CTRL_SEL)){
+          if(cs.display==="inline") inlineCtrls.push(el);
+          else blockCtrls.push(el);
+          return;
+        }
+      }
+      const isFlex=/flex|grid/.test(cs.display);
+      const kids=el.childNodes;
+      if(!kids || !kids.length) return;
+      if(isFlex || el===ground){
+        for(let i=0;i<kids.length;i++){
+          const k=kids[i];
+          if(k.nodeType===3 && k.nodeValue && k.nodeValue.trim()){
+            if(el!==ground){
+              const run=dgTrimRun([k]);
+              if(run.length && dgRunHasWords(run)) wraps.push({parent:el, run, insideFlex:isFlex});
+            }
+          }else if(k.nodeType===1){
+            visit(k);
+          }
+        }
+        return;
+      }
+      let run=[];
+      const flush=()=>{
+        if(run.length){
+          const trimmed=dgTrimRun(run.slice());
+          if(trimmed.length && dgRunHasWords(trimmed)) wraps.push({parent:el, run:trimmed, insideFlex:false});
+          run=[];
+        }
+      };
+      for(let i=0;i<kids.length;i++){
+        const k=kids[i];
+        if(k.nodeType===3){
+          run.push(k);
+          continue;
+        }
+        if(k.nodeType!==1) continue;
+        if(k.hidden) continue;
+        const ktag=(k.tagName||"").toUpperCase();
+        if(ktag==="BR"){ run.push(k); continue; }
+        const kcs=getComputedStyle(k);
+        if(kcs.display==="none") continue;
+        const ka=dgAlpha(kcs.backgroundColor);
+        const isFlow=(kcs.display==="inline" || kcs.display==="inline-block")
+          && ktag!=="SVG" && ktag!=="IMG"
+          && !(typeof k.matches==="function" && k.matches("input,select,textarea,button,.btn,.seg"))
+          && !(k.classList && k.classList.contains("e-dot-hug"))
+          && ka<0.95;
+        if(isFlow){
+          run.push(k);
+        }else{
+          flush();
+          visit(k);
+        }
+      }
+      flush();
+    };
+    visit(start);
   });
+  hugDottedGround.cardIn=cardIn;
+  /* Classes only. An inline ground beats hover, and a colour read off the screen stays after the theme changes. */
+  let wrapped=0;
+  for(let i=0;i<icons.length;i++){ if(!icons[i].classList.contains("e-dot-ic")) icons[i].classList.add("e-dot-ic"); }
+  for(let i=0;i<inlineCtrls.length;i++){ if(!inlineCtrls[i].classList.contains("e-dot-hug")){ inlineCtrls[i].classList.add("e-dot-hug"); wrapped++; } }
+  for(let i=0;i<blockCtrls.length;i++){
+    const el=blockCtrls[i];
+    if(!el.classList.contains("e-dot-ctrl")){ el.classList.add("e-dot-ctrl"); wrapped++; }
+  }
+  for(let i=0;i<wraps.length;i++){
+    const {parent, run, insideFlex}=wraps[i];
+    if(!run[0] || !run[0].parentNode) continue;
+    if(parent.hasAttribute && parent.hasAttribute("data-i18n-text")){
+      const src=parent.getAttribute("data-i18n-text");
+      for(let j=0;j<run.length;j++){
+        if(run[j].nodeType===3 && run[j].nodeValue && run[j].nodeValue.trim()){
+          if(!run[j].eI18nSrc) run[j].eI18nSrc=src;
+          break;
+        }
+      }
+      parent.removeAttribute("data-i18n-text");
+    }
+    const hug=doc.createElement("span");
+    hug.className="e-dot-hug";
+    const outer=insideFlex ? doc.createElement("span") : hug;
+    if(insideFlex){ outer.className="e-dot-flex"; outer.appendChild(hug); }
+    run[0].parentNode.insertBefore(outer, run[0]);
+    for(let j=0;j<run.length;j++) hug.appendChild(run[j]);
+    wrapped++;
+  }
+  return wrapped;
 }
 /** The app's own furniture, never the catalog's content. */
 function translateChrome(){
@@ -1951,6 +2239,7 @@ export {
   fileStamp,
   translateTree,
   translateChrome,
+  hugDottedGround,
   toast,
   toastHtml,
   toastRefusal,

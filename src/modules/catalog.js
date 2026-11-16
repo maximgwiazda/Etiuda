@@ -14,10 +14,10 @@ import { setCatalogStop } from "./affinity.js";
 import { fileStamp, toastRefusal, t } from "./ui-lang.js";
 
 /* ---- catalog: Etiuda ships empty - a catalog supplies cards, intents, categories and
-   facts, playing the role built-in content used to (pack.baseCards still overrides it,
-   personal edits still layer on top). Applied before BASE_STORE is snapshotted and before
-   rebuildBaseCards() reads M. Asked about once per signature: accept and it loads
-   silently from then on; change it and it asks again. */
+   facts, playing the role built-in content used to, and personal edits layer on top.
+   Applied before BASE_STORE is snapshotted and before rebuildBaseCards() reads M. Asked
+   about once per signature: accept and it loads silently from then on; change it and it
+   asks again. */
 const E_CATALOG_KEY=nsKey("CatalogOk");      // signature of the sibling catalog the user accepted
 const E_CATALOG_STORE=nsKey("Catalog");      // the active catalog itself
 /* Read once and remembered, because boot asks more than once and the answer cannot change:

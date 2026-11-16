@@ -456,7 +456,8 @@ const t0 = Date.now();
   check(hs.every(h => h === hs[0]) && Math.max.apply(null, tops) - Math.min.apply(null, tops) <= 0.5,
     "the band's tools stand at the language switcher's height: " + JSON.stringify(toolsH));
 
-  /* KEYBOARD FOCUS WEARS THE HOVER LOOK, board 452, and no ring - the browser's own included.
+  /* KEYBOARD FOCUS WEARS THE HOVER LOOK, board 452, AND THE DESK'S ONE RING (2 px solid, the focus ring's
+     rule: tests/desk-focus-ring.mjs), which a button at rest or under the pointer does not wear.
      Three reads of one button: at rest with the pointer away, under the pointer, and focused
      from the keyboard. The keyboard part is a key press before the focus() call, because
      Chromium decides :focus-visible from the last input it saw, and the element is asked
@@ -483,8 +484,9 @@ const t0 = Date.now();
   };
   const look = await focusLook();
   check(look.focus.fv && look.focus.bg === look.hover.bg && look.focus.ink === look.hover.ink
-        && look.hover.bg !== look.rest.bg && /^(none|hidden)/.test(look.focus.out),
-    "a button focused from the keyboard wears its hover look and no ring: " + JSON.stringify(look));
+        && look.hover.bg !== look.rest.bg && look.focus.out === "solid 2px"
+        && /^(none|hidden)/.test(look.rest.out) && /^(none|hidden)/.test(look.hover.out),
+    "a button focused from the keyboard wears its hover look and the desk's ring, and no ring at rest or under the pointer: " + JSON.stringify(look));
 
   /* Every menu action once; the toggles a second time to put things back; the tour separately. */
   e = since();
@@ -703,8 +705,8 @@ const t0 = Date.now();
      front of it with Next and Back. No step outside a window is ever met with a window or Quick facts
      standing, so Next and Back closed every window they left. */
   const inside = walk.filter(r => windowed.indexOf(r.id) > -1);
-  const badIn = inside.filter(r => !r.look.next || r.look.held || !r.look.back || r.look.z !== "240" || r.look.behind || !(r.look.window || r.look.facts))
-    .map(r => r.id + " " + JSON.stringify({ next: r.look.next, back: r.look.back, z: r.look.z, open: r.look.window || r.look.facts }));
+  const badIn = inside.filter(r => !r.look.next || r.look.held || !r.look.back || r.look.z !== "240" || r.look.behind || !(r.look.window || r.look.facts || r.look.screen))
+    .map(r => r.id + " " + JSON.stringify({ next: r.look.next, back: r.look.back, z: r.look.z, open: r.look.window || r.look.facts || r.look.screen }));
   const stood = walk.filter(r => windowed.indexOf(r.id) < 0 && (r.look.window || r.look.facts)).map(r => r.id);
   check(inside.map(r => r.id).join(",") === planned.filter(id => windowed.indexOf(id) > -1).join(",") && badIn.length === 0 && stood.length === 0,
     "each window opens by the click or by Next, and the tour goes into it, in front of it with Next and Back,"
@@ -713,12 +715,12 @@ const t0 = Date.now();
      bubble beside it, never over its rows; Back inside the Library closes it and stands on the Library
      step again; Next there opens the Library for the person; "then the same with Settings". */
   const lib = walk.find(r => r.id === "library"), libAgain = walk.find(r => r.id === "library" && r.visit === 2);
-  const chain = ["menu", "library", "libraryIn", "settings", "settingsIn"].map(id => walk.filter(r => r.id === id))
+  const chain = ["menu", "library", "libraryIn", "libraryRail", "libraryList", "settings", "settingsIn", "settingsRail"].map(id => walk.filter(r => r.id === id))
     .every(rs => rs.length > 0 && rs.every(r => r.to === r.want));
-  check(!!lib && lib.look.menu && lib.look.clear && !!libAgain && !libAgain.look.window && chain,
+  check(!!lib && lib.look.menu && lib.look.clear && !!libAgain && !libAgain.look.screen && chain,
     "the Menu step's Next brings the Library step with the menu open and the bubble clear of its rows, Back inside"
     + " the Library closes it onto that step, and Library and Settings each take the tour inside: "
-    + JSON.stringify(lib ? { menu: lib.look.menu, clear: lib.look.clear, backClosed: !!libAgain && !libAgain.look.window, chain } : null));
+    + JSON.stringify(lib ? { menu: lib.look.menu, clear: lib.look.clear, backClosed: !!libAgain && !libAgain.look.screen, chain } : null));
   const last = walk[walk.length - 1];
   check(!!walkEnd && !walkEnd.up && !!last && last.id === "done" && last.to === null,
     "and Finish on the last step takes the overlay off the screen, rather than only flagging the tour done");
@@ -975,7 +977,11 @@ const t0 = Date.now();
      method"), replacing board 452's single frame: the root wears the new theme in the press's first frame
      and each control eases its own colour on its tier. Sampled per frame through a real press with the
      pointer resting on the tile: the tile reaches its resting colour within 250 ms of that frame, and the
-     icon turns. */
+     icon turns. The sampler's 420 ms count from the first frame that wears the new theme, never from its own
+     start: on a loaded machine the press reached the page after a window counted from the start had closed
+     (twice on 2026-11-16, "in null ms ... over 102 frame(s)"), and the leg read its own lateness as the
+     desk's. A press that never lands is still a failure: the sampler gives up after five seconds with no
+     first frame. */
   e = since();
   const tileR = await p.evaluate(() => document.getElementById("theme").getBoundingClientRect().toJSON());
   await p.mouse.move(tileR.x + tileR.width / 2, tileR.y + tileR.height / 2); await sleep(400);
@@ -983,11 +989,14 @@ const t0 = Date.now();
     const t0 = performance.now(), from = document.documentElement.dataset.theme, f = [];
     const motion = localStorage.getItem("eMotionOff") !== "1"
       && !matchMedia("(prefers-reduced-motion:reduce)").matches;
+    let landed = null;
     const read = () => {
-      f.push({ t: performance.now() - t0, theme: document.documentElement.dataset.theme,
+      const now = performance.now() - t0, theme = document.documentElement.dataset.theme;
+      f.push({ t: now, theme: theme,
                bg: getComputedStyle(document.getElementById("theme")).backgroundColor,
                turn: getComputedStyle(document.querySelector("#theme svg")).transform });
-      if (performance.now() - t0 < 420) requestAnimationFrame(read);
+      if (landed === null && theme !== from) landed = now;
+      if (landed === null ? now < 5000 : now - landed < 420) requestAnimationFrame(read);
       else { const last = f[f.length - 1], first = f.filter(x => x.theme !== from)[0] || null;
         const rest = f.filter(x => x.theme !== from && x.bg === last.bg)[0] || null;
         res({ motion, n: f.length, first, last, eased: first && rest ? Math.round(rest.t - first.t) : null }); }
@@ -1188,10 +1197,10 @@ const t0 = Date.now();
       [themeColours[th].accent, themeColours[th].fill, themeColours[th].pill, themeColours[th].segs.length,
         themeColours[th].segs.filter(c => !near(c, themeColours[th].bub)).length])) + ")");
 
-  /* AN INACTIVE TAB'S DOT, with no category on it, is the band's ink: the theme's text colour on
-     the pale band a light desk draws (the host's backdrop, body.e-backdrop, set here as the host
-     sets it) and white on every deep band. Read off a copy of the selected tab without its
-     selection or category, put on the page for the reading and taken out again. */
+  /* AN INACTIVE TAB'S DOT, with no category on it, is the band's ink: white on the cobalt band of
+     both themes, with the host's backdrop (body.e-backdrop, set here as the host sets it) and
+     without it. Read off a copy of the selected tab without its selection or category, put on the
+     page for the reading and taken out again. */
   const tabDots = await p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const cx = Object.assign(document.createElement("canvas"), { width: 1, height: 1 }).getContext("2d", { willReadFrequently: true });
@@ -1220,9 +1229,8 @@ const t0 = Date.now();
     return out;
   });
   const white = c => c[0] === 255 && c[1] === 255 && c[2] === 255;
-  check(!!tabDots && tabDots.every(r => near(r.dot, r.band) && r.dot[3] === 1)
-    && near(tabDots[0].dot, tabDots[0].ink) && !white(tabDots[0].dot) && white(tabDots[1].dot),
-    "an inactive tab's dot is the theme's text colour on a light desk's pale band and white on dark and on any deep band ("
+  check(!!tabDots && tabDots.every(r => near(r.dot, r.band) && r.dot[3] === 1 && white(r.dot)),
+    "an inactive tab's dot is the band's ink, white on the cobalt band in both themes, with the backdrop and without it ("
     + JSON.stringify(tabDots && tabDots.map(r => [r.th, r.back, r.dot])) + ")");
 
   /* THE TRADEMARK NOTICE sits third from last in About's credit, after the copyright, once, in the interface's language,
@@ -3780,7 +3788,7 @@ const t0 = Date.now();
     await q.setViewport({ width: 1500, height: 950 });
     q.on("dialog", d => d.accept());
     q.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
-    if (done) await q.evaluateOnNewDocument(() => { try { localStorage.setItem("eTourDone_v3", "1"); localStorage.setItem("eTourInvite_v3", "1"); } catch (x) {} });
+    if (done) await q.evaluateOnNewDocument(() => { try { localStorage.setItem("eTourDone_v3", "1"); localStorage.setItem("eTourInvite_v3", "1"); localStorage.setItem("eFirstSigninSeen", "1"); } catch (x) {} });
     if (pre) await pre(q);
     await q.goto(huntUrl(dir), { waitUntil: "load", timeout: 90000 });
     await require("./launch-wait.js").waitLaunchGone(q, { who: "tests/smoke.js huntPage" });

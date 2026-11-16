@@ -364,6 +364,9 @@ async function main() {
     scripts.package = 'node tools/stub-package.mjs';
     put(path.join(dir, 'package.json'), { name: 'etiuda', version: '0.0.0', scripts, dependencies: deps || undefined });
     put(path.join(dir, 'tools', 'stub-package.mjs'), STUB_PACKAGE);
+    /* The release builds the page before it reads it. The lab's page is the stub below, so its build writes nothing and leaves
+       the tree as committed; the release against the real build is tests/build-readers.mjs's. */
+    put(path.join(dir, 'tools', 'build.mjs'), '/* the release lab\'s build: nothing to write */\n');
     put(path.join(dir, 'src', 'modules', 'env.js'), envJs('2.0.0-dev'));
     put(path.join(dir, 'shell', 'license_en.txt'), 'licence\n');
     put(path.join(dir, 'shell', 'license_pl.txt'), 'licencja\n');

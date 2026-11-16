@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 136;
+const EXPECTED = 162 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 8);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -296,10 +296,26 @@ try {
   const held = new Map(), taken = new Set(["Control+Shift+F9"]), clip = [];
   /* THE CARET HELPER is never run here: its calls are recorded, with how many calls the picker had seen
      at the time, and answered as the helper would. Only Windows has one; elsewhere none is asked. */
-  const caret = { there: true, front: "4242 1", runs: [], pickerCalls: () => -1, fail: false };
+  const caret = { there: true, front: "4242 1", runs: [], pickerCalls: () => -1, fail: false, sel: null };
   const cpReal = nodeRequire("node:child_process");
   const cpStub = Object.assign({}, cpReal, { execFile: (file, args, opts, done) => {
     caret.runs.push({ file: String(file), args: (args || []).map(String), at: caret.pickerCalls() });
+    /* The selection. A string is editable words. An object is {fact, text} or {code}. "hang" never answers.
+       A number, or nothing, is that exit (1 when nothing is selected). The fact is the helper's first line. */
+    if (args && args[0] === "selection") {
+      const sel = caret.sel;
+      if (sel === "hang") return;
+      setImmediate(() => {
+        if (sel && typeof sel === "object") {
+          if ("code" in sel) done(Object.assign(new Error("exit"), { code: sel.code }), "", "");
+          else done(null, String(sel.fact == null ? "" : sel.fact) + "\n" + String(sel.text == null ? "" : sel.text), "");
+          return;
+        }
+        if (typeof sel === "string") { done(null, "ed\n" + sel, ""); return; }
+        done(Object.assign(new Error("exit"), { code: sel == null ? 1 : sel }), "", "");
+      });
+      return;
+    }
     setImmediate(() => done(caret.fail && args && args[0] === "paste" ? Object.assign(new Error("refused"), { code: 3 }) : null,
       args && args[0] === "which" ? caret.front : "", ""));
   } });
@@ -333,10 +349,11 @@ try {
   shellFs.appendFileSync = (p, data, ...rest) => { noteWrite(data); return fs.appendFileSync(p, data, ...rest); };
   shellFs.readdirSync = (p, ...rest) => (listed.push(path.resolve(String(p)).toLowerCase()), fs.readdirSync(p, ...rest));
   shellFs.existsSync = p => /[\\/]caret\.exe$/i.test(String(p)) ? caret.there : fs.existsSync(p);
-  const EXPOSE = ["hotkeyRefusal", "pickerPlace", "pickClipText", "PICK_SIZE", "HOTKEY_DEFAULT"];
+  const EXPOSE = ["hotkeyRefusal", "pickerPlace", "pickerGrow", "pickClipText", "PICK_SIZE", "HOTKEY_DEFAULT"];
   process.env.XDG_CURRENT_DESKTOP = "GNOME"; /* so the shell's Linux keyring switch (tests/shell-office.mjs 14) stays out, on any machine */
   const SH = new Function("require", "__dirname", "__filename", "module", "exports", "console",
-    SRC + "\nreturn { " + EXPOSE.map(n => n + ": " + n).join(", ") + " };")(
+    SRC + "\nreturn { " + EXPOSE.map(n => n + ": " + n).join(", ")
+    + ", __rw: { config: f => { deskAiConfig = f; }, result: t => { pickReworded = t; } } };")(
     n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? shellFs : n === "node:child_process" ? cpStub : nodeRequire(n)),
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"),
     { exports: {} }, {}, quiet);
@@ -823,6 +840,168 @@ try {
     "2z with no helper beside the program nothing is run, and the reply waits on the clipboard as before: " + (caret.runs.length - from) + " run(s)");
   caret.there = true;
 
+  /* 2s1 to 2s4: THE SELECTION FIRST (Quick replies on the selection, Max's ruling 2026-11-15). The helper answers the words
+     selected: the picker shows them in its box and suggests from them, the clipboard is not read, and nothing is written to
+     it at the press. Nothing selected, a refusal (a password field) or no answer within about 300 ms: the clipboard as
+     before. The selected words reach the picker's page and nowhere else: not the desk's page, a log or the disk. */
+  {
+    const SEL = "zebraquill please mend the lantern glass today. Thank you, Ola.", CLIP = "the kettle brews tea for the guests";
+    const opening = async sel => {
+      caret.sel = sel; clipHeld = CLIP;
+      const r0 = clipReads, c0 = clip.length, o0 = opened.length, w0 = written.length, s0 = said.length, d0 = desk.sent.length, t0 = Date.now();
+      held.get("Control+Shift+Space")();
+      await until(() => opened.length > o0 && pw.visible, 5000);
+      const o = opened[opened.length - 1] || {};
+      const ms = Date.now() - t0;
+      const ask = desk.sent.slice(d0).filter(a => a[0] === "etiuda:pick-ask" && a[2] === "open").map(a => String(a[3] || ""))[0] || "";
+      const elsewhere = written.slice(w0).join("\n") + said.slice(s0).join("\n") + desk.sent.slice(d0).map(a => JSON.stringify(a)).join("\n");
+      held.get("Control+Shift+Space")();
+      await until(() => !pw.visible);
+      return { selected: o.selected || "", asked: ask, reads: clipReads - r0, writes: clip.length - c0, ms,
+        leaked: elsewhere.indexOf("lantern glass today. Thank you, Ola.") > -1 };
+    };
+    caret.there = true;
+    const got = await opening(SEL), none = await opening(null), refused = await opening(6), hung = await opening("hang");
+    caret.sel = null; clipHeld = "";
+    const J2 = JSON.stringify;
+    if (WIN) {
+      check(got.selected === SEL && got.asked !== "{}" && /profiles|epoch/.test(got.asked) && got.reads === 0 && got.writes === 0 && !got.leaked,
+        "2s1 a selection opens the picker on those words and asks the desk for what suggests from a message, read without the clipboard and written nowhere else, and nothing goes on the"
+        + " clipboard at the press: " + J2(got));
+      check(none.selected === "" && none.reads === 1 && none.writes === 0 && refused.selected === "" && refused.reads === 1 && refused.writes === 0,
+        "2s2 nothing selected, or the helper refusing the control, opens on the clipboard as before: " + J2({ none, refused }));
+      check(hung.selected === "" && hung.reads === 1 && hung.writes === 0 && hung.ms < 1500,
+        "2s3 a helper that does not answer gives way to the clipboard within its wait: " + J2(hung));
+    } else {
+      check(got.selected === "" && got.reads === 1, "2s1 not Windows: no helper, so the clipboard as before: " + J2(got));
+      check(true, "2s2 not Windows: no helper to refuse");
+      check(true, "2s3 not Windows: no helper to wait for");
+    }
+    /* 2s4: the two plants, each run on the function it guards, sliced from shell/main.js: the wait lifted leaves the opening
+       waiting on a helper that never answers, and the selection's branch rewritten never uses the words. */
+    if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  2s4 the selection's two plants (ETIUDA_PLANTS=off)");
+    else {
+      const decl = (src, name) => { const at = src.indexOf("function " + name + "("); let i = src.indexOf("{", at), d = 0;
+        for (; i < src.length; i++) { if (src[i] === "{") d++; else if (src[i] === "}" && --d === 0) break; } return at < 0 ? "" : src.slice(at, i + 1); };
+      const SELSRC = decl(SRC, "caretSelection"), TOGGLE = decl(SRC, "pickToggle");
+      const waitLine = SELSRC.split("\n").filter(l => l.indexOf("plant:selection-wait") >= 0);
+      const lifted = SELSRC.split("\n").filter(l => l.indexOf("plant:selection-wait") < 0).join("\n");
+      const runSel = src => new Function("caretTool", "execFile", "MESSAGE_MAX_CHARS", "CARET_SELECTION_MS", src + "\nreturn caretSelection();")(
+        () => "caret.exe", () => {}, 1500, 300);
+      const settles = p => Promise.race([p.then(() => true), new Promise(r => setTimeout(() => r(false), 1200))]);
+      const keptWait = await settles(runSel(SELSRC)), liftedWait = waitLine.length === 1 ? await settles(runSel(lifted)) : true;
+      const firstLine = TOGGLE.split("\n").filter(l => l.indexOf("plant:selection-first") >= 0);
+      const rewritten = TOGGLE.split("\n").map(l => l.indexOf("plant:selection-first") >= 0 ? l.replace("if (words)", "if (false)") : l).join("\n");
+      const runToggle = async src => {
+        const calls = [];
+        new Function("pickWin", "pickOpening", "theWindow", "hidePickNote", "pickPress", "pickTarget", "caretWhich", "caretSelection",
+          "withClipText", "pickWithClip", "hidePicker", "pickTrace", src + "\npickToggle();")(null, false, { isDestroyed: () => false }, () => {}, 0, null,
+          () => Promise.resolve(null), () => Promise.resolve({ words: "the words", editable: true, fact: "editable", reason: "" }),
+          then => then("the clipboard"),
+          (p, w, text, sel, editable) => calls.push([text, sel, editable]), () => {}, () => {});
+        await tick(20);
+        return calls;
+      };
+      const kept = await runToggle(TOGGLE), wrong = firstLine.length === 1 ? await runToggle(rewritten) : [["the words", true, true]];
+      check(keptWait && !liftedWait && J2(kept) === J2([["the words", true, true]]) && J2(wrong) === J2([["the clipboard", false, null]]),
+        "2s4 lifting plant:selection-wait leaves the opening waiting on a silent helper, and rewriting plant:selection-first opens on the"
+        + " clipboard over a selection: " + J2({ keptWait, liftedWait, kept, wrong }));
+    }
+  }
+
+  /* 2e1 to 2e5: WHETHER THOSE WORDS CAN BE EDITED. The helper's first line is the fact. The shell carries it beside the
+     words as editable (true, false or null) and appends one trace line: the time, which of the three, and for unknown the
+     reason. The stand-in's words are searched for in the trace and are not there. */
+  {
+    const traceAt = path.join(UD, "pick-trace.txt");
+    const traceText = () => fs.existsSync(traceAt) ? fs.readFileSync(traceAt, "utf8") : "";
+    const LINE = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z) quick reply: (read-only|editable|unknown \((no selection|no text pattern|not supported|mixed|contradicted|clipboard|timeout|refused)\))$/;
+    const WORD = "quillfern";
+    const saidFact = raw => { const line = String(raw || "").replace(/\n$/, ""); const m = LINE.exec(line); return m ? m[2] : "BAD " + JSON.stringify(line); };
+    const openFact = async sel => {
+      const before = traceText();
+      caret.sel = sel; clipHeld = "the kettle brews tea for the guests";
+      const r0 = clipReads, o0 = opened.length, t0 = Date.now();
+      held.get("Control+Shift+Space")();
+      await until(() => opened.length > o0 && pw.visible, 5000);
+      const o = opened[opened.length - 1] || {};
+      const ms = Date.now() - t0;
+      const after = traceText();
+      const added = after.startsWith(before) ? after.slice(before.length) : after;
+      held.get("Control+Shift+Space")();
+      await until(() => !pw.visible);
+      return { selected: "selected" in o ? o.selected : "", editable: "editable" in o ? o.editable : "missing",
+        reads: clipReads - r0, ms, added };
+    };
+    if (WIN) {
+      const ro = await openFact({ fact: "ro", text: WORD + " read only" });
+      const ed = await openFact({ fact: "ed", text: WORD + " can edit" });
+      check(ro.editable === false && ro.selected === WORD + " read only" && saidFact(ro.added) === "read-only" && ro.reads === 0
+        && ed.editable === true && ed.selected === WORD + " can edit" && saidFact(ed.added) === "editable" && ed.reads === 0
+        && traceText().indexOf(WORD) < 0,
+        "2e1 a read-only selection and an editable one each open on those words with that fact, and the trace names which, without the words: "
+        + JSON.stringify({ ro: { editable: ro.editable, fact: saidFact(ro.added) }, ed: { editable: ed.editable, fact: saidFact(ed.added) } }));
+      const mx = await openFact({ fact: "u mixed", text: WORD + " mixed" });
+      const ns = await openFact({ fact: "u unsupported", text: WORD + " unsupported" });
+      const cx = await openFact({ fact: "u contradicted", text: WORD + " contradicted" });
+      check(mx.editable === null && mx.selected === WORD + " mixed" && saidFact(mx.added) === "unknown (mixed)" && mx.reads === 0
+        && ns.editable === null && ns.selected === WORD + " unsupported" && saidFact(ns.added) === "unknown (not supported)"
+        && cx.editable === null && cx.selected === WORD + " contradicted" && saidFact(cx.added) === "unknown (contradicted)"
+        && traceText().indexOf(WORD) < 0,
+        "2e2 mixed, unsupported and contradicted keep the words, carry unknown, and the trace names the reason, without the words: "
+        + JSON.stringify({ mx: saidFact(mx.added), ns: saidFact(ns.added), cx: saidFact(cx.added) }));
+      const e1 = await openFact({ code: 1 }), e2 = await openFact({ code: 2 }), e3 = await openFact({ code: 3 });
+      const e6 = await openFact({ code: 6 }), e70 = await openFact({ code: 70 });
+      const bad = await openFact({ fact: "guessed", text: WORD + " guessed" }), hang = await openFact("hang");
+      check(e1.selected === "" && e1.editable === null && e1.reads === 1 && saidFact(e1.added) === "unknown (no selection)"
+        && e2.selected === "" && e2.editable === null && saidFact(e2.added) === "unknown (no selection)"
+        && e3.selected === "" && e3.editable === null && e3.reads === 1 && saidFact(e3.added) === "unknown (no text pattern)"
+        && e6.selected === "" && e6.editable === null && e6.reads === 1 && saidFact(e6.added) === "unknown (refused)"
+        && e70.selected === "" && e70.editable === null && e70.reads === 1 && saidFact(e70.added) === "unknown (clipboard)"
+        && bad.selected === "" && bad.editable === null && bad.reads === 1 && saidFact(bad.added) === "unknown (clipboard)"
+        && hang.selected === "" && hang.editable === null && hang.reads === 1 && hang.ms < 1500 && saidFact(hang.added) === "unknown (timeout)"
+        && traceText().indexOf(WORD) < 0,
+        "2e3 no selection, no text pattern, a refusal, a failed helper, a line the shell does not know, and no answer within 300 ms are unknown,"
+        + " and the trace names which: " + JSON.stringify({ e1: saidFact(e1.added), e2: saidFact(e2.added), e3: saidFact(e3.added),
+          e6: saidFact(e6.added), e70: saidFact(e70.added), bad: saidFact(bad.added), hang: saidFact(hang.added), ms: hang.ms }));
+      const text = traceText();
+      const lines = text.split("\n").filter(l => l.length);
+      const badLines = lines.filter(l => !LINE.test(l));
+      const bounds = /const PICK_TRACE_FILE = "pick-trace\.txt", PICK_TRACE_MAX_BYTES = 64 \* 1024, PICK_TRACE_RUN_LINES = 2000;/.test(SRC);
+      check(lines.length > 0 && badLines.length === 0 && text.indexOf(WORD) < 0 && text.indexOf("zebraquill") < 0 && bounds,
+        "2e4 every trace line is the time and the fact alone, the stand-in's words are not in the file, and the file is kept like the tray's: "
+        + lines.length + " line(s), " + badLines.length + " bad, bounds " + bounds);
+    } else {
+      check(true, "2e1 not Windows: no helper, so the fact is unknown");
+      check(true, "2e2 not Windows: no helper to leave a fact unknown");
+      check(true, "2e3 not Windows: no helper to refuse or to time out");
+      check(true, "2e4 not Windows: no helper, so no trace of a selection");
+    }
+    caret.sel = null; clipHeld = "";
+    if (process.env.ETIUDA_PLANTS === "off") console.log("  NOT RUN  2e5 the editability field's two plants (ETIUDA_PLANTS=off)");
+    else {
+      const decl = (src, name) => { const at = src.indexOf("function " + name + "("); let i = src.indexOf("{", at), d = 0;
+        for (; i < src.length; i++) { if (src[i] === "{") d++; else if (src[i] === "}" && --d === 0) break; } return at < 0 ? "" : src.slice(at, i + 1); };
+      const FACT = decl(SRC, "readSelectionFact"), LINEF = decl(SRC, "pickFactLine");
+      const fieldHits = FACT.split("\n").filter(l => l.indexOf("plant:editable-field") >= 0);
+      const factMut = FACT.replace("editable: false", "editable: null");
+      const runFact = src => src ? new Function("MESSAGE_MAX_CHARS", src + "\nreturn readSelectionFact;")(1500) : () => null;
+      const keptF = FACT ? runFact(FACT)("ro\n" + WORD) : null;
+      const turnedF = fieldHits.length === 1 && factMut !== FACT ? runFact(factMut)("ro\n" + WORD) : null;
+      const from = 'const allowed = reason === "no selection" || reason === "no text pattern" || reason === "not supported" || reason === "mixed" || reason === "contradicted" || reason === "clipboard" || reason === "timeout" || reason === "refused"; /* plant:editable-trace */';
+      const traceHits = LINEF.split("\n").filter(l => l.indexOf("plant:editable-trace") >= 0);
+      const lineMut = LINEF.replace(from, 'const allowed = true; /* plant:editable-trace */');
+      const runLine = src => src ? new Function(src + "\nreturn pickFactLine;")() : () => "";
+      const keptL = LINEF ? runLine(LINEF)("unknown", WORD) : "";
+      const leaked = traceHits.length === 1 && lineMut !== LINEF ? runLine(lineMut)("unknown", WORD) : "";
+      check(fieldHits.length === 1 && keptF && keptF.editable === false && keptF.words === WORD
+        && turnedF && turnedF.editable === null && turnedF.words === WORD
+        && traceHits.length === 1 && keptL === "unknown (clipboard)" && leaked.indexOf(WORD) >= 0,
+        "2e5 rewriting plant:editable-field reports a read-only selection as unknown, and rewriting plant:editable-trace lets the reason carry the words: "
+        + JSON.stringify({ field: fieldHits.length, kept: keptF && keptF.editable, turned: turnedF && turnedF.editable, trace: traceHits.length, keptL, leaked }));
+    }
+  }
+
   /* NO KEY READS THE CLIPBOARD. Alt+V is pressed on both windows as Electron delivers a key: nothing is read,
      no channel the shell opens is the clipboard's, and neither page's bridge offers a read. Openings read once
      each, above; this sweep must not add another. */
@@ -921,6 +1100,76 @@ try {
     AS.setCards(CARDS.map(c => Object.assign({}, c)));
   }
 
+  /* 7rw1 to 7rw5: ENTER AFTER A REWORD, the second ending. The shell offers the foot only while a configuration is in force and
+     keeps the last result an opening asked for; Enter puts it on the clipboard, the picker steps aside, and the helper reads the
+     selection again as at the opening: the same words still selected, its one key is pressed; otherwise the result waits on the
+     clipboard and the note says so. No model is asked: the configuration and the result go in through the test's own door. */
+  {
+    const notes = () => wins.filter(w => w.opts && w.opts.focusable === false && !w.destroyed);
+    const noteDoc = w => decodeURIComponent(String(w.url || "").replace(/^data:text\/html;charset=utf-8,/, ""));
+    const noteSays = w => (/<\/svg>([^<]*)<\/body>/.exec(noteDoc(w)) || [])[1] || "";
+    const words = pickAnswer("open").words;
+    const RW_SEL = "hi sorry for late reply, we check your order tomorow", RW_OUT = "Hi, sorry for the late reply.\nWe will check it tomorrow.";
+    const putRun = async (atOpen, atPut, result, config) => {
+      SH.__rw.config(() => config === undefined ? { provider: "openai", endpoint: "https://api.openai.com/v1/", model: "m", key: "k", managed: {} } : config);
+      caret.there = true; caret.front = "4242 " + (process.pid + 1); caret.fail = false; caret.sel = atOpen; clipHeld = "";
+      if (pw.visible) { held.get("Control+Shift+Space")(); await until(() => !pw.visible); }
+      const o0 = opened.length;
+      held.get("Control+Shift+Space")();
+      await until(() => opened.length > o0 && pw.visible, 5000);
+      const o = opened[opened.length - 1] || {};
+      if (result) SH.__rw.result(result);
+      caret.sel = atPut;
+      const r0 = caret.runs.length, c0 = clip.length;
+      const got = await pickerPage.E_PICK.put();
+      await tick(30);
+      const nw = notes()[0];
+      return { offered: o.reword || null, got, runs: caret.runs.slice(r0).map(r => r.args.join(" ")), clip: clip.slice(c0), hidden: !pw.visible,
+        note: nw && nw.visible ? noteSays(nw) : "" };
+    };
+    const same = await putRun(RW_SEL, RW_SEL, RW_OUT), moved = await putRun(RW_SEL, "a customer's message", RW_OUT);
+    const fromClip = await putRun(null, RW_SEL, RW_OUT), empty = await putRun(RW_SEL, RW_SEL, ""), off = await putRun(RW_SEL, RW_SEL, "", null);
+    SH.__rw.config(() => null);
+    caret.sel = null;
+    const wantClip = SH.pickClipText(RW_OUT, process.platform);
+    if (WIN) {
+      check(same.offered && same.offered.host === "api.openai.com" && same.got === true && JSON.stringify(same.runs) === JSON.stringify(["selection", "paste 4242"])
+        && JSON.stringify(same.clip) === JSON.stringify([wantClip]) && same.hidden && same.note === words.pasted,
+        "7rw1 the same words still selected: the result goes on the clipboard, the picker steps aside, the selection is read again and the one key"
+        + " pressed, and the note says it was pasted: " + JSON.stringify(same));
+      check(moved.got === false && JSON.stringify(moved.runs) === JSON.stringify(["selection"]) && JSON.stringify(moved.clip) === JSON.stringify([wantClip])
+        && moved.hidden && moved.note === words.copied,
+        "7rw2 another selection by then: nothing is pressed, the result waits on the clipboard, and the note says so in the desk's own words: " + JSON.stringify(moved));
+    } else {
+      check(same.got === false && same.runs.length === 0 && JSON.stringify(same.clip) === JSON.stringify([wantClip]), "7rw1 not Windows: no helper, the result on the clipboard: " + JSON.stringify(same));
+      check(true, "7rw2 not Windows: no selection to read again");
+    }
+    check(fromClip.got === false && fromClip.runs.filter(r => r === "selection" || r.indexOf("paste") === 0).length === 0
+      && fromClip.runs.indexOf("paste 4242") < 0 && JSON.stringify(fromClip.clip) === JSON.stringify([wantClip]) && fromClip.note === words.copied,
+      "7rw3 an opening on the clipboard, nothing selected, reads no selection at Enter and presses nothing: the result waits on the clipboard: " + JSON.stringify(fromClip));
+    check(empty.got === false && empty.clip.length === 0 && empty.runs.filter(r => r !== "which" && r !== "selection").length === 0
+      && off.offered === null && off.got === false && off.clip.length === 0,
+      "7rw4 with no result kept nothing is written or pressed, and without a configuration the foot is not offered: " + JSON.stringify({ empty, off: off.offered }));
+    if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  7rw5 plant:reword-put-same (ETIUDA_PLANTS=off)");
+    else {
+      /* The handler alone, sliced from shell/main.js and run on stand-ins, with the same-words test rewritten to always. */
+      const at = SRC.indexOf('ipcMain.handle("etiuda:pick-put", (e) => {'), end = SRC.indexOf("\n});\n", at);
+      const body = at < 0 || end < 0 ? "" : SRC.slice(SRC.indexOf("{", at) + 1, end);
+      const runPut = async src => {
+        const ran = [];
+        const fn = new Function("e", "fromPicker", "pickReworded", "pickClipText", "pickSelectedNow", "pickTarget", "noteOwnText", "clipboard", "hidePicker",
+          "showPickNote", "REWORD_PUT_WAIT_MS", "caretSelection", "caretPaste", src);
+        const got = await fn({}, () => true, RW_OUT, t => t, RW_SEL, "4242", () => {}, { writeText: () => ran.push("write") }, () => ran.push("hide"),
+          p => ran.push("note " + p), 1, () => Promise.resolve({ words: "a customer's message" }), () => ran.push("paste"));
+        return { got, ran };
+      };
+      const lines = body.split("\n").filter(l => l.indexOf("plant:reword-put-same") >= 0);
+      const kept = await runPut(body), planted = await runPut(body.split("\n").map(l => l.indexOf("plant:reword-put-same") >= 0 ? "    const same = true;" : l).join("\n"));
+      check(lines.length === 1 && kept.ran.indexOf("paste") < 0 && planted.ran.indexOf("paste") > -1,
+        "7rw5 with plant:reword-put-same rewritten to always, another selection is pasted over and 7rw2 would be red: " + JSON.stringify({ kept, planted }));
+    }
+  }
+
   cursor = { x: 1900, y: 1000 };
   const edge = SH.pickerPlace(cursor, area, SH.PICK_SIZE), small = SH.pickerPlace({ x: 10, y: 10 }, { x: 0, y: 0, width: 400, height: 300 }, SH.PICK_SIZE);
   check(edge.x + edge.width <= 1920 && edge.y + edge.height <= 1000 - 18 && edge.y >= 0 && small.width === 400 && small.height === 300,
@@ -928,6 +1177,15 @@ try {
     + JSON.stringify(edge) + " " + JSON.stringify(small));
   check(SH.pickClipText("a\nb\r\nc", "win32") === "a\r\nb\r\nc" && SH.pickClipText("a\nb", "linux") === "a\nb",
     "2p the line ends are Windows' pair there and left alone elsewhere");
+  /* The tour's step in the window: taller by the bubble's room, grown upwards so the rows stay where they opened, and held
+     inside the work area where there is no room above. */
+  const opened2q = { x: 300, y: 500, width: 600, height: 424 }, wa = { x: 0, y: 0, width: 1920, height: 1040 };
+  const grown = SH.pickerGrow(opened2q, 188, wa), high = SH.pickerGrow({ x: 300, y: 40, width: 600, height: 424 }, 188, wa),
+    tiny = SH.pickerGrow({ x: 0, y: 0, width: 400, height: 300 }, 188, { x: 0, y: 0, width: 400, height: 300 });
+  check(grown.y === 312 && grown.height === 612 && grown.y + grown.height === opened2q.y + opened2q.height && grown.x === 300 && grown.width === 600
+    && high.y === 0 && high.height === 612 && tiny.height === 300 && tiny.y === 0,
+    "2p2 while the tour's step stands in it the window grows upwards by the bubble's room, its rows where they opened, inside the work area: "
+    + JSON.stringify([grown, high, tiny]));
 
   /* The folder the shell takes for its app root is the lab's copy, and the checkout's own root is
      never listed, so no file a checkout happens to hold there can reach the boot. */
@@ -1014,6 +1272,159 @@ try {
   reopen();
   pageL["box:click"]({ target: { closest: () => ({ dataset: { i: "1" } }) } });
   check(lastCall() === 'copy {"id":"a","vi":0}', "4l a click on a row copies that row: " + lastCall());
+
+  /* 4s1 to 4s4: THE WORDS SELECTED ON THE SCREEN (Quick replies on the selection). The page is run again over a stand-in that
+     also holds the note under the box. The words stand in the box with the note, and the box counts as at rest while they do:
+     the strip of what the shell suggested for them stands as for a copied message (a step up from the first row reaches it,
+     and Enter takes it, the agent's act), and nothing is searched or taken by itself. Typing over them hides the note and
+     searches what is typed. 4s4 changes each of the two plants in a copy of the script and expects its leg red. */
+  let runSelPage = null;
+  {
+    const SEL = "my parcel has not arrived and the tracking says nothing";
+    const runSel = async (scriptText, o, h) => {
+      const L = {}, q2 = { value: "", placeholder: "", focus() {}, setAttribute() {}, addEventListener: (t, fn) => { L[t] = fn; } };
+      let html = "";
+      const box2 = { set innerHTML(v) { html = v; }, get innerHTML() { return html; }, setAttribute() {}, querySelectorAll: () => [], addEventListener() {} };
+      const note = { hidden: true, textContent: "" };
+      const calls = [], looked = [];
+      let onOpen = null;
+      const W = { E_PICK: {
+        rowsOf: id => { looked.push(id); return Promise.resolve(JSON.stringify(h && h.rowsOf ? h.rowsOf(id) : { rows: [R("rows-" + id)], count: "1 reply" })); },
+        find: qy => { calls.push("find " + qy); return Promise.resolve(JSON.stringify({ rows: [R("found")] })); },
+        takeSuggest: id => { calls.push("take " + id); return Promise.resolve(JSON.stringify({ rows: [R("s1")] })); },
+        copy: w => { calls.push("copy " + w); }, close() {}, ready() {}, onOpen: fn => { onOpen = fn; } } };
+      const D = { getElementById: id => (id === "q" ? q2 : id === "rows" ? box2 : id === "sel" ? note : null),
+        documentElement: { style: { setProperty() {} }, dataset: {}, classList: { toggle() {} }, lang: "" } };
+      new Function("window", "document", scriptText)(W, D);
+      const key = k => L.keydown({ key: k, code: k, ctrlKey: false, altKey: false, metaKey: false, shiftKey: false, preventDefault() {} });
+      onOpen(JSON.stringify(Object.assign({ rows: pRows, words: { selected: "The words you selected. Type to change them.", none: "none" } }, o)));
+      await tick(5);
+      const opened = { box: q2.value, note: note.hidden ? "" : note.textContent, calls: calls.slice(), looked: looked.slice(), html: html };
+      if (h && h.stop) { await tick(5); return { opened, key, calls, looked, html: () => html, tick5: () => tick(5) }; }
+      key("ArrowUp"); key("Enter");
+      await tick(5);
+      const stepped = calls.slice(opened.calls.length);
+      onOpen(JSON.stringify(Object.assign({ rows: pRows, words: { selected: "The words you selected. Type to change them." } }, o)));
+      await tick(5);
+      const c0 = calls.length;
+      q2.value = SEL + " please";
+      if (L.input) L.input();
+      await tick(5);
+      key("ArrowUp"); key("Enter");
+      await tick(5);
+      return { opened, stepped, edited: { note: note.hidden ? "" : note.textContent, calls: calls.slice(c0) } };
+    };
+    runSelPage = runSel;
+    const SUGGEST = [{ id: "t:post", name: "Post" }, { id: "t:lamp", name: "Lamps" }];
+    const withSel = await runSel(script, { selected: SEL, suggest: SUGGEST });
+    const plain = await runSel(script, {});
+    const J3 = JSON.stringify;
+    check(withSel.opened.box === SEL && withSel.opened.note === "The words you selected. Type to change them." && withSel.opened.calls.length === 0,
+      "4s1 the words selected stand in the box with the note under it, and nothing is searched or taken by itself: " + J3(withSel.opened));
+    check(J3(withSel.stepped) === J3(["take t:lamp"]),
+      "4s2 while they stand, the strip of what the shell suggested for them is there: a step up from the first row and Enter take it: " + J3(withSel.stepped));
+    check(withSel.edited.note === "" && withSel.edited.calls[0] === "find " + SEL + " please" && withSel.edited.calls.indexOf("take t:lamp") < 0
+      && plain.opened.box === "" && plain.opened.note === "",
+      "4s3 typing over the words hides the note and searches what is typed, the strip gone; an opening on no selection has an empty box and"
+      + " no note: " + J3({ edited: withSel.edited, plain: plain.opened }));
+    if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  4s4 the page's two plants (ETIUDA_PLANTS=off)");
+    else {
+      const lines = script.split("\n");
+      const marks = ["pick-selected-box", "pick-selected-rest"].map(tag => lines.filter(l => l.indexOf("plant:" + tag) >= 0).length);
+      const noBox = lines.filter(l => l.indexOf("plant:pick-selected-box") < 0).join("\n");
+      const from = " || (!!chosen && q.value === chosen)";
+      const noRest = lines.map(l => (l.indexOf("plant:pick-selected-rest") >= 0 ? l.replace(from, "") : l)).join("\n");
+      const b1 = await runSel(noBox, { selected: SEL, suggest: SUGGEST }), b2 = await runSel(noRest, { selected: SEL, suggest: SUGGEST });
+      check(J3(marks) === "[1,1]" && noRest !== script && b1.opened.box === "" && J3(b2.stepped) !== J3(["take t:lamp"]),
+        "4s4 lifting plant:pick-selected-box leaves the box empty, and rewriting plant:pick-selected-rest hides the strip behind the words: "
+        + J3({ marks, box: b1.opened.box, stepped: b2.stepped }));
+    }
+    const sameFace = (a, b) => a.opened.box === b.opened.box && a.opened.note === b.opened.note
+      && J3(a.stepped) === J3(b.stepped) && J3(a.edited) === J3(b.edited);
+    const onEdit = await runSel(script, { selected: SEL, suggest: SUGGEST, editable: true });
+    const offEdit = await runSel(script, { selected: SEL, suggest: SUGGEST, editable: false });
+    const unkEdit = await runSel(script, { selected: SEL, suggest: SUGGEST, editable: null });
+    const holds = /let mayEdit = null;/.test(script)
+      && /mayEdit = o\.editable === true \? true : o\.editable === false \? false : null;/.test(script);
+    check(withSel.opened.box === onEdit.opened.box && withSel.opened.note === onEdit.opened.note
+      && sameFace(onEdit, offEdit) && sameFace(offEdit, unkEdit) && holds,
+      "4e1 the page stores whether the selection can be edited, and the box, the note and the strip stay as they were for true, false and unknown: "
+      + J3({ box: onEdit.opened.box, note: onEdit.opened.note, holds }));
+  }
+
+  /* 4r1 to 4r5: THE REPLIES FOUND FOR THE SELECTED MESSAGE ARE THE ROWS (Quick replies on the selection). The product owner,
+     2026-11-15: "1-quick-replies-on-the-selection.png and 2-reword-on-a-card.png are perfect, by the way!"; the head of the
+     office's criterion: "opening on a message shows those rows at once; nothing is taken and nothing is counted until the agent
+     picks a row, and the pick then counts as a pick does today." The page asks the desk for the first suggestion's replies
+     (rowsOf) and draws them; it takes nothing, searches nothing and copies nothing by itself, and a pick of a row is the
+     one copy a pick is. The desk's side of it, that the lookup changes nothing, is 6o2 below. 4r5 changes each of two plants in a
+     copy of the script and expects 4r1 red. */
+  {
+    const SEL = "my parcel has not arrived and the tracking says nothing";
+    const SG = [{ id: "t:post", name: "Post" }, { id: "t:lamp", name: "Lamps" }];
+    const J4 = JSON.stringify;
+    const two = id => ({ rows: [R(id + "-1"), R(id + "-2")], count: "2 replies" });
+    const rowsRun = (scriptText, o, h) => runSelPage(scriptText, o, Object.assign({ stop: true, rowsOf: two }, h || {}));
+    const on = await rowsRun(script, { selected: SEL, suggest: SG });
+    const shown = d => (d.html().match(/T [\w:-]+/g) || []).join("|");
+    check(J4(on.looked) === '["t:post"]' && shown(on) === "T t:post-1|T t:post-2" && on.calls.length === 0,
+      "4r1 opening on selected words with suggestions shows the first suggestion's replies as the rows at once, and nothing is taken, searched or copied: "
+      + J4({ looked: on.looked, rows: shown(on), calls: on.calls }));
+    on.key("ArrowDown"); on.key("Enter");
+    await on.tick5();
+    check(J4(on.calls) === '["copy {\\"id\\":\\"t:post-2\\",\\"vi\\":0}"]',
+      "4r2 the arrow keys walk the rows as they walk the resting list, and Enter on one is the one copy a pick is, nothing else sent: " + J4(on.calls));
+    const none = await rowsRun(script, { selected: SEL, suggest: [] });
+    const noSel = await rowsRun(script, { suggest: SG });
+    check(none.looked.length === 0 && shown(none) === "T a|T b|T c" && noSel.looked.length === 0 && shown(noSel) === "T a|T b|T c",
+      "4r3 with no suggestions, or with no selected words, the rows are the resting list and the desk is not asked: "
+      + J4({ none: [none.looked, shown(none)], noSel: [noSel.looked, shown(noSel)] }));
+    const typed = await rowsRun(script, { selected: SEL, suggest: SG });
+    check(typed.opened.box === SEL, "4r4 control: the words still stand in the box beside the rows: " + J4(typed.opened.box));
+    if (process.env.ETIUDA_PLANTS === "off") console.log("  NOT RUN  4r5 the page's two plants (ETIUDA_PLANTS=off)");
+    else {
+      const lines = script.split("\n");
+      const marks = ["pick-rows-look", "pick-rows-take"].map(tag => lines.filter(l => l.indexOf("plant:" + tag) >= 0).length);
+      const noLook = lines.filter(l => l.indexOf("plant:pick-rows-look") < 0).join("\n");
+      const autoTake = lines.map(l => (l.indexOf("plant:pick-rows-take") >= 0 ? l.replace("/* plant:pick-rows-take */", "P.takeSuggest(first, false);") : l)).join("\n");
+      const p1 = await rowsRun(noLook, { selected: SEL, suggest: SG }), p2 = await rowsRun(autoTake, { selected: SEL, suggest: SG });
+      check(J4(marks) === "[1,1]" && noLook !== script && autoTake !== script && shown(p1) === "T a|T b|T c" && p2.calls.indexOf("take t:post") > -1,
+        "4r5 lifting the lookup leaves the resting list, and a lookup that takes the suggestion sends the take 4r1 holds absent: " + J4({ marks, lifted: shown(p1), taken: p2.calls }));
+    }
+  }
+
+  /* 4w1 to 4w3: THE WINDOW'S TWO FIELDS SAY WHAT THEY ARE FOR (the product owner's testing note 12). The words are the
+     desk's, the copywriter's, in both languages; the page puts them in the fields as placeholders and nothing else: a
+     placeholder is interface text, so it fills no value and selects nothing, and what a person types does. */
+  {
+    const J4 = JSON.stringify;
+    const runWho = async (pl, selected) => {
+      SYSTEM[0] = pl ? "pl-PL" : "en-US";
+      const opening = pickAnswer("open", {});
+      SYSTEM[0] = "en-US";
+      const L = {}, q2 = { value: "", placeholder: "", focus() {}, setAttribute() {}, addEventListener: (t, fn) => { L[t] = fn; } };
+      const who = { value: "", placeholder: "", title: "", hidden: true, focus() {}, addEventListener() {} };
+      const note = { hidden: true, textContent: "" };
+      const box2 = { set innerHTML(v) {}, get innerHTML() { return ""; }, setAttribute() {}, querySelectorAll: () => [], addEventListener() {} };
+      let onOpen = null;
+      const W = { E_PICK: { find: () => Promise.resolve("{}"), copy() {}, close() {}, ready() {}, onOpen: fn => { onOpen = fn; } } };
+      const D = { getElementById: id => (id === "q" ? q2 : id === "rows" ? box2 : id === "who" ? who : id === "sel" ? note : null),
+        documentElement: { style: { setProperty() {} }, dataset: {}, classList: { toggle() {} }, lang: "" } };
+      new Function("window", "document", script)(W, D);
+      onOpen(JSON.stringify(Object.assign({}, opening, selected ? { selected: selected } : {})));
+      await tick(5);
+      return { q: { value: q2.value, placeholder: q2.placeholder }, who: { value: who.value, placeholder: who.placeholder }, note: note.hidden };
+    };
+    const en = await runWho(false, ""), pl = await runWho(true, ""), typed = await runWho(false, "a word of mine");
+    check(en.q.placeholder === "Type a word to find a reply" && en.who.placeholder === "customer's name"
+      && en.q.value === "" && en.who.value === "" && en.note === true,
+      "4w1 in English, with both fields empty, the search box says what it is for and so does the name field, and neither is filled or selected: " + J4(en));
+    check(pl.q.placeholder === "Wpisz s\u0142owo, by znale\u017a\u0107 odpowied\u017a" && pl.who.placeholder === "imi\u0119 klienta"
+      && pl.q.value === "" && pl.who.value === "" && pl.note === true,
+      "4w2 in Polish, the same two, the copywriter's words exactly: " + J4(pl));
+    check(typed.q.value === "a word of mine" && typed.q.placeholder === en.q.placeholder && typed.note === false,
+      "4w3 with words in the box the box holds those words and nothing else (the placeholder is only what shows while it is empty): " + J4(typed));
+  }
 
   /* THE LEG (board 952, waste 3b): typing in the global picker filters in the picker;
      a keystroke in the picker sends no IPC, by count. The answer's first frame is measured. */
@@ -1146,9 +1557,11 @@ try {
     "5aa the shell reads the clipboard at one place, the picker's open, and a second read is refused: "
     + clipSites.length + " site(s), planted " + plantedSites + ", forbid hits " + plantedReach);
   const writes = shellCode.match(/clipboard\s*\.\s*write\w*\s*\(/g) || [];
-  check(writes.length === 1 && /clipboard\.writeText\(pickClipText\(v\.text,\s*process\.platform\)\)/.test(shellCode)
-    && (shellBare.match(/clipboard\.writeText\(/g) || []).length === 1,
-    "5b the shell writes the clipboard at one place, the desk's own text: " + writes.length + " write site(s)");
+  /* Two places since Enter after a reword: the desk's own copy, and the reword's result the shell itself kept (pickReworded). */
+  const putSite = /const text=pickClipText\(pickReworded,process\.platform\),was=pickSelectedNow,target=pickTarget;pickReworded="";noteOwnText\(text\);clipboard\.writeText\(text\);hidePicker\(true\);/.test(shellCode);
+  check(writes.length === 2 && /clipboard\.writeText\(pickClipText\(v\.text,\s*process\.platform\)\)/.test(shellCode) && putSite
+    && (shellBare.match(/clipboard\.writeText\(/g) || []).length === 2,
+    "5b the shell writes the clipboard at two places, the desk's own text and the reword's result it kept: " + writes.length + " write site(s), the put's " + putSite);
   /* Board 945 stage 3 (b) slice 1: background syncer worker in shell/folder/syncer.cjs and node:worker_threads */
   const MODS = ["electron", "node:child_process", "node:path", "node:fs", "node:os", "node:crypto", "node:zlib",
     "node:worker_threads", "./folder/syncer.cjs",
@@ -1163,46 +1576,69 @@ try {
     /* Its sync: node:crypto, node:fs and node:path over the store's own mirror; no window, screen, clipboard or key. */
     "./sync/sync.cjs",
     "./win-proxy.cjs", "./proxy-net.cjs", "./page-watch.cjs", "./clip-suggest.cjs", "./desk-ai.cjs", "./desk-reset.cjs", "./tray.cjs", "./embed/suggest.cjs", "./core.cjs", "./relay/channel.cjs", "./blob.cjs"];
-  const reqs = (shellCode.match(/\brequire\s*\(\s*[^)]*\)/g) || []).map(r => r.replace(/^require\s*\(\s*|\s*\)$/g, "").replace(/^["']|["']$/g, ""))
-    .map(r => { const m = /^path\.join\(__dirname,((?:"[\w.-]+",)*"[\w.-]+)$/.exec(r); return m ? "./" + m[1].replace(/"/g, "").split(",").join("/") : r; });
-  const strange = reqs.filter(r => MODS.indexOf(r) < 0);
-  const cps = [...shellCode.matchAll(/\{([^}]*)\}\s*=\s*require\(\s*"node:child_process"\s*\)/g)];
-  const cp = cps[0] || null;
-  /* EVERY PROGRAM BY A CONSTANT HELD HERE TO ITS FIXED PATH, never a bare name a PATH search resolves (board 880, 2026-10-13):
-     the registry tool for the proxy, policy and theme reads, and dbus-send on Linux, which Studio already runs at its fixed
-     path. A bare "reg" or "dbus-send" runs whatever a directory earlier in PATH holds under that name. */
-  const regTool = /\bconst REG_TOOL="C:\\\\Windows\\\\System32\\\\reg\.exe"/.test(shellCode);
-  const busTool = /\bconst BUS_TOOL="\/usr\/bin\/dbus-send"/.test(shellCode);
-  const runs = shellCode.match(/(?<![.\w])(execFileSync|execFile|execSync|exec|spawnSync|spawn|fork)\s*\(\s*("[^"]*"|[^,)]*)/g) || [];
-  const programs = runs.map(r => r.replace(/^[^(]*\(\s*/, ""));
-  /* ONE HANDLE ON child_process, and the one name it gives is only ever called (board 818): a second
-     `require("node:child_process")` held whole and called as `.spawn(...)` passed the call pattern above, which reads
-     a bare name only. So the module is required once in each file that runs a program, its one name is mentioned
-     once more per call and nowhere else, and no other loader (a dynamic import, createRequire, a binding) is in the
-     shell at all. */
-  const cpRequires = (shellCode.match(/\brequire\s*\(\s*"(?:node:)?child_process"\s*\)/g) || []).length;
-  const runMentions = (shellBare.match(/\bexecFileSync\b/g) || []).length, runCalls = (shellBare.match(/\bexecFileSync\s*\(/g) || []).length;
-  /* THE CARET HELPER'S CALLS, execFile in main.js alone: its program is `tool`, bound only to caretTool(), whose two
-     places are caret.exe beside the asar and in build/, and its name is mentioned once in the require and once per call. */
-  const asyncMentions = (shellBare.match(/\bexecFile\b/g) || []).length, asyncCalls = (shellBare.match(/\bexecFile\s*\(/g) || []).length;
-  const toolBinds = shellCode.match(/\bconst tool=caretTool\(\);/g) || [], toolNames = (shellBare.match(/\btool\b/g) || []).length;
-  const caretToolNames = (shellBare.match(/\bcaretTool\b/g) || []).length;
-  const caretPlaces = /function caretTool\(\)\{if\(process\.platform!=="win32"\)return null;const at=app\.isPackaged\?path\.join\(process\.resourcesPath,"caret\.exe"\):path\.join\(__dirname,"\.\.","dist","\.caret","caret\.exe"\);return fs\.existsSync\(at\)\?at:null\}/.test(shellCode);
-  const loaders = shellBare.match(/\bimport\s*\(|\bprocess\s*\.\s*(?:binding|_linkedBinding|dlopen)\b|\bcreateRequire\b|\bmodule\s*\.\s*require\b|\brequire\s*\.\s*(?:cache|main)\b/g) || [];
-  const cpNames = cps.map(m => m[1].split(",").map(x => x.trim()).sort().join(","));
-  check(reqs.length > 0 && strange.length === 0 && cps.length === cpRequires
-    && cpNames.every(n => n === "execFileSync" || n === "execFile,execFileSync") && cpNames.filter(n => n !== "execFileSync").length === 1
-    && asyncCalls === 2 && asyncMentions === asyncCalls + 1 && toolBinds.length === 2 && caretPlaces && caretToolNames === 3
-    && toolNames === toolBinds.length * 3
-    && programs.length > 0 && programs.every(p => (p === "REG_TOOL" && regTool) || p === "tool"
-      /* Linux alone: three questions to the session bus about the keyring, none about a window, the screen, the
-         clipboard or a key (tests/shell-office.mjs 14) */
-      || (p === "BUS_TOOL" && busTool))
-    && cpRequires === 2 && runMentions === runCalls + cpRequires && loaders.length === 0,
-    "5c the shell loads no module and runs no program it did not have (every one is read against the must-hold before it joins): "
-    + (strange.join(", ") || reqs.length + " requires known") + "; " + (cp ? cp[1].trim() : "no child_process") + " runs " + (programs.join(", ") || "nothing")
-    + "; child_process required " + cpRequires + " time(s), its name mentioned " + runMentions + " time(s) for " + runCalls + " call(s)"
-    + (loaders.length ? "; other loaders " + loaders.join(", ") : ""));
+  /* 5c AS A JUDGEMENT OF A TEXT, so a planted copy can be judged the same way. WIDENED 2026-11-15 by the lead engineer
+     (Claudius) on the test architect's word: win-proxy.cjs reads Windows' proxy again without waiting (execFile), so two
+     files now take execFile beside execFileSync and there are three asynchronous calls (the caret's two and win-proxy's one).
+     The program set is unchanged: win-proxy's one execFile call is pinned to REG_TOOL by its own text. WIDENED again the same
+     day by the lead engineer (Claudius delta5) on the test architect's edit to review 28: the desk AI's minute look at machine
+     policy runs without waiting, so four asynchronous calls, main.js's one beside the caret's pinned to REG_TOOL exporting
+     POLICY_KEY by its own text. */
+  const judge5c = (shellCode, shellBare, winSrc) => {
+    const reqs = (shellCode.match(/\brequire\s*\(\s*[^)]*\)/g) || []).map(r => r.replace(/^require\s*\(\s*|\s*\)$/g, "").replace(/^["']|["']$/g, ""))
+      .map(r => { const m = /^path\.join\(__dirname,((?:"[\w.-]+",)*"[\w.-]+)$/.exec(r); return m ? "./" + m[1].replace(/"/g, "").split(",").join("/") : r; });
+    const strange = reqs.filter(r => MODS.indexOf(r) < 0);
+    const cps = [...shellCode.matchAll(/\{([^}]*)\}\s*=\s*require\(\s*"node:child_process"\s*\)/g)];
+    const cp = cps[0] || null;
+    /* EVERY PROGRAM BY A CONSTANT HELD HERE TO ITS FIXED PATH, never a bare name a PATH search resolves (board 880, 2026-10-13):
+       the registry tool for the proxy, policy and theme reads, and dbus-send on Linux, which Studio already runs at its fixed
+       path. A bare "reg" or "dbus-send" runs whatever a directory earlier in PATH holds under that name. */
+    const regTool = /\bconst REG_TOOL="C:\\\\Windows\\\\System32\\\\reg\.exe"/.test(shellCode);
+    const busTool = /\bconst BUS_TOOL="\/usr\/bin\/dbus-send"/.test(shellCode);
+    const runs = shellCode.match(/(?<![.\w])(execFileSync|execFile|execSync|exec|spawnSync|spawn|fork)\s*\(\s*("[^"]*"|[^,)]*)/g) || [];
+    const programs = runs.map(r => r.replace(/^[^(]*\(\s*/, ""));
+    /* ONE HANDLE ON child_process, and the one name it gives is only ever called (board 818): a second
+       `require("node:child_process")` held whole and called as `.spawn(...)` passed the call pattern above, which reads
+       a bare name only. So the module is required once in each file that runs a program, its one name is mentioned
+       once more per call and nowhere else, and no other loader (a dynamic import, createRequire, a binding) is in the
+       shell at all. */
+    const cpRequires = (shellCode.match(/\brequire\s*\(\s*"(?:node:)?child_process"\s*\)/g) || []).length;
+    /* THE GUARD NAMES ITS CALLEE (shell/win-proxy.cjs, regOpts): each reg call passes its options as regOpts(execFileSync, ...) or
+     regOpts(execFile, ...), one more mention of that name per guarded call and nowhere else. */
+  const guardSync = (shellBare.match(/\bregOpts\(\s*execFileSync\s*,/g) || []).length, guardAsync = (shellBare.match(/\bregOpts\(\s*execFile\s*,/g) || []).length;
+  const runMentions = (shellBare.match(/\bexecFileSync\b/g) || []).length - guardSync, runCalls = (shellBare.match(/\bexecFileSync\s*\(/g) || []).length;
+    /* THE CARET HELPER'S CALLS, execFile in main.js alone: its program is `tool`, bound only to caretTool(), whose two
+       places are caret.exe beside the asar and in build/, and its name is mentioned once in the require and once per call.
+       WIDENED 2026-11-15 by the lead engineer (Claudius delta5) by exactly one call, the selection's (Quick replies on the
+       selection): with the two widenings above that is five asynchronous calls, three bindings of tool, caretTool named four times. */
+    const asyncMentions = (shellBare.match(/\bexecFile\b/g) || []).length - guardAsync, asyncCalls = (shellBare.match(/\bexecFile\s*\(/g) || []).length;
+    const toolBinds = shellCode.match(/\bconst tool=caretTool\(\);/g) || [], toolNames = (shellBare.match(/\btool\b/g) || []).length;
+    const caretToolNames = (shellBare.match(/\bcaretTool\b/g) || []).length;
+    const caretPlaces = /function caretTool\(\)\{if\(process\.platform!=="win32"\)return null;const at=app\.isPackaged\?path\.join\(process\.resourcesPath,"caret\.exe"\):path\.join\(__dirname,"\.\.","dist","\.caret","caret\.exe"\);return fs\.existsSync\(at\)\?at:null\}/.test(shellCode);
+    const loaders = shellBare.match(/\bimport\s*\(|\bprocess\s*\.\s*(?:binding|_linkedBinding|dlopen)\b|\bcreateRequire\b|\bmodule\s*\.\s*require\b|\brequire\s*\.\s*(?:cache|main)\b/g) || [];
+    const cpNames = cps.map(m => m[1].split(",").map(x => x.trim()).sort().join(","));
+    const winCalls = (winSrc.match(/\bexecFile\s*\(/g) || []).length, winPinned = winCalls === 1 && /\bexecFile\s*\(\s*REG_TOOL\b/.test(winSrc);
+    const outside = shellCode.split(winSrc).join("");
+    const mainRegLater = (outside.match(/\bexecFile\s*\(\s*REG_TOOL\b/g) || []).length;
+    const policyPinned = mainRegLater === 1 && /\bexecFile\s*\(\s*REG_TOOL\s*,\s*\[\s*"export"\s*,\s*POLICY_KEY\s*,/.test(outside);
+    return { ok: reqs.length > 0 && strange.length === 0 && cps.length === cpRequires && cpNames.every(n => n === "execFileSync" || n === "execFile,execFileSync") && cpNames.filter(n => n !== "execFileSync").length === 2 && asyncCalls === 5 && asyncMentions === asyncCalls + 2 && toolBinds.length === 3 && caretPlaces && caretToolNames === 4 && toolNames === toolBinds.length * 3 && programs.length > 0 && programs.every(p => (p === "REG_TOOL" && regTool) || p === "tool" /* Linux alone: three questions to the session bus about the keyring, none about a window, the screen, the clipboard or a key (tests/shell-office.mjs 14) */ || (p === "BUS_TOOL" && busTool)) && cpRequires === 2 && runMentions === runCalls + cpRequires && loaders.length === 0 && winPinned && policyPinned,
+      say: "5c the shell loads no module and runs no program it did not have (every one is read against the must-hold before it joins): " + (strange.join(", ") || reqs.length + " requires known") + "; " + (cp ? cp[1].trim() : "no child_process") + " runs " + (programs.join(", ") || "nothing") + "; child_process required " + cpRequires + " time(s), its name mentioned " + runMentions + " time(s) for " + runCalls + " call(s)" + (loaders.length ? "; other loaders " + loaders.join(", ") : "") + "; win-proxy's execFile call(s) " + winCalls + (winPinned ? " to REG_TOOL" : " NOT PINNED to REG_TOOL")
+        + "; main.js's REG_TOOL execFile call(s) " + mainRegLater + (policyPinned ? " exporting POLICY_KEY" : " NOT PINNED to exporting POLICY_KEY") };
+  };
+  const WIN_SRC = blank(fs.readFileSync(path.join(ROOT, "shell", "win-proxy.cjs"), "utf8"));
+  const five = judge5c(shellCode, shellBare, WIN_SRC);
+  /* Two plants, judged on copies of the text: win-proxy's call given another program, and a second call added there. */
+  const PLANTS_OFF_5C = process.env.ETIUDA_PLANTS === "off";
+  const plant5c = (from, to) => { const w = WIN_SRC.replace(from, to), c = shellCode.split(WIN_SRC).join(w);
+    return w !== WIN_SRC && c !== shellCode && !judge5c(c, mask(c), w).ok; };
+  /* And two on main.js's own: its policy look given another key, and a second call to REG_TOOL beside it. */
+  const plantMain = (from, to) => { const c = shellCode.replace(from, to); return c !== shellCode && !judge5c(c, mask(c), WIN_SRC).ok; };
+  const p5 = PLANTS_OFF_5C ? null : [plant5c(/\bexecFile\(REG_TOOL\b/, 'execFile("cmd.exe"'),
+    plant5c(/\bexecFile\(REG_TOOL,/, "execFile(REG_TOOL,[]);execFile(REG_TOOL,"),
+    plantMain(/\bexecFile\(REG_TOOL,\["export",POLICY_KEY,/, 'execFile(REG_TOOL,["export",USER_KEY,'),
+    plantMain(/\bexecFile\(REG_TOOL,\["export",POLICY_KEY,/, 'execFile(REG_TOOL,[]);execFile(REG_TOOL,["export",POLICY_KEY,')];
+  check(five.ok && (p5 === null || p5.every(Boolean)),
+    five.say + (p5 === null ? "; plants NOT RUN (ETIUDA_PLANTS=off)" : "; plants another program " + (p5[0] ? "red" : "MISSED") + ", a second call " + (p5[1] ? "red" : "MISSED")
+      + ", the policy look on another key " + (p5[2] ? "red" : "MISSED") + ", a second REG_TOOL call in main.js " + (p5[3] ? "red" : "MISSED")));
   /* THE PAGE IS GRANTED ONE PERMISSION, the clipboard's write, and every handler that could grant another answers
      from that list alone (board 818): "clipboard-read" added to the list stayed green, since no API name is in it.
      The list is named three times, its declaration and its two handlers, and nowhere else, so
@@ -1247,20 +1683,133 @@ try {
   const pressed = keyCalls.filter(k => k !== "int vk");
   const pressedValues = [...new Set(pressed.map(k => /^VK_\w+$/.test(k) ? vk[k] : NaN))].sort((a, b) => a - b);
   const builder = fs.readFileSync(path.join(ROOT, "electron-builder.js"), "utf8");
-  const builds = /path\.resolve\(__dirname, "shell", "caret\.cs"\)/.test(builder) && /"-noconfig"/.test(builder) && /"-r:System\.dll"/.test(builder);
+  const builds = /path\.resolve\(__dirname, "shell", "caret\.cs"\)/.test(builder) && /"-noconfig"/.test(builder) && /"-r:System\.dll"/.test(builder)
+    && /"-r:UIAutomationClient\.dll", "-r:UIAutomationTypes\.dll"/.test(builder) && (builder.match(/"-r:[^"]+"/g) || []).length === 3;
+  /* WIDENED 2026-11-15 by the lead engineer (Claudius delta5) for Quick replies on the selection (Max's ruling, decisions
+     2026-11-15 16:28): the helper reads the focused control's selected text through UI Automation. Exactly that is added:
+     three usings (System.Text, System.Windows.Automation and its .Text), the two UI Automation client libraries at the
+     compile, and a read that names only the focused element, its password flag, the text pattern, the selection and its
+     text, and nothing that sets, selects, scrolls, moves or invokes; a password field is refused before any text is read.
+     WIDENED again the same day for whether those words can be edited: the range's IsReadOnly attribute, the Value pattern's
+     IsReadOnly (not its value), and the control type. Twenty names where there were nine. Nothing that changes a control. */
+  const uiaRead = cs => {
+    const uiaNames = [...new Set(cs.match(/\b(?:AutomationElement|TextPattern|TextPatternRange|ValuePattern|ControlType)\b(?:\.\w+)?|\.(?:FocusedElement|TryGetCurrentPattern|GetSelection|GetText|GetAttributeValue|IsPassword|IsReadOnly)\b/g) || [])].sort();
+    const uiaWrites = cs.match(/\b(?:SetValue|InvokePattern|SelectionItemPattern|SelectionPattern|AddToSelection|RemoveFromSelection|SetFocus|ScrollIntoView|ExpandCollapsePattern|TogglePattern|Invoke|Move\w*|ExpandToEnclosingUnit|RangeFromPoint|FromPoint|FromHandle|TreeWalker|FindAll|FindFirst|GetVisibleRanges|DocumentRange|Select)\b\s*\(?/g) || [];
+    const valueRead = /\.Current\.Value\b|\bSetValue\b|\bValueProperty\b/.test(cs);
+    const passwordFirst = /if \(e\.Current\.IsPassword\) return 6;\s*object found;\s*if \(!e\.TryGetCurrentPattern\(TextPattern\.Pattern, out found\)\) return 3;/.test(cs);
+    return { uiaNames, uiaWrites, valueRead, passwordFirst, ok: J(uiaNames) === J(UIA_NAMES) && uiaWrites.length === 0 && !valueRead && passwordFirst };
+  };
+  const UIA_NAMES = [".GetAttributeValue", ".GetSelection", ".GetText", ".IsPassword", ".IsReadOnly", ".TryGetCurrentPattern",
+    "AutomationElement", "AutomationElement.FocusedElement", "AutomationElement.NotSupported", "ControlType", "ControlType.Document",
+    "ControlType.Edit", "ControlType.Text", "TextPattern", "TextPattern.IsReadOnlyAttribute", "TextPattern.MixedAttributeValue",
+    "TextPattern.Pattern", "TextPatternRange", "ValuePattern", "ValuePattern.Pattern"].sort();
+  const { uiaNames, uiaWrites, valueRead, passwordFirst } = uiaRead(CS);
   check(J(imports) === J(["GetAsyncKeyState", "GetForegroundWindow", "GetWindowThreadProcessId", "IsWindow", "MapVirtualKey", "SendInput",
       "SetForegroundWindow"]) && dllCount === imports.length && attrs.length === imports.length && attrsOk
-    && J(usings) === J(["using System.Diagnostics;", "using System.Runtime.InteropServices;", "using System.Threading;", "using System;"].sort())
+    && J(usings) === J(["using System.Diagnostics;", "using System.Runtime.InteropServices;", "using System.Threading;", "using System;",
+      "using System.Text;", "using System.Windows.Automation;", "using System.Windows.Automation.Text;"].sort())
+    && uiaRead(CS).ok
     && csForbid.length === 0 && keyCalls.length === 5 && (CS.match(/\bKey\(/g) || []).length === 5 && pressed.length === 4 && pressed.every(k => /^VK_\w+$/.test(k))
     && J(pressedValues) === J([0x11, 0x56]) && builds,
     "5f the caret helper electron-builder.js compiles, with -noconfig, calls " + imports.length + " user32 functions by their own names,"
-    + " uses no library beyond its four usings, and presses the keys 0x" + pressedValues.map(v => (v || 0).toString(16)).join(" and 0x")
+    + " uses no library beyond its seven usings, reads the selection through UI Automation naming " + uiaNames.length + " members and"
+    + (uiaWrites.length ? " ALSO " + uiaWrites.join(", ") : " nothing that changes a control")
+    + (valueRead ? ", READS the value" : ", the value unread")
+    + (passwordFirst ? ", a password field refused first," : ", NO password refusal first,")
+    + " and presses the keys 0x" + pressedValues.map(v => (v || 0).toString(16)).join(" and 0x")
     + " (Control, V) in " + pressed.length + " presses" + (csForbid.length ? "; also names " + csForbid.join(", ") : ""));
-  /* THE PASTE IS STARTED FROM ONE PLACE: the copy, right after its clipboard write, so no other handler presses a key. */
+  /* Two plants on copies of the helper's text: the password refusal lifted, and the focus set before the read. */
+  if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  5fp the helper's two plants (ETIUDA_PLANTS=off)");
+  else {
+    const lifted = CS.replace("if (e.Current.IsPassword) return 6;", ""), focused = CS.replace("object found;", "e.SetFocus(); object found;");
+    check(lifted !== CS && focused !== CS && !uiaRead(lifted).ok && !uiaRead(focused).ok,
+      "5fp the helper's read with its password refusal lifted, and with the focus set before it, each fails 5f's reading");
+  }
+  /* THE HELPER'S OWN CHECK, run where the C# compiler is: caret.cs compiled into a scratch folder as electron-builder.js compiles
+     it, and its check verb, which touches no window, prints the selection's cap over a fixed text as UTF-8, then the editability
+     rule. No window of this computer is read.
+     The rule, one row per cell. attr is the range's IsReadOnly (ro true, ed false, ns not supported, mx mixed). second is one
+     opinion: Value.IsReadOnly when that pattern is present, otherwise ControlType.Text as read-only; Edit and Document stay
+     silent. "?" is that opinion split (Value says editable, the type is Text). Agree, or a definite attribute with a silent
+     second: that answer. They disagree, the range is mixed, or the attribute is missing and the second is silent: unknown.
+       fact ro ro ro                  fact ro ed ? contradicted     fact ro . ro              fact ro ? ? contradicted
+       fact ed ro ? contradicted      fact ed ed ed                 fact ed . ed              fact ed ? ? contradicted
+       fact ns ro ro                  fact ns ed ed                 fact ns . ? not-supported fact ns ? ? not-supported
+       fact mx ro ? mixed             fact mx ed ? mixed            fact mx . ? mixed         fact mx ? ? mixed
+     The second opinion on its own, value then control type:
+       second ro text ro   second ro edit ro   second ro doc ro   second ro other ro
+       second ed text ?    second ed edit ed   second ed doc ed   second ed other ed
+       second . text ro    second . edit .     second . doc .     second . other . */
+  const FACT_ROWS = [
+    "fact ro ro ro", "fact ro ed ? contradicted", "fact ro . ro", "fact ro ? ? contradicted",
+    "fact ed ro ? contradicted", "fact ed ed ed", "fact ed . ed", "fact ed ? ? contradicted",
+    "fact ns ro ro", "fact ns ed ed", "fact ns . ? not-supported", "fact ns ? ? not-supported",
+    "fact mx ro ? mixed", "fact mx ed ? mixed", "fact mx . ? mixed", "fact mx ? ? mixed",
+    "second ro text ro", "second ro edit ro", "second ro doc ro", "second ro other ro",
+    "second ed text ?", "second ed edit ed", "second ed doc ed", "second ed other ed",
+    "second . text ro", "second . edit .", "second . doc .", "second . other ."];
+  {
+    const csc = path.join(process.env.WINDIR || "C:/Windows", "Microsoft.NET", "Framework64", "v4.0.30319", "csc.exe");
+    let said5h = "no C# compiler here, so not compiled";
+    let ok5h = process.platform !== "win32" || !fs.existsSync(csc);
+    if (!ok5h) {
+      const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-caret-check-")), exe = path.join(lab, "caret.exe");
+      try {
+        const { spawnSync } = nodeRequire("node:child_process");
+        const made = spawnSync(csc, ["-noconfig", "-nologo", "-optimize", "-target:winexe", "-platform:anycpu", "-r:System.dll",
+          "-lib:" + path.join(path.dirname(csc), "WPF"), "-r:UIAutomationClient.dll", "-r:UIAutomationTypes.dll", "-out:" + exe,
+          path.join(ROOT, "shell", "caret.cs")], { encoding: "utf8", windowsHide: true, timeout: 60000 });
+        const ran = made.status === 0 ? spawnSync(exe, ["check"], { windowsHide: true, timeout: 10000 }) : null;
+        const out = ran && ran.stdout ? ran.stdout.toString("utf8") : "";
+        const want = "Za\u017C\u00F3\u0142\u0107 g\u0119\u015Bl\u0105 ja\u017A\u0144 " + "x".repeat(1481);
+        const capOk = out.startsWith(want + "\n");
+        const tableOk = out.slice(want.length + 1) === FACT_ROWS.join("\n");
+        ok5h = !!ran && ran.status === 0 && capOk && tableOk;
+        said5h = made.status !== 0 ? "did not compile: " + String(made.stdout || made.stderr).split("\n")[0]
+          : "check exit " + (ran && ran.status) + ", cap " + (capOk ? "held" : "NOT held") + ", " + FACT_ROWS.length
+            + " rows " + (tableOk ? "held" : "NOT held");
+      } finally { fs.rmSync(lab, { recursive: true, force: true }); }
+    }
+    check(ok5h, "5fs the caret helper compiles as electron-builder.js compiles it, and its window-free check caps a text at 1500 characters in"
+      + " UTF-8 and prints the editability rule, Polish whole and no character cut in half: " + said5h);
+  }
+  /* The contradicted cell, rewritten to agree, is a different rule: check then prints read-only where the two opinions disagree. */
+  if (process.env.ETIUDA_PLANTS === "off") console.log("  NOT RUN  5fq the editability rule's plant (ETIUDA_PLANTS=off)");
+  else {
+    const csc = path.join(process.env.WINDIR || "C:/Windows", "Microsoft.NET", "Framework64", "v4.0.30319", "csc.exe");
+    const raw = fs.readFileSync(path.join(ROOT, "shell", "caret.cs"), "utf8");
+    const from = 'return "? contradicted"; // plant:fact-contradict';
+    const hits = raw.split("\n").filter(l => l.indexOf("plant:fact-contradict") >= 0);
+    const mutant = raw.replace(from, 'return "ro"; // plant:fact-contradict');
+    let turned = false, said = hits.length === 1 ? "marked" : "marker missing";
+    if (hits.length === 1 && mutant !== raw && (process.platform !== "win32" || !fs.existsSync(csc))) {
+      turned = true;
+      said = "no compiler; the marked return is present and the mutation differs";
+    } else if (hits.length === 1 && mutant !== raw) {
+      const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-caret-plant-")), exe = path.join(lab, "caret.exe"), cs = path.join(lab, "caret.cs");
+      try {
+        fs.writeFileSync(cs, mutant, "utf8");
+        const { spawnSync } = nodeRequire("node:child_process");
+        const made = spawnSync(csc, ["-noconfig", "-nologo", "-optimize", "-target:winexe", "-platform:anycpu", "-r:System.dll",
+          "-lib:" + path.join(path.dirname(csc), "WPF"), "-r:UIAutomationClient.dll", "-r:UIAutomationTypes.dll", "-out:" + exe, cs],
+          { encoding: "utf8", windowsHide: true, timeout: 60000 });
+        const ran = made.status === 0 ? spawnSync(exe, ["check"], { windowsHide: true, timeout: 10000 }) : null;
+        const lines = ran && ran.stdout ? ran.stdout.toString("utf8").split("\n") : [];
+        turned = lines.indexOf("fact ro ed ro") >= 0 && lines.indexOf("fact ro ed ? contradicted") < 0;
+        said = made.status !== 0 ? "mutant did not compile: " + String(made.stdout || made.stderr).split("\n")[0]
+          : "mutant check " + (turned ? "prints read-only for a contradiction" : "did not turn: " + lines.filter(l => l.indexOf("fact ro ed") === 0).join(" | "));
+      } finally { fs.rmSync(lab, { recursive: true, force: true }); }
+    }
+    check(hits.length === 1 && mutant !== raw && turned,
+      "5fq rewriting plant:fact-contradict so a read-only attribute and an editable second opinion agree makes check print read-only there: " + said);
+  }
+  /* THE PASTE IS STARTED FROM TWO PLACES: the copy, right after its clipboard write, and Enter after a reword, so no other handler presses a key. */
   const pasteNames = (shellBare.match(/\bcaretPaste\b/g) || []).length;
   const pasteAfterWrite = /clipboard\.writeText\(pickClipText\(v\.text,process\.platform\)\);caretPaste\(pickTarget,showPickNote\);hidePicker\(true\);/.test(shellCode);
-  check(pasteNames === 2 && pasteAfterWrite,
-    "5g the caret helper's paste is started from one place, the copy, right after its clipboard write and before the picker hides: "
+  /* And Enter after a reword, only once the selection read again is the opening's. */
+  const pasteAfterSame = /const same=!!\(got&&got\.words\)&&lf\(got\.words\)===lf\(was\);if\(same\)caretPaste\(target,showPickNote\);else showPickNote\(false\);/.test(shellCode);
+  check(pasteNames === 3 && pasteAfterWrite && pasteAfterSame,
+    "5g the caret helper's paste is started from two places: the copy, right after its clipboard write and before the picker hides, and Enter after a reword once the selection read again is the opening's: "
     + pasteNames + " mention(s) of caretPaste, " + (pasteAfterWrite ? "after the write" : "NOT after the write"));
 
   /* THE PACKAGE HOLDS EVERY FILE THE SHELL LOADS (Argon's updates review of 2026-11-01, finding 1: the folder mirror's syncer
@@ -1418,6 +1967,34 @@ try {
   deskOf([]); AS.setCards(bandedRow1.map(c => Object.assign({}, c)));
   copies("c-unlinked", 5);
   AS.setIntentIdxs([]);
+  /* 6o2: THE REPLIES OF A SUGGESTION, LOOKED AT AND NOT TAKEN. On the same desk, the lookup answers the rows a take would, the
+     linked card first, and leaves everything a take changes as it found it: the desk's chosen intents, the statistics' take
+     count and intent counts, the copies counted, the desk's page. The measure is one function, and the plant runs the real
+     take through it to show it sees a take. The page is then run over this desk (6o3): it draws these rows and sends
+     no take. */
+  const desk6 = () => JSON.stringify({ sel: AS.intentIdxs.slice(), taken: PK.pack.suggestTaken | 0, intents: PK.pack.intentCounts || null, use: PK.pack.useCounts || null });
+  const before6 = desk6();
+  const looked6 = pickAnswer("suggest-rows", { id: "t:wick" });
+  const after6 = desk6();
+  const stranger6 = pickAnswer("suggest-rows", { id: "t:nothing" });
+  check(looked6 && looked6.rows && looked6.rows[0] && looked6.rows[0].id === "c-linked" && typeof looked6.count === "string"
+    && after6 === before6 && stranger6 === null && desk6() === before6,
+    "6o2 the lookup returns the linked card at row 0 as a take would, and changes nothing: the desk's chosen intents, the take count, the intent counts and the copies counted are as they were, and an unknown id answers null: "
+    + JSON.stringify({ rows: looked6 && looked6.rows ? looked6.rows.map(r => r.id) : null, same: after6 === before6 }));
+  if (process.env.ETIUDA_PLANTS === "off") console.log("  NOT RUN  6o2p the lookup's measure against a real take (ETIUDA_PLANTS=off)");
+  else {
+    pickAnswer("suggest-take", { id: "t:wick" });
+    const afterTake6 = desk6();
+    AS.setIntentIdxs([]);
+    check(afterTake6 !== before6 && JSON.parse(afterTake6).taken === (JSON.parse(before6).taken | 0) + 1,
+      "6o2p plant: the same measure sees a real take (one more taken, the intent chosen), so 6o2's equal reading is not a blind one: " + afterTake6);
+    PK.pack.suggestTaken = JSON.parse(before6).taken;
+    PK.pack.intentCounts = JSON.parse(before6).intents;
+  }
+  const desk6run = await runSelPage(script, { selected: "where is my lamp", suggest: [{ id: "t:wick", name: "Wick" }] },
+    { stop: true, rowsOf: id => pickAnswer("suggest-rows", { id: id }) });
+  check(desk6run.opened.looked.join() === "t:wick" && /Linked reply/.test(desk6run.html()) && desk6run.calls.length === 0 && desk6() === before6,
+    "6o3 the page over this desk draws the linked card's reply as its row, sends nothing, and the desk is as it was: " + desk6run.html().replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 120));
   const tookRow1 = pickAnswer("suggest-take", { id: "t:wick" });
   check(tookRow1 && tookRow1.rows && tookRow1.rows[0] && tookRow1.rows[0].id === "c-linked",
     "6o on a desk where an unlinked card has 5 copies and the linked one has 0, taking the suggestion puts the linked card at row 0: "
@@ -1508,7 +2085,7 @@ try {
   CM.setContentLangs(["en"]);
   const wOne = pickAnswer("open").words.keyOther;
   CM.setContentLangs(langsWere);
-  check(w7.keyCopy === "{KEY} copies" && w7.keyOther === "{KEY} in PL" && wPl === "{KEY} in EN" && wOne === "" && w7.keyClose === "{KEY} closes"
+  check(w7.keyCopy === "{KEY} copies, and pastes where it can" && w7.keyOther === "{KEY} in PL" && wPl === "{KEY} in EN" && wOne === "" && w7.keyClose === "{KEY} closes"
     && w7.pasted === "Pasted" && w7.copied === "Copied, press Ctrl+V" && w7.who === "Etiuda fills the reply in for this conversation",
     "7c the page is given the words for its keys and its note, the other language named by its code, and none where there is one: "
     + JSON.stringify([w7.keyCopy, w7.keyOther, wPl, wOne, w7.keyClose, w7.pasted, w7.copied]));
@@ -1635,7 +2212,7 @@ try {
     globalThis.document = docWas; globalThis.addEventListener = addWas; delete globalThis.removeEventListener; HKS.hooks.openSettings = openWas;
     if (hostWas === undefined) delete globalThis.window.E_HOST; else globalThis.window.E_HOST = hostWas;
   }
-  check(taken7 === "Ctrl+Shift+Space belongs to another program just now. A combination of Etiuda's own, chosen in Settings, brings the replies over any window.Choose a combinationDismiss"
+  check(taken7 === "Ctrl+Shift+Space belongs to another program just now. A combination of Etiuda's own, chosen in Settings, opens Quick replies over any window.Choose a combinationDismiss"
     && acted === "gone/keys" && held7 === null && none7 === null && H7.eHotkeyLabel("Control+Alt+F9") === "Ctrl+Alt+F9",
     "7h a combination another program holds is said when the desk is up, naming it, with a button to Settings' keys that takes the"
     + " notice down; one held, or no host, says nothing: " + JSON.stringify([taken7, acted, !!held7, !!none7]));
@@ -1673,8 +2250,8 @@ try {
   const pickerMark = '<svg class="sx-ic" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4.5h6v6M20.5 4.5l-6 6M10.5 20.5h-6v-6M4.5 20.5l6-6"/></svg>';
   const titleHeld = "The replies beside the pointer, over any program: Ctrl+Shift+Space brings them from anywhere, and Settings is where the combination is changed.";
   const titleNotHeld = "The replies beside the pointer, over any program; a combination that brings them from anywhere is chosen in Settings.";
-  check(rows7.join(" | ") === pickerMark + "<span>Bring the replies over any window</span> | "
-    + pickerMark + "<span>Bring the replies over any window</span> | hidden | hidden"
+  check(rows7.join(" | ") === pickerMark + "<span>Quick replies</span> | "
+    + pickerMark + "<span>Quick replies</span> | hidden | hidden"
     && titles7[0] === titleHeld && titles7[1] === titleNotHeld && clicked === "1/shut",
     "7m the Menu has a row for the picker without kbd, and its tooltip names the live combination when held ("
     + rows7.join(" | ") + " / " + clicked + ")");
@@ -1693,24 +2270,30 @@ try {
     TT = new Function("scope", "with(scope){\n" + between(TSRC, "let tourPicks=", "// The wheel waits") + "\n"
       + between(TSRC, "const TOUR_STEPS=[", "\n];\n") + "\n];\nreturn { TOUR_STEPS, tourHeardPick };\n}")(scope7);
   } catch (e) { TT = null; }
-  const tids = TT ? TT.TOUR_STEPS.map(s => s.id) : [], ps = TT ? TT.TOUR_STEPS.find(s => s.id === "picker") : null;
+  const tids = TT ? TT.TOUR_STEPS.map(s => s.id) : [], ps = TT ? TT.TOUR_STEPS.find(s => s.id === "picker") : null,
+    pi = TT ? TT.TOUR_STEPS.find(s => s.id === "pickerIn") : null;
   let tourSays = "no step";
-  if (ps) {
+  if (ps && pi) {
     const whens = [null, { accel: "Control+Shift+Space", held: false, taken: true }, { accel: "Control+Shift+Space", held: true, taken: false }]
       .map(h => { hk7 = h; return ps.when(); });
     const chipsSeen = (ps.body().match(/<kbd>Ctrl<\/kbd>\+<kbd>Shift<\/kbd>\+<kbd>Space<\/kbd>/g) || []).length;
-    const doneBefore = ps.done();
+    own7.tourRunning = true;
+    own7.tourIdx = tids.indexOf("menu");
     TT.tourHeardPick();
-    const doneAfter = ps.done();
-    ps.open();
-    tourSays = JSON.stringify([tids.indexOf("picker") - tids.indexOf("menu"), whens, chipsSeen, doneBefore, doneAfter, actsHeard, doorKnocks,
-      ps.title, ps.menu, ps.side === own7.menuSide]);
+    const doneElse = ps.done(), piElse = pi.when();
+    own7.tourIdx = tids.indexOf("picker");
+    const doneBefore = ps.done(), piBefore = pi.when();
+    TT.tourHeardPick();
+    const doneAfter = ps.done(), piAfter = pi.when();
+    tourSays = JSON.stringify([tids.indexOf("picker") - tids.indexOf("menu"), tids.indexOf("pickerIn") - tids.indexOf("picker"),
+      whens, chipsSeen, doneElse, piElse, doneBefore, piBefore, doneAfter, piAfter, !ps.open, actsHeard, doorKnocks,
+      ps.title, pi.title, ps.menu, pi.menu, ps.side === own7.menuSide, !!pi.elsewhere && !pi.sel]);
   }
-  const resets = /function showTourStep\(i\)\{[\s\S]*?tourStepPicks=tourPicks;[\s\S]*?\n\}/.test(TSRC);
+  const resets = /function showTourStep\(i\)\{[\s\S]*?if\(step\.id!=="pickerIn"\) tourPickerOpened=false;[\s\S]*?\n\}/.test(TSRC);
   const heard = /if\(op==="open"\)\{\s*try\{ tourHeardPick\(\); \}catch\(e\)\{\}/.test(fs.readFileSync(path.join(ROOT, "src", "modules", "pick.js"), "utf8"));
-  check(tourSays === JSON.stringify([1, [false, false, true], 2, false, true, 1, 1, "Replies over any window", true, true]) && resets && heard,
-    "7n the tour has a step for the picker straight after the Menu's, on only while a combination is held, naming it as keys; it is done"
-    + " once the picker opens after the step began, and its Next opens it: " + tourSays + (resets ? "" : ", NO reset at each step")
+  check(tourSays === JSON.stringify([1, 1, [false, false, true], 2, false, false, false, false, true, true, true, 1, 0,
+    "Quick replies", "Quick replies", true, true, true, true]) && resets && heard,
+    "7n the tour has a step for the picker straight after the Menu's and the window's own step after it, carried by the window's page, without opening the picker on Next: " + tourSays + (resets ? "" : ", NO reset at each step")
     + (heard ? "" : ", the picker's opening NOT heard"));
 
   /* The global picker switches and opens conversations with the desk's own tab keys. */

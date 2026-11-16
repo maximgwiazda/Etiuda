@@ -27,13 +27,26 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
-const EXPECTED = 11;
+const EXPECTED = 19;
 
-let asserted = 0, failed = 0;
+let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
   asserted++;
   if (ok) console.log("  ok   " + line);
   else { failed++; console.log("  FAIL " + line); }
+}
+/* A planted fault is proof, not a gate: each lift is skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
+function skip(line) {
+  skipped++;
+  console.log("  SKIP  " + line);
+}
+/* `src` with the one line holding plant:<name> replaced by `line`, or null where the mark is not on exactly one line. */
+function liftPlant(src, name, line) {
+  const lines = src.split("\n"), at = lines.map((l, i) => (l.indexOf("plant:" + name + " ") >= 0 ? i : -1)).filter(i => i >= 0);
+  if (at.length !== 1) return null;
+  lines[at[0]] = line;
+  return lines.join("\n");
 }
 
 /* The same cut the member core uses: a function by its braces, a const by the semicolon outside them. */
@@ -55,22 +68,29 @@ function sliceDecl(src, marker) {
   }
   throw new Error("an unterminated declaration: " + marker);
 }
+/* A slice's reg calls meet the shell's own guard (shell/win-proxy.cjs, regOpts), so the functions handed in for execFileSync and
+   execFile are marked as stand-ins; markStand refuses node's own. */
+const REG_OPTS = nodeRequire("../shell/win-proxy.cjs").regOpts;
 function load(src, markers, names, params, args) {
   const body = markers.map(m => sliceDecl(src, m)).join("\n");
-  return new Function(...params, body + "\nreturn { " + names.join(", ") + " };")(...args);
+  const given = params.map((p, i) => args[i]);
+  params.forEach((p, i) => { if (p === "execFileSync" || p === "execFile") nodeRequire("./reg-stand.cjs").markStand(given[i]); });
+  return new Function(...params, "regOpts", body + "\nreturn { " + names.join(", ") + " };")(...given, REG_OPTS);
 }
 
-const POLICY_DECLS = ["const REG_TOOL =", "const POLICY_KEY =", "const POLICY_LEAD_RE =", "const POLICY_WORDS =",
+const POLICY_DECLS = ["const REG_TOOL =", "const POLICY_KEY =", "const POLICY_REREAD_MS =", "const POLICY_LOOK_MS =", "const POLICY_LOOK_GRACE_MS =", "const POLICY_LEAD_RE =", "const POLICY_WORDS =",
   "const POLICY_HEAD =", "const POLICY_EXPORT_LINE =", "function policyValues(", "function policyExpand(",
   "function policyRegSz(", "function policyFolderOk(", "function policyLeadOk(", "function policyNoUpdate(", "function joinPolicyFacts(",
-  "function policyWords(", "function joinPolicyFrom(", "let joinPolicyRead =", "function readJoinPolicy("];
-const POLICY_NAMES = ["execFileSync", "process", "fs", "os", "path"];
+  "function policyWords(", "function joinPolicyFrom(", "const POLICY_GOOD_FILE =", "function policyGoodLoad(", "function policyGoodSave(",
+  "let joinPolicyRead =", "function policyScratch(", "function policyScratchGone(", "function policyExported(", "function policyTake(",
+  "function policyLookLater(", "function readJoinPolicy("];
+const POLICY_NAMES = ["execFileSync", "process", "fs", "os", "path", "app", "writeReplacing", "execFile"];
 const MEMBER_DECLS = ["const HPKE_KEM =", "const HPKE_SUITE =", "const SPKI_X25519 =", "function hpkeLabeledExtract(",
   "function hpkeLabeledExpand(", "function hpkeX25519Public(", "function hpkeShared(", "function hpkeSchedule(",
   "function hpkeOpen(", "const SEALED_TEAM_RE =", "const TEAM_WRAP_LABEL =", "function teamWrapInfo(",
   "function unwrapTeamKey(", "const JOIN_KIND =", "const HANDOVER_PREFIX =", "const HANDOVER_KIND =",
   "function handoverSignedBytes(", "function handoverGenuine(", "function handedTo(", "const SPKI_ED25519 =",
-  "function canonJson(", "function signedBytesOf(", "function teamWhole(", "function memberRingVouches(",
+  "function canonJson(", "function signedBytesOf(", "function teamWhole(",
   "function memberStateCopy(", "function memberRequestDoc(", "function memberHeed(", "function hpkeSeal(",
   "function wrapTeamKey(", "function branchIdOf(", "function memberHeedUnderPolicy("];
 
@@ -81,11 +101,13 @@ const EN = {
   folder: "The team folder set in Group Policy is not a full path, so this desk keeps the folder it already uses.",
   lead: "The team lead's key set in Group Policy is not written as 64 lowercase hexadecimal characters, so this desk does not trust it.",
   beside: "The other value set beside it is not used either: the two are taken together or not at all.",
+  unread: "The organisation's settings could not be read just now. Etiuda will try again.",
 };
 const PL = {
   folder: "Folder zespołu ustawiony w zasadach grupy nie jest pełną ścieżką, więc stanowisko zostaje przy folderze, którego już używa.",
   lead: "Klucz lidera zespołu ustawiony w zasadach grupy nie ma postaci 64 małych znaków szesnastkowych, więc stanowisko go nie przyjmuje.",
   beside: "Druga wartość ustawiona obok też nie zostanie użyta: obie są przyjmowane razem albo wcale.",
+  unread: "Nie udało się teraz odczytać ustawień organizacji. Etiuda spróbuje ponownie.",
 };
 const FILE = "quay/etiuda-team.json";
 const LONG = "D:\\" + "a".repeat(1021);
@@ -137,7 +159,7 @@ function saidOf(got) { return got.said.join("|"); }
 
 let P = null, M = null, loadError = "", memberError = "";
 try {
-  P = load(SRC, POLICY_DECLS, ["joinPolicyFrom", "readJoinPolicy", "REG_TOOL", "POLICY_KEY", "POLICY_WORDS"],
+  P = load(SRC, POLICY_DECLS.filter(m => SRC.indexOf(m) >= 0), ["joinPolicyFrom", "readJoinPolicy", "REG_TOOL", "POLICY_KEY", "POLICY_WORDS"],
     POLICY_NAMES, [() => "", { platform: "linux", env: process.env }, fs, os, path]);
 } catch (e) { loadError = (e && e.message) || String(e); }
 try {
@@ -180,6 +202,8 @@ const goodRows = [
   else {
     const alone = (rows, lang, subkeys) => P.joinPolicyFrom(exportText(rows, subkeys), lang || "en");
     const none = (name, got) => { if (got.folder !== "" || got.lead !== "" || got.said.length !== 0) problems.push(name + " " + JSON.stringify(got)); };
+    /* A read in doubt is no policy, and is said as unread (the review 8 follow-up). */
+    const doubt = (name, got) => { if (got.folder !== "" || got.lead !== "" || JSON.stringify(got.said) !== JSON.stringify([EN.unread])) problems.push(name + " " + JSON.stringify(got)); };
     const badFolder = [
       ["quay\\team", "a relative path"],
       ["D:\\Quay\\team\\..\\other", "a segment that walks out"],
@@ -258,13 +282,13 @@ const goodRows = [
     const good = [["TeamFolder", "REG_SZ", "D:\\Quay\\team"], ["LeadKey", "REG_SZ", HEX]];
     const text = exportText(good, { Old: [["Note", "REG_SZ", "kept"]] });
     const own = "[" + REG_HEAD + "]\r\n";
-    none("an unrecognised line", P.joinPolicyFrom(text.replace(own, own + "TeamFolder=D:\\Quay\\team\r\n"), "en"));
-    none("an unrecognised line in a subkey's part", P.joinPolicyFrom(text.replace("\"Note\"=\"kept\"\r\n", "\"Note\"=\"kept\"\r\nkept\r\n"), "en"));
-    none("an escape reg does not write", P.joinPolicyFrom(text.replace("\"D:\\\\Quay\\\\team\"", "\"D:\\\\Quay\\nteam\""), "en"));
-    none("a header for another key", P.joinPolicyFrom(exportText(good, {}, "HKEY_CURRENT_USER\\Software\\Quay"), "en"));
-    none("no version line", P.joinPolicyFrom(text.slice(text.indexOf("\r\n") + 2), "en"));
-    none("a file cut short", P.joinPolicyFrom(text.slice(0, text.indexOf("\"D:\\\\Quay") + 6), "en"));
-    none("one name twice", P.joinPolicyFrom(text.replace(own, own + "\"teamfolder\"=\"D:\\\\Other\"\r\n"), "en"));
+    doubt("an unrecognised line", P.joinPolicyFrom(text.replace(own, own + "TeamFolder=D:\\Quay\\team\r\n"), "en"));
+    doubt("an unrecognised line in a subkey's part", P.joinPolicyFrom(text.replace("\"Note\"=\"kept\"\r\n", "\"Note\"=\"kept\"\r\nkept\r\n"), "en"));
+    doubt("an escape reg does not write", P.joinPolicyFrom(text.replace("\"D:\\\\Quay\\\\team\"", "\"D:\\\\Quay\\nteam\""), "en"));
+    doubt("a header for another key", P.joinPolicyFrom(exportText(good, {}, "HKEY_CURRENT_USER\\Software\\Quay"), "en"));
+    doubt("no version line", P.joinPolicyFrom(text.slice(text.indexOf("\r\n") + 2), "en"));
+    doubt("a file cut short", P.joinPolicyFrom(text.slice(0, text.indexOf("\"D:\\\\Quay") + 6), "en"));
+    doubt("one name twice", P.joinPolicyFrom(text.replace(own, own + "\"teamfolder\"=\"D:\\\\Other\"\r\n"), "en"));
     const polish = alone([["TeamFolder", "REG_SZ", "quay\\team"]], "pl");
     if (saidOf(polish) !== PL.folder || polish.said[0] === EN.folder || !/[ąćęłńóśźż]/i.test(polish.said[0]))
       problems.push("polish " + JSON.stringify(polish.said));
@@ -290,8 +314,8 @@ function shape(r) {
     let heed = "";
     try { heed = sliceDecl(SRC, "function heedTeam("); }
     catch (e) { problems.push("heedTeam " + e.message); }
-    if (heed && ((heed.split("memberHeedUnderPolicy(").length - 1) !== 3 || heed.includes("memberHeed(")))
-      problems.push("heedTeam does not call the policy heed three times and nothing else");
+    if (heed && ((heed.split("memberHeedUnderPolicy(").length - 1) !== 2 || heed.includes("memberHeed(")))
+      problems.push("heedTeam does not call the policy heed twice (the file, then with the box opened) and nothing else");
     const sign = crypto.generateKeyPairSync("ed25519");
     const box = crypto.generateKeyPairSync("x25519");
     const leadKey = crypto.generateKeyPairSync("ed25519");
@@ -342,9 +366,9 @@ function shape(r) {
     const missState = empty();
     const bareMiss = M.memberHeed(own, missState, noRing);
     const underMiss = untouched("ring not read", missState, () => M.memberHeedUnderPolicy(own, missState, noRing, lead.public));
-    if (!(bareMiss.needRing === true && bareMiss.pinned === false && underMiss.needRing === false && underMiss.stop === false
+    if (!(bareMiss.stop === true && bareMiss.pinned === false && underMiss.stop === false
         && underMiss.pinned === true && underMiss.state.pins[TEAM].public === lead.public && underMiss.key === null))
-      problems.push("ring not read: bare needRing " + bareMiss.needRing + " under pinned " + underMiss.pinned);
+      problems.push("no wrap, no pin: bare stop " + bareMiss.stop + " under pinned " + underMiss.pinned);
 
     const wrongRing = { file: FILE, member: { id: me.id, sk: box.privateKey }, ring: ringFor(other) };
     const wrongState = empty();
@@ -409,7 +433,7 @@ function shape(r) {
       problems.push("waiting join: bare stop " + bareJoin.stop + " under pinned " + underJoin.pinned);
   }
   check(problems.length === 0,
-    "19c the policy pin is ahead of the ring, the first wrap, a handover and the pin already held, and is the whole key: "
+    "19c the policy pin is ahead of the first wrap, a ring beside the file, a handover and the pin already held, and is the whole key: "
     + (problems.join("; ") || "that order"));
 }
 
@@ -475,16 +499,20 @@ function shape(r) {
   const problems = [];
   if (!P) problems.push(loadError);
   else {
-    let reader = "", facts = "", values = "", keyLine = "";
+    let reader = "", facts = "", values = "", keyLine = "", look = "";
     try {
       reader = sliceDecl(SRC, "function readJoinPolicy(");
+      look = sliceDecl(SRC, "function policyLookLater(");
       facts = sliceDecl(SRC, "function joinPolicyFacts(");
       values = sliceDecl(SRC, "function policyValues(");
       keyLine = sliceDecl(SRC, "const POLICY_KEY =");
     } catch (e) { problems.push(e.message); }
     if (reader) {
       if (reader.split("execFileSync(").length !== 2) problems.push("exec count " + reader.split("execFileSync(").length);
-      if (!reader.includes('execFileSync(REG_TOOL, ["export", POLICY_KEY, file, "/y"]')) problems.push("not REG_TOOL exporting the key");
+      if (!reader.includes('execFileSync(REG_TOOL, ["export", POLICY_KEY, at.file, "/y"]')) problems.push("not REG_TOOL exporting the key");
+      /* The minute's look, which does not wait, runs the same one program on the same one key. */
+      if (look.split("execFile(").length !== 2 || !look.includes('execFile(REG_TOOL, ["export", POLICY_KEY, at.file, "/y"]')) problems.push("the look is not REG_TOOL exporting the key once");
+      if (/execFileSync|powershell|cmd\.exe|spawn\s*\(|\bfork\s*\(|child_process|console\.|teamSay/i.test(look)) problems.push("the look runs or says something else");
       if (/execFileSync\(\s*["'`]/.test(reader)) problems.push("a program named in place of REG_TOOL");
       if (/powershell|cmd\.exe|spawn\s*\(|\bfork\s*\(|child_process|dbus-send/i.test(reader + facts + values)) problems.push("another program");
       if (/console\.|teamSay|\.said\b/.test(reader + facts + values)) problems.push("the reader says something itself");
@@ -494,7 +522,7 @@ function shape(r) {
     const quiet = s => s === "ignore" || (Array.isArray(s) && s.length === 3 && s.every(x => x === "ignore"));
     const tmp = path.resolve(os.tmpdir());
     const reader2 = (answer, platform, fsUsed) =>
-      load(SRC, POLICY_DECLS, ["readJoinPolicy", "REG_TOOL", "POLICY_KEY"], POLICY_NAMES, [answer, { platform: platform || "win32" }, fsUsed || fs, os, path]);
+      load(SRC, POLICY_DECLS.filter(m => SRC.indexOf(m) >= 0), ["readJoinPolicy", "REG_TOOL", "POLICY_KEY"], POLICY_NAMES, [answer, { platform: platform || "win32" }, fsUsed || fs, os, path]);
     /* A stand-in that writes the export where it is asked, a different folder at every call. */
     const calls = [];
     const win = reader2((file, args, opt) => {
@@ -526,7 +554,7 @@ function shape(r) {
     const broken = reader2((file, args) => { threw++; thrownAt = String(args[2]); throw new Error("missing"); });
     const none = broken.readJoinPolicy("en");
     broken.readJoinPolicy("pl");
-    if (threw !== 1 || none.folder !== "" || none.lead !== "" || none.said.length !== 0 || !thrownAt || fs.existsSync(path.dirname(thrownAt)))
+    if (threw !== 1 || none.folder !== "" || none.lead !== "" || saidOf(none) !== EN.unread || !thrownAt || fs.existsSync(path.dirname(thrownAt)))
       problems.push("throw " + threw + " " + JSON.stringify(none));
     const unmarked = reader2((file, args) => {
       fs.writeFileSync(args[2], exportText([["TeamFolder", "REG_SZ", "D:\\Quay\\team"], ["LeadKey", "REG_SZ", HEX]]), "utf8");
@@ -536,7 +564,7 @@ function shape(r) {
     /* The old door's input, another key's console print, is no export of this key: no policy, and nothing said. */
     const dump = "\r\nHKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings\r\n    ProxyEnable    REG_DWORD    0x0\r\n    ProxyServer    REG_SZ    http://127.0.0.1:9\r\n";
     const proxy = P.joinPolicyFrom(dump, "pl");
-    if (proxy.folder !== "" || proxy.lead !== "" || proxy.said.length !== 0) problems.push("proxy dump " + JSON.stringify(proxy));
+    if (proxy.folder !== "" || proxy.lead !== "" || JSON.stringify(proxy.said) !== JSON.stringify([PL.unread])) problems.push("proxy dump " + JSON.stringify(proxy));
     let linuxCalls = 0, made = 0;
     const counting = Object.assign(Object.create(fs), { mkdtempSync: (...a) => { made++; return fs.mkdtempSync(...a); } });
     const off = reader2(() => { linuxCalls++; return null; }, "linux", counting).readJoinPolicy("en");
@@ -787,6 +815,8 @@ function standInReg(registry, page) {
     calls.push({ file: String(file), args: args, opt: opt });
     const key = file === REG_EXE && args[1] === ASKED ? (typeof registry === "function" ? registry(asked().length) : registry) : null;
     const fail = () => { const e = new Error("reg.exe exited 1"); e.status = 1; throw e; };
+    /* "late" is reg stopped at the reader's timeout, as execFileSync reports one: no exit status, a signal. */
+    if (key === "late") { const e = new Error("spawnSync reg.exe ETIMEDOUT"); e.code = "ETIMEDOUT"; e.status = null; e.signal = "SIGTERM"; throw e; }
     if (!key) fail();
     let out = "";
     if (args[0] === "export" && args.length === 4 && args[3] === "/y") {
@@ -799,7 +829,9 @@ function standInReg(registry, page) {
     const bytes = consoleBytes(out, page);
     return opt && opt.encoding && opt.encoding !== "buffer" ? bytes.toString(opt.encoding) : bytes;
   };
-  return { calls, asked, cp: { execFileSync, execFile: () => { throw new Error("no program runs here"); } } };
+  const execFile = () => { throw new Error("no program runs here"); };
+  nodeRequire("./reg-stand.cjs").markStand(execFileSync, execFile);
+  return { calls, asked, cp: { execFileSync, execFile } };
 }
 /* Every leg below asks the Windows arm of the reader, so the shell runs as Windows on any machine. */
 function asWindows(fn) {
@@ -809,7 +841,7 @@ function asWindows(fn) {
 }
 /* One desk: its desk.json, the shell evaluated afresh over it with the stand-in reg, and its own .cjs files evaluated
    with the same require so the proxy reader meets the stand-in too. setLang changes the desk's language as a write would. */
-function loadDesk(name, desk, reg) {
+function loadDesk(name, desk, reg, shell) {
   const ud = path.join(LAB, name);
   fs.mkdirSync(ud, { recursive: true });
   fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(Object.assign({ kind: "etiuda-desk", schema: 1 }, desk)), "utf8");
@@ -838,7 +870,7 @@ function loadDesk(name, desk, reg) {
   };
   process.env.XDG_CURRENT_DESKTOP = "GNOME";
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
-    SHELL + "\nreturn { catalogFolder, heedTeam, teamCovering,"
+    (shell || SHELL) + "\nreturn { catalogFolder, heedTeam, teamCovering, joinView,"
     + " setLang: l => { if (deskKeys === undefined) deskKeys = readDesk(); deskKeys = Object.assign({}, deskKeys, { eUiLang: l }); } };")(
     req, path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
   return { api, said, ud, envelope: () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8")) };
@@ -967,11 +999,10 @@ function scratchGone(reg, problems, name) {
   if (!P) problems.push(loadError);
   else {
     process.env.TEST_POLICY_SHARE = "D:\\Quay";
-    process.env.TEST_POLICY_LEAD = HEX;
     try {
       const got = P.joinPolicyFrom(exportText([
         ["TeamFolder", "REG_EXPAND_SZ", "%TEST_POLICY_SHARE%\\team"],
-        ["LeadKey", "REG_EXPAND_SZ", "%TEST_POLICY_LEAD%"]
+        ["LeadKey", "REG_SZ", HEX]
       ]), "en");
       if (got.folder !== "D:\\Quay\\team" || got.lead !== HEX || got.said.length !== 0)
         problems.push("expanded values not taken: " + JSON.stringify(got));
@@ -995,11 +1026,10 @@ function scratchGone(reg, problems, name) {
         problems.push("prototype toString reached: " + JSON.stringify(gotToString));
     } finally {
       delete process.env.TEST_POLICY_SHARE;
-      delete process.env.TEST_POLICY_LEAD;
     }
   }
   check(problems.length === 0,
-    "19j REG_EXPAND_SZ values are expanded for TeamFolder and LeadKey: environment variables are expanded case-insensitively and values taken, while unresolved variables and inherited names are bad: "
+    "19j an expandable TeamFolder is filled from the environment, its variables matched without regard to case, while unresolved variables and inherited names are bad (the lead is 19l's): "
     + (problems.join("; ") || "expanded"));
 }
 
@@ -1036,11 +1066,197 @@ function scratchGone(reg, problems, name) {
     + (problems.join("; ") || "nine values and two beside the team pair as they should be"));
 }
 
+/* 19l: AN EXPANDABLE LEAD IS TAKEN AS WRITTEN (Grok's review 8, finding 1). A variable in the person's environment never
+   becomes the lead this desk trusts: one that would expand to a good key is the bad lead said, and 64 lower-case hex written
+   into an expandable value is taken. The folder is still filled from the environment (19j). Lifting plant:lead-as-written
+   expands the lead again, and the leg goes red. */
+function leadFromEnvironment(Pd) {
+  const problems = [];
+  process.env.TEST_POLICY_LEAD_19L = HEX;
+  try {
+    const named = Pd.joinPolicyFrom(exportText([["TeamFolder", "REG_SZ", "D:\\Quay\\team"], ["LeadKey", "REG_EXPAND_SZ", "%TEST_POLICY_LEAD_19L%"]]), "en");
+    if (named.lead !== "" || named.folder !== "" || saidOf(named) !== EN.lead + "|" + EN.beside)
+      problems.push("a variable became the lead " + JSON.stringify(named));
+    const alone = Pd.joinPolicyFrom(exportText([["LeadKey", "REG_EXPAND_SZ", "%TEST_POLICY_LEAD_19L%"]]), "en");
+    if (alone.lead !== "" || saidOf(alone) !== EN.lead) problems.push("a variable alone became the lead " + JSON.stringify(alone));
+    const written = Pd.joinPolicyFrom(exportText([["TeamFolder", "REG_SZ", "D:\\Quay\\team"], ["LeadKey", "REG_EXPAND_SZ", HEX]]), "en");
+    if (written.lead !== HEX || written.folder !== "D:\\Quay\\team" || written.said.length !== 0)
+      problems.push("a key written into an expandable value was not taken " + JSON.stringify(written));
+  } finally { delete process.env.TEST_POLICY_LEAD_19L; }
+  return problems;
+}
+{
+  const problems = P ? leadFromEnvironment(P) : [loadError];
+  check(problems.length === 0, "19l an expandable LeadKey is taken as written, never filled from the person's environment: "
+    + (problems.join("; ") || "the variable said as a bad lead, the written key taken"));
+  if (PLANTS_OFF) skip("19l lifting plant:lead-as-written fills the lead from the environment again (ETIUDA_PLANTS=off)");
+  else {
+    const src = liftPlant(SRC, "lead-as-written",
+      "    if (lead.type === \"REG_SZ\" ? policyLeadOk(lead.value) : lead.type === \"REG_EXPAND_SZ\" && policyLeadOk(policyExpand(lead.value))) { leadOk = true; leadValue = lead.type === \"REG_SZ\" ? lead.value : policyExpand(lead.value); }");
+    let turned = [];
+    try { turned = src ? leadFromEnvironment(load(src, POLICY_DECLS.filter(m => src.indexOf(m) >= 0), ["joinPolicyFrom"], POLICY_NAMES, [() => "", { platform: "linux", env: process.env }, fs, os, path])) : []; }
+    catch (e) { turned = []; problems.push("the lifted copy: " + e.message); }
+    check(!!src && turned.length > 0, "19l lifting plant:lead-as-written fills the lead from the environment again: "
+      + (src ? turned.length + " problem(s)" : "the plant is not on exactly one line"));
+  }
+}
+
+/* 19m: WHAT POLICY SET AND THE DESK CANNOT USE REACHES THE PAGE, AND A READ THAT FAILED IS TOLD FROM A KEY THAT IS NOT THERE
+   (Grok's review 8, finding 3). A bad value's sentences, in the desk's language, are the join view's policySaid, for Settings
+   to print as they stand; a good key gives none. A read reg did not finish (its timeout) is unread and said once in the log;
+   reg's exit 1, the key absent, is not. Lifting plant:policy-said-view leaves the sentences in the log alone, and lifting
+   plant:policy-unread reads a stopped reg as no key. */
+const UNREAD_LINE = { test: l => String(l).indexOf(EN.unread) >= 0 };
+let r8Desks = 0;
+function policyToPage(shell) {
+  const problems = [];
+  const mine = path.join(LAB, "r8-folder");
+  fs.mkdirSync(mine, { recursive: true });
+  const viewOf = (registry, lang) => {
+    const D = asWindows(() => loadDesk("r8-" + (r8Desks++), { keys: { eCatalogFolder: mine, eUiLang: lang } }, standInReg(registry, 65001), shell));
+    return { D: D, view: asWindows(() => D.api.joinView()) || {} };
+  };
+  const bad = viewOf({ rows: [["TeamFolder", "REG_SZ", "D:\\Quay\\team"], ["LeadKey", "REG_SZ", "   "]] }, "pl");
+  if (JSON.stringify(bad.view.policySaid) !== JSON.stringify([PL.lead, PL.beside])) problems.push("a bad lead's sentences " + JSON.stringify(bad.view.policySaid));
+  const good = viewOf({ rows: [["TeamFolder", "REG_SZ", mine], ["LeadKey", "REG_SZ", HEX]] }, "en");
+  if (good.view.policySaid !== undefined) problems.push("a good key said " + JSON.stringify(good.view.policySaid));
+  const late = viewOf("late", "en"), absent = viewOf(null, "en");
+  const told = D => D.said.filter(l => UNREAD_LINE.test(l)).length;
+  if (told(late.D) !== 1 || JSON.stringify(late.view.policySaid) !== JSON.stringify([EN.unread])) problems.push("a stopped reg: said " + told(late.D) + " time(s), " + JSON.stringify(late.view.policySaid));
+  if (told(absent.D) !== 0 || absent.view.policySaid !== undefined) problems.push("no key: said " + told(absent.D) + " time(s)");
+  return problems;
+}
+{
+  let problems = [];
+  try { problems = policyToPage(null); } catch (e) { problems.push("harness: " + ((e && e.stack) || e)); }
+  check(problems.length === 0, "19m a bad policy value's sentences reach the join view in the desk's language, a good key's none, and a read"
+    + " reg did not finish is said once as unread where a key that is not there is not: " + (problems.join("; ") || "two sentences in Polish, one unread line"));
+  if (PLANTS_OFF) skip("19m lifting plant:policy-said-view and plant:policy-unread each turns 19m red (ETIUDA_PLANTS=off)");
+  else {
+    const lifts = [["policy-said-view", "  /* plant lifted */"], ["policy-unread", "      } catch { text = \"\"; }"]].map(([name, line]) => {
+      const src = liftPlant(SHELL, name, line);
+      if (!src) return name + " not on exactly one line";
+      let p = [];
+      try { p = policyToPage(src); } catch (e) { p = ["harness: " + e.message]; }
+      return p.length ? "" : name + " lifted and 19m still green";
+    }).filter(Boolean);
+    check(lifts.length === 0, "19m lifting plant:policy-said-view and plant:policy-unread each turns 19m red: " + (lifts.join("; ") || "both red"));
+  }
+}
+
+/* 19n: A READ THAT FAILED KEEPS THE VERSION LOOK OFF, AND IS TRIED AGAIN (Grok's review 17 of the update offer, finding 4).
+   reg stopped at its timeout: the look is off, since a DeskNoUpdateCheck the read missed is not taken as unset, and a second
+   ask at once starts no second reg. Two hours on, the key is read again, and its 0 leaves the look on; a read that worked is
+   looked at again once its minute has passed (review 28, finding 4), without waiting: one asynchronous call, no second
+   synchronous one. Lifting plant:policy-reread keeps the failed read for the run, and plant:look-off-unread lets it arm. */
+function lookUnderFailedRead(src) {
+  const problems = [];
+  let calls = 0, looks = 0;
+  const answer = (file, args) => {
+    calls++;
+    if (calls === 1) { const e = new Error("spawnSync reg.exe ETIMEDOUT"); e.code = "ETIMEDOUT"; e.status = null; throw e; }
+    fs.writeFileSync(args[2], exportBytes([["DeskNoUpdateCheck", "REG_DWORD", 0]]));
+    return null;
+  };
+  const R = load(src, POLICY_DECLS.concat(["function updateLookOff("]).filter(m => src.indexOf(m) >= 0), ["readJoinPolicy", "updateLookOff"],
+    POLICY_NAMES, [answer, { platform: "win32" }, fs, os, path, undefined, undefined, () => { looks++; }]);
+  const realNow = Date.now;
+  let shift = 0;
+  Date.now = () => realNow() + shift;
+  try {
+    const first = R.updateLookOff(), again = R.updateLookOff(), callsSoon = calls;
+    shift = 2 * 60 * 60 * 1000;
+    const later = R.updateLookOff(), callsLater = calls;
+    shift = 5 * 60 * 60 * 1000;
+    R.updateLookOff();
+    if (first !== true || again !== true || callsSoon !== 1) problems.push("the failed read: off " + first + " then " + again + ", reg " + callsSoon + " time(s)");
+    if (later !== false || callsLater !== 2) problems.push("two hours on: off " + later + ", reg " + callsLater + " time(s)");
+    if (calls !== 2 || looks !== 1) problems.push("a read that worked, three hours on: " + (calls - 2) + " more read(s) waited on, " + looks + " look(s) without waiting, not 0 and 1");
+  } finally { Date.now = realNow; }
+  return problems;
+}
+{
+  let problems = [];
+  try { problems = lookUnderFailedRead(SRC); } catch (e) { problems.push("harness: " + e.message); }
+  check(problems.length === 0, "19n a policy read that failed keeps the version look off and is tried again after its interval, once,"
+    + " and a read that worked stands: " + (problems.join("; ") || "off, then read again and on"));
+  if (PLANTS_OFF) skip("19n lifting plant:policy-reread and plant:look-off-unread each turns 19n red (ETIUDA_PLANTS=off)");
+  else {
+    const lifts = [["policy-reread", "  if (joinPolicyRead === null) {"],
+      ["look-off-unread", "  try { return readJoinPolicy(\"en\").noUpdate === true; } catch { return false; }"]].map(([name, line]) => {
+      const src = liftPlant(SRC, name, line);
+      if (!src) return name + " not on exactly one line";
+      let p = [];
+      try { p = lookUnderFailedRead(src); } catch (e) { p = ["harness: " + e.message]; }
+      return p.length ? "" : name + " lifted and 19n still green";
+    }).filter(Boolean);
+    check(lifts.length === 0, "19n lifting plant:policy-reread and plant:look-off-unread each turns 19n red: " + (lifts.join("; ") || "both red"));
+  }
+}
+
+/* 19o: AN UNREADABLE POLICY HOLDS ITS LAST GOOD READ (Claude α's decision on review 8's finding 3). A run reads the key
+   well; the next run's read fails: every pin and switch the good read set stands, from the copy kept beside the desk file,
+   which carries no AI key, the read is said as unread, and the version look stays as the good read left it. An hour on the
+   key reads well again and its read replaces the held one. With no good read ever, the desk runs unpinned as before.
+   Lifting plant:policy-hold-good drops the good read at the failure. */
+function holdsLastGood(src, dir) {
+  const problems = [];
+  const app = { getPath: () => dir };
+  const reader = answer => load(src, POLICY_DECLS.concat(["function updateLookOff("]).filter(m => src.indexOf(m) >= 0),
+    ["readJoinPolicy", "updateLookOff"], POLICY_NAMES, [answer, { platform: "win32" }, fs, os, path, app, (f, t) => fs.writeFileSync(f, t)]);
+  const late = () => { const e = new Error("spawnSync reg.exe ETIMEDOUT"); e.code = "ETIMEDOUT"; e.status = null; throw e; };
+  const rows = folder => [["TeamFolder", "REG_SZ", folder], ["LeadKey", "REG_SZ", HEX], ["DeskNoUpdateCheck", "REG_DWORD", 1],
+    ["AiKey", "REG_SZ", "org-key-not-to-keep"]];
+  const first = reader((file, args) => { fs.writeFileSync(args[2], exportBytes(rows("D:\\Quay\\team"))); return null; }).readJoinPolicy("en");
+  if (first.folder !== "D:\\Quay\\team" || first.lead !== HEX || first.unread) problems.push("the good read " + JSON.stringify(first));
+  const kept = fs.readdirSync(dir).map(n => fs.readFileSync(path.join(dir, n), "utf8")).join("\n");
+  if (kept.indexOf("org-key-not-to-keep") >= 0) problems.push("the AI key is in the copy kept beside the desk file");
+  let calls = 0;
+  const R2 = reader((file, args) => { if (++calls === 1) late(); fs.writeFileSync(args[2], exportBytes(rows("D:\\Quay\\moved"))); return null; });
+  const realNow = Date.now;
+  let shift = 0;
+  Date.now = () => realNow() + shift;
+  try {
+    const held = R2.readJoinPolicy("pl"), lookOff = R2.updateLookOff();
+    if (held.folder !== "D:\\Quay\\team" || held.lead !== HEX || held.noUpdate !== true || held.unread !== true
+        || held.said.indexOf(PL.unread) < 0 || lookOff !== true)
+      problems.push("the next run's failed read " + JSON.stringify({ folder: held.folder, lead: held.lead === HEX, noUpdate: held.noUpdate, unread: held.unread, said: held.said, lookOff: lookOff }));
+    shift = 2 * 60 * 60 * 1000;
+    const later = R2.readJoinPolicy("en");
+    if (calls !== 2 || later.folder !== "D:\\Quay\\moved" || later.unread !== false || later.said.length !== 0)
+      problems.push("an hour on, a good read " + JSON.stringify({ calls: calls, folder: later.folder, unread: later.unread, said: later.said }));
+  } finally { Date.now = realNow; }
+  const empty = path.join(dir, "..", path.basename(dir) + "-never");
+  fs.mkdirSync(empty, { recursive: true });
+  const R3 = load(src, POLICY_DECLS.filter(m => src.indexOf(m) >= 0), ["readJoinPolicy"], POLICY_NAMES,
+    [late, { platform: "win32" }, fs, os, path, { getPath: () => empty }]);
+  const never = R3.readJoinPolicy("en");
+  if (never.folder !== "" || never.lead !== "" || never.unread !== true) problems.push("no good read ever " + JSON.stringify(never));
+  return problems;
+}
+{
+  let problems = [];
+  const d1 = path.join(LAB, "r19o-desk");
+  fs.mkdirSync(d1, { recursive: true });
+  try { problems = holdsLastGood(SRC, d1); } catch (e) { problems.push("harness: " + ((e && e.stack) || e)); }
+  check(problems.length === 0, "19o an unreadable policy holds its last good read, every pin and switch, said as unread, and after a"
+    + " restart from the copy beside the desk file, which keeps no AI key; with none ever, unpinned: " + (problems.join("; ") || "held"));
+  if (PLANTS_OFF) skip("19o lifting plant:policy-hold-good drops the good read at a failed read (ETIUDA_PLANTS=off)");
+  else {
+    const src = liftPlant(SRC, "policy-hold-good", "      void good;");
+    const d2 = path.join(LAB, "r19o-lifted");
+    fs.mkdirSync(d2, { recursive: true });
+    let p = [];
+    try { p = src ? holdsLastGood(src, d2) : ["the plant is not on exactly one line"]; } catch (e) { p = ["harness: " + e.message]; }
+    check(!!src && p.length > 0, "19o lifting plant:policy-hold-good drops the good read at a failed read: " + p.length + " problem(s)");
+  }
+}
+
 try { fs.rmSync(LAB, { recursive: true, force: true }); } catch { /* the temp folder's own to clear */ }
 
-console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);
-if (asserted < EXPECTED) {
-  console.log("SUITE DID NOT COMPLETE: " + asserted + " of " + EXPECTED + " checks ran");
+console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + " expected=" + EXPECTED);
+if (asserted + skipped < EXPECTED) {
+  console.log("SUITE DID NOT COMPLETE: " + (asserted + skipped) + " of " + EXPECTED + " checks ran");
   process.exit(78);
 }
 console.log(failed ? "  RESULT: FAIL " + failed + " of " + asserted : "  RESULT: ok " + asserted + " check(s)");

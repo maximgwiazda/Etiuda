@@ -48,7 +48,8 @@ const CARD_FLAGS=["firstOnly","allIntents","intentTop"];
 const V2_CARD_NAMED=["id","shelf","title","body","note","bodyShape","k","firstOnly","allIntents","intentTop",
   "paxVoc","paxOwn","address","lockLang","requests","retired","next","commits","changedAt"];
 const V2_HEAD_NAMED=["format","kind","id","rev","date","langs","commentLang","tags","cards","role","facts",
-  "greet","stop","sample","evaluation","modified","hash","sig","notes","grew","desk","name","variables"];
+  "greet","stop","sample","evaluation","modified","hash","sig","notes","grew","desk","name","variables",
+  "flags","answered"]; /* plant:flag-named */
 // One phrase per part of the day, and the clock has three. A language whose greeting covers
 // two parts writes the same phrase twice, which is what the built-in Polish does.
 const V2_GREET_PARTS=3;
@@ -842,6 +843,8 @@ function catalogToV2(c,opts){
   if(c.desk&&typeof c.desk==="object") out.desk=v2Copy(c.desk);
   if(c.variables&&typeof c.variables==="object") out.variables=v2Copy(c.variables);
   v2Restore(out,c.ext,V2_HEAD_NAMED);
+  /* The desk file's flags, and never an edition's answered: a desk does not write that list. */
+  if(Array.isArray(c.flags)&&c.flags.length) out.flags=v2Copy(c.flags); /* plant:flag-no-answered */
   /* Section 5. This engine is never the origin of a catalog, so a file it hands back says so.
      Rev arrives already raised where an export chose a new edition - see currentCatalog - and is
      otherwise left exactly where it was. An id is what says there was an origin at all: a
@@ -853,4 +856,4 @@ function catalogToV2(c,opts){
   return out;
 }
 
-export { isV2, v2ChangedAt, v2NeedsEngine, catalogFromV2, catalogToV2, v2Mark, v2Unmark, v2AltLabel, v2PartText, v2Problems, v2CatKey, V2_GRAMMAR_LANGS, v2ContentHash, v2SignedBytes, v2SigState, v2RingRead, v2TeamRead, v2TeamSigState, V2_FORMAT, V2_KIND, V2_KNOWN_KEYS, V2_RING_FORMAT, V2_RING_KIND, V2_RING_FILE, V2_TEAM_FORMAT, V2_TEAM_KIND, V2_TEAM_FILE, V2_HARNESS_TEST_KEYID, V2_HARNESS_TEST_PUB, V2_SIG_NONE, V2_SIG_VALID, V2_SIG_INVALID, V2_SIG_UNKNOWN, V2_SIG_ALG };
+export { isV2, v2ChangedAt, v2NeedsEngine, catalogFromV2, catalogToV2, v2Canonical, v2Mark, v2Unmark, v2AltLabel, v2PartText, v2Problems, v2CatKey, V2_GRAMMAR_LANGS, v2ContentHash, v2SignedBytes, v2SigState, v2RingRead, v2TeamRead, v2TeamSigState, V2_FORMAT, V2_KIND, V2_KNOWN_KEYS, V2_RING_FORMAT, V2_RING_KIND, V2_RING_FILE, V2_TEAM_FORMAT, V2_TEAM_KIND, V2_TEAM_FILE, V2_HARNESS_TEST_KEYID, V2_HARNESS_TEST_PUB, V2_SIG_NONE, V2_SIG_VALID, V2_SIG_INVALID, V2_SIG_UNKNOWN, V2_SIG_ALG };

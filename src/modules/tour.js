@@ -4,7 +4,7 @@ import { fillProseIcons } from "./icons.js";
 import { focusFirstEntryOnOpen } from "./on-open.js";
 import { drawIntentRail } from "./rail-list.js";
 import { chordChips } from "./shortcuts.js";
-import { lsGet, lsSet, lsDel, ssGet, ssSet, ssDel } from "./storage.js";
+import { lsGet, lsSet, lsDel, ssGet, ssSet, ssDel, nsGet } from "./storage.js";
 import { drawPills } from "./tabs.js";
 import { t, toast } from "./ui-lang.js";
 import { railActive, railWanted, scheduleRailGeometry, syncRailLayout } from "./rail-panel.js";
@@ -16,11 +16,13 @@ import { syncLayoutPrefs, pillsWanted, schedulePillsCollapse } from "./pills-box
 import { closeSettingsMenu, openSettingsMenu } from "./header-menus.js";
 import { wholeThingEmpty } from "./app-state.js";
 import { placeBubble } from "./bubble.js";
-import { eHost, eCatalogFolderShort, eHotkey, eHotkeyLabel, eOpenPicker } from "./host.js";
+import { eHost, eCatalogFolderShort, eCatalogFiles, eFolderCatalogPick, eOnFolderPick, noteCatalogFolderHold, eHotkey, eHotkeyLabel, eOpenPicker } from "./host.js";
+import { hooks } from "./hooks.js";
 import { agentName, setAgentName, keepAgentName, keepTypedName, nameAnswered, nameFieldHtml, wireNameField } from "./agent.js";
 import { esc } from "./esc.js";
 import { cutLeaves, dismissCopy, mgReduceMotion } from "./motion.js";
 import { joinStands, onJoinPainted } from "./team-join.js";
+import { firstSigninStands, onFirstSigninClosed } from "./signin.js";
 import { closeScreenTab, screenOn } from "./screen-tabs.js";
 
 /* ---------- Guided tour ----------------------------------------------------
@@ -28,12 +30,12 @@ import { closeScreenTab, screenOn } from "./screen-tabs.js";
    anywhere never takes a step down. It starts by itself on a first run and from Menu, Show tour.
    Bump TOUR_VER to re-offer after a major layout change. */
 const TOUR_VER=3;
-let tourIdx=-1, tourRunning=false, tourRaf=0, tourGlideEl=null;
+let tourIdx=-1, tourRunning=false, tourRaf=0, tourGlideEl=null, tourReturnId="";
 function tourActive(){ return !!tourRunning; }
 function tourStorageKey(){ return "eTourDone_v"+TOUR_VER; }
 function tourInviteKey(){ return "eTourInvite_v"+TOUR_VER; }
 function markTourDone(){
-  lsSet(tourStorageKey(),"1"); lsSet(tourInviteKey(),"1");
+  lsSet(tourStorageKey(),"1"); lsSet(tourInviteKey(),"1"); lsDel(TOUR_AT);
 }
 function markTourInviteDismissed(){
   lsSet(tourInviteKey(),"1");
@@ -131,10 +133,28 @@ function tourRevealCardActions(){
 }
 
 /* The desk's own words for the folder a Load opens, or none in a browser, which has no folder. */
+function sampleLoaded(){
+  return typeof nsGet==="function" && nsGet("Sample")==="1";
+}
+function loadStepPick(){
+  if(typeof eHost==="function" && !eHost()) return null;
+  if(!eCatalogFolderShort()) return null;
+  return typeof eFolderCatalogPick==="function" ? eFolderCatalogPick() : null;
+}
 function loadStepBody(){
   const dir=eCatalogFolderShort();
-  if(!dir) return t("Replies come in a catalog. Click <b>Load catalog file</b> and choose the file. The tour carries on as soon as it is in place, and the catalog stays in this browser, ready whenever you come back.");
-  return t("Replies come in a catalog. Click <b>Load catalog file</b> and choose the team's catalog file in {FOLDER}. The tour carries on as soon as it is in place.")
+  if(!dir) return t("Replies come in a catalog. Click <b>Load catalog file</b> and choose the file; <b>Next</b> stays off until a catalog is in place, and the catalog stays in this browser, ready whenever you come back.");
+  const pick=typeof eFolderCatalogPick==="function" ? eFolderCatalogPick() : null;
+  if(pick && pick.kind==="sample"){
+    return t("Replies come in a catalog. Click <b>Next</b> to open the practice catalog in {FOLDER} and try Etiuda before your team's own arrives, or <b>Load catalog file</b> to choose another.")
+      .split("{FOLDER}").join(esc(dir));
+  }
+  if(pick && pick.file){
+    return t("Replies come in a catalog. Click <b>Next</b> to open {FILE} in {FOLDER}, or <b>Load catalog file</b> to choose another.")
+      .split("{FILE}").join(esc(pick.file))
+      .split("{FOLDER}").join(esc(dir));
+  }
+  return t("Replies come in a catalog. Click <b>Load catalog file</b> and choose the team's catalog file in {FOLDER}; <b>Next</b> stays off until a catalog is in place.")
     .split("{FOLDER}").join(esc(dir));
 }
 /* THE MENU AS IT STANDS: the button while it is shut, and once the person opens it, the row a step
@@ -146,22 +166,96 @@ function menuTarget(act){
   return (act && m.querySelector('[data-act="'+act+'"]')) || m;
 }
 const menuSide=()=>menuOpen() ? "left" : null;
+/* THE TAB A STEP NEEDS (`tab`): a conversation's ("chat"), or the Library's or Settings' own. A conversation step met
+   while another tab is in front gives way to the step that asks for one (chatDetour); a step of the Library or Settings
+   stands only while its tab is in front (stepOn). */
+function tabInFront(tab){ return tab==="chat" ? !screenOn : screenOn===tab; }
+function chatDetour(s){
+  if(!s || s.tab!=="chat" || tabInFront("chat")) return false;
+  const ct=TOUR_STEPS.findIndex(x=>x.id==="chatTab");
+  if(ct<0) return false;
+  tourReturnId=s.id;
+  showTourStep(ct);
+  return true;
+}
+function hasChatTab(){
+  if(typeof document==="undefined" || typeof document.querySelectorAll!=="function") return false;
+  const all=document.querySelectorAll("#tabsBar .tab[data-tid]");
+  for(let i=0;i<all.length;i++){
+    const el=all[i];
+    if(!el.getClientRects || el.getClientRects().length) return true;
+  }
+  return false;
+}
+function chatTabTarget(){
+  if(typeof document==="undefined" || typeof document.querySelectorAll!=="function") return null;
+  const all=document.querySelectorAll("#tabsBar .tab[data-tid]");
+  for(let i=0;i<all.length;i++){
+    const el=all[i];
+    if(!el.getClientRects || el.getClientRects().length) return el;
+  }
+  return document.querySelector("#tabsWrap .tab-add");
+}
+function openChatTab(){
+  const el=chatTabTarget();
+  if(el && typeof el.click==="function") el.click();
+}
 // The window each inside step stands in.
 const cardEditorOpen=()=>modalOpen() && !!document.getElementById("meCancel");
-const libraryOpen=()=>screenOn==="library" && !!document.querySelector("#screenHost details.manage-sec");
-const settingsOpen=()=>screenOn==="settings" && !!document.getElementById("setBody");
+/* THE SECTION A STEP IS SHOWN ON (`sec`), pressed in its tab's rail as a person presses it, where another is showing. */
+function tourSection(s){
+  const row=s && s.sec && document.querySelector('#screenHost .sx-sec[data-lm="'+s.sec+'"]');
+  if(row && !row.classList.contains("on")) row.click();
+}
+// The first row of the Library's list as it stands, its section's heading row passed over.
+function libraryFirstRow(){
+  const rows=document.querySelectorAll("#libPage .mg-tree > *");
+  for(let i=0;i<rows.length;i++) if(rows[i].getClientRects().length && !rows[i].classList.contains("lw-head")) return rows[i];
+  return null;
+}
 /* NEXT PRESSES THE STEP'S OWN CONTROL for the person, and only where it stands on screen: never the
    card or the list a step falls back to ringing. */
 function tourPress(el, sel){ if(el && el.matches && el.matches(sel) && el.getClientRects().length) el.click(); }
 // A Menu row, with the Menu opened first where it is shut.
 function tourPressRow(act){ if(!menuOpen()) openSettingsMenu(); tourPress(menuTarget(act), '[data-act="'+act+'"]'); }
-// The window an inside step stands in, closed as the person would close it.
-// A screen tab the tour went into closes with the step. A pop-up over it closes first.
-function shutTourWindow(){ if(modalOpen()) closeAllDialogs(); else if(screenOn==="library") closeScreenTab("library"); else if(screenOn==="settings") closeScreenTab("settings"); if(factsPanelOpen()) closeFactsPanel(); }
-/* THE PICKER'S STEP, where the shell holds a combination: done once the picker opens after the step began (pick.js
-   says when it does), and Next opens it by the pointer. */
+/* The window an inside step stands in, closed as the person would close it (and nothing else). A tab is left open on
+   Next, the steps after it being there from any tab, and closed only by Back from the step that went into it. */
+function shutTourWindow(step, back){
+  const id=step && step.id;
+  if(id==="editor" || id==="addIn"){ if(modalOpen()) closeAllDialogs(); }
+  else if(id==="factsIn"){ if(factsPanelOpen()) closeFactsPanel(); }
+  else if(back && (step.tab==="library" || step.tab==="settings")){ if(screenOn===step.tab) closeScreenTab(step.tab); }
+}
+/* THE PICKER'S STEP, where the shell holds a combination: done once the picker opens while this step
+   is shown (pick.js says when it does); Next simply moves on without opening the picker. */
 let tourPicks=0, tourStepPicks=0;
-function tourHeardPick(){ tourPicks++; tourActSoon(); }
+let tourPickerOpened=false;
+function tourHeardPick(){
+  tourPicks++;
+  if(tourRunning && TOUR_STEPS[tourIdx] && TOUR_STEPS[tourIdx].id==="picker"){
+    tourPickerOpened=true;
+    tourActSoon();
+  }
+}
+/* What the Quick replies window shows of the tour as it opens on the picker's step: the window's own step and the
+   tour's three buttons, or null on any other step. */
+function tourPickBubble(){
+  const s=TOUR_STEPS[tourIdx], p=TOUR_STEPS.find(x=>x.id==="pickerIn");
+  if(!tourRunning || !s || !p || (s.id!=="picker" && s.id!=="pickerIn")) return null;
+  return {title:t(p.title), body:t(p.body), skip:t("Skip tour"), back:t("Back"), next:t("Next")};
+}
+/* The window closed while it carried the step: by its Next, Esc or a click away (`next`), its Back, or Skip tour. It
+   may close before the opening's act has moved the tour into the step, which is where it is then. */
+function tourPickGo(go){
+  const s=TOUR_STEPS[tourIdx];
+  if(!tourRunning || !s) return;
+  if(s.id==="picker" && tourPickerOpened) tourIdx=TOUR_STEPS.findIndex(x=>x.id==="pickerIn");
+  if(!TOUR_STEPS[tourIdx] || TOUR_STEPS[tourIdx].id!=="pickerIn") return;
+  clearTimeout(tourActT);
+  if(go==="skip") endTour(false);
+  else if(go==="back") tourPrev();
+  else tourOn();
+}
 function hotkeyHeld(){ const hk=eHotkey(); return hk && hk.held ? hk.accel : ""; }
 function hotkeyChips(){ return eHotkeyLabel(hotkeyHeld()).split("+").map(k=>'<kbd>'+esc(k)+'</kbd>').join("+"); }
 // The wheel waits on the sample until a reply names somebody (agent.js), and the step says so.
@@ -173,9 +267,19 @@ const TOUR_STEPS=[
     id:"name",
     sel:".brand",
     title:"Welcome to Etiuda",
-    body:"To begin, the name your replies are signed with. Customers see it at the foot of each one, and it can be changed at any time in Settings.",
+    body:"To begin, the name your replies are signed with. Customers see it at the foot of each one, and it can be changed at any time in Settings, under Account.",
     name:true,
     pad:10
+  },
+  {
+    id:"chatTab",
+    sel:()=>chatTabTarget(),
+    title:"A conversation",
+    body:"The next steps are about a conversation. Click a conversation's tab to carry on.",
+    when:()=>!tabInFront("chat"),
+    done:()=>tabInFront("chat"),
+    open:()=>openChatTab(),
+    pad:8
   },
   /* ONLY WHILE THE DESK IS EMPTY: the step is done by loading, and the tour carries on from the
      step after it (tourAfterRestart). A card made by hand ends it too. */
@@ -184,6 +288,7 @@ const TOUR_STEPS=[
     sel:"#emptyLoad",
     title:"A catalog of replies",
     body:loadStepBody,
+    tab:"chat",
     when:()=>wholeThingEmpty(),
     waits:true,
     pad:6
@@ -191,15 +296,17 @@ const TOUR_STEPS=[
   {
     id:"pax",
     sel:".field-wrap.paxrole",
+    tab:"chat",
     title:()=>wheelShown() ? "Customer name and role" : "The customer's name",
     body:()=>wheelShown()
-      ? "The customer's name goes here as the chat gives it, surname and capitals included, and every reply greets them by first name, in Polish in the vocative (ANNA KOWALSKA becomes <b>Anno</b>). The wheel beside it says who is on the chat, for internal comments."
+      ? "The customer's name goes here as the chat gives it, surname and capitals included, and every reply greets them by first name, in Polish in the vocative (ANNA KOWALSKA becomes <b>Anno</b>). The wheel beside it chooses who in the team this reply names."
       : "The customer's name goes here as the chat gives it, surname and capitals included, and every reply greets them by first name, in Polish in the vocative (ANNA KOWALSKA becomes <b>Anno</b>).",
     pad:6
   },
   {
     id:"search",
     sel:"#intentComboWrap",
+    tab:"chat",
     title:"Search",
     body:"A word near what the customer means, such as 'refund', is enough: the intents on the left rank themselves and the cards narrow to match, in both languages. <kbd>Enter</kbd> picks the marked intent, and <kbd>Esc</kbd> clears the box.",
     pad:6
@@ -207,6 +314,7 @@ const TOUR_STEPS=[
   {
     id:"rail",
     sel:"#intentRail",
+    tab:"chat",
     title:"Intent panel",
     body:"An intent names what the customer has come about. A click on one brings its replies forward, ringed <b class=\"t-go\">green</b>, with its phrase filling <span class=\"fillmiss\">INTENT</span> wherever a reply uses it. <kbd>Ctrl</kbd>+click picks several, and the star keeps the ones used most at the top.",
     pad:8,
@@ -215,15 +323,22 @@ const TOUR_STEPS=[
   {
     id:"cards",
     sel:()=>tourPickFirstCard()||$("#list"),
+    tab:"chat",
     title:"Cards",
-    body:"A click on a reply copies the whole of it, greeting, name and signature filled in, ready to paste into the chat. A card marked <b>1/2</b> or <b>STEP 1/3</b> holds several, each copied on its own. <kbd>↑</kbd> <kbd>↓</kbd> and <kbd>Enter</kbd> do the same from the keyboard.",
+    body:()=>{
+      const base=t("A click on a reply copies the whole of it, greeting, name and signature filled in, ready to paste into the chat. A card marked <b>1/2</b> or <b>STEP 1/3</b> holds several, each copied on its own. <kbd>↑</kbd> <kbd>↓</kbd> and <kbd>Enter</kbd> do the same from the keyboard.");
+      return sampleLoaded()
+        ? base+" "+t("These replies are examples to practise with, not for a live chat.")
+        : base;
+    },
     pad:6,
     prep:()=>{ tourScrollListTop(); tourPickFirstCard(); }
   },
   {
     id:"pills",
     sel:"#pills",
-    title:"Category pills",
+    tab:"chat",
+    title:"The category bar",
     body:"A click on a category shows only its cards, and <kbd>Ctrl</kbd>+click keeps several. A <b class=\"t-go\">green</b> ring marks one holding a card for the chosen intent, and a <b class=\"t-acc\">blue</b> one a supporting category, useful for any question.",
     pad:8,
     prep:tourEnsurePills
@@ -239,6 +354,7 @@ const TOUR_STEPS=[
   {
     id:"seg",
     sel:"#seg",
+    tab:"chat",
     title:"English / Polish",
     // A function, not a string: the key it names is rebindable, so it is read at show time
     body:()=>t("Replies in this conversation follow the language chosen here, so each customer is answered in their own. {KEY} switches it from anywhere.")
@@ -246,11 +362,12 @@ const TOUR_STEPS=[
     pad:6
   },
   /* A STEP THAT OPENS A WINDOW (`opens`) moves on when the person opens it or when Next opens it for
-     them (`open`); the step inside (`inside`) stands while its window does, and its Next or Back
-     closes the window before moving. */
+     them (`open`); the step inside (`inside`) stands while its window does. Its Back closes the window,
+     and so does its Next, but for a tab, which stays for the steps hung from it (shutTourWindow). */
   {
     id:"buttons",
     sel:()=>cardBtn(".cacts"),
+    tab:"chat",
     prep:tourRevealCardActions,
     title:"A card's buttons",
     body:"The star lifts a card to the top of its category, and under <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> into <b class=\"t-fav\"><span data-icon=\"star\"></span>Favourites</b>.<br>The eye puts it away, greyed at the foot of its category, and brings it back from there.<br>The pencil opens it for editing, and <b>Reset</b> in the editor brings back the catalog's own words.<br>Click the pencil on this card.",
@@ -266,7 +383,7 @@ const TOUR_STEPS=[
     when:cardEditorOpen,
     pad:4,
     title:"The card editor",
-    body:()=>t("<span class=\"t-sec\">Content</span> holds the text in both languages and the internal note; the folds below hold the keywords, the category, the linked intents and the finer settings. <b>Cancel</b> leaves everything as it was.")
+    body:()=>t("<span class=\"t-sec\">Content</span> holds the text in both languages and the internal note; the folds below hold the keywords, the category, the linked intents, the next replies and the advanced settings. <b>Cancel</b> leaves everything as it was.")
       +" "+t("The tour carries on once this window is closed.")
   },
   /* AFTER the editor, not before it: the step above acts on a card that already exists, and this
@@ -274,6 +391,7 @@ const TOUR_STEPS=[
   {
     id:"add",
     sel:"#addCardFab",
+    tab:"chat",
     title:"A card of your own",
     body:()=>t("Click <b>+</b> to write a card of your own, in the category open now or in any other chosen in the editor.")
       +" "+t("Once the window is open, the tour goes inside with it."),
@@ -336,14 +454,23 @@ const TOUR_STEPS=[
     id:"picker",
     sel:()=>menuTarget("picker"),
     side:menuSide,
-    title:"Replies over any window",
-    body:()=>t("{KEY} brings these replies over any program, beside the pointer: a word finds the reply, and Enter copies it and goes back to the window you were in. Press {KEY} to try it; Esc closes it.")
+    title:"Quick replies",
+    body:()=>t("{KEY} opens Quick replies over any program, beside the pointer. To try it, press {KEY} or click <b>Quick replies</b> here.")
       .split("{KEY}").join(hotkeyChips()),
     when:()=>!!hotkeyHeld(),
-    done:()=>tourPicks>tourStepPicks,
-    open:()=>eOpenPicker(),
+    done:()=>tourPickerOpened,
     menu:true,
     pad:8
+  },
+  /* THE QUICK REPLIES WINDOW'S OWN PAGE CARRIES THIS STEP (`elsewhere`, tourPickBubble): the desk's bubble stands
+     aside while it does, and the window's Next or Esc, Back and Skip tour come back through tourPickGo. */
+  {
+    id:"pickerIn",
+    title:"Quick replies",
+    body:"A word finds the reply. <kbd>Enter</kbd> copies it, and pastes it into the window you were in wherever Windows allows. <kbd>Esc</kbd> closes Quick replies.",
+    when:()=>tourPickerOpened,
+    elsewhere:true,
+    menu:true
   },
   {
     id:"library",
@@ -358,15 +485,34 @@ const TOUR_STEPS=[
     menu:true,
     pad:8
   },
+  /* THE LIBRARY AND SETTINGS, EACH FROM WHAT IS ON SCREEN: the tab in the tab bar, its section rail, and (the Library's)
+     the first row of its list. Next leaves the tab open. */
   {
     id:"libraryIn",
-    sel:"#screenHost",
+    sel:'#tabsBar .tab.screen[data-sid="library"]',
+    tab:"library",
     inside:true,
-    when:libraryOpen,
     pad:4,
     title:"Library",
-    body:()=>t("<b><span data-icon=\"settings\"></span> → Library</b> holds every card, intent and category, to add, edit, hide or move. Catalog files are loaded here too, and your own improvements go out from here as a file for whoever keeps the wording.")
-      +" "+t("The tour carries on once this tab is closed.")
+    body:"The Library has a tab of its own, beside the conversations. The whole catalog is here."
+  },
+  {
+    id:"libraryRail",
+    sel:"#libSecs",
+    tab:"library",
+    side:"right",
+    pad:6,
+    title:"Library",
+    body:"Its parts are on the left: <b>Categories & cards</b>, <b>Intents</b>, <b>ROLE suggestions</b> and <b>Catalog & data</b>, where a catalog is loaded and your own improvements go out as a file for whoever keeps the wording."
+  },
+  {
+    id:"libraryList",
+    sel:()=>libraryFirstRow(),
+    tab:"library",
+    sec:"catmac",
+    pad:4,
+    title:"Library",
+    body:"A click on a row opens it, to edit, hide or move."
   },
   {
     id:"settings",
@@ -382,28 +528,54 @@ const TOUR_STEPS=[
   },
   {
     id:"settingsIn",
-    sel:"#screenHost",
+    sel:'#tabsBar .tab.screen[data-sid="settings"]',
+    tab:"settings",
     inside:true,
-    when:settingsOpen,
     pad:4,
     title:"Settings",
-    body:()=>t("<b><span data-icon=\"settings\"></span> → Settings</b>: your name, the language of the buttons, the look and the shortcuts. Nothing here touches a card.")
-      +" "+t("The tour carries on once this tab is closed.")
+    body:"Settings has a tab of its own too. Nothing here touches a card."
+  },
+  {
+    id:"settingsRail",
+    sel:"#sxSecs",
+    tab:"settings",
+    side:"right",
+    pad:6,
+    title:"Settings",
+    body:"The parts are on the left: your name is under <b>Account</b>, the language under <b>General</b>, the look under <b>Appearance</b>, and every shortcut, Quick replies' included, under <b>Keyboard shortcuts</b>."
   },
   {
     id:"done",
     sel:".brand",
-    title:"Ready for the first customer",
-    body:"That is the whole tour. <b>Show tour…</b> in the <span data-icon=\"settings\"></span> Menu brings it back, and <b>Settings</b> lists every shortcut.",
+    title:()=>t(sampleLoaded() ? "Ready to practise" : "Ready for the first customer"),
+    body:()=>{
+      const base=t("That is the whole tour. <b>Show tour…</b> in the <span data-icon=\"settings\"></span> Menu brings it back, and <b>Settings</b> lists every shortcut.");
+      return sampleLoaded()
+        ? base+" "+t("Before the first customer, load your team's catalog.")
+        : base;
+    },
     pad:10
   }
 ];
-// A step is on when it has no condition or its condition holds now.
-function stepOn(i){ const s=TOUR_STEPS[i]; return !!s && (!s.when || s.when()); }
+// A step is on when its condition holds now, and a step of the Library or Settings while its tab is in front.
+function stepOn(i){ const s=TOUR_STEPS[i]; return !!s && (!s.when || s.when()) && (!s.tab || s.tab==="chat" || tabInFront(s.tab)); }
 function onFrom(i,dir){ for(let j=i; j>=0 && j<TOUR_STEPS.length; j+=dir) if(stepOn(j)) return j; return -1; }
 /* NEXT ON EVERY STEP, held back only where the steps after need the person's own act (`waits`) and
    its control is on screen. */
-function nextHeld(s){ return !!(s && s.waits) && !!resolveTourTarget(s); }
+function nextHeld(s){
+  if(!s || !s.waits) return false;
+  if(s.id==="load" && loadStepPick()) return false;
+  return !!resolveTourTarget(s);
+}
+function refreshLoadStep(){
+  if(!tourRunning) return;
+  const step=TOUR_STEPS[tourIdx];
+  if(!step || step.id!=="load") return;
+  const els=tourEls();
+  if(els.body){ els.body.innerHTML=t(loadStepBody()); fillProseIcons(els.body); }
+  syncTourNext();
+  scheduleTourPlace();
+}
 function syncTourNext(){
   const els=tourEls(), step=TOUR_STEPS[tourIdx];
   if(!els.next || !step) return;
@@ -423,9 +595,10 @@ function tourActSoon(){
 function tourActCheck(){
   const step=TOUR_STEPS[tourIdx];
   if(!step) return;
+  if(chatDetour(step)) return;
+  if(step.done && step.done()){ tourOn(); return; }
   if(!stepOn(tourIdx)){ showTourStep(onFrom(tourIdx+1,1)); return; }
   if(step.opens){ tourFollowWindow(); return; }
-  if(step.done && step.done()) tourOn();
 }
 
 
@@ -450,8 +623,11 @@ function resolveTourTarget(step){
   } else if(step.sel){
     el=document.querySelector(step.sel);
   }
-  if(el && el.getClientRects && el.getClientRects().length===0) return null;
-  return el||null;
+  if(!el) return null;
+  if(el.getClientRects && el.getClientRects().length===0) return null;
+  if(screenOn && el.closest && el.closest(".stage > .scroller > .shell, .dotfield, .pills-slot, .pills-probe, .fab-stack, #railHit, #lanes")) return null;
+  if(typeof el.checkVisibility==="function" && !el.checkVisibility({contentVisibilityAuto:true, visibilityProperty:true})) return null;
+  return el;
 }
 /* A length from computed style: a percentage of `rel`, a keyword of the axis, or pixels. */
 function tourPx(tok, rel){
@@ -635,14 +811,19 @@ function scheduleTourPlace(){
 }
 function showTourStep(i){
   if(i<0||i>=TOUR_STEPS.length){ endTour(true); return; }
+  const next=TOUR_STEPS[i];
+  if(chatDetour(next)) return;
   // Whether the keyboard is driving the tour: only then does a new step take the focus.
   const keyed=tourHasFocus();
   tourIdx=i;
   tourStepPicks=tourPicks;
   const step=TOUR_STEPS[i];
+  if(step.id!=="pickerIn") tourPickerOpened=false;
   const els=tourEls();
   // Where the tour stands survives a reload, the shell's recovery of a stopped page included.
   ssSet(TOUR_AT,step.id);
+  if(i>onFrom(0,1)) lsSet(TOUR_AT,step.id); else lsDel(TOUR_AT); /* plant:tour-save-step */
+  if(typeof syncTourMenu==="function") syncTourMenu();
   // Only a step about the Menu's rows (`menu`) leaves it open.
   if(!step.menu) closeSettingsMenu();
   /* A showcase must not outlive its step: whatever the PREVIOUS step's prep borrowed is given
@@ -651,6 +832,7 @@ function showTourStep(i){
      pointed at, and without this the lock persisted past the step, past the tour, and past
      the session - the panel sat over the cards of every later step and stayed. */
   runTourStepUndo();
+  tourSection(step);
   if(step.prep){
     try{ step.prep(); }catch(_){}
   }
@@ -661,6 +843,9 @@ function showTourStep(i){
   if(els.body){ els.body.innerHTML=t((typeof step.body==="function"?step.body():step.body)||""); fillProseIcons(els.body); }
   if(els.prev) els.prev.hidden=onFrom(i-1,-1)<0;
   syncTourNext();
+  if(step.id==="load" && !loadStepPick() && typeof eCatalogFiles==="function" && typeof noteCatalogFolderHold==="function"){
+    Promise.resolve(eCatalogFiles()).then(rows=>noteCatalogFolderHold(rows)).catch(()=>{});
+  }
   let nameInp=null;
   if(els.field){
     els.field.hidden=!step.name;
@@ -700,6 +885,33 @@ function showTourStep(i){
 let tourNameWas=false;
 /** From the Menu, or by itself (`auto`): a first run, or a reload in the middle of one, which
  *  finds whatever the person had open still open, and leaves it so. */
+/** Persistent index where a manually opened tour resumes, or -1 if none kept. */
+function tourResumeAt(){
+  const id=lsGet(TOUR_AT);
+  if(!id) return -1;
+  let i=TOUR_STEPS.findIndex(x=>x.id===id);
+  if(i<0) return -1;
+  if(TOUR_STEPS[i].id==="editor"||TOUR_STEPS[i].id==="addIn"||TOUR_STEPS[i].id==="factsIn") i++;
+  i=onFrom(i,1);
+  const L=TOUR_STEPS.findIndex(x=>x.id==="load");
+  if(i>L && stepOn(L)) i=L;
+  return i;
+}
+/** Position of the kept step on the Menu row, or null when no step is kept. */
+function tourMenuState(){
+  const i=tourResumeAt();
+  if(i<0) return null;
+  const step=TOUR_STEPS[i];
+  if(!step) return null;
+  const on=TOUR_STEPS.map((_,k)=>k).filter(k=>stepOn(k) && !TOUR_STEPS[k].inside);
+  const at=step.inside ? TOUR_STEPS.findIndex(x=>x.opens===step.id) : i;
+  const n=on.indexOf(at)+1;
+  if(n<1 || !on.length) return null;
+  return {at, id:step.id, n, of:on.length};
+}
+function syncTourMenu(){
+  if(typeof hooks!=="undefined" && typeof hooks.syncSettingsMenu==="function") hooks.syncSettingsMenu();
+}
 function startTour(from,auto){
   if(!auto){
     closeSettingsMenu();
@@ -708,12 +920,14 @@ function startTour(from,auto){
   }
   const els=tourEls();
   if(!els.root) return;
-  let i=onFrom(Math.max(0,from|0),1);
+  const r=from==null ? tourResumeAt() : Math.max(0,from|0);
+  let i=onFrom(r>=0 ? r : 0,1);
   // Back on an empty desk after the load step, the load step is where the tour stands.
   const L=TOUR_STEPS.findIndex(x=>x.id==="load");
   if(i>L && stepOn(L)) i=L;
   if(i<0){ ssDel(TOUR_AT); return; }
   tourRunning=true;
+  tourReturnId="";
   tourIdx=i;
   tourNameWas=nameAnswered();
   cutLeaves();
@@ -743,6 +957,14 @@ function heedJoin(){
     if(tourAfterJoin && !joinStands()){ const go=tourAfterJoin; tourAfterJoin=null; go(); }
   });
 }
+let tourAfterSignin=null, signinHeeded=false;
+function heedFirstSignin(){
+  if(signinHeeded) return;
+  signinHeeded=true;
+  onFirstSigninClosed(()=>{
+    if(tourAfterSignin && !firstSigninStands()){ const go=tourAfterSignin; tourAfterSignin=null; go(); }
+  });
+}
 function maybeStartTour(){
   const at=ssGet(TOUR_AT);
   if(!at && (tourSeen()||tourInviteDismissed())) return;
@@ -751,6 +973,7 @@ function maybeStartTour(){
   let floor=false, formed=false;
   const go=()=>{
     if(!(floor && formed && due())) return;
+    if(typeof firstSigninStands==="function" && firstSigninStands()){ heedFirstSignin(); tourAfterSignin=go; return; } /* plant:first-signin-order */
     if(joinStands()){ heedJoin(); tourAfterJoin=go; return; } /* plant:tour-waits-join */
     startTour(i,true);
   };
@@ -760,6 +983,7 @@ function maybeStartTour(){
 /* THE DESK STARTED AGAIN UNDER A RUNNING TOUR: a step the new desk no longer offers, the load step
    once a catalog is in, gives way to the next one that it does. */
 function tourAfterRestart(){
+  if(typeof syncTourMenu==="function") syncTourMenu();
   if(!tourRunning || tourIdx<0) return;
   const i=onFrom(tourIdx,1);
   if(i<0) endTour(true); else showTourStep(i);
@@ -770,6 +994,8 @@ function afterTour(fn){ tourAfter.push(fn); }
 function endTour(completed){
   if(!tourRunning && tourIdx<0) return;
   tourRunning=false;
+  tourReturnId="";
+  tourPickerOpened=false;
   tourIdx=-1;
   const els=tourEls();
   /* The bubble and its ring leave on the dismiss tier as copies, lifted out of the root that hides
@@ -799,6 +1025,7 @@ function endTour(completed){
   if(completed) markTourDone();
   else markTourInviteDismissed();
   ssDel(TOUR_AT);
+  if(typeof syncTourMenu==="function") syncTourMenu();
   if(els.root){ els.root.classList.remove("behind"); els.root.classList.remove("away"); }
   if(!completed) toast("The tour waits in the Menu, under Show tour…");
   focusFirstEntryOnOpen();
@@ -826,6 +1053,7 @@ function syncTourBehind(){
   els.root.classList.toggle("behind", tourRunning && (asked || (covered && !(step && step.modal))));
   let away=false;
   away=tourRunning && joinStands(); /* plant:tour-away-join */
+  if(tourRunning && step && step.elsewhere) away=true;
   els.root.classList.toggle("away", away);
 }
 function tourHasFocus(){
@@ -898,19 +1126,28 @@ function observeTourTarget(tb){
     if(tb && tb.nodeType===1) tourTargetRO.observe(tb);
   }catch(_){}
 }
-/* NEXT DOES FOR THE PERSON WHAT THE STEP ASKS: it closes the window a step stands inside, opens the
-   one a step invites them to open and follows it in, and moves on. */
+/* NEXT DOES FOR THE PERSON WHAT THE STEP ASKS: it closes the pop-up a step stands inside, opens the
+   window a step invites them to open and follows it in, and moves on. */
 function tourNext(){
   if(!tourRunning) return;
   const step=TOUR_STEPS[tourIdx];
   if(!step || nextHeld(step)) return;
+  const pick=step.id==="load" ? loadStepPick() : null;
+  if(pick){
+    const btn=tourEls().next;
+    if(btn){ if(btn.disabled) return; btn.disabled=true; }
+    Promise.resolve(hooks.loadCatalogFromFolder(pick.file, pick.mtime)).finally(()=>{
+      if(tourRunning && TOUR_STEPS[tourIdx] && TOUR_STEPS[tourIdx].id==="load") syncTourNext();
+    });
+    return;
+  }
   /* The name step's field is its answer: a name given is kept and the question is not asked again;
      left empty, the first signed copy asks, as it would without the tour. */
   if(step.name){
     const inp=$("#tourName"), v=inp ? inp.value.trim() : "";
     if(v) keepAgentName(v); else if(agentName()) setAgentName("");
   }
-  if(step.inside) shutTourWindow();
+  if(step.inside) shutTourWindow(step, false);
   if(step.open){
     try{ step.open(); }catch(_){}
     if(tourFollowWindow()) return;
@@ -919,6 +1156,12 @@ function tourNext(){
 }
 // On to the next step that is on, or the end.
 function tourOn(){
+  if(TOUR_STEPS[tourIdx] && TOUR_STEPS[tourIdx].id==="chatTab" && tourReturnId){
+    const rid=tourReturnId;
+    tourReturnId="";
+    const r=TOUR_STEPS.findIndex(x=>x.id===rid);
+    if(r>=0 && stepOn(r)){ showTourStep(r); return; }
+  }
   const n=onFrom(tourIdx+1,1);
   if(n<0) endTour(true);
   else showTourStep(n);
@@ -927,12 +1170,16 @@ function tourOn(){
 function tourPrev(){
   if(!tourRunning) return;
   const step=TOUR_STEPS[tourIdx];
-  if(step && step.inside) shutTourWindow();
-  const n=onFrom(tourIdx-1,-1);
+  if(step && step.inside) shutTourWindow(step, true);
+  // Back from the detour to a conversation goes to the step before the one it came from, not before the detour.
+  const came=step && step.id==="chatTab" && tourReturnId ? TOUR_STEPS.findIndex(x=>x.id===tourReturnId) : -1;
+  tourReturnId="";
+  const n=onFrom((came>=0 ? came : tourIdx)-1,-1);
   if(n>=0) showTourStep(n);
 }
 function wireTourUi(){
   heedJoin();
+  if(typeof eOnFolderPick==="function") eOnFolderPick(refreshLoadStep);
   const els=tourEls();
   if(els.next) els.next.onclick=()=>tourNext();
   if(els.prev) els.prev.onclick=()=>tourPrev();
@@ -945,7 +1192,7 @@ function wireTourUi(){
   // A window opening or closing over the page moves the bubble behind it or back.
   if(typeof MutationObserver==="function"){
     try{
-      const mo=new MutationObserver(()=>{ if(tourRunning){ if(!tourFollowWindow()) syncTourBehind(); scheduleTourPlace(); } });
+      const mo=new MutationObserver(()=>{ if(tourRunning){ if(chatDetour(TOUR_STEPS[tourIdx])) return; if(!tourFollowWindow()) syncTourBehind(); scheduleTourPlace(); } });
       mo.observe(document.body,{childList:true});
       const shared=$("#modal");
       if(shared) mo.observe(shared,{attributes:true, attributeFilter:["hidden","class"]});   // class: an editor resting or back in front
@@ -969,6 +1216,8 @@ function wireTourUi(){
 export {
   tourAfterRestart,
   tourHeardPick,
+  tourPickBubble,
+  tourPickGo,
   tourActive,
   scheduleTourPlace,
   startTour,
@@ -978,6 +1227,7 @@ export {
   wireTourUi,
   tourHasFocus,
   tourDueAtBoot,
+  tourMenuState,
   maybeStartTour,
   afterTour
 };

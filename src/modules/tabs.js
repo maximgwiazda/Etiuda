@@ -4,6 +4,7 @@ import { applyCut, cutSides } from "./cut-text.js";
 import { ICON_TAB_X, ICON_TAB_ADD } from "./icons.js";
 import { mgReduceMotion, E_EASE, dismissNode } from "./motion.js";
 import { esc } from "./esc.js";
+import { sxIcon } from "./sx-icons.js";
 import { formatActionChord, tabAddTitle } from "./shortcuts.js";
 import { lsGet, ssGet, ssSet } from "./storage.js";
 import { t, toast, TOAST_MS, toastSerial, offerUndo } from "./ui-lang.js";
@@ -958,6 +959,7 @@ function updateTabOverflow(){
     updateTabOverflow._reflow=true;
     try{ applyTabWidths(); } finally { updateTabOverflow._reflow=false; }
   }
+  if(!over) syncTabList();
   const prev=$("#tabsPrev"), next=$("#tabsNext");
   if(prev) prev.disabled=!over || bar.scrollLeft<=TAB_SCROLL_EPS;
   if(next) next.disabled=!over || bar.scrollLeft>=bar.scrollWidth-bar.clientWidth-TAB_SCROLL_EPS;
@@ -1119,7 +1121,7 @@ function applyTabWidths(){
      Reading the class rather than predicting it keeps this one-directional:
      updateTabOverflow sets it from a measurement at the END of this function, and a
      change there asks for one more pass, which settles - the space is already there. */
-  const NAV_W=40;   // 2 x .tabs-nav width - keep in step with the stylesheet
+  const NAV_W=60;   // 2 x .tabs-nav (20) + .tabs-list-wrap (20) - keep in step with the stylesheet
   /* MEASURE UNDER ZERO PRESSURE. The wrap is flex-basis:auto - content-sized - so reading
      it cold returns an ECHO of whatever bar this function wrote last time; and probing
      with a GIANT bar squeezes every sibling in proportion to what it currently holds, so
@@ -1246,16 +1248,18 @@ function applyTabWidths(){
      landed and take any overhang straight off the bar. Tabs keep their widths (a
      narrower bar is simply more scrolling); _wrapW records the corrected state, which
      keeps the ResizeObserver quiet. */
-  if(add){
+  const listWrap=typeof wrap.querySelector==="function"?wrap.querySelector("#tabsListWrap"):null;
+  const lastChrome=(listWrap && wrap.classList.contains("tabs-over") && listWrap.getBoundingClientRect().width>0)?listWrap:add;
+  if(lastChrome){
     let bw=barW;
-    const o0=add.getBoundingClientRect().right-wrap.getBoundingClientRect().right;
+    const o0=lastChrome.getBoundingClientRect().right-wrap.getBoundingClientRect().right;
     if(o0>0.5){
       const probed=Math.max(40, bw-Math.ceil(o0*1.5));
       if(probed<bw){
         bw=probed;
         bar.style.flex="0 0 "+bw+"px"; bar.style.width=bw+"px";
         bar.style.minWidth=bw+"px";    bar.style.maxWidth=bw+"px";
-        const o1=add.getBoundingClientRect().right-wrap.getBoundingClientRect().right;
+        const o1=lastChrome.getBoundingClientRect().right-wrap.getBoundingClientRect().right;
         const settled=settleBarWidth(barW, o0, probed, o1, 40);
         if(settled!==bw){
           bw=settled;
@@ -1351,6 +1355,16 @@ function tabAccentSlots(list){
    the pills and cards already use, so nothing here knows what colour it is. The rest can't:
    a gradient is one value built from many, so it is composed here - still out of the same
    --e-c* tokens, so the themes keep control of the actual colours. */
+function paintTabAccent(el,list){
+  const n=tabAccentSlots(list);
+  delete el.dataset.ec;
+  el.style.removeProperty("--tab-accent-img");
+  if(n.length>=1) el.dataset.ec=String(n[0]);
+  if(n.length>1){
+    el.style.setProperty("--tab-accent-img",
+      "linear-gradient(90deg,"+n.map(i=>"var(--e-c"+i+")").join(",")+")");
+  }
+}
 function syncTabAccent(){
   document.querySelectorAll(".tab").forEach(el=>{
     /* The SELECTED tab's filter lives in `cats`, not in its stored object: that copy is only
@@ -1364,14 +1378,7 @@ function syncTabAccent(){
       const tb=(typeof tabs!=="undefined"&&tabs)?tabs.find(x=>x.id===el.dataset.tid):null;
       list=(tb&&Array.isArray(tb.cats))?tb.cats:[];
     }
-    const n=tabAccentSlots(list);
-    delete el.dataset.ec;
-    el.style.removeProperty("--tab-accent-img");
-    if(n.length>=1) el.dataset.ec=String(n[0]);
-    if(n.length>1){
-      el.style.setProperty("--tab-accent-img",
-        "linear-gradient(90deg,"+n.map(i=>"var(--e-c"+i+")").join(",")+")");
-    }
+    paintTabAccent(el,list);
   });
 }
 /* drawPills and drawTabs are wrappers and the Core functions do the drawing, which is
@@ -1562,7 +1569,9 @@ function drawTabsCore(){
     add.innerHTML='<span class="tab-add-mark">'+ICON_TAB_ADD+'</span>';
     /* Never disabled: the + is the one control that must always work - see addTab(). */
     add.onclick=()=>addTab();
-    wrap.appendChild(add);
+    const listWrap=typeof wrap.querySelector==="function"?wrap.querySelector("#tabsListWrap"):null;
+    if(listWrap && typeof wrap.insertBefore==="function") wrap.insertBefore(add,listWrap);
+    else wrap.appendChild(add);
   }
   bindTabScroll();
   // Measure after layout; rAF covers first paint / flex settling
@@ -1573,6 +1582,132 @@ function drawTabsCore(){
   // width change the debounced resize pass has not yet absorbed; on unchanged inputs the
   // sync is a pure no-op. Coalesced, so a burst of redraws costs one pass.
   if(typeof scheduleHeaderSync==="function") scheduleHeaderSync();
+  if(typeof syncTabList==="function") syncTabList();
+}
+let beforeTabListOpen=null;
+/** Register callback run before the tab-list menu opens (closes sibling popovers). */
+function wireTabListBeforeOpen(fn){ beforeTabListOpen=fn; }
+function screenRowIcon(sid){
+  return sxIcon(sid==="settings"?"general":sid==="manage"?"cards":"data");
+}
+/** Render open screen and conversation tabs into #tabsListMenu in strip order. */
+function drawTabList(preserveFocus){
+  const menu=$("#tabsListMenu"), rowsBox=$("#tabsListRows"), head=$("#tabsListHead");
+  if(!menu||!rowsBox) return;
+  if(head) head.textContent=t("Open tabs");
+  const cur=typeof document!=="undefined"?document.activeElement:null;
+  const hadFocus=!menu.hidden && cur && (menu.contains(cur)||cur===menu);
+  const prevRow=hadFocus && cur.closest?cur.closest(".tabs-list-row"):null;
+  const oldRows=[].slice.call(rowsBox.querySelectorAll(".tabs-list-row"));
+  const prevIdx=prevRow?oldRows.indexOf(prevRow):-1;
+  rowsBox.innerHTML="";
+  const curScreen=typeof screenOn!=="undefined"?screenOn:null;
+  const screenList=typeof screens!=="undefined"&&Array.isArray(screens)?screens:[];
+  const order=typeof getTabOrder==="function"?getTabOrder():(tabs||[]).map(tb=>tb.id).concat(screenList);
+  const checkSvg='<svg class="ic tabs-list-check" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4.8 10.4 8.3 13.9 15.2 6.6"/></svg>';
+  order.forEach(id=>{
+    const isScr=screenList.includes(id);
+    const tb=isScr?null:(tabs||[]).find(x=>x.id===id);
+    if(!isScr && !tb) return;
+    const ti=isScr?-1:tabs.findIndex(x=>x.id===id);
+    const on=isScr?(id===curScreen):(!curScreen && tb.id===activeTabId);
+    const def=isScr?(typeof getScreenDef==="function"?getScreenDef(id):null):null;
+    const name=isScr?(def&&typeof def.title==="function"?def.title():(id==="maintenance"?t("Maintenance"):id)):tabLabel(tb,ti>=0?ti:0);
+    const row=document.createElement("div");
+    row.className="tabs-list-row"+(on?" on":"");
+    row.setAttribute("role","none");
+    const item=document.createElement("button");
+    item.type="button";
+    item.className="tabs-list-item";
+    item.setAttribute("role","menuitem");
+    if(isScr) item.dataset.sid=id; else item.dataset.tid=tb.id;
+    if(on) item.setAttribute("aria-current","true");
+    if(isScr){
+      const hold=document.createElement("span");
+      hold.innerHTML=screenRowIcon(id);
+      if(hold.firstChild) item.appendChild(hold.firstChild);
+    }else{
+      const dot=document.createElement("span");
+      dot.className="tabs-list-dot";
+      dot.setAttribute("aria-hidden","true");
+      paintTabAccent(dot, on?(typeof cats!=="undefined"&&cats?cats:[]):(tb.cats||[]));
+      item.appendChild(dot);
+    }
+    const label=document.createElement("span");
+    label.className="tabs-list-name";
+    if(!isScr) label.setAttribute("data-i18n-skip","");
+    label.textContent=name;
+    item.appendChild(label);
+    if(on){
+      const hold=document.createElement("span");
+      hold.innerHTML=checkSvg;
+      if(hold.firstChild) item.appendChild(hold.firstChild);
+    }
+    item.onclick=()=>{
+      closeTabList(false);
+      if(isScr){ if(typeof frontScreenTab==="function") frontScreenTab(id); }
+      else switchTab(tb.id);
+    };
+    row.appendChild(item);
+    if(!isScr){
+      const x=document.createElement("button");
+      x.type="button";
+      x.className="tabs-list-x";
+      x.title=t(tabs.length===1?"Clear tab fields":"Close tab");
+      x.setAttribute("aria-label",t(tabs.length===1?"Clear tab":"Close tab")+": "+name);
+      x.innerHTML=ICON_TAB_X;
+      x.onclick=ev=>{ ev.stopPropagation(); ev.preventDefault(); closeTab(tb.id,ev); };
+      row.appendChild(x);
+    }
+    rowsBox.appendChild(row);
+  });
+  if(preserveFocus && hadFocus && !menu.hidden){
+    const keysMode=typeof document!=="undefined" && document.documentElement && document.documentElement.dataset
+      && document.documentElement.dataset.hand==="keys";
+    const items=[].slice.call(rowsBox.querySelectorAll(".tabs-list-item"));
+    const target=(keysMode && items.length)
+      ?(prevIdx>=0?items[Math.min(prevIdx,items.length-1)]:(rowsBox.querySelector(".tabs-list-row.on .tabs-list-item")||items[0]))
+      :menu;
+    if(target && typeof target.focus==="function") try{ target.focus({preventScroll:true}); }catch(_){ target.focus(); }
+  }
+}
+/** Keep #tabsListMenu synchronised with strip overflow and open tabs. */
+function syncTabList(){
+  const m=$("#tabsListMenu"), wrap=$("#tabsWrap");
+  if(!m||m.hidden) return;
+  if(!wrap||!wrap.classList.contains("tabs-over")){ closeTabList(false); return; } // plant:tab-list-overflow
+  drawTabList(true);
+}
+/** Open the all-open-tabs menu; keyboard opens with focus on the active tab row. */
+function openTabList(byKey){
+  const m=$("#tabsListMenu"), b=$("#tabsListBtn"), wrap=$("#tabsWrap");
+  if(!m||!b||!wrap||!wrap.classList.contains("tabs-over")) return;
+  if(beforeTabListOpen) beforeTabListOpen();
+  drawTabList(false);
+  m.hidden=false;
+  b.classList.add("on");
+  b.setAttribute("aria-expanded","true");
+  const activeItem=m.querySelector(".tabs-list-row.on .tabs-list-item");
+  const target=activeItem||m.querySelector(".tabs-list-item");
+  if(target && typeof target.scrollIntoView==="function") try{ target.scrollIntoView({block:"nearest"}); }catch(_){}
+  const f=byKey?(target||m):m;
+  if(f && typeof f.focus==="function") try{ f.focus({preventScroll:true}); }catch(_){ f.focus(); }
+}
+/** Shut the all-open-tabs menu, returning focus to #tabsListBtn when asked. */
+function closeTabList(giveFocus){
+  const m=$("#tabsListMenu"), b=$("#tabsListBtn"), wrap=$("#tabsWrap");
+  if(!m||m.hidden) return;
+  const cur=typeof document!=="undefined"?document.activeElement:null;
+  const had=cur && (m.contains(cur)||cur===m);
+  m.hidden=true;
+  if(b){ b.classList.remove("on"); b.setAttribute("aria-expanded","false"); }
+  if(giveFocus){
+    if(b && wrap && wrap.classList.contains("tabs-over") && typeof b.focus==="function"){
+      try{ b.focus({preventScroll:true}); }catch(_){ b.focus(); }
+    }
+  }else if(had && cur && typeof cur.blur==="function"){
+    cur.blur();
+  }
 }
 // Re-fit tab labels when the window (or bar) width changes - names and their stubs
 // Document-level listeners: drawTabs rebuilds nodes mid-drag
@@ -1699,5 +1834,6 @@ export {
   tabInsertAnimating,
   turnScreenTabToCards,
   TAB_FLOOR_W, reopenClosedTab, closeAllTabs, escapeHeld, askClose, closeTabById, closeOtherTabs, closedTabCount, activeTabName,
-  beginTabRename, finishTabRename, cancelTabRename, clearTabRename, moveTab, getTabOrder, tabOrder
+  beginTabRename, finishTabRename, cancelTabRename, clearTabRename, moveTab, getTabOrder, tabOrder,
+  drawTabList, syncTabList, openTabList, closeTabList, wireTabListBeforeOpen
 };

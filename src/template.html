@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Etiuda - an offline, single-file macro bank for live-chat support agents.
+<!-- Etiuda - a single-file macro bank for live-chat support agents.
      Copyright (c) 2026 Maxim Gwiazda · Etiuda Source-Available Licence 1.0 (notice below).
      No version here: E_VERSION is the one source of truth.
      The charset declaration must sit within the first 1024 bytes of the document, so this
@@ -386,7 +386,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      the ink of whichever theme is on; the two shares are PICKED BY EYE from a sheet of twelve
      (ruled 2026-09-17) rather than derived, because a pale ground swallows a dot that a dark one
      shows. Declared in all four token blocks, like every theme-dependent token here. */
-  --dots-ink:color-mix(in srgb,var(--dim) 60%,transparent);
+  --dots-ink:color-mix(in srgb,var(--dim) 42%,transparent);
   /* The WinUI dress: header fields sit ABOVE their chrome - lighter than it in both themes -
      and wear a darker bottom edge; focus underlines in accent instead of ringing. The band
      is the blue behind brand and tabs; the chrome is the header below it. */
@@ -395,11 +395,14 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      White wherever the band is deep, which is everywhere but a light session under the host's
      material; the rule that flips it sits beside the scrim. */
   --band-ink:#fff; --band-ink-rgb:255,255,255;
-  --field:#fdfdfd; --field-line:#e0e4ea; --field-edge:#aab3c0;
+  /* Field edge at least 3:1 against every ground it meets (--bg, --panel, --header-bg, and --field),
+     matching Studio's --edge rule (WCAG 1.4.11). */
+  --field:#fdfdfd; --field-line:#e0e4ea; --field-edge:#aab3c0; --edge:#838c9a;
   /* The star is a mark you scan for, not text you read - its ~2.6:1 on white is spent
      deliberately, and the badge, the filled star and the intent panel's gold edge always say
      it too. DARK IS NOT SYNCED to this hue and must not be. */
   --fav:#c69a2a; --fav-soft:rgba(218,180,65,.30);
+  --flag:#d98a1f; --flag-ink:#8a5206;
   --ed:#0e67d8; --ed-soft:rgba(14,103,216,.13);
   --pl:#6b3fa0;; --go:#047857; --go-soft:#d1fae5;
   /* The radius scale: 12 surfaces, 8 controls sitting on them, 6 small targets inside
@@ -510,14 +513,16 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --bg:#0f1013; --panel:#131418; --ink:#e3e6ea; --dim:#8f98a6; --line:#262a31;
   --dots-ink:color-mix(in srgb,var(--dim) 30%,transparent);
   /* The dark half of the WinUI dress - see the light block for the law. */
-  /* Darker than the chrome, so the band recedes and the active tab pops FORWARD. */
-  --band:#0a0d13; --header-bg:#191b20;
-  --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30);
+  /* The band is the light theme's cobalt in the dark too, as Studio's violet is one colour in both themes. */
+  --band:#0f4c9d; --header-bg:#191b20;
+  /* #68707c lifts Studio's #646c78 four steps so the edge clears 3:1 against Desk's --field (#23262c) too. */
+  --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30); --edge:#68707c;
   --accent:#409afc; --accent-fill:#136adc; --accent-soft:#16233a; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28);
+  --flag:#d98a1f; --flag-ink:#f2b45c;
   --ed:#409afc; --ed-soft:rgba(64,154,252,.16);
   --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
-  --bub:#136adc; --bub-shadow:rgba(0,0,0,.55);
+  --bub:#136adc; --bub-shadow:rgba(37,99,235,.30); /* a soft glow in its own colour, weaker than the light theme's (Max 2026-11-15, "ANd I agree with glow in dark mode."; the product designer's value) */
   --scroll-thumb:color-mix(in srgb,rgb(152,162,179) 40%,var(--bg));
   --scroll-thumb-hover:color-mix(in srgb,rgb(152,162,179) 75%,var(--bg));
   --bevel:inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(0,0,0,.38),inset 1px 0 0 rgba(255,255,255,.05);
@@ -551,14 +556,16 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --bg:#0f1013; --panel:#131418; --ink:#e3e6ea; --dim:#8f98a6; --line:#262a31;
   --dots-ink:color-mix(in srgb,var(--dim) 30%,transparent);
   /* The dark half of the WinUI dress - see the light block for the law. */
-  /* Darker than the chrome, so the band recedes and the active tab pops FORWARD. */
-  --band:#0a0d13; --header-bg:#191b20;
-  --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30);
+  /* The band is the light theme's cobalt in the dark too, as Studio's violet is one colour in both themes. */
+  --band:#0f4c9d; --header-bg:#191b20;
+  /* #68707c lifts Studio's #646c78 four steps so the edge clears 3:1 against Desk's --field (#23262c) too. */
+  --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30); --edge:#68707c;
   --accent:#409afc; --accent-fill:#136adc; --accent-soft:#16233a; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28);
+  --flag:#d98a1f; --flag-ink:#f2b45c;
   --ed:#409afc; --ed-soft:rgba(64,154,252,.16);
   --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
-  --bub:#136adc; --bub-shadow:rgba(0,0,0,.55);
+  --bub:#136adc; --bub-shadow:rgba(37,99,235,.30); /* a soft glow in its own colour, weaker than the light theme's (Max 2026-11-15, "ANd I agree with glow in dark mode."; the product designer's value) */
   --scroll-thumb:color-mix(in srgb,rgb(152,162,179) 40%,var(--bg));
   --scroll-thumb-hover:color-mix(in srgb,rgb(152,162,179) 75%,var(--bg));
   --bevel:inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(0,0,0,.38),inset 1px 0 0 rgba(255,255,255,.05);
@@ -588,15 +595,18 @@ button,a,label,select,summary,[role="button"]{cursor:default}
 :root[data-theme=light]{
   color-scheme:light;
   --bg:#f7f8fa; --panel:#ffffff; --ink:#0f172a; --dim:#475569; --line:#e4e8ee; --line-strong:#cfd6e0;
-  --dots-ink:color-mix(in srgb,var(--dim) 60%,transparent);
+  --dots-ink:color-mix(in srgb,var(--dim) 42%,transparent);
   /* The light half of the WinUI dress - the law lives at the base :root block. */
   --band:#0f4c9d; --header-bg:#f0f2f5;
-  --field:#fdfdfd; --field-line:#e0e4ea; --field-edge:#aab3c0;
+  /* Field edge at least 3:1 against every ground it meets (--bg, --panel, --header-bg, and --field),
+     matching Studio's --edge rule (WCAG 1.4.11). */
+  --field:#fdfdfd; --field-line:#e0e4ea; --field-edge:#aab3c0; --edge:#838c9a;
   --accent:#0e67d8; --accent-fill:#0e67d8; --accent-soft:#dde9fc; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8; --mark-ink:#0e67d8;
   /* The star is a mark you scan for, not text you read - its ~2.6:1 on white is spent
      deliberately, and the badge, the filled star and the intent panel's gold edge always say
      it too. DARK IS NOT SYNCED to this hue and must not be. */
   --fav:#c69a2a; --fav-soft:rgba(218,180,65,.30);
+  --flag:#d98a1f; --flag-ink:#8a5206;
   --ed:#0e67d8; --ed-soft:rgba(14,103,216,.13);
   --pl:#6b3fa0;; --go:#047857; --go-soft:#d1fae5;
   --bub:#0e67d8; --bub-shadow:rgba(14,103,216,.30);
@@ -645,7 +655,10 @@ input,textarea,[contenteditable="true"],.mg-cat-lab2{cursor:text}
 input[type=checkbox],input[type=radio],input[type=range],input[type=hidden],select,button{cursor:default}
 html{height:100%;overflow:hidden}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);
-  display:flex;flex-direction:column;height:100%;overflow:hidden}
+  display:flex;flex-direction:column;height:100%;overflow:hidden;
+  user-select:none;-webkit-user-select:none}
+input,textarea,[contenteditable="true"],[contenteditable=""],.mono,code,pre,.ec-fp,.e-join-code,.e-join-key,.e-lead-key,.e-ksig,.e-notice-err,.mt-row .v{
+  user-select:text;-webkit-user-select:text}
 /* Reserve the scrollbar lane: filtering swings the list across one viewport many times a
    minute, and each crossing otherwise reflows the whole centred column sideways. */
 .stage{flex:1 1 auto;min-height:0;display:grid;grid-template:minmax(0,1fr)/minmax(0,1fr)}
@@ -700,13 +713,19 @@ body.e-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,4
 .row{display:flex;gap:8px;align-items:flex-end;flex-wrap:nowrap;max-width:var(--app-max);
   margin:-10px auto 0;padding-top:4px;min-width:0;position:relative;color:#f2f6ff}
 .row::before{content:"";position:absolute;top:0;bottom:0;left:calc(-1 * var(--app-pad));
-  right:calc(-1 * var(--app-pad));background:var(--band);z-index:-1}
+  right:calc(-1 * var(--app-pad));background:color-mix(in srgb,var(--band) 62%,var(--bg));z-index:-1}
+/* Without the material a light page takes the band deeper, 78 per cent, so its white words clear 4.5:1. */
+:root[data-theme=light] body:not(.e-backdrop) .row::before{background:color-mix(in srgb,var(--band) 78%,var(--bg))}
 /* Band furniture: what stands on the blue dresses in white. What stands there is the brand,
    the tab strip and the window's own three controls; the tools live on the row below. */
-.row .tabs-nav{color:rgba(var(--band-ink-rgb),.7)}
-.row .tabs-nav:hover:not(:disabled),.row .tabs-nav:focus-visible:not(:disabled){color:var(--band-ink)}
+.row .tabs-nav,.row .tabs-list-btn{color:rgba(var(--band-ink-rgb),.7)}
+.row .tabs-nav:hover:not(:disabled),.row .tabs-nav:focus-visible:not(:disabled),
+.row .tabs-list-btn:hover,.row .tabs-list-btn:focus-visible,.row .tabs-list-btn.on{color:var(--band-ink)}
 .row .tabs-nav:hover:not(:disabled) .tabs-nav-mark,
-.row .tabs-nav:focus-visible:not(:disabled) .tabs-nav-mark{color:var(--band-ink);background:var(--strip-hover)}
+.row .tabs-nav:focus-visible:not(:disabled) .tabs-nav-mark,
+.row .tabs-list-btn:hover .tabs-list-mark,
+.row .tabs-list-btn:focus-visible .tabs-list-mark,
+.row .tabs-list-btn.on .tabs-list-mark{color:var(--band-ink);background:var(--strip-hover)}
 .brand{color:var(--band-ink)}
 /* THE LANGUAGE SWITCH ON PAPER. It carries the band's idea onto the second row rather than
    abandoning it: the thumb is a RAISED SURFACE and the language's colour is in the lettering,
@@ -769,7 +788,7 @@ body.e-host.e-max .win-g-max{display:none}
    rectangle. So each thing inside it that answers a click says no-drag, the popovers included:
    a menu or the facts panel opens across the band's own rectangle and would be dead under it. */
 body.e-host .row{app-region:drag;-webkit-app-region:drag;user-select:none}
-body.e-host .row button,body.e-host .row input,body.e-host .row .tab{
+body.e-host .row button,body.e-host .row input,body.e-host .row .tab,body.e-host .row .menu{
   app-region:no-drag;-webkit-app-region:no-drag}
 body.e-host .row .cat-now.is-waiting{app-region:no-drag;-webkit-app-region:no-drag}
 
@@ -797,19 +816,17 @@ body.e-backdrop header{
    unchanged. Spec section 10. */
 body.e-backdrop .row::before{
   background:color-mix(in srgb,var(--band-accent,var(--band)) 62%,transparent)}
-/* THE PALE BAND. Every title bar on this desktop goes near-white in a light session and ours
-   read as the one dark strip on the screen. The scrim stays a scrim - 62 per cent, the material
-   still moving through it - and the furniture that stands on it turns dark, which is the swap
-   Windows makes for caption text rather than a second design. Deep enough to hold the selected
-   tab's own face apart from it, and dark ink clears 4.5:1 on it over any material. */
-:root[data-theme=light] body.e-backdrop{
-  --band:#dee3ec;
-  --band-ink:#0f172a; --band-ink-rgb:15,23,42;
-  --tab-edge:rgba(var(--band-ink-rgb),.28);
-  --strip-hover:rgba(var(--band-ink-rgb),.10)}
+/* THE TINTED BAND, Studio's construction in the desk's colour: the cobalt at 62 per cent over the material with white
+   furniture on it, in both themes, so the tabs always stand clear of it. Without the material the same mix stands over
+   the page's colour (.row::before), so turning the material off leaves the band's colour where it was. */
+:root body.e-backdrop{
+  --band:#0f4c9d;
+  --band-ink:#fff; --band-ink-rgb:255,255,255;
+  --tab-edge:rgba(255,255,255,.32);
+  --strip-hover:rgba(255,255,255,.18)}
 /* AN ACCENT OUTRANKS THE THEME, both ways: Windows hands over one colour and the caption
    furniture follows its lightness, so the engine says which way this one faces (host.js) and
-   these two answer it. Same specificity as the rule above and written after it deliberately. */
+   these two answer it. They out-specify the rule above by their class. */
 :root body.e-backdrop.e-band-pale{
   --band-ink:#0f172a; --band-ink-rgb:15,23,42;
   --tab-edge:rgba(var(--band-ink-rgb),.28);
@@ -949,6 +966,14 @@ span[data-icon]{line-height:0}
   background:var(--tab-edge);pointer-events:none}
 #tabsPrev::after{right:0}
 #tabsNext::before{left:0}
+.tabs-wrap:has(#tabsListMenu:not([hidden])){z-index:80}
+.tabs-list-wrap{display:none;flex:0 0 auto;align-self:flex-end;position:relative;z-index:5}
+.tabs-wrap.tabs-over .tabs-list-wrap{display:inline-flex}
+.tabs-list-btn{flex:0 0 auto;width:20px;height:32px;margin:0;padding:0;border:0;border-radius:0;
+  background:transparent;color:var(--dim);font:inherit;cursor:default;
+  display:inline-flex;align-items:center;justify-content:center;
+  appearance:none;-webkit-appearance:none;box-shadow:none}
+.tabs-list-mark{display:inline-flex;align-items:center;justify-content:center;padding:2px;border-radius:4px}
 .tab{display:inline-flex;align-items:center;gap:6px;
   flex:1 1 0;/* share width; applyTabWidths usually sets fixed width */
   width:0;
@@ -988,12 +1013,6 @@ span[data-icon]{line-height:0}
    Hover is WHITE, not accent - it stands on the band, where accent-on-blue would vanish. */
 .tab:hover,.tab:focus-visible,.tab:focus-within{color:var(--band-ink);--tab-face:var(--strip-hover)}
 :root{--strip-hover:rgba(255,255,255,.18)}
-/* Charcoal cannot use the same alpha. White is not part of this design, so an alpha over it
-   says nothing about either band: .18 reaches 1.676:1 on the dark band, louder than the
-   selected tab's own 1.129:1, and the tab under the cursor outranked the tab you were in.
-   Mixed from the SELECTED face instead, the hover is a fraction of what it previews and cannot
-   overtake it, whatever either surface later becomes. 55% sits halfway there, at 1.063:1. */
-:root:not([data-theme=light]){--strip-hover:color-mix(in srgb,var(--header-bg) 55%,transparent)}
 /* The selected tab meets the chrome via BOX-SHADOW: the band/chrome boundary SNAPS to the
    device grid while margins do not, so border tricks miss at every dpr but 1. A shadow
    escapes the tab's tight overflow; 2px down, 2px extent covers however it snapped. */
@@ -1005,26 +1024,6 @@ span[data-icon]{line-height:0}
   z-index:2;
   box-shadow:0 2px 0 0 var(--header-bg)}
 .tab.on:hover,.tab.on:focus-visible,.tab.on:focus-within{background:var(--header-bg);color:var(--ink)}
-/* THE ACTIVE TAB'S BAR, dark only: the selected face clears the band by 1.129:1 and needs
-   saying twice. Not in light: on cobalt the category colours do not read, and a white tab
-   needs no help. Coloured by this tab's categories through the dot's own plumbing. The
-   crescent is the rail's trick on its side, see .rail-item.rail-rel::before: one box masked
-   by two rounded rects offset and subtracted, which strokes the RADIUS instead of slicing a
-   band off the top, so the gradient wraps the shoulders. rx tracks .tab's own 10px. */
-:root:not([data-theme=light]) .tab.on::after{content:"";position:absolute;inset:0;
-  pointer-events:none;background-color:var(--ecat,var(--accent));
-  background-image:var(--tab-accent-img,none);
-  --tb-rect:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><rect width='100%25' height='200%25' rx='10'/></svg>");
-  -webkit-mask-image:var(--tb-rect),var(--tb-rect);
-  -webkit-mask-size:100% 100%,100% 100%;
-  -webkit-mask-position:0 0,0 2px;
-  -webkit-mask-repeat:no-repeat,no-repeat;
-  -webkit-mask-composite:source-out;
-  mask-image:var(--tb-rect),var(--tb-rect);
-  mask-size:100% 100%,100% 100%;
-  mask-position:0 0,0 2px;
-  mask-repeat:no-repeat,no-repeat;
-  mask-composite:subtract}
 .tab.on .tab-x{color:var(--dim);opacity:.85}
 .tab.on .tab-x:hover,.tab.on .tab-x:focus-visible{color:#c44;background:rgba(196,68,68,.14)}
 .tab.dragging{opacity:.55;z-index:3}
@@ -1071,7 +1070,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .tab-x{border:0;background:transparent;color:rgba(var(--band-ink-rgb),.7);cursor:default;padding:2px;
   border-radius:4px;flex:0 0 auto;opacity:.75;
   display:inline-flex;align-items:center;justify-content:center}
-.tab-x .ic,.tab-add-mark .ic,.tabs-nav-mark .ic{width:16px;height:16px;stroke-width:1.5}
+.tab-x .ic,.tab-add-mark .ic,.tabs-nav-mark .ic,.tabs-list-mark .ic{width:16px;height:16px;stroke-width:1.5}
 .tab:hover .tab-x,.tab:focus-visible .tab-x,.tab:focus-within .tab-x,.tab-x:focus-visible{opacity:1}
 .tab-x:hover,.tab-x:focus-visible{color:#c44;background:rgba(196,68,68,.14);opacity:1}
 /* No hairline between the last tab and + - if the strip's end ever needs marking again,
@@ -1110,15 +1109,15 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .tab-add:disabled:hover .tab-add-mark{color:inherit;background:transparent}
 .fill{display:flex;gap:6px;align-items:center}
 /* WinUI textbox: the field above its chrome, a darker bottom edge, and focus as a 2px accent
-   underline drawn inset - never a ring, and never a border that moves the layout. THE CHROME
+   underline drawn inset instead of a focus ring, and never a border that moves the layout. THE CHROME
    IS ON THE WRAP, never on the input: cut text fades under a mask, and a mask over an input
    takes its border and its ground along with the words. :focus-within lights the box from
    inside. */
 .fill input{width:112px;padding:7px 10px;border:0;background:transparent;
   color:var(--ink);font:13px var(--sans);outline:none}
-.fill .field-wrap,.fill .combo{border:1px solid var(--field-line);border-radius:var(--radius-sm);
-  background:var(--field);box-shadow:inset 0 -1px 0 0 var(--field-edge)}
-.fill .field-wrap:focus-within,.fill .combo:focus-within{box-shadow:inset 0 -2px 0 0 var(--accent)}
+.fill .field-wrap,.fill .combo{border:1px solid var(--edge);border-radius:var(--radius-sm);
+  background:var(--field);box-shadow:inset 0 -1px 0 0 var(--field-edge);outline:none}
+.fill .field-wrap:focus-within,.fill .combo:focus-within{outline:none;box-shadow:inset 0 -2px 0 0 var(--accent)}
 /* The primary control of the screen, and the TYPE says so, not the box: --intent-type reads a
    size above every sibling while 8.5px of padding holds the exact height the field always
    had. padding-right clears the clear button, whose lane is all that remains of the
@@ -1196,7 +1195,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .seg button.on{background:transparent}
 
 .btn{padding:7px 11px;border:1px solid transparent;border-radius:var(--radius-sm);
-  background:color-mix(in srgb,var(--ink) 4%,transparent);
+  --btn-rest:color-mix(in srgb,var(--ink) 4%,transparent);background:var(--btn-rest);
   color:var(--ink);font:13px var(--sans);cursor:default;white-space:nowrap;flex:0 0 auto}
 /* .tour-sel rides along here on purpose: the tour's ←/→ selection must look exactly like
    hover, so both states share one declaration and cannot drift apart. */
@@ -1204,6 +1203,10 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
    though it could, and red on a dead Delete promises a risk that is not there. The danger
    hover and the disabled look carry the same weight, so source order alone decided it. */
 .btn:not([disabled]):hover,.btn:not([disabled]):focus-visible,.tour-actions .btn.tour-sel{color:var(--accent);background:var(--accent-soft)}
+/* On a white card the edge is what says button. A card that is not white, and the toolbar, keep the grey fill. */
+:root[data-theme=light] .sx-card .btn:not(.primary):not(.danger){border-color:var(--line-strong);background:var(--panel)}
+:root[data-theme=light] .sx-card .btn:not(.primary):not(.danger):not([disabled]):hover,
+:root[data-theme=light] .sx-card .btn:not(.primary):not(.danger):not([disabled]):focus-visible{color:var(--accent);background:var(--accent-soft)}
 /* THE KEYBOARD'S HALF: the tint alone is too faint to follow from key to key, so a focused button
    in a dialog also takes an edge two pixels deep, the accent the X and the pills wear, in its own
    colour on a danger button and the dialog's ground inside a filled one. The pointer never sees it. */
@@ -1249,8 +1252,7 @@ body.shed-segfold #seg::before{width:100%;transform:none}
   input:not([type=checkbox]):not([type=radio]),textarea,select{font-size:16px!important}
 }
 #settingsBtn.on,#moreBtn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
-/* A menu row is an icon and a word. The icon is dim until the pointer or the keyboard reaches
-   the row, when it turns accent; the words stay ink. The language badge fills the same slot the
+/* A menu row is an icon and a word, the icon dim and the words ink. The language badge fills the same slot the
    icons do, so those rows share one left edge. */
 .menu.menu-ic button{display:flex;align-items:center;gap:9px}
 .menu.menu-ic button .ic{flex:0 0 auto;color:var(--dim)}
@@ -1265,11 +1267,36 @@ body.shed-segfold #seg::before{width:100%;transform:none}
 .menu button{display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:4px 10px;border:0;border-radius:6px;
   background:transparent;color:var(--ink);font:13px/20px var(--sans);cursor:default}
 .menu button .sx-ic,.menu button .ic{flex:none;width:16px;height:16px;color:var(--dim)}
-.menu button:hover,.menu button:focus-visible{background:color-mix(in srgb,var(--accent) 9%,transparent);color:var(--ink);
-  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 16%,transparent)}
-.menu button:hover .sx-ic,.menu button:focus-visible .sx-ic,
-.menu button:hover .ic,.menu button:focus-visible .ic,
-.menu button:hover .more-lang-badge,.menu button:focus-visible .more-lang-badge{color:var(--accent)}
+/* ONE ROW MARKED AT A TIME, in Studio's menu look: the mark is the focus alone, a quiet fill with no ring, and the pointer
+   moving over a row hands it the focus (header-menus.js), so the pointer and the keys share one mark. A :hover mark, or
+   a fade between two rows, would be a second one. */
+.menu{--menu-mark:#e8ecf1}
+:root:not([data-theme=light]) .menu{--menu-mark:#2a2f37}
+.menu:focus{outline:none}
+.menu button:focus{background:var(--menu-mark);color:var(--ink);outline:none}
+.tabs-wrap .menu.tabs-list-menu{min-width:240px;width:max-content;max-width:min(360px,calc(100vw - 24px));
+  max-height:min(420px,calc(100vh - 80px));overflow-y:auto;gap:2px}
+.tabs-list-head{padding:5px 10px 6px;margin-bottom:3px;border-bottom:1px solid var(--line);
+  font:600 11px/1.2 var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--dim);user-select:none}
+.tabs-list-rows{display:flex;flex-direction:column;gap:1px}
+.tabs-list-row{display:flex;align-items:center;gap:2px;border-radius:6px}
+.tabs-list-row:focus-within{background:var(--menu-mark)}
+.menu .tabs-list-item{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:9px;width:auto;
+  padding:5px 8px 5px 10px;border-radius:6px;background:transparent;color:var(--ink)}
+.menu .tabs-list-item:focus:not(:focus-visible){background:transparent;color:var(--ink);outline:none}
+.tabs-list-row.on .tabs-list-item{font-weight:600}
+.tabs-list-name{flex:1 1 auto;min-width:0;white-space:normal;overflow-wrap:anywhere;line-height:1.35}
+.tabs-list-dot{flex:none;width:7px;height:7px;margin:0 4.5px;border-radius:50%;
+  background-color:var(--ecat,var(--dim));background-image:var(--tab-accent-img,none)}
+.tabs-list-row.on .tabs-list-dot{background-color:var(--ecat,var(--accent))}
+.menu .tabs-list-item .tabs-list-check{flex:none;width:15px;height:15px;color:var(--accent);stroke-width:2}
+.menu .tabs-list-x{flex:none;width:24px;height:24px;padding:0;margin-right:3px;border-radius:4px;
+  justify-content:center;color:var(--dim);background:transparent}
+.menu .tabs-list-x:focus:not(:focus-visible){background:transparent;color:var(--dim);outline:none}
+.menu .tabs-list-x .ic{width:14px;height:14px;color:currentColor}
+.menu .tabs-list-x:hover,.menu .tabs-list-x:focus-visible{color:#c44;background:rgba(196,68,68,.14)}
+.menu .tabs-list-item:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.menu .tabs-list-x:focus-visible{outline:2px solid #c44;outline-offset:-2px}
 .menu .menu-sep{height:1px;margin:3px 6px;background:var(--line);border:0;padding:0;pointer-events:none}
 /* A row's key at its right edge, in the row's quieter ink. */
 #menuPicker{display:flex;align-items:center;gap:9px}
@@ -1290,9 +1317,6 @@ body.shed-segfold #seg::before{width:100%;transform:none}
 .menu .menu-upd-acts button{width:auto}
 .menu #menuUpdateSee{color:var(--accent)}
 body.pills-off .pills-slot{display:none}
-/* The retreat is a fixed clone (see animatePillsBox). This class must not put the slot
-   back into flow: the snap has already taken its final display. */
-.pills-slot.pills-anim{overflow:hidden}
 /* Ctrl/Cmd peeks the hidden pills. ONE declaration, because the peeked bar must be a
    plain flat bar BY CONSTRUCTION: syncPillsCollapse() clears pills-overflow whenever the
    bar is off, so no clipped-bar or popover rule can match a bar that is not on screen. */
@@ -1404,9 +1428,10 @@ html.e-still .sgn-run::after{animation:none;transform:translateX(80%)}
 .sgn-link .sgn-cap b{color:var(--ink);font-weight:600}
 .sgn-link-row{display:flex;gap:8px;align-items:center;margin-top:6px;min-width:0}
 /* A reference, so in the ordinary weight and the dim ink; the input type in the selector outranks the header's .fill input. */
-.sgn-link input.sgn-link-f{flex:1 1 auto;width:auto;min-width:0;padding:5px 8px;border:1px solid var(--field-line);border-radius:var(--radius-sm);
+.sgn-link input.sgn-link-f{flex:1 1 auto;width:auto;min-width:0;padding:5px 8px;border:1px solid var(--edge);border-radius:var(--radius-sm);
   background:var(--field);color:var(--dim);font:400 12.5px var(--mono);white-space:nowrap;overflow:hidden;cursor:text;outline:none;
   box-shadow:inset 0 -1px 0 0 var(--field-edge)}
+.sgn-link input.sgn-link-f:focus,.sgn-link input.sgn-link-f:focus-visible{outline:none;box-shadow:inset 0 -2px 0 0 var(--accent)}
 .sgn-link-row .btn{flex:none}
 /* The sign-in's Copy (signinCopyHtml): "Copy" and "Copied" share one cell, so the button holds the wider label's width. */
 .sgn-copy{display:inline-grid;justify-items:center}
@@ -1471,8 +1496,9 @@ html.e-still .sgn-run::after{animation:none;transform:translateX(80%)}
      the window, so it never exceeds the panel's own clamp. */
   flex:1 1 auto;min-height:min(52vh,500px);
   margin:0;padding:8px;font:12px/1.6 var(--mono);white-space:pre;overflow:auto;resize:none;
-  color:var(--ink);background:var(--bg);border:1px solid var(--line-strong);border-radius:var(--radius-sm);outline:none}
-.facts-panel #factsEdit:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+  color:var(--ink);background:var(--bg);border:1px solid var(--edge);border-radius:var(--radius-sm);outline:none;
+  box-shadow:inset 0 -1px 0 0 var(--field-edge)}
+.facts-panel #factsEdit:focus,.facts-panel #factsEdit:focus-visible{outline:none;box-shadow:inset 0 -2px 0 0 var(--accent)}
 /* Editing takes the full width back: a textarea's intrinsic width is a couple dozen
    characters, and the moment width matters most is while aligning the columns. */
 .facts-panel.editing{width:min(720px, var(--facts-maxw, calc(100vw - 28px)))}
@@ -1550,8 +1576,9 @@ body.role-waits #roleDrum{display:none}
 #roleDrum:hover .rd-prev,#roleDrum:hover .rd-next,#roleDrum:focus-visible .rd-prev,#roleDrum:focus-visible .rd-next{opacity:.5}
 #roleDrum .rd-track.rd-up{animation:rd-up var(--m-move) var(--m-ease)}
 #roleDrum .rd-track.rd-down{animation:rd-down var(--m-move) var(--m-ease)}
-/* The gender glyph at the box's right end: grey when read from the name, ink and the accent's dot when
-   set by hand. A click, the wheel and the arrow keys turn it (gender-turn.js). */
+/* The gender glyph at the box's right end: dim when the customer name is empty, full ink once
+   typed, and heavier stroke plus the accent's dot when set by hand. A click, the wheel and the
+   arrow keys turn it (gender-turn.js). */
 #genderDrum{position:relative;flex:0 0 auto;width:var(--gender-glyph);border-left:1px solid var(--field-line);
   overflow:hidden;user-select:none;-webkit-user-select:none;outline:none;
   border-radius:0 var(--radius-sm) var(--radius-sm) 0;
@@ -1562,7 +1589,8 @@ body.role-waits #roleDrum{display:none}
 .paxrole .field-clear{right:calc(var(--gender-glyph) + 4px)}
 #genderDrum .gd-track{position:absolute;inset:0}
 #genderDrum svg{position:absolute;left:50%;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round}
-#genderDrum .gd-cur{top:50%;width:15px;height:15px;transform:translate(-50%,-50%);stroke-width:1.65;color:var(--dim)}
+#genderDrum .gd-cur{top:50%;width:15px;height:15px;transform:translate(-50%,-50%);stroke-width:1.65;color:var(--ink)}
+#genderDrum.gd-empty:not(.gd-hand) .gd-cur{color:var(--dim)}
 #genderDrum.gd-hand .gd-cur{color:var(--ink);stroke-width:1.9}
 #genderDrum .gd-prev,#genderDrum .gd-next{width:7px;height:7px;transform:translateX(-50%);stroke-width:2.4;
   color:var(--ink);opacity:0;transition:opacity var(--m-tone) ease}
@@ -1579,10 +1607,13 @@ body.role-waits #roleDrum{display:none}
    selector was `.fill select` alone until Settings needed a language list; widened rather than
    copied, for the reason the rest of this release keeps repeating. A text field on that screen
    joins them: one dressing for anything in a settings row that takes a value. */
-.fill select,.set-row select,.set-row input[type=text],.om-fields select,.om-fields input{padding:7px 9px;border:1px solid var(--field-line);border-radius:var(--radius-sm);
-  background:var(--field);color:var(--ink);font:13px var(--sans);cursor:default;outline:none;
+.fill select,.set-row select,.set-row input[type=text],.om-fields select,.om-fields input{padding:7px 9px;border:1px solid var(--edge);border-radius:var(--radius-sm);
+  background:var(--field);color:var(--ink);font:13px var(--sans);cursor:default;
   box-shadow:inset 0 -1px 0 0 var(--field-edge)}
-.fill select:focus,.set-row select:focus,.set-row input[type=text]:focus,.om-fields select:focus,.om-fields input:focus{border-color:var(--field-line);box-shadow:inset 0 -2px 0 0 var(--accent)}
+.set-row input[type=text],.om-fields input{outline:none}
+.set-row input[type=text]:focus,.om-fields input:focus,
+.set-row input[type=text]:focus-visible,.om-fields input:focus-visible{
+  outline:none;border-color:var(--edge);box-shadow:inset 0 -2px 0 0 var(--accent)}
 .set-row input[type=text]{width:var(--name-field);max-width:100%;cursor:text}
 /* {INTENT} combobox - a real dropdown that still accepts free text */
 .combo{position:relative;flex:1 1 auto;display:flex;min-width:0}
@@ -1884,8 +1915,8 @@ main{max-width:none;margin:16px 0 0;padding:0}
 /* The count and the fold sit at the far end of the group's own rule, so the eye meets the
    name first and the control only when it is looking for one. See .list-sep.e-catsep::after. */
 .list-sep .sep-n{flex:none;margin-left:8px;font:600 12px/calc(11px * 1.5) var(--sans);color:var(--dim);
-  opacity:1;font-variant-numeric:tabular-nums;background:var(--bg);padding:0 2px 0 8px}
-.list-sep .sep-fold{flex:none;margin-left:6px;padding:2px;border:0;background:transparent;
+  opacity:1;font-variant-numeric:tabular-nums;background:var(--bg);padding:0 2px 0 5px}
+.list-sep .sep-fold{flex:none;margin-left:6px;padding:2px;border:0;background:var(--bg);
   color:var(--dim);border-radius:6px;cursor:default;line-height:0}
 .list-sep .sep-fold:hover,.list-sep .sep-fold:focus-visible{color:var(--accent)}
 /* Right chevron pointing down when open, and back to the right when shut - the same rotation
@@ -1967,7 +1998,7 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 html.eddrag, html.eddrag *{cursor:default!important;user-select:none!important;-webkit-user-select:none!important}
 .cbadge.hit{background:var(--go-soft);color:var(--go)}
 .cbadge.cat{background:var(--accent-soft);color:var(--accent)}
-.cbadge.fav{background:var(--fav-soft);color:var(--fav)}
+.cbadge.fav{background-color:var(--bg);background-image:linear-gradient(var(--fav-soft),var(--fav-soft));color:var(--fav)}
 /* The hue is worn by exactly TWO things: the pill's dot and the card's top-edge tag -
    NO icon carries it, so the editor's swatch means the dot and the edge, nothing else.
    Shape stays the channel that survives colour-blindness. All is chrome and wears nothing. */
@@ -2043,10 +2074,11 @@ html.eddrag, html.eddrag *{cursor:default!important;user-select:none!important;-
    mark in a slot of one width at the head, so every pixel the row holds over that slot belongs
    to the title, and the title is faded by the cut pass only when the row itself runs out. */
 .ctitle,.ccat{min-width:0;overflow:hidden;white-space:nowrap}
-.chead .ctitle{flex:0 1 auto}
+.chead .ctitle{flex:0 1 auto;background:var(--bg);box-shadow:0 0 0 3px var(--bg);border-radius:3px}
+.chead .cat-ic{background:var(--bg);box-shadow:0 0 0 3px var(--bg);border-radius:3px}
 .chead .cbadge{flex:0 0 auto}
 /* A card that commits the firm: the stamp after its title, in the warning colour. */
-.chead .cstamp{flex:0 0 auto;display:inline-flex;color:var(--warn)}
+.chead .cstamp{flex:0 0 auto;display:inline-flex;color:var(--warn);background:var(--bg);box-shadow:0 0 0 3px var(--bg);border-radius:3px}
 .cstamp .ic,.nx-stamp .ic{width:16px;height:16px}
 .intent-pick{max-height:200px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius-sm);
   padding:4px;background:var(--bg);display:flex;flex-direction:column;gap:1px;min-width:0}
@@ -2207,15 +2239,16 @@ body:not(.deck-off) #list .card,body:not(.deck-off) #list .list-sep{transition:o
 :root[data-theme=light] #list .deck-under{opacity:.3}
 #list .deck-fresh{transition:none!important}
 /* THE GLASS RIM: light catching an edge, drawn as a 1px ring cut from this gradient. A
-   line along the top and the bottom edge, brightest at the top's left and the bottom's right and
-   fading along the edge, wide and shallow so the sides are all but dark. The two catches are one
-   mirrored pair (top and bottom read alike) and a steady line holds both edges, so the brightest
-   point is within about one and a half times the dimmest and the line does not read thicker where it is brighter. Static.
+   line along the top and a quieter line along the foot, brightest at the top's left and
+   fading along the edge, wide and shallow so the sides are all but dark. The foot catch at
+   the bottom's right and the lower edge stop are scaled by --rim-foot so the foot sits well
+   below the top without altering the top's brightness or adding thickness. Static.
    Dark themes only. */
 :root:not([data-theme=light]){
+  --rim-foot:.2;
   --rim:radial-gradient(520px 36px at 0 0,rgba(255,255,255,.2),rgba(255,255,255,.08) 40%,transparent 85%),
-        radial-gradient(520px 36px at 100% 100%,rgba(255,255,255,.2),rgba(255,255,255,.08) 40%,transparent 85%),
-        linear-gradient(rgba(255,255,255,.18),transparent 12px calc(100% - 12px),rgba(255,255,255,.18)),
+        radial-gradient(520px 36px at 100% 100%,rgba(255,255,255,calc(.2 * var(--rim-foot))),rgba(255,255,255,calc(.08 * var(--rim-foot))) 40%,transparent 85%),
+        linear-gradient(rgba(255,255,255,.18),transparent 12px calc(100% - 12px),rgba(255,255,255,calc(.18 * var(--rim-foot)))),
         linear-gradient(rgba(255,255,255,.02),rgba(255,255,255,.02))}
 /* The macro's bevel gives way to the rim; the ring sits over its border. */
 :root:not([data-theme=light]) .txt{--card-shadow:0 0 #0000}
@@ -2254,10 +2287,12 @@ body:not(.deck-off) #list .card,body:not(.deck-off) #list .list-sep{transition:o
 /* The two in-card notices keep the slabs' own gutter, which is none: the card has no padding
    left to inset them from. */
 .miss{margin:0 0 10px;padding:9px 12px;border:1px dashed var(--line-strong);border-radius:var(--radius-sm);
-  color:var(--dim);font-size:13px}
+  background:var(--bg);color:var(--dim);font-size:13px}
 .swap{margin:0 0 10px;font-size:13px;color:var(--dim)}
+.swap b{background:var(--bg);box-shadow:0 0 0 3px var(--bg);border-radius:3px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .swap code{background:var(--accent-soft);color:var(--accent);padding:1px 6px;border-radius:4px;
-  font:12px var(--mono);cursor:default;display:inline-block;margin:2px 3px 2px 0}
+  font:12px var(--mono);cursor:default;user-select:none;-webkit-user-select:none;
+  display:inline-block;margin:2px 3px 2px 0}
 .swap code:hover{outline:1px solid var(--accent)}
 .swap code.on{background:var(--accent-fill);color:#fff}
 .swap code.on::after{content:" ✕";opacity:.7}
@@ -2280,10 +2315,11 @@ body:not(.deck-off) #list .card,body:not(.deck-off) #list .list-sep{transition:o
    18px row, and a taller row moves every card under it. */
 .list-sep.e-catsep>span:first-child,.list-sep.e-favsep>span:first-child{font-size:12px;
   line-height:calc(11px * 1.5);letter-spacing:.07em;color:var(--dim);opacity:1;
-  background:var(--bg);padding:0 8px 0 0}
+  background:var(--bg);padding:0 5px 0 0}
 .list-sep.e-catsep .sep-n,.list-sep.e-favsep .sep-n,
 .list-sep.e-catsep .sep-fold,.list-sep.e-favsep .sep-fold{order:9}
 .list-sep i{flex:1;height:1px;border-radius:0;background:var(--line)}
+.list-sep>span{background:var(--bg);padding:0 5px;border-radius:3px}
 .list-sep span{white-space:nowrap}
 /* One button slot per row, swapped by state: the hide button appears only on the hovered
    row and only while Ctrl is held - on every row at once it was a wall of icons.
@@ -2395,11 +2431,12 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
    change. .empty stays a plain centred block - its content is raw text with inline markup. */
 /* text-wrap:pretty keeps a one-word orphan off the last line; a no-op where unsupported. */
 .empty{text-align:center;color:var(--dim);padding:64px 16px 72px;font-size:14px;text-wrap:pretty}
+.empty:not(.empty-desk):not(.empty-cat){background:linear-gradient(var(--bg),var(--bg)) no-repeat 50% 61px / 54px 54px}
 .empty::before{content:"";display:block;width:48px;height:48px;margin:0 auto 16px;
-  background:var(--dim);opacity:.4;
+  background:color-mix(in srgb,var(--dim) 40%,var(--bg));opacity:1;
   -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='9.5' width='18' height='11' rx='2.5'/%3E%3Cpath d='M6 6.5h12M8.5 3.5h7'/%3E%3C/svg%3E") center/contain no-repeat;
   mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='9.5' width='18' height='11' rx='2.5'/%3E%3Cpath d='M6 6.5h12M8.5 3.5h7'/%3E%3C/svg%3E") center/contain no-repeat}
-.empty kbd{font:12px var(--mono);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+.empty kbd{font:12px var(--mono);border:1px solid var(--line);border-radius:4px;padding:1px 5px;background:var(--bg)}
 /* THE EMPTY DESK draws no picture of its own: the drawing the other empty states carry is dropped from its block. */
 .empty.empty-desk::before{content:none}
 .empty-desk{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:72px 16px 80px}
@@ -2411,7 +2448,7 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
 .empty-desk .mid-or a{color:inherit;text-decoration:none;border-bottom:1px solid currentColor;cursor:pointer}
 .empty-desk .mid-or a:hover{color:var(--accent)}
 .empty-desk #emptyJoin{margin-top:16px}
-.empty-desk .mid-folder{margin-top:28px;font-size:12.5px;opacity:.75}
+.empty-desk .mid-folder{margin-top:28px;font-size:12.5px;color:color-mix(in srgb,var(--ink) 75%,var(--bg))}
 /* THE LAUNCH (launch-mark.js): opening variant A, turning over window ground, landing on the corner mark; nothing of the UI before landing. --e-launch-out is the give-way fade. */
 .e-launch-veil{position:fixed;inset:0;z-index:100;width:100vw;height:100vh;background:var(--bg);display:block;
   margin:0;padding:0;overflow:hidden;transition:opacity var(--e-launch-out,.35s) ease-out}
@@ -2441,7 +2478,8 @@ code.open-folder:hover,code.open-folder:focus-visible{color:var(--accent);text-d
 /* The category's own icon stands in for the generic drawing, at its size and its weight. */
 .empty-cat::before{content:none}
 .empty .empty-ic{display:block;width:48px;height:48px;margin:0 auto 16px;vertical-align:0;
-  opacity:.4;stroke-width:1.2}
+  color:color-mix(in srgb,var(--dim) 40%,var(--bg));background:var(--bg);box-shadow:0 0 0 4px var(--bg);
+  border-radius:6px;stroke-width:1.2}
 /* A sealed catalog's empty desk and its bubble: the title with its lock, the code in two threes, and six drawn places
    while the code is still to come. */
 .e-join-t{font-size:19px;font-weight:600;color:var(--ink);display:inline-flex;align-items:center;gap:8px}
@@ -2449,17 +2487,17 @@ code.open-folder:hover,code.open-folder:focus-visible{color:var(--accent);text-d
 .e-join p{margin:8px auto 0;max-width:620px}
 .e-join-code{font:600 34px var(--mono);color:var(--ink);margin:18px 0 6px;display:flex;justify-content:center;gap:.6em}
 .e-join-wait i{display:inline-block;width:.62em;height:3px;margin:0 .1em;vertical-align:middle;border-radius:2px;background:var(--dim);opacity:.6}
-.e-join-meta{font:12px var(--mono);opacity:.75;margin-top:8px}
+.e-join-meta{font:12px var(--mono);color:color-mix(in srgb,var(--dim) 75%,var(--bg));margin-top:8px}
 .e-join-acts{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:16px}
-.e-join-paste{display:block;width:min(520px,100%);box-sizing:border-box;margin:14px auto 0;min-height:4.5em;padding:8px 10px;border:1px solid var(--line-strong);border-radius:8px;background:transparent;color:var(--ink);font:13px/1.45 var(--mono);resize:vertical}
-.e-join-bub .e-join-paste{width:100%;color:var(--bub-ink)}
+.e-join-paste{display:block;width:min(520px,100%);box-sizing:border-box;margin:14px auto 0;min-height:4.5em;padding:8px 10px;border:1px solid var(--line-strong);border-radius:8px;background:var(--bg);color:var(--ink);font:13px/1.45 var(--mono);resize:vertical}
+.e-join-bub .e-join-paste{width:100%;color:var(--bub-ink);background:transparent}
 .e-join-ask{margin:12px auto 0;max-width:520px}
-.e-join-why{margin:4px auto 0;max-width:520px;font-size:12px;opacity:.75}
-.e-join-check{display:block;width:6.5em;box-sizing:border-box;margin:8px auto 0;padding:6px 8px;border:1px solid var(--line-strong);border-radius:8px;background:transparent;color:var(--ink);font:600 18px var(--mono);letter-spacing:.2em;text-align:center}
+.e-join-why{margin:4px auto 0;max-width:520px;font-size:12px;color:color-mix(in srgb,var(--dim) 75%,var(--bg))}
+.e-join-check{display:block;width:6.5em;box-sizing:border-box;margin:8px auto 0;padding:6px 8px;border:1px solid var(--line-strong);border-radius:8px;background:var(--bg);color:var(--ink);font:600 18px var(--mono);letter-spacing:.2em;text-align:center}
 .e-join .btn:disabled,.e-join-bub .btn:disabled{opacity:.45}
 .e-join-bub .e-join-ask{margin:8px 0 0;color:var(--bub-ink)}
 .e-join-bub .e-join-why{margin:2px 0 0;color:var(--bub-dim)}
-.e-join-bub .e-join-check{margin:6px 0 0;color:var(--bub-ink)}
+.e-join-bub .e-join-check{margin:6px 0 0;color:var(--bub-ink);background:transparent}
 .e-join-bub .e-join-code{color:var(--bub-ink);font-size:28px;justify-content:flex-start;margin:8px 0 2px}
 .e-join-bub .e-join-wait i{background:var(--bub-dim)}
 .e-join-bub .e-join-meta{color:var(--bub-dim);margin:0 0 8px}
@@ -2645,10 +2683,11 @@ html.raildrag #intentRailList{margin-top:0}
    would simply lose the pencil, the eye and the star. */
 @media (hover:hover){
   .chead .cacts{opacity:0;transition:opacity var(--m-tone) ease}
-  .card:hover>.chead .cacts,.card:focus-within>.chead .cacts{opacity:1}
-  /* While they wait they take no width, so the title runs the whole row and recedes when they
+  .card:hover>.chead .cacts,.card:focus-within>.chead .cacts,.card:has([data-act=flag][aria-expanded=true])>.chead .cacts,.card:has([data-act=reword][aria-expanded=true])>.chead .cacts{opacity:1}
+  /* While a bubble from a card's button stands (the flag's, Reword's menu, its waiting line, its refusal) the card keeps its buttons out, with the
+     pointer or the keyboard anywhere, so the bubble points at a visible button; closed, they go back to waiting. While they wait they take no width, so the title runs the whole row and recedes when they
      come. The cut pass reads their width from here (cut-text.js, cut-rh). */
-  body:not(.tour-cacts) .card:not(:hover,:focus-within,.is-hidden)>.chead .cacts{
+  body:not(.tour-cacts) .card:not(:hover,:focus-within,.is-hidden):not(:has([data-act=flag][aria-expanded=true])):not(:has([data-act=reword][aria-expanded=true]))>.chead .cacts{
     width:0;overflow:hidden;margin-left:calc(-1*var(--chead-gap))}
 }
 /* A tour has no pointer, so a step showcasing the star, the eye or the pencil was pointing at
@@ -2845,18 +2884,34 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
    in the row without a tile under the cursor read as the one that had stopped working. */
 .cacts button.star-btn.on{color:var(--fav);background:transparent;box-shadow:none}
 .cacts button.star-btn.on:hover,.cacts button.star-btn.on:focus-visible{background:var(--fav-soft)}
+.chead .cacts button:not(:hover):not(:focus-visible),
+.chead .cacts button.star-btn.on:not(:hover):not(:focus-visible){background-color:var(--bg)}
 /* A tint alone is too faint once Tab lands here. The edge is the dialog button's, and it
    belongs to focus only: hover already has its tile. */
 .cacts button:focus-visible{box-shadow:inset 0 0 0 1px var(--accent)}
 .cacts button.danger:focus-visible{box-shadow:inset 0 0 0 1px #c44}
 .cacts button.star-btn:focus-visible{box-shadow:inset 0 0 0 1px var(--fav)}
+/* THE FLAG, lit amber while it is with the lead or its answer waits; outranks every resting ground (the product designer's
+   sheet of the flag, point 7). */
+.chead .cacts button.flag-btn.on{color:var(--flag-ink);background:color-mix(in srgb,var(--flag) 20%,var(--panel));box-shadow:inset 0 0 0 1px var(--flag)}
+.chead .cacts button.flag-btn.on .ic-flag path:last-child{fill:var(--flag)}
+.chead .cacts button.flag-btn.on:focus-visible{box-shadow:inset 0 0 0 2px var(--flag)}
+/* The mark beside the card's name: whole however short the row, the name giving way. */
+.chead .cflag{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;box-sizing:border-box;height:22px;margin:0 0 0 calc(10px - var(--chead-gap));
+  padding:0 9px;border:0;border-radius:7px;background:color-mix(in srgb,var(--flag) 16%,var(--bg));color:var(--flag-ink);
+  font:600 12px var(--sans);white-space:nowrap;user-select:none;-webkit-user-select:none;cursor:default}
+.chead .cflag .ic{width:13px;height:13px}
+.chead .cflag.answered{background:color-mix(in srgb,var(--accent) 13%,var(--bg));color:var(--accent)}
+.chead .cflag.answered:hover,.chead .cflag.answered:focus-visible{box-shadow:inset 0 0 0 1px var(--accent);outline:none}
+.e-flag-bub .e-flag-note{display:block;box-sizing:border-box;width:100%;height:34px;margin:2px 0 10px;padding:0 10px;border:0;
+  border-radius:8px;background:#fff;color:#0f172a;font:13.5px var(--sans);outline:none}
+.e-flag-bub .e-flag-note:focus{box-shadow:inset 0 -2px 0 0 var(--accent-fill)}
+.e-flag-bub .e-flag-note[aria-invalid=true]{box-shadow:inset 0 0 0 2px #ffb066}
+.bub-ask.e-flag-bub .e-flag-why{margin:-4px 0 10px;font-size:12.5px;color:var(--bub-ink)}
 .cbadge{font:600 11px var(--sans);letter-spacing:0;padding:1px 7px;border-radius:6px;
   background:var(--accent-soft);color:var(--accent);text-transform:none}
-.cbadge.ed{background:var(--ed-soft);color:var(--ed)}
+.cbadge.ed{background-color:var(--bg);background-image:linear-gradient(var(--ed-soft),var(--ed-soft));color:var(--ed)}
 .modal{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:16px}
-/* A dialog's and a bubble's words do not select like a page's; what a field holds and a path a person copies still do. */
-.modal,.bub{user-select:none;-webkit-user-select:none}
-.modal :is(input,textarea,select,[contenteditable="true"],.mono,code),.bub :is(input,textarea,.mono,code){user-select:text;-webkit-user-select:text}
 /* A keyframe, not a transition - the element returns from display:none with no previous
    value. The way out is a copy on the dismiss tier (.e-gone), which the next surface to open
    ends, so a flow that closes one dialog and opens another never cross-fades the two.
@@ -2940,36 +2995,75 @@ body.e-host .modal.ed-win:not(.ed-rest) .modal-bg{app-region:no-drag;-webkit-app
 body.ed-bars #list{padding-bottom:var(--ed-bars-h)}
 :root:not([data-theme=light]) .modal.ed-multi:not(.ed-rest) #modalCard::after{display:none}
 body:has(.modal.ed-rest:not([hidden])) header:has(.menu:not([hidden]):not(.e-warm),.facts-panel:not([hidden]),.sgn-panel:not([hidden])){z-index:57}
-/* The intent panel, the dialogs, the menus, Quick facts and the opened pill bar wear the rim inside their
-   border; their bevel gives way to it. A surface that scrolls as a whole carries the ring with its content. */
+/* The intent panel, the dialogs, the menus, Quick facts and the opened pill bar wear the rim over their
+   border without touching overflow or resize; their bevel gives way to it. The first four paint their
+   ground on the padding box and --rim over --line on their own transparent border via border-area, so
+   no pseudo-element sits outside the padding box. The opened pill bar cannot use its own border because
+   it transitions background-color and border-color from transparent while closed and fades its ring in,
+   so its ring sits on the parent slot's ::after alongside ::before's shadow outside the clip. */
 :root:not([data-theme=light]) #intentRail,
 :root:not([data-theme=light]) .facts-panel,
 :root:not([data-theme=light]) .pills-slot.pills-overflow .pills{--bevel:var(--bevel-off)}
-:root:not([data-theme=light]) #intentRail::after,
-:root:not([data-theme=light]) .modal-card::after,
-:root:not([data-theme=light]) .menu::after,
-:root:not([data-theme=light]) .facts-panel::after,
-:root:not([data-theme=light]) .pills-slot.pills-overflow .pills::after{content:"";position:absolute;inset:0;
-  border-radius:calc(var(--radius) - 1px);padding:1px;background:var(--rim);pointer-events:none;z-index:3;
-  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
-  mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude}
-:root:not([data-theme=light]) .modal-card::after{border-radius:15px}
-/* The pill bar is flat while it is closed, so its ring fades in with the glass and the shadow. */
-:root:not([data-theme=light]) .pills-slot.pills-overflow .pills::after{opacity:0;transition:opacity var(--m-reveal) var(--m-ease)}
-:root:not([data-theme=light]) body.pills-lines-expand .pills-slot.pills-overflow .pills::after,
-:root:not([data-theme=light]) .pills-slot.pills-overflow:hover .pills::after,
-:root:not([data-theme=light]) .pills-slot.pills-overflow.pills-navpeek .pills::after,
-:root:not([data-theme=light]) .pills-slot.pills-overflow.pills-expand .pills::after{opacity:1}
-/* Inside their own border, so the same real border as the macro's: no inset to match, the pseudo's box is the
-   padding box and its 1px border snaps with it. */
 @supports (background-clip:border-area){
+  :root:not([data-theme=light]) .menu,
+  :root:not([data-theme=light]) .modal-card{
+    border-color:transparent;
+    background-image:linear-gradient(var(--panel-raised),var(--panel-raised)),var(--rim),linear-gradient(var(--line),var(--line));
+    background-origin:padding-box,border-box,border-box,border-box,border-box,border-box;
+    background-clip:padding-box,border-area,border-area,border-area,border-area,border-area}
+  :root:not([data-theme=light]) .modal.ed-multi:not(.ed-rest) #modalCard{
+    background:var(--panel-raised);border-color:var(--accent)}
+  :root:not([data-theme=light]) .facts-panel{
+    border-color:transparent;
+    background-image:linear-gradient(var(--glass-mid,var(--panel-raised)),var(--glass-mid,var(--panel-raised))),var(--rim),linear-gradient(var(--line),var(--line));
+    background-origin:padding-box,border-box,border-box,border-box,border-box,border-box;
+    background-clip:padding-box,border-area,border-area,border-area,border-area,border-area}
+  :root:not([data-theme=light]) body:not(.rail-col) #intentRail{
+    --rail-bg:var(--glass-mid,var(--panel-raised));
+    border-color:transparent;
+    background-image:linear-gradient(var(--rail-bg),var(--rail-bg)),var(--rim),linear-gradient(var(--line),var(--line));
+    background-origin:padding-box,border-box,border-box,border-box,border-box,border-box;
+    background-clip:padding-box,border-area,border-area,border-area,border-area,border-area}
+  :root:not([data-theme=light]) body.rail-on:not(.rail-col) #intentRail{--rail-bg:var(--panel-raised)}
+  :root:not([data-theme=light]) .pills-slot.pills-overflow::after{
+    content:"";position:absolute;z-index:42;left:0;right:0;top:0;box-sizing:border-box;
+    height:var(--pills-show);border:1px solid transparent;border-radius:12px;pointer-events:none;
+    --pills-show:var(--pills-2line,4.2em);
+    background:var(--rim);background-origin:border-box;background-clip:border-area;
+    opacity:0;
+    transition:--pills-show var(--m-reveal) var(--m-ease),opacity var(--m-reveal) var(--m-ease)}
+  :root:not([data-theme=light]) body.pills-lines-expand .pills-slot.pills-overflow::after,
+  :root:not([data-theme=light]) .pills-slot.pills-overflow:hover::after,
+  :root:not([data-theme=light]) .pills-slot.pills-overflow.pills-navpeek::after,
+  :root:not([data-theme=light]) .pills-slot.pills-overflow.pills-expand::after{
+    --pills-show:var(--pills-full,var(--pills-2line,4.2em));opacity:1}
+  :root:not([data-theme=light]) .pills-slot.pills-measuring::after{transition:none!important}
+}
+@supports not (background-clip:border-area){
+  :root:not([data-theme=light]) .menu::after{content:"";position:absolute;inset:-1px;
+    border-radius:inherit;padding:1px;background:var(--rim);pointer-events:none;z-index:3;
+    -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
+    mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude}
   :root:not([data-theme=light]) #intentRail::after,
   :root:not([data-theme=light]) .modal-card::after,
-  :root:not([data-theme=light]) .menu::after,
-  :root:not([data-theme=light]) .facts-panel::after,
-  :root:not([data-theme=light]) .pills-slot.pills-overflow .pills::after{padding:0;border:1px solid transparent;
-    background-origin:border-box;background-clip:border-area;
-    -webkit-mask:none;mask:none}
+  :root:not([data-theme=light]) .facts-panel::after{content:"";position:absolute;inset:0;
+    border-radius:calc(var(--radius) - 1px);padding:1px;background:var(--rim);pointer-events:none;z-index:3;
+    -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
+    mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude}
+  :root:not([data-theme=light]) .modal-card::after{border-radius:15px}
+  :root:not([data-theme=light]) .pills-slot.pills-overflow::after{
+    content:"";position:absolute;z-index:42;left:0;right:0;top:0;box-sizing:border-box;
+    height:var(--pills-show);border-radius:12px;padding:1px;background:var(--rim);pointer-events:none;
+    --pills-show:var(--pills-2line,4.2em);opacity:0;
+    -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
+    mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;
+    transition:--pills-show var(--m-reveal) var(--m-ease),opacity var(--m-reveal) var(--m-ease)}
+  :root:not([data-theme=light]) body.pills-lines-expand .pills-slot.pills-overflow::after,
+  :root:not([data-theme=light]) .pills-slot.pills-overflow:hover::after,
+  :root:not([data-theme=light]) .pills-slot.pills-overflow.pills-navpeek::after,
+  :root:not([data-theme=light]) .pills-slot.pills-overflow.pills-expand::after{
+    --pills-show:var(--pills-full,var(--pills-2line,4.2em));opacity:1}
+  :root:not([data-theme=light]) .pills-slot.pills-measuring::after{transition:none!important}
 }
 /* The only thing that scrolls, so the scrollbar sits beside the content and stops short of both
    pinned bars. min-height:0 is load-bearing: a flex item will not shrink below its content
@@ -3052,11 +3146,15 @@ body:has(.modal.ed-rest:not([hidden])) header:has(.menu:not([hidden]):not(.e-war
 .modal .mf>label{font:600 12.5px var(--sans);letter-spacing:0;color:var(--ink);text-transform:none}
 /* text fields only - checkboxes inside .intent-pick must not inherit width:100% */
 .mf input:not([type=checkbox]):not([type=radio]):not([type=hidden]),
-.mf select,.mf textarea{width:100%;padding:8px 10px;border:1px solid var(--line-strong);
-  border-radius:var(--radius-sm);background:var(--bg);color:var(--ink);font:14px var(--sans);outline:none}
+.mf select,.mf textarea{width:100%;padding:8px 10px;border:1px solid var(--edge);
+  border-radius:var(--radius-sm);background:var(--bg);color:var(--ink);font:14px var(--sans);
+  box-shadow:inset 0 -1px 0 0 var(--field-edge)}
+.mf input:not([type=checkbox]):not([type=radio]):not([type=hidden]),.mf textarea{outline:none}
 .mf textarea{min-height:110px;resize:vertical;font:13px/1.45 var(--sans);white-space:pre-wrap}
 .mf input:not([type=checkbox]):not([type=radio]):focus,
-.mf select:focus,.mf textarea:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.mf textarea:focus,
+.mf input:not([type=checkbox]):not([type=radio]):focus-visible,
+.mf textarea:focus-visible{outline:none;border-color:var(--edge);box-shadow:inset 0 -2px 0 0 var(--accent)}
 /* Left empty and asked for by Save. Declared after focus and matching it on weight, so the
    field the dialog has just jumped to still reads as the wrong one rather than the live one. */
 .cat-pick.is-missing{border-color:#c44;box-shadow:0 0 0 2px rgba(196,68,68,.16)}
@@ -3083,10 +3181,11 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
    fades under a mask, and a mask over an input takes its fill and border along with the words,
    so the fade showed the panel behind the field. dressDialogInputs() wraps them as a dialog
    opens; the input goes naked and the wrap carries the border, the fill and both rings. */
-.mf .field-wrap{display:block;border:1px solid var(--line-strong);border-radius:var(--radius-sm);background:var(--bg)}
-.mf .field-wrap:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.mf .field-wrap{display:block;border:1px solid var(--edge);border-radius:var(--radius-sm);background:var(--bg);
+  box-shadow:inset 0 -1px 0 0 var(--field-edge);outline:none}
+.mf .field-wrap:focus-within{outline:none;border-color:var(--edge);box-shadow:inset 0 -2px 0 0 var(--accent)}
 .mf .field-wrap:has(>input.is-missing){border-color:#c44;box-shadow:0 0 0 2px rgba(196,68,68,.16)}
-.mf .field-wrap>input:not([type=checkbox]):not([type=radio]):not([type=hidden]){border:0;background:transparent;box-shadow:none;border-radius:0}
+.mf .field-wrap>input:not([type=checkbox]):not([type=radio]):not([type=hidden]){border:0;background:transparent;box-shadow:none;border-radius:0;outline:none}
 /* The card editor's flags: one grid, filled column-first (grid-auto-flow:column with an explicit
    row count), so reading down a column keeps related toggles together. Collapses to a single
    column on a narrow dialog, which is the width the modal actually reaches on a small laptop. */
@@ -3121,16 +3220,11 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
    actions bar decides which of its buttons leads, so outside one the class paints nothing and
    is not written. Measured, it had been on four buttons that read as plain. */
 .modal-actions .btn.primary,.screen-actions .btn.primary{background:var(--accent-fill);border-color:var(--accent-fill);color:#fff;font-weight:600}
-/* Two buttons at the same edge read as one loosely spaced group, and one of these forgets your
-   work while the other brings a file in. A hairline says they are two things. */
-.modal-actions .mf-left .mf-sep{align-self:stretch;width:1px;margin:3px;background:var(--line-strong);
-  border-radius:1px}
 /* A SCREEN TAB'S HEADING AND BAR keep the dialog's: the file's name beside the title, and the bar's left group with
    its hairline, as the Library's bar had them. */
 .screen-head{display:flex;align-items:baseline;gap:.7ch;min-width:0}
 .screen-head .screen-name{font-weight:400;color:var(--dim);min-width:0;overflow:hidden;white-space:nowrap}
 .screen-actions .mf-left{display:flex;gap:8px;margin-right:auto;flex-wrap:wrap}
-.screen-actions .mf-left .mf-sep{align-self:stretch;width:1px;margin:3px;background:var(--line-strong);border-radius:1px}
 .screen-page:focus{outline:none}
 /* A VARIANT THAT MUST SURVIVE A STATE SAYS SO ITSELF. The ground is restated here, not
    inherited from the variant rule two lines up: that rule ties .btn:not([disabled]):hover on
@@ -3153,9 +3247,6 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
 .btn.danger{color:#c44;border-color:color-mix(in srgb,#c44 47%,var(--bg))}
 /* About Etiuda dialog, and the pages it opens */
 .modal-card.about-modal,.modal-card.about-page{max-width:520px}
-/* THE PANEL TAKES THE WINDOW'S WIDTH, and the readings as many columns as it holds, so the whole of
-   it stands on one screen without scrolling in any reasonably big window. */
-.modal-card.mt-modal{max-width:min(1240px,calc(100vw - 40px))}
 /* Light and OPEN, not bold: the one place the product says its own name was the heaviest
    text in the app. 350 + tracking gives the presence the bold was for. 350 needs Segoe UI
    Variable (Win11); older systems snap to 400 - degrades to plainer, never to broken. */
@@ -3226,8 +3317,10 @@ details.mf-fold>summary:focus-visible .mf-lab{text-decoration:underline 2px var(
 .manage-row.is-hidden>span:first-child{color:var(--dim);opacity:.72}
 .manage-row.is-hidden .star-btn{opacity:.4;pointer-events:none}
 .manage-row span{flex:1 1 120px;min-width:0}
-.manage-row input{flex:1 1 140px;min-width:100px;padding:5px 8px;border:1px solid var(--line-strong);
-  border-radius:var(--radius-xs);background:var(--bg);color:var(--ink);font:13px var(--sans)}
+.manage-row input{flex:1 1 140px;min-width:100px;padding:5px 8px;border:1px solid var(--edge);
+  border-radius:var(--radius-xs);background:var(--bg);color:var(--ink);font:13px var(--sans);outline:none;
+  box-shadow:inset 0 -1px 0 0 var(--field-edge)}
+.manage-row input:focus,.manage-row input:focus-visible{outline:none;box-shadow:inset 0 -2px 0 0 var(--accent)}
 .manage-empty{font-size:13px;color:var(--dim);padding:4px 0}
 /* THE CATALOG LIST, in the Library and on the empty state's offer. One row per file: what it is,
    when it was written and how big, then the one act it offers. The name is the only part allowed
@@ -3321,8 +3414,9 @@ details.manage-sec>summary .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;
 /* The same row on an empty screen, with the folder's count over it. Left-aligned inside a centred
    empty state, because a filename and a date are data rather than a sentence, and hidden while it
    holds nothing so a browser's empty state is exactly what it was. */
-.cat-new input{flex:1;padding:7px 10px;border:1px solid var(--line-strong);border-radius:var(--radius-sm);
-  background:var(--bg);color:var(--ink);font:13px var(--sans)}
+.cat-new input{flex:1;padding:7px 10px;border:1px solid var(--edge);border-radius:var(--radius-sm);
+  background:var(--bg);color:var(--ink);font:13px var(--sans);outline:none;box-shadow:inset 0 -1px 0 0 var(--field-edge)}
+.cat-new input:focus,.cat-new input:focus-visible{outline:none;box-shadow:inset 0 -2px 0 0 var(--accent)}
 /* Intent editor: category multi-pick (chips, not native multi-select blue) */
 .cat-pick{display:flex;flex-wrap:wrap;gap:6px;padding:8px;border:1px solid var(--line);
   border-radius:10px;background:var(--bg);max-height:200px;overflow:auto}
@@ -3475,7 +3569,7 @@ details.manage-sec>summary h3{margin:0}
   background:transparent;color:var(--ink);font:600 13px var(--sans);min-width:2.5em;max-width:16em;
   width:auto;field-sizing:content;cursor:text;user-select:text;resize:none;overflow:hidden;white-space:pre;vertical-align:middle}
 .mg-cat-lab2:hover{border-color:var(--line)}
-.mg-cat-lab2:focus{outline:none;border-color:var(--accent);background:var(--panel)}
+.mg-cat-lab2:focus{outline:none;border-color:var(--accent);background:var(--panel);box-shadow:inset 0 -2px 0 0 var(--accent)}
 .mg-cat-fixed{font:600 13px var(--sans);color:var(--ink);padding:1px 3px}
 .mg-cat-body{padding:2px 0 6px 28px;display:flex;flex-direction:column;gap:5px}
 .mg-cat-acts{margin-left:auto;display:flex;gap:2px;flex:0 0 auto;align-items:center}
@@ -3533,16 +3627,8 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
   padding:3px 6px;border:1px solid transparent;border-radius:var(--radius-xs);background:transparent;
   color:var(--ink);font:13px var(--sans);
   overflow:hidden;white-space:nowrap}
-.manage-row .mg-badge{flex:0 0 auto}
 .manage-row .mg-stamp{flex:0 0 auto;display:inline-flex;color:var(--warn)}
 .mg-stamp .ic{width:16px;height:16px}
-/* Local copy counter on Manage rows - appears once a card has been copied at least once.
-   SCOPED TO THE ROW so it can refuse to flex: `.manage-row span` gives every span a basis of
-   120px and permission to grow - written for the category label, which is the only span in
-   these rows that should - and one bare class loses to it. Unscoped, this counter demanded
-   120px beside a title that already filled the row, and the buttons wrapped to a line of
-   their own. Every other span here is already scoped for the same reason. */
-.manage-row .mg-uses{flex:0 0 auto;font:10px var(--mono);color:var(--dim);opacity:.75;padding:0 3px}
 /* Eye icon: stroked with currentColor so it inherits every existing hover colour rule */
 .ic-eye{width:15px;height:15px;display:block;fill:none;stroke:currentColor;stroke-width:1.5;
   stroke-linecap:round;stroke-linejoin:round;vertical-align:middle}
@@ -3641,7 +3727,7 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
 .mf-own-body label:has(input:checked:not(:disabled))+.mf-ex{color:var(--ink)}
 @media (max-width:560px){ .mf-cols .mf-own-body{grid-row:auto} }
 .mf-switch{appearance:none;-webkit-appearance:none;position:relative;flex:0 0 auto;width:28px;height:16px;
-  margin:1px 0 0 3px;border-radius:8px;background:var(--line-strong);outline:none}
+  margin:1px 0 0 3px;border-radius:8px;background:var(--line-strong)}
 .mf-switch::after{content:"";position:absolute;left:2px;top:2px;width:12px;height:12px;border-radius:50%;
   background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25)}
 .mf-switch:checked{background:var(--accent-fill)}
@@ -3785,6 +3871,61 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .stage>.scroller>.shell{contain-intrinsic-size:auto none}
 #screenHost{grid-area:1/1;position:relative;z-index:1;display:flex;flex-direction:column;min-height:0;background:var(--bg);color:var(--ink);overflow-y:auto}
 #screenHost[hidden]{display:none!important}
+/* ---------- First-opening sign-in screen ---------- */
+body.e-first-signin .fab-stack,
+body.e-first-signin .pills-slot,
+body.e-first-signin .pills-probe,
+body.e-first-signin #railHit,
+body.e-first-signin #intentRail,
+body.e-first-signin #lanes,
+body.e-first-signin .fills,
+body.e-first-signin #tabsWrap,
+body.e-first-signin .stage>.scroller>.shell{display:none!important}
+body.e-first-signin header{padding-bottom:0;border-bottom:0}
+body.e-first-signin .stage>.dotfield{content-visibility:hidden}
+.fs-screen{grid-area:1/1;position:relative;z-index:2;min-height:0;background:var(--bg);color:var(--ink);overflow:auto;display:flex;flex-direction:column}
+.fs-screen[hidden]{display:none!important}
+.fs-grid{display:grid;grid-template-columns:1fr 1fr;flex:1 1 auto;min-height:100%}
+.fs-left{display:flex;flex-direction:column;align-items:center;padding:36px clamp(28px,5vw,56px) 24px;
+  background-color:var(--bg);
+  background-image:radial-gradient(circle at center,var(--dots-ink) 0 .7px,color-mix(in srgb,var(--dots-ink) 0%,transparent) 1.2px);
+  background-size:16px 16px}
+.fs-left-in{width:100%;max-width:390px;min-height:100%;display:flex;flex-direction:column}
+.fs-body{margin:auto 0;padding:8px 0 24px}
+.fs-mark{width:52px;height:52px;color:var(--mark-ink);display:inline-flex;align-items:center;justify-content:center;margin:0 0 24px}
+.fs-mark svg{width:100%;height:100%;display:block}
+.fs-left h1{margin:0 0 12px;font:600 clamp(22px,2.3vw,27px)/1.2 var(--sans);letter-spacing:-.015em;color:var(--ink)}
+.fs-lede{margin:0 0 28px;font:14px/1.55 var(--sans);color:var(--dim);max-width:38ch}
+.fs-steps-h{margin:0 0 12px;font:600 11px/1.2 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.fs-steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
+.fs-steps li{display:flex;align-items:center;gap:11px;font:13.5px/1.4 var(--sans);color:var(--ink)}
+.fs-step-n{width:22px;height:22px;flex:none;display:inline-flex;align-items:center;justify-content:center;
+  border-radius:50%;border:1px solid var(--line-strong);background:var(--panel);color:var(--dim);
+  font:600 11.5px/1 var(--sans);font-variant-numeric:tabular-nums}
+.fs-foot{margin:8px 0 0;padding-top:12px;font:12px/1.4 var(--sans);color:var(--dim)}
+.fs-right{display:flex;flex-direction:column;justify-content:center;align-items:center;
+  padding:36px clamp(28px,5vw,56px);background:var(--panel);border-left:1px solid var(--line)}
+.fs-right-in{width:100%;max-width:390px}
+.fs-rh{margin:0 0 14px;font:600 20px/1.25 var(--sans);color:var(--ink)}
+.fs-right-in h4{margin:0 0 6px;font:600 16px/1.3 var(--sans);color:var(--ink)}
+.fs-right-note{margin:14px 0 0}
+.fs-privacy{margin:10px 0 0}
+.fs-right-in .sgn-acts{margin-top:16px}
+.fs-skip{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+.fs-skip-line{margin:10px 0 0;font:12.5px/1.45 var(--sans);color:var(--dim)}
+@media (max-width:780px){
+  .fs-grid{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+  .fs-left{padding:26px 22px 18px}
+  .fs-left-in{min-height:0}
+  .fs-body{margin:0;padding:0 0 16px}
+  .fs-mark{margin-bottom:16px}
+  .fs-right{padding:24px 22px 32px;border-left:0;border-top:1px solid var(--line);justify-content:flex-start}
+}
+@media (max-height:660px){
+  .fs-left,.fs-right{padding-top:22px;padding-bottom:22px}
+  .fs-mark{margin-bottom:14px}
+  .fs-lede{margin-bottom:18px}
+}
 .screen-page{display:flex;flex-direction:column;max-width:1240px;width:100%;margin:0 auto;padding:20px 28px;gap:20px;box-sizing:border-box}
 .screen-head h2{margin:0;font-size:20px;font-weight:600}
 .screen-body{flex:1 1 auto;min-height:0}
@@ -3792,40 +3933,75 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 /* ---------- The Settings screen tab ---------- */
 /* On the desk's own tokens, never glass. Opening Settings shows every section on one page. A section opened
    alone keeps Appearance and Layout beside a small desk, and lays every other section's rows out as tiles.
-   The selected rail row is one class and the three --sx-sel tokens, so its treatment changes in one place:
-   a soft fill of the accent with a fine ring of it, the name bold, the icon in the accent. */
-.sx{--sx-acc:var(--accent);--sx-sel-fill:color-mix(in srgb,var(--sx-acc) 11%,transparent);
-  --sx-sel-ring:color-mix(in srgb,var(--sx-acc) 16%,transparent);--sx-hover:color-mix(in srgb,var(--ink) 3.5%,transparent);
+   The rail's rows wear Studio's look, its values ported: the selected row is the panel's face lifted by a soft
+   shadow, the name bold, the icon in the accent; a row under the hand takes the ink at 5 per cent over the rail. */
+.sx{--sx-acc:var(--accent);--sx-sel-fill:var(--panel);--sx-sel-lift:0 1px 2px rgba(15,23,42,.1);
+  --sx-hover:color-mix(in srgb,var(--ink) 5%,var(--header-bg));
   flex:1 1 auto;min-height:0;display:flex;background:var(--bg);color:var(--ink);font:14px/1.45 var(--sans)}
-:root:not([data-theme=light]) .sx{--sx-sel-fill:color-mix(in srgb,var(--sx-acc) 20%,transparent);
-  --sx-sel-ring:color-mix(in srgb,var(--sx-acc) 26%,transparent);--sx-hover:color-mix(in srgb,var(--ink) 4%,transparent)}
+:root:not([data-theme=light]) .sx{--sx-sel-lift:0 1px 2px rgba(0,0,0,.5)}
 .sx *{box-sizing:border-box}
 .sx-ic{display:block;width:18px;height:18px;flex:0 0 auto}
 .sx-nav{flex:0 0 var(--side-w);min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding:16px 10px;
   background:var(--header-bg);border-right:1px solid var(--line)}
-.sx-nav h1{font:300 26px/1.1 var(--sans-display);margin:4px 10px 14px}
-.sx-search{display:flex;align-items:center;gap:8px;margin:0 4px 12px;padding:0 10px;border:1px solid var(--field-line);
-  border-bottom-color:var(--field-edge);border-radius:var(--radius-xs);background:var(--field);color:var(--dim)}
-.sx-search:focus-within{box-shadow:inset 0 -2px 0 0 var(--accent)}
+/* THE HEAD OF A RAIL is Studio's small capitals label: the tab and the page already name the screen in large type. */
+.sx-nav h1,.sx.lm .sx-nav .screen-head h2,.sx-nav .sx-nav-title h2{font:600 11px var(--sans);letter-spacing:.7px;
+  text-transform:uppercase;color:var(--dim);margin:0;padding:6px 10px 5px}
+.sx-search{display:flex;align-items:center;gap:8px;margin:0 4px 12px;padding:0 10px;border:1px solid var(--edge);
+  border-radius:var(--radius-xs);background:var(--field);color:var(--dim);box-shadow:inset 0 -1px 0 0 var(--field-edge);outline:none}
+.sx-search:focus-within{outline:none;box-shadow:inset 0 -2px 0 0 var(--accent)}
 .sx-search .sx-ic{width:15px;height:15px}
 .sx-search input{flex:1 1 auto;min-width:0;padding:7px 0;border:0;outline:0;background:transparent;color:var(--ink);
   font:13.5px var(--sans);cursor:text}
 .sx-secs{display:flex;flex-direction:column;gap:2px}
-.sx-sec{display:flex;align-items:center;gap:11px;width:100%;padding:8px 10px;border:0;border-radius:var(--radius-xs);
+.sx-sec{display:flex;align-items:center;gap:11px;width:100%;padding:8px 10px;border:0;border-radius:var(--radius-sm);
   background:transparent;color:var(--ink);font:14px var(--sans);text-align:left}
 .sx-sec .sx-ic{color:var(--dim)}
 .sx-sec:hover,.sx-sec:focus-visible{background:var(--sx-hover)}
-.sx-sec.on{background:var(--sx-sel-fill);box-shadow:inset 0 0 0 1px var(--sx-sel-ring);font-weight:600}
-.sx-sec.on:focus-visible{box-shadow:inset 0 0 0 2px var(--sx-sel-ring)}
+.sx-sec.on,.sx-sec.on:hover,.sx-sec.on:focus-visible{background:var(--sx-sel-fill);box-shadow:var(--sx-sel-lift);font-weight:600}
+/* The chosen row still shows focus when the keys reach it: a ring inside its edge, so the mark stays one row (k6). */
+.sx-sec.on:focus-visible{outline:2px solid var(--sx-acc);outline-offset:-2px}
 .sx-sec.on .sx-ic{color:var(--sx-acc)}
+/* ONE ROW OF THE RAIL MARKED AT A TIME: the hand used last owns the mark (data-hand on the root, header-menus.js). Under the
+   pointer a focused row other than the hovered one goes unmarked; under the keys the hovered row does. */
+:root[data-hand=pointer] .sx-nav:hover :is(.sx-sec,.sx-maint):focus-visible:not(:hover):not(.on){background:transparent}
+:root[data-hand=keys] .sx-nav :is(.sx-sec,.sx-maint):hover:not(:focus-visible):not(.on){background:transparent}
 .sx-foot{margin-top:auto;padding-top:10px;border-top:1px solid var(--line)}
-.sx-maint{padding:6px 10px;border:0;border-radius:var(--radius-xs);background:transparent;color:var(--dim);font:12.5px var(--sans)}
-.sx-maint:hover{background:var(--sx-hover);color:var(--ink)}
+/* THE ROW AT THE RAIL'S FOOT is a row like those above it, Studio's: its icon, its words, and its keys plain at the right. */
+.sx-maint{display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;border:0;border-radius:var(--radius-sm);
+  background:transparent;color:var(--ink);font:13.5px var(--sans);text-align:left}
+.sx-maint .sx-ic{width:16px;height:16px;color:var(--dim)}
+.sx .sx-maint kbd{margin-left:auto;padding:0;border:0;background:none;font:11px var(--mono);color:var(--dim)}
+.sx-maint:hover,.sx-maint:focus-visible{background:var(--sx-hover);color:var(--ink)}
 .sx kbd{font:11.5px var(--mono);padding:1px 5px;border:1px solid var(--line-strong);border-radius:4px}
 .sx-page{flex:1 1 auto;min-width:0;overflow-y:auto;padding:24px 32px 32px}
 .sx-crumb{color:var(--dim);font-size:13px;margin-bottom:2px}
 .sx-page h2{font:300 30px/1.15 var(--sans-display);margin:0 0 4px}
 .sx-page .lede{color:var(--dim);font-size:14px;margin:0 0 20px}
+/* THE DOTTED PAGE of Settings, the Library and Maintenance, Studio's own: a 16 px grid of fine dots in the dim ink,
+   and the words standing on the page each on a patch of the page's ground, so no dot crosses a letter. */
+.sx{--sx-dots:color-mix(in srgb,var(--dim) 42%,transparent)}
+:root:not([data-theme=light]) .sx{--sx-dots:color-mix(in srgb,var(--dim) 30%,transparent)}
+.sx-page{background-image:radial-gradient(circle at center,var(--sx-dots) 0 .7px,transparent 1.2px);background-size:16px 16px}
+/* Inline words on a dotted ground clear only their own line width (with a 3px cushion) so
+   multi-line blocks never carve out a rectangle beside a shorter line. Controls and icons
+   carry an opaque canvas ground of their own size. */
+.e-dot-hug{display:inline;background:var(--bg);box-shadow:0 0 0 3px var(--bg);border-radius:3px;
+  -webkit-box-decoration-break:clone;box-decoration-break:clone}
+.e-dot-ic{background:var(--bg);box-shadow:0 0 0 3px var(--bg);border-radius:4px}
+.e-dot-flex{min-width:0}
+.sx-page :is(h2,.sx-group>h3,.sx-block>h3,.sx-lookside>h3){width:fit-content}
+.sx-page .mt-readings{background:var(--bg)}
+.sx-page .lw-name.add{background:var(--bg);box-shadow:0 0 0 3px var(--bg);border-radius:10px}
+.sx-crumb+h2{margin-top:2px}
+/* The page ground, and only while the control rests. Hover, focus and press do not match
+   this rule, so they keep the colours they already have. A button's veil is its own token,
+   laid over that ground: a colour read off the screen would stay after the theme changed. */
+.e-dot-ctrl:not(:hover):not(:focus-visible):not(:active){background-color:var(--bg)}
+.e-dot-ctrl.btn:not([disabled]):not(:hover):not(:focus-visible):not(:active){
+  background-image:linear-gradient(var(--btn-rest),var(--btn-rest))}
+.empty .btn:not(.primary){background:color-mix(in srgb,var(--ink) 4%,var(--bg))}
+.e-dot-ctrl[disabled],.empty .btn[disabled]{opacity:1;color:color-mix(in srgb,var(--ink) 45%,var(--bg));border-color:transparent}
+.sx-page .sc-row{min-width:0}
 .sx-group{margin:0 0 20px}
 .sx-group h3{font:600 12px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin:0 0 8px}
 .sx-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-sm);overflow:hidden}
@@ -3838,7 +4014,10 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx .set-ctl{grid-column:3;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px}
 .sx .sc-list{max-height:none;overflow:visible;gap:0;margin:0}
 .sx .sc-row{padding:10px 16px;border:0;border-top:1px solid var(--line);border-radius:0;background:transparent}
-.sc-row .chg{font:600 10.5px var(--sans);color:var(--accent);margin-left:6px;vertical-align:middle}
+/* A NEW KEY is Studio's small tag beside the keys: a mark on the row, not a part of its name. */
+.sc-row .chg{flex:0 0 auto;display:inline-flex;align-items:center;padding:1px 9px;border-radius:999px;
+  font:600 11.5px var(--sans);letter-spacing:.3px;border:1px solid var(--line-strong);color:var(--dim);background:#e8ecf1;white-space:nowrap}
+:root:not([data-theme=light]) .sc-row .chg{background:#20242b}
 .sx .sc-list>.sc-row:first-child{border-top:0}
 .sx .sc-sep{margin:0;padding:12px 16px 6px;border-top:1px solid var(--line)}
 .sx-note{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:8px 2px 0;color:var(--dim);font-size:12.5px}
@@ -3872,7 +4051,8 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
   .sx:not(.lm) .sx-block[data-sec="keys"]{break-before:column;break-after:column}
 }
 .sx:not(.lm) .sx-block>h3{font:600 15px/1.3 var(--sans);letter-spacing:0;text-transform:none;color:var(--ink);margin:0 0 10px}
-.sx:not(.lm) .sx-block>h3 button{font:inherit;color:inherit;background:none;border:0;padding:0;text-align:left}
+.sx:not(.lm) .sx-block>h3 button{display:inline;font:inherit;color:inherit;background:var(--bg);box-shadow:0 0 0 3px var(--bg);
+  border-radius:3px;-webkit-box-decoration-break:clone;box-decoration-break:clone;border:0;padding:0;text-align:left}
 .sx:not(.lm) .sx-block>h3 button:hover,.sx:not(.lm) .sx-block>h3 button:focus-visible{color:var(--accent)}
 .sx:not(.lm) .sx-block .sx-group{margin:0 0 10px}
 .sx:not(.lm) .sx-block .set-row{min-height:54px;min-width:0}
@@ -3883,7 +4063,8 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx:not(.lm) .sx-lookrows{min-width:0}
 .sx:not(.lm) .sx-lookside>h3{font:600 12px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin:0 0 8px}
 .sx:not(.lm) .sx-lookside>p{font-size:13px;color:var(--dim);margin:10px 0 0}
-.sx:not(.lm) a.sx-crumb{color:var(--dim);text-decoration:none}
+.sx:not(.lm) a.sx-crumb{color:var(--dim);text-decoration:none;background:var(--bg);box-shadow:0 0 0 3px var(--bg);
+  border-radius:3px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .sx-mini{border:1px solid var(--line-strong);border-radius:12px;overflow:hidden;background:var(--bg);aspect-ratio:16/9;
   display:flex;flex-direction:column}
 .sx-mini,.sx-mini *{pointer-events:none}
@@ -3913,17 +4094,23 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
   gap:10px;background:none;border:0;overflow:visible;box-shadow:none}
 .sx:not(.lm) .sx-tiles .sx-card>.set-row,.sx:not(.lm) .sx-tiles .sx-card>.set-row:first-child{background:var(--panel);
   border:1px solid var(--line);border-radius:10px;min-height:76px}
-.sx:not(.lm) .sx-tiles .sx-card:has(.sc-list){display:block}
-.sx:not(.lm) .sx-tiles .sc-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,520px),1fr));gap:10px}
-.sx:not(.lm) .sx-tiles .sc-row{background:var(--panel);border:1px solid var(--line);border-radius:10px;min-height:76px}
-.sx:not(.lm) .sx-tiles .sc-sep{grid-column:1 / -1}
+/* The shortcuts list is one card of ruled rows, in this section as on All settings. The rows keep .sx .sc-row. */
+.sx:not(.lm) .sx-tiles .sx-card:has(.sc-list){display:block;background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--radius-sm);overflow:hidden}
 @container sxpage (max-width:720px){
   .sx:not(.lm) .sx-look{grid-template-columns:minmax(0,1fr)}
 }
 /* A ROW'S CONTROL GOES UNDER ITS WORDS where they would get under 260px beside it, at the row's full width, its
    options equal shares on one line. The words' basis is that 260px and their grow outweighs the control's 999 to 1,
-   so side by side the words take the room, and alone on its line the control takes the row. */
+   so side by side the words take the room, and alone on its line the control takes the row. Beside the words, the
+   control and icon stand on the first line while single-line tiles keep their line centred. */
 .sx:not(.lm) .set-row{display:flex;flex-wrap:wrap;gap:8px 14px}
+.sx:not(.lm) .set-row{align-items:baseline;align-content:center} /* plant:settings-row-top */
+/* The control's words sit on the words' first line, so its middle is that line's middle (the designer, 2026-11-15), in a
+   row of one line as of four. The icon has no line of its own: on the baseline its foot stands there, and 4.5px down (half
+   its 20px less the 14px words' ascent above their line's middle, measured) its middle is that line's middle too, beside
+   the control or above it. */
+.sx:not(.lm) .set-row>.sx-ic{align-self:baseline;translate:0 4.5px}
 .sx:not(.lm) .set-row>.sx-ic{flex:0 0 20px;margin-right:8px}
 .sx:not(.lm) .set-label{flex:999 1 min(260px,calc(100% - 42px))}
 .sx:not(.lm) .set-ctl{flex:1 1 auto;min-width:0;justify-content:flex-start}
@@ -3946,10 +4133,7 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx.lm .lm-split{flex:1 1 auto;min-height:0;min-width:0;display:flex;overflow:hidden}
 .sx.lm .sx-page{min-height:0}
 .sx.lm .screen-actions{flex:0 0 auto;padding:12px 32px 16px}
-.sx.lm .sx-maint{display:inline-flex;align-items:center;gap:6px}
-.sx.lm .sx-maint .sx-ic{width:15px;height:15px}
-.sx.lm .sx-nav .screen-head{display:block;margin:4px 10px 14px;position:relative}
-.sx.lm .sx-nav .screen-head h2{margin:0;font:300 26px/1.1 var(--sans-display)}
+.sx.lm .sx-nav .screen-head{display:block;margin:0;position:relative}
 .sx.lm .screen-head .screen-name{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;
   clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .sx.lm-lib details.manage-sec{margin:0;padding:0;border:0}
@@ -3982,7 +4166,7 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
   padding:9px 12px 9px 10px;font:600 11.5px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--dim);
   border-bottom:1px solid var(--line-strong);position:sticky;top:-24px;background:var(--panel);z-index:3;user-select:none
 }
-.lw-head .lw-c,.lw-head .lw-nm{color:var(--dim)!important;font:inherit!important;cursor:default;outline:none}
+.lw-head .lw-c,.lw-head .lw-nm{color:var(--dim)!important;font:inherit!important;cursor:default}
 .lw-head [data-sort-col]{cursor:default}
 .lw-head [data-sort-col]:hover,.lw-head [data-sort-col]:focus-visible{color:var(--ink)!important}
 .lw-sort-line{
@@ -4190,6 +4374,7 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 }
 .sx.lm-lib .mg-tree,.sx.lm-lib .mg-intents{max-height:none;overflow:visible;border:0;padding:0;background:none;
   box-shadow:none;margin:0}
+.sx.lm-lib .sx-page :is(.mg-tree,.mg-intents){background:var(--bg)}
 .sx.lm-mt .mt-sub{margin:0 0 20px;font-size:14px}
 .sx.lm-mt[data-page="health"] #mtLede{display:none}
 .sx.lm-mt:not([data-page="health"]) .mt-sub,
@@ -4351,7 +4536,7 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .e-offer .ec-more{font-size:12.5px;margin-top:2px}
 .e-offer .ec-diff{appearance:none;-webkit-appearance:none;border:0;background:none;padding:0;margin:0 0 8px;
   font:600 13.5px var(--sans);color:var(--bub-ink);text-decoration:underline;text-underline-offset:3px}
-.e-offer .ec-diff:focus-visible{outline:2px solid #fff;outline-offset:2px;border-radius:2px}
+.e-offer .ec-diff:focus-visible{outline:2px solid var(--bub-ink);outline-offset:2px;border-radius:2px}
 /* THE PANEL BEHIND IT: the cards at the left, the chosen one at the right as it was, as it becomes and,
    where the agent has an edit, as the agent wrote it. */
 .modal-card.ed-modal{max-width:min(1120px,100%)}
@@ -4401,9 +4586,9 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .lk-chip:hover,.lk-chip:focus-visible,.lk-chip[aria-expanded="true"]{background:var(--accent-soft)}
 .lk-t{min-width:0;overflow:hidden;white-space:nowrap}
 .lk-pick{width:min(440px,100%);display:grid}
-.lk-pick input{font:14px var(--sans);padding:8px 10px;border:1px solid var(--field-line);border-radius:var(--radius-sm);
-  background:var(--field);color:var(--ink);outline:none}
-.lk-pick input:focus{border-color:var(--accent)}
+.lk-pick input{font:14px var(--sans);padding:8px 10px;border:1px solid var(--edge);border-radius:var(--radius-sm);
+  background:var(--field);color:var(--ink);outline:none;box-shadow:inset 0 -1px 0 0 var(--field-edge)}
+.lk-pick input:focus,.lk-pick input:focus-visible{outline:none;box-shadow:inset 0 -2px 0 0 var(--accent)}
 .lk-hits{max-height:240px;overflow-y:auto}
 .lk-hits .cat-ic,.lk-hits .ic{flex:none;width:14px;height:14px;margin:0}
 /* WHILE IT IS DRAGGED the panel steps down and the category bar comes up sharp above the scrim, ringed, with the
@@ -4448,9 +4633,18 @@ body.e-take-drag .modal-card.ed-modal{translate:0 28px;scale:.985}
 .e-notice p.e-notice-err{font:12px var(--mono);color:var(--bub-dim);overflow-wrap:anywhere}
 .e-notice .e-notice-hint{margin-right:auto;font-size:12.5px;color:var(--bub-dim)}
 /* A field on the fill: paper, so what is typed reads as the reader's own. */
-.bub .e-name-inp,.bub .e-proxy-inp,.bub .e-reset-inp{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
+.bub .e-name-inp,.bub .e-proxy-inp,.bub .e-reset-inp,.bub .rw-how{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
   border:1px solid transparent;border-radius:8px;background:#fff;color:#0f172a;font:13.5px var(--sans)}
-.bub .e-name-inp:focus-visible,.bub .e-proxy-inp:focus-visible,.bub .e-reset-inp:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.bub .e-name-inp:focus-visible,.bub .e-proxy-inp:focus-visible,.bub .e-reset-inp:focus-visible,.bub .rw-how:focus-visible{outline:2px solid var(--bub-ink);outline-offset:2px}
+/* REWORD ON A CARD (card-reword.js): the menu's acts on the fill, its line under the field; and the card while a rewording
+   stands, its slabs' own line dashed, the chip over its words and Approve and Revert at its lower right. */
+.rw-bub .rw-bacts{justify-content:flex-start;margin:0 0 8px;padding:0;border:0}
+.rw-bub .rw-bline{margin:8px 0 0;font-size:12.5px}
+.card.rw-on>.txt{border-style:dashed;border-color:var(--accent)}
+:root:not([data-theme=light]) .card.rw-on>.txt::after{content:none}
+.rw-chip{display:flex;align-items:center;gap:8px;margin:0 0 6px;font-size:12px;color:var(--dim)}
+.rw-badge{padding:1px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:600}
+.rw-ans{display:flex;justify-content:flex-end;gap:8px;margin:-4px 0 10px}
 .bub .e-proxy-inp+.e-proxy-inp{margin-top:8px}
 .bub .e-proxy-inp:last-of-type{margin-bottom:10px}
 .bub .e-greet{color:var(--bub-ink);margin:8px 0 10px}
@@ -4526,10 +4720,9 @@ body.e-take-drag .modal-card.ed-modal{translate:0 28px;scale:.985}
 .tour-actions .btn.primary:not([disabled]):hover,.tour-actions .btn.primary:not([disabled]):focus-visible,
 .tour-actions .btn.primary.tour-sel{filter:brightness(.94)}
 .tour-actions .tour-skip{margin-right:auto}
-/* ←/→ move real focus so Enter and screen readers work, but .tour-sel already draws the
-   selection using the hover rules. Suppress the UA focus ring, or the browser stacks a
-   second, thicker outline on top of it. */
-.tour-actions .btn:focus,.tour-actions .btn:focus-visible{outline:none;box-shadow:none}
+/* ←/→ move real focus so Enter and screen readers work; .tour-sel already draws the
+   selection using the hover rules, while keyboard focus adds the bubble's ink ring. */
+.tour-actions .btn:focus,.tour-actions .btn:focus-visible{box-shadow:none}
 /* First-run invite (compact, bottom-right) */
 /* Unmistakable, not loud - the mark only has to be READ. A low-alpha solid fill: a
    hairline outline shimmers on fractional pixels as the page scrolls, a soft fill sits
@@ -4692,9 +4885,9 @@ body.e-lanes #pillsSlot{display:none}
 .ln-src{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .ln-add{justify-self:start}
 .ln-find{display:grid;max-width:440px}
-.ln-find input{font:14px var(--sans);padding:8px 10px;border:1px solid var(--field-line);border-radius:var(--radius-sm);
-  background:var(--field);color:var(--ink);outline:none}
-.ln-find input:focus{border-color:var(--accent)}
+.ln-find input{font:14px var(--sans);padding:8px 10px;border:1px solid var(--edge);border-radius:var(--radius-sm);
+  background:var(--field);color:var(--ink);outline:none;box-shadow:inset 0 -1px 0 0 var(--field-edge)}
+.ln-find input:focus,.ln-find input:focus-visible{outline:none;box-shadow:inset 0 -2px 0 0 var(--accent)}
 .ln-ghost{position:absolute;margin:0;pointer-events:none;z-index:1}
 .ln-trail{display:none}
 /* Where three lanes would not fit, Sent folds into a trail above, and Now and Next share the width.
@@ -4733,7 +4926,7 @@ body.e-lanes #pillsSlot{display:none}
 /* Colour-only, at the tone tier - these fire on hover with the pointer already moving. Transform
    and layout are deliberately NOT transitioned: drag, the FLIP reorders and the pill bar
    own their timing, and a transitioned transform under a drag fights the hand. */
-.pill,.btn,.seg button,.tab,.menu button,
+.pill,.btn,.seg button,.tab,
 .tab-x,.field-clear,.combo-clear{
   transition:background-color var(--m-tone) ease,color var(--m-tone) ease,border-color var(--m-tone) ease}
 /* THE REPEATING ROWS EASE ON HOVER, NEVER ON THE FLIP: hundreds of them, so a theme press that started
@@ -4760,7 +4953,7 @@ body.e-lanes #pillsSlot{display:none}
 }@layer base{
 /* Tabular figures wherever a number sits beside a label, so a count ticking from 9 to 10
    does not shuffle the text around it. */
-.pill b,.mg-uses,.mg-count,.mg-cat-n,.cbadge,.rail-badge,.tag{
+.pill b,.mg-count,.mg-cat-n,.cbadge,.rail-badge,.tag{
   font-variant-numeric:tabular-nums}
 /* The star's own path (_STAR), spawned by the click handler as a fixed overlay so it
    survives the re-render that follows the click. 299: under the toast, above everything
@@ -4797,14 +4990,16 @@ body.e-lanes #pillsSlot{display:none}
 @keyframes eLashesOut{0%{opacity:1}20%,100%{opacity:0}}
 @keyframes eEyeBloom{0%{transform:scale(1);opacity:.95}50%{transform:scale(1.03);opacity:.95}
   62%{transform:scale(1.16);opacity:.95;animation-timing-function:ease-in}100%{transform:scale(1.5);opacity:0}}
-/* NO RING ON A BUTTON, and the hover look in its place: every control below restates its own
-   hover rule for :focus-visible, so one declaration serves both states and they cannot drift.
-   The browser's own ring is named here as well - it returns the moment a rule stops saying so -
-   and a text field keeps whatever it has, which is a different cue for a different thing. */
-.btn:focus-visible,.tab:focus-visible,.tab-label:focus-visible,.tab-x:focus-visible,.tab-add:focus-visible,
-.seg button:focus-visible,.field-clear:focus-visible,.combo-clear:focus-visible,
-.rail-item:focus-visible,.rail-add:focus-visible,.rail-lock:focus-visible,
-button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:none}
+/* Every keyboard-focused control draws a solid 2 px accent ring, except the two controls that keep
+   their own mark (a text field's 2 px inset underline, and an open menu row's fill). Coloured
+   grounds (the band and the bubble) take the ground's own ink so the ring stays legible there. */
+*:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.row :is(.tabs-nav,.tabs-list-btn,.tab-add,.cat-now.is-waiting):focus-visible,
+body.e-host .row .win-btn:focus-visible{outline:2px solid var(--band-ink);outline-offset:1px}
+body.e-host .row .win-btn:focus-visible{outline-offset:-2px}
+.row .tab:not(.on) :is(.tab-label,.tab-x):focus-visible{outline:2px solid var(--band-ink);outline-offset:-2px}
+.row .tab.on :is(.tab-label,.tab-x):focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.bub :is(.btn,.tour-actions .btn):focus-visible{outline:2px solid var(--bub-ink);outline-offset:1px}
 /* HIGH CONTRAST paints every ground and edge in the system's own two colours, so what a tint says
    here vanishes there: the mark, the focus, the chosen tab, language and category, and the tour's
    selected button. The system's highlight colour stands in for them, and only there. After the
@@ -4859,6 +5054,13 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
         <button type="button" class="tabs-nav" id="tabsPrev" tabindex="-1" aria-label="Scroll tabs left" title="Scroll tabs left"><span class="tabs-nav-mark"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M11.9 4.6L6.5 10l5.4 5.4"/></svg></span></button>
         <div class="tabs-bar" id="tabsBar" role="tablist"></div>
         <button type="button" class="tabs-nav" id="tabsNext" tabindex="-1" aria-label="Scroll tabs right" title="Scroll tabs right"><span class="tabs-nav-mark"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M8.1 4.6L13.5 10l-5.4 5.4"/></svg></span></button>
+        <div class="tabs-list-wrap" id="tabsListWrap">
+          <button type="button" class="tabs-list-btn" id="tabsListBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="tabsListMenu" aria-label="All open tabs" title="All open tabs"><span class="tabs-list-mark"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.2 7.6 10 12.4l4.8-4.8"/></svg></span></button>
+          <div class="menu tabs-list-menu" id="tabsListMenu" hidden role="menu" tabindex="-1" aria-labelledby="tabsListHead">
+            <div class="tabs-list-head" id="tabsListHead">Open tabs</div>
+            <div class="tabs-list-rows" id="tabsListRows" role="none" data-i18n-skip></div>
+          </div>
+        </div>
       </div>
     </div>
     <!-- THE CATALOG IN USE, by name, or that none is: inert, and no door to the Library. -->
@@ -4944,7 +5146,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
            automatically. Rows delegate with .click(), which works at display:none. -->
       <div class="menu-wrap" id="moreWrap" hidden>
         <button class="btn icbtn" id="moreBtn" type="button" title="The tools this window is too narrow to show" aria-haspopup="true" aria-expanded="false" aria-label="More tools"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4.8 5.4 9.4 10l-4.6 4.6"/><path d="M10.6 5.4 15.2 10l-4.6 4.6"/></svg></button>
-        <div class="menu menu-ic" id="moreMenu" hidden role="menu">
+        <div class="menu menu-ic" id="moreMenu" hidden role="menu" tabindex="-1">
           <!-- Each row wears the icon of the button it stands in for - a control that lost its
                place must not lose its face. The language row's slot holds the language in force,
                which doubles as the state readout; where it would take you is in the title. -->
@@ -4958,7 +5160,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
      the one step that is whole device pixels at 1x, 1.5x and 2x - verified by rasterising,
      not by reading the numbers. -->
         <button class="btn icbtn" id="settingsBtn" type="button" title="Cards, the intent panel and the category bar" aria-haspopup="true" aria-expanded="false" aria-label="Menu"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4 5h12M4 10h12M4 15h12"/></svg><span class="upd-dot" id="updDot" role="img" data-i18n-skip hidden></span></button>
-        <div class="menu" id="settingsMenu" hidden role="menu">
+        <div class="menu" id="settingsMenu" hidden role="menu" tabindex="-1">
           <!-- The update offer, first while one stands and Later has not put it off: words in update-offer.js. -->
           <div class="menu-upd" id="menuUpdate" role="group" aria-labelledby="menuUpdateT" data-i18n-skip hidden><div class="menu-upd-t" id="menuUpdateT"></div><div class="menu-upd-acts"><button type="button" role="menuitem" data-act="update-see" data-e-open="update" id="menuUpdateSee"></button><button type="button" role="menuitem" data-act="update-later" id="menuUpdateLater"></button></div></div>
           <div class="menu-sep" id="menuUpdateSep" hidden></div>
@@ -5022,6 +5224,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 </div>
 </div>
 <div id="screenHost" class="screen-host" hidden></div>
+<section id="firstSignin" class="fs-screen" hidden role="dialog" aria-modal="true" aria-labelledby="fsHeading" data-i18n-skip></section>
 </div>
 
 <!-- role=status/aria-live so copy confirmations reach screen readers without stealing focus -->

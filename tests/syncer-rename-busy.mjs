@@ -22,7 +22,7 @@ import { createLab } from "./lab-owner.mjs";
 const SELF = fileURLToPath(import.meta.url);
 const ROOT = path.resolve(path.dirname(SELF), "..");
 const nodeRequire = createRequire(import.meta.url);
-const EXPECTED = 21;
+const EXPECTED = 23;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -123,6 +123,11 @@ function stagedTmps(mirror) {
    files from a folder of its own, where a plant is lifted. */
 const SCENE_KILL_MS = 45000;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
+/* A 50 MS LIMIT IS JUDGED IN THE RELEASE PROFILE ALONE (Claude alpha's decision under the regimen, 2026-11-15): under an area run's
+   load these readings reached 95 to 128 ms against 14 to 24 ms alone, failing by their own fault and stopping four area runs in a day.
+   Outside the release profile the reading is printed in the line and not judged; every other condition of the check still is. */
+const TIMED = process.env.ETIUDA_PROFILE === "release";
+const under50 = (ms) => !TIMED || ms < 50;
 const ASIDE_998E = nodeRequire("./off-windows.cjs").offWindows("998e",
   "a rename over a read-only file succeeds off Windows, so lifting plant:land-clear-mark leaves nothing refusing and the plant has no teeth");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -408,7 +413,7 @@ const copyGreen = r => !r.threw && r.bytes === true && r.copyWritable === true &
 const tickGreen = r => !r.killed && !r.noResult && r.landed === true && r.sameStamp === true && r.next === true;
 const settledGreen = r => !r.killed && !r.noResult && r.landed === true && r.sameStamp === true && r.next === false;
 const outboxReadGreen = r => !r.killed && !r.noResult && r.cleared === true && r.owedAfter === false
-  && r.shareMatches === true && r.outboxReads >= 2 && r.owedEvents === 1 && r.saidKept === 1 && r.saidReached === 1 && r.maxStallMs < 50;
+  && r.shareMatches === true && r.outboxReads >= 2 && r.owedEvents === 1 && r.saidKept === 1 && r.saidReached === 1 && under50(r.maxStallMs);
 
 async function main() {
   const land = runScene("land");
@@ -422,14 +427,14 @@ async function main() {
     + " the last-write time without the mark, the source keeping its own: " + JSON.stringify(copy));
   const stall = runScene("stall");
   check(!stall.killed && !stall.noResult && stall.attempts >= 2 && stall.stagedKept === true && stall.catalogAbsent === true
-    && stall.refusedSaid === 1 && stall.maxStallMs < 50,
-    "998r a landing whose rename refuses for good keeps the main thread's longest stall under 50 ms across scans: " + JSON.stringify(stall));
+    && stall.refusedSaid === 1 && under50(stall.maxStallMs),
+    "998r a landing whose rename refuses for good keeps the main thread's longest stall under 50 ms across scans" + (TIMED ? "" : " (the 50 ms limit judged in the release profile only)") + ": " + JSON.stringify(stall));
   const transient = runScene("transient");
   check(!transient.killed && !transient.noResult && transient.landed === true && transient.noTemp === true
-    && transient.attempts === 3 && transient.landAfterFirstMs < 1500 && transient.maxStallMs < 50,
-    "998s a landing whose rename refuses twice still lands soon without waiting for the next scan and under 50 ms stall: " + JSON.stringify(transient));
+    && transient.attempts === 3 && transient.landAfterFirstMs < 1500 && under50(transient.maxStallMs),
+    "998s a landing whose rename refuses twice still lands soon without waiting for the next scan and under 50 ms stall" + (TIMED ? "" : " (the 50 ms limit judged in the release profile only)") + ": " + JSON.stringify(transient));
   const copyStall = runScene("copy-stall");
-  check(!copyStall.killed && !copyStall.noResult && copyStall.threw === "EPERM" && copyStall.maxStallMs < 50,
+  check(!copyStall.killed && !copyStall.noResult && copyStall.threw === "EPERM" && under50(copyStall.maxStallMs),
     "998t copyClear refused on the main thread returns under 50 ms without blocking the event loop: " + JSON.stringify(copyStall));
   const tick = runScene("tick");
   check(tickGreen(tick), "955n the worker reads again a share file stamped within 3 s of its reading, so a rewrite of the same size and stamp lands: " + JSON.stringify(tick));
@@ -614,6 +619,74 @@ async function main() {
   check(!threwC && owedBeforeC && triesAt1250 === 20 && triesStable && owedWhileRefused && keptBoth && clearedNext,
     "998w control: an outbox read refused every time stops at 20 tries, leaves the record and sibling in place, and clears on the next pass: "
     + JSON.stringify({ threwC, owedBeforeC, triesAt1250, triesStable, owedWhileRefused, keptBoth, clearedNext }));
+
+  /* r7: a new owe whose rename stays busy past 20 tries is said once and still recorded once the rename is allowed. */
+  async function busyOwe(mod, name) {
+    const mirror = path.join(LAB, name + "-mirror");
+    fs.mkdirSync(mirror, { recursive: true });
+    const rel = "lamp.ec";
+    fs.writeFileSync(path.join(mirror, rel), "{\"rev\":1}\n", "utf8");
+    let renames = 0;
+    const lines = [];
+    const orig = console.log;
+    console.log = (...a) => { lines.push(a.map(String).join(" ")); };
+    const io = {
+      readdir: d => fs.readdirSync(d),
+      stat: p => fs.statSync(p),
+      readFile: (p, enc) => fs.readFileSync(p, enc),
+      writeFile: (p, data) => fs.writeFileSync(p, data),
+      unlink: p => fs.unlinkSync(p),
+      mkdir: d => fs.mkdirSync(d, { recursive: true }),
+      exists: p => fs.existsSync(p),
+      rename: (a, b) => {
+        renames++;
+        if (renames <= 20) throw busy("EBUSY");
+        fs.renameSync(a, b);
+      }
+    };
+    try {
+      const accepted = mod.noteOwed(mirror, rel, io);
+      const until = Date.now() + 2500;
+      let recorded = false;
+      while (Date.now() < until) {
+        recorded = mod.owedList(mirror, io).some(x => x.rel === rel);
+        if (recorded) break;
+        await sleep(40);
+      }
+      return {
+        accepted,
+        recorded,
+        renames,
+        said: lines.some(l => l.indexOf("could not be recorded") >= 0 && l.indexOf(" - ") < 0)
+      };
+    } finally { console.log = orig; }
+  }
+  {
+    const g = await busyOwe(syncer, "r7a");
+    check(g.accepted === true && g.recorded === true && g.renames > 20 && g.said === true,
+      "r7a an owed write whose rename is busy twenty times is said and still recorded once the rename is allowed: " + JSON.stringify(g));
+  }
+  {
+    const line = "r7b lifting plant:outbox-busy-keep drops an owed write after twenty busy renames: NOT RUN";
+    if (PLANTS_OFF) { asserted++; console.log("  skip " + line); }
+    else {
+      const src = path.join(ROOT, "shell", "folder", "syncer.cjs");
+      const before = fs.readFileSync(src);
+      const parts = before.toString("utf8").split("\n");
+      const at = parts.findIndex(l => l.includes("plant:outbox-busy-keep"));
+      if (at < 0) throw new Error("plant:outbox-busy-keep absent");
+      parts.splice(at, 1);
+      const scratchDir = fs.mkdtempSync(path.join(LAB, "plant-outbox-busy-"));
+      const scratch = path.join(scratchDir, "syncer.cjs");
+      fs.writeFileSync(scratch, parts.join("\n"), "utf8");
+      let got = null;
+      try { got = await busyOwe(nodeRequire(scratch), "r7b"); }
+      catch { got = null; }
+      const same = fs.readFileSync(src).equals(before);
+      check(!!got && got.recorded === false && got.renames === 20 && same,
+        "r7b lifting plant:outbox-busy-keep drops an owed write after twenty busy renames: " + JSON.stringify({ got, same }));
+    }
+  }
 
   if (asserted !== EXPECTED) check(false, "completed " + asserted + " of " + EXPECTED + " checks");
   console.log("syncer-rename-busy: " + (asserted - failed) + " passed, " + failed + " failed, " + asserted + " of " + EXPECTED);

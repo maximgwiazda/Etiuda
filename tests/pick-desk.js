@@ -110,7 +110,7 @@ function buildApp() {
   E.pinCatalogFolder(UD, path.join(dir, "catalogs"));
   const file = path.join(UD, "desk.json");
   const d = JSON.parse(fs.readFileSync(file, "utf8"));
-  Object.assign(d.keys, { eTourDone_v3: "1", eTourInvite_v3: "1", eAgent: "Kate", eNameAsked: "1" });
+  Object.assign(d.keys, { eTourDone_v3: "1", eTourInvite_v3: "1", eFirstSigninSeen: "1", eAgent: "Kate", eNameAsked: "1" });
   fs.writeFileSync(file, JSON.stringify(d), "utf8");
   return { dir, UD, docs: path.join(dir, "documents") };
 }

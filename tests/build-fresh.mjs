@@ -46,6 +46,28 @@ try {
 
 const stale = OUTPUTS.map((p, i) => [p, i]).filter(([, i]) => !after[i].equals(before[i]));
 
+/* THE RELEASE GATE'S DASH RULE, HELD ON EVERY MERGE THAT BUILDS THE PAGE. tools/release.mjs gate 4 refuses an em or en
+   dash in the artefact; for four days two stood in it (a character class in src/modules/manage.js, 2026-11-11 to fold 97)
+   and no area leg said so, so no release could have been cut. The same characters, built from char codes for the reason
+   release.mjs gives: a dash written into this tracked file would be the thing refused. Each hit is named by the module
+   banner above it, which is where the source is (the test architect, 2026-11-15). */
+{
+  const DASHES = new RegExp('[' + String.fromCharCode(0x2013, 0x2014) + ']', 'g');
+  const page = before[OUTPUTS.indexOf(OUT_FILE)].toString('utf8');
+  const hits = [];
+  for (let m; (m = DASHES.exec(page)); ) {
+    const banner = page.lastIndexOf('// src/', m.index);
+    const from = banner < 0 ? '(the template)' : page.slice(banner + 3, page.indexOf('\n', banner));
+    hits.push(from + ' at byte ' + m.index);
+  }
+  if (hits.length) {
+    console.error('  FAIL ' + rel(OUT_FILE) + ' holds ' + hits.length + ' em or en dash(es), which release.mjs gate 4 refuses: '
+      + hits.slice(0, 5).join('; '));
+    console.error('       write each as an escape (\\u2013, \\u2014) or reword it in src/, then build.');
+    process.exit(1);
+  }
+}
+
 if (!stale.length) {
   /* THE GATE'S OWN COUNTS, board item 529. The record read this gate as one `line` whatever it
      did. What it compares is the build's outputs, so the numbers are their sizes: a rebuild

@@ -549,13 +549,14 @@ function runUnitTests() {
   catalogLangTests();
   catalogIdentityTests();
   catalogNsTests();
-  strandedAdoptionTests();
+  layerStaysPutTests();
   unreadablePackTests();
   langSegWiringTests();
   deskStatsTests();
   ejectUndoTests();
   tourActTests();
   emptyDeskTests();
+  quickFactsDefaultTests();
   catNowTests();
   deskMarkTests();
   libraryHeadTests();
@@ -577,7 +578,8 @@ function lanePageKeyTests() {
   const own = { document: doc, addEventListener: (k, fn) => { if (k === "keydown") world.listener = fn; },
     $: s => (s === "#lanes" ? lanesBox : null), scCaptureId: "", SC_DEFS: [], intentEl: null,
     tourActive: off, tourHasFocus: off, openCover: () => null, modalOpen: off, modalFront: off, edToDesk: off, factsPanelOpen: off,
-    eventMatchesAction: off, eHost: off, hooks: { runShortcut: off }, mgReduceMotion: off };
+    eventMatchesAction: off, eHost: off, hooks: { runShortcut: off }, mgReduceMotion: off,
+    firstSigninOpenNow: off, skipFirstSignin: off /* a desk past the first-opening sign-in: no screen is up */ };
   Object.defineProperty(own, "lanesOn", { get: () => world.open });
   const scope = new Proxy({}, {
     has: (o, k) => typeof k === "string",
@@ -738,31 +740,36 @@ function tourActTests() {
   const timers = [];
   /* The page: which window stands (`win`: the card editor, the Library's tab or Settings), Quick facts, the Menu,
      and whether the controls a step presses are on screen. Each control opens what a person's click opens. */
-  const page = { tourRunning: true, tourIdx: 0, target: {}, win: null, facts: false, menu: false, shown: true, moved: [], ends: [] };
+  const page = { tourRunning: true, tourIdx: 0, target: {}, win: null, chatTabs: 1, facts: false, menu: false, shown: true, moved: [], ends: [] };
   const control = (sel, open) => ({ matches: s => s === sel, getClientRects: () => (page.shown ? [{}] : []), click: open });
   const pencil = control('[data-act="edit"]', () => { page.win = "editor"; });
   const fab = control("#addCardFab", () => { page.win = "editor"; });
   const factsBtn = control("#factsBtn", () => { page.facts = true; });
+  const chatTabEl = control("#tabsBar .tab[data-tid]", () => { if (page.win === "library" || page.win === "settings") page.win = null; });
+  const addTabEl = control("#tabsWrap .tab-add", () => { page.chatTabs++; if (page.win === "library" || page.win === "settings") page.win = null; });
   const rows = { manage: control('[data-act="manage"]', () => { page.menu = false; page.win = "library"; }),
     settings: control('[data-act="settings"]', () => { page.menu = false; page.win = "settings"; }) };
   const next = { hidden: false, disabled: false, textContent: "" };
   const own = {
     t: s => s, chordChips: () => "K", tourEls: () => ({ next }), resolveTourTarget: () => page.target,
+    eOpenPicker: () => { page.pickerOpens++; }, hotkeyHeld: () => page.hotkey, hotkeyChips: () => "K",
     setTimeout: (fn, ms) => { timers.push({ fn, ms, live: true }); return timers.length; },
     clearTimeout: id => { if (id && timers[id - 1]) timers[id - 1].live = false; },
     showTourStep: i => { page.tourIdx = i; page.moved.push(T.TOUR_STEPS[i].id); }, endTour: done => { page.ends.push(done); },
-    cardBtn: sel => (sel === '[data-act="edit"]' ? pencil : {}), $: sel => ({ "#addCardFab": fab, "#factsBtn": factsBtn, "#tourName": { value: "" } })[sel],
+    cardBtn: sel => (sel === '[data-act="edit"]' ? pencil : {}), $: sel => ({ "#addCardFab": fab, "#factsBtn": factsBtn, "#tourName": { value: "" }, "#tabsWrap .tab-add": addTabEl })[sel],
     menuOpen: () => page.menu, openSettingsMenu: () => { page.menu = true; },
     menuTarget: act => (page.menu ? rows[act] || {} : {}),
-    /* The card editor is the pop-up. The Library and Settings are screen tabs: libraryOpen and
-       settingsOpen are the module's own, over this page, so a tab that is not the window they
-       name leaves their inside step off. */
+    /* The card editor is the pop-up. The Library and Settings are screen tabs, read through the steps' own `tab`
+       (tabInFront), so a tab that is not in front leaves its steps off. */
     modalOpen: () => page.win === "editor", closeModal: () => { page.win = null; }, closeAllDialogs: () => { page.win = null; },
     get screenOn() { return page.win === "library" || page.win === "settings" ? page.win : ""; },
     closeScreenTab: id => { if (page.win === id) page.win = null; },
     document: {
       getElementById: id => (id === "setBody" && page.win === "settings") || (id === "meCancel" && page.win === "editor") ? { id } : null,
-      querySelector: sel => sel === "#screenHost details.manage-sec" && page.win === "library" ? {} : null
+      querySelector: sel => sel === "#screenHost details.manage-sec" && page.win === "library" ? {}
+        : sel === "#tabsWrap .tab-add" ? addTabEl : null,
+      querySelectorAll: sel => sel === "#tabsBar .tab[data-tid]" ? (page.chatTabs > 0 ? [chatTabEl] : [])
+        : sel === "#libPage .mg-tree > *" && page.win === "library" ? [{ getClientRects: () => [{}], classList: { contains: () => false } }] : []
     },
     factsPanelOpen: () => page.facts, closeFactsPanel: () => { page.facts = false; },
     cardEditorOpen: () => page.win === "editor",
@@ -776,17 +783,18 @@ function tourActTests() {
   });
   let T = null;
   try {
-    T = new Function("scope", "with(scope){\n" + ["function tourPress(", "function tourPressRow(", "function shutTourWindow(",
-      "function loadStepBody(", "const libraryOpen=", "const settingsOpen=", "const TOUR_STEPS=", "function stepOn(", "function onFrom(", "function nextHeld(", "function syncTourNext(",
+    T = new Function("scope", "with(scope){\n" + ["function hasChatTab(", "function chatTabTarget(", "function openChatTab(", "function tourPress(", "function tourPressRow(", "function shutTourWindow(",
+      "let tourPicks=", "function tourHeardPick(", "function tourPickBubble(", "function tourPickGo(",
+      "function loadStepBody(", "function tabInFront(", "function chatDetour(", "function libraryFirstRow(", "const TOUR_STEPS=", "function stepOn(", "function onFrom(", "function nextHeld(", "function syncTourNext(",
       "const TOUR_ACT_MS=", "let tourActT=", "function tourActSoon(", "function tourActCheck(", "function tourFollowWindow(",
       "function tourNext(", "function tourOn(", "function tourPrev("]
       .map(m => extractDecl(src, m)).join("\n")
-      + "\nreturn {TOUR_STEPS, nextHeld, syncTourNext, tourActSoon, TOUR_ACT_MS, tourNext, tourPrev};\n}")(scope);
+      + "\nreturn {TOUR_STEPS, nextHeld, syncTourNext, tourActSoon, TOUR_ACT_MS, tourNext, tourPrev, tourHeardPick, tourPickBubble, tourPickGo};\n}")(scope);
   } catch (e) { T = null; eq("tour.js carries the step table and the functions that move the tour", e.message, "sliced"); }
   if (!T) return;
   const ids = T.TOUR_STEPS.map(s => s.id), at = id => ids.indexOf(id);
   const fire = () => { const live = timers.filter(x => x.live); timers.forEach(x => { x.live = false; }); live.forEach(x => x.fn()); return live.map(x => x.ms); };
-  const reset = (id, state) => { Object.assign(page, { win: null, facts: false, menu: false, shown: true, empty: false, moved: [], ends: [] }, state || {}); page.tourIdx = at(id); };
+  const reset = (id, state) => { Object.assign(page, { win: null, chatTabs: 1, facts: false, menu: false, shown: true, empty: false, moved: [], ends: [], tourReturnId: "", hotkey: "", pickerOpens: 0, tourPickerOpened: false }, state || {}); page.tourIdx = at(id); };
   const where = () => ids[page.tourIdx] + (page.win ? " [" + page.win + "]" : "") + (page.facts ? " [facts]" : "") + (page.menu ? " [menu]" : "");
 
   const held = () => ids.filter((id, i) => { page.tourIdx = i; next.disabled = false; T.syncTourNext(); return next.disabled || next.hidden; });
@@ -805,8 +813,8 @@ function tourActTests() {
      + " window steps only describes, waiting for no act",
     [ids.join(","), T.TOUR_STEPS.filter(s => s.name).map(s => s.id), T.TOUR_STEPS.filter(s => !waitsOn(s) && !s.name).map(s => s.id),
      T.TOUR_STEPS.filter(s => "does" in s).map(s => s.id)],
-    ["name,load,pax,search,rail,cards,pills,tabs,seg,buttons,editor,add,addIn,facts,factsIn,theme,menu,picker,library,libraryIn,settings,settingsIn,done",
-     ["name"], ["pax", "search", "rail", "cards", "pills", "tabs", "seg", "theme", "done"], []]);
+    ["name,chatTab,load,pax,search,rail,cards,pills,tabs,seg,buttons,editor,add,addIn,facts,factsIn,theme,menu,picker,pickerIn,library,libraryIn,libraryRail,libraryList,settings,settingsIn,settingsRail,done",
+     ["name"], ["pax", "search", "rail", "cards", "pills", "tabs", "seg", "theme", "pickerIn", "libraryRail", "libraryList", "settingsRail", "done"], []]);
 
   /* The person's act: on a step that describes, nothing they do moves the tour; the Menu step moves on once the
      Menu is open; a step that opens a window follows the window in. Each read once the act settles. */
@@ -827,12 +835,13 @@ function tourActTests() {
   eq("and where its control is not on screen Next opens nothing and moves on past the window's own step",
     hidden, ["buttons>add", "add>facts", "facts>theme"]);
 
-  /* Inside a window: Next closes it and moves on; Back closes it and returns to the step that opens it. */
+  /* Inside a window: Next closes a pop-up and moves on, and leaves a tab open for the steps hung from it; Back closes
+     either and returns to the step that opens it. */
   const inWin = { editor: { win: "editor" }, addIn: { win: "editor" }, factsIn: { facts: true }, libraryIn: { win: "library" }, settingsIn: { win: "settings" } };
   const nexts = Object.keys(inWin).map(id => { reset(id, inWin[id]); T.tourNext(); return id + ">" + where(); });
   const backs = Object.keys(inWin).map(id => { reset(id, inWin[id]); T.tourPrev(); return id + "<" + where(); });
-  eq("inside a window Next closes it and moves on, and Back closes it and returns to the step that opens it",
-    [nexts, backs], [["editor>add", "addIn>facts", "factsIn>theme", "libraryIn>settings", "settingsIn>done"],
+  eq("inside a window Next closes a pop-up and moves on, leaves a tab open for its next step, and Back closes either and returns to the step that opens it",
+    [nexts, backs], [["editor>add", "addIn>facts", "factsIn>theme", "libraryIn>libraryRail [library]", "settingsIn>settingsRail [settings]"],
       ["editor<buttons", "addIn<add", "factsIn<facts", "libraryIn<library", "settingsIn<settings"]]);
 
   /* Closing the tab is the act that moves an inside step on. While the tab stands, an act leaves
@@ -850,12 +859,115 @@ function tourActTests() {
     [settingsStays, settingsClosed, libraryStays, libraryClosed],
     ["settingsIn [settings]", "done", "libraryIn [library]", "settings"]);
 
+  /* THE LIBRARY'S AND SETTINGS' STEPS, EACH NEEDING ITS TAB: Next walks the tab, its rail and (the Library's) its list
+     with the tab left open; a step whose tab is no longer in front gives way to the next that can stand; Back inside
+     leaves the tab, but Back from the tab's own step closes it. */
+  const walkTab = (id, n) => { const out = []; for (let i = 0; i < n; i++) { T.tourNext(); out.push(where()); } return id + ">" + out.join(">"); };
+  reset("libraryIn", { win: "library" }); const libWalk = walkTab("libraryIn", 3);
+  reset("settingsIn", { win: "settings" }); const setWalk = walkTab("settingsIn", 2);
+  reset("libraryRail", { win: "library" }); page.win = null; T.tourActSoon(); fire(); const libAway = where();
+  reset("libraryList", { win: "library" }); T.tourPrev(); const listBack = where();
+  reset("settingsRail", { win: "settings" }); T.tourPrev(); const railBack = where();
+  eq("the Library's three steps and Settings' two each stand on their own tab, Next leaving it open, and give way when it is not in front",
+    [libWalk, setWalk, libAway, listBack, railBack],
+    ["libraryIn>libraryRail [library]>libraryList [library]>settings [library]", "settingsIn>settingsRail [settings]>done [settings]",
+      "settings", "libraryRail [library]", "settingsIn [settings]"]);
+
   /* The load step: Next does nothing while the desk is empty and its control stands, and Finish ends the tour done. */
   reset("load", { empty: true }); T.tourNext();
   const loadNext = where();
   reset("done"); T.tourNext();
   eq("Next on the load step does nothing while it is held back, and on the last step it ends the tour as done",
     [loadNext, page.ends], ["load", [true]]);
+
+  /* A non-chat tab active: the tour inserts chatTab before explaining chat-tab controls, waits for a chat tab
+     click (or Next clicks one / + when none is open), returns to an interrupted chat step, and resolveTourTarget
+     never returns an element hidden under a screen tab. */
+  reset("name", { win: "settings" }); T.tourNext();
+  const fromSettings = where();
+  const chatStep = T.TOUR_STEPS.find(s => s.id === "chatTab");
+  let chatWaitStays = null, chatActMoved = null, chatNextMoved = null, chatNewTabMoved = null, chatNewAdded = null, chatBack = null;
+  if (chatStep) {
+    reset("chatTab", { win: "settings" }); T.tourActSoon(); fire(); chatWaitStays = where();
+    page.win = null; T.tourActSoon(); fire(); chatActMoved = where();
+    reset("chatTab", { win: "settings" }); T.tourNext(); chatNextMoved = where();
+    reset("chatTab", { win: "settings", chatTabs: 0 }); T.tourNext(); chatNewTabMoved = where(); chatNewAdded = page.chatTabs;
+    reset("cards", { win: "settings" }); T.tourActSoon(); fire(); chatBack = where();
+    if (where() === "chatTab [settings]") { page.win = null; T.tourActSoon(); fire(); chatBack += ">" + where(); }
+  }
+  /* Back from the detour returns to the step before the one it came from, not to the tour's start. */
+  reset("seg", { win: "settings" }); T.tourActSoon(); fire(); const detoured = where(); T.tourPrev(); const detourBack = where();
+  reset("chatTab", { win: "settings" }); T.tourPrev(); const plainBack = where();
+  eq("Back from the detour to a conversation goes to the step before the one it came from, and from a plain detour to the step before it",
+    [detoured, detourBack, plainBack], ["chatTab [settings]", "tabs [settings]", "name [settings]"]);
+  const hiddenShellEl = { getClientRects: () => [{}], closest: sel => (sel.indexOf(".shell") > -1 ? {} : null) };
+  const hiddenVizEl = { getClientRects: () => [{}], closest: () => null, checkVisibility: () => false };
+  const visibleEl = { getClientRects: () => [{}], closest: () => null, checkVisibility: () => true };
+  let resolvedHidden = "missing", resolvedViz = "missing", resolvedVisible = "missing";
+  try {
+    let rScreen = "settings";
+    const rScope = {
+      get screenOn() { return rScreen; },
+      document: { querySelector: sel => (sel === "#intentRail" ? hiddenShellEl : sel === "#hidden" ? hiddenVizEl : visibleEl) }
+    };
+    const rFn = new Function("scope", "with(scope){\n" + extractDecl(src, "function resolveTourTarget(") + "\nreturn resolveTourTarget;}")(rScope);
+    resolvedHidden = rFn({ sel: "#intentRail" }) === null;
+    resolvedViz = rFn({ sel: "#hidden" }) === null;
+    rScreen = "";
+    resolvedVisible = rFn({ sel: ".brand" }) === visibleEl;
+  } catch (_) {}
+  eq("a non-chat tab active asks to switch to a chat tab (or open one) before chat-tab steps, waits for the click, and never outlines off-screen elements",
+    [fromSettings, chatWaitStays, chatActMoved, chatNextMoved, chatNewTabMoved, chatNewAdded, chatBack, resolvedHidden, resolvedViz, resolvedVisible],
+    ["chatTab [settings]", "chatTab [settings]", "pax", "pax", "pax", 1, "chatTab [settings]>cards", true, true, true]);
+
+  /* Stepping from factsIn to theme ("Light and dark") or Back from factsIn leaves any open screen tab alone. */
+  reset("factsIn", { facts: true, win: "library" }); T.tourNext();
+  const factsToThemeWin = where();
+  reset("factsIn", { facts: true, win: "settings" }); T.tourPrev();
+  const factsBackWin = where();
+  reset("theme", { win: "library" }); T.tourNext();
+  const themeNextWin = where();
+  eq("Light and dark (and leaving Quick facts) leaves open screen tabs open",
+    [factsToThemeWin, factsBackWin, themeNextWin],
+    ["theme [library]", "facts [settings]", "menu [library]"]);
+
+  /* Quick replies step: Next goes to Library without opening the window; opening it on that step enters pickerIn, and nowhere else. */
+  reset("picker", { hotkey: "Ctrl+Shift+Space", menu: true }); T.tourNext();
+  const pickerNextStep = where(), pickerNextOpens = page.pickerOpens;
+  reset("picker", { hotkey: "Ctrl+Shift+Space", menu: true }); T.tourHeardPick(); fire();
+  const pickerOpenedStep = where();
+  let pickerInNext = null, pickerInBack = null;
+  if (at("pickerIn") >= 0) {
+    reset("pickerIn", { hotkey: "Ctrl+Shift+Space", tourPickerOpened: true }); T.tourNext(); pickerInNext = where();
+    reset("pickerIn", { hotkey: "Ctrl+Shift+Space", tourPickerOpened: true }); T.tourPrev(); pickerInBack = where();
+  }
+  reset("cards", { hotkey: "Ctrl+Shift+Space" }); T.tourHeardPick(); fire();
+  const cardsHeardStep = where(), pickerInWhenOnCards = at("pickerIn") >= 0 ? T.TOUR_STEPS[at("pickerIn")].when() : null;
+  eq("Next on the picker step moves to Library without opening the window; opening it on that step shows pickerIn",
+    [pickerNextStep, pickerNextOpens, pickerOpenedStep, pickerInNext, pickerInBack, cardsHeardStep, pickerInWhenOnCards],
+    ["library [menu]", 0, "pickerIn [menu]", "library", "picker", "cards", false]);
+
+  /* THE WINDOW CARRIES ITS OWN STEP: the opening on the picker's step hands it the step's words and the tour's three
+     buttons, and how the window was left comes back: Next or Esc on, Back to the Menu's row, Skip tour ends the tour;
+     before the opening's act has moved the tour in as well. Nothing on any other step. */
+  reset("picker", { hotkey: "Ctrl+Shift+Space", menu: true });
+  const bub = T.tourPickBubble(), bubOff = (reset("cards"), T.tourPickBubble());
+  const goes = [["pickerIn", "next"], ["pickerIn", "back"], ["picker", "next"], ["picker", "skip"], ["cards", "next"]].map(([id, go]) => {
+    reset(id, { hotkey: "Ctrl+Shift+Space", tourPickerOpened: id !== "cards" }); T.tourPickGo(go); return go + ":" + where() + (page.ends.length ? " ended " + page.ends.join() : "");
+  });
+  const inStep = T.TOUR_STEPS.find(s => s.id === "pickerIn");
+  eq("the Quick replies window carries its step: its words and the tour's buttons at an opening on the picker's step, and its Next or Esc, Back and Skip tour move the desk's tour",
+    [bub && [bub.title, /<kbd>Esc<\/kbd>/.test(bub.body), bub.skip, bub.back, bub.next], bubOff, goes, !!inStep.elsewhere, inStep.sel || null],
+    [["Quick replies", true, "Skip tour", "Back", "Next"], null, ["next:library", "back:picker", "next:library", "skip:pickerIn ended false", "next:cards"], true, null]);
+
+  /* The name "Quick replies" in Menu, Settings (hotkeyRowHtml), and tour steps, all through UI_STRINGS. */
+  const menuSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "header-menus.js"), "utf8");
+  const setSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "settings.js"), "utf8");
+  const pickerStep = T.TOUR_STEPS.find(s => s.id === "picker"), pickerInStep = T.TOUR_STEPS.find(s => s.id === "pickerIn");
+  eq("Menu, Settings shortcuts, and the tour name the feature Quick replies via ui-lang.js",
+    [menuSrc.indexOf('t("Quick replies")') >= 0, setSrc.indexOf('t("Quick replies")') >= 0,
+      pickerStep && pickerStep.title, pickerInStep && pickerInStep.title],
+    [true, true, "Quick replies", "Quick replies"]);
 
   /* THE SMOKE WALKS THIS TOUR, not a remembered one. tests/tour-walk.js says which way the walk takes on each step,
      and the smoke takes it; this holds its rows to the table above: the same ids in order, Next pressed only where
@@ -951,6 +1063,100 @@ function emptyDeskTests() {
   }));
   eq("the empty desk offers Load and no sample button on the desk, from a disk and over a link, in English and in Polish",
     wrong, []);
+}
+
+/* THE EMPTY DESK'S QUICK FACTS TEXT: chosen by host ("on this computer" in the app, "in this browser"
+   in a browser) and translated through the UI language table, while stock.js stays import-free and
+   a catalog's own facts override both. */
+function quickFactsDefaultTests() {
+  const stockSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "stock.js"), "utf8");
+  const factsSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "facts.js"), "utf8");
+  const langSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "ui-lang.js"), "utf8");
+  const plAt = langSrc.indexOf("UI_STRINGS.pl={"), plEnd = langSrc.indexOf("\n};", plAt);
+  const PL = new Function("const UI_STRINGS={};\n" + langSrc.slice(plAt, plEnd + 3) + "\nreturn UI_STRINGS.pl;")();
+  const EN_APP = [
+    "Quick facts are yours to write.",
+    "",
+    "The pencil above opens them for editing:",
+    "fees, deadlines, links, anything used often.",
+    "",
+    "A catalog can bring its own,",
+    "and loading it replaces what is here.",
+    "",
+    "What is typed here stays on this computer.",
+  ].join("\n");
+  const EN_WEB = EN_APP.replace("stays on this computer.", "stays in this browser.");
+  const PL_APP = [
+    "Szybkie fakty można uzupełnić samodzielnie.",
+    "",
+    "Ołówek powyżej otwiera je do edycji:",
+    "opłaty, terminy, odnośniki, wszystko, czego często się używa.",
+    "",
+    "Katalog może zawierać własne,",
+    "a jego wczytanie zastępuje to, co jest tutaj.",
+    "",
+    "To, co się tu wpisze, zostaje na tym komputerze.",
+  ].join("\n");
+  const PL_WEB = PL_APP.replace("zostaje na tym komputerze.", "zostaje w tej przeglądarce.");
+
+  const run = (src, host, lang, packFacts) => {
+    const decls = [
+      extractDecl(stockSrc, "const M="),
+      extractDecl(stockSrc, "const FACTS_BUILT_IN="),
+      extractDecl(stockSrc, "let FACTS="),
+      extractDecl(stockSrc, "let WHO_BASE="),
+      extractDecl(stockSrc, "function setCatalogFacts("),
+      extractDecl(stockSrc, "function resetStock("),
+      src.includes("function defaultFacts(") ? extractDecl(src, "function defaultFacts(") : "",
+      extractDecl(src, "function getFactsText("),
+      extractDecl(src, "function factsIsCustom("),
+    ].filter(Boolean).join("\n");
+    const tr = lang === "pl" ? (s => PL[s] == null ? s : PL[s]) : (s => s);
+    return new Function("pack", "eHost", "t",
+      decls + "\nreturn { getFactsText, factsIsCustom, setCatalogFacts, resetStock };")(
+      { facts: packFacts === undefined ? null : packFacts }, () => !!host, tr);
+  };
+
+  eq("stock.js stays import-free", /^\s*import\b/m.test(stockSrc), false);
+  let got;
+  try {
+    got = [
+      run(factsSrc, true, "en").getFactsText(),
+      run(factsSrc, false, "en").getFactsText(),
+      run(factsSrc, true, "pl").getFactsText(),
+      run(factsSrc, false, "pl").getFactsText(),
+    ];
+  } catch (e) { got = "facts threw: " + e.message; }
+  eq("Quick facts default text matches the copywriter's wording on both hosts and in both languages",
+    got, [EN_APP, EN_WEB, PL_APP, PL_WEB]);
+
+  try {
+    const api = run(factsSrc, true, "pl");
+    api.setCatalogFacts("Free returns.");
+    const cat = api.getFactsText();
+    api.resetStock();
+    const back = api.getFactsText();
+    const same = run(factsSrc, true, "pl", PL_APP).factsIsCustom();
+    const custom = run(factsSrc, true, "pl", "Own notes").factsIsCustom();
+    got = [cat, back, same, custom];
+  } catch (e) { got = "facts threw: " + e.message; }
+  eq("a catalog's own facts override the built-in default across languages, resetStock restores it, and factsIsCustom knows the default from custom text",
+    got, ["Free returns.", PL_APP, false, true]);
+
+  if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  lifting plant:facts-host drops the app-host wording");
+  else {
+    try {
+      const lines = factsSrc.split("\n");
+      const at = lines.findIndex(l => l.indexOf("plant:facts-host") >= 0);
+      if (at < 0) got = "plant:facts-host missing";
+      else {
+        lines.splice(at, 1);
+        const stripped = run(lines.join("\n"), true, "en").getFactsText();
+        got = [stripped.includes("stays on this computer"), stripped.includes("stays in this browser")];
+      }
+    } catch (e) { got = "plant threw: " + e.message; }
+    eq("lifting plant:facts-host turns the app host back to the browser wording", got, [false, true]);
+  }
 }
 
 /* THE TOP BAR NAMES THE LOADED CATALOG'S FILE, extension and all. Maxim, 2026-09-28 17:06: "It's additional
@@ -2274,47 +2480,43 @@ function catalogNsTests() {
      [named(src), named('<script id="eEmbedded"></script>'), named("function eEmbeddedCatalog(){}")], [false, true, true]);
 }
 
-/* THE ADOPTIONS NEVER CARRY ONE CATALOG'S LAYER INTO ANOTHER'S. A build with a catalog inside it
-   adopts a lone layer an earlier build of that catalog stranded; since each catalog keeps a layer of
-   its own, a lone layer can be another catalog's. Both movers and the order loadPack runs them in,
-   sliced out of pack.js over a store this supplies, with the layer in view and the desk's list of
-   written layers supplied as storage.js keeps them. */
-function strandedAdoptionTests() {
-  const src = sourceText();
-  const decl = m => extractDecl(src, m);
-  const nsFor = new Function(decl("function eNsFor(") + "\nreturn eNsFor;")();
-  const body = ["const NS_CARRY=", "const NS_DROP_POSITIONAL=", "function packWithoutPositional(",
-                "function carryNsLayer(", "const NS_ADOPTED=", "function adoptStrandedPack("]
-                 .map(decl).join("\n") + "\nadoptStrandedPack();";
-  const EMBEDDED = { id: "lamp-shop" };
-  const own = nsFor(EMBEDDED.id), other = nsFor("fern-shop"), stranger = nsFor("an older seed");
-  const boot = (store, inView, written) => {
-    const lsGet = k => (k in store) ? store[k] : null;
-    new Function("eEmbeddedCatalog", "eNsFor", "E_NS", "lsGet", "lsSet", "lsKeys", "LAYER_KEYS", "eLayer", "eLayers",
-                 "lyGet", "t", "toast", "setTimeout", body)(
-      () => EMBEDDED, nsFor, own, lsGet, (k, v) => { store[k] = String(v); return true; }, () => Object.keys(store),
-      ["Pack", "Stats", "Days", "CatOrder", "IntentOrder", "IntentsAside", "LinksAside", "RequestsAside", "Exported"],
-      () => inView, () => written.slice(), n => lsGet(inView + n), s => s, () => {}, fn => fn());
-    return store;
-  };
-  const PACK = tag => JSON.stringify({ favourites: [tag] });
-  const under = (store, ns) => Object.keys(store).filter(k => k.indexOf(ns) === 0).sort();
-  const marks = store => Object.keys(store).filter(k => k.indexOf("e~nsAdopted:") === 0).length;
-
-  const s1 = boot({ [own + "Pack"]: PACK("an edit over the build's own catalog") }, other, [other]);
-  eq("a catalog loaded over the build's own finds none of that catalog's layer in its own, and nothing is marked",
-     [under(s1, other), marks(s1)], [[], 0]);
-  const s2 = boot({ [other + "Pack"]: PACK("an edit over another catalog") }, own, [other]);
-  eq("the build's own catalog back in view takes nothing from a layer this desk wrote for another catalog",
-     [under(s2, own), marks(s2)], [[], 0]);
-  const s3 = boot({ [stranger + "Pack"]: PACK("an edit under an older seed") }, other, [other]);
-  const s3Other = under(s3, other), s3Marks = marks(s3);
-  boot(s3, own, [other]);
-  eq("a stranded layer waits while another catalog is in view, and reaches the build's own catalog when it is",
-     [s3Other, s3Marks, JSON.parse(s3[own + "Pack"] || "{}").favourites], [[], 0, ["an edit under an older seed"]]);
-  const s4 = boot({ [stranger + "Pack"]: PACK("an edit an earlier build stranded") }, own, [other]);
-  eq("a lone stranded layer no catalog of this desk wrote is still adopted by the build's own catalog",
-     JSON.parse(s4[own + "Pack"] || "{}").favourites, ["an edit an earlier build stranded"]);
+/* A CATALOG'S LAYER STAYS ITS OWN. loadPack reads the layer in view and leaves every other
+   namespace's pack where it was. */
+function layerStaysPutTests() {
+  const cp = require("child_process");
+  const script = [
+    'process.removeAllListeners("warning");',
+    'process.on("warning", () => {});',
+    'import { pathToFileURL } from "node:url";',
+    'import { join } from "node:path";',
+    'const root = process.env.LAYER_STAYS_ROOT;',
+    'const mod = (n) => pathToFileURL(join(root, "src", "modules", n)).href;',
+    'const ST = await import(mod("storage.js"));',
+    'const PK = await import(mod("pack.js"));',
+    'const own = "eab12~", other = "ecd34~", lone = "e99aa~";',
+    'const packOf = (tag) => JSON.stringify({ favourites: [tag], intentKeys: "tag" });',
+    'const ownPack = packOf("own-card"), otherPack = packOf("other-card"), lonePack = packOf("lone-card");',
+    'ST.setLayer(own);',
+    'ST.lsSet(own + "Pack", ownPack);',
+    'ST.lsSet(other + "Pack", otherPack);',
+    'ST.lsSet(lone + "Pack", lonePack);',
+    'PK.resetPack();',
+    'PK.loadPack();',
+    'process.stdout.write(JSON.stringify({',
+    '  fav: PK.pack.favourites,',
+    '  other: ST.lsGet(other + "Pack") === otherPack,',
+    '  lone: ST.lsGet(lone + "Pack") === lonePack',
+    '}));'
+  ].join("\n");
+  const r = cp.spawnSync(process.execPath, ["--input-type=module", "-"], {
+    input: script, encoding: "utf8", cwd: E.ROOT, timeout: 60000, windowsHide: true,
+    env: Object.assign({}, process.env, { LAYER_STAYS_ROOT: E.ROOT })
+  });
+  let got = null;
+  try { got = JSON.parse(String(r.stdout || "").trim().split(/\r?\n/).filter(Boolean).pop() || "null"); } catch (e) {}
+  eq("loadPack reads the layer in view and leaves every other namespace's pack where it was",
+     [r.status, got && got.fav, got && got.other, got && got.lone],
+     [0, ["own-card"], true, true]);
 }
 
 /* THE PACK LOADER TOLERATES AN UNREADABLE LAYER, not JSON or JSON of the wrong shape: the desk starts,
@@ -2724,7 +2926,7 @@ function markLab(o) {
     extractDecl(open, "let eReadyDone="), extractDecl(open, "let lastGreet;"), extractDecl(open, "function markEReady("),
     extractDecl(open, "function deskLaunch("), extractDecl(open, "function wireOnOpen(")];
   let clock = 0, seq = 0, frames = [], timers = [], landed = null, waiting = [];
-  const log = [], warms = [], handed = [];
+  const log = [], warms = [], handed = [], focuses = [], bodyClasses = new Set();
   const sb = {
     mgReduceMotion: () => !!sb.still, fifthPhase: () => 0,
     performance: { now: () => clock },
@@ -2734,7 +2936,7 @@ function markLab(o) {
     clearTimeout: id => { timers = timers.filter(x => x.id !== id); },
     requestIdleCallback: fn => { timers.push({ id: ++seq, at: clock, fn }); return seq; },
     setInterval: () => 0,
-    document: { querySelector: () => null },
+    document: { querySelector: () => null, body: { classList: { add: c => bodyClasses.add(c), remove: c => bodyClasses.delete(c) } } },
     syncLaunchMark: (host, opts) => { handed.push([host, opts]); if (host) landed = false; },
     whenLaunchLanded: fn => { if (landed === false) waiting.push(fn); else fn(); },
     ssSet: () => {}, launchMark: () => null,
@@ -2742,11 +2944,23 @@ function markLab(o) {
     joinStands: () => false, heedJoin: () => {},
     startTour: () => log.push(["tour", Math.round(clock)]),
     applyUiLang: () => log.push(["repaint", Math.round(clock)]),
-    focusFirstEntryOnOpen: () => {}, focusEmptyLoadOnOpen: () => {}, greeting: () => "", render: () => {},
-    warmMenu: () => warms.push(Math.round(clock))
+    focusFirstEntryOnOpen: () => {}, focusEmptyLoadOnOpen: () => focuses.push(Math.round(clock)), greeting: () => "", render: () => {},
+    warmMenu: () => warms.push(Math.round(clock)),
+    /* a desk past the first-opening sign-in: no screen to show, so nothing waits on it */
+    bootFirstSignin: () => {}, firstSigninStands: () => false, onFirstSigninClosed: fn => fn()
   };
   sb.window = sb;
   if (o && o.host) sb.E_HOST = o.host;
+  if (o && o.signin) {
+    /* The real gate-to-screen sequence (signin.js's own state and its five movers) over a due flag the lab owns; the screen's
+       drawing is a stand-in, since what is asked is when the desk's boot waits, speaks and takes focus around it. */
+    const sg = read("signin.js");
+    ["let firstSigninPending=", "function firstSigninStands(", "function onFirstSigninClosed(", "function tellFirstSigninClosed(",
+      "function skipFirstSignin(", "function openFirstSignin(", "function closeFirstSignin(", "function bootFirstSignin("]
+      .forEach(m => slices.push(extractDecl(sg, m)));
+    sb.firstSigninDue = () => !!o.signin.due && !sb.seenMark; sb.markFirstSigninSeen = () => { sb.seenMark = true; };
+    sb.paintFirstSignin = () => {}; sb.signinV = null; sb.signinCall = () => {}; sb.$ = () => null;
+  }
   require("vm").runInNewContext(mark + "\n" + slices.join("\n") + "\n", sb);
   const timersTo = t => {
     for (;;) {
@@ -2762,7 +2976,7 @@ function markLab(o) {
   // The drawing lands at t: what waited runs then, each in the order it asked.
   const land = t => { timersTo(t); landed = true; const w = waiting; waiting = []; w.forEach(fn => fn()); };
   const host = { block: true };
-  return { sb, log, warms, handed, frame, timersTo, land, make: () => sb.syncEmptyMark(host), host };
+  return { sb, log, warms, handed, focuses, bodyClasses, frame, timersTo, land, make: () => sb.syncEmptyMark(host), host };
 }
 function markClockTests() {
   let got;
@@ -2906,6 +3120,26 @@ function markClockTests() {
   } catch (e) { got = "the lab threw: " + e.message; }
   eq("the menu's warm copy is drawn once, 900 ms after the mark has landed, and 900 ms after boot without one",
     got, [[2600], [900]]);
+
+  /* A FIRST OPENING WITH THE SIGN-IN SCREEN: the six boot rules above are held by a desk past the screen; here the screen
+     stands. Its first paint is the chrome in its own language and no screen yet (a launch) or the screen at once (none);
+     the warm copy keeps its 900 ms; the empty desk's focus waits for the answer and takes the desk when the screen is
+     answered or skipped; a desk with no screen due takes it at the landing as before. */
+  try {
+    const snap = w => [w.bodyClasses.has("e-first-signin"), w.sb.firstSigninStands(), w.focuses.slice(), w.warms.slice(), w.log.slice()];
+    const c = markLab({ signin: { due: true } }); c.make(); c.sb.wireOnOpen(); c.frame(10); c.frame(20);
+    const bootC = snap(c);
+    c.land(1700); c.timersTo(4000);
+    const heldC = snap(c); c.sb.skipFirstSignin(); const doneC = snap(c);
+    const n = markLab({ signin: { due: true } }); n.sb.wireOnOpen(); n.frame(10); n.frame(20); n.timersTo(4000);
+    const heldN = snap(n); n.sb.skipFirstSignin(); const doneN = snap(n);
+    const k = markLab({ signin: { due: false } }); k.make(); k.sb.wireOnOpen(); k.frame(10); k.frame(20); k.land(1700); k.timersTo(4000);
+    got = [bootC, heldC, doneC, heldN, doneN, snap(k)];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("a first opening with the sign-in screen: the chrome speaks its language at boot, the warm copy keeps its timing, and the empty desk's focus waits for the screen's answer and then comes as before",
+    got, [[false, true, [], [], [["repaint", 0]]], [true, true, [], [2600], [["repaint", 0]]], [false, false, [4000], [2600], [["repaint", 0]]],
+      [true, true, [], [900], [["repaint", 0]]], [false, false, [4000], [900], [["repaint", 0]]],
+      [false, false, [1700], [2600], [["repaint", 0]]]]);
 }
 /* THE LAUNCH MARK: launch-mark.js runs in a VM on a page, a clock, a frame queue and a promise written here (the
    promise settles in the same task, so a timeline is read without awaiting). Its figure is held to fifth.js's, its
@@ -3052,6 +3286,7 @@ function launchLab(o) {
     sb.greeting = () => "";
     sb.render = () => {};
     sb.warmMenu = () => {};
+    sb.bootFirstSignin = () => {}; sb.firstSigninStands = () => false; sb.onFirstSigninClosed = fn => fn(); /* no first sign-in to show */
     sb.setInterval = () => 0;
     sb.applyUiLang = () => { if (typeof o.onLang === "function") o.onLang(); };
   }
@@ -3563,6 +3798,7 @@ function launchFollowsTests() {
     const sb = { document: doc, requestAnimationFrame: fn => frames.push(fn), setTimeout: () => 0, setInterval: () => 0,
       ssGet: () => "1", ssSet: () => {}, mgReduceMotion: () => false, markCovered: () => false, fifthPhase: () => 0,
       afterShown: fn => fn(), greeting: () => "", render: () => {}, applyUiLang: () => {}, warmMenu: () => {},
+      bootFirstSignin: () => {}, firstSigninStands: () => false, onFirstSigninClosed: fn => fn(), /* no first sign-in to show */
       launchMark: () => ({}), setEntrySel: () => {}, dialogStanding: () => !!o.dialog,
       listEntryEls: () => (o.cards ? [{ dataset: { v: "0" }, closest: () => ({ dataset: { id: "c1" } }) }] : []),
       whenLaunchLanded: fn => { if (launching) held.push(fn); else fn(); } };
@@ -4142,7 +4378,7 @@ function menuWarmTests() {
       $: sel => (sel === "#settingsMenu" ? menu : sel === "#settingsBtn" ? btn : null),
       requestAnimationFrame: fn => { frames.push(fn); return frames.length; },
       setTimeout: (fn, ms) => { timers.push({ at: clock + ms, fn }); return timers.length; },
-      closeFactsPanel() {}, cutLeaves() {}, syncSettingsMenu() {}, takeKeyboard() {}
+      closeFactsPanel() {}, closeMoreMenu() {}, closeTabList() {}, cutLeaves() {}, syncSettingsMenu() {}, takeKeyboard() {}
     };
     require("vm").runInNewContext([extractDecl(src, "let menuDrawn="), extractDecl(src, "function warmMenu("),
       extractDecl(src, "function openSettingsMenu(")].join("\n"), sb);
@@ -4618,12 +4854,12 @@ function shippedFlagTests() {
       new Function("ipcMain", "fromEngine", "BrowserWindow", "process", "hostBackdrop", "catalogFolder",
         "path", "catalogFrom", "folderShown", "isBuiltIn", "catalogMtime", "openedWith",
         "openedRefused", "recovering", "deskFile", "os", "hostAccent", "catalogWaitNewer", "newerKey", "catalogNewerSaid",
-        "sessionHeld", "pendingSavedTabs", "readSavedTabs", "testServiceOn",
+        "sessionHeld", "pendingSavedTabs", "readSavedTabs", "testServiceOn", "sayJoinPolicy",
         extractDecl(shell, 'ipcMain.on("etiuda:host",'))(
         { on: (ch, fn) => { handler = fn; } }, () => true, { fromWebContents: () => null }, { platform: "win32" }, () => null,
         () => own, path.win32, from, S.folderShown, S.isBuiltIn, () => 0, "",
         null, new Set(), () => "", { homedir: () => "" }, () => "", null, () => "", "",
-        new Map(), null, () => null, false);
+        new Map(), null, () => null, false, () => ({ folder: "" }));
       ev = { sender: { id: 1, once() {} } };
       handler(ev);
     } catch (e) { return "the host answer did not run: " + e.message; }
@@ -5903,8 +6139,10 @@ function checkCatalogRoundTrip() {
      and catalogFromV2 reads it; a key written by one and unread by the other is a field that
      leaves in an export and never comes back. isV2 and v2Problems count as readers: format,
      kind and hash are what they are for. `modified` is written and never read back on purpose,
-     being a property of the export rather than of the catalog. */
-  const FILE_ALLOW = new Set(["modified"]);
+     being a property of the export rather than of the catalog. `flags` is written into a desk's
+     own file and not read back onto the catalog: a load does not take another desk's flags, and
+     an export does not carry them. */
+  const FILE_ALLOW = new Set(["modified", "flags"]);
   const exp3 = extractDecl(src, "function catalogToV2(");
   const imp3 = extractDecl(src, "function catalogFromV2(") + extractDecl(src, "function isV2(")
              + extractDecl(src, "function v2Problems(");

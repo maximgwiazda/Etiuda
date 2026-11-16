@@ -21,7 +21,7 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 27;
+const EXPECTED = 31 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 3);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -51,7 +51,7 @@ const safeStorage = {
 };
 /* One evaluation of main.js is one run of the app: its handlers, and a line appended to its body that hands over what
    a leg needs to reach. A second boot over the same folders is the next launch. */
-function boot() {
+function boot(src) {
   const on = {}, handle = {}, test = {};
   const electron = {
     app: { getPath: n => (n === "documents" ? DOCS : UD), setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop,
@@ -62,7 +62,7 @@ function boot() {
   };
   process.env.XDG_CURRENT_DESKTOP = "GNOME"; /* so the shell's Linux keyring switch (tests/shell-office.mjs 14) stays out, on any machine */
   new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
-    fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8")
+    (src || fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8"))
     + "\n__test.catalogChanged = catalogChanged; __test.teamKeys = teamKeys;"
     + " __test.historyKept = typeof historyKept === \"function\" ? historyKept : null;"
     + " __test.relayHere = function() { return relayHere(); };"
@@ -169,6 +169,74 @@ try {
     && outV.some(v => v.sha === sha(Buffer.from(exported)) && v.wrote),
     "1h an export over an existing file keeps the bytes it replaces, then what it wrote (" + outV.length + " versions)");
 
+  /* 1i (Grok's review 23, finding 6): where the history cannot keep anything (its folder is a file here), an export over an
+     existing file and the desk's own write each stop, the file left byte for byte as it was; the same two with the history
+     back write as before. */
+  {
+    const OUT2 = path.join(ELSEWHERE, "r23", "shop.ec"), was = catalog("shop", 7, "Was here");
+    fs.mkdirSync(path.dirname(OUT2), { recursive: true });
+    write(OUT2, was);
+    const ownWas = OWN ? fs.readFileSync(OWN, "utf8") : "";
+    const ownNext = catalog(me ? me.id + "-" + tail : "x", 1, "Mine again", { desk: me ? { id: me.id, key: me.key, box: me.box, name: "Ala K." } : {} });
+    const exportTo = async () => {
+      process.env.ETIUDA_TEST_SAVE_AS = path.dirname(OUT2);
+      try {
+        await A.ask("etiuda:choose-catalog-save", "Export", "shop.ec", "Etiuda catalog");
+        return await A.ask("etiuda:write-catalog-save", catalog("shop-y", 1, "Exported again"), null);
+      } finally { delete process.env.ETIUDA_TEST_SAVE_AS; }
+    };
+    fs.renameSync(HIST, HIST + ".away");
+    fs.writeFileSync(HIST, "not a folder");
+    let broken = null;
+    try {
+      const out = await exportTo(), own = await A.ask("etiuda:branch-write", "shop-" + tail, ownNext);
+      broken = { exportOk: !!out && out.ok === true, exportKept: fs.readFileSync(OUT2, "utf8") === was,
+        ownOk: !!own && own.ok === true, ownKept: !!OWN && fs.readFileSync(OWN, "utf8") === ownWas };
+    } finally {
+      fs.unlinkSync(HIST);
+      fs.renameSync(HIST + ".away", HIST);
+    }
+    const outBack = await exportTo(), ownBack = await A.ask("etiuda:branch-write", "shop-" + tail, ownNext);
+    const back = { exportOk: !!outBack && outBack.ok === true, exportWrote: fs.readFileSync(OUT2, "utf8") !== was,
+      ownOk: !!ownBack && ownBack.ok === true, ownWrote: !!OWN && fs.readFileSync(OWN, "utf8") !== ownWas,
+      wasKept: of(OUT2).some(v => v.sha === sha(Buffer.from(was))) };
+    check(!broken.exportOk && broken.exportKept && !broken.ownOk && broken.ownKept
+      && back.exportOk && back.exportWrote && back.ownOk && back.ownWrote && back.wasKept,
+      "1i where the history cannot keep the bytes a write replaces, an export and the desk's own write stop and the file stays as it"
+      + " was; THE CONTROL, the history back, both write and the replaced bytes are kept: " + JSON.stringify({ broken: broken, back: back }));
+    /* The plants, lifted in a second run of a copy over the same folders: each write goes through again with the history broken. */
+    if (process.env.ETIUDA_PLANTS === "off") { console.log("  SKIP 1i lifting plant:export-keeps-first and plant:branch-keeps-first (ETIUDA_PLANTS=off)"); }
+    else {
+      const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8").split("\n");
+      const lift = (tag, line) => { const at = MAIN.map((l, i) => (l.indexOf(tag) >= 0 ? i : -1)).filter(i => i >= 0); if (at.length !== 1) return null; const c = MAIN.slice(); c[at[0]] = line; return c.join("\n"); };
+      const liftedSrc = lift("plant:export-keeps-first", "    if (false) {");
+      let turned = null;
+      if (liftedSrc && lift("plant:branch-keeps-first", "") !== null) {
+        const src = liftedSrc.split("\n").map(l => (l.indexOf("plant:branch-keeps-first") >= 0 ? "" : l)).join("\n");
+        const B = boot(src);
+        await B.ask("etiuda:branch-identity", true);
+        const outWas = fs.readFileSync(OUT2, "utf8"), ownNow = OWN ? fs.readFileSync(OWN, "utf8") : "";
+        const ownThird = catalog(me ? me.id + "-" + tail : "x", 1, "Mine a third time", { desk: me ? { id: me.id, key: me.key, box: me.box, name: "Ala K." } : {} });
+        fs.renameSync(HIST, HIST + ".away");
+        fs.writeFileSync(HIST, "not a folder");
+        try {
+          process.env.ETIUDA_TEST_SAVE_AS = path.dirname(OUT2);
+          await B.ask("etiuda:choose-catalog-save", "Export", "shop.ec", "Etiuda catalog");
+          await B.ask("etiuda:write-catalog-save", catalog("shop-z", 1, "Lifted"), null);
+          delete process.env.ETIUDA_TEST_SAVE_AS;
+          await B.ask("etiuda:branch-write", "shop-" + tail, ownThird);
+          turned = { exportOver: fs.readFileSync(OUT2, "utf8") !== outWas, ownOver: !!OWN && fs.readFileSync(OWN, "utf8") !== ownNow };
+        } finally {
+          delete process.env.ETIUDA_TEST_SAVE_AS;
+          fs.unlinkSync(HIST);
+          fs.renameSync(HIST + ".away", HIST);
+        }
+      }
+      check(!!turned && turned.exportOver && turned.ownOver,
+        "1i lifting plant:export-keeps-first and plant:branch-keeps-first writes over both files with the history broken: " + JSON.stringify(turned));
+    }
+  }
+
   /* ---- the list, the open and the putting back ---------------------------------------------------------------------- */
   const list = await A.ask("etiuda:history-list");
   const L = Array.isArray(list) ? list : [];
@@ -248,6 +316,26 @@ try {
   check(capped === "c,d,f",
     "4b past the cap the longest unseen go first, the newest of each file never, and one content kept for two files weighs once, so c outlives a and b (" + capped + ")");
 
+  /* 4d (Grok's review 23, finding 8): the cap binds the newest of each file too, once nothing else is left to drop, so the
+     history cannot grow with every path the desk has opened; the longest unseen of them goes first. */
+  const pinSet = [V("x", "/x", now - 9 * DAY, 40), V("y", "/y", now - 2 * DAY, 40), V("z", "/z", now - DAY, 40), V("w", "/w", now - 20 * DAY, 40)];
+  const pinCapped = K ? K(pinSet, now, 30, 100).map(v => v.id).sort().join() : "no historyKept";
+  const roomy = K ? K(pinSet, now, 30, 1e9).map(v => v.id).sort().join() : "no historyKept";
+  check(pinCapped === "y,z" && roomy === "w,x,y,z",
+    "4d past the cap with only the newest of each file left, the longest unseen of those go too (" + pinCapped + "); THE CONTROL, under the cap, every one stays (" + roomy + ")");
+  if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP 4d lifting plant:history-cap-pinned (ETIUDA_PLANTS=off)");
+  else {
+    const MAIN4 = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8").split("\n");
+    const at4 = MAIN4.map((l, i) => (l.indexOf("plant:history-cap-pinned") >= 0 ? i : -1)).filter(i => i >= 0);
+    let liftedCap = null;
+    if (at4.length === 1) {
+      const c = MAIN4.slice(); c[at4[0]] = "";
+      const P4 = boot(c.join("\n")).test.historyKept;
+      liftedCap = P4 ? P4(pinSet, now, 30, 100).map(v => v.id).sort().join() : null;
+    }
+    check(liftedCap === "w,x,y,z", "4d lifting plant:history-cap-pinned keeps every newest past the cap again (" + liftedCap + ")");
+  }
+
   /* For real, a month on: the edition shop.ec held first is dropped from the index and its copy from the disk. */
   const realNow = Date.now;
   Date.now = () => realNow() + 31 * DAY;
@@ -303,6 +391,56 @@ try {
       "15ib a relay desk does not write an unsigned catalog in its mirror, and does not put an earlier version back over it: "
       + JSON.stringify({ here: !!here, wrote: wrote, held: afterWrite === before,
         offered: !!(older && older.put), put: put && put.ok, restored: afterPut === second }));
+  }
+
+  /* 2r23 (Grok's review 23, finding 2): a put-back takes the lock a shared write takes beside the file, so it waits while
+     another desk holds it, the file as it was; with the lock free it puts back and lets its own lock go. */
+  {
+    const B = boot();
+    const older = catalog("shop", 5, "Older one"), current = catalog("shop", 6, "Current one");
+    B.test.keepHist(SHOP, older);
+    write(SHOP, current, Date.now() + 6000);
+    B.test.keepHist(SHOP, current);
+    fs.writeFileSync(SHOP + ".lock", JSON.stringify({ kind: "etiuda-lock", token: "another-desk", at: Date.now() }));
+    const held = await B.ask("etiuda:history-put", sha(Buffer.from(older)), SHOP);
+    const heldKept = fs.readFileSync(SHOP, "utf8") === current && fs.existsSync(SHOP + ".lock");
+    fs.unlinkSync(SHOP + ".lock");
+    const free = await B.ask("etiuda:history-put", sha(Buffer.from(older)), SHOP);
+    const wrote = fs.readFileSync(SHOP, "utf8") === older && !fs.existsSync(SHOP + ".lock");
+    check(!!held && held.ok === false && heldKept && !!free && free.ok === true && wrote,
+      "2r23 a put-back waits while another desk holds the lock beside the file, the file as it was; THE CONTROL, the lock free,"
+      + " it puts back and leaves no lock: " + JSON.stringify({ held: held, heldKept: heldKept, free: free, wrote: wrote }));
+
+    /* 2q23 (the review's second question): an index this run did not build, saying a signed copy is free, puts nothing back:
+       the bytes are judged as they are about to be written. */
+    const signedOld = catalog("shop", 7, "Signed", SIGNED);
+    B.test.keepHist(SHOP, signedOld);
+    const doc = JSON.parse(fs.readFileSync(path.join(HIST, "index.json"), "utf8"));
+    doc.versions.forEach(v => { if (v.sha === sha(Buffer.from(signedOld))) v.signed = ""; });
+    fs.writeFileSync(path.join(HIST, "index.json"), JSON.stringify(doc));
+    const C = boot(), cur = fs.readFileSync(SHOP, "utf8");
+    const forged = await C.ask("etiuda:history-put", sha(Buffer.from(signedOld)), SHOP);
+    check(!!forged && forged.ok === false && fs.readFileSync(SHOP, "utf8") === cur,
+      "2q23 an index row saying a signed copy is free puts nothing back: the stored bytes are judged before they are written: " + JSON.stringify(forged));
+    if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP 2r23 lifting plant:put-back-lock and plant:put-back-bytes (ETIUDA_PLANTS=off)");
+    else {
+      const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8").split("\n");
+      const lifted = (tag, line) => { const at = MAIN.map((l, i) => (l.indexOf(tag) >= 0 ? i : -1)).filter(i => i >= 0); if (at.length !== 1) return null; const c = MAIN.slice(); c[at[0]] = line; return c.join("\n"); };
+      const noLock = lifted("plant:put-back-lock", "  if (false) {"), noBytes = lifted("plant:put-back-bytes", "");
+      let turned = null;
+      if (noLock && noBytes) {
+        const L = boot(noLock), now = fs.readFileSync(SHOP, "utf8");
+        fs.writeFileSync(SHOP + ".lock", JSON.stringify({ kind: "etiuda-lock", token: "another-desk", at: Date.now() }));
+        const r = await L.ask("etiuda:history-put", sha(Buffer.from(current)), SHOP);
+        const overLock = !!r && r.ok === true && fs.readFileSync(SHOP, "utf8") !== now;
+        fs.unlinkSync(SHOP + ".lock");
+        const Bt = boot(noBytes), before = fs.readFileSync(SHOP, "utf8");
+        const r2 = await Bt.ask("etiuda:history-put", sha(Buffer.from(signedOld)), SHOP);
+        turned = { overLock: overLock, signedWritten: !!r2 && r2.ok === true && fs.readFileSync(SHOP, "utf8") !== before };
+      }
+      check(!!turned && turned.overLock && turned.signedWritten,
+        "2r23 lifting plant:put-back-lock writes under another desk's lock, and lifting plant:put-back-bytes puts the signed copy back: " + JSON.stringify(turned));
+    }
   }
 
   /* ---- the page's half ------------------------------------------------------------------------------------------------ */

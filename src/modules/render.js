@@ -5,13 +5,15 @@ import { syncPillCounts } from "./pill-state.js";
 import { ensureCardOrder, cmpCardDisplay, displayBandKey, favBlockOn, inIntentBand, intentBandOn } from "./card-order.js";
 import { cardInActiveCats } from "./card-counts.js";
 import { editionMarkSig } from "./edition-marks.js";
+import { flagSig, flagFrame } from "./card-flag-desk.js";
+import { rewordSig, rewordShown } from "./card-model.js";
 import { cardMatchesSearch } from "./card-search.js";
 import { intentAffinityGroups } from "./affinity.js";
 import { cardSearchScore } from "./card-score.js";
 import { cardHitsSelectedIntent, cardHitsAlwaysCat } from "./card-intent.js";
 import { esc } from "./esc.js";
 import { list, $ } from "./dom.js";
-import { t, uiLang } from "./ui-lang.js";
+import { t, uiLang, hugDottedGround } from "./ui-lang.js";
 import { catIconSvg, catSlot } from "./cat-identity.js";
 import { chordChips } from "./shortcuts.js";
 import { applyCardColumns, remPx } from "./columns.js";
@@ -123,6 +125,7 @@ function render(){
   closeNotePane();
   edSubjectSoon();
   cancelLangChunks();
+  flagFrame();
   const terms=cardSearchTerms();
   scheduleSearchRank();
   syncPillCounts();
@@ -199,6 +202,7 @@ function render(){
     putEntrySel(null);
     markSearchHits(terms);
     syncEmptyMark(null);
+    hugDottedGround(list);
     return;
   }
   const other = nextContentLang(lang);
@@ -302,8 +306,8 @@ function render(){
     const body=()=>built||(built=cardBodyHtml(m,i,{hit:hit,catHit:catHit,fav:fav,band:band,other:other,dragTip:dragTip}));
     return {sepH:sepH, body:body, id:m.id,
       sig:ePackEpoch+"|"+renderKey+"|"+cardFillKey(m)
-        +"|"+(entrySel&&entrySel.id===m.id?entrySel.vi:-1)+"|"+editionMarkSig(m.id),
-      hit:hit, catHit:catHit, hidden:!!m._hidden, i:i, band:band,
+        +"|"+(entrySel&&entrySel.id===m.id?entrySel.vi:-1)+"|"+editionMarkSig(m.id)+"|"+flagSig(String(m.id||""))+"|"+rewordSig(m.id),
+      hit:hit, catHit:catHit, hidden:!!m._hidden, rw:!!rewordShown(m), i:i, band:band,
       dragging:!!(cardDrag&&cardDrag.moved&&cardDrag.key===m.id),
       dragTip:dragTip};
   });
@@ -363,6 +367,7 @@ function render(){
   scheduleCutScan();
   markSearchHits(terms);
   syncEmptyMark(null);
+  hugDottedGround(list);
 }
 export {
   rankedCards,

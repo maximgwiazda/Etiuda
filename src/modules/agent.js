@@ -3,7 +3,6 @@ import { pax } from "./dom.js";
 import { syncGenderGlyph } from "./gender-drum.js";
 import { t, translateTree, toast, TOAST_HAND_MS } from "./ui-lang.js";
 import { esc } from "./esc.js";
-import { greetLine } from "./greeting.js";
 import { lang } from "./app-state.js";
 import { scheduleTabSave } from "./tabs.js";
 import { hooks } from "./hooks.js";
@@ -111,8 +110,7 @@ function wireNameField(root,raw){
     const who=typed ? esc(typed) : '<span class="e-name-ph">'+esc(t("Kate"))+'</span>';
     const init=esc(agentParts(typed||t("Kate")).init);
     if(!shown.length){
-      const parts=greetLine("{NAME}",lang).split("{NAME}");
-      prev.innerHTML=esc(parts[0])+who+esc(parts[1]||"");
+      prev.innerHTML=who;
       return;
     }
     prev.innerHTML=shown.map(l=>esc(l).split("{AGENT}").join(who).split("{INIT}").join(init)).join("<br>");

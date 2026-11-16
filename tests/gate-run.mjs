@@ -62,6 +62,9 @@ function runTool(lab, args, customEnv = {}) {
     /* Every leg here asks the tool for a run of its own, and several legs run area on one lab's tree in turn; area resume (fold 45)
        would carry the second of them whole from the first and run nothing, so it is off unless a leg names it. */
     ETIUDA_AREA_RESUME: "off",
+    /* The real-profile sentinel snapshots a stand-in, never this machine's profile, unless a leg names another (the test architect's
+       real-profile measurement, 2026-11-15: 2795 reads of the real desk profile came from runs here that named none). */
+    ETIUDA_REAL_PROFILE_OVERRIDE: path.join(lab.root, "real-profile-stand-in"),
   }, customEnv);
   const r = spawnSync(process.execPath, [path.join(lab.lab, "tools", "gate-run.mjs"), ...args], {
     cwd: lab.lab,
@@ -580,7 +583,7 @@ function main() {
       const holder = spawn(process.execPath, [path.join(lab.lab, "tools", "machine-lock.mjs"), "run", "--", process.execPath, path.join(lab.lab, "tests", "hold.mjs")],
         /* Off Windows the holder leads its own process group, so the stop below takes machine-lock's wrapper and the held child together;
            a SIGKILL to the wrapper alone left the child holding the lane, and 16d's control found it still held (Claude gamma's sweep). */
-        { cwd: lab.lab, env: Object.assign({}, process.env, { ETIUDA_LOCK_PATH: path.join(lab.root, "machine.lock") }), stdio: "ignore", windowsHide: true,
+        { cwd: lab.lab, env: Object.assign({}, process.env, { ETIUDA_LOCK_PATH: path.join(lab.root, "machine.lock"), ETIUDA_REAL_PROFILE_OVERRIDE: path.join(lab.root, "real-profile-stand-in") }), stdio: "ignore", windowsHide: true,
           detached: process.platform !== "win32" });
       const lockFile = path.join(lab.root, "machine.lock");
       const t0 = Date.now();

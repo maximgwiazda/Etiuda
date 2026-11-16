@@ -3,11 +3,12 @@ import { cardBodyHtml } from "./card-body.js";
 import { cardHitsAlwaysCat, cardHitsSelectedIntent } from "./card-intent.js";
 import { holdFresh, parseCardHtml } from "./card-node.js";
 import { deckSettle, deckUnobserve, deckCarry } from "./deck.js";
-import { findCard } from "./card-model.js";
+import { findCard, rewordSig } from "./card-model.js";
 import { displayBandKey } from "./card-order.js";
 import { isFavourite, ePackEpoch } from "./pack.js";
 import { cardFillKey } from "./rail-list.js";
 import { editionMarkSig } from "./edition-marks.js";
+import { flagSig } from "./card-flag-desk.js";
 import { t, uiLang } from "./ui-lang.js";
 import { list, cardTpl } from "./dom.js";
 import { cards, lang, intentIdxs, entrySel } from "./app-state.js";
@@ -22,7 +23,7 @@ function dropCardPool(){ cardPool=new Map(); }
 function patchCard(el,it){
   // className is assigned WHOLE: a class put on a card from outside the render dies at the next pick,
   // all but the deck's own, which the same render reads again: see deckCarry.
-  el.className="card"+(it.hidden?" is-hidden":"")+(it.hit?" intent-hit":"")
+  el.className="card"+(it.hidden?" is-hidden":"")+(it.rw?" rw-on":"")+(it.hit?" intent-hit":"")
     +(it.catHit?" cat-hit":"")+(it.dragging?" dragging":"")+deckCarry(el);
   el.setAttribute("title",it.dragTip);
   el.setAttribute("data-i",it.i);
@@ -34,10 +35,12 @@ function patchCard(el,it){
      would file every badge between the mark and the words it marks. */
   const anchor=head.querySelector(".cstamp")||head.querySelector(".ctitle");
   if(!anchor) return;
+  // The flag's mark follows the title and its stamp, and the badges follow the mark.
+  const after=head.querySelector(":scope>.cflag")||anchor;
   let hitB=head.querySelector(".cbadge.hit"), catB=head.querySelector(".cbadge.cat");
-  if(it.hit && !hitB){ hitB=parseCardHtml(it.body().hitBadge); anchor.insertAdjacentElement("afterend",hitB); }
+  if(it.hit && !hitB){ hitB=parseCardHtml(it.body().hitBadge); after.insertAdjacentElement("afterend",hitB); }
   else if(!it.hit && hitB){ hitB.remove(); hitB=null; }
-  if(it.catHit && !catB){ catB=parseCardHtml(it.body().catBadge); (hitB||anchor).insertAdjacentElement("afterend",catB); }
+  if(it.catHit && !catB){ catB=parseCardHtml(it.body().catBadge); (hitB||after).insertAdjacentElement("afterend",catB); }
   else if(!it.catHit && catB){ catB.remove(); }
 }
 /* A language flip changes every card's bytes but nothing structural, so the tail never
@@ -77,7 +80,7 @@ function rebuildCardInPlace(id,near){
   const fresh=parseCardHtml(b.cardH);
   if(!fresh) return;
   fresh.__sig=ePackEpoch+"|"+renderKey+"|"+cardFillKey(m)
-    +"|"+(entrySel&&entrySel.id===m.id?entrySel.vi:-1)+"|"+editionMarkSig(m.id);
+    +"|"+(entrySel&&entrySel.id===m.id?entrySel.vi:-1)+"|"+editionMarkSig(m.id)+"|"+flagSig(String(m.id||""))+"|"+rewordSig(m.id);
   const ord=el.getAttribute("data-ord");
   if(ord!=null) fresh.setAttribute("data-ord",ord);
   deckUnobserve(el);
@@ -159,12 +162,44 @@ function paintList(spellNote,items){
 }
 /* setAttribute APPENDS on a kept node where the builder interleaves, so serialisation order
    differs while the attribute set does not. CSS and dataset are order-blind; compare sorted. */
+const POST_PAINT_CLASS=/^(?:deck(?:-[a-z]+)?|is-cut|cut-(?:l|r|rh|b))$/;
+const DECK_STYLE_PROP=/^--deck-[a-z-]+\s*:/;
 function normAttrOrder(el){
   return el.outerHTML.replace(/<([a-zA-Z][\w-]*)((?:\s+[\w:-]+(?:="[^"]*")?)*)(\s*\/?)>/g,
     (m,name,attrs,close)=>{
-      /* data-ord is stamped by the column dealer AFTER paint, so a kept node carries it and a
-         fresh parse does not. It is not part of what the builder wrote. */
-      const got=((attrs||"").match(/[\w:-]+(?:="[^"]*")?/g)||[]).filter(a=>a.indexOf("data-ord")!==0);
+      const raw=(attrs||"").match(/[\w:-]+(?:="[^"]*")?/g)||[];
+      let hasDeck=false;
+      for(let i=0;i<raw.length;i++){
+        if(raw[i].indexOf('class="')===0 && /\bdeck\b/.test(raw[i])){ hasDeck=true; break; }
+      }
+      const got=[];
+      for(let i=0;i<raw.length;i++){
+        const a=raw[i];
+        /* data-ord (columns.js) and data-erec (recency.js) are stamped AFTER paint. */
+        if(a.indexOf("data-ord")===0 || a.indexOf("data-erec")===0) continue;
+        if(a.indexOf('class="')===0){
+          const cls=a.slice(7,-1).split(/\s+/).filter(c=>c && !POST_PAINT_CLASS.test(c));
+          if(cls.length) got.push('class="'+cls.join(" ")+'"');
+          continue;
+        }
+        if(a.indexOf('style="')===0){
+          let s=a.slice(7,-1).trim();
+          const hasDeckStyle=hasDeck || /(?:^|;)\s*--deck-/.test(s);
+          if(s && hasDeckStyle){
+            const hasRest=/(?:^|;)\s*--deck-rest-bottom\s*:/.test(s);
+            const rem=s.split(";").map(d=>d.trim()).filter(d=>{
+              if(!d || DECK_STYLE_PROP.test(d)) return false;
+              if((hasDeck || hasRest) && /^height\s*:/.test(d)) return false;
+              return true;
+            });
+            s=rem.length ? rem.map(d=>d+";").join(" ") : "";
+          }
+          if(!s){ /* plant:pool-norm-empty-style */ continue; }
+          got.push('style="'+s+'"');
+          continue;
+        }
+        got.push(a);
+      }
       return "<"+name+(got.length?" "+got.sort().join(" "):"")+close+">";
     });
 }

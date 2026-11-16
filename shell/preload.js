@@ -2,6 +2,8 @@
 
 const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
+/* What a reword hands the shell: act, words, how and to, each a string, and nothing else of the page's. */
+const rewordOf = (o) => { const v = o && typeof o === "object" ? o : {}, s = k => (typeof v[k] === "string" ? v[k] : ""); return { act: s("act"), words: s("words"), how: s("how"), to: s("to") }; };
 /* THE PICKER'S WINDOW is told so by the shell on its command line, and gets its own eight verbs and
    nothing of the desk's; main answers them only from that window, and the desk's only from the desk. */
 const PICKER = typeof process !== "undefined" && Array.isArray(process.argv) && process.argv.indexOf("--etiuda-picker") > -1;
@@ -13,8 +15,14 @@ if (PICKER) {
     lang: () => ipcRenderer.invoke("etiuda:pick-lang").then(v => String(v || "null")),
     copy: (what) => ipcRenderer.invoke("etiuda:pick-copy", String(what || "")),
     takeSuggest: (id, multi) => ipcRenderer.invoke("etiuda:pick-intent", String(id || ""), multi ? 1 : 0).then(v => String(v || "null")),
+    rowsOf: (id) => ipcRenderer.invoke("etiuda:pick-rows", String(id || "")).then(v => String(v || "null")),
+    /* A reword of the words in the box, the four strings alone, answered {ok, text} or {ok, why}; and Enter's put of its result. */
+    reword: (o) => ipcRenderer.invoke("etiuda:pick-reword", rewordOf(o)),
+    put: () => ipcRenderer.invoke("etiuda:pick-put"),
+    grow: () => ipcRenderer.send("etiuda:pick-grow"),
     close: () => ipcRenderer.send("etiuda:pick-close"),
-    ready: () => ipcRenderer.send("etiuda:pick-ready"),
+    ready: (add) => ipcRenderer.send("etiuda:pick-ready", Number(add) || 0),
+    tour: (go) => ipcRenderer.send("etiuda:pick-tour", String(go || "")),
     onOpen: (fn) => ipcRenderer.on("etiuda:pick-open", (_e, text) => fn(String(text || ""))),
   });
 }
@@ -80,6 +88,7 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
      accepting a catalog reloads the document, so a stale answer cannot outlive the fact. The
      folder Settings is showing comes from the desk key instead, which is live. */
   catalogFolder: host.catalogFolder,
+  catalogFolderPolicy: host.catalogFolderPolicy || "",
   catalogFile: host.catalogFile,
   catalogIn: host.catalogIn,
   /* True where that file is one Etiuda ships, whose folder is never named. */
@@ -204,6 +213,8 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
      desk's own catalog file by its stem, an empty text taking it away. Nothing here hands out a key. */
   branchIdentity: (make) => ipcRenderer.invoke("etiuda:branch-identity", make === false ? false : true),
   writeBranch: (stem, text) => ipcRenderer.invoke("etiuda:branch-write", String(stem || ""), String(text || "")),
+  /* Whether a flag made now would reach a lead. No argument: the shell holds the catalog in use. */
+  branchReach: () => ipcRenderer.sendSync("etiuda:branch-reach"),
   /* The desk's earlier versions of its catalogs: the list, {name, text} for one, and putting one back in the catalog
      folder, answered {ok, replaced}. A version is its hash and the file it was kept for. */
   historyList: () => ipcRenderer.invoke("etiuda:history-list"),
@@ -238,6 +249,8 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   /* The embedded model: {model} says whether this desk carries it, and the switch is told to the shell as it moves. */
   aiState: () => ipcRenderer.sendSync("etiuda:ai-state"),
   setAi: (on) => ipcRenderer.send("etiuda:ai-set", !!on),
+  /* The person's own switch for rewording, on this computer alone: aiState says whether it is on (rewordOn) and the address a reword would go to (rewordAt). */
+  setReword: (on) => ipcRenderer.send("etiuda:reword-set", !!on),
   /* The organisation's model in Settings: what is in force, never the key; a save of the fields named, each a string; the
      connection test; and each re-order's outcome as the shell reports it on an event of its own, {ranking, failures,
      pausedUntil, slow}, slow while the service usually answers too late to reorder. */
@@ -250,6 +263,8 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
     return ipcRenderer.invoke("etiuda:desk-ai-save", f);
   },
   deskAiTest: () => ipcRenderer.invoke("etiuda:desk-ai-test"),
+  /* A card's reword: the four strings alone, answered {ok, text} or {ok, why}. */
+  reword: (o) => ipcRenderer.invoke("etiuda:desk-reword", rewordOf(o)),
   onAiRanking: (fn) => ipcRenderer.on("etiuda:ai-ranking", (_e, v) => {
     const s = v && typeof v === "object" ? v : {};
     try {

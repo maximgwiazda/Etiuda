@@ -17,6 +17,8 @@ import { $, intentEl } from "./dom.js";
 import { closeNotePane } from "./note-pane.js";
 import { eHost } from "./host.js";
 import { closeMoreMenu, closeSettingsMenu } from "./header-menus.js";
+import { closeTabList } from "./tabs.js";
+import { firstSigninOpenNow, skipFirstSignin } from "./signin.js";
 import { hooks } from "./hooks.js";
 
 /* Reaching for the search box dismisses the loose overlays: quick facts and the settings
@@ -31,6 +33,9 @@ function closeLooseOverlays(){
   // The chevron's menu hangs off the same row and is the same kind of loose overlay.
   if($("#moreMenu") && !$("#moreMenu").hidden){
     closeMoreMenu();
+  }
+  if($("#tabsListMenu") && !$("#tabsListMenu").hidden){
+    closeTabList(false);
   }
   if(factsPanelOpen()){
     closeFactsPanel();
@@ -142,6 +147,18 @@ function wireGlobalKeydown(){
       return;
     }
 
+    if(firstSigninOpenNow()){
+      if(eventMatchesAction(e,"escape") || e.key==="Escape"){
+        e.preventDefault(); e.stopPropagation(); skipFirstSignin(); return;
+      }
+      if(e.key==="Tab" && !e.ctrlKey && !e.altKey && !e.metaKey){
+        const to=tabTargetIn($("#firstSignin"), e.shiftKey);
+        if(to){ e.preventDefault(); try{ to.focus({preventScroll:true}); }catch(x){ to.focus(); } }
+        return;
+      }
+      return;
+    }
+
     /* A resting editor holds no key: the desk in front has them all. */
     if(modalFront()){
       // Escape is the keyboard's X, and goes where the X goes - back one screen, then out.
@@ -185,6 +202,9 @@ function wireGlobalKeydown(){
       }
       if($("#moreMenu")&&!$("#moreMenu").hidden){
         e.preventDefault(); closeMoreMenu(); return;
+      }
+      if($("#tabsListMenu")&&!$("#tabsListMenu").hidden){
+        e.preventDefault(); closeTabList(true); return;
       }
       if(factsPanelOpen()){ e.preventDefault(); closeFactsPanel(); return; }
     }

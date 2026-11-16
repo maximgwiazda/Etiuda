@@ -18,7 +18,7 @@ import { drawIntentRail } from "./rail-list.js";
 import { normWhoList, WHO_BASE } from "./stock.js";
 import { lySet } from "./storage.js";
 import { drawPills } from "./tabs.js";
-import { t, catalogCountsLine, counted, toast, translateTree, offerUndo, uiLang } from "./ui-lang.js";
+import { t, catalogCountsLine, counted, toast, translateTree, offerUndo, uiLang, hugDottedGround } from "./ui-lang.js";
 import { isFavourite, isIntentFavourite, pack, whoOptions, savePack } from "./pack.js";
 import { removeCard, removeIntent, setIntentHidden, syncIntentOrder, toggleFavourite, toggleIntentFavourite } from "./favourites.js";
 import { primaryCatKeys, intentCardCounts, allIntentCardCount, normalizeCardIntents } from "./card-intent.js";
@@ -33,7 +33,7 @@ import { rebuildCards } from "./rebuild.js";
 import { render } from "./render.js";
 import { paintCatalogList } from "./catalog-offer.js";
 import { eHasHistory, openHistory } from "./catalog-history.js";
-import { eCatalogFolder, eCatalogFolderShort, eChooseCatalogFolder, eHost, eOpenCatalogFolder } from "./host.js";
+import { eCatalogFolder, eCatalogFolderPinned, eCatalogFolderShort, eChooseCatalogFolder, eHost, eOpenCatalogFolder } from "./host.js";
 import { cards, catOrder, mgOpen, cardCounts } from "./app-state.js";
 import { joinDoorButton, openJoinPaste, teamLeads } from "./team-join.js";
 import { openScreenTab, registerScreen, screenOn } from "./screen-tabs.js";
@@ -52,9 +52,9 @@ function catalogFolderTail(withId){
     +' title="'+esc(eCatalogFolder())+'"'
     +' aria-label="'+esc(t("Open this folder"))+': '+esc(eCatalogFolder())+'">'
     +esc(eCatalogFolderShort())+'</code>'
-    +'<button type="button" class="btn icbtn ec-where-edit"'+editId+' title="'
+    +(eCatalogFolderPinned()?'':'<button type="button" class="btn icbtn ec-where-edit"'+editId+' title="'
     +esc(t("Change folder…"))+'" aria-label="'+esc(t("Change folder…"))+'">'
-    +ICON_EDIT+'</button>'
+    +ICON_EDIT+'</button>')
     +'</span>';
 }
 /** One collapsible Manage section. `body` is trusted markup; `title` is not. */
@@ -105,7 +105,7 @@ function mgDay(ms){
 
 function stripLeadingGreetingAndPax(s){
   let str = String(s || "").trim();
-  return str.replace(/^(?:\{(?:GREET|PAX)(?::[^{}]*)?\}[,\s.!?\-–—]*\s*)+/i, "");
+  return str.replace(/^(?:\{(?:GREET|PAX)(?::[^{}]*)?\}[,\s.!?\-\u2013\u2014]*\s*)+/i, "");
 }
 
 function mgCardOpensWithText(m){
@@ -219,7 +219,7 @@ function mgCardRow(m, maxSent){
   return '<div class="manage-row mg-card mg-card-row' + (hid ? " is-hidden" : "") + '" data-cardrow="' + esc(m.id) + '"' +
       ' data-band="' + esc(mgCardBand(m)) + '" title="' + esc(mgCardDragTip()) + '">' +
     '<span class="lw-nm">' +
-      '<span class="mg-card-lab">' + esc(cardTitle(m) || "") + '</span>' +
+      '<span class="mg-card-lab" data-i18n-skip>' + esc(cardTitle(m) || "") + '</span>' +
       (cardCommits(m) ? stampHtml("mg-stamp") : "") +
     '</span>' +
     '<span class="lw-c op lw-h-op cut-peek">' + openHtml + '</span>' +
@@ -343,19 +343,31 @@ function mgCardDragTip(){
     : t("Drag to reorder, or onto a category to move it there");
 }
 /* An intent's date, in its row's hover while its column has stepped aside. */
-function updateIntentDateTitles(root){
-  const head=(root || document).querySelector(".lw-ih-date");
+function updateIntentDateTitles(root, force){
+  const scope=root || document;
+  const list=scope.classList && scope.classList.contains("mg-intents") ? scope : scope.querySelector(".mg-intents");
+  if(!list || (typeof list.getClientRects==="function" && !list.getClientRects().length)) return;
+  const head=list.querySelector(".lw-ih-date");
   const hidden=!head || !head.offsetParent || getComputedStyle(head).display === "none";
-  (root || document).querySelectorAll(".mg-intents .manage-row.mg-int[data-changed]").forEach(row=>{
+  if(!force && list.__dateHidden===hidden) return;
+  list.__dateHidden=hidden;
+  list.querySelectorAll(".manage-row.mg-int[data-changed]").forEach(row=>{
     if(hidden) row.setAttribute("title", t("Date modified") + ": " + row.getAttribute("data-changed"));
     else row.removeAttribute("title");
   });
 }
-function updateTreeHoverTitles(root){
+function updateTreeHoverTitles(root, scope){
   const tree = (root || document).querySelector(".mg-tree");
   if(!tree) return;
+  const isSingle = scope && scope.matches && scope.matches(".manage-row.mg-card");
+  if(!isSingle && tree.closest("[hidden]")) return;
   const head = tree.querySelector(".lw-head");
   if(!head) return;
+  const rows = isSingle
+    ? [scope]
+    : Array.from((scope || tree).querySelectorAll(".mg-cat-body:not([hidden]) > .manage-row.mg-card:not([hidden])"))
+        .filter(r => !r.closest("[hidden]"));
+  if(!rows.length) return;
   const isColShown = cls => {
     const el = head.querySelector("." + cls);
     return el && el.offsetParent && getComputedStyle(el).display !== "none";
@@ -370,10 +382,14 @@ function updateTreeHoverTitles(root){
     dt: !isColShown("lw-h-dt"),
   };
   const dragHint = mgCardDragTip();
-  const cardRows = tree.querySelectorAll(".mg-cat-body .manage-row.mg-card");
-  cardRows.forEach(row => {
+  let byId = null;
+  if(rows.length > 1){
+    byId = new Map();
+    for(const c of (cards || [])) if(c && c.id && !byId.has(c.id)) byId.set(c.id, c);
+  }
+  rows.forEach(row => {
     const cid = row.getAttribute("data-cardrow");
-    const m = (cards || []).find(c => c && c.id === cid);
+    const m = byId ? byId.get(cid) : (cards || []).find(c => c && c.id === cid);
     if(!m) return;
     const lines = [dragHint];
     if(hiddenCols.op){
@@ -459,7 +475,7 @@ function mgCatTree(){
        updates the category directly. Fixed / orphan categories use a span. */
     const name=(fixed || k==="__orphan")
       ? '<span class="mg-cat-fixed">'+esc(label)+'</span>'
-      : '<textarea class="mg-cat-lab2" rows="1" data-rename="'+esc(k)+'" spellcheck="false" autocomplete="off" aria-label="'+esc(t("Category name"))+'">'+esc(label)+'</textarea>';
+      : '<textarea class="mg-cat-lab2" rows="1" data-rename="'+esc(k)+'" spellcheck="false" autocomplete="off" aria-label="'+esc(t("Category name"))+'" data-i18n-skip>'+esc(label)+'</textarea>';
     /* × only on an empty category - the same rule the header pill uses, so no route anywhere
        in the UI deletes a category with cards still in it. */
     const x=(!n && k!=="__orphan")
@@ -969,7 +985,7 @@ function mgIntentRow(i,catOf,linked,intentCardsMap){
   } else {
     chipsHtml=cardList.map(o=>{
       const title=(typeof cardTitle==="function"?cardTitle(o.m):"")||"";
-      return '<button type="button" class="lw-chip" data-card-id="'+esc(o.m.id)+'" title="'+esc(t("Opens this card's editor"))+'" aria-label="'+esc(title)+' · '+esc(t("Opens this card's editor"))+'">'+esc(title)+'</button>';
+      return '<button type="button" class="lw-chip" data-card-id="'+esc(o.m.id)+'" title="'+esc(t("Opens this card's editor"))+'" aria-label="'+esc(title)+' · '+esc(t("Opens this card's editor"))+'"><span data-i18n-skip>'+esc(title)+'</span></button>';
     }).join("");
   }
 
@@ -1161,13 +1177,31 @@ function applyLibView(page){
     const everyLine=every?t("Cards linked to every intent: {N}.").replace("{N}",every)+" ":"";
     lede.textContent=!sec||q?"":(sec.key==="catmac"&&n)?(n+". "+sec.lede):(sec.key==="intents")?((n?t("Intents: {N}.").replace("{N}",n)+" ":"")+everyLine+sec.lede):sec.lede;
   }
+  hugDottedGround(page.querySelector("#libPage") || page);
 }
 /* The fades are measured where the page is drawn: the nav and the section shown, or every section a search shows. */
 function markLibCut(page){
-  if(libFold(libQuery)){ markCutText(page); return; }
-  const nav=page.querySelector(".sx-nav"), sec=page.querySelector('details.manage-sec[data-mg="'+libOn+'"]');
+  const nav=page.querySelector(".sx-nav");
   if(nav) markCutText(nav);
+  if(libFold(libQuery)){
+    page.querySelectorAll("details.manage-sec").forEach(sec=>{ if(!sec.hasAttribute("hidden")) markCutText(sec); });
+    return;
+  }
+  const sec=page.querySelector('details.manage-sec[data-mg="'+libOn+'"]');
   if(sec) markCutText(sec);
+}
+/* A search keystroke filters the drawn list in place rather than drawing the Library again. */
+function filterLibPage(page){
+  if(!page || !page.isConnected || page!==libPage() || libView!=="list") return false;
+  applyLibView(page);
+  const at=page.querySelector("#libPage");
+  if(at) at.scrollTop=0;
+  markLibCut(page);
+  const intSec=page.querySelector('details.manage-sec[data-mg="intents"]');
+  if(intSec && !intSec.hasAttribute("hidden")) markChipOverflow({ force: true });
+  const catSec=page.querySelector('details.manage-sec[data-mg="catmac"]');
+  if(catSec && !catSec.hasAttribute("hidden")) updateTreeHoverTitles(page);
+  return true;
 }
 /* A section press shows a section the last paint already drew, as Settings' press does, and measures only what it
    uncovered; false where there is no drawn list to show it in, and the caller paints. */
@@ -1185,21 +1219,23 @@ function wireLibShell(page){
   if(!page||typeof page.querySelectorAll!=="function") return;
   const buttons=page.querySelectorAll(".sx-sec[data-lm]");
   if(!buttons||!buttons.length) return;
+  const find=page.querySelector("#libSearch");
   buttons.forEach(b=>{
     b.onclick=()=>{
-      const wasList=libView==="list" && !libFold(libQuery);
+      const wasList=libView==="list";
       libView="list";
       libOn=b.getAttribute("data-lm")||libOn;
       libQuery="";
       mgOpen.add(libOn);
+      if(find) find.value="";
       if(wasList && showLibSection(page)) return;
       paintLibrary();
     };
   });
-  const find=page.querySelector("#libSearch");
   if(find){
     find.oninput=()=>{
       libQuery=find.value;
+      if(filterLibPage(page)) return;
       const at=find.selectionStart;
       paintLibrary();
       const again=document.getElementById("libSearch");
@@ -1212,11 +1248,19 @@ function wireLibShell(page){
       e.preventDefault();
       if(e.stopPropagation) e.stopPropagation();
       libQuery="";
+      find.value="";
+      if(filterLibPage(page)) return;
       paintLibrary();
     });
   }
   const mt=page.querySelector("#libMaint");
   if(mt) mt.onclick=()=>openMaintenance();
+  const at=page.querySelector("#libPage");
+  if(at && typeof at.addEventListener==="function"){
+    at.addEventListener("scroll", ()=>{
+      if(libView==="list" && (libOn==="intents" || libFold(libQuery))) markChipOverflow({ scroll: true });
+    }, { passive: true });
+  }
 }
 const ICON_GRIP = '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true"><circle cx="6" cy="4" r="1.2"/><circle cx="10" cy="4" r="1.2"/><circle cx="6" cy="8" r="1.2"/><circle cx="10" cy="8" r="1.2"/><circle cx="6" cy="12" r="1.2"/><circle cx="10" cy="12" r="1.2"/></svg>';
 const ICON_REMOVE = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
@@ -1263,9 +1307,9 @@ function roleWheelHtml(names, markedName){
   }
   return '<div class="lw-wheel">'+
     '<div class="lw-drum">'+
-      '<span class="rd-prev p">'+esc(prev)+'</span>'+
-      '<span class="rd-cur c">'+esc(cur)+'</span>'+
-      '<span class="rd-next q">'+esc(next)+'</span>'+
+      '<span class="rd-prev p" data-i18n-skip>'+esc(prev)+'</span>'+
+      '<span class="rd-cur c" data-i18n-skip>'+esc(cur)+'</span>'+
+      '<span class="rd-next q" data-i18n-skip>'+esc(next)+'</span>'+
     '</div>'+
     '<div class="lw-drumfield">'+esc(t("customer's name"))+'</div>'+
   '</div>';
@@ -1278,7 +1322,7 @@ function mgWhoRowsHtml(names, markedName){
     const takeTitle = t("Take {NAME} off the wheel").replace("{NAME}", name);
     return '<div class="lw-name'+on+'" tabindex="0" role="listitem" data-wrow="'+esc(name)+'">'+
       '<span class="g" aria-label="'+esc(moveTitle)+'" title="'+esc(moveTitle)+'">'+ICON_GRIP+'</span>'+
-      '<span class="n">'+esc(name)+'</span>'+
+      '<span class="n" data-i18n-skip>'+esc(name)+'</span>'+
       '<button type="button" class="lw-del" aria-label="'+esc(takeTitle)+'" title="'+esc(takeTitle)+'">'+ICON_REMOVE+'</button>'+
     '</div>';
   }).join("");
@@ -1304,8 +1348,8 @@ function mgWhoSideHtml(names, markedName){
       const title = cardTitle(m);
       const filled = fillCardReply(m, markedName);
       return '<div class="lw-ct" role="button" tabindex="0" data-card-id="'+esc(m.id)+'" title="'+esc(t("Opens this card's editor"))+'" aria-label="'+esc(t("Opens this card's editor"))+'">'+
-        '<div class="t">'+esc(title)+'</div>'+
-        '<div class="r">'+filled+'</div>'+
+        '<div class="t" data-i18n-skip>'+esc(title)+'</div>'+
+        '<div class="r" data-i18n-skip>'+filled+'</div>'+
       '</div>';
     }).join("")+
   '</div>';
@@ -1336,6 +1380,7 @@ function refreshRolePage(page){
   const fk = focusKey(document.activeElement, sec);
   sec.innerHTML = mgWhoSectionHtml();
   wireRolePage(page);
+  hugDottedGround(sec);
   if(fk) focusSame(sec, fk);
   const cnt = page.querySelector('details.manage-sec[data-mg="who"] .mg-count');
   if(cnt) cnt.textContent = String(whoOptions().length);
@@ -1579,7 +1624,14 @@ function paintLibrary(host,body){
   const isHist=libView==="history";
   const name=catalogFileName();
   const fk=focusKey(document.activeElement,host);
-  const html='<div class="sx lm lm-lib lib-screen lib-list'+(isHist?' is-history':'')+'" tabindex="-1">'
+  const bodyHtml=isHist ? "" : (body||openManage(true));
+  const key=isHist ? "" : [
+    name, libFind(), libSections().map(s=>s.key+":"+s.name).join("\0"),
+    formatActionChord("maintenance"), bodyHtml
+  ].join("\x01");
+  const kept=!isHist && libDrawn && libDrawn.key===key && libDrawn.page.isConnected===false ? libDrawn.page : null;
+  if(kept) host.replaceChildren(kept);
+  else host.innerHTML='<div class="sx lm lm-lib lib-screen lib-list'+(isHist?' is-history':'')+'" tabindex="-1">'
     +'<div class="lm-split">'
     +'<nav class="sx-nav" aria-label="'+esc(t("Library"))+'">'+libraryHeadHtml()
     +'<label class="sx-search">'+lmIcon("search")
@@ -1596,22 +1648,21 @@ function paintLibrary(host,body){
       : '<div class="sx-page" id="libPage"><div class="sx-crumb">'+esc(t("Library"))
         +(name?' · <span data-i18n-skip>'+esc(name)+'</span>':'')+'</div>'
         +'<h2 id="libTitle" data-i18n-skip></h2><p class="lede" id="libLede" data-i18n-skip></p>'
-        +'<div class="sx-card">'+(body||openManage(true))+'</div></div>')
+        +'<div class="sx-card">'+bodyHtml+'</div></div>')
     +'</div>'
     +(isHist ? '<div class="screen-actions"><div class="mf-left"></div><button type="button" class="btn primary" id="ehClose">'+esc(t("Back to the Library"))+'</button></div>' : '')+'</div>';
-  const kept=!isHist && libDrawn && libDrawn.html===html && libDrawn.page.isConnected===false ? libDrawn.page : null;
-  if(kept) host.replaceChildren(kept);
-  else host.innerHTML=html;
   const page=kept || host.querySelector(".lib-list");
-  libDrawn=isHist ? null : { html, page };
+  libDrawn=isHist ? null : { key, page };
   if(kept){
+    const findEl=page.querySelector("#libSearch");
+    if(findEl && findEl.value!==libQuery) findEl.value=libQuery;
     applyLibView(page);
     const at=page.querySelector("#libPage");
     if(at) at.scrollTop=0;
     paintCatalogList();
     markLibCut(page);
     updateTreeHoverTitles(page);
-    updateIntentDateTitles(page);
+    markChipOverflow();
   } else if(isHist){
     wireLibShell(page);
     openHistory(host.querySelector("#ehView")||host);
@@ -1625,7 +1676,6 @@ function paintLibrary(host,body){
     dressDialogInputs(page);
     markLibCut(page);
     updateTreeHoverTitles(page);
-    updateIntentDateTitles(page);
   }
   if(fk) focusSame(host,fk);
   // The tab takes the keyboard where its wiring left focus nowhere inside it, as a dialog does.
@@ -1640,7 +1690,7 @@ registerScreen(LIB_SCREEN,{ title:()=>t("Library"), render:host=>paintLibrary(ho
    2026-11-11: at 1280 it cost the first row most of a chip). One observer for the list: a new one on
    every paint kept each previous list. */
 const CHIP_COL_NARROW=320, CHIP_COL_DATE=520;
-let chipOverflowRO=null;
+let chipOverflowRO=null, treeHoverRO=null;
 /* The chips' column on the narrowest shown row without the date, the chevron's place taken from it,
    and what the date would take besides. Read from the parts of a row that never move (its width less
    the mark, name, number, buttons and gaps), never from its chips: with every row open there is no
@@ -1649,10 +1699,12 @@ let chipOverflowRO=null;
    520px). */
 function chipRoom(list){
   let room=null, gone=false, gap=0, more=null;
-  list.querySelectorAll(".manage-row.mg-int").forEach(r=>{
+  const rows=list.querySelectorAll(".manage-row.mg-int:not([hidden])");
+  for(const r of rows){
+    if(!r.getClientRects().length) continue;
     const mid=r.querySelector(".lw-mid");
-    if(!mid || !r.getClientRects().length) return;
-    if(!mid.getClientRects().length){ gone=true; return; }
+    if(!mid) continue;
+    if(!mid.getClientRects().length){ gone=true; break; }
     const cs=getComputedStyle(r);
     gap=parseFloat(cs.columnGap)||0;
     let w=r.clientWidth-parseFloat(cs.paddingLeft)-parseFloat(cs.paddingRight);
@@ -1661,41 +1713,123 @@ function chipRoom(list){
       const k=getComputedStyle(c);
       w-=c.getBoundingClientRect().width+parseFloat(k.marginLeft)+parseFloat(k.marginRight)+gap;
     }
-    if(room===null || w<room) room=w;
-    if(!more) more=r.querySelector("[data-chips-more]");
-  });
+    room=w;
+    more=list.querySelector(".manage-row.mg-int:not([hidden]) [data-chips-more]:not([hidden])") || r.querySelector("[data-chips-more]");
+    break;
+  }
   if(room===null) return { room, gone, date:0 };
   // Every chevron is one size; a hidden one is shown for the reading alone, before anything paints.
-  if(more){
-    const was=more.hidden;
+  if(more && more.hidden){
     more.hidden=false;
     room-=more.getBoundingClientRect().width+gap;
-    more.hidden=was;
+    more.hidden=true;
+  } else if(more){
+    room-=more.getBoundingClientRect().width+gap;
   }
-  const cell=list.querySelector(".lw-date");
+  const cell=list.querySelector(".manage-row.mg-int:not([hidden]) .lw-date") || list.querySelector(".lw-date");
   return { room, gone, date: cell ? (parseFloat(getComputedStyle(cell).flexBasis)||0)+gap : 0 };
 }
-function markChipOverflow(){
+function applyChipOverflowRow(r, more, open, over, gen){
+  more.hidden=!open && !over;
+  r.classList.toggle("chips-fade", !open && over);
+  r.__chipGen=gen;
+}
+function markChipOverflow(opts){
+  if(opts && opts.nodeType===1){
+    const r=opts;
+    const intentsList=r.closest ? r.closest(".mg-intents") : document.querySelector(".mg-intents");
+    if(!intentsList || (typeof intentsList.getClientRects==="function" && !intentsList.getClientRects().length)) return;
+    if(r.hasAttribute("hidden") || !r.getClientRects().length) return;
+    const more=r.querySelector("[data-chips-more]"), mid=r.querySelector(".lw-mid");
+    if(!more||!mid) return;
+    const gen=intentsList.__chipGen || 1;
+    applyChipOverflowRow(r, more, r.classList.contains("chips-open"), mid.scrollWidth>mid.clientWidth+1, gen);
+    return;
+  }
   const intentsList=document.querySelector(".mg-intents");
-  if(!intentsList) return;
+  if(!intentsList || (typeof intentsList.getClientRects==="function" && !intentsList.getClientRects().length)) return;
+  const fromRO=!!(opts && opts.fromRO), scroll=!!(opts && opts.scroll), force=!!(opts && opts.force);
+  const listW=intentsList.clientWidth;
+  if(scroll){
+    if(intentsList.__chipDone) return;
+    const gen=intentsList.__chipGen;
+    if(gen){
+      const sc=intentsList.closest ? intentsList.closest("#libPage") : null;
+      const vp=sc ? sc.getBoundingClientRect() : null;
+      const vpTop=vp ? vp.top : 0;
+      const vpBot=vp ? vp.bottom : (window.innerHeight || 900);
+      const rows=[];
+      let seenInView=false;
+      for(const r of intentsList.querySelectorAll(".manage-row.mg-int:not([hidden])")){
+        const box=r.getBoundingClientRect();
+        if(!box.width && !box.height) continue;
+        if(box.bottom < vpTop - 40) continue;
+        if(box.top > vpBot + 80){ if(seenInView) break; continue; }
+        seenInView=true;
+        if(r.__chipGen===gen) continue;
+        const more=r.querySelector("[data-chips-more]"), mid=r.querySelector(".lw-mid");
+        if(!more||!mid) continue;
+        rows.push({ r, more, open:r.classList.contains("chips-open"), over:mid.scrollWidth>mid.clientWidth+1 });
+      }
+      rows.forEach(({ r, more, open, over })=>applyChipOverflowRow(r, more, open, over, gen));
+      return;
+    }
+  }
+  if(!force && intentsList.__chipW===listW && intentsList.__chipGen) return;
+  if(intentsList.__chipTimer){ clearTimeout(intentsList.__chipTimer); intentsList.__chipTimer=0; }
+  if(intentsList.__chipRaf){ cancelAnimationFrame(intentsList.__chipRaf); intentsList.__chipRaf=0; }
+  const gen=(intentsList.__chipGen || 0) + 1;
+  intentsList.__chipGen=gen;
+  intentsList.__chipW=listW;
+  intentsList.__chipDone=false;
   const c=chipRoom(intentsList);
   if(c.room!==null){
     const aside=c.room-c.date<CHIP_COL_DATE;
     intentsList.classList.toggle("date-aside", aside);
     intentsList.classList.toggle("chips-narrow", c.room-(aside?0:c.date)<CHIP_COL_NARROW);
   } else if(c.gone) intentsList.classList.add("date-aside");
-  updateIntentDateTitles();
+  updateIntentDateTitles(intentsList, force);
+  const sc=intentsList.closest ? intentsList.closest("#libPage") : null;
+  const vp=sc ? sc.getBoundingClientRect() : null;
+  const vpTop=vp ? vp.top : 0;
+  const vpBot=vp ? vp.bottom : (window.innerHeight || 900);
   // Every row read before any is written: a write between two reads lays the page out again for each row.
   const rows=[];
-  intentsList.querySelectorAll(".manage-row.mg-int").forEach(r=>{
+  let seenInView=false, hasMore=false;
+  for(const r of intentsList.querySelectorAll(".manage-row.mg-int:not([hidden])")){
+    const box=r.getBoundingClientRect();
+    if(!box.width && !box.height) continue;
+    if(box.bottom < vpTop - 40){ hasMore=true; continue; }
+    if(box.top > vpBot + 80){ hasMore=true; if(seenInView) break; continue; }
+    seenInView=true;
     const more=r.querySelector("[data-chips-more]"), mid=r.querySelector(".lw-mid");
-    if(!more||!mid) return;
+    if(!more||!mid) continue;
     rows.push({ r, more, open:r.classList.contains("chips-open"), over:mid.scrollWidth>mid.clientWidth+1 });
-  });
-  rows.forEach(({ r, more, open, over })=>{
-    more.hidden=!open && !over;
-    r.classList.toggle("chips-fade", !open && over);
-  });
+  }
+  rows.forEach(({ r, more, open, over })=>applyChipOverflowRow(r, more, open, over, gen));
+  if(!hasMore){ intentsList.__chipDone=true; return; }
+  const finish=()=>{
+    intentsList.__chipRaf=0;
+    intentsList.__chipTimer=0;
+    if(!intentsList.isConnected || intentsList.__chipGen!==gen) return;
+    if(typeof intentsList.getClientRects==="function" && !intentsList.getClientRects().length) return;
+    const todo=[];
+    intentsList.querySelectorAll(".manage-row.mg-int:not([hidden])").forEach(r=>{
+      if(r.__chipGen===gen || !r.getClientRects().length) return;
+      const more=r.querySelector("[data-chips-more]"), mid=r.querySelector(".lw-mid");
+      if(!more||!mid) return;
+      todo.push({ r, more, open:r.classList.contains("chips-open"), over:mid.scrollWidth>mid.clientWidth+1 });
+    });
+    todo.forEach(({ r, more, open, over })=>applyChipOverflowRow(r, more, open, over, gen));
+    intentsList.__chipDone=true;
+  };
+  if(fromRO) intentsList.__chipTimer=setTimeout(finish, 0);
+  else if(typeof requestAnimationFrame==="function"){
+    intentsList.__chipRaf=requestAnimationFrame(()=>{
+      intentsList.__chipRaf=0;
+      intentsList.__chipTimer=setTimeout(finish, 0);
+    });
+  } else intentsList.__chipTimer=setTimeout(finish, 0);
 }
 function wireLibrary(page){
   wireLibShell(page);
@@ -1743,9 +1877,10 @@ function wireLibrary(page){
       e.preventDefault(); e.stopPropagation();
       // pinned like the sections; catToggle does its own measuring inside modalResize
       mgPinCard();
-      catToggle(btn.closest(".mg-cat"), btn.getAttribute("data-toggle"));
-      markCutText(btn.closest(".mg-cat"));
-      updateTreeHoverTitles(page);
+      const cat=btn.closest(".mg-cat");
+      catToggle(cat, btn.getAttribute("data-toggle"));
+      markCutText(cat);
+      if(cat && cat.classList.contains("is-open")) updateTreeHoverTitles(page, cat);
     };
   });
 
@@ -1761,15 +1896,17 @@ function wireLibrary(page){
     };
   });
   page.querySelectorAll(".mg-cat-body .manage-row.mg-card").forEach(r=>{
-    r.addEventListener("pointerenter", ()=>updateTreeHoverTitles(page), {passive:true});
+    r.addEventListener("pointerenter", ()=>updateTreeHoverTitles(page, r), {passive:true});
   });
   const treeEl = page.querySelector(".mg-tree");
   const cardBox = (treeEl && treeEl.closest(".sx-card")) || treeEl;
   if(cardBox && typeof ResizeObserver !== "undefined"){
-    const ro = new ResizeObserver(() => {
-      updateTreeHoverTitles(page);
+    if(!treeHoverRO) treeHoverRO = new ResizeObserver(() => {
+      const cur = libPage();
+      if(cur) updateTreeHoverTitles(cur);
     });
-    ro.observe(cardBox);
+    treeHoverRO.disconnect();
+    treeHoverRO.observe(cardBox);
   }
 
   // ---- card rows in the category tree
@@ -1836,13 +1973,13 @@ function wireLibrary(page){
       btn.setAttribute("aria-expanded",open?"true":"false");
       btn.title=word;
       btn.setAttribute("aria-label",word+" "+btn.getAttribute("data-chips-more"));
-      markChipOverflow();
+      markChipOverflow(r);
       markCutText(r);
     };
   });
   if(intentsList){
     if(!chipOverflowRO && typeof ResizeObserver!=="undefined")
-      chipOverflowRO=new ResizeObserver(()=>{ markChipOverflow(); });
+      chipOverflowRO=new ResizeObserver(()=>{ markChipOverflow({ fromRO: true }); });
     if(chipOverflowRO){ chipOverflowRO.disconnect(); chipOverflowRO.observe(intentsList); }
     markChipOverflow();
   }

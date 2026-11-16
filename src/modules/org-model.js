@@ -23,6 +23,27 @@ function orgRanks(st){
   const s=st===undefined ? orgModel() : st;
   return !!(s && s.on===true && s.ready===true);
 }
+/* Whether a reword at the person's press can be sent: the shell says the person's Rewording switch is on (rewordOn is true, as the sending
+   code reads it, failing closed) and names the address one would go to (rewordAt). Anything else, including a state that says nothing of
+   it, reads as off, so the sentences below never say less than what can be sent. Read afresh at each use. */
+function rewordSent(){
+  const h=eHost();
+  let s=null;
+  try{ s=h && typeof h.aiState==="function" ? h.aiState() : null; }catch(e){ s=null; }
+  return !!(s && s.rewordOn===true && typeof s.rewordAt==="string" && s.rewordAt!=="");
+}
+/* What leaves, in one sentence, while the organisation's model ranks: by the two switches and by the Rewording switch. The AI section's
+   lede and the mark's title are this one string, with {HOST} for the address, so the two cannot drift apart. */
+function orgSaid(search, suggest){
+  const line=search && suggest ? t("The organisation's model at {HOST} ranks the search and the suggestions. The search text, the copied message the suggestions are made from, and up to 12 short pieces of the cards being ranked are sent there.")
+    : search ? t("The organisation's model at {HOST} ranks the search. The search text is sent there, with up to 12 short pieces of the cards being ranked.")
+    : suggest ? t("The organisation's model at {HOST} ranks the suggestions. The copied message they are made from is sent there, with up to 12 short pieces of the cards being ranked.")
+    : "";
+  const rewords=rewordSent();
+  if(line) return rewords ? line+" "+t("At your press, the words or the card you ask it to reword go there too.") : line;
+  return rewords ? t("The organisation's model at {HOST} is set. With both switches off, only the words or the card you ask it to reword are sent to it, at your press.")
+    : t("The organisation's model at {HOST} is set, and with both switches and Rewording off, nothing is sent to it.");
+}
 /* The last re-order's outcome as the shell sent it on etiuda:ai-ranking. `slow` is the shell's: the median of the service's
    last answer times over the 4 seconds the mark's words name (shell/desk-ai.cjs WINDOW_CEILING_MS). */
 let orgOutcome={ranking:"organisation", failures:0, pausedUntil:0, slow:false};
@@ -42,13 +63,11 @@ function orgMarkWords(st, outcome, now){
   /* Too slow keeps the quiet colour and no dot: nothing has failed. */
   if(o.slow===true) return eAiModel()
     ? {paused:false, label:t("organisation's model too slow to reorder"),
-      title:at(t("{HOST} usually takes more than 4 seconds to answer, too long to reorder a list already being read, so the built-in model's order stands."))}
+      title:at(t("{HOST} usually takes more than 4 seconds to answer, too long to reorder a list already being read, so the built-in model's order stands, and the desk still sends one query a minute to {HOST}."))}
     : {paused:false, label:t("organisation's model too slow to reorder"),
-      title:at(t("{HOST} usually takes more than 4 seconds to answer, too long to reorder a list already being read, so the word matches' order stands."))};
+      title:at(t("{HOST} usually takes more than 4 seconds to answer, too long to reorder a list already being read, so the word matches' order stands, and the desk still sends one query a minute to {HOST}."))};
   const search=eSearchOn(), suggest=eAiOn();
-  const title=search && !suggest ? t("The organisation's model at {HOST} ranks the search. The search text is sent there.")
-    : suggest && !search ? t("The organisation's model at {HOST} ranks the suggestions. The copied message they are made from is sent there.")
-    : t("The organisation's model at {HOST} ranks the search and the suggestions. The search text and the copied message the suggestions are made from are sent there.");
+  const title=orgSaid(search, suggest);
   return {paused:false, label:t("organisation's model"), title:at(title)};
 }
 /* The mark: there while the organisation's model ranks for either switch, on every screen, and absent otherwise. */
@@ -81,6 +100,8 @@ function wireOrgModel(){
 export {
   orgModel,
   orgRanks,
+  orgSaid,
+  rewordSent,
   orgMarkWords,
   syncOrgMark,
   wireOrgModel

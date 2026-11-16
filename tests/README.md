@@ -23,7 +23,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/catalog-routes.mjs                     no fixtures, the two catalog routes
     node tests/module-calls.mjs                       no fixtures, the modules CALLED
     node tests/tab-focus.mjs                          no fixtures, Tab walks the main screen, Ctrl+Tab and Ctrl+T move the conversations, the middle button closes one, covers and dialogs keep their own Tab
-    node tests/library-tab.mjs                        no fixtures, the desk's Library as a screen tab: the Menu opens it named Library, a second open fronts it, an editor closes back onto it, Earlier versions is a page in it with Back, a restart in place comes back on it; two plants lifted in a scratch copy
+    node tests/library-tab.mjs                        no fixtures, the desk's Library as a screen tab: the Menu opens it named Library, a second open fronts it, an editor closes back onto it, Earlier versions is a page in it with Back, a restart in place comes back on it; two plants lifted in a scratch copy; L20 a card titled Settings and a category named Library keep those words through an interface-language switch, and lifting the card title's skip mark turns it red
     node tests/screen-switch.mjs                      no fixtures, leaving Settings, Maintenance or the Library restyles what a conversation switch restyles, counted from the trace, its time to paint printed; the stage undisplayed under a screen is its control
     node tests/library-switch.mjs                     no fixtures, fronting the Library from a conversation or Settings, and pressing each of its sections, draws at most 1000 elements, counted by marking what the screen shows, over the shipped sample of a real catalog's size, its time to paint printed beside Settings'; the Library drawn afresh is its control, and a card starred while it was away shows when it is fronted again
     node tests/strip-redraw.mjs                       no fixtures, a conversation switch with Settings and the Library in the strip moves the mark and rebuilds the strip 0 times, as with no screen tab; a new conversation rebuilding it is the control (sr1 to sr3), Chrome
@@ -705,7 +705,9 @@ reachability probe; automatic detection (0x09) or a failed read leaves Chromium'
 still fires on the first hostname lookup. `tests/shell-office.mjs` leg 6 reads the switches the real
 `shell/main.js` sets, with electron stubbed and the keys planted, never read from the machine: the server,
 the script, the quiet answers, a per-machine server under policy, DefaultConnectionSettings flags 0x09
-and 0x01, a failed read leaving the resolver, and none once the line is cut out of a copy. That leg
+and 0x01, a failed read leaving the resolver, and none once the line is cut out of a copy; 6v to 6y add
+a proxy named in the policy key itself, a leftover script beside a server, and Windows read again after
+the start when a call fails or the desk wakes, its change handed to the session (6P, five plants). That leg
 proves the switch is set; only Electron can prove what Chromium then does. `tests/desk.js` runs C and D
 do that, each on a profile of its own with `--log-net-log`: C is the shell with the line cut out and
 must show discovery, and D, the shipped shell: where automatic detection is left to Chromium (0x09), D

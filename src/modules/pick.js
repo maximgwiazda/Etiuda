@@ -23,7 +23,7 @@ import { intentIdAt, intentIdxOfId, isIntentHiddenIdx } from "./intent-id.js";
 import { pickIntent } from "./intent-pick.js";
 import { buildSuggestModel } from "./clip-suggest.js";
 import { activeTabName } from "./tabs.js";
-import { tourHeardPick } from "./tour.js";
+import { tourHeardPick, tourPickBubble, tourPickGo } from "./tour.js";
 import { hooks } from "./hooks.js";
 import { dockNow } from "./next-dock.js";
 import { scChord, scChord2 } from "./shortcuts.js";
@@ -36,7 +36,8 @@ const PICK_ROWS=50;
 /* The desk's colours as its sheet computed them, sent at every opening so the picker wears the
    theme on screen now. */
 const PICK_LOOK=["--panel","--panel-raised","--ink","--dim","--line","--line-strong","--accent",
-  "--accent-soft","--warn","--field","--field-line","--field-edge","--sans","--mono","--radius-sm","--intent-type"];
+  "--accent-soft","--warn","--field","--field-line","--field-edge","--sans","--mono","--radius-sm","--intent-type",
+  "--bub","--bub-ink","--bub-dim","--bub-shadow","--sans-display"];
 
 /* A put-away card is never offered, whatever is chosen: the list offers it at the foot of its own
    shelf, and the picker has no shelf to be at the foot of. A query searches every category, as the
@@ -209,13 +210,31 @@ function pickLook(){
 /* The page's words. A legend line holds {KEY} where its key goes; the other language is named only where there is one. */
 function pickWords(){
   const other=CONTENT_LANGS.length>1 ? String(nextContentLang(lang)).toUpperCase() : "";
-  return {lang:uiLang(), search:t("search replies"), list:t("Replies"), again:t("The reply copied last"),
+  return {lang:uiLang(), search:t("Type a word to find a reply"), whoHint:t("customer's name"), list:t("Replies"), again:t("The reply copied last"),
           none:t("A different word may do better."), stamp:t("Commits the firm"),
           empty:wholeThingEmpty() ? t("Etiuda is ready for its first replies.") : t("Nothing here yet."),
           who:t("Etiuda fills the reply in for this conversation"),
           langTitle:t("Click to switch replies to the next language"),
-          keyCopy:t("{KEY} copies"), keyOther:other ? t("{KEY} in {LANG}").split("{LANG}").join(other) : "",
-          keyClose:t("{KEY} closes"), pasted:t("Pasted"), copied:t("Copied, press Ctrl+V")};
+          keyCopy:t("{KEY} copies, and pastes where it can"), keyOther:other ? t("{KEY} in {LANG}").split("{LANG}").join(other) : "",
+          keyClose:t("{KEY} closes"), pasted:t("Pasted"), copied:t("Copied, press Ctrl+V"),
+          selected:t("The words you selected. Type to change them."),
+          /* Your own words, shown only where the shell offers a reword; {ADDRESS} is the host it names. */
+          rwHead:t("Your own words?"), rwSpelling:t("Fix spelling"), rwShorter:t("Shorter"), rwFriendlier:t("Friendlier"),
+          rwFormal:t("More formal"), rwIntoPl:t("Into Polish"), rwIntoEn:t("Into English"), rwLangs:CONTENT_LANGS.slice(),
+          rwBefore:t("A press sends only the words above to {ADDRESS}, your organisation's AI service."), rwYou:t("You selected"),
+          rwAfter:t("Sent to {ADDRESS}: only the words you selected. Read the result before you send it."),
+          rwEnter:t("Enter puts it in place of your selection"), rwBack:t("Back to the replies"),
+          rwWait:t("Waiting for the service at {ADDRESS}…"),
+          rwNone:t("No result came back from {ADDRESS}. Your words are as you wrote them."),
+          rwLate:t("The service at {ADDRESS} did not answer in time. Your words are as you wrote them."),
+          rwBusy:t("The service at {ADDRESS} is busy; a later try may go through. Your words are as you wrote them."),
+          /* Each case where nothing was sent says so, never "No result came back": the service paused, words over 4000 characters, the person's
+             switch off at the press, the organisation's model gone, and a press the desk cannot say more of. */
+          rwPaused:t("The service at {ADDRESS} failed three times in a row, so Etiuda waits before asking it again; nothing was sent. Your words are as you wrote them."),
+          rwTooLong:t("These words are over 4000 characters, more than can be sent, so nothing was sent. Your words are as you wrote them."),
+          rwSwitch:t("Rewording is turned off on this computer, so nothing was sent. Your words are as you wrote them."),
+          rwModel:t("The organisation's model is no longer set, so nothing was sent. Your words are as you wrote them."),
+          rwUnavail:t("Rewording is not available just now, so nothing was sent. Your words are as you wrote them.")};
 }
 /* THE TEXT THE DESK'S OWN COPY WOULD MAKE, counted as the desk counts a copy: the fill of the block
    in the card's language, for the chat tab in front. The shell writes it to the clipboard. A reply
@@ -352,6 +371,8 @@ function answerPick(op,argText){
     const paxVal=pickDeskPax();
     const curEpoch = suggestEpoch();
     const out=Object.assign({look:pickLook(), words:pickWords(), chords:pickChords(), last:pickLastRow(), who:activeTabName(), name:paxVal, lang:lang, langs:CONTENT_LANGS.length, picked:intentIdxs.map(i=>intentIdAt(i)), epoch:curEpoch, ai:eAiOn()}, pickFound(""));
+    const tour=tourPickBubble();
+    if(tour) out.tour=tour;
     if(a.profiles || (a.epoch !== undefined && a.epoch !== curEpoch)){
       try{ out.profiles=suggestModel(); }catch(e){}
     }
@@ -381,6 +402,19 @@ function answerPick(op,argText){
     const picked=intentIdxs.map(i=>intentIdAt(i));
     return withIndex(Object.assign({who:activeTabName(), name:paxVal, lang:lang, langs:CONTENT_LANGS.length, last:pickLastRow(), picked:picked}, pickFound("")), "");
   }
+  /* THE REPLIES OF A SUGGESTION, LOOKED AT AND NOT TAKEN: the rows the window would show once it were taken, found
+     with the intent borrowed for the length of the lookup and given back as it was. Nothing is picked, selected,
+     counted or drawn on the desk, so only the agent's own click or Enter takes a suggestion (embed-suggest e6). */
+  if(op==="suggest-rows"){
+    const id=String(a.id||"").slice(0,80);
+    const idx=intentIdxOfId(id);
+    if(!id||idx<0||isIntentHiddenIdx(idx)) return null;
+    const mine=intentIdxs.slice();
+    let found;
+    try{ intentIdxs.length=0; intentIdxs.push(idx); found=pickFound(""); }
+    finally{ intentIdxs.length=0; mine.forEach(i=>intentIdxs.push(i)); }
+    return {rows:found.rows, count:found.count};
+  }
   if(op==="tab"){
     if(a.id!=="tabNext" && a.id!=="tabPrev" && a.id!=="tabNew") return null;
     runShortcut(a.id);
@@ -398,6 +432,7 @@ function answerPick(op,argText){
     const paxVal=pickDeskPax();
     return withIndex(Object.assign({words:pickWords(), who:activeTabName(), name:paxVal, lang:lang, langs:CONTENT_LANGS.length}, pickFound("")), "");
   }
+  if(op==="tour"){ try{ tourPickGo(String(a.go||"")); }catch(e){} return {ok:1}; }
   if(op==="find") return pickFound(a.q);
   /* The main search, asked by the shell for the head of its list and then given an order of it. */
   if(op==="search-shortlist") return searchShortlist(String(a.q==null?"":a.q));
@@ -416,7 +451,7 @@ function hotkeyNotice(){
   const hk=eHotkey();
   if(!hk || !hk.accel || !hk.taken || document.getElementById("eHotkeyNote")) return;
   eNotice("eHotkeyNote", t("{KEYS} belongs to another program just now.").split("{KEYS}").join(eHotkeyLabel(hk.accel)),
-    t("A combination of Etiuda's own, chosen in Settings, brings the replies over any window."), null,
+    t("A combination of Etiuda's own, chosen in Settings, opens Quick replies over any window."), null,
     {label:t("Choose a combination"), run:()=>hooks.openSettings("keys")});
 }
 function wirePick(){

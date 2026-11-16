@@ -3,10 +3,11 @@
    signed in by provider, the sign-in code and how the seat stands, and shows nothing where no provider is offered, so a desk
    with no registration configured looks as it did. Settings' Account draws the same view with signinParts. */
 import { $ } from "./dom.js";
-import { eHost, eOpenSetAside } from "./host.js";
+import { eHost, eOpenSetAside, eCatalogFolderPinned } from "./host.js";
 import { esc } from "./esc.js";
-import { t, uiLang } from "./ui-lang.js";
+import { t, uiLang, hugDottedGround } from "./ui-lang.js";
 import { agentName } from "./agent.js";
+import { lsGet, lsSet } from "./storage.js";
 import { teamLeads } from "./team-join.js";
 import { hooks } from "./hooks.js";
 import { catalogLoaded } from "./catalog-boot.js";
@@ -105,6 +106,130 @@ function signinNow(){
 }
 /* Whether the door exists: a provider offered, or somebody signed in. */
 function signinShown(v){ return !!(v && (v.offered.length || v.signedIn)); }
+/* FIRST-OPENING SIGN-IN GATE AND MEMORY: shown once on a desk that offers a provider, has
+   nobody signed in, has never shown the screen before, and is not pinned by policy (a policy
+   desk joins its team from HKLM policy without asking first). Written when the screen opens
+   so stopping mid-screen never traps the person behind it again while Sign in stays in the bar. */
+const FIRST_SIGNIN_KEY="eFirstSigninSeen";
+function firstSigninSeen(){ return lsGet(FIRST_SIGNIN_KEY)==="1"; }
+function markFirstSigninSeen(){ return lsSet(FIRST_SIGNIN_KEY,"1",true); }
+function firstSigninDue(v, opts){
+  const s=v===undefined ? signinV : signinRead(v);
+  const o=opts && typeof opts==="object" ? opts : null;
+  const seen=o && "seen" in o ? !!o.seen : firstSigninSeen();
+  const policy=o && "policy" in o ? !!o.policy : eCatalogFolderPinned();
+  if(policy) return false; /* plant:first-signin-gate */
+  return !!(s && s.offered.length && !s.signedIn && !seen);
+}
+let firstSigninPending=false, firstSigninOpen=false, firstSigninWaits=[];
+function firstSigninStands(){ return !!(firstSigninPending || firstSigninOpen); }
+function onFirstSigninClosed(fn){
+  if(typeof fn!=="function") return;
+  if(!firstSigninStands()){ fn(); return; }
+  firstSigninWaits.push(fn);
+}
+function tellFirstSigninClosed(){
+  const w=firstSigninWaits; firstSigninWaits=[];
+  w.forEach(fn=>fn());
+}
+function firstSigninOpenNow(){ return !!firstSigninOpen; }
+function firstSigninMarkHtml(){
+  const svg=typeof document!=="undefined" ? document.querySelector(".brand-tile svg") : null;
+  if(!svg) return "";
+  /* The header's mark under a mask id of its own. The header's id is read from its mask and never written here, so the
+     page holds that id once (tests/mark-layout.mjs counts it), and a second mark can never answer for the first's mask. */
+  const mask=svg.querySelector("mask"), was=mask ? mask.id : "", own=was+"-first-signin";
+  const html=was ? svg.outerHTML.split('id="'+was+'"').join('id="'+own+'"').split("url(#"+was+")").join("url(#"+own+")") : svg.outerHTML;
+  return '<div class="fs-mark" aria-hidden="true">'+html+'</div>';
+}
+function paintFirstSignin(){
+  if(!firstSigninOpen || typeof document==="undefined") return;
+  const el=$("#firstSignin"); if(!el) return;
+  const hadFocus=el.contains(document.activeElement);
+  const d=signinDoor(signinV);
+  const skipBtn='<button type="button" class="btn fs-skip-btn" id="firstSigninSkip">'+esc(t("Not now"))+'</button>';
+  const skipLine='<p class="fs-skip-line">'+esc(t("The desk opens as it is, and Sign in stays in the bar at the top for later."))+'</p>';
+  let rightBody="";
+  if(d && d.moment==="before"){
+    rightBody=signinPanelHtml(Object.assign({}, d, {heading:"", line:"", privacy:"", foot:""}))
+      +'<p class="sgn-lede fs-right-note">'+esc(t("Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in."))+'</p>'
+      +(d.privacy ? '<p class="sgn-cap fs-privacy">'+esc(d.privacy)+'</p>' : "")
+      +'<div class="fs-skip">'+skipBtn+skipLine+'</div>';
+  }else if(d){
+    rightBody=signinPanelHtml(Object.assign({}, d, {foot:""}));
+  }
+  el.innerHTML='<div class="fs-grid">'
+    +'<div class="fs-left"><div class="fs-left-in"><div class="fs-body">'
+      +firstSigninMarkHtml()
+      +'<h1 id="fsHeading">'+esc(t("Sign in to Etiuda"))+'</h1>'
+      +'<p class="fs-lede">'+esc(t("Your seat belongs to your account, so it comes with you to any computer you sign in on, up to three."))+'</p>'
+      +'<h2 class="fs-steps-h">'+esc(t("What happens"))+'</h2>'
+      +'<ol class="fs-steps">'
+        +'<li><span class="fs-step-n" aria-hidden="true">1</span><span>'+esc(t("The browser opens the sign-in page"))+'</span></li>'
+        +'<li><span class="fs-step-n" aria-hidden="true">2</span><span>'+esc(t("You choose your account there"))+'</span></li>'
+        +'<li><span class="fs-step-n" aria-hidden="true">3</span><span>'+esc(t("Etiuda carries on here by itself"))+'</span></li>'
+      +'</ol>'
+    +'</div><p class="fs-foot">'+esc(t("No licence key to keep"))+'</p></div></div>'
+    +'<div class="fs-right"><div class="fs-right-in">'
+      +'<h2 class="fs-rh">'+esc(t("Signing in"))+'</h2>'
+      +rightBody
+    +'</div></div></div>';
+  if(d && d.moment==="refused"){
+    const acts=el.querySelector(".sgn-acts");
+    if(acts){
+      acts.insertAdjacentHTML("beforeend", skipBtn);
+      acts.insertAdjacentHTML("afterend", skipLine);
+    }else{
+      const rin=el.querySelector(".fs-right-in");
+      if(rin) rin.insertAdjacentHTML("beforeend", '<div class="fs-skip">'+skipBtn+skipLine+'</div>');
+    }
+  }
+  if(hadFocus){
+    const first=el.querySelector("button:not(:disabled), input");
+    if(first) try{ first.focus({preventScroll:true}); }catch(e){ first.focus(); }
+  }
+  hugDottedGround(el); /* plant:first-signin-dots */
+}
+function skipFirstSignin(){
+  if(!firstSigninPending && !firstSigninOpen) return;
+  if(signinV && signinV.busy) signinCall("signinStop");
+  closeFirstSignin();
+}
+function openFirstSignin(){
+  firstSigninPending=false;
+  firstSigninOpen=true;
+  markFirstSigninSeen(); /* plant:first-signin-mark */
+  if(typeof document==="undefined") return;
+  document.body.classList.add("e-first-signin");
+  const el=$("#firstSignin");
+  if(el){ el.hidden=false; el.setAttribute("aria-hidden","false"); }
+  paintFirstSignin();
+  if(el){
+    const first=el.querySelector("button:not(:disabled), input");
+    if(first) try{ first.focus({preventScroll:true}); }catch(e){ first.focus(); }
+  }
+}
+function closeFirstSignin(){
+  if(!firstSigninPending && !firstSigninOpen) return;
+  firstSigninPending=false;
+  firstSigninOpen=false;
+  if(typeof document!=="undefined"){
+    document.body.classList.remove("e-first-signin");
+    const el=$("#firstSignin");
+    if(el){ el.hidden=true; el.setAttribute("aria-hidden","true"); el.innerHTML=""; }
+  }
+  tellFirstSigninClosed();
+}
+function bootFirstSignin(land){
+  if(!firstSigninPending && !firstSigninDue()) return;
+  if(!firstSigninDue()){ firstSigninPending=false; tellFirstSigninClosed(); return; }
+  firstSigninPending=true;
+  const run=()=>{
+    if(!firstSigninDue()){ closeFirstSignin(); return; }
+    openFirstSignin();
+  };
+  if(typeof land==="function") land(run); else run();
+}
 /* The code in four groups of four, as it is read aloud; Copy takes it without the spaces. */
 function signinCodeText(code){ return String(code||"").replace(/(.{4})(?=.)/g,"$1 "); }
 /* A day as the panel says one: "27 Nov". */
@@ -414,6 +539,10 @@ function closeSigninPanel(back){
 function signinChanged(v, answered){
   signinV=signinRead(v);
   paintSigninButton();
+  if(firstSigninOpen || firstSigninPending){
+    if(signinV.signedIn){ closeFirstSignin(); signinTell(); return; }
+    if(firstSigninOpen){ paintFirstSignin(); signinTell(); return; }
+  }
   if(answered && signinShown(signinV) && !signinV.busy) signinOpen=true;
   if(signinOpen) paintSigninPanel();
   signinTell();
@@ -445,7 +574,7 @@ function signinAct(act, btn){
   if(act==="copy" || act==="copylink"){
     return signinCopy(act==="copy" ? signinV.code : signinV.busy ? signinV.link : "").then(ok=>{ if(ok) signinCopied(btn); return ok; });
   }
-  if(act==="choose"){ signinChoosing=true; signinV=Object.assign({}, signinV, {said:""}); paintSigninPanel(); signinTell(); return; }
+  if(act==="choose"){ signinChoosing=true; signinV=Object.assign({}, signinV, {said:""}); paintSigninPanel(); if(firstSigninOpen) paintFirstSignin(); signinTell(); return; }
   if(act==="stop"){ signinCall("signinStop"); return; }
   if(act==="again"){ signinCall("signinAgain"); return; }
   if(act==="check"){ signinCall("signinCheck").then(v=>{ if(v) signinChanged(v, false); }); return; }
@@ -707,11 +836,19 @@ function wireSignin(){
   const h=signinHost();
   if(!h) return;
   signinNow();
+  firstSigninPending=firstSigninDue();
   if(typeof h.onSignin==="function") h.onSignin(v=>signinChanged(v, false));
   if(typeof h.onStore==="function") h.onStore(()=>syncChanged());
-  const btn=$("#signinBtn"), panel=$("#signinPanel"), wrap=$("#signinWrap");
+  const btn=$("#signinBtn"), panel=$("#signinPanel"), wrap=$("#signinWrap"), fs=$("#firstSignin");
   if(btn) btn.onclick=e=>{ e.stopPropagation(); if(signinOpen) closeSigninPanel(true); else openSigninPanel(); };
   signinClicks(panel);
+  if(fs){
+    signinClicks(fs);
+    fs.addEventListener("click", e=>{
+      const s=e.target && e.target.closest ? e.target.closest("#firstSigninSkip") : null;
+      if(s) skipFirstSignin();
+    });
+  }
   addEventListener("pointerdown", e=>{ if(signinOpen && wrap && !wrap.contains(e.target)) closeSigninPanel(false); });
   addEventListener("keydown", e=>{
     if(e.key==="Escape" && signinOpen && wrap && wrap.contains(document.activeElement)){ e.stopPropagation(); closeSigninPanel(true); }
@@ -721,8 +858,19 @@ function wireSignin(){
 }
 
 export {
+  FIRST_SIGNIN_KEY,
   SIGNIN_NAMES,
+  bootFirstSignin,
+  closeFirstSignin,
+  firstSigninDue,
+  firstSigninOpenNow,
+  firstSigninSeen,
+  firstSigninStands,
+  markFirstSigninSeen,
+  onFirstSigninClosed,
+  paintFirstSignin,
   signinAct,
+  skipFirstSignin,
   signinActsHtml,
   signinChanged,
   signinChoosingNow,

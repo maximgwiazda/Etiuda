@@ -118,6 +118,7 @@ async function launch(plan) {
     maximize: noop,
     focus: noop,
     loadFile: noop,
+    loadURL: noop,
     close: noop,
     on: noop,
     once: noop,
@@ -225,16 +226,36 @@ async function launch(plan) {
   process.env.XDG_CURRENT_DESKTOP = "GNOME";
   const mainSrc = plan.scratchMainSource || fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 
+  /* reg.exe stood in whole: the policy export this leg plans, and every other reg call answered as a key that is not there, so
+     no read reaches this machine's registry (it passed them through until the test architect's measurement of 2026-11-15).
+     Marked as a stand-in, so the shell's guard lets these calls through (tests/reg-stand.cjs). Any other program runs. */
+  const realCp = nodeRequire("node:child_process");
+  const isReg = (file) => /^reg(\.exe)?$/i.test(path.win32.basename(String(file || "")));
+  const regAnswer = (args) => {
+    if (args && args[0] === "export" && args[1] === "HKLM\\SOFTWARE\\Policies\\Etiuda" && plan.policyFolder) {
+      fs.writeFileSync(args[2], makePolicyExport(plan.policyFolder, plan.policyLead || "00".repeat(32)));
+      return null;
+    }
+    const e = new Error("ERROR: The system was unable to find the specified registry key or value.");
+    e.status = 1; e.code = 1;
+    return e;
+  };
   const mockCp = {
-    execFile: nodeRequire("node:child_process").execFile,
+    execFile: (file, args, opts, cb) => {
+      if (!isReg(file)) return realCp.execFile(file, args, opts, cb);
+      const done = [args, opts, cb].find((f) => typeof f === "function");
+      const err = regAnswer(args);
+      setImmediate(() => done && done(err, "", ""));
+      return { pid: 0, on() { return this; }, once() { return this; }, kill() { return true; } };
+    },
     execFileSync: (file, args, opts) => {
-      if (args && args[0] === "export" && args[1] === "HKLM\\SOFTWARE\\Policies\\Etiuda" && plan.policyFolder) {
-        fs.writeFileSync(args[2], makePolicyExport(plan.policyFolder, plan.policyLead || "00".repeat(32)));
-        return Buffer.alloc(0);
-      }
-      return nodeRequire("node:child_process").execFileSync(file, args, opts);
+      if (!isReg(file)) return realCp.execFileSync(file, args, opts);
+      const err = regAnswer(args);
+      if (err) throw err;
+      return Buffer.alloc(0);
     },
   };
+  nodeRequire("./reg-stand.cjs").markStand(mockCp.execFileSync, mockCp.execFile);
 
   const beside = n => {
     if (typeof n === "string" && path.isAbsolute(n) && (n === SHELL || n.startsWith(SHELL + path.sep))) {

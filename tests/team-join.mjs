@@ -14,6 +14,8 @@
  */
 process.removeAllListeners("warning");
 process.on("warning", () => {});
+/* This file's relay invitations name a stand-in host. That host is accepted only on a harness start. */
+process.env.ETIUDA_TEST_OFFSCREEN = "1";
 
 import fs from "node:fs";
 import os from "node:os";
@@ -39,7 +41,7 @@ const ASIDE = {
   "15ep": offWindows("15ep", "15em stands aside off Windows, so lifting plant:w2-folder-not-writable has no green leg there to turn"),
 };
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 179;
+const EXPECTED = 193;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -462,6 +464,98 @@ try {
     "15nb an opening signed by anyone but that lead is not taken: the desk waits and reveals nothing ("
     + (openState.join ? openState.join.state : "no join") + ", said " + JSON.stringify(openSaid) + ")");
 
+  /* ---- review 14, finding 1, and the ruled ways in (decisions: a desk joins by machine policy, by Studio admitting its request, or by
+     an invitation): a writer of the share swaps in a team file and an unsigned ring under its own key. A ring pins nothing, so the
+     forger's opening pins nothing either, and the bar and the leave stand; with no request at all the swapped file pins nothing. ---- */
+  const answeredForger = async (name, src) => {
+    const share = folder(name + "-share");
+    put(share, "etiuda-team.json", teamFile([], { lead: FORGED, signer: forger.privateKey }));
+    put(share, "etiuda-ring.json", { format: 1, kind: "etiuda-ring", keys: [{ catalog: "lamp-shop", keyId: FORGED.keyId, alg: "Ed25519", public: FORGED.public }] });
+    put(share, "lamps.ec", P.sealCatalog(K1, TEAM, 1, A1));
+    const ud = path.join(LAB, name);
+    fs.mkdirSync(ud, { recursive: true });
+    const left = new Date(Date.now() - 60000).toISOString();
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: share, eUiLang: "en" },
+      teamBarred: [TEAM], teamLeft: { [TEAM]: left } }), "utf8");
+    const D = loadDesk(ud, src);
+    syncFolder(share);
+    const me = await D.ask("etiuda:branch-identity", true);
+    await D.join("ask", "lamps.ec", "Rut");
+    const req = JSON.parse(fs.readFileSync(path.join(share, "desks", me.id, "join.json"), "utf8"));
+    put(share, P.JOINS_NAME, signJoinsDoc([{ desk: me.id, commit: req.commit, nonce: nonce() }], forger.privateKey, FORGED));
+    await D.join("state");
+    await D.join("state");
+    const e1 = D.envelope();
+    const barredStill = e => JSON.stringify(e.teamBarred || null) === JSON.stringify([TEAM]) && !!(e.teamLeft && e.teamLeft[TEAM] === left);
+    await D.join("cancel");
+    const e2 = D.envelope();
+    return { pinned: !!(e1.teamPins && e1.teamPins[TEAM]), barred: barredStill(e1), opens: D.api.readCatalog() !== null,
+      pinAfter: !!(e2.teamPins && e2.teamPins[TEAM]), barredAfter: barredStill(e2), joinAfter: !!e2.teamJoin };
+  };
+  const af = await answeredForger("j14a");
+  check(!af.pinned && af.barred && !af.opens && !af.pinAfter && af.barredAfter && !af.joinAfter,
+    "j14a review 14.1: a forger's team file, its unsigned ring and its signed opening pin nothing on a desk that left the team, and the bar"
+    + " and the leave stand, before Cancel and after: " + JSON.stringify(af));
+  const ringOnly = async (name, src) => {
+    const share = folder(name + "-share");
+    put(share, "etiuda-team.json", teamFile([], { lead: FORGED, signer: forger.privateKey }));
+    put(share, "etiuda-ring.json", { format: 1, kind: "etiuda-ring", keys: [{ catalog: "lamp-shop", keyId: FORGED.keyId, alg: "Ed25519", public: FORGED.public }] });
+    put(share, "lamps.ec", P.sealCatalog(K1, TEAM, 1, A1));
+    const ud = path.join(LAB, name);
+    fs.mkdirSync(ud, { recursive: true });
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: share, eUiLang: "en" } }), "utf8");
+    const D = loadDesk(ud, src);
+    syncFolder(share);
+    await D.ask("etiuda:branch-identity", true);
+    const v = await D.join("state");
+    return { pinned: !!(D.envelope().teamPins && D.envelope().teamPins[TEAM]), leads: v && v.leads ? v.leads.length : -1 };
+  };
+  const ro14 = await ringOnly("j14f");
+  check(!ro14.pinned && ro14.leads === 0,
+    "j14f the ruled ways in: a desk with no pin, no invitation and no admission, beside a swapped team file and an unsigned ring that lists"
+    + " its key, heeds nothing and pins nothing: " + JSON.stringify(ro14));
+  if (PLANTS_OFF) skip("j14f2 lifting plant:j14-no-ring heeds that file and pins its key (ETIUDA_PLANTS=off)");
+  else {
+    const planted = SRC.split("\n").map(l => (l.indexOf("plant:j14-no-ring") >= 0 ? "  heeded = true;" : l)).join("\n");
+    const pr = SRC.indexOf("plant:j14-no-ring") >= 0 ? await ringOnly("j14f-plant", planted) : null;
+    check(!!pr && pr.pinned, "j14f2 lifting plant:j14-no-ring heeds that file and pins its key (FAIL j14f): " + JSON.stringify(pr));
+  }
+
+  /* ---- review 14, finding 4: the lead opens a request and then refuses it; the refusal read after the opening ends it. ---- */
+  const refusedAfterOpen = async (name, src) => {
+    const share = folder(name + "-share");
+    put(share, "etiuda-team.json", teamFile([]));
+    put(share, "lamps.ec", P.sealCatalog(K1, TEAM, 1, A1));
+    const ud = path.join(LAB, name);
+    fs.mkdirSync(ud, { recursive: true });
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: share, eUiLang: "en" } }), "utf8");
+    const D = loadDesk(ud, src);
+    syncFolder(share);
+    const me = await D.ask("etiuda:branch-identity", true);
+    await D.join("ask", "lamps.ec", "Lena");
+    const req = JSON.parse(fs.readFileSync(path.join(share, "desks", me.id, "join.json"), "utf8"));
+    const lamp = nonce();
+    put(share, P.JOINS_NAME, joins([{ desk: me.id, commit: req.commit, nonce: lamp }]));
+    const coded = await D.join("state");
+    put(share, P.JOINS_NAME, joins([{ desk: me.id, commit: req.commit, refused: true }]));
+    const after = await D.join("state");
+    put(share, P.JOINS_NAME, joins([{ desk: me.id, commit: req.commit, nonce: nonce() }]));
+    const reopened = await D.join("state");
+    return { coded: coded.join ? coded.join.state : null, after: after.join ? after.join.state : null, reopened: reopened.join ? reopened.join.state : null,
+      reveal: JSON.parse(fs.readFileSync(path.join(share, "desks", me.id, "join.json"), "utf8")).opened.nonce === lamp };
+  };
+  const ro = await refusedAfterOpen("j14d");
+  check(ro.coded === "code" && ro.after === "refused" && ro.reopened === "refused" && ro.reveal,
+    "j14d review 14.4: a refusal of this commitment read after the opening the desk revealed against ends the request as refused, and a"
+    + " later opening neither lifts it nor moves the reveal (commit then reveal holds): " + JSON.stringify(ro));
+  if (PLANTS_OFF) skip("j14d2 lifting plant:j14-refused-after-open leaves the opened request saying its code after the refusal (ETIUDA_PLANTS=off)");
+  else {
+    const planted = SRC.split("\n").map(l => (l.indexOf("plant:j14-refused-after-open") >= 0 ? "    readJoins = !j.opened && !j.refused;" : l)).join("\n");
+    const pr = SRC.indexOf("plant:j14-refused-after-open") >= 0 ? await refusedAfterOpen("j14d-plant", planted) : null;
+    check(!!pr && pr.after === "code", "j14d2 lifting plant:j14-refused-after-open leaves the opened request saying its code after the refusal"
+      + " (FAIL j14d): " + JSON.stringify(pr));
+  }
+
   /* ---- the envelope keeps the request across a restart ------------------------------------------------------------ */
   const D1r = loadDesk(D1.ud);
   const again = await D1r.join("state");
@@ -716,6 +810,31 @@ try {
     finally { untap.forEach(u => u()); }
     return touched;
   };
+  /* ---- review 14, finding 2, refuted: Leave is this desk's own act and tells the lead nothing, so the lead's roster still names
+     it, and the lead's Studio takes a desk with the same keys on its roster as admitted and lists no request for it. A new
+     invitation from that lead, accepted by the person's yes, makes it a member again by that roster's key; held until a new
+     opening, it would wait for one the lead is never shown. ---- */
+  {
+    const share = folder("j14b-share");
+    const Dj = await deskWith("j14b", share);
+    const mej = await Dj.ask("etiuda:branch-identity", true);
+    put(share, "etiuda-team.json", teamFile([entry(mej, K1, 1)]));
+    put(share, "lamps.ec", P.sealCatalog(K1, TEAM, 1, A1));
+    await Dj.join("state");
+    const inBefore = Dj.api.readCatalog() === A1.trim();
+    await Dj.join("leave", TEAM);
+    const leftNow = !!(Dj.envelope().teamLeft && Dj.envelope().teamLeft[TEAM]) && Dj.api.readCatalog() === null;
+    const blob = inviteBlob({ team: TEAM, folder: share, lead: lampLead, secret: newSecret() });
+    const offered = await Dj.join("read", blob);
+    const took = await Dj.join("invite", blob, "Kai", codeFor(blob));
+    const after = await Dj.join("state"), e = Dj.envelope();
+    check(inBefore && leftNow && offered && !offered.refused && took && !took.refused
+      && !!(e.teamPins && e.teamPins[TEAM] && e.teamPins[TEAM].public === LEAD.public) && !(e.teamLeft && e.teamLeft[TEAM])
+      && Dj.api.readCatalog() === A1.trim() && !e.teamJoin && !!(after && (after.joined || after.join === null)),
+      "j14b review 14.2 refuted: after Leave, a new invitation from the same lead, taken by the person's yes, makes the desk a member"
+      + " again by the roster that still names it, the leave lifted only by that yes: member before " + inBefore + ", left " + leftNow
+      + ", offered " + !!(offered && !offered.refused) + ", taken " + !!(took && !took.refused) + ", request ended " + !e.teamJoin);
+  }
   const hostile = folder("hostile");
   const forgedLead = { keyId: FORGED.keyId, public: FORGED.public, name: "Lamp lead" };
   const Dp = await deskWith("pinned", folder("pinned-own"),
@@ -865,10 +984,17 @@ try {
     P.inviteFolderBelongs ? P.inviteFolderBelongs(underForger, invented) : false,
     P.inviteFolderBelongs ? P.inviteFolderBelongs(broken, invented) : false,
   ];
-  check(belongChecks[0] === true && belongChecks[1] === true
+  check(belongChecks[0] === true && belongChecks[1] === false
       && belongChecks[2] === false && belongChecks[3] === false
       && belongChecks[4] === false && belongChecks[5] === false,
-    "15cl a chosen copy of the shared folder is accepted only where it holds that team's own team file under the invited lead or vouched for by a ring, and refused otherwise: " + JSON.stringify(belongChecks));
+    "15cl a chosen copy of the shared folder is accepted only where it holds that team's own team file under the invited lead, and refused otherwise, a ring there vouching for another key included (review 14.5): " + JSON.stringify(belongChecks));
+  if (PLANTS_OFF) skip("j14e lifting plant:j14-picked-lead takes a chosen folder under another key (ETIUDA_PLANTS=off)");
+  else {
+    const planted = SRC.split("\n").map(l => (l.indexOf("plant:j14-picked-lead") >= 0 ? "  handed = true;" : l)).join("\n");
+    const Dp = SRC.indexOf("plant:j14-picked-lead") >= 0 ? loadDesk(folder("j14e-ud"), planted) : null;
+    const took = Dp ? Dp.api.inviteFolderBelongs(ringYard, invented) : null;
+    check(took === true, "j14e lifting plant:j14-picked-lead takes a chosen folder under another key (FAIL 15cl): " + JSON.stringify(took));
+  }
 
   const Dk = await deskWith("kept", folder("kept-own"));
   const secretK = newSecret();
@@ -3085,12 +3211,12 @@ try {
     + " catalog opens on the empty desk with nothing pressed, the catalogs said open only then: " + wrapSaid(wrapped));
   /* 987r: with an older edition of the team's catalog in the mirror under a name listed first, the shell names the newest (the
      test architect's C1 to the desk pilot: relayOpenFile took the first it found). */
-  const olderA1 = JSON.stringify(Object.assign(JSON.parse(A1), { rev: 0 }));
+  const olderA1 = JSON.stringify(sign(Object.assign(JSON.parse(A1), { rev: 0 }), lead.privateKey, LEAD.keyId));
   const newest = await wrapScene("f3-newest", null, TJ, [["a-older.ec", olderA1]]);
   check(JSON.stringify(newest.loads) === JSON.stringify(["board.ec"]), "987r with an older edition listed first, the shell opens the team's newest: " + JSON.stringify(newest.loads));
   /* 962s5i by the relay: with two of the team's catalogs in the mirror, the shell names neither, and the empty desk opens nothing;
      one catalog with two editions opens its newest, as 987r. */
-  const annexA1 = JSON.stringify(Object.assign(JSON.parse(A1), { id: "lamp-annex", name: "Lamp Annex" }));
+  const annexA1 = JSON.stringify(sign(Object.assign(JSON.parse(A1), { id: "lamp-annex", name: "Lamp Annex" }), lead.privateKey, LEAD.keyId));
   const twoRelay = await wrapScene("s5i-relay", null, TJ, [["annex.ec", annexA1]]);
   check(twoRelay.keyed && twoRelay.loads.length === 0 && JSON.stringify(newest.loads) === JSON.stringify(["board.ec"]),
     "962s5i3 a relay desk keyed for a team whose catalogs in the mirror are two opens neither by itself, and with one catalog opens its newest: two "
@@ -3102,6 +3228,23 @@ try {
     let w = null;
     if (at >= 0) { lines.splice(at, 1); w = await wrapScene("s5i-relay-plant", lines.join("\n"), TJ, [["annex.ec", annexA1]]); }
     check(!!w && w.loads.length === 1, "962s5i4 lifting plant:open-many-none opens one of the two catalogs by itself (FAIL 962s5i3): " + (w ? JSON.stringify(w.loads) : "plant line absent"));
+  }
+  /* 987t: a higher rev any member sealed with the team's key, signed by a key that is not the pinned lead's or not signed at all,
+     is not the one opened; the lead's own lower rev is (Grok's review 16, finding 4). */
+  const memberHigh = JSON.stringify(sign(Object.assign(JSON.parse(A1), { rev: 5, name: "Lamp Shop, a member's" }), forger.privateKey, LEAD.keyId));
+  const memberBare = JSON.stringify(Object.assign(JSON.parse(A1), { rev: 6, sig: undefined }));
+  const memberRows = [["z-member.ec", memberHigh], ["z-member-bare.ec", memberBare]];
+  const leadOnly = await wrapScene("f3-lead-only", null, TJ, memberRows);
+  check(JSON.stringify(leadOnly.loads) === JSON.stringify(["board.ec"]),
+    "987t a higher rev a member sealed, signed by another key or not at all, is not opened on the empty desk; the lead's edition is: "
+    + JSON.stringify(leadOnly.loads));
+  if (PLANTS_OFF) skip("987u lifting plant:sealed-lead-only opens a member's higher rev");
+  else {
+    const lines = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf("plant:sealed-lead-only") >= 0);
+    let w = null;
+    if (at >= 0) { lines.splice(at, 1); w = await wrapScene("f3-plant-lead-only", lines.join("\n"), TJ, memberRows); }
+    check(!!w && w.loads.length === 1 && w.loads[0] !== "board.ec", "987u lifting plant:sealed-lead-only opens a member's higher rev (FAIL 987t): " + (w ? JSON.stringify(w.loads) : "plant line absent"));
   }
   if (PLANTS_OFF) skip("987s lifting plant:relay-open-newest names no catalog");
   else {
@@ -4773,6 +4916,127 @@ try {
         + detail + ", sha " + (same ? "restored" : "differs"));
     }
   }
+
+  /* ---- Grok's review 8 of the desk's policy (findings 3, 2 and 6), Windows only: off it the shell reads no policy ---------- */
+  /* 15r8a: what machine policy set and this desk cannot use is printed in Settings, first in the team section, in the shell's
+     own sentences: a lead that is not 64 lower-case hex and the folder dropped beside it. A good key prints no such row. */
+  await legTry("15r8a", async () => {
+    if (!WIN) { check(true, "15r8a off Windows the shell reads no machine policy, so Settings prints none"); return; }
+    const named = folder("r8a-named");
+    const Dbad = await underPolicy([["TeamFolder", named], ["LeadKey", "NO"]], "r8a-bad", folder("r8a-bad-own"));
+    const Dgood = await underPolicy([["TeamFolder", named], ["LeadKey", LEAD.public]], "r8a-good", folder("r8a-good-own"));
+    const bodyR8 = document.body;
+    if (!document.body) document.body = { classList: { contains: () => false, toggle: noop, add: noop, remove: noop }, appendChild: el => el };
+    let bad = "", good = "";
+    try { bad = await settingsAt(Dbad, "en"); good = await settingsAt(Dgood, "en"); } finally { document.body = bodyR8; }
+    const LEAD_WORDS = "The team lead's key set in Group Policy is not written as 64 lowercase hexadecimal characters, so this desk does not trust it.";
+    const BESIDE_WORDS = "The other value set beside it is not used either: the two are taken together or not at all.";
+    const row = (bad.match(/<div class="set-row" data-row="teampolicy">[\s\S]*?<\/div><\/div>/) || [""])[0];
+    const f = { row: row.indexOf("<small>" + escPage(LEAD_WORDS) + "</small><small>" + escPage(BESIDE_WORDS) + "</small>") >= 0,
+      first: bad.indexOf('data-row="teampolicy"') >= 0 && bad.indexOf('data-row="teampolicy"') < Math.min(...['data-row="join"', 'data-leave-team'].map(s => bad.indexOf(s)).filter(n => n >= 0).concat([bad.length])),
+      none: good.indexOf('data-row="teampolicy"') < 0 };
+    check(Object.keys(f).every(k => f[k]), "15r8a a policy value this desk cannot use is printed in Settings in the shell's own sentences,"
+      + " first in the team section, and a good key prints none: " + JSON.stringify(f));
+  });
+
+  /* 15r8b: while machine policy names the folder, the desk's folder is that one on both sides (finding 2). The shell tells the
+     page the policy's folder, its folder picker opens no dialog and answers nothing, and Open a folder for a moved team is
+     refused for any other folder; the page shows the policy's folder over the desk key and its Change folder opens no picker
+     and offers no button. THE CONTROL, the same desk with no policy: the dialog opens and its folder is answered. */
+  await legTry("15r8b", async () => {
+    if (!WIN) { check(true, "15r8b off Windows the shell reads no machine policy, so the folder is the desk's own"); return; }
+    const named = folder("r8b-named"), other = folder("r8b-other");
+    const deskUnder = async (rows, name) => {
+      const opened = [];
+      const dialog = { showOpenDialog: async () => { opened.push(1); return { canceled: false, filePaths: [other] }; } };
+      REG.policy = rows ? regText(rows) : null;
+      try { const D = await deskWith(name, folder(name + "-own"), null, null, { dialog: dialog }); D.opened = opened; return D; }
+      finally { REG.policy = null; }
+    };
+    const outcome = async D => {
+      const facts = D.sync("etiuda:host") || {};
+      const picked = await D.ask("etiuda:pick-catalog-folder", "Choose");
+      const moved = await D.join("pick-moved-folder", TEAM, other);
+      return { pinned: facts.catalogFolderPolicy || "", picked: picked, dialogs: D.opened.length, moved: moved && moved.error };
+    };
+    const under = await outcome(await deskUnder([["TeamFolder", named]], "r8b-under"));
+    const plain = await outcome(await deskUnder(null, "r8b-plain"));
+    const HO = await import(MOD("host.js"));
+    const hostWas = window.E_HOST, keyWas = ST.lsGet("eCatalogFolder");
+    let pagePicks = 0, page = {};
+    try {
+      ST.lsSet("eCatalogFolder", other);
+      window.E_HOST = { catalogFolder: named, catalogFolderPolicy: named, pickCatalogFolder: () => { pagePicks++; return other; } };
+      const chose = await HO.eChooseCatalogFolder("Choose");
+      page.pinned = { shown: HO.eCatalogFolder(), chose: chose, picks: pagePicks, key: ST.lsGet("eCatalogFolder") };
+      window.E_HOST = { catalogFolder: named, pickCatalogFolder: () => { pagePicks++; return named; } };
+      page.plain = { shown: HO.eCatalogFolder() };
+    } finally {
+      window.E_HOST = hostWas;
+      if (keyWas == null) ST.lsDel("eCatalogFolder"); else ST.lsSet("eCatalogFolder", keyWas);
+    }
+    const manage = fs.readFileSync(path.join(ROOT, "src", "modules", "manage.js"), "utf8");
+    const tail = (manage.match(/function catalogFolderTail\(withId\)\{[\s\S]*?\n\}/) || [""])[0];
+    const f = { shell: under.pinned === named && under.picked === "" && under.dialogs === 0 && under.moved === "policy",
+      control: plain.pinned === "" && plain.picked === other && plain.dialogs === 1 && plain.moved !== "policy",
+      page: page.pinned.shown === named && page.pinned.chose === "" && page.pinned.picks === 0 && page.pinned.key === other && page.plain.shown === other,
+      button: /eCatalogFolderPinned\(\)/.test(tail) };
+    check(Object.keys(f).every(k => f[k]), "15r8b while machine policy names the folder, the shell and the page show that folder, the folder"
+      + " picker opens nothing, a moved team's Open a folder is refused for another folder, and the Library offers no Change folder;"
+      + " the control opens the dialog: " + JSON.stringify(f) + " " + JSON.stringify({ under: under, plain: plain, page: page }));
+    if (PLANTS_OFF) { skip("15r8b lifting plant:pick-under-policy opens the folder dialog under the policy (ETIUDA_PLANTS=off)"); return; }
+    const lines = SRC.split("\n"), at = lines.map((l, i) => (l.includes("/* plant:pick-under-policy */") ? i : -1)).filter(i => i >= 0);
+    let liftedPick = null;
+    if (at.length === 1) {
+      lines.splice(at[0], 1);
+      const opened = [];
+      REG.policy = regText([["TeamFolder", named]]);
+      try {
+        const D = await deskWith("r8b-lifted", folder("r8b-lifted-own"), null, lines.join("\n"),
+          { dialog: { showOpenDialog: async () => { opened.push(1); return { canceled: false, filePaths: [other] }; } } });
+        liftedPick = { picked: await D.ask("etiuda:pick-catalog-folder", "Choose"), dialogs: opened.length };
+      } finally { REG.policy = null; }
+    }
+    check(!!liftedPick && liftedPick.picked === other && liftedPick.dialogs === 1,
+      "15r8b lifting plant:pick-under-policy opens the folder dialog under the policy and answers its folder: " + JSON.stringify(liftedPick));
+  });
+
+  /* 15r8c: with the folder named alone, every invitation is refused, so a leave could not be undone (finding 6): the team's
+     row is the policy's, Settings offers no Leave and says the organisation's IT sets the team, and a leave sent anyway leaves
+     the pin and bars nothing. THE CONTROL, the same desk with no policy: Leave is offered and takes the pin. Lifting
+     plant:folder-holds-team offers Leave again under the folder. */
+  await legTry("15r8c", async () => {
+    if (!WIN) { check(true, "15r8c off Windows the shell reads no machine policy, so Leave stands as it does with none"); return; }
+    const named = folder("r8c-named");
+    const pinnedHere = { teamPins: { [TEAM]: { keyId: LEAD.keyId, public: LEAD.public } }, teamShown: { [TEAM]: { folder: named, lead: "Lamp lead" } } };
+    const caseOf = async (rows, name, src) => {
+      REG.policy = rows ? regText(rows) : null;
+      let D = null;
+      try { D = await deskWith(name, folder(name + "-own"), pinnedHere, src); } finally { REG.policy = null; }
+      const row = leadIn(await D.join("leads"));
+      const bodyWas = document.body;
+      if (!document.body) document.body = { classList: { contains: () => false, toggle: noop, add: noop, remove: noop }, appendChild: el => el };
+      let html = "";
+      try { html = await settingsAt(D, "en"); } finally { document.body = bodyWas; }
+      await D.join("leave", TEAM);
+      const env = D.envelope();
+      return { policy: !!row && row.policy === true, leaveShown: html.indexOf('data-leave-team="' + TEAM + '"') >= 0,
+        itSays: html.indexOf(escPage("The organisation's IT sets this desk's team.")) >= 0,
+        pinKept: !!(env.teamPins && env.teamPins[TEAM]), barred: (env.teamBarred || []).indexOf(TEAM) >= 0 };
+    };
+    const under = await caseOf([["TeamFolder", named]], "r8c-under");
+    const plain = await caseOf(null, "r8c-plain");
+    const f = { under: under.policy && !under.leaveShown && under.itSays && under.pinKept && !under.barred,
+      control: !plain.policy && plain.leaveShown && !plain.itSays && !plain.pinKept && plain.barred };
+    check(f.under && f.control, "15r8c with the folder named alone, the team's row is the policy's, Settings offers no Leave and says"
+      + " the organisation's IT sets the team, and a leave sent anyway keeps the pin; the control leaves: " + JSON.stringify({ under: under, plain: plain }));
+    if (PLANTS_OFF) { skip("15r8c lifting plant:folder-holds-team offers Leave under the folder again (ETIUDA_PLANTS=off)"); return; }
+    const lines = SRC.split("\n"), at = lines.map((l, i) => (l.includes("/* plant:folder-holds-team */") ? i : -1)).filter(i => i >= 0);
+    let lifted = null;
+    if (at.length === 1) { lines[at[0]] = "  return false;"; lifted = await caseOf([["TeamFolder", named]], "r8c-lifted", lines.join("\n")); }
+    check(!!lifted && !lifted.policy && lifted.leaveShown && !lifted.pinKept,
+      "15r8c lifting plant:folder-holds-team offers Leave under the folder again, and the leave takes the pin: " + JSON.stringify(lifted));
+  });
 
   /* Last, over every desk above: the log of each holds none of the secrets any invitation carried. */
   const leaked = [];

@@ -35,7 +35,8 @@ let inFlight = false;
 let folderWatcher = null;
 let kickDebounce = null;
 const knownMtimes = new Map(); // relPath -> { size, mtimeMs }
-const heldStamps = new Map();     // relPath -> { size, mtimeMs } the main thread refused or parked, not copied again while it stays
+const heldStamps = new Map();     // relPath -> { size, mtimeMs } the main thread refused or parked
+const heldSeen = new Map();       // that stamp, once it had stood long enough to be staged again
 const sentNow = new Map();         // relPath -> the sha (or "del") this worker wrote, until the outbox stops owing it
 const casHeld = new Map();         // ask id -> the lock a compare and swap holds
 const CAS_HOLD_MS = 20000;
@@ -46,16 +47,13 @@ const isAllowedPath = S.isAllowedPath;
 function walkFolder(baseDir, sub = "") {
   const out = new Map();
   const current = path.join(baseDir, sub);
-  let entries = [];
-  try {
-    entries = fs.readdirSync(current);
-  } catch {
-    return out;
-  }
+  const entries = S.directoryNames(fs.readdirSync, current);
+  if (entries == null) return null;
   for (const name of entries) {
     if (name.startsWith(".") || name.endsWith(".tmp")) continue;
     const rel = sub ? path.join(sub, name).replace(/\\/g, "/") : name;
     const full = path.join(baseDir, rel);
+    if (S.linkInside(baseDir, full)) continue;
     let st = null;
     try {
       st = fs.statSync(full);
@@ -63,14 +61,17 @@ function walkFolder(baseDir, sub = "") {
       continue;
     }
     if (st.isDirectory && st.isDirectory()) {
+      /* A subtree that does not list is unknown for itself alone (syncer.cjs, scopeUnread); the root's walk still answers null. */
       if (sub === "" && (name === "desks" || name === "invites" || name === "catalog-asks")) {
         const inner = walkFolder(baseDir, name);
-        for (const [k, v] of inner.entries()) out.set(k, v);
+        if (inner == null) { if (S.scopeUnread(out, name)) continue; return null; }
+        S.takeInner(out, inner);
       } else if (sub === "desks" && /^k-[0-9a-f]{16}$/.test(name)) {
         const inner = walkFolder(baseDir, path.join(sub, name));
-        for (const [k, v] of inner.entries()) out.set(k, v);
+        if (inner == null) { if (S.scopeUnread(out, rel)) continue; return null; }
+        S.takeInner(out, inner);
       }
-    } else {
+    } else if (st.isFile && st.isFile()) {
       if (isAllowedPath(rel)) {
         out.set(rel, { size: st.size, mtimeMs: st.mtimeMs || 0 });
       }
@@ -102,16 +103,46 @@ function sameBytes(a, b) {
   try { return fs.readFileSync(a).equals(fs.readFileSync(b)); } catch { return false; }
 }
 
+/* The id from the latest own message. Null until one arrives, so the first listing still uses the init string.
+   A listing applies it and does not yield: a read is not served before that listing is posted. */
+let ownLive = null;
+let scanAfterOwn = false;
+let pollContinuing = false;
+
+function schedulePoll() {
+  if (pollTimer) clearTimeout(pollTimer);
+  if (stopped) return;
+  pollTimer = setTimeout(() => {
+    if (stopped) return;
+    pollContinuing = true;
+    askThenScan();
+  }, pollMs);
+  if (pollTimer && pollTimer.unref) pollTimer.unref();
+}
+/* Ask for the id, then list once it is here. The list itself runs straight through. */
+function askThenScan() {
+  if (stopped) return;
+  if (!parentPort) {
+    try { syncOnce(); } catch {}
+    if (pollContinuing) { pollContinuing = false; schedulePoll(); }
+    return;
+  }
+  scanAfterOwn = true;
+  parentPort.postMessage({ type: "need-own" });
+}
 function syncOnce() {
   if (inFlight || stopped) return;
   inFlight = true;
   try {
+    let id = own;
+    id = ownLive !== null ? ownLive : id; /* plant:worker-own-now */
+    own = typeof id === "string" ? id : own;
     let owedRels = new Set();
     try { owedRels = flushOutbox(); } catch {}
     let foundFiles = null;
     try {
       foundFiles = walkFolder(folder);
-      if (!fs.existsSync(folder)) throw new Error("folder not found");
+      if (foundFiles == null || !fs.existsSync(folder)) throw new Error("folder not found");
       if (parentPort) parentPort.postMessage({ type: "status", folder, answers: true });
     } catch (e) {
       if (parentPort) parentPort.postMessage({ type: "status", folder, answers: false });
@@ -125,7 +156,15 @@ function syncOnce() {
     for (const [relPath, st] of foundFiles.entries()) {
       if (owedRels.has(relPath)) continue;
       const hold = heldStamps.get(relPath);
-      if (hold && hold.size === st.size && hold.mtimeMs === st.mtimeMs) continue; /* plant:worker-held */
+      /* A held stamp is copied again once it is old enough to stand for its bytes, and that once is remembered
+         across the next held list, so a torn first read is not the last read and a settled file is not copied every scan. */
+      if (hold && hold.size === st.size && hold.mtimeMs === st.mtimeMs) {
+        const seen = heldSeen.get(relPath);
+        let reread = false;
+        reread = S.stampStands(st, Date.now()) && !(seen && seen.size === st.size && seen.mtimeMs === st.mtimeMs); /* plant:held-settled-reread */
+        if (reread) heldSeen.set(relPath, { size: st.size, mtimeMs: st.mtimeMs });
+        if (!reread) continue; /* plant:worker-held */
+      }
       const mirrorFile = path.join(mirror, relPath);
       let alreadyInMirror = false;
       const known = knownMtimes.get(relPath);
@@ -149,6 +188,7 @@ function syncOnce() {
 
       if (!alreadyInMirror) {
         const srcFile = path.join(folder, relPath);
+        if (S.linkInside(folder, srcFile)) continue;
         const rand = crypto.randomBytes(8).toString("hex");
         const tmpFile = path.join(stagingDir, rand + ".tmp");
         const readAt = Date.now();
@@ -177,6 +217,7 @@ function syncOnce() {
         folder,
         answers: true,
         listing: Array.from(foundFiles.entries()),
+        unread: foundFiles.unread || [],
         staged
       });
     }
@@ -196,7 +237,7 @@ function init(data) {
       if (stopped) return;
       clearTimeout(kickDebounce);
       kickDebounce = setTimeout(() => {
-        if (!stopped) { try { syncOnce(); } catch {} }
+        if (!stopped) askThenScan();
       }, 200);
       if (kickDebounce && kickDebounce.unref) kickDebounce.unref();
     });
@@ -208,17 +249,8 @@ function init(data) {
     folderWatcher = null;
   }
 
-  function loop() {
-    if (stopped) return;
-    try {
-      syncOnce();
-    } catch {}
-    if (!stopped) {
-      pollTimer = setTimeout(loop, pollMs);
-      if (pollTimer && pollTimer.unref) pollTimer.unref();
-    }
-  }
-  loop();
+  try { syncOnce(); } catch {}
+  schedulePoll();
 }
 
 if (parentPort) {
@@ -227,11 +259,32 @@ if (parentPort) {
     if (msg.type === "init") {
       init(msg.data);
     } else if (msg.type === "held") {
-      for (const rel of msg.forget || []) knownMtimes.delete(rel);
+      for (const rel of msg.forget || []) { knownMtimes.delete(rel); heldSeen.delete(rel); }
       heldStamps.clear();
-      for (const h of msg.held || []) if (h && h.rel) heldStamps.set(h.rel, { size: h.size, mtimeMs: h.mtimeMs });
+      const still = new Set();
+      for (const h of msg.held || []) if (h && h.rel) {
+        heldStamps.set(h.rel, { size: h.size, mtimeMs: h.mtimeMs });
+        still.add(h.rel);
+        const seen = heldSeen.get(h.rel);
+        if (seen && (seen.size !== h.size || seen.mtimeMs !== h.mtimeMs)) heldSeen.delete(h.rel);
+      }
+      for (const rel of Array.from(heldSeen.keys())) if (!still.has(rel)) heldSeen.delete(rel);
+    } else if (msg.type === "own") {
+      ownLive = typeof msg.own === "string" ? msg.own : "";
+      /* A push rides ahead of a kick, which runs the listing. A reply to need-own runs it here. */
+      if (msg.push || !scanAfterOwn || stopped) return;
+      scanAfterOwn = false;
+      const cont = pollContinuing;
+      pollContinuing = false;
+      try { syncOnce(); } catch {}
+      if (cont) schedulePoll();
     } else if (msg.type === "kick") {
-      if (!stopped) { try { syncOnce(); } catch {} }
+      if (stopped) return;
+      const cont = pollContinuing;
+      scanAfterOwn = false;
+      pollContinuing = false;
+      try { syncOnce(); } catch {}
+      if (cont) schedulePoll();
     } else if (msg.type === "read") {
       let got = null;
       try { got = S.shareReadFile(folder, msg.name); } catch { got = null; }
@@ -260,6 +313,8 @@ if (parentPort) {
       if (held) { clearTimeout(held.timer); S.shareRelease(held); }
     } else if (msg.type === "stop") {
       stopped = true;
+      scanAfterOwn = false;
+      pollContinuing = false;
       for (const held of casHeld.values()) { clearTimeout(held.timer); S.shareRelease(held); }
       casHeld.clear();
       if (pollTimer) clearTimeout(pollTimer);

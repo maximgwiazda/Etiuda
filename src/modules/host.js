@@ -28,7 +28,13 @@ const E_CATALOG_FOLDER_KEY="eCatalogFolder";
 const E_CATALOG_SCRIPT="etiuda-catalog.js";
 function eCatalogFolder(){
   const h=eHost(); if(!h) return "";
+  if(h.catalogFolderPolicy) return String(h.catalogFolderPolicy);
   return String(lsGet(E_CATALOG_FOLDER_KEY)||h.catalogFolder||"");
+}
+/* True where machine policy names the folder, so no other is offered or chosen. */
+function eCatalogFolderPinned(){
+  const h=eHost();
+  return !!(h && h.catalogFolderPolicy);
 }
 /* THE FOLDER AS WINDOWS NAMES IT, which is the last two segments: a full path is the answer to
    "where exactly" and belongs on hover, while the sentence in front of a person has to fit one
@@ -145,6 +151,10 @@ function mapListing(v){
                                            desk:(f&&f.desk&&typeof f.desk==="object"&&f.desk.id)?{id:String(f.desk.id),name:String(f.desk.name||"")}:null,
                                            reached:!!(f&&f.reached),
                                            relay:!!(f&&f.relay),
+                                           // Whether a pinned lead signed it (the shell's catalogLeadOk), which alone lets a notice name the lead.
+                                           leadSigned:!!(f&&f.leadSigned===true), /* plant:listing-lead-mapped */
+                                           // The hash of the file's bytes, by which a row's key is kept (catalog-offer.js ecFileTrust).
+                                           bytesSha:String(f&&f.bytesSha||""),
                                            // "taken-back" on this desk's own file where the team's folder has taken its writes back three times.
                                            fault:String(f&&f.fault||""),
                                            // The copy Etiuda ships, rather than a folder's own file.
@@ -168,7 +178,8 @@ function eOnCatalogListing(fn){
    is not the copy Etiuda ships. A later listing replaces that answer. A row with no card count
    still counts, because a caller that hands the listing without one has already decided the file
    is a catalog; a count of -1 is a file that did not read. */
-let folderHold=null;
+let folderHold=null, folderPick=null;
+const folderPickWatchers=[];
 function normFolder(p){
   return String(p||"").replace(/\\/g,"/").replace(/\/+$/,"").toLowerCase();
 }
@@ -186,10 +197,35 @@ function rowHoldsCatalog(f){
   if(f.cards==null) return true;
   return +f.cards>=0;
 }
+function pickFromListing(rows){
+  if(!Array.isArray(rows)) return null;
+  const elig=rows.filter(rowHoldsCatalog);
+  if(!elig.length) return null;
+  const nonSample=elig.filter(f=>!f.sample);
+  const chosen=nonSample.length
+    ? nonSample.slice().sort((a,b)=>(+b.mtime||0)-(+a.mtime||0))[0]
+    : elig.find(f=>f.sample)||null;
+  return chosen ? {kind:chosen.sample?"sample":"file", file:String(chosen.name||""), mtime:+chosen.mtime||0} : null;
+}
+function eFolderCatalogPick(){
+  return folderPick;
+}
+function eOnFolderPick(fn){
+  if(typeof fn==="function") folderPickWatchers.push(fn);
+}
+function samePick(a,b){
+  if(!a && !b) return true;
+  if(!a || !b) return false;
+  return a.kind===b.kind && a.file===b.file && a.mtime===b.mtime;
+}
 /* True when the answer changed, so the empty desk can draw its line again. */
 function noteCatalogFolderHold(rows){
-  const prev=eFolderHoldsCatalog();
+  const prev=eFolderHoldsCatalog(), prevPick=folderPick;
   folderHold=Array.isArray(rows) && rows.some(rowHoldsCatalog);
+  folderPick=pickFromListing(rows);
+  if(!samePick(prevPick, folderPick)){
+    folderPickWatchers.forEach(fn=>{ try{ fn(folderPick); }catch(_){} });
+  }
   return folderHold!==prev;
 }
 /* WHICH FILE IN THAT FOLDER IS THE ONE LOADED, so a list can mark it. The name is written when a
@@ -206,6 +242,7 @@ function eLoadedCatalogFile(){
    so the two cannot drift about what a closed dialog or a refused write means. Resolves to the
    folder actually set, and "" for anything that leaves the setting where it was. */
 function eChooseCatalogFolder(title){
+  if(eCatalogFolderPinned()) return Promise.resolve("");
   return ePickCatalogFolder(title).then(dir=>{
     if(!dir || dir===eCatalogFolder()) return "";
     if(lsSet(E_CATALOG_FOLDER_KEY,dir,true)===false){ toastRefusal(t("That setting could not be saved.")); return ""; }
@@ -322,6 +359,14 @@ function eBranchIdentity(make){
       .then(v=>(v&&typeof v==="object"&&v.id&&v.key&&v.box)?{id:String(v.id),key:String(v.key),box:String(v.box)}:null)
       .catch(()=>null);
   }catch(e){ return Promise.resolve(null); }
+}
+/* Whether a flag made now would leave in a file a lead can read. The shell already holds the
+   catalog in use, so the question takes no argument. False in a browser, and false where the
+   shell would hold the file, remove it, or seal it to the lead's box alone. */
+function eBranchReach(){
+  const h=eHost();
+  if(!h || typeof h.branchReach!=="function") return false;
+  try{ return h.branchReach()===true; }catch(e){ return false; }
 }
 function eWriteBranch(stem,text){
   if(!eHasBranch()) return Promise.resolve({ok:false});
@@ -546,6 +591,7 @@ export {
   TEST_BAND_EN,
   eBranchIdentity,
   eHasBranch,
+  eBranchReach,
   eWriteBranch,
   eHasShared,
   eSharedRead,
@@ -558,10 +604,13 @@ export {
   eCatalogFiles,
   eOnCatalogListing,
   eFolderHoldsCatalog,
+  eFolderCatalogPick,
+  eOnFolderPick,
   noteCatalogFolderHold,
   eCatalogRing,
   eCatalogLeads,
   eChooseCatalogFolder,
+  eCatalogFolderPinned,
   eLoadedCatalogFile,
   eCatalogIn,
   eCatalogBuiltIn,

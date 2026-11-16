@@ -672,6 +672,9 @@ async function startOn(appDir, ud) {
   /* The expectation is this tree's reader of Windows' settings. ETIUDA_PROXY_ORACLE names another tree's reader, so an
      older shell can be measured against a newer reading (the red side of a fix's window run); unset, it is this tree's. */
   const oracle = process.env.ETIUDA_PROXY_ORACLE || path.join(E.ROOT, "shell", "win-proxy.cjs");
+  /* The oracle reads the keys through the same stand-in the launched shell meets (tests/reg-stand-preload.cjs, loaded by
+     shellLaunch), never this machine's registry: both read the keys as missing. */
+  require("./reg-stand-preload.cjs");
   const expectedSwitches = require(oracle).windowsProxySwitches();
   const expectsNone = expectedSwitches.some(s => s[0] === "no-proxy-server");
   const leavesResolver = expectedSwitches.length === 0;

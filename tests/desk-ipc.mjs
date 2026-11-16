@@ -34,7 +34,7 @@ const nodeRequire = createRequire(import.meta.url);
    open now asks machine policy whether to keep the desk (section 12), and 77z drives exactly that. Before the shell loads. */
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 134;
+const EXPECTED = 146;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const ASIDE_D6_LOGIN = nodeRequire("./off-windows.cjs").offWindows("D6-login",
   "the shell sets no login item off Windows, so Reset's turn-off has nothing to reach");
@@ -855,6 +855,58 @@ try {
     + (env.branchOld || []).length + "), the old desk's files left as they were, and the log says it once ("
     + said.filter(l => /branch key could not be opened/.test(l)).length + ")");
   decryptFails = null;
+
+  /* 77z2: A PAIR KEPT ASIDE THAT OPENS AGAIN COMES BACK (Grok's review 8, finding 5). A desk file kept while the seal was
+     lost, then the old seal back: the pair in force no longer opens and the one kept aside does, so the desk's id is the
+     old one again and the pair that will not open is kept aside in its place; nothing new is made. The shell is evaluated
+     apart, over a desk file of its own, so the state the legs above leave stands. Lifting plant:branch-back makes a new
+     pair instead. */
+  const branchBackRun = mark => {
+    const ud = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-branch-back-"));
+    const sealPair = () => {
+      const s = crypto.generateKeyPairSync("ed25519"), b = crypto.generateKeyPairSync("x25519");
+      const pub = k => k.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
+      const seal = k => safeStorage.encryptString(k.export({ type: "pkcs8", format: "der" }).toString("base64")).toString("base64");
+      return { sign: { pub: pub(s.publicKey), priv: seal(s.privateKey) }, box: { pub: pub(b.publicKey), priv: seal(b.privateKey) } };
+    };
+    const kept = sealPair(), now = sealPair();
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: {}, branch: now, branchOld: [kept] }), "utf8");
+    let src = shellSrc("main.js");
+    if (mark) {
+      const lines = src.split("\n"), at = lines.map((l, i) => (l.includes("/* plant:" + mark + " */") ? i : -1)).filter(i => i >= 0);
+      if (at.length !== 1) return { error: "plant:" + mark + " is on " + at.length + " line(s)" };
+      lines[at[0]] = "    const back = null;";
+      src = lines.join("\n");
+    }
+    const out = {}, lines = [];
+    const isolatedElectron = Object.assign({}, electron, {
+      app: Object.assign({}, electron.app, { getPath: () => ud, on: noop, whenReady: () => new Promise(noop) }),
+      ipcMain: { on: noop, handle: noop },
+    });
+    const isolatedReq = n => (n === "electron" ? isolatedElectron : nodeRequire(n));
+    const hush = { log: s => lines.push(String(s)), error: s => lines.push(String(s)), warn: noop };
+    decryptFails = now.sign.priv;
+    try {
+      new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
+        src + "\n__test.branchIdentity = branchIdentity;")(isolatedReq, path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, hush, out);
+      const me = out.branchIdentity(true);
+      const env = JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
+      const idOf = p => "k-" + crypto.createHash("sha256").update(Buffer.from(p.sign.pub, "hex")).digest("hex").slice(0, 16);
+      return { back: !!me && me.id === idOf(kept) && env.branch && env.branch.sign.pub === kept.sign.pub,
+        aside: JSON.stringify(env.branchOld) === JSON.stringify([now]), made: !!me && me.id !== idOf(kept) && me.id !== idOf(now),
+        said: lines.filter(l => /branch key/.test(l)).length };
+    } catch (e) { return { error: String((e && e.message) || e) }; }
+    finally { decryptFails = null; try { fs.rmSync(ud, { recursive: true, force: true }); } catch { /* the temp folder's own */ } }
+  };
+  const rKeptBack = branchBackRun("");
+  check(rKeptBack.back === true && rKeptBack.aside === true && rKeptBack.made === false && rKeptBack.said === 1,
+    "77z2 a pair kept aside that opens again comes back: the desk's id is the old one, the pair that will not open is kept aside in its place, nothing new is made, and the log says it once (" + JSON.stringify(rKeptBack) + ")");
+  if (PLANTS_OFF) skip("77z2 lifting plant:branch-back makes a new pair while the kept one opens (ETIUDA_PLANTS=off)");
+  else {
+    const rKeptLift = branchBackRun("branch-back");
+    check(!rKeptLift.error && rKeptLift.made === true && rKeptLift.back === false,
+      "77z2 lifting plant:branch-back makes a new pair while the kept one opens (" + JSON.stringify(rKeptLift) + ")");
+  }
 
   /* ---- Clement's named edits and the rulings that came with them: a star and a hide on an unedited layer,
      a file whose signature alone is spoiled, every form of every private half, the edition after a removal, and the
@@ -1947,7 +1999,7 @@ try {
       w.isMinimized = () => false;
       const tray = mainTest.ensureTray();
       const labels = (tray && tray.menu && tray.menu.template || []).map(item => item.type === "separator" ? "|" : item.label);
-      const want = ["Open Etiuda", "Bring the replies over any window", "Notifications: on", "Settings", "|", "Quit Etiuda"];
+      const want = ["Open Etiuda", "Quick replies", "Notifications: on", "Settings", "|", "Quit Etiuda"];
       const notes = (tray && tray.menu && tray.menu.template || []).find(item => item.label === "Notifications: on");
       if (notes && notes.click) notes.click();
       const labels2 = (tray && tray.menu && tray.menu.template || []).map(item => item.label);
@@ -2140,7 +2192,7 @@ try {
         const taskTitles = taskItems.map(t => t.title);
         const taskArgs = taskItems.map(t => t.args);
         const tasksMatch = taskItems.length === 4
-          && taskArgs[0] === "--picker" && taskTitles[0] === "Bring the replies over any window"
+          && taskArgs[0] === "--picker" && taskTitles[0] === "Quick replies"
           && taskArgs[1] === "--new-tab" && taskTitles[1] === "New tab"
           && taskArgs[2] === "--library" && taskTitles[2] === "Library"
           && taskArgs[3] === "--settings" && taskTitles[3] === "Settings";
@@ -2220,6 +2272,9 @@ try {
     w.sent = [];
     w.sentEvents = [];
     mainTest.onSecondInstance(["--picker"]);
+    /* The pick opens once the helper has answered for the selection, or its short wait has run out (Quick replies on the
+       selection), so the page is asked a moment after the act: waited for, bounded, never read on the same tick. */
+    for (let i = 0; i < 100 && w.sent.indexOf("etiuda:pick-ask") < 0; i++) await new Promise(r => setTimeout(r, 30));
     const pickerOk = shows === 0 && w.sent.indexOf("etiuda:pick-ask") >= 0;
 
     d8Args = settingsOk && libraryOk && newTabOk && pickerOk;
@@ -2327,6 +2382,7 @@ try {
   let d7Unsigned = false, d7UnsignedWhy = "";
   let d7Listing = false, d7ListingWhy = "";
   let d7Nameless = false, d7NamelessWhy = "";
+  let d7NotLead = false, d7NotLeadWhy = "";
   let d7Switches = false, d7SwitchesWhy = "";
   let d7Click = false, d7ClickWhy = "";
   let d7Asked = false, d7AskedWhy = "";
@@ -2441,7 +2497,7 @@ try {
 
     // 4. New team catalog in listing toasts once
     const notesBeforeListing = madeNotes.length;
-    const newListing = [{ name: "catalog-gamma.ec", id: "k-team-gamma", sha: "sha-gamma-1", rev: 1, mtime: Date.now() }];
+    const newListing = [{ name: "catalog-gamma.ec", id: "k-team-gamma", sha: "sha-gamma-1", rev: 1, mtime: Date.now(), leadSigned: true }];
     if (typeof CO.onCatalogListing === "function") {
       CO.onCatalogListing(newListing);
     }
@@ -2463,6 +2519,16 @@ try {
       && bodyList.indexOf("is in the Library, ready to open.") >= 0;
     if (!d7Listing) d7ListingWhy = JSON.stringify({ nListOk, nListOnce, notes: madeNotes.length - notesBeforeListing, title: titleList, body: bodyList });
 
+    // 4a. A new file the shell did not find signed by the pinned lead is not announced as the lead's (Grok's review 16, finding 1)
+    const notesBeforeNotLead = madeNotes.length;
+    if (typeof CO.onCatalogListing === "function") {
+      CO.onCatalogListing([{ name: "catalog-forged.ec", id: "k-team-forged", sha: "sha-forged-1", rev: 1, mtime: Date.now() },
+        { name: "catalog-false.ec", id: "k-team-false", sha: "sha-false-1", rev: 1, mtime: Date.now(), leadSigned: false }]);
+    }
+    await tick(150);
+    d7NotLead = madeNotes.length === notesBeforeNotLead;
+    if (!d7NotLead) d7NotLeadWhy = JSON.stringify(madeNotes.slice(notesBeforeNotLead).map(n => n.opts && n.opts.title));
+
     // 4b. A lead the team file gives no name: the copywriter's nameless titles in both languages, never a stand-in name
     if (d7JoinCb) d7JoinCb({ leads: [{ team: "team-alpha", lead: "", print: "1234" }] });
     const nlTitles = [];
@@ -2473,7 +2539,7 @@ try {
       await waitNotes(madeNotes, before + 1);
       await tick(100);
       const a = madeNotes.length === before + 1 ? madeNotes[madeNotes.length - 1].opts.title : null;
-      if (typeof CO.onCatalogListing === "function") CO.onCatalogListing([{ name: "catalog-nl-" + lang + ".ec", id: "k-team-nl-" + lang, sha: "sha-nl-" + lang, rev: 1, mtime: Date.now() }]);
+      if (typeof CO.onCatalogListing === "function") CO.onCatalogListing([{ name: "catalog-nl-" + lang + ".ec", id: "k-team-nl-" + lang, sha: "sha-nl-" + lang, rev: 1, mtime: Date.now(), leadSigned: true }]);
       await waitNotes(madeNotes, before + 2);
       await tick(100);
       const b = madeNotes.length === before + 2 ? madeNotes[madeNotes.length - 1].opts.title : null;
@@ -2495,7 +2561,7 @@ try {
     ST.lsDel("eNotifyEditionOff");
 
     ST.lsSet("eNotifyCatalogOff", "1");
-    const listing2 = [{ name: "catalog-epsilon.ec", id: "k-team-eps", sha: "sha-eps-1", rev: 1, mtime: Date.now() }];
+    const listing2 = [{ name: "catalog-epsilon.ec", id: "k-team-eps", sha: "sha-eps-1", rev: 1, mtime: Date.now(), leadSigned: true }];
     if (typeof CO.onCatalogListing === "function") {
       CO.onCatalogListing(listing2);
     }
@@ -2595,6 +2661,55 @@ try {
   check(d7Focused, "D7-focused the same while focused does not (" + d7FocusedWhy + ")");
   check(d7Unsigned, "D7-unsigned a refused or unsigned file never toasts (" + d7UnsignedWhy + ")");
   check(d7Listing, "D7-listing a new team catalog in the listing toasts once (" + d7ListingWhy + ")");
+  check(d7NotLead, "D7-not-lead a new file in the listing the pinned lead did not sign, or one the shell did not mark, is announced as no one's (" + d7NotLeadWhy + ")");
+  /* Its guard in a scratch copy of the page's modules, never in the tree: lifted, listingNoticeFiles announces the unsigned file. */
+  if (PLANTS_OFF) skip("D7-not-lead-plant lifting plant:listing-lead-signed announces a file the lead did not sign");
+  else {
+    let red = false, why = "plant line absent";
+    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-ipc-plant-"));
+    try {
+      fs.cpSync(path.join(ROOT, "src", "modules"), scratch, { recursive: true });
+      const at = path.join(scratch, "catalog-offer.js"), lines = fs.readFileSync(at, "utf8").split("\n");
+      const i = lines.findIndex(l => l.indexOf("plant:listing-lead-signed") >= 0);
+      if (i >= 0) {
+        lines.splice(i, 1);
+        lines[i - 1] = lines[i - 1] + ";";
+        fs.writeFileSync(at, lines.join("\n"));
+        const PL = await import(pathToFileURL(at).href);
+        const got = PL.listingNoticeFiles([{ name: "catalog-forged.ec", id: "k-team-forged", rev: 1 }], null);
+        red = got.length === 1;
+        why = JSON.stringify(got.map(f => f.name));
+      }
+    } catch (e) { why = String(e && e.message || e).slice(0, 200); }
+    finally { fs.rmSync(scratch, { recursive: true, force: true }); }
+    check(red, "D7-not-lead-plant lifting plant:listing-lead-signed announces a file the lead did not sign (FAIL D7-not-lead): " + why);
+  }
+  /* The flag reaches the page through host.js's listing shape (mapListing), which keeps only the fields it names: the shell's
+     leadSigned row, read through eCatalogFiles, still says so on the page side. Lifted in a scratch copy, it is dropped. */
+  {
+    const mapped = async dir => {
+      const H = await import(pathToFileURL(path.join(dir, "host.js")).href + "?m=" + Math.random());
+      const was = window.E_HOST;
+      window.E_HOST = { catalogFiles: () => [{ name: "lead.ec", id: "k-lead", leadSigned: true }, { name: "bare.ec", id: "k-bare" }] };
+      try { const rows = await H.eCatalogFiles(); return rows.map(r => r.name + ":" + r.leadSigned).join(","); }
+      finally { window.E_HOST = was; }
+    };
+    const got = await mapped(path.join(ROOT, "src", "modules"));
+    check(got === "lead.ec:true,bare.ec:false", "D7-lead-mapped the shell's leadSigned reaches the page through the listing's shape, and a row without it is false: " + got);
+    if (PLANTS_OFF) skip("D7-lead-mapped-plant lifting plant:listing-lead-mapped drops the flag on its way to the page");
+    else {
+      let why = "plant line absent";
+      const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-ipc-map-"));
+      try {
+        fs.cpSync(path.join(ROOT, "src", "modules"), scratch, { recursive: true });
+        const at = path.join(scratch, "host.js"), lines = fs.readFileSync(at, "utf8").split("\n");
+        const i = lines.findIndex(l => l.indexOf("plant:listing-lead-mapped") >= 0);
+        if (i >= 0) { lines.splice(i, 1); fs.writeFileSync(at, lines.join("\n")); why = await mapped(scratch); }
+      } catch (e) { why = String(e && e.message || e).slice(0, 200); }
+      finally { fs.rmSync(scratch, { recursive: true, force: true }); }
+      check(why !== "plant line absent" && why.indexOf("lead.ec:true") < 0, "D7-lead-mapped-plant lifting plant:listing-lead-mapped drops the flag on its way to the page (FAIL D7-lead-mapped): " + why);
+    }
+  }
   check(d7Nameless, "D7-nameless a lead with no name gets the nameless titles in both languages, never a stand-in name (" + d7NamelessWhy + ")");
   check(d7Switches, "D7-switches each switch silences its kind (" + d7SwitchesWhy + ")");
   check(d7Click, "D7-click a click shows the window on the offer or the Library tab (" + d7ClickWhy + ")");

@@ -8,8 +8,11 @@
  * A leg in no list is unregistered and fails this check (the chain-split rule, rule 7).
  */
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TESTS = path.join(ROOT, "tests");
@@ -17,6 +20,7 @@ const TESTS = path.join(ROOT, "tests");
 /* Not gates of any chain. A name that a chain reaches, or a name with no file, is stale. */
 export const HELPERS = {
   "tests/badge-room.js": "the badge's room, a sweep tests/smoke.js requires and runs",
+  "tests/caret-selection-desk.js": "a machine-window gate (the helper on a real control), not in either chain",
   "tests/css-dead.js": "a report, as deadcode.js; its scanner is held by tests/text-scan-selftest.js",
   "tests/deadcode.js": "a report: a hit is a candidate to read, not a verdict",
   "tests/engine.js": "the library every gate requires, not a gate",
@@ -32,6 +36,7 @@ export const HELPERS = {
   "tests/pick-desk.js": "a machine-window gate, not in either chain",
   "tests/plants-tree.mjs": "the scratch copy the planting gates re-run themselves in, not a gate",
   "tests/reg-stand.cjs": "a stand-in module tests/relay-channel.mjs requires, not a gate",
+  "tests/reg-stand-preload.cjs": "reg-stand preloaded into a harness-launched shell by tests/engine.js shellLaunch, not a gate",
   "tests/storage-keys.js": "a report, as deadcode.js; its scanner is held by tests/text-scan-selftest.js",
   "tests/tour-walk.js": "the tour's walk tests/smoke.js requires and runs",
   "tests/update-install.js": "a machine-window gate, not in either chain",
@@ -54,11 +59,55 @@ export const NIGHTLY_ONLY = [
   "tests/theme-roll.mjs",
 ];
 
-let asserted = 0, failed = 0;
+/* Scripts that seed eTourDone_v3 as "1" without naming eFirstSigninSeen, each with its reason. */
+export const FIRST_SIGNIN_SEED_EXCEPTIONS = {
+  "tests/desk-focus-ring.mjs": "its one seeded boot is the first-opening sign-in screen's own, which must find the key unset",
+  "tests/test.js": "synthetic localStorage fixture for clearLocalMemory(), not a booted desk",
+};
+
+let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
   asserted++;
   if (cond) process.stdout.write("  ok   " + line + "\n");
   else { failed++; process.stderr.write("  FAIL " + line + "\n"); }
+}
+function skip(line) {
+  skipped++;
+  process.stdout.write("  NOT RUN " + line + "\n");
+}
+
+function stripComments(text) {
+  return String(text || "")
+    .replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, " "))
+    .replace(/(^|[^:"'\\])\/\/[^\n]*/g, "$1");
+}
+
+/** Whether `text` seeds `eTourDone_v3` as done ("1") rather than reading or deleting it. */
+export function seedsTourDone(text) {
+  const code = stripComments(text);
+  return /(?:setItem|lsSet)\(\s*["']eTourDone_v3["']\s*,\s*["']1["']\s*\)/.test(code)
+    || /\[\s*["']eTourDone_v3["']\s*,\s*["']1["']\s*\]/.test(code)
+    || /\[\s*(?:["'][^"']+["']\s*,\s*)*["']eTourDone_v3["']/.test(code)
+    || /(?:["']eTourDone_v3["']|\beTourDone_v3)\s*[:=]\s*["']1["']/.test(code);
+}
+
+/** Files under `files` that seed `eTourDone_v3` as done without naming `eFirstSigninSeen`, outside `exceptions`. */
+export function firstSigninSeedFaults({ files, read, exceptions = FIRST_SIGNIN_SEED_EXCEPTIONS }) {
+  const faults = [];
+  const fileSet = new Set(files);
+  for (const rel of Object.keys(exceptions)) {
+    if (!exceptions[rel]) faults.push({ file: rel, why: "exception has no reason" });
+    else if (!fileSet.has(rel)) faults.push({ file: rel, why: "listed as an exception but not a tests script" });
+  }
+  for (const rel of files) {
+    if (Object.prototype.hasOwnProperty.call(exceptions, rel)) continue;
+    const text = read(rel);
+    if (seedsTourDone(text) && !/\beFirstSigninSeen\b/.test(text)) {
+      faults.push({ file: rel, why: "seeds eTourDone_v3 as done without naming eFirstSigninSeen" });
+    }
+  }
+  faults.sort((a, b) => a.file < b.file ? -1 : a.file > b.file ? 1 : 0);
+  return faults;
 }
 
 const ALONE_MARKER = "/* run: alone (timing) */";
@@ -199,6 +248,25 @@ function controls() {
   check(one(nightBoth, "tests/k.mjs", "in both the node chain and the nightly list"),
     "cs11 a leg in both the node chain and the nightly list is refused by name: "
     + nightBoth.filter(f => f.file === "tests/k.mjs").map(f => f.why).join("; "));
+
+  const TD = "eTourDone" + "_v3", FS = "eFirstSignin" + "Seen";
+  const samples = {
+    "tests/read.mjs": `localStorage.getItem("${TD}"); ST.lsDel("${TD}");`,
+    "tests/seed-ok.mjs": `localStorage.setItem("${TD}", "1"); localStorage.setItem("${FS}", "1");`,
+    "tests/seed-obj-miss.mjs": `Object.assign(d.keys, { ${TD}: "1" });`,
+    "tests/seed-list-miss.mjs": `for (const k of ["${TD}", "eNameAsked"]) localStorage.setItem(k, "1");`,
+  };
+  const sampleFaults = firstSigninSeedFaults({
+    files: Object.keys(samples),
+    read: f => samples[f],
+    exceptions: {},
+  });
+  check(sampleFaults.length === 2
+    && sampleFaults.some(f => f.file === "tests/seed-obj-miss.mjs")
+    && sampleFaults.some(f => f.file === "tests/seed-list-miss.mjs")
+    && !sampleFaults.some(f => f.file === "tests/read.mjs" || f.file === "tests/seed-ok.mjs"),
+    "cs13 first-signin seed scan ignores reads/deletes and catches object/list seeds missing " + FS + ": "
+    + sampleFaults.map(f => f.file).join(", "));
 }
 
 function main() {
@@ -239,8 +307,44 @@ function main() {
       check(false, "chain-split refuses " + f.file + ": the alone marker at line " + f.line + " " + f.why);
   }
 
+  const seedFaults = firstSigninSeedFaults({
+    files,
+    read: rel => fs.readFileSync(path.join(ROOT, rel), "utf8"),
+    exceptions: FIRST_SIGNIN_SEED_EXCEPTIONS,
+  });
+  if (!seedFaults.length) {
+    check(true, "cs12 every tests script seeding eTourDone_v3 also names eFirstSigninSeen or is a reasoned exception ("
+      + Object.keys(FIRST_SIGNIN_SEED_EXCEPTIONS).length + " exception(s))");
+  } else {
+    for (const f of seedFaults) check(false, "chain-split refuses " + f.file + ": " + f.why);
+  }
+
   controls();
-  process.stdout.write("#counts checks=" + asserted + " failures=" + failed + "\n");
+
+  if (PLANTS_OFF) {
+    skip("cs14 plant: a test script seeding eTourDone_v3 without eFirstSigninSeen is caught by name (ETIUDA_PLANTS=off)");
+  } else {
+    const lab = fs.mkdtempSync(path.join(os.tmpdir(), "chain-split-fsseed-"));
+    try {
+      const TD = "eTourDone" + "_v3", FS = "eFirstSignin" + "Seen";
+      const missRel = "tests/planted-miss.mjs", okRel = "tests/planted-ok.mjs";
+      fs.mkdirSync(path.join(lab, "tests"), { recursive: true });
+      fs.writeFileSync(path.join(lab, missRel), `localStorage.setItem("${TD}", "1");\n`);
+      fs.writeFileSync(path.join(lab, okRel), `localStorage.setItem("${TD}", "1");\nlocalStorage.setItem("${FS}", "1");\n`);
+      const planted = firstSigninSeedFaults({
+        files: [missRel, okRel],
+        read: rel => fs.readFileSync(path.join(lab, rel), "utf8"),
+        exceptions: {},
+      });
+      check(planted.length === 1 && planted[0].file === missRel,
+        "cs14 plant: a test script seeding " + TD + " without " + FS + " is caught by name: "
+        + (planted.map(f => f.file).join(", ") || "none"));
+    } finally {
+      fs.rmSync(lab, { recursive: true, force: true });
+    }
+  }
+
+  process.stdout.write("#counts checks=" + asserted + " skipped=" + skipped + " failures=" + failed + "\n");
   process.stdout.write("chain-split " + (failed ? "FAILED " + failed + " of " : "passed ") + asserted + " check(s)\n");
   process.exit(failed ? 1 : 0);
 }

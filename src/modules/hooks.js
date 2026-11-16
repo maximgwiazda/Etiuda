@@ -27,6 +27,7 @@ const SLOTS = [
   "render",
   "closeSettingsMenu",
   "syncSettingsMenu",
+  "tourMenuState",
   "endTour",
   "startTour",
   "tourActive",
@@ -63,6 +64,7 @@ const SLOTS = [
   "keepPoolAcross",
   "restartDesk",
   "takeSyncedDesk",
+  "scheduleDeskBranch",
 ];
 
 const hooks = Object.create(null);

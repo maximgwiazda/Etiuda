@@ -95,6 +95,7 @@ function leadToShow(){
 /* The leads this desk trusts, as the shell last said them. */
 function teamLeads(){ return ((joinNow&&joinNow.leads)||[]).slice(); }
 function relayDesk(){ return !!(joinNow&&joinNow.onRelay===true); }
+function teamPolicySaid(){ return ((joinNow&&joinNow.policySaid)||[]).slice(); }
 /* The same, asked of the shell now: a page that never showed the join has no answer to read. [] where there is none. */
 function leadsNow(){
   if(!eHasJoin()) return Promise.resolve([]);
@@ -343,6 +344,8 @@ function joinTook(v,changed){
   joinNow={sealed:s.sealed&&s.sealed.file?{file:String(s.sealed.file),team:String(s.sealed.team||"")}:null,
            join:joinShown(s.join),
            askRefused:(s.askRefused || s.refused) || null,
+           /* The shell's sentences for what machine policy set and this desk cannot use, as text in the desk's language. */
+           policySaid:Array.isArray(s.policySaid)?s.policySaid.filter(x=>typeof x==="string"&&x).map(String):[],
            leads:Array.isArray(s.leads)?s.leads.filter(l=>l&&l.team).map(l=>{
              const row={team:String(l.team),print:String(l.print||""),
                admitted:l.admitted===true,seen:l.seen===true,lead:String(l.lead||""),folder:String(l.folder||""),
@@ -457,7 +460,7 @@ function joinDoorButton(id){
   return '<button type="button" class="btn" id="'+esc(id)+'" title="'+esc(t("Paste the invitation from the team's lead."))+'">'+esc(t("Join a team"))+'</button>';
 }
 function joinDisclosure(){
-  return '<div class="e-join-meta">'+esc(t("Once this desk joins, the team's lead can see which catalog it uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk: its content reaches the lead only if the lead turns on copies of unlisted catalogs in Studio, and this desk is told before anything is sent. A catalog the team does not list can be marked private here, and is then never sent. The desk's use counts only in the team's totals, never on its own."))+'</div>';
+  return '<div class="e-join-meta">'+esc(t("Once this desk joins, the team's lead can see which catalog it uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk: its content reaches the lead only if the lead turns on copies of unlisted catalogs in Studio, and this desk is told before anything is sent. A catalog the team does not list can be marked private here, and is then never sent. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, and Studio shows them in the team's totals."))+'</div>';
 }
 /* The name of a sync root's kind, as the absent-root sentence names it. */
 function joinKindWord(kind){
@@ -798,4 +801,4 @@ function pickMovedFolder(team,then){
   });
 }
 
-export { lapseNote, shareRefusedNotes, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, relayDesk, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, openJoinPaste, joinDoorButton, teamCanJoin, inviteHeld, noteCatalogCopy };
+export { lapseNote, shareRefusedNotes, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, teamPolicySaid, relayDesk, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, openJoinPaste, joinDoorButton, teamCanJoin, inviteHeld, noteCatalogCopy };

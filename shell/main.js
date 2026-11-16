@@ -112,11 +112,30 @@ function folderSyncerFailed(e) {
 }
 
 /* THE PROXY IS CHOSEN HERE, BEFORE READY: a setProxy after ready would not stop the first lookup.
-   Windows' own setting is followed where it names a setup script or a server (per-machine under
-   ProxySettingsPerUser 0). Where none is named and the Connections flags say direct only, no proxy
-   is passed; automatic detection or a failed read leaves Chromium's resolver. */
-const { windowsProxySwitches } = require(path.join(__dirname, "win-proxy.cjs"));
+   Windows' own setting is followed where it names a setup script or a server (machine policy first,
+   then per-machine under ProxySettingsPerUser 0). Where none is named and the Connections flags say
+   direct only, no proxy is passed; automatic detection or a failed read leaves Chromium's resolver. */
+const { windowsProxySwitches, windowsProxyChange, regOpts } = require(path.join(__dirname, "win-proxy.cjs"));
 for (const s of windowsProxySwitches()) app.commandLine.appendSwitch(...s);
+/* Those switches hold for the run, so Windows' setting is read again where it may have changed: after sleep, and when a
+   call fails other than for being offline, at most once a minute. A change goes to the session, which resolves by it. */
+const PROXY_RECHECK_MS = 60 * 1000;
+let proxyCheckedAt = 0, proxyChecking = null;
+/* The read again waits on nothing here: the reg tool answers in its own time and the session is told when it does. One read
+   at a time; the promise is handed back so a caller that wants the answer can wait for it. */
+function proxyRecheck(e) {
+  try {
+    if (e && (e.name === "AbortError" || /ERR_INTERNET_DISCONNECTED/.test(String(e.message || "")))) return null;
+    if (proxyChecking) return proxyChecking;
+    if (!app.isReady() || Date.now() - proxyCheckedAt < PROXY_RECHECK_MS) return null; /* plant:proxy-recheck-bound */
+    proxyCheckedAt = Date.now();
+    proxyChecking = Promise.resolve(windowsProxyChange())
+      .then(cfg => (cfg ? Promise.resolve(session.defaultSession.setProxy(cfg)) : null))
+      .catch(() => { /* the switches stand */ })
+      .then(() => { proxyChecking = null; });
+    return proxyChecking;
+  } catch { return null; /* the switches stand */ }
+}
 /* A PROXY THAT ASKS FOR A SIGN-IN (shell/proxy-net.cjs): every call the shell makes goes through deskFetch, and a challenge
    Chromium cannot answer with the Windows account is asked of the person on the page, once per proxy, the answer held in
    memory for this run and never written or logged. The relay's socket follows the proxy Chromium names (relayConnect). */
@@ -128,7 +147,7 @@ const deskProxy = proxyNet.proxyAsker({
   say: line => console.error("etiuda: " + line),
 });
 function deskFetch(u, init) {
-  if (net && typeof net.request === "function") return proxyNet.fetchThrough(net, u, init, deskProxy.forRequest()); /* plant:desk-fetch-login */
+  if (net && typeof net.request === "function") return proxyNet.fetchThrough(net, u, init, deskProxy.forRequest()).catch(e => { proxyRecheck(e); throw e; }); /* plant:desk-fetch-login */
   return net && typeof net.fetch === "function" ? net.fetch(u, init) : Promise.reject(new Error("no network here"));
 }
 /* Every question still open goes to the page whenever it loads, so one asked before the window opened waits for it. */
@@ -688,14 +707,26 @@ let engineVersionRead = null;
 function engineVersion() {
   if (engineVersionRead !== null) return engineVersionRead;
   let m = null;
-  try { m = /\bE_VERSION\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)[^"]*"/.exec(fs.readFileSync(ENGINE, "utf8")); } catch { m = null; }
-  engineVersionRead = m ? m[1] : "";
+  try { m = /\bE_VERSION\s*=\s*"((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?)"/.exec(fs.readFileSync(ENGINE, "utf8")); } catch { m = null; }
+  if (!m) return ""; /* plant:engine-version-nocache */
+  engineVersionRead = m[1];
   return engineVersionRead;
+}
+let engineBuiltRead = null;
+function engineBuilt() {
+  if (engineBuiltRead !== null) return engineBuiltRead;
+  let m = null;
+  try { m = /\bE_BUILT\s*=\s*"([0-9]{4})-([0-9]{2})-([0-9]{2})"/.exec(fs.readFileSync(ENGINE, "utf8")); } catch { m = null; }
+  if (!m || +m[1] < 2020 || +m[1] > 2099) return "";
+  const at = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  if (at.getUTCFullYear() !== +m[1] || at.getUTCMonth() !== +m[2] - 1 || at.getUTCDate() !== +m[3]) return "";
+  engineBuiltRead = m[1] + "-" + m[2] + "-" + m[3];
+  return engineBuiltRead;
 }
 /* The release a catalog asks for where this engine is older, else "". */
 function needsNewerEngine(data) {
   const want = /^([0-9]{1,6})\.([0-9]{1,6})\.([0-9]{1,6})/.exec(String((data && data.minEngine) || ""));
-  const have = /^([0-9]+)\.([0-9]+)\.([0-9]+)$/.exec(want ? engineVersion() : "");
+  const have = /^([0-9]+)\.([0-9]+)\.([0-9]+)/.exec(want ? engineVersion() : "");
   if (!want || !have) return "";
   for (let i = 1; i <= 3; i++) if (+want[i] !== +have[i]) return +want[i] > +have[i] ? [want[1], want[2], want[3]].map(Number).join(".") : "";
   return "";
@@ -735,7 +766,8 @@ function catalogPeek(text) {
    When pinPublic is given, returns a boolean verifying the signature against that public key. */
 function catalogSigValid(data, pinPublic) {
   const sig = data && data.sig;
-  if (!data || !sig || sig.alg !== "Ed25519" || !/^[0-9a-f]{128}$/.test(String(sig.value || ""))) return pinPublic !== undefined ? false : "";
+  /* A signature is its 64 bytes in hex, of either case: the same bytes verify whichever case the signing tool wrote. */
+  if (!data || !sig || sig.alg !== "Ed25519" || !/^[0-9a-fA-F]{128}$/.test(String(sig.value || ""))) return pinPublic !== undefined ? false : ""; /* plant:sig-hex-case */
   if (pinPublic !== undefined) {
     if (!/^[0-9a-f]{64}$/.test(String(pinPublic || ""))) return false;
     try {
@@ -876,11 +908,16 @@ function catalogLeadOk(data) {
   const bound = folderLeadPublics();
   if (bound === null) return catalogSigValid(data);
   const sig = data && data.sig;
-  if (!bound.length || !data || !sig || sig.alg !== "Ed25519" || !/^[0-9a-f]{128}$/.test(String(sig.value || ""))) return "";
+  if (!bound.length || !data || !sig || sig.alg !== "Ed25519" || !/^[0-9a-fA-F]{128}$/.test(String(sig.value || ""))) return ""; /* plant:lead-hex-case */
   for (const pub of bound) {
     if (catalogSigValid(data, pub)) return pub;
   }
   return "";
+}
+/* The public a catalog verifies under as this desk trusts it: while a lead is pinned, that lead's (catalogLeadOk), so the
+   share's unsigned ring file never stands in for it; else the ring's. */
+function catalogTrustedPub(data) {
+  return pinnedLeadPubs().length ? catalogLeadOk(data) : catalogSigValid(data); /* plant:trusted-pub-lead */
 }
 /* The leads the page verifies against, the same publics catalogLeadOk uses. A whole team file narrows them to that
    team's pin. Where that lead is not pinned, one key that verifies nothing, so another team's pin is not read and
@@ -961,7 +998,7 @@ function readCatalog() {
   for (const file of catalogPlaces()) {
     if (refusedByEngine(file)) continue;
     let text;
-    try { text = fs.readFileSync(file, "utf8"); } catch { refuseOpened(file, "read"); continue; }
+    try { text = catalogFileText(file); } catch { refuseOpened(file, "read"); continue; }
     try {
       const peeked = catalogPeek(text);
       if (!isV2(peeked.data)) throw new Error("not an Etiuda catalog (format 2)");
@@ -1662,6 +1699,13 @@ const IN_USE_KIND = "etiuda-in-use", IN_USE_STEM = "in-use";
    would otherwise have the pin and not the text. Written only once in-use.ec names it. */
 const LOADED_CATALOG_FILE = "catalog-loaded.txt";
 const LOADED_CATALOG_MAX = 16 * 1024 * 1024;
+/* A catalog file in the folder is read only up to what the largest catalog kept here takes sealed (twice its bytes in hex,
+   and room for the envelope); a larger one would hold the main process for its read and parse, and is refused unread. */
+const CATALOG_FILE_MAX = 2 * LOADED_CATALOG_MAX + 64 * 1024;
+function catalogFileText(file) {
+  if (fs.statSync(file).size > CATALOG_FILE_MAX) throw new Error("larger than any catalog this desk keeps, so it is not read"); /* plant:catalog-file-max */
+  return fs.readFileSync(file, "utf8");
+}
 const ASK_DIR = "catalog-asks", ASK_KIND = "etiuda-catalog-ask", ASK_PREFIX = "etiuda-catalog-ask\n";
 const ANSWER_KIND = "etiuda-catalog-answer", ANSWER_NAME = "catalog-answer.ec";
 const ASK_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/;
@@ -1775,6 +1819,8 @@ let statsPeriod = null;
 let statsHeld = null;
 let statsNoBoxSaid = "";
 let statsWroteKey = "";
+/* The team, lead key id and box the last answer was sealed to, {team, keyId, box}, kept in stats-seal.json beside desk.json. */
+let statsSealedTo = null;
 let statsLastWrite = 0;
 let statsClock = null;
 let statsMidnightTimer = null;
@@ -2098,7 +2144,15 @@ function statsSeal() {
   if (!use.member || use.stale || !use.seal) return null;
   const me = branchIdentity(false);
   if (!me || !/^k-[0-9a-f]{16}$/.test(me.id)) return null;
-  const box = typeof use.seal.box === "string" ? use.seal.box : "";
+  /* The statistics box the team file names (lead.stats, which follows the lead's signing key), else the lead's box, as a team
+     file from before the statistics box has it. */
+  let box = typeof use.seal.box === "string" ? use.seal.box : "";
+  if (use.seal.stats) box = use.seal.stats; /* plant:stats-box-own */
+  if (use.seal.statsBad) { /* plant:stats-box-bad */
+    if (statsNoBoxSaid !== use.seal.team + "|bad") console.log("etiuda: statistics are not sealed: the team file's statistics box is malformed");
+    statsNoBoxSaid = use.seal.team + "|bad";
+    return null;
+  }
   if (!/^[0-9a-f]{64}$/.test(box)) {
     if (statsNoBoxSaid !== use.seal.team) {
       statsNoBoxSaid = use.seal.team;
@@ -2106,7 +2160,7 @@ function statsSeal() {
     }
     return null;
   }
-  if (statsNoBoxSaid === use.seal.team) statsNoBoxSaid = "";
+  if (statsNoBoxSaid === use.seal.team || statsNoBoxSaid === use.seal.team + "|bad") statsNoBoxSaid = "";
   return { seal: { box: box, team: use.seal.team, epoch: use.seal.epoch, key: use.seal.key,
     keyId: String(use.seal.lead && use.seal.lead.keyId), desk: me.id } };
 }
@@ -2160,6 +2214,31 @@ function flushHeldStats() {
   if (!statsHeld) return;
   writeStatsAnswer(statsHeld, "", "close");
 }
+function statsSealKey(seal) { return seal.box + "\n" + seal.keyId; }
+/* THE BOX GOES WITH ITS HOLDER: once the lead's key has been handed on, nothing is sealed while the team file still names the box
+   the last answer was sealed to, until it names a box of its own. Said once. */
+function statsLastSeal() {
+  if (statsSealedTo === null) {
+    try { statsSealedTo = JSON.parse(fs.readFileSync(path.join(app.getPath("userData"), "stats-seal.json"), "utf8")); } catch { statsSealedTo = {}; }
+  }
+  return statsSealedTo && typeof statsSealedTo === "object" ? statsSealedTo : {};
+}
+let statsBoxKeptSaid = "";
+function statsBoxKept(seal) {
+  const last = statsLastSeal();
+  let kept = false;
+  kept = last.team === seal.team && last.box === seal.box && typeof last.keyId === "string" && last.keyId !== seal.keyId; /* plant:stats-box-kept */
+  if (kept && statsBoxKeptSaid !== statsSealKey(seal)) {
+    statsBoxKeptSaid = statsSealKey(seal);
+    console.log("etiuda: statistics are not sealed: the team's lead was handed on and the team file still names the old box");
+  }
+  return kept;
+}
+function statsSealNote(seal) {
+  statsSealedTo = { team: seal.team, keyId: seal.keyId, box: seal.box };
+  try { writeReplacing(path.join(app.getPath("userData"), "stats-seal.json"), JSON.stringify(statsSealedTo) + "\n"); }
+  catch (e) { console.error("etiuda: the box statistics were sealed to could not be kept - " + e.message); }
+}
 function writeStatsAnswer(text, askId, forced) {
   const why = reasonForAsk(askId, forced);
   if (!statsSpan || !statsPeriod) return { ok: false };
@@ -2173,11 +2252,11 @@ function writeStatsAnswer(text, askId, forced) {
     format: 1,
     kind: "etiuda-statistics",
     desk: id,
-    engine: String(data.engine || ""),
+    engine: typeof data.engine === "string" && /^[0-9A-Za-z.+-]{1,40}$/.test(data.engine) ? data.engine : "", /* plant:stats-engine */
     period: { from: String(statsPeriod.from), to: String(statsPeriod.to) },
     sync: channelStamp(now),
     cards: cardCounts(data.cards),
-    intents: Array.isArray(data.intents) ? data.intents : [],
+    intents: intentCounts(data.intents), /* plant:stats-intents */
     misses: data.misses | 0,
     /* One counter per language the page actually counted, keyed by code: the desk's languages
        are its catalog's, so a pair here would silently drop every other one. */
@@ -2202,16 +2281,18 @@ function writeStatsAnswer(text, askId, forced) {
   }
   if ((data.suggestTaken | 0) > 0) out.suggestTaken = data.suggestTaken | 0;
   if ((data.suggestOpen | 0) > 0) out.suggestOpen = data.suggestOpen | 0;
-  const key = statsContentKey(out);
+  /* The box is part of what was written, so the same figures under a new box are sealed again. */
+  let got = statsSeal();
+  const key = statsContentKey(out) + (got && got.seal ? "\n" + statsSealKey(got.seal) : ""); /* plant:stats-seal-key */
   if (key === statsWroteKey) { statsHeld = null; return { ok: true, unchanged: true }; }
   const bypass = why === "span" || why === "midnight" || why === "close";
   if (!bypass && statsLastWrite && (now.getTime() - statsLastWrite) < STATS_PACE_MS) {
     statsHeld = String(text || "");
     return { ok: true, paced: true, why: why };
   }
-  let got = statsSeal();
   if (got && got.away) { statsHeld = String(text || ""); return { ok: false }; }
   if (!got || !got.seal) return { ok: false };
+  if (statsBoxKept(got.seal)) return { ok: false };
   const at = statsFile();
   if (!at) return { ok: false };
   out.hash = channelHash(out);
@@ -2232,10 +2313,12 @@ function writeStatsAnswer(text, askId, forced) {
   statsHeld = null;
   statsWroteKey = key;
   statsLastWrite = now.getTime();
+  statsSealNote(got.seal);
   return { ok: true, sync: out.sync, syncMs: now.getTime(), why: why };
 }
 /* The span file, if it verifies. Anything else is left unadopted: a bad replacement does not write and does not
-   delete the answer already sealed. A missing file is not a new span either. */
+   delete the answer already sealed. A missing file is not a new span either. A span once adopted that is gone or no
+   longer genuine stops the sealing until a genuine one is read again; a folder not answering stops nothing. */
 function readSpanText() {
   const file = path.join(catalogFolder(), SPAN_NAME);
   try {
@@ -2249,17 +2332,23 @@ function readSpanText() {
     return { away: true };
   }
 }
+function statsWithdrawn() {
+  if (!statsSpan) return;
+  statsSpan = ""; statsPeriod = null; statsHeld = null; statsWroteKey = ""; /* plant:stats-withdrawn */
+  armMidnight();
+}
 function tryLiveStats(win) {
   if (!folderAnswers(catalogFolder())) return;
   const got = readSpanText();
-  if (!got.text) return;
+  if (got.away) return;
+  if (!got.text) return statsWithdrawn();
   const doc = spanDocument(got.text);
-  if (!doc) return;
+  if (!doc) return statsWithdrawn();
   const lead = pinnedLead();
-  if (!lead || !spanGenuine(doc, lead)) return;
+  if (!lead || !spanGenuine(doc, lead)) return statsWithdrawn();
   const next = String(doc.span);
   const period = spanPeriod(next, statsNow());
-  if (!period) return;
+  if (!period) return statsWithdrawn();
   if (next !== statsSpan) {
     statsSpan = next;
     statsPeriod = period;
@@ -2267,7 +2356,10 @@ function tryLiveStats(win) {
     askStats(win, "span");
     return;
   }
-  if (statsHeld) writeStatsAnswer(statsHeld);
+  if (statsHeld) { writeStatsAnswer(statsHeld); return; }
+  /* A team file that names another box for the lead seals the answer again at once, its figures unchanged or not. */
+  const now = statsSeal(), last = statsLastSeal();
+  if (now && now.seal && last.team === now.seal.team && last.box && last.box !== now.seal.box) askStats(win, "span"); /* plant:stats-box-reseal */
 }
 
 /* ---- HPKE, RFC 9180 base mode: DHKEM(X25519, HKDF-SHA256), HKDF-SHA256, AES-128-GCM ----------
@@ -2728,12 +2820,12 @@ function catalogRevSlot(id, pub) {
   return Number.isInteger(n) ? n : 0;
 }
 /* A rev already held for this signing public is not replaced by a lower one. Equal is not a raise.
-   Only the public catalogSigValid just verified is written, so one key's mark never moves another's.
+   Only the public catalogTrustedPub just verified is written, so one key's mark never moves another's.
    An unsigned file, whoever wrote it into the share, does not. */
 function keepCatalogRev(json) {
   const x = catalogMarkOf(json);
   if (!x) return;
-  const pub = catalogSigValid(catalogDocIn(json));
+  const pub = catalogTrustedPub(catalogDocIn(json));
   if (!pub || !(x.rev > catalogRevSlot(x.id, pub))) return;
   if (!catalogRevs[x.id] || typeof catalogRevs[x.id] !== "object" || Array.isArray(catalogRevs[x.id])) catalogRevs[x.id] = {};
   catalogRevs[x.id][pub] = x.rev;
@@ -2744,7 +2836,7 @@ function keepCatalogRev(json) {
 function belowCatalogRev(json) {
   const x = catalogMarkOf(json);
   if (!x) return false;
-  const pub = catalogSigValid(catalogDocIn(json));
+  const pub = catalogTrustedPub(catalogDocIn(json));
   if (!pub) return false;
   return x.rev < catalogRevSlot(x.id, pub);
 }
@@ -2795,8 +2887,9 @@ function branchIdOf(pubHex) {
   return "k-" + crypto.createHash("sha256").update(Buffer.from(pubHex, "hex")).digest("hex").slice(0, 16);
 }
 /* {id, key, box} for the page, or null where no key can be kept safely. Where encryption is only
-   unavailable nothing is made and nothing is replaced. A pair the envelope throws on is that of another
-   account, so it is kept aside, never deleted, and a new one is made: silence would hide the desk. */
+   unavailable nothing is made and nothing is replaced. A pair the envelope throws on is kept aside, never
+   deleted; a pair kept aside that opens again comes back in its place, and only where none does is a new
+   one made: silence would hide the desk. */
 function branchIdentity(make) {
   if (deskKeys === undefined) deskKeys = readDesk();
   /* Asked not to make one, it answers the public halves of the pair there is, or null: nothing is opened or made. */
@@ -2810,6 +2903,22 @@ function branchIdentity(make) {
       if (!deskStranded) console.error("etiuda: the desk's branch key could not be opened on this profile, and machine policy keeps this desk rather than make a new one");
       deskStranded = true;
       return null;
+    }
+    const back = wasOld.slice().reverse().find(p => !!openPrivate(p.sign.priv) && !!openPrivate(p.box.priv)); /* plant:branch-back */
+    if (back) {
+      try {
+        deskBranchOld = wasOld.filter(p => p !== back).concat(was ? [was] : []);
+        deskBranch = back;
+        saveDeskFile(JSON.stringify(deskKeys));
+        deskWritten = true;
+        console.log("etiuda: the desk's branch key could not be opened, and the pair kept aside opens again, so it is the desk's key once more");
+        return { id: branchIdOf(deskBranch.sign.pub), key: deskBranch.sign.pub, box: deskBranch.box.pub };
+      } catch (e) {
+        deskBranch = was;
+        deskBranchOld = wasOld;
+        console.error("etiuda: the desk's branch key could not be kept - " + e.message);
+        return null;
+      }
     }
     try {
       if (deskBranch) { deskBranchOld = wasOld.concat([deskBranch]); deskBranch = null; }
@@ -3003,6 +3112,26 @@ function sealFor(catalogId, pin, root) {
     return key.length === 32 ? { team: team, epoch: epoch, key: key, plain: cover.exportsSealed === false } : null;
   } catch { return null; }
 }
+/* Whether the folder a desk file goes to is there to hold it: answering, and a directory. */
+function branchRootReady(root) {
+  try { return folderAnswers(root) && fs.statSync(root).isDirectory(); } catch { return false; }
+}
+/* How the desk's file of `doc` is sealed at `root`: {seal} with the team's cover, or {seal: null} where it goes plain or to the
+   lead's box, and null where it cannot be sealed and is held. A file grown from a catalog this desk opened from an envelope,
+   or from a copy whose chain held one (sealed as the root's first hop was), is that catalog. The write and branchReach both ask it. */
+function branchSealStep(doc, toLead, root) {
+  let sealId = "", sealPin = "";
+  if (doc.grew && typeof doc.grew === "object" && teamOpened.has(String(doc.grew.id))) { sealId = String(doc.grew.id); sealPin = String(doc.grew.sha || ""); }
+  if (!sealId && !toLead) {
+    const ids = lineageOf(doc), top = ids.length > 2 ? ids[ids.length - 1] : "";
+    let chained = false;
+    chained = !!top && ids.slice(1).some(c => teamOpened.has(c)); /* plant:e6d-chain-seal */
+    if (chained) { sealId = top; sealPin = firstHopSha(ids[ids.length - 2], top); }
+  }
+  if (!sealId || toLead) return { seal: null };
+  const seal = PIN_RE.test(sealPin) ? sealFor(sealId, sealPin, root) : null;
+  return seal ? { seal: seal } : null;
+}
 /* The file is <stem>-<8 hex>.ec and its catalog id ends in the same 8 hex, so two catalogs with one stem
    are two files. An empty text takes every file of that id away. Anything else is a catalog the page
    built, which the desk signs only when it names this desk, and writes by replacement with the edition
@@ -3016,12 +3145,11 @@ function writeBranch(stem, text) {
   const me = branchIdentity();
   if (!me) return branchHold(stem, text); /* plant:w1-early-hold */
   const id = me.id + "-" + tail[1];
-  let doc = null, seal = null, grewId = "";
+  let doc = null, seal = null;
   if (text) {
     try { doc = JSON.parse(text); } catch { return branchHold(stem, text); /* plant:w1-early-hold */ }
     const d = doc && typeof doc === "object" ? doc.desk : null;
     if (!d || d.id !== me.id || d.key !== me.key || d.box !== me.box || doc.id !== id) return branchHold(stem, text); /* plant:w1-early-hold */
-    if (doc.grew && typeof doc.grew === "object" && teamOpened.has(String(doc.grew.id))) grewId = String(doc.grew.id);
   }
   let toLead = null, toLeadAt = "", withheld = false;
   if (doc) {
@@ -3033,23 +3161,13 @@ function writeBranch(stem, text) {
   const at = branchDest(stem);
   if (!at) return branchHold(stem, text); /* plant:w1-early-hold */
   try {
-    if (!folderAnswers(at.root) || !fs.statSync(at.root).isDirectory()) return branchHold(stem, text);
+    if (!branchRootReady(at.root)) return branchHold(stem, text);
     /* A file grown from a catalog this desk opened from an envelope is that catalog, so it is signed and then sealed for the
        team that sealed the edition it grew from; where that team, its cover at this folder or its key cannot be had, or the
        team has left this desk out, it is held, never written in the clear. */
-    let sealId = grewId, sealPin = grewId ? String(doc.grew.sha || "") : "";
-    /* A copy of a copy holds what its chain held: where any hop past its own id was opened from an envelope, it is sealed as the
-       root's first hop was, or held. */
-    if (!grewId && !toLead && doc) {
-      const ids = lineageOf(doc), root = ids.length > 2 ? ids[ids.length - 1] : "";
-      let chained = false;
-      chained = !!root && ids.slice(1).some(c => teamOpened.has(c)); /* plant:e6d-chain-seal */
-      if (chained) { sealId = root; sealPin = firstHopSha(ids[ids.length - 2], root); }
-    }
-    if (sealId && !toLead && doc) {
-      seal = PIN_RE.test(sealPin) ? sealFor(sealId, sealPin, at.root) : null;
-      if (!seal) return branchHold(stem, text);
-    }
+    const sealed = doc ? branchSealStep(doc, toLead, at.root) : { seal: null };
+    if (!sealed) return branchHold(stem, text);
+    seal = sealed.seal;
     const same = ownFilesWithId(at.dir, id);
     /* A file this desk did not sign does not raise the rev. The share is anybody's to write. */
     const lastRev = same.reduce((hi, e) => (branchGenuine(e.doc) ? Math.max(hi, +e.doc.rev || 0) : hi), branchRevs[id] || 0);
@@ -3087,9 +3205,13 @@ function writeBranch(stem, text) {
     }
     const written = toLead ? JSON.stringify(sealBranchLead(toLead.box, toLead.team, String(toLead.lead.keyId), me.id, boxed), null, 1) + "\n"
       : seal ? JSON.stringify(sealCatalog(seal.key, seal.team, seal.epoch, signed), null, 1) + "\n" : signed;
+    /* The history is this desk's own, kept on this computer, so it keeps the copy itself and not the lead's envelope. The new
+       bytes are kept before they land, and a file there the history never kept is kept first: a write the history cannot
+       follow is held, so no edition is lost without a copy. */
+    const keptText = toLead ? signed : written;
+    const prior = historyRead().versions.some(v => v.path === path.resolve(at.dest)) ? { none: true } : historyKeepFile(at.dest);
+    if (!prior || (Buffer.byteLength(keptText, "utf8") <= BRANCH_TEXT_MAX && !historyKeep(at.dest, keptText, true))) return branchHold(stem, text); /* plant:branch-keeps-first */
     writeReplacing(at.dest, written);
-    /* The history is this desk's own, kept on this computer, so it keeps the copy itself and not the lead's envelope. */
-    historyKeep(at.dest, toLead ? signed : written, true);
     tidy();
     branchRevs[id] = doc.rev;
     persistDeskEnvelope();
@@ -3148,7 +3270,7 @@ function catalogTitleClean(name) {
   return name.replace(INVITE_HIDDEN_RE, "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 120);
 }
 function catalogSignerOf(doc) {
-  return catalogSigValid(doc) && doc.sig && typeof doc.sig.keyId === "string" ? String(doc.sig.keyId) : "";
+  return catalogTrustedPub(doc) && doc.sig && typeof doc.sig.keyId === "string" ? String(doc.sig.keyId) : "";
 }
 function deskTitle() {
   const n = deskKeys && typeof deskKeys.eAgent === "string" ? deskKeys.eAgent.trim().slice(0, 120) : "";
@@ -3180,9 +3302,11 @@ function teamUse() {
   if (!key || key.length !== 32) return { member: false };
   const stale = doc.epoch !== epoch || epoch < (teamEpochSeen[team] || 0) || teamFileBehind(doc); /* plant:s0b-floor-use */
   const box = typeof doc.lead.box === "string" ? doc.lead.box : "";
+  /* A lead.stats that is not 64 hex seals nothing, and the file is taken as it is. */
+  const stats = typeof doc.lead.stats === "string" && /^[0-9a-f]{64}$/.test(doc.lead.stats) ? doc.lead.stats : "";
   const catalogs = Array.isArray(doc.catalogs) ? doc.catalogs.map(String) : [];
   return { member: true, stale: stale, catalogs: catalogs, content: stale ? null : teamContentOf(doc), consent: stale ? "" : consentOf(doc),
-    seal: { team: team, epoch: epoch, key: key, lead: pin, box: box } };
+    seal: { team: team, epoch: epoch, key: key, lead: pin, box: box, stats: stats, statsBad: doc.lead.stats !== undefined && !stats } };
 }
 function inUseFile() {
   const me = branchIdentity(false);
@@ -3493,11 +3617,17 @@ function teamFileBehind(doc) {
   return rev === null || teamRevRefused((teamRevSeen[String(doc.id)] || {})[doc.lead.public], doc.epoch, rev);
 }
 const LINEAGE_MAX = 4096, LINEAGE_HOPS = 64;
+let lineageAsked = null; /* while branchReach asks about a file it will not write: the roots such a file states, by its id */
 /* The catalog ids a document descends through, itself first: its grew, then each grew this desk has seen for those ids. Each
    hop it sees is kept (catalogLineage), so a copy of a copy is judged by its whole chain. */
 function lineageOf(doc) {
   const id = doc && typeof doc.id === "string" ? doc.id : "";
   const g = doc && doc.grew && typeof doc.grew === "object" ? String(doc.grew.id || "") : "";
+  if (lineageAsked) { /* a question about a file never written keeps no record */
+    const stated = doc && doc.grew && typeof doc.grew === "object" && typeof doc.grew.root === "string" ? doc.grew.root : "";
+    if (id && stated && stated !== id) lineageAsked[id] = stated;
+    return lineageOfId(id || g, id ? g : "");
+  }
   if (id && g && g !== id && PIN_RE.test(String(doc.grew.sha || ""))) catalogLineageSha[id] = String(doc.grew.sha);
   if (id && g && g !== id && catalogLineage[id] !== g) {
     catalogLineage[id] = g;
@@ -3518,7 +3648,7 @@ function lineageOf(doc) {
 /* The ids the private mark reads: the stored chain and every root a copy along it has stated. */
 function privateChain(ids) {
   const out = ids.slice();
-  ids.forEach(c => { const r = catalogRoots[c]; if (r && out.indexOf(r) < 0) out.push(r); }); /* plant:s0b-grew-root */
+  ids.forEach(c => { const r = catalogRoots[c] || (lineageAsked && lineageAsked[c]); if (r && out.indexOf(r) < 0) out.push(r); }); /* plant:s0b-grew-root */
   return out;
 }
 function lineageOfId(id, parent) {
@@ -3643,6 +3773,36 @@ function branchGate(doc) {
   if (teamListedDoc(doc, use)) return {};
   if (!contentApplies(use.seal.team, use.consent) || !/^[0-9a-f]{64}$/.test(String(use.seal.box || ""))) return { hold: true }; /* plant:s0b-branch-switch */
   return { box: use.seal, at: use.content ? String(use.content.at) : "" };
+}
+/* The desk's own file for the catalog in use as the page would send it now (branchCatalog): the id this desk's key and the
+   grown-from id give it, and grew naming the edition. Null where no edition is held or this desk has no key of its own. */
+function deskDocNow() {
+  const me = branchIdentity(false), edition = loadedText ? catalogDocIn(loadedText) : null;
+  if (!me || !edition || edition.kind !== "etiuda-catalog" || typeof edition.id !== "string" || !edition.id) return null;
+  let pin = "";
+  try { pin = signedSha(edition); } catch { return null; }
+  if (!PIN_RE.test(pin)) return null;
+  const doc = { format: 2, kind: "etiuda-catalog", id: me.id + "-" + crypto.createHash("sha256").update(edition.id).digest("hex").slice(0, 8), rev: 1,
+    grew: { id: edition.id, rev: +edition.rev || 0, sha: pin }, desk: { id: me.id, key: me.key, box: me.box } };
+  const og = edition.grew && typeof edition.grew === "object" ? edition.grew : null;
+  if (og && (og.root || og.id)) doc.grew.root = String(og.root || og.id);
+  return doc;
+}
+/* Whether a flag made for the catalog in use would leave in a desk file a lead can read, answered by the code that writes the
+   file: branchGate and branchSealStep, over the file this desk would write now. The page asks with no argument. True only on a
+   team, where that file would be written plain or under the team's key; a hold, a removal and a seal to the lead's box alone
+   are false. Nothing is written, and lineageOf keeps no record of the question. */
+function branchReach() {
+  const doc = deskDocNow();
+  if (!doc) return false;
+  lineageAsked = {};
+  try {
+    const use = teamUse();
+    if (!(use.member && use.seal)) return false;
+    const gate = branchGate(doc), root = sharedFolderForWrite();
+    if (gate.none || gate.hold || gate.box || !branchRootReady(root)) return false;
+    return branchSealStep(doc, null, root) !== null;
+  } finally { lineageAsked = null; }
 }
 /* What this desk put on the share that the lead may no longer read (board 962, stage 0b, Claude alpha's ruling B): an answer to
    the lead's box once the switch no longer applies, any answer about a catalog now private, and working copies likewise. */
@@ -3829,9 +3989,9 @@ function tryHeldUse() {
 
 /* ---- the team: its file beside the catalogs, its lead's key pinned, and this desk's team keys -----------
    A team file verifies under the lead key it names, so it is whole and nothing more: anybody who can write the
-   share can sign one. Its lead's key is pinned where the ring lists it for a catalog the team covers, or at the
-   first admission, a file whose roster carries a wrap this desk opens; nothing in a file under any other key is
-   then used, unless the file's handovers lead to that key from the pinned one, and the pin then moves to it. Each
+   share can sign one. Its lead's key is pinned by machine policy, by an invitation, or at the first admission, a
+   file whose roster carries a wrap this desk opens (decisions, the ruled ways in); a ring pins nothing. Nothing in a
+   file under any other key is then used, unless the file's handovers lead to that key from the pinned one, and the pin then moves to it. Each
    epoch's key is kept, so an edition sealed before a new epoch still opens. */
 const TEAM_MAX = 1024 * 1024;
 let teamPins = {};                             // team id -> {keyId, public}: the lead's key, once trusted
@@ -3935,14 +4095,6 @@ function rosterIdsOf(doc) {
 function deskIdsOnce(list) {
   return Array.from(new Set(list.map(String).filter(id => /^k-[0-9a-f]{16}$/.test(id)))).sort();
 }
-/* Whether a ring document lists this team's lead key for a catalog the team covers, read as v2RingRead reads a ring.
-   The file itself is the shell's to read. */
-function memberRingVouches(doc, ring) {
-  const covers = Array.isArray(doc.catalogs) ? doc.catalogs.map(String) : [];
-  return !!ring && typeof ring === "object" && +ring.format === 1 && ring.kind === "etiuda-ring" && Array.isArray(ring.keys)
-    && ring.keys.some(e => !!e && typeof e === "object" && covers.indexOf(String(e.catalog)) >= 0 && e.keyId === doc.lead.keyId
-      && e.alg === "Ed25519" && e.public === doc.lead.public);
-}
 /* A copy of the membership a heed is given, so the caller's pins, keys and barred list stay as they were. */
 function memberStateCopy(state) {
   const pins = Object.assign({}, state && state.pins);
@@ -3954,12 +4106,11 @@ function memberStateCopy(state) {
 /* What heeding one team file changes for one member. `doc` is the parsed file, or null. `state` is
    {pins, keys, barred, join}: pins is a team id to {keyId, public}, keys is a team id to the epochs
    already kept, barred is the team ids with no first admission, and join is the one request or null.
-   `seen` is {file, member, ring}: file is the path the words name, member is null or {id, sk} where sk
-   is the opened box key, false where that box would not open, or null where it has not been opened yet,
-   and ring is the parsed ring, null where there is none, or absent where it has not been read.
+   `seen` is {file, member}: file is the path the words name, member is null or {id, sk} where sk
+   is the opened box key, false where that box would not open, or null where it has not been opened yet.
    Returns the new state, the key (a buffer, null, or false where the box would not open) and the lines
    to say. A new epoch's key is returned for the caller to seal; it is not written into state, because
-   a seal can fail. Where needKey or needRing is set, nothing was decided and the caller calls again.
+   a seal can fail. Where needKey is set, nothing was decided and the caller calls again.
    A key below state.epochSeen for that team is not kept. Pure: only these declarations, crypto, Buffer and the arguments. */
 function memberHeed(doc, state, seen) {
   const file = seen && typeof seen.file === "string" ? seen.file : "";
@@ -3967,7 +4118,7 @@ function memberHeed(doc, state, seen) {
   const out = memberStateCopy(state);
   const said = [];
   const ret = (extra) => Object.assign({ state: out, key: null, said: said, stampClear: false, changed: false,
-    stop: false, needKey: false, needRing: false, team: "", epoch: 0, keep: false, unbar: false, pinned: false }, extra);
+    stop: false, needKey: false, team: "", epoch: 0, keep: false, unbar: false, pinned: false }, extra);
   if (!teamWhole(doc)) {
     said.push(file + " is not a team file whole under its lead's key, so nothing in it is used");
     return ret({ stop: true });
@@ -4001,8 +4152,9 @@ function memberHeed(doc, state, seen) {
   if (hasWrap && (member.sk === null || member.sk === undefined)) return ret({ needKey: true, team: doc.id });
   let key = null;
   if (hasWrap) key = member.sk ? unwrapTeamKey(member.sk, entry.wrap, doc.id, doc.epoch, member.id) : false;
-  if (!hadPin && !key && !invited && look.ring === undefined) return ret({ needRing: true, key: key, stampClear: key === false, team: doc.id });
-  if (!hadPin && !key && !invited && !memberRingVouches(doc, look.ring)) return ret({ stop: true, key: key, stampClear: key === false, team: doc.id });
+  let heeded = true;
+  heeded = hadPin || !!key || invited; /* plant:j14-no-ring */
+  if (!heeded) return ret({ stop: true, key: key, stampClear: key === false, team: doc.id });
   let changed = false, pinned = false, unbar = false;
   if (!hadPin || handed) { out.pins[doc.id] = lead; pinned = true; changed = true; }
   if (!hadPin) {
@@ -4019,7 +4171,10 @@ function memberHeed(doc, state, seen) {
 }
 /* AN ADMINISTRATOR NAMES THE TEAM IN MACHINE POLICY. The desk reads the Etiuda pair; Studio's pair
    is in the same template and is not read here. A value that is not the form below is said and
-   ignored, and one bad value of a pair leaves the other unused. Nothing set leaves heeding as it was. */
+   ignored, and one bad value of a pair leaves the other unused. Nothing set leaves heeding as it was.
+   An expandable TeamFolder is filled from the person's environment on purpose, since a synced share is pinned only
+   through a variable: a person can move their own desk's pinned folder, and a lead named beside it still refuses any
+   team file it did not sign. */
 const REG_TOOL = "C:\\Windows\\System32\\reg.exe";
 const POLICY_KEY = "HKLM\\SOFTWARE\\Policies\\Etiuda";
 const POLICY_LEAD_RE = /^[0-9a-f]{64}$/;
@@ -4028,11 +4183,13 @@ const POLICY_WORDS = {
     folder: "The team folder set in Group Policy is not a full path, so this desk keeps the folder it already uses.",
     lead: "The team lead's key set in Group Policy is not written as 64 lowercase hexadecimal characters, so this desk does not trust it.",
     beside: "The other value set beside it is not used either: the two are taken together or not at all.",
+    unread: "The organisation's settings could not be read just now. Etiuda will try again.",
   },
   pl: {
     folder: "Folder zespołu ustawiony w zasadach grupy nie jest pełną ścieżką, więc stanowisko zostaje przy folderze, którego już używa.",
     lead: "Klucz lidera zespołu ustawiony w zasadach grupy nie ma postaci 64 małych znaków szesnastkowych, więc stanowisko go nie przyjmuje.",
     beside: "Druga wartość ustawiona obok też nie zostanie użyta: obie są przyjmowane razem albo wcale.",
+    unread: "Nie udało się teraz odczytać ustawień organizacji. Etiuda spróbuje ponownie.",
   },
 };
 /* The key as reg export heads its section, the hive written out and the rest as asked. */
@@ -4126,11 +4283,13 @@ function policyNoUpdate(values) {
   const s = String(v.value).trim();
   return !((v.type === "dword" || v.type === "REG_SZ" || v.type === "REG_EXPAND_SZ") && (s === "" || s === "0"));
 }
-/* `text` is the text of reg export's file for the policy key, or empty where there is none.
-   Returns {folder, lead, bad, noUpdate, values}: folder and lead empty where unused, bad the names of the words to say, noUpdate
-   true where policy turns the version look off, values policyValues' reading for the readers of the key's other values. */
-function joinPolicyFacts(text) {
+/* `text` is the text of reg export's file for the policy key, or empty where there is none; `unread` true where the key was
+   there to read and the read failed. Returns {folder, lead, bad, noUpdate, values, unread}: folder and lead empty where unused, bad
+   the names of the words to say, noUpdate true where policy turns the version look off, values policyValues' reading for the
+   readers of the key's other values, unread true where a read failed or a text would not parse, so no part of it is used. */
+function joinPolicyFacts(text, unread) {
   const values = text ? policyValues(text) : null;
+  const doubt = unread === true || (!!text && values === null);
   const noUpdate = policyNoUpdate(values);
   const folder = policyRegSz(values, "TeamFolder");
   const lead = policyRegSz(values, "LeadKey");
@@ -4145,57 +4304,146 @@ function joinPolicyFacts(text) {
     }
     else bad.push("folder");
   }
+  /* An expandable folder is filled from the desk's environment; the lead is taken as written whatever its type, so no
+     variable a person sets becomes the key this desk trusts. */
   if (lead.set) {
-    if (lead.type === "REG_SZ" && policyLeadOk(lead.value)) { leadOk = true; leadValue = lead.value; }
-    else if (lead.type === "REG_EXPAND_SZ") {
-      const exp = policyExpand(lead.value);
-      if (exp !== null && policyLeadOk(exp)) { leadOk = true; leadValue = exp; }
-      else bad.push("lead");
-    }
+    if ((lead.type === "REG_SZ" || lead.type === "REG_EXPAND_SZ") && policyLeadOk(lead.value)) { leadOk = true; leadValue = lead.value; } /* plant:lead-as-written */
     else bad.push("lead");
   }
   if ((folder.set || lead.set) && (!folderOk || !leadOk)) {
     if (folder.set && folderOk && !leadOk) bad.push("beside");
     if (lead.set && leadOk && !folderOk) bad.push("beside");
-    return { folder: "", lead: "", bad: bad, noUpdate: noUpdate, values: values };
+    return { folder: "", lead: "", bad: bad, noUpdate: noUpdate, values: values, unread: doubt };
   }
-  return { folder: folderValue, lead: leadValue, bad: bad, noUpdate: noUpdate, values: values };
+  return { folder: folderValue, lead: leadValue, bad: bad, noUpdate: noUpdate, values: values, unread: doubt };
 }
-/* The facts with their sentences in `lang`, "pl" or anything else for English: {folder, lead, said, noUpdate}. */
+/* The facts with their sentences in `lang`, "pl" or anything else for English: {folder, lead, said, noUpdate, unread, held},
+   held true where an unread key's last good read stands in for it. */
 function policyWords(facts, lang) {
   const words = POLICY_WORDS[lang === "pl" ? "pl" : "en"];
-  return { folder: facts.folder, lead: facts.lead, said: facts.bad.map(k => words[k]), noUpdate: facts.noUpdate === true };
+  return { folder: facts.folder, lead: facts.lead, said: facts.bad.map(k => words[k]).concat(facts.unread === true ? [words.unread] : []),
+    noUpdate: facts.noUpdate === true, unread: facts.unread === true, held: facts.held === true };
 }
 function joinPolicyFrom(text, lang) { return policyWords(joinPolicyFacts(text), lang); }
-let joinPolicyRead = null;
-/* Read once a run, whatever the language. The one program started is reg.exe at its fixed path, exporting
-   this one key to a scratch file, which holds the registry's own UTF-16 where reg's printing would be in the
-   console's code page. A failure, and any system but Windows, is no policy. The scratch file and its folder
-   go whatever happens, and nothing of them is logged. */
-function readJoinPolicy(lang) {
-  if (joinPolicyRead === null) {
-    let text = "";
-    if (process.platform === "win32") {
-      let dir = "", file = "";
-      try {
-        dir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-policy-"));
-        file = path.join(dir, "policy.reg");
-        execFileSync(REG_TOOL, ["export", POLICY_KEY, file, "/y"], { windowsHide: true, timeout: 5000, stdio: "ignore" });
-        const bytes = fs.readFileSync(file);
-        if (bytes.length % 2 === 0 && bytes[0] === 0xff && bytes[1] === 0xfe) text = bytes.subarray(2).toString("utf16le");
-      } catch { text = ""; }
-      finally {
-        if (file) { try { fs.unlinkSync(file); } catch { /* never written */ } }
-        if (dir) { try { fs.rmdirSync(dir); } catch { /* never made */ } }
-      }
-    }
-    joinPolicyRead = joinPolicyFacts(text);
+/* THE LAST GOOD READ, beside desk.json, so a read that fails holds it rather than none, across a restart too. Plain, as the
+   key itself is readable by every account of this computer, and without AiKey, the one secret among the values, which then
+   waits for a good read. Null where there is none or it is not this shape. It sits in userData, which the person can write:
+   a person who can also make the read fail could put pins of their own in it, but such a person could already make the read
+   fail and drop every pin, so holding the last good read widens nothing (Claude α, 2026-11-15: no seal, which would not stop
+   that person and would add a way for an honest desk to fail). */
+const POLICY_GOOD_FILE = "policy-last-good.json";
+function policyGoodLoad() {
+  try {
+    const doc = JSON.parse(fs.readFileSync(path.join(app.getPath("userData"), POLICY_GOOD_FILE), "utf8"));
+    if (!doc || doc.kind !== "etiuda-policy-last-good" || doc.format !== 1 || typeof doc.folder !== "string" || typeof doc.lead !== "string") return null;
+    if ((doc.folder && !policyFolderOk(doc.folder)) || (doc.lead && !policyLeadOk(doc.lead))) return null;
+    const values = Object.create(null);
+    const given = doc.values && typeof doc.values === "object" && !Array.isArray(doc.values) ? doc.values : {};
+    Object.keys(given).forEach(k => { const v = given[k]; if (k !== "aikey" && v && typeof v.type === "string" && typeof v.value === "string") values[k] = { type: v.type, value: v.value }; });
+    const bad = Array.isArray(doc.bad) ? doc.bad.filter(b => b === "folder" || b === "lead" || b === "beside") : [];
+    return { folder: doc.folder, lead: doc.lead, bad: bad, noUpdate: doc.noUpdate === true, values: values, unread: false };
+  } catch { return null; }
+}
+function policyGoodSave(facts) {
+  try {
+    const values = {};
+    Object.keys(facts.values || {}).forEach(k => { if (k !== "aikey") values[k] = facts.values[k]; });
+    const text = JSON.stringify({ format: 1, kind: "etiuda-policy-last-good", folder: facts.folder, lead: facts.lead, bad: facts.bad,
+      noUpdate: facts.noUpdate === true, values: values });
+    const file = path.join(app.getPath("userData"), POLICY_GOOD_FILE);
+    let was = "";
+    try { was = fs.readFileSync(file, "utf8"); } catch { /* none kept yet */ }
+    if (was === text) return;
+    writeReplacing(file, text);
+  } catch { /* the next good read keeps it */ }
+}
+/* A read that failed is asked again at the first ask once this has passed, so one failure does not stand for the run. */
+const POLICY_REREAD_MS = 60 * 60 * 1000;
+/* How often a running desk looks at the key again, so a policy turned off, or an AiKey removed, stops the next send within about
+   a minute (review 28, finding 4). The look runs without waiting (execFile): the facts last read serve every ask until it
+   lands, and a send waits for facts no older than the look and its grace (policyFresh). */
+const POLICY_LOOK_MS = 60 * 1000;
+const POLICY_LOOK_GRACE_MS = 15 * 1000;
+let joinPolicyRead = null, joinPolicyReadAt = 0, joinPolicyGood = null, joinPolicyAskedAt = 0, joinPolicyAsking = false;
+/* The scratch file reg exports the key into, and its folder; both go whatever happens, and nothing of them is logged. */
+function policyScratch() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-policy-"));
+  return { dir: dir, file: path.join(dir, "policy.reg") };
+}
+function policyScratchGone(at) {
+  if (!at) return;
+  if (at.file) { try { fs.unlinkSync(at.file); } catch { /* never written */ } }
+  if (at.dir) { try { fs.rmdirSync(at.dir); } catch { /* never made */ } }
+}
+/* What reg's export left: the text of the registry's own UTF-16, or unread where the file is not that. */
+function policyExported(at) {
+  const bytes = fs.readFileSync(at.file);
+  return bytes.length % 2 === 0 && bytes[0] === 0xff && bytes[1] === 0xfe ? { text: bytes.subarray(2).toString("utf16le"), unread: false }
+    : { text: "", unread: true };
+}
+/* A read's facts made the ones in force: a good read is kept as the last good read, and a read that failed holds it. */
+function policyTake(text, unread) {
+  const read = joinPolicyFacts(text, unread);
+  if (!read.unread) { joinPolicyGood = read; policyGoodSave(read); }
+  else {
+    /* A read that failed holds the last good read, every pin and switch it set, said as unread; with none, it is none. */
+    const good = joinPolicyGood || (joinPolicyGood = policyGoodLoad());
+    if (good) { read.folder = good.folder; read.lead = good.lead; read.bad = good.bad; read.noUpdate = good.noUpdate; read.values = good.values; read.held = true; } /* plant:policy-hold-good */
   }
+  joinPolicyRead = read;
+  joinPolicyReadAt = Date.now();
+  joinPolicyAskedAt = joinPolicyReadAt;
+}
+/* The minute's look, without waiting: one at a time, its facts taken when reg answers, judged as the first read judges them. */
+function policyLookLater() {
+  if (joinPolicyAsking || process.platform !== "win32") return;
+  joinPolicyAsking = true;
+  joinPolicyAskedAt = Date.now();
+  let at = null;
+  try { at = policyScratch(); } catch { joinPolicyAsking = false; return; }
+  try {
+    execFile(REG_TOOL, ["export", POLICY_KEY, at.file, "/y"], regOpts(execFile, { windowsHide: true, timeout: 5000 }), err => {
+      let got = { text: "", unread: !(err && (err.code === 1 || err.status === 1)) };
+      try { if (!err) got = policyExported(at); } catch { got = { text: "", unread: true }; }
+      finally { policyScratchGone(at); joinPolicyAsking = false; }
+      try { policyTake(got.text, got.unread); } catch { /* the facts in force stand */ }
+    });
+  } catch { policyScratchGone(at); joinPolicyAsking = false; }
+}
+/* Whether the facts in force are recent enough for a send: read within the look and its grace, or no policy to look at. */
+function policyFresh() {
+  return process.platform !== "win32" || (!!joinPolicyRead && Date.now() - joinPolicyReadAt < POLICY_LOOK_MS + POLICY_LOOK_GRACE_MS);
+}
+/* Read at the first ask, whatever the language, and again at the first ask an hour after a read that failed
+   (POLICY_REREAD_MS), both waiting, since that ask needs the answer; between them, looked at again a minute after the last
+   read, without waiting (POLICY_LOOK_MS). The one program started is reg.exe at its fixed path, exporting
+   this one key to a scratch file, which holds the registry's own UTF-16 where reg's printing would be in the
+   console's code page. A failure, and any system but Windows, is no policy; reg's own exit 1 is a key that is not there,
+   and any other failure is a read that failed, kept as unread. */
+function readJoinPolicy(lang) {
+  if (joinPolicyRead === null || (joinPolicyRead.unread && Date.now() - joinPolicyReadAt >= POLICY_REREAD_MS)) { /* plant:policy-reread */
+    let text = "", unread = false;
+    if (process.platform === "win32") {
+      let at = null;
+      try {
+        at = policyScratch();
+        execFileSync(REG_TOOL, ["export", POLICY_KEY, at.file, "/y"], regOpts(execFileSync, { windowsHide: true, timeout: 5000, stdio: "ignore" }));
+        ({ text, unread } = policyExported(at));
+      } catch (e) { text = ""; unread = !(e && e.status === 1); } /* plant:policy-unread */
+      finally { policyScratchGone(at); }
+    }
+    policyTake(text, unread);
+  }
+  if (Date.now() - joinPolicyAskedAt >= POLICY_LOOK_MS) policyLookLater(); /* plant:policy-look-later */
   return policyWords(joinPolicyRead, lang);
 }
-/* True where machine policy turns the version look off; read with the team values, once a run. */
+/* True where machine policy turns the version look off, its last good read standing in where a read failed, or where a read
+   failed with no good read ever, so a switch the read missed is not taken as unset. updateLookUnsure says which. */
 function updateLookOff() {
-  try { return readJoinPolicy("en").noUpdate === true; } catch { return false; }
+  try { const p = readJoinPolicy("en"); return p.noUpdate === true || (p.unread === true && p.held !== true); } catch { return true; } /* plant:look-off-unread */
+}
+function updateLookUnsure() {
+  try { const p = readJoinPolicy("en"); return p.unread === true && p.held !== true; } catch { return true; }
 }
 /* A MANAGED INSTALLATION (decision 49): Managed, SharedComputer, AllowPersonalAccounts, SigninProvider, SigninTenant and
    SupportContact, from policyValues' reading, machine policy alone. A pin that cannot be read closes the sign-in rather than
@@ -4324,16 +4572,19 @@ function deskAiJoin(me, org) {
   const pick = (a, b) => (a ? { value: a, managed: true } : { value: typeof b === "string" ? b : "", managed: false });
   const choiceSet = o.on === true || o.on === false;
   const provider = pick(o.provider, p.provider), model = pick(o.model, p.model);
+  const endpointBad = Array.isArray(o.ignored) && o.ignored.indexOf("AiEndpoint") > -1; /* plant:policy-bad-endpoint */
   /* The person's address belongs to the service the person chose, so it is not carried over to another the policy chose. */
   const endpoint = pick(o.endpoint, o.provider && o.provider !== p.provider ? "" : p.endpoint);
   const service = deskAiService(provider.value);
-  const at = !service ? "" : endpoint.value ? deskAiEndpointShape(endpoint.value, provider.value) : service.endpoint;
-  const home = endpoint.managed || (at !== "" && service && at === service.endpoint);
+  const at = !service || endpointBad ? "" : endpoint.value ? deskAiEndpointShape(endpoint.value, provider.value) : service.endpoint;
+  /* A policy key goes only to a service or address the policy itself named, never to a vendor chosen here alone. */
+  const keyUnpinned = !!o.key && !provider.managed && !endpoint.managed && !endpointBad; /* plant:policy-key-pinned-service */
+  const home = !endpointBad && !keyUnpinned && (endpoint.managed || (at !== "" && service && at === service.endpoint));
   return {
     on: choiceSet ? o.on : p.choice === "organisation",
-    provider: provider.value, given: endpoint.value, endpoint: at, model: model.value,
-    managed: { choice: choiceSet, provider: provider.managed, endpoint: endpoint.managed, model: model.managed, key: !!o.key },
-    keyAway: !!o.key && !home,
+    provider: provider.value, given: endpointBad ? "" : endpoint.value, endpoint: at, model: model.value,
+    managed: { choice: choiceSet, provider: provider.managed, endpoint: endpoint.managed || endpointBad, model: model.managed, key: !!o.key },
+    keyAway: !!o.key && !home, keyNoService: keyUnpinned,
   };
 }
 function deskAiReadyOf(j, key) { return !!(j && deskAiService(j.provider) && j.endpoint && j.model && key); }
@@ -4344,7 +4595,7 @@ function deskAiAnswer(j, keyIn, ignored, sealable, stored) {
   return {
     choice: j.on ? "organisation" : "builtin", on: !!j.on, ready: !!j.on && deskAiReadyOf(j, keyIn),
     provider: j.provider, endpoint: j.given, at: j.endpoint, host: host, model: j.model,
-    keyKept: !!keyIn || !!stored, keyAway: !!j.keyAway, managed: Object.assign({}, j.managed),
+    keyKept: !!keyIn || !!stored, keyAway: !!j.keyAway, keyNoService: !!j.keyNoService, managed: Object.assign({}, j.managed),
     ignored: Array.isArray(ignored) ? ignored.slice() : [], sealable: !!sealable,
     services: Object.keys(DESK_AI_SERVICES).map(id => ({ id: id, endpoint: DESK_AI_SERVICES[id].endpoint })),
   };
@@ -4392,18 +4643,20 @@ function deskAiPolicy() {
   return deskAiPolicyFrom(joinPolicyRead && joinPolicyRead.values);
 }
 /* WHAT IS IN FORCE, KEPT IN MEMORY: every search, picker opening and the page's two-second look asks deskAiConfig, so the two
-   files are read and the key unsealed once, and again only after deskAiForget (every save or forget from Settings) or a new
-   reading of machine policy. A file edited behind the running desk's back is read at the next save or start. */
+   files are read and the key unsealed once, and again only after deskAiForget (every save or forget from Settings), a file
+   change on disk (such as deleting the key file) or a new reading of machine policy (at most once a minute). */
 let deskAiKept = null;
 function deskAiForget() { deskAiKept = null; }
 /* Everything in force now: {joined, policy, key}, the key the one a request would carry, "" where none would go. */
 function deskAiNow() {
   const policy = deskAiPolicy();
-  if (deskAiKept && deskAiKept.from === joinPolicyRead) return deskAiKept.now;
+  const stampOf = name => { try { const st = fs.statSync(deskAiPath(name)); return st.mtimeMs + ":" + st.size; } catch { return ""; } };
+  const stamp = stampOf(DESK_AI_FILE) + "|" + stampOf(DESK_AI_KEY_FILE);
+  if (deskAiKept && deskAiKept.from === joinPolicyRead && deskAiKept.stamp === stamp) return deskAiKept.now; /* plant:desk-ai-key-stamp */
   const joined = deskAiJoin(deskAiPerson(), policy);
   const key = policy.key ? (joined.keyAway ? "" : policy.key) : deskAiKeyFor(joined.endpoint);
   const now = { joined: joined, policy: policy, key: key };
-  deskAiKept = { from: joinPolicyRead, now: now };
+  deskAiKept = { from: joinPolicyRead, stamp: stamp, now: now };
   return now;
 }
 /** THE ONE PLACE THE ADDRESS AND THE KEY ARE HANDED ON. Null while the option is off or anything a request needs is missing;
@@ -4476,6 +4729,7 @@ function deskAiTest() {
   try { now = deskAiNow(); } catch { return Promise.resolve({ ok: false, why: "none", host: "", model: "" }); }
   const j = now.joined, a = deskAiAnswer(j, !!now.key, [], false);
   const said = why => Promise.resolve({ ok: false, why: why, host: a.host, model: j.model });
+  if (j.keyNoService) return said("keyNoService");
   if (!deskAiService(j.provider)) return said("provider");
   if (!j.endpoint) return said("endpoint");
   if (!j.model) return said("model");
@@ -4495,12 +4749,16 @@ ipcMain.on("etiuda:desk-ai-settings", (e) => {
 });
 ipcMain.handle("etiuda:desk-ai-save", (e, fields) => (fromEngine(e) ? deskAiSave(fields) : { ok: false, why: "refused", settings: null }));
 ipcMain.handle("etiuda:desk-ai-test", (e) => (fromEngine(e) ? deskAiTest() : { ok: false, why: "refused", host: "", model: "" }));
-let joinPolicySaid = false;
+let joinPolicySaid = null;
 function sayJoinPolicy() {
   let lang = "en";
   try { if (shellWords().lang === "pl") lang = "pl"; } catch { lang = "en"; }
   const got = readJoinPolicy(lang);
-  if (!joinPolicySaid) { joinPolicySaid = true; got.said.forEach(teamSay); policyLetsInviteGo(got); }
+  if (joinPolicySaid !== joinPolicyRead) {
+    joinPolicySaid = joinPolicyRead;
+    got.said.forEach(teamSay);
+    policyLetsInviteGo(got);
+  }
   return got;
 }
 /* Case-insensitive path comparison on Windows. A UNC path and a mapped drive read as different folders. */
@@ -4546,7 +4804,7 @@ function memberHeedUnderPolicy(doc, state, seen, policy) {
     const out = memberStateCopy(state);
     const said = [file + " is signed by a key other than the lead's this desk trusts for team " + doc.id + ", so nothing in it is used"];
     return { state: out, key: null, said: said, stampClear: false, changed: false, stop: true,
-      needKey: false, needRing: false, team: String(doc.id), epoch: 0, keep: false, unbar: false, pinned: false };
+      needKey: false, team: String(doc.id), epoch: 0, keep: false, unbar: false, pinned: false };
   }
   const prior = state && state.pins ? state.pins[doc.id] : null;
   const already = !!prior && prior.public === lead.public && prior.keyId === lead.keyId;
@@ -4556,7 +4814,7 @@ function memberHeedUnderPolicy(doc, state, seen, policy) {
   const barred = seeded.barred.indexOf(doc.id);
   if (barred >= 0) seeded.barred.splice(barred, 1);
   const r = memberHeed(doc, seeded, seen);
-  if (r.stop || r.needKey || r.needRing) return r;
+  if (r.stop || r.needKey) return r;
   r.pinned = true;
   r.changed = true;
   if (barred >= 0) r.unbar = true;
@@ -4580,14 +4838,6 @@ function relayRingAt(root) {
 function readRing() {
   const root = catalogFolder(), relay = relayRingAt(root);
   return relay === undefined ? readRingFile(root) : relay;
-}
-/* The ring a team file's first pin is heeded with: on the folder the ring file, and on the relay none at all. The relay's
-   first step let a relay file's own signed ring vouch for the key that signed it; its fourth step inverts that (board 907):
-   on the relay a first pin comes from an invitation, machine policy or an answered request, never from a ring. The
-   signed ring is still the one a catalog's signature is read against (relayRingAt). */
-function ringHeeded(doc, root) {
-  const channel = teamChannelOf(doc);
-  return !channel ? null : channel.kind === "relay" ? null : readRingFile(root); /* plant:ring-relay */
 }
 function teamSay(line) {
   if (teamSaid.has(line)) return;
@@ -4678,20 +4928,16 @@ function heedTeam() {
   const state = { pins: teamPins, keys: teamKeys, barred: Array.from(teamBarred), join: teamJoin, epochSeen: teamEpochSeen };
   const member = deskBranch ? { id: branchIdOf(deskBranch.sign.pub), sk: null } : null;
   const policyLead = sayJoinPolicy().lead;
-  let seen = { file: used, member: member, ring: undefined };
+  let seen = { file: used, member: member };
   let r = memberHeedUnderPolicy(doc, state, seen, policyLead);
   if (r.needKey) {
     const sk = openPrivate(deskBranch.box.priv);
-    seen = { file: file, member: { id: member.id, sk: sk || false }, ring: undefined };
-    r = memberHeedUnderPolicy(doc, state, seen, policyLead);
-  }
-  if (r.needRing) {
-    seen = { file: file, member: seen.member, ring: ringHeeded(doc, root) };
+    seen = { file: file, member: { id: member.id, sk: sk || false } };
     r = memberHeedUnderPolicy(doc, state, seen, policyLead);
   }
   r.said.forEach(teamSay);
   if (r.stampClear) teamStamp = "";
-  if (r.stop || r.needKey || r.needRing) return;
+  if (r.stop || r.needKey) return;
   /* A whole file is heeded only where its rev and channel read, and where it is not an older epoch than the floor kept
      for its team and lead key, nor a lower rev at that epoch. */
   const rev = teamRevOf(doc), channel = teamChannelOf(doc);
@@ -4924,8 +5170,10 @@ function teamSealedHere(team) {
   const kept = teamKeys[team] || {};
   const ids = new Set();
   if (!Object.keys(kept).length) return { best: "", ids: ids };
-  /* The newest of the team's sealed files this desk can open: the highest key number, then the highest rev inside it (the
-     test architect's C1 to the desk pilot; a sealed envelope carries no rev outside its ciphertext). */
+  /* The newest of the team's sealed files this desk can open whose inner catalog the team's pinned lead signed: the highest
+     key number, then the highest rev inside it (the test architect's C1 to the desk pilot; a sealed envelope carries no rev
+     outside its ciphertext). The team key is every member's, so a seal alone makes no file the lead's. */
+  const pin = teamPins[team];
   let best = "", bestEpoch = -1, bestRev = -1;
   let files = ecFilesIn(catalogFolder());
   if (!files.length) {
@@ -4936,8 +5184,11 @@ function teamSealedHere(team) {
     let d = null;
     try { if (fs.statSync(f).size <= BRANCH_TEXT_MAX) d = catalogPayload(fs.readFileSync(f, "utf8")).data; } catch { continue; }
     if (!(d && d.kind === SEALED_KIND && String(d.team) === team && Number.isInteger(d.epoch) && kept[d.epoch])) continue;
-    let rev = -1;
-    try { const text = openSealed(teamKeyAt(team, d.epoch), d); const doc = text ? JSON.parse(text) : null; if (doc && Number.isInteger(doc.rev)) rev = doc.rev; if (doc && typeof doc.id === "string") ids.add(doc.id); } catch { rev = -1; }
+    let rev = -1, doc = null;
+    try { const text = openSealed(teamKeyAt(team, d.epoch), d); doc = text ? JSON.parse(text) : null; } catch { doc = null; }
+    if (!(doc && pin && catalogSigValid(doc, String(pin.public || "")))) continue; /* plant:sealed-lead-only */
+    if (Number.isInteger(doc.rev)) rev = doc.rev;
+    if (typeof doc.id === "string") ids.add(doc.id);
     if (d.epoch > bestEpoch || (d.epoch === bestEpoch && rev > bestRev)) { best = path.basename(f); bestEpoch = d.epoch; bestRev = rev; } /* plant:relay-open-newest */
   }
   return { best: best, ids: ids };
@@ -5568,6 +5819,10 @@ function liveSyncIo() {
       }
     }
   }
+  let whole = true;
+  /* A read the deadline cut, or one past maxBuffer, is partial; a missing key or a missing reg.exe answers whole. */
+  let cut = ["ETIMEDOUT"];
+  cut = ["ETIMEDOUT", "ENOBUFS"]; /* plant:syncio-overflow */
   if (process.platform === "win32") {
     const deadline = Date.now() + 5000;
     const queries = [
@@ -5580,10 +5835,10 @@ function liveSyncIo() {
     ];
     for (let i = 0; i < queries.length; i++) {
       const left = deadline - Date.now();
-      if (left < 1) break;
+      if (left < 1) { whole = false; break; } /* plant:syncio-deadline */
       try {
-        absorb(execFileSync(REG_TOOL, queries[i], { windowsHide: true, timeout: left, encoding: "buffer", maxBuffer: 1024 * 1024 }));
-      } catch (e) { /* a missing key is an empty record */ }
+        absorb(execFileSync(REG_TOOL, queries[i], regOpts(execFileSync, { windowsHide: true, timeout: left, encoding: "buffer", maxBuffer: 1024 * 1024 })));
+      } catch (e) { /* a missing key is an empty record; a read the deadline cut leaves the records partial */ if (e && cut.indexOf(e.code) >= 0) whole = false; }
     }
   }
   const io = {
@@ -5598,6 +5853,8 @@ function liveSyncIo() {
     subkeys: function (key) { return sub[String(key)] ? sub[String(key)].slice() : []; },
     readFile: function (p) { try { return fs.readFileSync(p, "utf8"); } catch (e) { return ""; } }
   };
+  /* Kept for the life of the process only when every read answered; a partial one is read again at the next ask. */
+  if (!whole) return io; /* plant:syncio-whole */
   liveSyncIo.cached = io;
   return io;
 }
@@ -5641,11 +5898,12 @@ async function driveSeen(records, readdir, ms) {
   return found;
 }
 /* One look at a time, on Windows alone, kept on liveSyncIo for the readers that cannot wait for one; a later look
-   replaces it, so a Drive started after the desk is found at the next invitation. */
-function driveLook() {
+   replaces it, so a Drive started after the desk is found at the next invitation. `io`, where given, is the read of the
+   records the caller plans from too, so one act reads them once. */
+function driveLook(io) {
   if (driveLook.running) return driveLook.running;
   let rec = null;
-  try { rec = readSyncRecords(Object.assign({}, liveSyncIo(), { drives: null })); } catch (e) { rec = null; }
+  try { rec = readSyncRecords(Object.assign({}, io || liveSyncIo(), { drives: null })); } catch (e) { rec = null; }
   const run = process.platform === "win32" && rec ? driveSeen(rec, d => fs.promises.readdir(d), FOLDER_ASK_MS) : Promise.resolve([]);
   const looking = run.then(found => { liveSyncIo.drives = found; return found; }, () => liveSyncIo.drives || [])
     .then(found => { driveLook.running = null; return found; });
@@ -6043,6 +6301,9 @@ function joinView() {
   if (deskKeys === undefined) deskKeys = readDesk();
   const root = catalogFolder();
   const view = { sealed: null, join: null, joined: null, leads: leadsView() };
+  /* What machine policy set and this desk cannot use, in the desk's language, for Settings to print as it stands. */
+  const policySaid = sayJoinPolicy().said;
+  if (policySaid.length) view.policySaid = policySaid.slice(); /* plant:policy-said-view */
   if (relayHere()) view.onRelay = true;
   if (!folderAnswers(root)) return view;
   heedTeam();
@@ -6061,12 +6322,15 @@ function joinView() {
       const named = sealedOutside();
       if (named && named.team === j.team) { j.file = named.file; persistDeskEnvelope(); }
     }
-    if (!j.opened && !j.refused) {
+    /* The reveal answers only the first opening read (15l); a refusal of this commitment read after it still ends the request. */
+    let readJoins = false;
+    readJoins = !j.refused; /* plant:j14-refused-after-open */
+    if (readJoins) {
       let joins = null;
       try { joins = JSON.parse(fs.readFileSync(path.join(root, JOINS_NAME), "utf8")); } catch { /* none yet */ }
       const got = joinOpening(joins, j.team, me.id, j.commit, joinTrustPubs(j.team, root));
       if (got && got.refused) { j.refused = true; persistDeskEnvelope(); }
-      else if (got) {
+      else if (got && !j.opened) {
         try { writeJoin(joinRequestDoc(j, got)); j.opened = got; persistDeskEnvelope(); }
         catch (e) { console.error("etiuda: the request to join could not be answered - " + e.message); }
       }
@@ -6212,19 +6476,19 @@ function inviteFolderTeam(parsed) {
   return teamWhole(doc) && doc.id === parsed.team && doc.lead && doc.lead.keyId === parsed.lead.keyId && doc.lead.public === parsed.lead.public
     ? "" : "foreign";
 }
-/* True only where `folder` holds this team's own team file, whole under the invited lead, under a lead handed over to
-   from it, or vouched for by a ring in that folder. False for any other. */
+/* True only where `folder` holds this team's own team file, whole under the invited lead or under a lead handed over to from
+   it. A ring there is not asked: the invitation pins its own lead, and a file under any other key is never heeded after. */
 function inviteFolderBelongs(folder, parsed) {
   if (!folder || !parsed || !parsed.team || !parsed.lead) return false;
   const doc = teamTextChosen(folder).doc;
   if (!doc || !teamWhole(doc) || doc.id !== parsed.team) return false;
   if (doc.lead && doc.lead.keyId === parsed.lead.keyId && doc.lead.public === parsed.lead.public) return true;
-  if (handedTo(doc, parsed.lead)) return true;
-  const ring = readRingFile(folder);
-  return Boolean(ring && memberRingVouches(doc, ring));
+  let handed = false;
+  handed = handedTo(doc, parsed.lead); /* plant:j14-picked-lead */
+  return handed;
 }
 /* What an invitation says, and nothing written: the folder it names is not opened, stated or watched. */
-function readInvite(text) {
+function readInvite(text, io) {
   const parsed = inviteParse(text);
   const view = joinView();
   const shut = inviteDoor(parsed);
@@ -6245,7 +6509,7 @@ function readInvite(text) {
   let carried = null;
   try { carried = parsed.place ? placeKept(parsed.place) : null; } catch (e) { carried = null; }
   if (carried) {
-    const plan = invitePlacePlan(parsed);
+    const plan = invitePlacePlan(parsed, io);
     if (plan && typeof plan.path === "string" && plan.path) shownFolder = plan.path;
     carried = { how: plan && plan.how ? plan.how : "", why: plan && plan.why ? plan.why : "", kind: carried.kind };
   }
@@ -6261,37 +6525,54 @@ function readInvite(text) {
 async function readInviteLooked(text) {
   let kept = null;
   try { const parsed = inviteParse(text); kept = parsed && !parsed.relay ? placeKept(parsed.place) : null; } catch (e) { kept = null; }
-  if (kept && kept.kind === "gdrive") await driveLook();
-  return readInvite(text);
+  let io = null, pass = null;
+  if (kept && kept.kind === "gdrive") { io = liveSyncIo(); await driveLook(io); }
+  pass = io; /* plant:one-ask-paste */
+  return readInvite(text, pass);
 }
 /* Where the invitation's place would land on this computer, with every candidate treated as there: the confirm shows
    the plan and does not stat, because a path on another computer answers a stat by connecting. A record that cannot
    be read leaves the absolute path. */
-function invitePlacePlan(parsed) {
+function invitePlacePlan(parsed, io) {
   if (!parsed || !parsed.place) return { path: parsed && parsed.folder ? parsed.folder : "", how: "absolute", why: "plain" };
   let roots = [];
-  try { roots = syncRootsFrom(readSyncRecords(null)); }
+  try { roots = syncRootsFrom(readSyncRecords(io || null)); }
   catch (e) { roots = []; }
   try { return placeResolve(parsed.folder, parsed.place, roots, function () { return true; }); }
   catch (e) { return { path: parsed.folder, how: "absolute", why: "plain" }; }
 }
+/* A path whose first look leaves this computer: UNC (\\server\...), a device path (\\?\ or \\.\), or //.
+   A drive letter is not one. The invitation's own local folder is still asked, and a folder the person
+   picks in this shell's dialog is asked after they pick it. */
+function pageRemotePath(p) {
+  const s = typeof p === "string" ? p : "";
+  return s.length >= 2 && ((s.charAt(0) === "\\" && s.charAt(1) === "\\") || (s.charAt(0) === "/" && s.charAt(1) === "/"));
+}
 /* The folder yes will write into. A root candidate is asked first, then the absolute path the invitation carried, and
-   only then does the caller open the picker. An old invitation, with no place, is asked at its path as before. */
+   only then does the caller open the picker. An old invitation, with no place, is asked at its path as before.
+   A remote path is not asked: stating it would reach another computer. The picker is the person's choice. */
+async function askInviteFolder(dir, asks) {
+  if (pageRemotePath(dir)) return false; /* plant:invite-remote-folder */
+  const fn = asks || askFolder;
+  return !!(dir && await fn(dir));
+}
 async function chooseInviteFolder(parsed) {
   let kept = null;
   try { kept = placeKept(parsed && parsed.place); }
   catch (e) { kept = null; }
   if (!kept) {
-    if (await askFolder(parsed.folder)) return { path: parsed.folder, ask: false };
+    if (await askInviteFolder(parsed.folder)) return { path: parsed.folder, ask: false };
     return { ask: true };
   }
-  if (kept.kind === "gdrive") await driveLook();
+  let io = null, pass = null;
+  if (kept.kind === "gdrive") { io = liveSyncIo(); await driveLook(io); }
+  pass = io; /* plant:one-ask-choose */
   let roots = [];
-  try { roots = syncRootsFrom(readSyncRecords(null)); }
+  try { roots = syncRootsFrom(readSyncRecords(pass)); }
   catch (e) { roots = []; }
   if (kept.kind === "unc") {
     const built = placeJoin(kept.root, kept.rel);
-    if (built && await askFolder(built)) return { path: built, ask: false };
+    if (await askInviteFolder(built)) return { path: built, ask: false };
     return { ask: true };
   }
   let candidates = [];
@@ -6300,9 +6581,9 @@ async function chooseInviteFolder(parsed) {
   let asks = askFolder;
   if (kept.kind === "gdrive") asks = askDirItself; /* plant:drive-itself */
   for (let i = 0; i < candidates.length; i++) {
-    if (candidates[i] && await asks(candidates[i])) return { path: candidates[i], ask: false };
+    if (await askInviteFolder(candidates[i], asks)) return { path: candidates[i], ask: false };
   }
-  if (await askFolder(parsed.folder)) return { path: parsed.folder, ask: false };
+  if (await askInviteFolder(parsed.folder)) return { path: parsed.folder, ask: false };
   return { ask: true };
 }
 /* The person's yes, with the check code they typed, which a folder invitation needs and a relay invitation does not,
@@ -6326,6 +6607,8 @@ async function takeInvite(text, name, check) {
   const me = branchIdentity();
   if (!me) return Object.assign({}, joinView(), { refused: "unread" });
   let ask = null;
+  if (parsed.relay && !knownRelayAddress(parsed.relay.url))
+    return Object.assign({}, joinView(), { refused: "unread" });
   if (parsed.relay && stranded) {
     if (!branchSealable()) return Object.assign({}, joinView(), { refused: "unread" });
     /* The request is written before the old lead is let go, so a write that fails leaves this desk as it was: left behind, with
@@ -6500,6 +6783,8 @@ function askWritten(ask) {
    invitation sets is the one board 907 lets the desk follow a relay address under. */
 /* `ahead`: a left-behind desk's yes, its request made and written before it let the old lead go (relayAsk, askWritten). */
 function takeRelayInvite(parsed, name, me, ahead) {
+  if (!parsed || !parsed.relay || !knownRelayAddress(parsed.relay.url))
+    return Object.assign({}, joinView(), { refused: "unread" });
   if (!branchSealable()) return Object.assign({}, joinView(), { refused: "unread" });
   const ask = ahead || relayAsk(parsed, name, me);
   if (ask.refused) return Object.assign({}, joinView(), { refused: ask.refused });
@@ -6791,9 +7076,17 @@ function awaitsFirstEdition(team) {
   }
   return doc.catalogs.some(id => !have.has(String(id)));
 }
+/* Whether machine policy holds this desk to team `t`, so a leave could not be undone: its lead named and pinned for `t`, or a
+   folder named alone, under which every invitation is refused. `named` is readJoinPolicy's answer. */
+function policyHoldsTeam(t, named) {
+  const pin = teamPins[t];
+  if (!pin || !named) return false;
+  if (named.lead) return named.lead === pin.public;
+  return !!named.folder; /* plant:folder-holds-team */
+}
 function leadsView() {
   const teams = Object.keys(teamPins).filter(t => SEALED_TEAM_RE.test(t) && !!teamPins[t] && typeof teamPins[t].public === "string");
-  const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "", named = teams.length ? readJoinPolicy("en").lead : "";
+  const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "", named = teams.length ? readJoinPolicy("en") : null;
   const ftHere = folderTeamHere();
   const reading = ftHere && folderStillReading() ? shellWords().stillReading : "";
   return teams.map(t => {
@@ -6806,7 +7099,7 @@ function leadsView() {
     const row = { team: t, print: leadPrint(teamPins[t].public), admitted: admitted, seen: teamSeen.has(t),
       lead: shown.lead || "", folder: shown.folder || "",
       removed: (admitted && !!me && !!roster && roster.desks.indexOf(me) < 0) || relayRemoved,
-      policy: !!named && named === teamPins[t].public };
+      policy: policyHoldsTeam(t, named) };
     if (relayHost) row.relay = relayHost; /* plant:settings-relay-row */
     if (relayRemoved) row.relayRemoved = true;
     const head = headShown(t);
@@ -6863,6 +7156,8 @@ function forgetLead(team, left) {
   team = String(team || "");
   if (deskKeys === undefined) deskKeys = readDesk();
   if (!SEALED_TEAM_RE.test(team) || !teamPins[team]) return joinView();
+  /* Settings offers no Leave where policy holds the team; one sent anyway changes nothing. "It does not match" still forgets. */
+  if (left === true && policyHoldsTeam(team, readJoinPolicy("en"))) return joinView();
   const ch = teamChannel[team];
   if (ch && ch.kind === "relay") setRelayTeamAside(ch.rt); /* plant:leave-aside */
   /* The note this desk left in a folder team's mirror goes too, owed to that share, so a later return does not send it. */
@@ -6921,14 +7216,23 @@ function forgetLead(team, left) {
 
 /* ---- the relay: the team folder as a mirror the channel layer keeps (board 900, relay slice 1, step 4) -----------------
    The desk follows a relay address only for a team whose lead was pinned by an invitation, machine policy or an answered
-   request (board 907): a ring and a wrapped key both travel in a file anybody who can write the share may sign, so a first
-   pin by a file's own vouching is no wider than today's folder ring. Its relay address is followed only when the lead-signed
+   request (board 907): a wrapped key travels in a file anybody who can write the share may sign, so a desk that pinned its
+   lead by a file's own wrap is held to more. Its relay address is followed only when the lead-signed
    roster names this desk, no machine policy names a folder, and the address is the built-in relay (board 945 stage 3 (a), which
    widens 907 knowingly: whoever planted that first team file can move such a desk to a built-in relay team they lead). A folder
    named by machine policy wins over any relay, and the desk says so. */
 const BUILTIN_RELAY_URL = "https://etiuda.dev/relay/v1";
 /* A test service build's second built-in relay, fixed here as the first is and never read from a file or the environment. */
 const STAGING_RELAY_URL = "https://etiuda.dev/relay-staging/v1";
+/* An invitation may name only this build's relay or the staging relay. A harness start may also name
+   the https address a leg points at a stand-in. A customer's start may not, so a page cannot choose a host. */
+function knownRelayAddress(u) {
+  if (typeof u !== "string") return false;
+  const at = u.trim().replace(/\/+$/, "");
+  if (at === BUILTIN_RELAY_URL || at === STAGING_RELAY_URL) return true;
+  if (!harnessLaunch()) return false; /* plant:relay-known */
+  return /^https:\/\/[a-z0-9.-]+(?::[0-9]{1,5})?(?:\/[A-Za-z0-9._~-]+)*\/?$/.test(at);
+}
 function isBuiltinRelayUrl(u) {
   if (typeof u !== "string") return false;
   const at = u.trim().replace(/\/+$/, "");
@@ -7117,7 +7421,15 @@ function setTeamNeedsFolder(teamId, doc, mirrorDir) {
   sendJoin(theWindow);
 }
 
-function pickMovedFolder(teamId, pickedFolder) {
+/* The page may name only the folder this shell's picker returned for it. Anything else is not read. A folder machine policy
+   names is the only one a moved team may take, picked or not. */
+function pickMovedFolder(teamId, pickedFolder, senderId) {
+  const named = sayJoinPolicy().folder;
+  if (named && !policySameFolder(pickedFolder, named)) {
+    teamSay("a folder picked for team " + teamId + " is not the one machine policy names, so this desk stays with the policy's folder");
+    return { ok: false, error: "policy" };
+  }
+  if (!offeredFolder(senderId, pickedFolder)) return { ok: false, error: "unpicked" }; /* plant:moved-folder-offered */
   const need = teamNeedsFolder[teamId];
   const pinned = teamPins[teamId];
   const minRev = need ? need.rev : 0;
@@ -7410,7 +7722,7 @@ function relayRun() {
 /* ---- the desk's own history of the catalogs it reads and writes --------------------------------------------------
    One gzip per content, named by its SHA-256, and an index of where and when each was seen, beside desk.json: nobody
    else's desk reads this folder. A version stays 30 days after it was last seen and the newest of each file whatever its
-   age; past the cap the longest unseen go first. A sealed file is kept as sealed. */
+   age; past the cap the longest unseen go first, the newest of each file last. A sealed file is kept as sealed. */
 const HISTORY_KIND = "etiuda-catalog-history", HISTORY_INDEX = "index.json";
 const HISTORY_DAY_MS = 24 * 60 * 60 * 1000, HISTORY_DAYS = 30, HISTORY_CAP = 100 * 1024 * 1024;
 // A version seen again within this long is not written down again.
@@ -7495,7 +7807,10 @@ function historyKept(versions, now, days, cap) {
     each.forEach(n => { sum += n; });
     return sum;
   };
-  const spare = kept.filter(v => !pinned(v)).sort((a, b) => a.last - b.last || a.first - b.first);
+  const byAge = (a, b) => a.last - b.last || a.first - b.first;
+  /* The newest of each file goes last, the longest unseen of them first, so the cap holds whatever paths were opened. */
+  const spare = kept.filter(v => !pinned(v)).sort(byAge)
+    .concat(kept.filter(v => pinned(v)).sort(byAge)); /* plant:history-cap-pinned */
   while (spare.length && weight(kept) > cap) {
     const v = spare.shift();
     kept = kept.filter(x => x !== v);
@@ -7560,7 +7875,7 @@ function historyKeepFile(file) {
   try { text = fs.readFileSync(file, "utf8"); }
   catch (e) { return e.code === "ENOENT" ? { none: true } : null; }
   const buf = Buffer.from(text, "utf8");
-  if (!text || historyShipped(buf, sha256Hex(buf))) return { none: true };
+  if (!text || isBuiltIn(path.resolve(String(file))) || buf.length > BRANCH_TEXT_MAX || historyShipped(buf, sha256Hex(buf))) return { none: true };
   const entry = historyKeep(file, text, false);
   return entry ? { entry: entry } : null;
 }
@@ -7616,19 +7931,30 @@ function historyOpen(sha, file) {
   }
 }
 /* Writes a kept version back over its file in the catalog folder, by the rule at historyFree and only after the bytes it
-   replaces are kept themselves: `replaced` names them, so the page can offer them back. */
+   replaces are kept themselves: `replaced` names them, so the page can offer them back. The kept bytes are judged as they
+   are written, whatever the index says of them, and the write is sharedWrite's: under the lock beside the file, {busy}
+   while another desk holds it, except in a folder team's mirror, which is this desk's own and which the syncer swaps. */
 function historyPutBack(sha, file) {
   if (relayHere()) return { ok: false }; /* See sharedWrite. */
   const v = historyFind(sha, file), root = path.resolve(catalogFolder());
   if (!v || !historyFree(v) || !v.path || path.dirname(v.path) !== root || !/\.ec$/i.test(v.path) || !folderAnswers(catalogFolder())) return { ok: false };
+  const mirror = folderMirrorHere();
+  let held = null;
+  if (!mirror || path.resolve(mirror) !== root) { /* plant:put-back-lock */
+    try { held = sharedLock(v.path); }
+    catch (e) { console.error("etiuda: the lock beside " + v.path + " could not be taken - " + e.message); return { ok: false, busy: true }; }
+    if (!held) return { ok: false, busy: true };
+  }
   try {
     const text = historyText(v.sha);
+    if (!historyFree(historyFacts(text))) return { ok: false }; /* plant:put-back-bytes */
     let was = "";
     try { was = fs.readFileSync(v.path, "utf8"); } catch (e) { if (e.code !== "ENOENT") throw e; }
     if (was && sha256Hex(Buffer.from(was, "utf8")) === v.sha) return { ok: true, unchanged: true };
     if (was && !historyFree(historyFacts(was))) return { ok: false };
     const before = historyKeepFile(v.path);
     if (!before) return { ok: false };
+    if (held && !sharedHolds(held)) return { ok: false, busy: true };
     writeReplacing(v.path, text);
     historyKeep(v.path, text, true);
     console.log("etiuda: " + v.path + " was put back as this desk kept it");
@@ -7636,6 +7962,8 @@ function historyPutBack(sha, file) {
   } catch (e) {
     console.error("etiuda: " + v.path + " could not be put back - " + e.message);
     return { ok: false };
+  } finally {
+    if (held && sharedHolds(held)) { try { fs.unlinkSync(held.lock); } catch { /* stale in SHARED_LOCK_MS */ } }
   }
 }
 
@@ -7651,6 +7979,33 @@ function sharedFile(name) {
   const base = String(name || ""), root = sharedFolderForWrite();
   if (!base || base !== path.basename(base) || !/\.ec$/i.test(base) || !folderAnswers(root)) return "";
   return path.resolve(root, base);
+}
+/* The canonical file a conflict copy was made from, when that file is in the same folder.
+   The longest stem wins, so a shorter name cannot claim a tail that is not its own. "" where
+   the name is not a conflict copy, or no canonical file sits beside it, and that only copy can still be written. */
+function canonicalEditionName(name) {
+  const base = path.basename(String(name || ""));
+  if (!base || !isConflictName(base)) return "";
+  const root = sharedFolderForWrite();
+  if (!root || !folderAnswers(root)) return "";
+  let names = [];
+  try { names = fs.readdirSync(root); } catch { return ""; }
+  let best = "";
+  for (let i = 0; i < names.length; i++) {
+    const n = names[i];
+    if (n === base || isConflictName(n)) continue;
+    if (!conflictSiblingName(n, base)) continue;
+    if (n.length > best.length) best = n;
+  }
+  return best;
+}
+/* A direct edit named as a conflict copy reads and writes the canonical file, so the compare
+   hash and the bytes are the same file. Without the plant the name is used as it was given. */
+function editionWriteName(name) {
+  const base = path.basename(String(name || ""));
+  let chosen = base;
+  chosen = canonicalEditionName(base) || chosen; /* plant:direct-canon-name */
+  return chosen || base;
 }
 /* The edition the layer grew from, as the file held it: the file itself while it is that edition, else the copy the
    history kept, seen again as it is used so the history does not let it go while a desk still merges against it. */
@@ -7674,7 +8029,7 @@ function sharedBase(file, text, pin) {
    file will not read. `free` is false for a signed or sealed file or edition, and nothing of either is handed then. */
 function sharedRead(name, pin) {
   if (relayHere()) return null; /* See sharedWrite. */
-  const file = sharedFile(name);
+  const file = sharedFile(editionWriteName(name));
   if (!file) return null;
   const share = shareSyncer(path.dirname(file));
   if (share) return share.then(s => (s ? s.shareRead(path.basename(file)) : null)).then(got => (got ? sharedReadOf(file, got.text, pin) : null));
@@ -7737,7 +8092,7 @@ function shareMustSeal(root) {
    and a relay mirror is refused outright, since a write there would stay on this desk. */
 function sharedWrite(name, text, sha, create) {
   if (relayHere()) return { ok: false, refused: true };
-  const file = sharedFile(name);
+  const file = sharedFile(editionWriteName(name));
   text = String(text || "");
   if (!file || !text || text.length > BRANCH_TEXT_MAX) return { ok: false };
   let data = null;
@@ -8151,15 +8506,45 @@ function onUiLangChanged() {
   try { syncJumpList(); } catch { /* the jump list is optional */ }
 }
 
+/* The last folder this shell's own picker returned, per page, kept until the next pick. A save may
+   name that path again. It is not spent on the first write. */
+const folderOffered = new Map();
+function rememberFolder(senderId, folder) {
+  if (senderId == null || typeof folder !== "string" || !folder) return;
+  folderOffered.set(senderId, folder);
+}
+function offeredFolder(senderId, folder) {
+  return typeof folder === "string" && folder !== "" && folderOffered.get(senderId) === folder;
+}
+/* The page may set the catalog folder to the path the picker returned, the one already stored, or the
+   one machine policy names. Anything else is left out of the write, so it is never stated or opened. */
+function catalogFolderAllowed(next, senderId) {
+  if (typeof next !== "string" || next === "") return false;
+  if (deskKeys && deskKeys[CATALOG_FOLDER_KEY] === next) return true;
+  if (offeredFolder(senderId, next)) return true;
+  let named = "";
+  try { named = sayJoinPolicy().folder || ""; } catch (e) { named = ""; }
+  return !!named && policySameFolder(next, named);
+}
+function confineCatalogFolder(map, senderId) {
+  if (!map || !Object.prototype.hasOwnProperty.call(map, CATALOG_FOLDER_KEY)) return false;
+  const next = map[CATALOG_FOLDER_KEY];
+  if (next === null || next === undefined) return false;
+  if (catalogFolderAllowed(next, senderId)) return false;
+  delete map[CATALOG_FOLDER_KEY]; /* plant:catalog-folder-wall */
+  return true;
+}
 function writeDesk(text, from) {
   let map;
   try { map = JSON.parse(text); } catch { return false; }
   if (!map || typeof map !== "object" || Array.isArray(map)) return false;
   if (deskKeys === undefined) deskKeys = readDesk();
+  const folderRefused = confineCatalogFolder(map, from);
   const langWas = deskKeys ? deskKeys.eUiLang : undefined;
   const merged = mergeDesk(deskKeys, deskGiven.get(from) || {}, map);
   /* A write is skipped only where the live file is known to hold exactly this. A desk recovered
      from a backup has not been written yet, and skipping there would leave the refused file. */
+  if (folderRefused && sameDesk(merged, deskKeys)) return false;
   if (deskWritten && sameDesk(merged, deskKeys)) { deskGiven.set(from, map); return true; }
   try {
     saveDeskFile(sameDesk(merged, map) ? text : JSON.stringify(merged));
@@ -8199,9 +8584,10 @@ function patchDesk(text, page) {
   let patch;
   try { patch = JSON.parse(text); } catch { return false; }
   if (!patch || typeof patch !== "object" || Array.isArray(patch)) return false;
-  let keys = Object.keys(patch);
-  if (keys.some(k => patch[k] !== null && typeof patch[k] !== "string")) return false;
+  if (Object.keys(patch).some(k => patch[k] !== null && typeof patch[k] !== "string")) return false;
   if (deskKeys === undefined) deskKeys = readDesk();
+  const folderRefused = confineCatalogFolder(patch, page ? page.from : undefined);
+  let keys = Object.keys(patch);
   /* A key the page writes from a copy that never took a tell since: what the sync took is taken again by the next merge (sync.cjs
      untake), never read as this computer's removal; a key the sync cleared whole stays cleared, and the page is told again. */
   let rewind = {};
@@ -8219,7 +8605,9 @@ function patchDesk(text, page) {
      that key was never stored and the patch then changes nothing. */
   if (Object.prototype.hasOwnProperty.call(patch, "eCatalog") && patch.eCatalog === null) releaseOpened();
   const has = (k) => Object.prototype.hasOwnProperty.call(deskKeys, k);
-  if (deskWritten && keys.every(k => (patch[k] === null ? !has(k) : deskKeys[k] === patch[k]))) return true;
+  const unchanged = keys.every(k => (patch[k] === null ? !has(k) : deskKeys[k] === patch[k]));
+  if (folderRefused && (unchanged || keys.length === 0)) return false;
+  if (deskWritten && unchanged) return true;
   const merged = Object.assign({}, deskKeys);
   keys.forEach(k => { if (patch[k] === null) delete merged[k]; else merged[k] = patch[k]; });
   try {
@@ -8469,7 +8857,7 @@ function accentOnTitleBars() {
   try {
     const out = execFileSync(REG_TOOL,
       ["query", "HKCU\\Software\\Microsoft\\Windows\\DWM", "/v", "ColorPrevalence"],
-      { encoding: "utf8", windowsHide: true });
+      regOpts(execFileSync, { encoding: "utf8", windowsHide: true }));
     const m = out.match(/ColorPrevalence\s+REG_DWORD\s+0x([0-9a-fA-F]+)/);
     return !!m && parseInt(m[1], 16) === 1;
   } catch { return false; }
@@ -8588,7 +8976,7 @@ function closeHeld(win, e) {
   if (decision === "hide" && ensureTray() && !(lost && !lost.back)) {
     try { if (e && typeof e.preventDefault === "function") e.preventDefault(); } catch { /* already held */ }
     try { if (win && typeof win.hide === "function") win.hide(); } catch { /* this window cannot hide */ }
-    try { maybeFirstClose(win); } catch { /* the toast is a courtesy */ }
+    try { firstCloseTraced(win); } catch { /* the toast is a courtesy */ }
     return true;
   }
   if (win && (win.etiudaInstallerClose || win.etiudaSessionEnd || win.etiudaRefusalClose)) return false;
@@ -8716,6 +9104,8 @@ ipcMain.on("etiuda:host", (e) => {
        them and the offer's line names the folder it accepts from. The preload asks for the
        catalog first, so catalogFrom is already the answer by the time this is read. */
     catalogFolder: catalogFolder(),
+    // The folder machine policy names, or "": the page shows it over the desk key and offers no other.
+    catalogFolderPolicy: sayJoinPolicy().folder,
     catalogFile: catalogFrom ? path.basename(catalogFrom) : "",
     catalogIn: folderShown(catalogFrom),
     catalogBuiltIn: isBuiltIn(catalogFrom),
@@ -8765,22 +9155,35 @@ function ecBlocks(text, shape) {
    is the length of the intents array the offer dialog counts; categories are the shelf ids, the
    keys the runtime files a card under. Counted in the catalog's PRIMARY language, which the
    format makes safe: a card dividing differently in another language is refused at load. */
-/* Whatever the page sent, reduced to codes and whole numbers. Anything that is not a usable
-   code is dropped here rather than forwarded into a document that leaves this machine. */
-/* Per card, the languages that card was copied in, reduced the same way as the desk's
-   language totals. A card sent without the field is returned as it arrived. */
+/* Whatever the page sent, reduced to ids, days, codes and whole numbers, field by field. Anything that is not
+   one of those is dropped here rather than forwarded into a document that leaves this machine. */
+/* A card is its id, its count, the day it was last copied, and the languages it was copied in. */
 function cardCounts(list) {
   if (!Array.isArray(list)) return [];
-  return list.map(card => {
-    if (!card || typeof card !== "object" || Array.isArray(card) || !Object.prototype.hasOwnProperty.call(card, "langs")) return card;
-    const kept = langCounts(card.langs);
-    const langs = {};
+  const out = [];
+  list.forEach(card => {
+    if (!card || typeof card !== "object" || Array.isArray(card)) return;
+    const id = typeof card.id === "string" && card.id.length <= 256 ? card.id : "", n = card.n | 0;
+    if (!id || n < 1) return;
+    const row = { id: id, n: n }; /* plant:stats-card-row */
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(card.at || ""))) row.at = String(card.at);
+    const kept = langCounts(card.langs), langs = {};
     Object.keys(kept).forEach(code => { if ((kept[code] | 0) > 0) langs[code] = kept[code] | 0; });
-    const out = {};
-    Object.keys(card).forEach(k => { if (k !== "langs") out[k] = card[k]; });
-    if (Object.keys(langs).length) out.langs = langs;
-    return out;
+    if (Object.keys(langs).length) row.langs = langs;
+    out.push(row);
   });
+  return out;
+}
+/* An intent is its id and its count. */
+function intentCounts(list) {
+  if (!Array.isArray(list)) return [];
+  const out = [];
+  list.forEach(it => {
+    if (!it || typeof it !== "object" || Array.isArray(it)) return;
+    const id = typeof it.id === "string" && it.id.length <= 256 ? it.id : "", n = it.n | 0;
+    if (id && n > 0) out.push({ id: id, n: n });
+  });
+  return out;
 }
 function langCounts(v) {
   const out = {};
@@ -8881,7 +9284,7 @@ function ecFacts(file, deskFolder) {
   /* A read that fails (another program holds the file) says nothing about the file, so it is not remembered: only a
      verdict on the text is. */
   let text;
-  try { text = fs.readFileSync(file, "utf8"); } catch { return null; }
+  try { text = catalogFileText(file); } catch { return null; }
   let out = null;
   try {
     const { data } = catalogRead(text);
@@ -8892,7 +9295,7 @@ function ecFacts(file, deskFolder) {
       out = { mtime: Math.round(st.mtimeMs), cards: data.cards.length, edition: data.date != null ? String(data.date) : "",
               macros: n.macros, intents: n.intents, cats: n.cats, awaiting: n.awaiting, id: data.id != null ? String(data.id) : "",
               rev: +data.rev || 0, grew: ecGrew(data), sha: signedSha(data), deskName: d && typeof d.name === "string" ? d.name : "",
-              deskOk: deskFileGenuine(data, deskFolder),
+              deskOk: deskFileGenuine(data, deskFolder), bytesSha: crypto.createHash("sha256").update(text, "utf8").digest("hex").slice(0, 32),
               genuine: !!(pinnedLeadPubs().length ? catalogLeadOk(data) : catalogSigValid(data)) };
     }
   } catch (e) {
@@ -8950,10 +9353,10 @@ function ecGrew(data) {
   const g = data && data.grew;
   return g && typeof g === "object" && typeof g.id === "string" ? { id: g.id, rev: +g.rev || 0, sha: String(g.sha || "") } : null;
 }
-/* One row per catalog id. A genuine edition beats one that does not verify. Among those that
-   agree, the higher rev wins, and an equal rev keeps the name that is not a conflict copy of
-   another, else the earlier name. An id that did not parse keeps its own row. `genuine` is how
-   the choice is made and is not a field of the row the page is sent. */
+/* Both editions of one catalog stay in the list, each under its own file's name. Dropping one
+   left its cards unnamed. A genuine edition still beats one that does not verify when the plant
+   below is lifted, and among those the higher rev wins. An id that did not parse keeps its own
+   row. `genuine` is how that choice is made and is not a field of the row the page is sent. */
 function isConflictName(name) {
   const n = path.basename(String(name || ""));
   const ext = path.extname(n);
@@ -8998,6 +9401,12 @@ function collapseEditions(rows) {
     const names = idxs.map(i => rows[i].name);
     const hasConflict = names.some(n => conflictNamedAmong(n, names) || isConflictName(n));
     if (!hasConflict) continue; /* plant:f3-conflict-only */
+    /* The plant keeps every conflict edition. Without it the old drop returns, and one file's cards go unnamed. */
+    if (hasConflict) {
+      let both = false;
+      both = true; /* plant:editions-both */
+      if (both) continue;
+    }
     let keep = idxs[0];
     for (let n = 1; n < idxs.length; n++) {
       if (betterEdition(rows[idxs[n]], rows[keep], names)) keep = idxs[n];
@@ -9006,9 +9415,11 @@ function collapseEditions(rows) {
   }
   return rows.filter((row, i) => !drop.has(i));
 }
+/* The page is told only whether a pinned lead signed the row's file (leadSigned), which is what lets it name the lead. */
 function stripGenuine(row) {
   if (!row || !Object.prototype.hasOwnProperty.call(row, "genuine")) return row;
   const copy = Object.assign({}, row);
+  if (copy.genuine && !copy.desk && pinnedLeadPubs().length) copy.leadSigned = true; /* plant:listing-lead-row */
   delete copy.genuine;
   return copy;
 }
@@ -9021,7 +9432,7 @@ function listingRows() {
     return { name: path.basename(f), mtime: mt, cards: x ? x.cards : -1, edition: x ? x.edition : "",
              macros: x ? x.macros : -1, intents: x ? x.intents : -1, cats: x ? x.cats : -1, awaiting: x ? x.awaiting : [],
              sample: isTheSample(f), id: x ? x.id : "", rev: x ? x.rev : 0, grew: x ? x.grew : null, sha: x ? x.sha : "",
-             genuine: !!(x && x.genuine), relay: onRelay,
+             genuine: !!(x && x.genuine), relay: onRelay, bytesSha: x ? x.bytesSha : "",
              // The copy Etiuda ships, rather than a folder's own file of any name.
              builtIn: path.dirname(f) === BUILT_IN_DIR };
   });
@@ -9032,12 +9443,22 @@ function listingRows() {
 ipcMain.handle("etiuda:catalog-files", (e) => (fromEngine(e) ? listingRows() : []));
 /* The page asks. The files stay until the next start: this process still holds them. The catalog
    folder is the setting in the desk file, not the live mirror, which can point somewhere else. */
-/* The new process asks for the single-instance lock. Releasing it first is what lets that
-   process get it; the marker waits if the new process never arrives. */
+/* The team folders a reset never sweeps, whatever their path: machine policy's folder and every folder team's share. The
+   desk file's own are read again by the next start itself (shell/desk-reset.cjs deskFacts). */
+function resetShares() {
+  const out = [];
+  try { const named = readJoinPolicy("en").folder; if (named) out.push(named); } catch { /* no policy is read as none */ }
+  Object.keys(teamShown).forEach(t => { const s = teamShown[t]; if (s && typeof s.folder === "string" && s.folder) out.push(s.folder); });
+  return out;
+}
+/* The new process asks for the single-instance lock. Releasing it is what lets that process get it, and it is released
+   at will-quit, once before-quit has drained every write, so no new start honours the marker while this one still writes
+   in the desk folder; the marker waits if the new process never arrives. */
+let resetRelaunching = false;
 function relaunchAfterReset() {
   setImmediate(() => {
     try {
-      if (typeof app.releaseSingleInstanceLock === "function") app.releaseSingleInstanceLock();
+      resetRelaunching = true; /* plant:reset-lock-late */
       if (typeof app.relaunch === "function") app.relaunch();
       if (typeof app.quit === "function") app.quit();
       else if (typeof app.exit === "function") app.exit(0);
@@ -9053,7 +9474,7 @@ ipcMain.handle("etiuda:desk-reset", (e) => {
     const keys = typeof env.keys === "string" ? JSON.parse(env.keys || "{}") : (env.keys || {});
     catalogSetting = String(keys[CATALOG_FOLDER_KEY] || "");
   } catch (err) { catalogSetting = ""; }
-  const staged = stageReset({ userData: userData, catalogSetting: catalogSetting, defaultCatalog: defaultCatalogFolder() });
+  const staged = stageReset({ userData: userData, catalogSetting: catalogSetting, defaultCatalog: defaultCatalogFolder(), shares: resetShares() });
   if (staged && staged.ok) {
     try { setStartWithWindows(false); } catch (err) { /* start with Windows could not be changed */ }
     relaunchAfterReset();
@@ -9156,7 +9577,7 @@ ipcMain.handle("etiuda:catalog-read", (e, name, desk, asked, offer) => {
     if (who && !(ecFacts(file, who) || {}).deskOk) throw new Error("not a desk's own file");
     const offTeam = !!who && !deskRoster()(who);
     if (offTeam && !asked) throw new Error("its desk is not on the team's roster");
-    const raw = fs.readFileSync(file, "utf8");
+    const raw = catalogFileText(file);
     if (asked) {
       const blocked = sealBlockedWhy(raw);
       if (blocked) {
@@ -9223,6 +9644,10 @@ ipcMain.handle("etiuda:stats-close", (e, text) => {
 /* The desk's branch: its public identity, and the write of its own file. See writeBranch. */
 ipcMain.handle("etiuda:branch-identity", (e, make) => (fromEngine(e) ? branchIdentity(make === false ? false : true) : null));
 ipcMain.handle("etiuda:branch-write", (e, stem, text) => (fromEngine(e) ? writeBranch(stem, text) : { ok: false }));
+ipcMain.on("etiuda:branch-reach", (e) => {
+  if (!fromEngine(e)) { e.returnValue = false; return; }
+  e.returnValue = branchReach(); /* plant:flag-reach */
+});
 /* The desk's earlier versions: the list, one version's catalog, and putting one back. A version is named by its hash and
    the file it was kept for, and only a pair the history holds is answered. */
 ipcMain.handle("etiuda:history-list", (e) => (fromEngine(e) ? historyView() : []));
@@ -9241,7 +9666,7 @@ ipcMain.handle("etiuda:team-join", (e, op, file, name, check) => (!fromEngine(e)
   : op === "ask" ? askJoin(file, name) : op === "cancel" ? cancelJoin() : op === "seen" ? leadSeen(file)
   : op === "lapse-seen" ? lapseSeen(file, name) : op === "fork-seen" ? forkDismissed(file) : op === "stranded-seen" ? strandedDismissed(file)
   : op === "forget" ? forgetLead(file) : op === "leave" ? forgetLead(file, true) : op === "read" ? readInviteLooked(file) : op === "invite" ? takeInvite(file, name, check)
-  : op === "pick-moved-folder" ? pickMovedFolder(file, name)
+  : op === "pick-moved-folder" ? pickMovedFolder(file, name, e.sender.id)
   : op === "held" ? heldLinkAnswer() : op === "link" ? takeHeldLink(name) : op === "link-no" ? declineHeldLink() : joinView())); /* plant:link-no */
 
 /* The engine calls no OS API, so the folder picker is the shell's. The CAPTION comes from the
@@ -9250,6 +9675,7 @@ ipcMain.handle("etiuda:team-join", (e, op, file, name, check) => (!fromEngine(e)
    setting is the engine's, through the ordinary desk key the search order above reads. */
 ipcMain.handle("etiuda:pick-catalog-folder", async (e, title) => {
   if (!fromEngine(e)) return "";
+  if (sayJoinPolicy().folder) return ""; /* plant:pick-under-policy */
   const win = BrowserWindow.fromWebContents(e.sender);
   const opts = {
     title: String(title || "Etiuda").slice(0, 120),
@@ -9257,7 +9683,9 @@ ipcMain.handle("etiuda:pick-catalog-folder", async (e, title) => {
     properties: ["openDirectory", "createDirectory"],
   };
   const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
-  return (!r.canceled && r.filePaths && r.filePaths[0]) ? r.filePaths[0] : "";
+  const chosen = (!r.canceled && r.filePaths && r.filePaths[0]) ? r.filePaths[0] : "";
+  if (chosen) rememberFolder(e.sender.id, chosen);
+  return chosen;
 });
 
 /* IMPORT CATALOG'S OWN DIALOG, the shell's for the same reason the folder picker above is: the
@@ -9350,7 +9778,11 @@ ipcMain.handle("etiuda:write-catalog-save", async (e, text, from) => {
       console.error("etiuda: " + p.file + " was not written: it is a sealed team's catalog this desk cannot seal");
       return { name: path.basename(p.file), ok: false, sealed: true };
     }
-    historyKeepFile(p.file);
+    /* The bytes an export replaces are kept first, or nothing is written: no catalog is lost without a copy. */
+    if (!historyKeepFile(p.file)) { /* plant:export-keeps-first */
+      console.error("etiuda: " + p.file + " was not written: the bytes it would replace could not be kept first");
+      return { name: path.basename(p.file), ok: false };
+    }
     await writeReplacingAsync(p.file, out);
     historyKeep(p.file, out, true);
     return out === String(text || "") ? { name: path.basename(p.file), ok: true } : { name: path.basename(p.file), ok: true, sealed: true };
@@ -10142,13 +10574,14 @@ function signinKept(storage, sealed) {
 /* THE LICENCE SERVICE'S DOOR for the desk, beside fetchNote's: one POST of JSON to signin/desk alone, the body at most 8 KiB. The
    bytes the desk key signs are the service's own (requests.mjs signinDeskBytes): its line, then the provider, the SHA-256 of the
    ID token's characters, the desk's public half and t, one a line. A first sign-in sends the seed its token's nonce was made
-   of; a renewal sends none. */
+   of, and signs it as the bytes' last line, "seed:" and its hex (requests.mjs seedLine), so a copy with the seed taken out or
+   swapped fails the signature rather than reading as a renewal; a renewal sends none and signs the lines before it alone. */
 let SIGNIN_SERVICE = "https://etiuda.dev/licence/v1/signin/desk";
 const SIGNIN_BODY_MAX = 8 * 1024, SIGNIN_SERVICE_MAX = 32 * 1024;
 const SIGNIN_DESK_LINE = "etiuda-licence-signin-desk";
 function signinTokenHash(idToken) { return crypto.createHash("sha256").update(String(idToken), "utf8").digest("hex"); }
 function signinDeskBytes(o) {
-  return Buffer.from(SIGNIN_DESK_LINE + "\n" + [o.provider, o.tokenHash, o.desk, o.t].map(String).join("\n"), "utf8");
+  return Buffer.from(SIGNIN_DESK_LINE + "\n" + [o.provider, o.tokenHash, o.desk, o.t].concat(o.seed ? ["seed:" + o.seed] : []).map(String).join("\n"), "utf8"); /* plant:desk-seed-line */
 }
 /* With the service's access token (section 11.11): the service's managed line over both tokens' hashes, requests.mjs
    signinDeskManagedBytes. */
@@ -10196,7 +10629,7 @@ function signinDeskBody(provider, idToken, desk, seed, t, sign, accessToken, poo
   if (seed && !/^[0-9a-f]{64}$/.test(String(seed))) return null;
   if (pooled === true) return signinDeskPooledBody(provider, idToken, desk, seed, t, sign, accessToken); /* plant:pooled-body */
   if (accessToken !== undefined) return signinDeskManagedBody(provider, idToken, desk, seed, t, sign, accessToken); /* plant:access-body */
-  const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t })) || ""); /* plant:desk-signed */
+  const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t, seed: seed || "" })) || ""); /* plant:desk-signed */
   if (!/^[0-9a-f]{128}$/.test(sig)) return null;
   const body = { provider: String(provider), idToken: idToken, desk: String(desk) };
   if (seed) body.seed = String(seed); /* plant:seed-first */
@@ -10285,6 +10718,11 @@ function signinCertOk(c, deskKey) {
     .concat(c.pooled === true ? ["pooled"] : []) /* plant:cert-pooled-line */
     .concat(c.deskOnly === true ? ["desk-only"] : []).map(String).join("\n"), "utf8"); /* plant:cert-desk-only-bytes */
   return signinVerified(d.key.pub, bytes, c.sig.value); /* plant:cert-sig */
+}
+/* A certificate issued later than now, past the same five minutes the ID token and the relay's door allow (certWhy "future"),
+   stands nowhere yet: no door, no seat, no "held". */
+function signinCertEarly(cert, now) {
+  return !!cert && Number.isSafeInteger(cert.issued) && cert.issued > now + SIGNIN_SKEW_MS; /* plant:cert-early */
 }
 /* THE DOORS THE SERVICE HANDS (board 980, the door-finding; Max, 2026-11-12 18:46 and 18:57): beside a certificate, the doors of
    the relay teams on its licence, each {team, rt, url, keyId, lead, box}. A door is kept only whole: the team id and relay id in
@@ -10422,6 +10860,7 @@ async function signinSeatAccess(io, p, deskKey, got, seed, now) {
 /* THE CALM LAPSE: the kept certificate's `until` passed with no new one. It decides nothing on the desk but Account's words; the
    desk works on, and the next certificate ends it. */
 function signinLapsed(held, now) {
+  if (!!held && !!held.cert && signinCertEarly(held.cert, now)) return true; /* plant:lapse-early */
   if (!!held && !!held.cert && signinRevokedHas(held.revoked, held.cert)) return true; /* plant:lapse-revoked */
   return !!held && !!held.cert && now >= held.cert.until; /* plant:lapse-until */
 }
@@ -10491,6 +10930,7 @@ function seatFileText(deskId, cert) { return JSON.stringify({ format: 2, desk: S
 function signinDoorRequest(doc, deskId, deskKey, cert, door, now) {
   if (!doc || typeof doc !== "object" || doc.invite !== undefined || !/^[0-9a-f]{32}$/.test(String(door))) return null;
   if (!signinCertOk(cert, deskKey) || !(cert.until > now)) return null; /* plant:door-cert */
+  if (signinCertEarly(cert, now)) return null; /* plant:door-early */
   return Object.assign({}, doc, { seat: JSON.parse(seatFileText(deskId, cert)), door: String(door) }); /* plant:door-fields */
 }
 /* The sign-in's file beside desk.json, read whole or not at all: {held: {provider, refresh, sub, seed, code, cert, at, checked,
@@ -10498,6 +10938,8 @@ function signinDoorRequest(doc, deskId, deskKey, cert, door, now) {
    `refresh` and `sub` are signinKeep's, "" where none is kept, and nothing else in it is a secret; `ask` says the person's own
    sign-in is wanted again; a file of another format holds nothing. `packed` is signinDoorAddressOk's. */
 const SIGNIN_FILE = "signin.json";
+/* A signin.json past this is no sign-in, as an answer past SIGNIN_ANSWER_MAX is none: the file the desk writes stays far below it. */
+const SIGNIN_FILE_MAX = 256 * 1024;
 function signinFileRead(text, packed) {
   let d = null;
   try { d = JSON.parse(String(text)); } catch { d = null; }
@@ -10523,6 +10965,36 @@ function signinFileRead(text, packed) {
   /* A sign-in the service refused for a managed tenant keeps no seat, but the desk remembers it offers nothing to buy (signinTake). */
   if (d.licenceManaged === true) out.licenceManaged = true;
   return out;
+}
+/* THE FILE'S MARK: as signin.json is written this desk's key signs the certificate's signature, the code and the revocation list the
+   file keeps. Read back, a held seat whose mark does not hold under this desk's key keeps no certificate and no code, so an edit can
+   neither take a list back nor bring in a certificate this desk was not given; the next answer seats the desk again. */
+function signinMarkBytes(held, revoked) {
+  const c = held && held.cert, r = revoked && typeof revoked === "object" ? revoked : null;
+  return Buffer.from("etiuda-signin-kept\n" + [c && c.sig ? String(c.sig.value) : "", held && held.code ? String(held.code) : "",
+    r ? String(r.serial) : "0", r && r.sig ? String(r.sig.value) : ""].join("\n"), "utf8");
+}
+/* signinFileText's text with the mark `sign` makes over it; the text as it was where nothing is held or nothing signs. */
+function signinFileMarkText(text, sign) {
+  let d = null;
+  try { d = JSON.parse(String(text)); } catch { return text; }
+  if (!d || !d.held || typeof sign !== "function") return text;
+  const mark = String(sign(signinMarkBytes(d.held, d.revoked)) || "");
+  return /^[0-9a-f]{128}$/.test(mark) ? JSON.stringify(Object.assign(d, { mark: mark }), null, 1) + "\n" : text;
+}
+/* The file's held seat as this desk takes it: as read where its mark holds under `deskKey`, else with no certificate, code or doors. */
+function signinFileHeld(store, text, deskKey) {
+  const h = store && store.held;
+  if (!h || (!h.cert && !h.code)) return store;
+  let d = null;
+  try { d = JSON.parse(String(text)); } catch { d = null; }
+  let marked = false;
+  marked = !!d && /^[0-9a-f]{64}$/.test(String(deskKey || "")) && signinVerified(String(deskKey), signinMarkBytes(h, store.revoked), d.mark); /* plant:file-mark */
+  /* The certificate is this desk's own, judged against this desk's key and not the desk the certificate names. */
+  let mine = true;
+  mine = !h.cert || signinCertOk(h.cert, String(deskKey || "")); /* plant:file-desk-key */
+  if (marked && mine) return store;
+  return Object.assign({}, store, { held: Object.assign({}, h, { cert: null, code: "", doors: [], doorsSig: "" }) });
 }
 function signinFileText(s) {
   const revoked = signinRevokedNext(s.revoked || null, s.held ? s.held.revoked : null);
@@ -10609,13 +11081,20 @@ function signinState() {
   const managed = managedPolicy();
   SIGNIN_PROVIDERS = signinPinTable(SIGNIN_PROVIDERS, managed); /* plant:pin-taken */
   let text = "";
-  try { text = fs.readFileSync(path.join(app.getPath("userData"), SIGNIN_FILE), "utf8"); } catch { text = ""; }
+  try {
+    const at = path.join(app.getPath("userData"), SIGNIN_FILE);
+    let within = true;
+    within = fs.statSync(at).size <= SIGNIN_FILE_MAX; /* plant:file-max */
+    text = within ? fs.readFileSync(at, "utf8") : "";
+  } catch { text = ""; }
   signinStore = signinFileRead(text, SIGNIN_DESK_PACKED); /* plant:door-file-packed */
+  const me = branchIdentity(false);
+  signinStore = signinFileHeld(signinStore, text, me ? me.key : ""); /* plant:file-held */
   signinStore.managed = managed;
   return signinStore;
 }
 function signinSave() {
-  try { writeReplacing(path.join(app.getPath("userData"), SIGNIN_FILE), signinFileText(signinState())); }
+  try { writeReplacing(path.join(app.getPath("userData"), SIGNIN_FILE), signinFileMarkText(signinFileText(signinState()), signinSign)); } /* plant:file-mark-save */
   catch (e) { console.error("etiuda: the sign-in could not be kept - " + e.message); }
 }
 function signinSign(bytes) {
@@ -10633,6 +11112,9 @@ function signinTeamHere() {
 function signinFlush() {
   const held = signinState().held, cert = held && held.cert, me = branchIdentity(false);
   if (!cert || !me || !signinTeamHere()) return false;
+  if (signinCertEarly(cert, Date.now())) return false; /* plant:flush-early */
+  /* An ended certificate stays for the lapse's words and is no seat to publish: a door takes that instant as its end. */
+  if (Date.now() >= cert.until) return false; /* plant:flush-ended */
   if (signinRevokedHas(held.revoked, cert)) return false; /* plant:revoked-flush */
   /* Only a certificate given to this desk key is its seat: one kept from a key made again since is never written under the new id. */
   if (!signinCertOk(cert, me.key)) return false; /* plant:flush-own-key */
@@ -10665,6 +11147,7 @@ function signinDoorInvite(team, rt) {
   if (inv.withdrawing === true) return inv.rt === rt && /^[0-9a-f]{64}$/.test(String(inv.box)) && /^[0-9a-f]{32}$/.test(String(inv.inv)) ? { door: null, box: inv.box, inv: inv.inv } : null; /* plant:door-withdraw-invite */
   const held = signinState().held, cert = held && held.cert, me = branchIdentity(false);
   if (inv.rt !== rt || !me || !/^[0-9a-f]{64}$/.test(String(inv.box)) || !signinCertOk(cert, me.key) || !(cert.until > Date.now())) return null; /* plant:door-invite-cert */
+  if (signinCertEarly(cert, Date.now())) return null; /* plant:door-invite-early */
   if (signinRevokedHas(held.revoked, cert)) return null; /* plant:revoked-knock */
   const out = { door: cert, box: inv.box };
   if (/^[0-9a-f]{32}$/.test(String(inv.inv))) out.inv = inv.inv;
@@ -10696,6 +11179,7 @@ function signinDoorKept(team, mirror, id) {
 function signinDoorsShown(held, now) {
   const me = branchIdentity(false);
   if (!held || !held.cert || !me || !signinCertOk(held.cert, me.key) || !(held.cert.until > now) || pinnedLead() || teamJoin) return []; /* plant:door-shown */
+  if (signinCertEarly(held.cert, now)) return []; /* plant:door-shown-early */
   if (Object.keys(teamPins).some(teamPinStands)) return []; /* plant:door-pin-stands */
   if (signinRevokedHas(held.revoked, held.cert)) return []; /* plant:revoked-offer */
   if (!signinDoorsSigned(held.doors, held.doorsSig, held.cert)) return []; /* plant:door-shown-signed */
@@ -10757,7 +11241,10 @@ function signinView() {
   const st = signinState(), held = st.held, real = signinOffered().map(p => p.id), now = Date.now(), preview = signinPreviewing();
   const offered = preview ? Object.keys(SIGNIN_PROVIDERS) : real;
   const signedIn = held && real.indexOf(held.provider) >= 0 ? held.provider : "";
-  const view = { offered: offered, preview: preview, signedIn: signedIn, code: signedIn ? held.code : "",
+  /* The code shown and handed to Buy is the held certificate's own where one is held, as the answer took it. */
+  let code = signedIn ? held.code : "";
+  if (signedIn && held.cert && typeof held.cert.code === "string") code = held.cert.code; /* plant:view-cert-code */
+  const view = { offered: offered, preview: preview, signedIn: signedIn, code: code,
     seat: !signedIn ? "" : held.cert ? (signinLapsed(held, now) ? "lapsed" : "held") : "none",
     deskOnly: !!signedIn && !!held.cert && held.cert.deskOnly === true, /* plant:view-desk-only */
     /* Ask your lead, and the person's own trial's end where its certificate is the one held (a team is its lead's own). */
@@ -12037,13 +12524,29 @@ function keepNote(note, kept) {
   if (!kept) return "taken";
   if (note.serial < kept.serial) return "refused"; /* plant:note-serial */
   if (note.serial === kept.serial) return noteBytes(note).equals(noteBytes(kept)) ? "same" : "refused";
+  if (versionAbove(kept.version, note.version)) return "refused"; /* plant:note-downgrade */
+  if (note.released < kept.released) return "refused"; /* plant:note-released-older */
   return "taken";
 }
-/* Whether release `a` is above release `b`, each three whole numbers; false where either is not. */
+const SEMVER_RE = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+/* Whether release `a` is above release `b` under semver precedence; false where either is not a release. */
 function versionAbove(a, b) {
-  const x = NOTE_VERSION_RE.exec(String(a)), y = /^([0-9]+)\.([0-9]+)\.([0-9]+)$/.exec(String(b));
+  const x = SEMVER_RE.exec(String(a)), y = SEMVER_RE.exec(String(b));
   if (!x || !y) return false;
   for (let i = 1; i <= 3; i++) if (+x[i] !== +y[i]) return +x[i] > +y[i];
+  if (!x[4] && y[4]) return true; /* plant:note-prerelease */
+  if (x[4] && !y[4]) return false;
+  if (x[4] && y[4]) {
+    const ax = x[4].split("."), ay = y[4].split(".");
+    for (let i = 0; i < ax.length && i < ay.length; i++) {
+      if (ax[i] === ay[i]) continue;
+      const nx = /^(0|[1-9][0-9]*)$/.test(ax[i]), ny = /^(0|[1-9][0-9]*)$/.test(ay[i]);
+      if (nx && ny) return +ax[i] > +ay[i];
+      if (nx !== ny) return !nx;
+      return ax[i] > ay[i];
+    }
+    return ax.length > ay.length;
+  }
   return false; /* plant:note-equal */
 }
 /* The note's bytes through `fetchFn`: one GET over https to etiuda.dev, no redirect followed, nothing cached, no cookie,
@@ -12084,7 +12587,8 @@ async function fetchNote(fetchFn, url, ms) {
   finally { clearTimeout(timer); read.catch(() => {}); late.catch(() => {}); }
 }
 /* The last note the desk took, in update-note.json beside desk.json, read back through the same checks; and how the latest
-   look went: "read" for a note that held, "failed" for anything else, "" before the first look ends. */
+   look went: "read" for a note that held, "older" for a sound note released before this build (a test build is newer than every
+   published note, so nothing newer has been published), "failed" for anything else, "" before the first look ends. */
 const NOTE_FILE = "update-note.json", NOTE_FIRST_MS = 60 * 1000, NOTE_EVERY_MS = 60 * 60 * 1000;
 let noteKept, noteLook = "", noteTimer = null;
 function keptNote() {
@@ -12096,32 +12600,36 @@ function keptNote() {
 }
 /* What the page shows: the version offered where the kept note's is above this engine's and machine policy leaves the look
    on, and how the latest look went. */
+function noteFreshForBuild(n, built) { return !!n && noteDay(built) && !(n.released < built); } /* plant:note-released-built */
 function updateState() {
   const kept = keptNote();
-  return { offer: !updateLookOff() && kept && versionAbove(kept.version, engineVersion()) ? kept.version : "", look: noteLook };
+  return { offer: !updateLookOff() && noteFreshForBuild(kept, engineBuilt()) && versionAbove(kept.version, engineVersion()) ? kept.version : "", look: noteLook };
 }
 async function lookForNote(fetchFn) {
   let look = "failed";
   try {
     const body = await fetchNote(fetchFn, NOTE_URL), got = readNote(body);
-    if (got.note) {
+    const running = engineVersion(), built = engineBuilt();
+    if (got.note && SEMVER_RE.test(running) && noteDay(built)) { /* plant:note-known-running */
       const kept = keptNote();
-      const take = keepNote(got.note, kept);
-      /* A look reads only when its note stands at or above the running version: a note below it says nothing of newer
-         releases, kept or not (Argon's update-offer finding 1). */
-      const proves = !versionAbove(engineVersion(), got.note.version);
-      if (take === "same") {
-        look = proves ? "read" : "failed";
-      } else if (take === "taken") {
-        try {
-          writeReplacing(path.join(app.getPath("userData"), NOTE_FILE), body.toString("utf8"));
-          noteKept = got.note;
-          look = proves ? "read" : "failed";
-        } catch (e) {
-          console.error("etiuda: the version note could not be kept - " + e.message);
-          look = "failed";
+      /* A look reads only when its note stands at or above the running version and was not released before this build:
+         a past or lower note proves nothing of newer releases and must not be kept as a serial floor. */
+      const proves = !versionAbove(running, got.note.version) && noteFreshForBuild(got.note, built);
+      if (proves) { /* plant:note-weigh-before-keep */
+        const take = keepNote(got.note, kept);
+        if (take === "same") {
+          look = "read";
+        } else if (take === "taken") {
+          try {
+            writeReplacing(path.join(app.getPath("userData"), NOTE_FILE), body.toString("utf8"));
+            noteKept = got.note;
+            look = "read";
+          } catch (e) {
+            console.error("etiuda: the version note could not be kept - " + e.message);
+            look = "failed";
+          }
         }
-      }
+      } else if (!noteFreshForBuild(got.note, built)) look = "older"; /* plant:note-older-said */
     }
   } catch { look = "failed"; }
   noteLook = look;
@@ -12132,7 +12640,12 @@ async function lookForNote(fetchFn) {
 /* A first look a minute after the window opens, then hourly. Never from the harness's own window, so no leg reaches out. */
 function armNoteLook() {
   /* Not from any harness start (harnessLaunch: --user-data-dir or a test variable), so no leg ever asks production etiuda.dev. */
-  if (PLACED_ASIDE || harnessLaunch() || updateLookOff() || noteTimer || !net || typeof net.fetch !== "function") return;
+  if (PLACED_ASIDE || harnessLaunch() || noteTimer || !net || typeof net.fetch !== "function") return;
+  if (updateLookOff()) {
+    /* A key there and unread is asked again when the reader would read it again, and the look follows that answer. */
+    if (updateLookUnsure()) { noteTimer = setTimeout(() => { noteTimer = null; armNoteLook(); }, POLICY_REREAD_MS); if (noteTimer.unref) noteTimer.unref(); } /* plant:look-rearm */
+    return;
+  }
   const next = () => {
     lookForNote((u, init) => deskFetch(u, init)).catch(() => {});
     noteTimer = setTimeout(next, NOTE_EVERY_MS);
@@ -12269,7 +12782,7 @@ const SHELL_WORDS = {
         pickTeamFolder: "Choose the team's shared folder",
         stillReading: "Etiuda is still reading the team's shared folder, so the catalog is not open yet. Once that is done, Etiuda offers the catalog in a window of its own, and loading it from there opens it.",
         trayOpen: "Open Etiuda",
-        trayReplies: "Bring the replies over any window",
+        trayReplies: "Quick replies",
         trayNotesOn: "Notifications: on",
         trayNotesOff: "Notifications: off",
         traySettings: "Settings",
@@ -12278,7 +12791,7 @@ const SHELL_WORDS = {
         trayKeepsRunning: "Etiuda keeps running in the tray",
         trayKeepsBody: "Its shortcut still works and the team's updates still arrive. To quit, right-click the tray icon and choose Quit Etiuda; Settings, under General, can make closing the window quit instead.",
         jumpRecent: "Recent catalogs",
-        jumpReplies: "Bring the replies over any window",
+        jumpReplies: "Quick replies",
         jumpNewTab: "New tab",
         jumpLibrary: "Library",
         jumpSettings: "Settings" },
@@ -12293,7 +12806,7 @@ const SHELL_WORDS = {
         pickTeamFolder: "Wybierz wspólny folder zespołu",
         stillReading: "Etiuda jeszcze wczytuje wspólny folder zespołu, więc katalog nie jest na razie otwarty. Gdy wczytywanie dobiegnie końca, Etiuda zaproponuje katalog w osobnym oknie; wystarczy go stamtąd wczytać, aby się otworzył.",
         trayOpen: "Otwórz Etiudę",
-        trayReplies: "Przywołaj odpowiedzi nad dowolne okno",
+        trayReplies: "Szybkie odpowiedzi",
         trayNotesOn: "Powiadomienia: wł.",
         trayNotesOff: "Powiadomienia: wył.",
         traySettings: "Ustawienia",
@@ -12302,7 +12815,7 @@ const SHELL_WORDS = {
         trayKeepsRunning: "Etiuda działa dalej w zasobniku",
         trayKeepsBody: "Skrót nadal działa, a aktualizacje od zespołu wciąż docierają. Program zamyka pozycja Zakończ Etiudę w menu ikony zasobnika; w Ustawieniach, w części Ogólne, można ustawić, by zamknięcie okna kończyło działanie.",
         jumpRecent: "Ostatnie katalogi",
-        jumpReplies: "Przywołaj odpowiedzi nad dowolne okno",
+        jumpReplies: "Szybkie odpowiedzi",
         jumpNewTab: "Nowa rozmowa",
         jumpLibrary: "Biblioteka",
         jumpSettings: "Ustawienia" },
@@ -12429,6 +12942,8 @@ function syncHotkey() { if (hotkeyReady) holdHotkey(hotkeyWanted()); }
 /* Where the picker opens: below and a little left of the pointer, above it where the work area
    has no room below, and wholly inside that work area. Pure. */
 const PICK_SIZE = { width: 600, height: 424 };
+/* The reworder alone, on words that can be edited: no list to hold, so a smaller window, taller once a result stands. */
+const REWORD_SIZE = { width: 600, height: 264 }, REWORD_TALL = 336;
 function pickerPlace(pt, area, size) {
   const w = Math.min(size.width, area.width), h = Math.min(size.height, area.height);
   let x = pt.x - 40, y = pt.y + 18;
@@ -12436,6 +12951,13 @@ function pickerPlace(pt, area, size) {
   x = Math.min(Math.max(x, area.x), area.x + area.width - w);
   y = Math.min(Math.max(y, area.y), area.y + area.height - h);
   return { x: Math.round(x), y: Math.round(y), width: Math.round(w), height: Math.round(h) };
+}
+/* While the tour's step stands in the picker, the window is taller by its bubble and grows upwards, so the rows stay where
+   they opened; held inside the work area. Pure. */
+const PICK_TOUR_MAX = 400;
+function pickerGrow(at, add, area) {
+  const h = Math.min(at.height + add, area.height);
+  return { x: at.x, y: Math.max(area.y, at.y + at.height - h), width: at.width, height: h };
 }
 /* On Windows the page's own copy puts CRLF on the clipboard (Chromium turns each line feed into
    the platform's pair as it writes), so the picker's copy does the same and the two paste alike. */
@@ -12453,6 +12975,20 @@ function pickPage() {
   const who = document.getElementById("who"), count = document.getElementById("count"), keys = document.getElementById("keys"), langBtn = document.getElementById("lang");
   let rows = [], last = null, words = {}, chords = {}, at = 0, asked = 0, said = "", sent = null, closing = false;
   let suggest = [], sgAt = -1, picked = [];
+  /* THE WORDS SELECTED on the screen stand in the box as given, and the box counts as at rest while they do: the strip of
+     what the shell suggests for them shows, as for a copied message, and the rows are the resting list. Typing over them
+     makes the box a query like any other. A suggestion is still taken only by the agent. */
+  const selNote = document.getElementById("sel");
+  let chosen = "";
+  /* Whether the selected words can be edited where they stand: true, false, or null. The window does not show it. */
+  let mayEdit = null;
+  /* YOUR OWN WORDS, offered by the shell (o.reword, the host it sends to) only while the organisation's model is set and on.
+     Words that can be edited open the reworder alone ("only"), words that cannot open the replies alone, and where the helper
+     cannot tell, or nothing was selected, it is the foot under the replies ("foot"). A press of an act is the one thing that
+     sends; a later press, or Esc, drops an answer still on its way. */
+  const rwFoot = document.getElementById("rw"), rwOnly = document.getElementById("rwo"), rwRes = document.getElementById("rwr");
+  let reword = null, rwMode = "", rwAt = 0, rwN = 0, rwOn = null, rwWords = "", rwOut = "", rwSaid = "", rwLang = "";
+  const blank = () => !q.value.trim() || (!!chosen && q.value === chosen); /* plant:pick-selected-rest */
   /* THE KEYSTROKE FILTERS HERE, on the rows the open handed over. The order is the desk's
      search: the same terms, the same tiers, the same lift. An open without that index still
      asks the desk. */
@@ -12684,19 +13220,76 @@ function pickPage() {
     + ' stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10.2 12.5l.6-4.2a2.6 2.6 0 1 1 3.4 0l.6 4.2"/>'
     + '<path d="M5 17v-2.5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2V17z" fill="currentColor"/><path d="M6 20.5h13"/></svg>';
   const stamp = () => '<span class="st" title="' + esc(words.stamp) + '">' + ICON_STAMP + '</span>';
-  const list = () => (!q.value.trim() && last)
+  /* THE TOUR'S STEP FOR THIS WINDOW, while the desk's tour stands on it: the family's bubble above the search box, its
+     pointer on the box's centre, and the room it takes, which the shell adds above the rows. Its words are the desk's;
+     only <b> and <kbd> pass as markup. */
+  const paintTour = tour => {
+    const old = document.getElementById("tour");
+    if (old && old.remove) old.remove();
+    if (document.body) document.body.style.paddingTop = "";
+    if (!tour || !tour.title || !document.createElement || !document.body) return 0;
+    const mark = s => esc(s).replace(/&lt;(\/?)(b|kbd)&gt;/g, "<$1$2>");
+    const c = document.createElement("div");
+    c.id = "tour";
+    c.className = "tour-card bub";
+    c.setAttribute("data-side", "above");
+    c.setAttribute("role", "dialog");
+    c.innerHTML = '<h3>' + esc(tour.title) + '</h3><p>' + mark(tour.body) + '</p><div class="tour-actions">'
+      + '<button type="button" class="tour-skip" data-go="skip">' + esc(tour.skip) + '</button>'
+      + '<button type="button" data-go="back">' + esc(tour.back) + '</button>'
+      + '<button type="button" class="primary" data-go="next">' + esc(tour.next) + '</button></div><i class="bub-tip" aria-hidden="true"></i>';
+    c.addEventListener("mousedown", ev => ev.preventDefault());
+    c.addEventListener("click", ev => {
+      const b = ev.target && ev.target.closest && ev.target.closest("button[data-go]");
+      if (b && typeof P.tour === "function") P.tour(b.getAttribute("data-go"));
+    });
+    document.body.appendChild(c);
+    const GAP = 10, EDGE = 12, h = c.offsetHeight, add = EDGE + h + GAP;
+    document.body.style.paddingTop = (8 + add) + "px";
+    const r = q.getBoundingClientRect(), w = c.offsetWidth, cx = r.left + r.width / 2;
+    const left = Math.max(EDGE, Math.min(cx - w / 2, window.innerWidth - w - EDGE));
+    c.style.left = left + "px";
+    c.style.top = (r.top - GAP - h) + "px";
+    const tip = c.querySelector(".bub-tip");
+    if (tip) tip.style.left = (Math.max(22, Math.min(cx - left, w - 22)) - 6) + "px";
+    return add;
+  };
+  /* The replies of the first suggestion, shown as the rows while the selected words stand as given: asked of the desk, which
+     answers them and takes nothing. rowsOf names the suggestion they belong to. */
+  let rowsOf = "", rowsAsk = 0, took = false;
+  const list = () => (blank() && last && !rowsOf)
     ? [Object.assign({ again: true }, last)].concat(rows.filter(r => r.id !== last.id || r.vi !== last.vi)) : rows;
+  function lookRows() {
+    const first = !!chosen && q.value === chosen && suggest.length > 0 ? suggest[0].id : "";
+    if (took || !first || typeof P.rowsOf !== "function") { if (!took && !first) rowsOf = ""; return; }
+    if (first === rowsOf) return;
+    const mine = ++rowsAsk; /* plant:pick-rows-take */
+    Promise.resolve(P.rowsOf(first)).then(text => {
+      if (mine !== rowsAsk || !chosen || q.value !== chosen || !suggest.length || suggest[0].id !== first) return;
+      let o = {};
+      try { o = JSON.parse(text) || {}; } catch (e) { o = {}; }
+      if (!Array.isArray(o.rows) || !o.rows.length) return;
+      rows = o.rows;
+      said = o.count || "";
+      rowsOf = first;
+      at = 0;
+      box.scrollTop = 0;
+      paint(false);
+    });
+  }
   /* A CARD OF SEVERAL REPLIES IS ONE GROUP: its title once, over its replies, each named by its tag. The first nine
      rows after the reply copied last carry Ctrl and their digit, and that one Ctrl+0. */
   const same = (a, b) => !!a && !!b && !a.again && !b.again && a.id === b.id;
   function takeSuggest(id, multi) {
     if (typeof P.takeSuggest !== "function") return;
     const mine = ++asked;
+    rowsAsk++;
     Promise.resolve(P.takeSuggest(id, !!multi)).then(text => {
       if (mine !== asked) return;
       let o = {};
       try { o = JSON.parse(text) || {}; } catch (e) { o = {}; }
       if (!Array.isArray(o.rows)) return;
+      took = true; rowsOf = "";
       rows = o.rows;
       said = o.count || "";
       takeIndex(o, false);
@@ -12714,9 +13307,96 @@ function pickPage() {
       paint(false);
     });
   }
+  const rwSay = line => String(line || "").split("{ADDRESS}").join(reword ? reword.host : "");
+  /* The acts, the translation naming the conversation's other language where the catalog holds both. */
+  const rwActs = () => {
+    const langs = Array.isArray(words.rwLangs) ? words.rwLangs : [];
+    const to = rwLang === "en" && langs.indexOf("pl") > -1 ? "pl" : rwLang === "pl" && langs.indexOf("en") > -1 ? "en" : "";
+    const acts = [["spelling", words.rwSpelling], ["shorter", words.rwShorter], ["friendlier", words.rwFriendlier], ["formal", words.rwFormal]];
+    if (to) acts.push(["translate", to === "pl" ? words.rwIntoPl : words.rwIntoEn, to]);
+    return acts.filter(a => a[1]);
+  };
+  /* The words an act sends: the selection where the reworder stands alone, else what the box holds at the press. */
+  const rwText = () => (rwMode === "only" ? chosen : String(q.value || ""));
+  function rwPress(i) {
+    const a = rwActs()[i], text = rwText();
+    if (!a || !reword || typeof P.reword !== "function" || !text.trim()) return;
+    const mine = ++rwN;
+    rwAt = i; rwOn = a[0]; rwWords = text; rwOut = ""; rwSaid = rwSay(words.rwWait);
+    paintRw();
+    Promise.resolve(P.reword({ act: a[0], words: text, to: a[2] || "" })).then(r => {
+      if (mine !== rwN) return;
+      if (r && r.ok === true && typeof r.text === "string" && r.text) {
+        rwOut = r.text; rwSaid = rwSay(words.rwAfter);
+        if (rwMode === "only" && typeof P.grow === "function") P.grow();
+      } else {
+        rwOn = null; rwOut = "";
+        const why = r && r.why;
+        rwSaid = rwSay(why === "late" ? words.rwLate : why === "busy" ? words.rwBusy : why === "paused" ? words.rwPaused : why === "toolong" ? words.rwTooLong
+          : why === "switch" ? words.rwSwitch : why === "model" ? words.rwModel : why === "unavailable" || why === "refused" || why === "off" ? words.rwUnavail : words.rwNone);
+      }
+      paintRw();
+    }, () => { if (mine === rwN) { rwOn = null; rwSaid = rwSay(words.rwNone); paintRw(); } });
+  }
+  /* Back to the replies, nothing changed: the result and any answer on its way are let go. */
+  function rwBack() {
+    rwN++; rwOn = null; rwOut = ""; rwSaid = ""; rwWords = "";
+    paintRw();
+    paint(false);
+  }
+  function rwPut() {
+    if (!rwOut || typeof P.put !== "function") return;
+    rwN++;
+    P.put();
+  }
+  /* Whether the result's place stands where the replies stood: from a press until Esc, a new opening or typing. */
+  const rwShowing = () => rwMode === "only" || (rwMode === "foot" && (rwOn !== null || !!rwSaid));
+  function rwActsInto(host) {
+    const row = host && host.querySelector ? host.querySelector(".rw-acts") : null;
+    if (!row) return;
+    const acts = rwActs(), keyed = rwMode === "only";
+    row.innerHTML = acts.map((a, i) => '<button type="button" data-act="' + i + '"' + ((keyed ? i === rwAt : a[0] === rwOn) ? ' class="on"' : '')
+      + ' aria-pressed="' + (a[0] === rwOn ? "true" : "false") + '">' + (keyed ? '<kbd>Ctrl+' + (i + 1) + '</kbd>' : '') + esc(a[1]) + '</button>').join("");
+  }
+  function paintRw() {
+    const on = !!reword && !!rwMode, showing = on && rwShowing();
+    const top = document.getElementById("top"), sg = document.getElementById("sg");
+    if (rwFoot) rwFoot.hidden = !on || rwMode !== "foot";
+    if (rwOnly) rwOnly.hidden = !on || rwMode !== "only";
+    if (top) top.hidden = rwMode === "only";
+    box.hidden = showing;
+    if (sg) sg.hidden = showing;
+    if (count) count.hidden = showing;
+    if (selNote && rwMode === "only") selNote.hidden = true;
+    const line = (host, text) => { const el = host && host.querySelector ? host.querySelector(".rw-line") : null; if (el) { el.textContent = text; el.hidden = !text; } };
+    const set = (host, sel, text) => { const el = host && host.querySelector ? host.querySelector(sel) : null; if (el) { el.textContent = text; el.hidden = !text; } };
+    if (on && rwMode === "foot") {
+      set(rwFoot, ".rw-h", words.rwHead || "");
+      rwActsInto(rwFoot);
+      line(rwFoot, showing ? "" : rwSay(words.rwBefore));
+    }
+    if (on && rwMode === "only") {
+      set(rwOnly, ".rw-lab", words.rwYou || "");
+      set(rwOnly, ".rw-words", chosen);
+      rwActsInto(rwOnly);
+      line(rwOnly, rwOn === null && !rwSaid ? rwSay(words.rwBefore) : "");
+    }
+    if (rwRes) {
+      const act = rwActs().filter(a => a[0] === rwOn)[0];
+      rwRes.hidden = !showing || (rwMode === "only" && rwOn === null && !rwSaid);
+      set(rwRes, ".rw-lab", rwMode === "foot" ? (words.rwYou || "") : "");
+      set(rwRes, ".rw-words", rwMode === "foot" ? (rwWords || rwText()) : "");
+      set(rwRes, ".rw-act", rwMode === "foot" && act ? act[1] : "");
+      set(rwRes, ".rw-out", rwOut);
+      line(rwRes, rwSaid);
+      const out = rwRes.querySelector ? rwRes.querySelector(".rw-out") : null;
+      if (out) out.classList.toggle("wait", !rwOut && rwOn !== null);
+    }
+    legend();
+  }
   /* Drawn only while suggestions are on and the query is empty, so a quiet clipboard adds no element. */
   function paintStrip() {
-    const on = suggest.length > 0 && !String(q.value || "").trim();
+    const on = suggest.length > 0 && blank();
     const host = document.getElementById ? document.getElementById("sg") : null;
     if (!on) {
       if (host && host.remove) host.remove();
@@ -12791,7 +13471,8 @@ function pickPage() {
     q.setAttribute("aria-activedescendant", sgAt >= 0 ? "s" + sgAt : (all.length ? "r" + at : ""));
     paintStrip();
     box.querySelectorAll(".t,.x").forEach(el => el.classList.toggle("cut", el.scrollWidth > el.clientWidth + 1));
-    if (count) count.textContent = all.length ? said : "";
+    /* The count gives way where the foot is short, fading at its right; the key hints always stand whole. */
+    if (count) { count.textContent = all.length ? said : ""; if (count.classList) count.classList.toggle("cut", count.scrollWidth > count.clientWidth + 1); }
     /* A key that moved the mark brings it into view, and its group's title with it at the top; the pointer's mark
        scrolls nothing. */
     const on = keyed && box.querySelector ? box.querySelector("li.on") : null;
@@ -12810,6 +13491,15 @@ function pickPage() {
   /* The keys as they work, under the list: each line holds {KEY} where its key is drawn. */
   const legend = () => {
     if (!keys) return;
+    /* While a reword stands, Enter and Esc say what they do there; "Enter" in the line is drawn as its key. */
+    const kbdEnter = line => esc(line).replace("Enter", '<kbd>Enter</kbd>');
+    if (reword && rwMode && rwShowing()) {
+      const act = rwActs()[rwAt];
+      const enter = rwOut ? kbdEnter(words.rwEnter || "") : rwMode === "only" && act ? '<kbd>Enter</kbd>' + esc(act[1]) : "";
+      const esc2 = rwMode === "only" ? esc(words.keyClose || "").split("{KEY}").join('<kbd>Esc</kbd>') : '<kbd>Esc</kbd>' + esc(words.rwBack || "");
+      keys.innerHTML = [enter, esc2].filter(Boolean).map(h => '<span>' + h + '</span>').join("");
+      return;
+    }
     keys.innerHTML = [["Enter", words.keyCopy], ["Shift+Enter", words.keyOther], ["Esc", words.keyClose]]
       .filter(k => k[1]).map(k => '<span>' + esc(k[1]).split("{KEY}").join('<kbd>' + k[0] + '</kbd>') + '</span>').join("");
   };
@@ -12837,9 +13527,16 @@ function pickPage() {
     return null;
   };
   const paintLang = o => {
+    if (o && o.lang) rwLang = String(o.lang);
     if (!langBtn || !o || !o.lang) return;
     langBtn.hidden = (o.langs | 0) < 2;
     langBtn.textContent = String(o.lang).toUpperCase();
+  };
+  const paintSel = () => {
+    if (!selNote) return;
+    const on = !!chosen && q.value === chosen;
+    selNote.hidden = !on;
+    selNote.textContent = on ? (words.selected || "") : "";
   };
   const paintOpen = (o, fresh) => {
     if (o.words) {
@@ -12862,10 +13559,16 @@ function pickPage() {
     suggest = Array.isArray(o.suggest) ? o.suggest.filter(s => s && s.id) : [];
     picked = Array.isArray(o.picked) ? o.picked : [];
     sgAt = -1;
-    q.value = ""; at = (last && list().length > 1) ? 1 : 0; asked++;
+    rowsOf = ""; rowsAsk++; took = false;
+    q.value = chosen; at = (last && list().length > 1) ? 1 : 0; asked++;
     box.scrollTop = 0;
     paint(false);
-    if (fresh && who && !who.hidden) who.focus();
+    paintSel();
+    lookRows(); /* plant:pick-rows-look */
+    rwN++; rwOn = null; rwOut = ""; rwSaid = ""; rwWords = ""; rwAt = 0;
+    paintRw();
+    if (rwMode === "only" && rwOnly) rwOnly.focus();
+    else if (fresh && who && !who.hidden) who.focus();
     else q.focus();
   };
   const onTabKey = (e, tabId) => {
@@ -12893,6 +13596,7 @@ function pickPage() {
       suggest = (Array.isArray(o.suggest) ? o.suggest : []).filter(s => s && s.id);
       if (sgAt >= suggest.length) sgAt = -1;
       paint(false);
+      lookRows();
       return;
     }
     const look = o.look || {}, root = document.documentElement;
@@ -12902,16 +13606,24 @@ function pickPage() {
     root.classList.toggle("still", !!look.still);
     words = o.words || {};
     chords = o.chords || {};
+    chosen = typeof o.selected === "string" ? o.selected : ""; /* plant:pick-selected-box */
+    mayEdit = o.editable === true ? true : o.editable === false ? false : null;
+    reword = o.reword && typeof o.reword.host === "string" && o.reword.host ? { host: o.reword.host } : null;
+    rwMode = !reword ? "" : chosen && mayEdit === true ? "only" : chosen && mayEdit === false ? "" : "foot"; /* plant:pick-reword-mode */
     root.lang = words.lang || "en";
     q.placeholder = words.search || "";
+    if (who) who.placeholder = words.whoHint || "";
     box.setAttribute("aria-label", words.list || "");
     if (who) who.title = words.who || "";
     if (langBtn) langBtn.title = words.langTitle || "";
     legend();
     paintOpen(o, false);
-    P.ready();
+    P.ready(paintTour(o.tour));
   });
   q.addEventListener("input", () => {
+    if (rwOn !== null || rwSaid) { rwN++; rwOn = null; rwOut = ""; rwSaid = ""; paintRw(); }
+    if (chosen && q.value !== chosen) { chosen = ""; paintSel(); }
+    rowsOf = ""; rowsAsk++;
     paintStrip();
     if (bank) {
       asked++;
@@ -12944,16 +13656,23 @@ function pickPage() {
     const tabId = matchTab(e);
     if (tabId) { onTabKey(e, tabId); return; }
     const all = list();
+    if (rwMode === "foot" && rwShowing()) {
+      if (e.key === "Escape") { e.preventDefault(); rwBack(); return; }
+      if (e.key === "Enter") { e.preventDefault(); rwPut(); return; }
+      if (e.ctrlKey && /^(Digit|Numpad)[0-9]$/.test(e.code || "")) { e.preventDefault(); return; }
+    }
     if (e.key === "Escape") { e.preventDefault(); P.close(); return; }
     if (e.key === "Tab") {
       e.preventDefault();
+      const first = rwFoot && !rwFoot.hidden && rwFoot.querySelector ? rwFoot.querySelector(".rw-acts button") : null;
       if (who && !who.hidden) who.focus();
+      else if (first) first.focus();
       return;
     }
     const step = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : e.key === "PageDown" ? 8 : e.key === "PageUp" ? -8 : 0;
     if (step) {
       e.preventDefault();
-      const stripOn = suggest.length > 0 && !q.value.trim();
+      const stripOn = suggest.length > 0 && blank();
       if (sgAt >= 0 && stripOn) {
         if (Math.abs(step) === 1 && step < 0) {
           sgAt = sgAt <= 0 ? suggest.length - 1 : sgAt - 1;
@@ -12980,7 +13699,7 @@ function pickPage() {
     }
     if (e.key === "Enter") {
       e.preventDefault();
-      if (sgAt >= 0 && suggest[sgAt] && !q.value.trim()) { takeSuggest(suggest[sgAt].id, !!(e.ctrlKey || e.metaKey)); return; }
+      if (sgAt >= 0 && suggest[sgAt] && blank()) { takeSuggest(suggest[sgAt].id, !!(e.ctrlKey || e.metaKey)); return; }
       take(all[at], e.shiftKey);
       return;
     }
@@ -13005,7 +13724,9 @@ function pickPage() {
         takeIndex(o, false);
         if (!Array.isArray(o.rest) && !String(q.value || "").trim()) { restRows = rows.slice(); restSaid = said; }
         paintLang(o);
+        rowsOf = ""; rowsAsk++;
         paint(false);
+        lookRows();
         if (o.name != null) { who.value = o.name; sent = who.value; }
       });
     };
@@ -13045,6 +13766,43 @@ function pickPage() {
     const li = e.target.closest && e.target.closest("li[data-i]");
     if (li) take(list()[+li.dataset.i], e.shiftKey);
   });
+  [rwFoot, rwOnly].forEach(host => {
+    if (!host || !host.addEventListener) return;
+    host.addEventListener("mousedown", e => { if (e.target.closest && e.target.closest("button")) e.preventDefault(); });
+    host.addEventListener("click", e => {
+      const b = e.target.closest && e.target.closest("button[data-act]");
+      if (b) rwPress(+b.getAttribute("data-act"));
+    });
+  });
+  /* An act's button under the keyboard: Esc and Enter as in the box, Left and Right along the row. */
+  if (rwFoot && rwFoot.addEventListener) rwFoot.addEventListener("keydown", e => {
+    const b = e.target.closest && e.target.closest("button[data-act]");
+    if (!b) return;
+    const all = [...rwFoot.querySelectorAll("button[data-act]")], i = all.indexOf(b);
+    if (e.key === "Escape") { e.preventDefault(); if (rwShowing()) { rwBack(); q.focus(); } else P.close(); return; }
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") { e.preventDefault(); all[(i + (e.key === "ArrowRight" ? 1 : all.length - 1)) % all.length].focus(); return; }
+    if (e.key === "Enter" && rwOut) { e.preventDefault(); rwPut(); }
+  });
+  /* The reworder alone: Enter does the lit act, or puts the result it made; Left and Right move the light; Ctrl and a digit
+     chooses; Esc closes and nothing has changed. */
+  if (rwOnly && rwOnly.addEventListener) rwOnly.addEventListener("keydown", e => {
+    if (rwMode !== "only") return;
+    const acts = rwActs();
+    if (e.key === "Escape") { e.preventDefault(); rwN++; P.close(); return; }
+    if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && acts.length) {
+      e.preventDefault();
+      rwAt = (rwAt + (e.key === "ArrowRight" ? 1 : acts.length - 1)) % acts.length;
+      paintRw();
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (rwOut && acts[rwAt] && acts[rwAt][0] === rwOn) rwPut(); else rwPress(rwAt);
+      return;
+    }
+    const d = /^(Digit|Numpad)([1-9])$/.exec(e.code || "");
+    if (d && e.ctrlKey && !e.altKey && !e.metaKey) { e.preventDefault(); if (+d[2] <= acts.length) rwPress(+d[2] - 1); }
+  });
 }
 const PICK_SCRIPT = "(" + pickPage.toString() + ")();";
 const PICK_HASH = "'sha256-" + crypto.createHash("sha256").update(PICK_SCRIPT, "utf8").digest("base64") + "'";
@@ -13063,7 +13821,8 @@ function pickerDoc() {
     + ':root.glass,:root.glass body{background:transparent}\n'
     + ':root.glass body{background:color-mix(in srgb,var(--panel-raised) 78%,transparent)}\n'
     + 'body{box-sizing:border-box;padding:8px;display:flex;flex-direction:column;gap:6px;color:var(--ink);'
-    + 'font:14px/1.35 var(--sans);cursor:default;user-select:none}\n'
+    + 'font:14px/1.35 var(--sans);cursor:default;user-select:none;-webkit-user-select:none}\n'
+    + 'input,textarea,[contenteditable="true"],[contenteditable=""],.mono,code,pre,.rw-text{user-select:text;-webkit-user-select:text}\n'
     + '#top{flex:0 0 40px;display:flex;gap:6px;min-width:0}\n'
     + '#q{box-sizing:border-box;flex:1 1 auto;min-width:0;padding:0 12px;border:1px solid var(--field-line);'
     + 'border-bottom-color:var(--field-edge);border-radius:var(--radius-sm);background:var(--field);color:var(--ink);'
@@ -13085,6 +13844,25 @@ function pickerDoc() {
     + '#sg button.on{background:color-mix(in srgb,var(--accent) 20%,transparent);color:var(--accent)}\n'
     + '#sg button.picked{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}\n'
     + '#sg button.picked.on{background:color-mix(in srgb,var(--accent) 28%,transparent);color:var(--accent)}\n'
+    + '#sel{flex:0 0 auto;padding:0 12px;color:var(--dim);font-size:12px}\n#sel[hidden]{display:none}\n'
+    + '#top[hidden],#rows[hidden],#count[hidden],#sg[hidden],#rw[hidden],#rwo[hidden],#rwr[hidden],.rw-h[hidden],.rw-lab[hidden],'
+    + '.rw-words[hidden],.rw-act[hidden],.rw-out[hidden],.rw-line[hidden]{display:none}\n'
+    + '#rwo,#rwr{display:flex;flex-direction:column;gap:6px;min-width:0;padding:6px 10px 0;outline:none}\n'
+    + '#rwo{flex:0 0 auto}\n#rwr{flex:1 1 auto;min-height:0;overflow-y:auto}\n'
+    + '.rw-lab,.rw-act,.rw-line{color:var(--dim);font-size:12px}\n'
+    + '.rw-words{color:var(--ink);font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:4.2em;overflow-y:auto}\n'
+    + '.rw-out{padding:10px 12px;border-radius:var(--radius-sm);background:color-mix(in srgb,var(--accent) 14%,transparent);'
+    + 'color:var(--ink);font-weight:600;white-space:pre-wrap;overflow-wrap:anywhere}\n'
+    + '#rw{flex:0 0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:6px 10px 0;border-top:1px solid var(--line);'
+    + 'color:var(--dim);font-size:12px}\n#rw .rw-line{flex:1 0 100%}\n'
+    + '.rw-acts{display:flex;flex-wrap:wrap;gap:6px}\n'
+    + '.rw-acts button{box-sizing:border-box;display:inline-flex;align-items:center;gap:6px;height:28px;margin:0;padding:0 10px;'
+    + 'border:1px solid var(--line-strong);border-radius:var(--radius-sm);background:var(--field);color:var(--ink);font:600 12.5px var(--sans);'
+    + 'cursor:default;outline:none}\n'
+    + '.rw-acts button:hover{border-color:var(--accent)}\n'
+    + '.rw-acts button.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent)}\n'
+    + '.rw-acts button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}\n'
+    + '.rw-acts kbd{color:var(--dim)}\n'
     + '#rows{flex:1 1 auto;min-height:0;margin:0;padding:0;list-style:none;overflow-x:hidden;overflow-y:auto;'
     + 'overscroll-behavior:contain;scrollbar-width:thin}\n'
     + '#rows li{display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:var(--radius-sm);'
@@ -13106,7 +13884,26 @@ function pickerDoc() {
     + '#rows li.none{height:auto;padding:14px 12px;color:var(--dim);white-space:normal}\n'
     + 'footer{flex:0 0 auto;display:flex;align-items:center;gap:14px;padding:6px 10px 0;border-top:1px solid var(--line);'
     + 'color:var(--dim);font-size:12px;white-space:nowrap;overflow:hidden}\n'
-    + '#count{margin-right:auto}\n#keys{display:flex;gap:14px}\n#keys kbd{margin-right:5px}\n'
+    + '#count{margin-right:auto;flex:0 1 auto;min-width:0;overflow:hidden}\n#keys{display:flex;flex:0 0 auto;gap:14px}\n#keys kbd{margin-right:5px}\n'
+    + ':root{--bub:#2563eb;--bub-ink:#fff;--bub-dim:rgba(255,255,255,.92);--bub-shadow:rgba(37,99,235,.32);--sans-display:var(--sans)}\n'
+    + '.bub{position:fixed;box-sizing:border-box;overflow:visible;padding:12px 14px;background:var(--bub);color:var(--bub-ink);'
+    + 'border-radius:14px;filter:drop-shadow(0 10px 22px var(--bub-shadow))}\n'
+    + '.bub-tip{position:absolute;width:12px;height:12px;background:var(--bub);transform:rotate(45deg);border-radius:2px;pointer-events:none}\n'
+    + '.bub[data-side=above]>.bub-tip{bottom:-6px}\n'
+    + '.tour-card{width:min(360px,calc(100vw - 24px));line-height:1.5}\n'
+    + '.tour-card h3{margin:0 0 6px;font:700 15.5px/1.3 var(--sans-display);letter-spacing:-.2px}\n'
+    + '.tour-card p{margin:0 0 10px;font-size:13.5px;line-height:1.5;color:var(--bub-dim);text-wrap:balance}\n'
+    + '.tour-card p b{color:var(--bub-ink);font-weight:600}\n'
+    + '.tour-card kbd{font:11px var(--mono);border:1px solid color-mix(in srgb,var(--bub-ink) 34%,transparent);border-radius:4px;'
+    + 'padding:1px 5px;color:var(--bub-ink);background:color-mix(in srgb,var(--bub-ink) 14%,transparent)}\n'
+    + '.tour-actions{display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-top:2px;padding-top:10px;'
+    + 'border-top:1px solid rgba(255,255,255,.24)}\n'
+    + '.tour-actions button{padding:7px 11px;border:1px solid transparent;border-radius:var(--radius-sm);background:rgba(0,0,0,.14);'
+    + 'color:#fff;font:600 13px var(--sans);cursor:default;white-space:nowrap;outline:none}\n'
+    + '.tour-actions button:hover,.tour-actions button:focus-visible{background:rgba(0,0,0,.26)}\n'
+    + '.tour-actions button.primary{background:#fff;border-color:#fff;color:var(--bub)}\n'
+    + '.tour-actions button.primary:hover,.tour-actions button.primary:focus-visible{background:#fff;filter:brightness(.94)}\n'
+    + '.tour-actions .tour-skip{margin-right:auto}\n'
     + ':root.still #rows li{transition:none}\n'
     + '@media (prefers-reduced-motion:reduce){#rows li{transition:none}}\n'
     + '@media (forced-colors:active){#rows li.on{outline:2px solid Highlight;outline-offset:-2px}'
@@ -13114,8 +13911,13 @@ function pickerDoc() {
     + '</style>\n'
     + '<div id="top"><input id="q" type="text" role="combobox" aria-expanded="true" aria-controls="rows" aria-autocomplete="list"'
     + ' autocomplete="off" spellcheck="false"><input id="who" type="text" autocomplete="off" spellcheck="false" hidden>'
-    + '<button id="lang" type="button" hidden></button></div>\n'
+    + '<button id="lang" type="button" hidden></button></div>\n<div id="sel" hidden></div>\n'
+    + '<div id="rwo" tabindex="-1" hidden><div class="rw-lab"></div><div class="rw-words rw-text"></div><div class="rw-acts" role="group"></div>'
+    + '<div class="rw-line"></div></div>\n'
+    + '<div id="rwr" role="status" hidden><div class="rw-lab"></div><div class="rw-words rw-text"></div><div class="rw-act"></div>'
+    + '<div class="rw-out rw-text"></div><div class="rw-line"></div></div>\n'
     + '<ul id="rows" role="listbox"></ul>\n'
+    + '<div id="rw" hidden><span class="rw-h"></span><span class="rw-acts" role="group"></span><div class="rw-line"></div></div>\n'
     + '<footer><span id="count" aria-live="polite"></span><span id="keys"></span></footer>\n'
     + '<script>' + PICK_SCRIPT + '</script>\n';
 }
@@ -13176,6 +13978,9 @@ function showPickNote(pasted) {
 }
 
 let pickWin = null, pickLoaded = null, pickOpening = false, pickShown = null;
+/* The tour's step in this opening (pickTour), the room its bubble takes (pickTourAdd, from the page) and how the window
+   was left (pickTourGo), told to the desk once it hides. */
+let pickTour = false, pickTourAdd = 0, pickTourGo = "";
 /* THE CARET HELPER (shell/caret.cs): beside the asar, or in dist/.caret from the tree; null where there
    is none, which is every platform but Windows, and then the agent pastes as before. */
 const CARET_WHICH_MS = 1500, CARET_WAIT_MS = 150, CARET_PASTE_MS = 4000;
@@ -13193,6 +13998,71 @@ function caretWhich() {
     const m = /^(\d+) (\d+)$/.exec(String(out || "").trim());
     done(!err && m && +m[2] !== process.pid ? m[1] : null);
   }));
+}
+/* THE WORDS SELECTED in the window in front, and whether they can be edited there. The helper's first line is the fact
+   and the rest are the words. Nothing selected, no text pattern, a refusal, a failure, or no answer within
+   CARET_SELECTION_MS leaves the words empty and the fact unknown, and then the clipboard stands in. */
+const CARET_SELECTION_MS = 300;
+/* A line that is not one of the five facts is not a selection: the words it might have carried are not used. */
+function readSelectionFact(out) {
+  const raw = String(out || "");
+  const at = raw.indexOf("\n");
+  const head = (at < 0 ? raw : raw.slice(0, at)).replace(/\r$/, "");
+  let body = at < 0 ? "" : raw.slice(at + 1);
+  if (body.length > MESSAGE_MAX_CHARS) body = body.slice(0, MESSAGE_MAX_CHARS);
+  if (head === "ro" && body.trim()) return { words: body, editable: false, fact: "read-only", reason: "" }; /* plant:editable-field */
+  if (head === "ed" && body.trim()) return { words: body, editable: true, fact: "editable", reason: "" };
+  if (head === "u mixed" && body.trim()) return { words: body, editable: null, fact: "unknown", reason: "mixed" };
+  if (head === "u unsupported" && body.trim()) return { words: body, editable: null, fact: "unknown", reason: "not supported" };
+  if (head === "u contradicted" && body.trim()) return { words: body, editable: null, fact: "unknown", reason: "contradicted" };
+  if (head === "ro" || head === "ed" || head === "u mixed" || head === "u unsupported" || head === "u contradicted")
+    return { words: "", editable: null, fact: "unknown", reason: "no selection" };
+  return { words: "", editable: null, fact: "unknown", reason: "clipboard" };
+}
+function pickFactLine(fact, reason) {
+  if (fact === "read-only" || fact === "editable") return fact;
+  const allowed = reason === "no selection" || reason === "no text pattern" || reason === "not supported" || reason === "mixed" || reason === "contradicted" || reason === "clipboard" || reason === "timeout" || reason === "refused"; /* plant:editable-trace */
+  return "unknown (" + (allowed ? reason : "clipboard") + ")";
+}
+/* One line per opening, beside tray-trace.txt: which of the three, and for unknown the reason. Never the words, their
+   length, or the window. Two thousand lines a run, and the file at 64 KiB, the same bound as the tray's. */
+const PICK_TRACE_FILE = "pick-trace.txt", PICK_TRACE_MAX_BYTES = 64 * 1024, PICK_TRACE_RUN_LINES = 2000;
+const pickTraceState = { lines: 0 };
+function pickTraceWrite(line) {
+  if (pickTraceState.lines >= PICK_TRACE_RUN_LINES) return;
+  pickTraceState.lines++;
+  try {
+    const at = path.join(app.getPath("userData"), PICK_TRACE_FILE);
+    let size = 0;
+    try { size = fs.statSync(at).size; } catch { size = 0; }
+    if (size > PICK_TRACE_MAX_BYTES) {
+      const text = fs.readFileSync(at, "utf8"), cut = text.indexOf("\n", text.length - PICK_TRACE_MAX_BYTES / 2);
+      fs.writeFileSync(at, cut < 0 ? "" : text.slice(cut + 1));
+    }
+    fs.appendFileSync(at, line + "\n");
+  } catch { /* an unwritten line costs only itself */ }
+}
+function pickTrace(fact, reason) {
+  pickTraceWrite(new Date().toISOString() + " quick reply: " + pickFactLine(fact, reason));
+}
+function caretSelection() {
+  const empty = reason => ({ words: "", editable: null, fact: "unknown", reason: reason });
+  const tool = caretTool();
+  if (!tool) return Promise.resolve(empty("clipboard"));
+  return new Promise(done => {
+    let told = false;
+    const tell = t => { if (!told) { told = true; done(t); } };
+    const late = setTimeout(() => tell(empty("timeout")), CARET_SELECTION_MS); /* plant:selection-wait */
+    execFile(tool, ["selection"], { windowsHide: true, timeout: CARET_SELECTION_MS * 4, encoding: "utf8", maxBuffer: 64 * 1024 }, (err, out) => {
+      clearTimeout(late);
+      if (err) {
+        const code = err.code;
+        tell(empty(code === 1 || code === 2 ? "no selection" : code === 3 ? "no text pattern" : code === 6 ? "refused" : "clipboard"));
+        return;
+      }
+      tell(readSelectionFact(out));
+    });
+  });
 }
 /* Started while the picker is still in front: Windows lets a program started by the window in front
    hand the front to another, and to nothing else. The reply is on the clipboard whatever it answers, and `done` hears
@@ -13253,6 +14123,7 @@ function hidePicker(handBack) {
   if (!pickWin || pickWin.isDestroyed() || !pickWin.isVisible()) return;
   if (handBack) pickWin.blur();
   pickWin.hide();
+  if (pickTour) { const go = pickTourGo || "next"; pickTour = false; pickTourGo = ""; askDesk("tour", { go: go }); }
 }
 /* The desk's own window, forward and focused: where a reply needs the agent's name first, and where
    the hotkey lands while the page cannot answer. */
@@ -13349,7 +14220,118 @@ function deskAiState(state) {
 function deskAiFetch(u, init) {
   return deskFetch(u, init);
 }
-const deskReorder = deskAi.createReorder({ config: () => deskAiConfig(), fetch: deskAiFetch, onState: deskAiState });
+/* A send waits for machine policy's facts to be recent (policyFresh): after a quiet spell the first ask starts the look and
+   sends nothing, and the asks after it lands send under what it found. */
+function deskAiSendConfig() {
+  const c = deskAiConfig();
+  return c && !policyFresh() ? null : c; /* plant:send-policy-fresh */
+}
+const deskReorder = deskAi.createReorder({ config: deskAiSendConfig, fetch: deskAiFetch, onState: deskAiState });
+/* A REWORD AT A PRESS (shell/desk-ai.cjs createReword), from the picker's foot or a card's Reword, under deskAiSendConfig as
+   the order is; where only the policy's facts are stale, the press waits for the look briefly rather than send under them. */
+const REWORD_POLICY_WAIT_MS = 2000;
+/* THE PERSON'S OWN SWITCH FOR REWORDING, fail closed: on only where the desk has never been told otherwise (no file: ENOENT) or the file
+   says on in its own kind and format. Once a person has turned it off, nothing short of their turning it on can make the desk send their
+   words: a file that cannot be read for any other reason (busy, no access, a torn write), is not this desk's own, or says nothing about
+   the choice reads as off, and so does a switch whose write did not land (rewordOffNow). Kept in desk-reword.json beside the desk's other
+   settings, written as they are (a temporary file and a rename, writeReplacing), on this computer alone and never shared with the
+   organisation; read at each use so a press, an opening and the page's question all see the one answer. It reads nothing of deskAiConfig
+   and is read by nothing that orders results. Off, Reword and "Your own words?" are absent and no reword request is made. */
+const DESK_REWORD_FILE = "desk-reword.json";
+const DESK_REWORD_KIND = "etiuda-desk-reword";
+let rewordOffNow = false;
+/* "on", "off" (the person turned it off: a file of the desk's own kind that says so, or a write that did not land) or "unreadable"
+   (everything else but a file never written), which behaves as off and is said as "not available", never as the person's choice. */
+function rewordSwitch() {
+  if (rewordOffNow) return "off";
+  let text = "";
+  try { text = fs.readFileSync(deskAiPath(DESK_REWORD_FILE), "utf8"); } catch (e) { return e && e.code === "ENOENT" ? "on" : "unreadable"; } /* plant:reword-read-closed */
+  try {
+    const doc = JSON.parse(text);
+    if (!doc || typeof doc !== "object" || doc.kind !== DESK_REWORD_KIND || doc.format !== 1) return "unreadable";
+    return doc.off === false ? "on" : doc.off === true ? "off" : "unreadable";
+  } catch { return "unreadable"; } /* plant:reword-parse-closed */
+}
+function rewordWanted() { return rewordSwitch() === "on"; }
+/* Why a press is refused at a door, as the page says it: the person's switch ("switch"), a choice the desk cannot read ("unavailable"),
+   or "" where the switch is on. */
+function rewordSwitchWhy() { const w = rewordSwitch(); return w === "on" ? "" : w === "off" ? "switch" : "unavailable"; }
+async function deskRewordConfig() {
+  if (!rewordWanted()) return null; /* plant:reword-switch-send */
+  const end = Date.now() + REWORD_POLICY_WAIT_MS;
+  for (;;) {
+    const c = deskAiSendConfig(); /* plant:reword-config */
+    if (c || !deskAiConfig() || Date.now() >= end) return c;
+    await new Promise(done => setTimeout(done, 100));
+  }
+}
+const deskReword = deskAi.createReword({ config: deskRewordConfig, fetch: deskAiFetch });
+/* The four strings a reword reads, and nothing else of what the page sent. */
+function rewordArg(a) {
+  const o = a && typeof a === "object" ? a : {}, s = k => (typeof o[k] === "string" ? o[k] : "");
+  return { act: s("act"), words: s("words"), how: s("how"), to: s("to") };
+}
+/* The door's own "off" (no configuration to send under at the press) is said as the switch if the choice moved meanwhile; as the model gone
+   where no configuration is in force; and as "unavailable" where one is but machine policy's facts are stale, which the person did not do. */
+function rewordShown(r) {
+  if (!r || r.ok !== false || r.why !== "off") return r;
+  return { ok: false, why: rewordSwitchWhy() || (deskAiConfig() ? "unavailable" : "model") };
+}
+/* The host the screen names, read from the address the request goes to, so the two cannot differ. */
+function rewordHost(c) {
+  try { return c ? new URL(deskAi.endpointFor(c)).host : ""; } catch { return ""; }
+}
+/* The picker's foot, offered at an opening only while a configuration is in force; the opening's selection and the last
+   result asked in it are kept here for Enter's put, numbered so an answer overtaken by a later press is not the one put. */
+let pickRewordOn = false, pickSelectedNow = "", pickReworded = "", pickRewordN = 0;
+ipcMain.handle("etiuda:pick-reword", (e, a) => {
+  if (!fromPicker(e)) return { ok: false, why: "off" };
+  if (!pickRewordOn || !rewordWanted()) return { ok: false, why: rewordSwitchWhy() || "unavailable" }; /* plant:reword-switch-door-pick */
+  const n = ++pickRewordN;
+  return deskReword.ask(rewordArg(a)).then(rewordShown).then(r => {
+    if (n === pickRewordN) pickReworded = r && r.ok ? r.text : "";
+    return r;
+  });
+});
+/* ENTER AFTER A REWORD: the result goes on the clipboard, the picker steps aside, and the helper reads the selection again as at
+   the opening; only where the words selected at this opening are still the ones selected does it press its one key. Otherwise
+   the result waits on the clipboard and the note says so. */
+const REWORD_PUT_WAIT_MS = 150;
+ipcMain.handle("etiuda:pick-put", (e) => {
+  if (!fromPicker(e) || !pickReworded) return false;
+  const text = pickClipText(pickReworded, process.platform), was = pickSelectedNow, target = pickTarget;
+  pickReworded = "";
+  noteOwnText(text);
+  clipboard.writeText(text);
+  hidePicker(true);
+  const lf = s => String(s || "").replace(/\r\n/g, "\n");
+  if (!was || !target) { showPickNote(false); return false; }
+  return new Promise(done => setTimeout(done, REWORD_PUT_WAIT_MS)).then(() => caretSelection()).then(got => {
+    const same = !!(got && got.words) && lf(got.words) === lf(was); /* plant:reword-put-same */
+    if (same) caretPaste(target, showPickNote); else showPickNote(false);
+    return same;
+  });
+});
+/* The reworder alone grows once its result stands, its top kept and its foot inside the work area. */
+ipcMain.on("etiuda:pick-grow", (e) => {
+  if (!fromPicker(e) || !pickWin.isVisible()) return;
+  const b = pickWin.getBounds();
+  if (b.height >= REWORD_TALL) return;
+  let area = null;
+  try { area = screen.getDisplayMatching(b).workArea; } catch { area = null; }
+  const y = area ? Math.max(area.y, Math.min(b.y, area.y + area.height - REWORD_TALL)) : b.y;
+  pickWin.setBounds({ x: b.x, y: y, width: b.width, height: REWORD_TALL });
+});
+/* A card's Reword in the desk's own window: the same door, the same asks. */
+ipcMain.handle("etiuda:desk-reword", (e, a) => (fromEngine(e) && rewordWanted() ? deskReword.ask(rewordArg(a)).then(rewordShown) : { ok: false, why: fromEngine(e) ? rewordSwitchWhy() : "refused" })); /* plant:reword-switch-door-desk */
+/* The person's own switch, set from Settings: stored as a file of its own; a result already made for the picker's Enter is let go, and a press from a window opened before refuses at its own door. */
+ipcMain.on("etiuda:reword-set", (e, on) => {
+  if (!fromEngine(e)) return;
+  const wasOff = rewordOffNow;
+  rewordOffNow = !on;
+  try { writeReplacing(deskAiPath(DESK_REWORD_FILE), JSON.stringify({ format: 1, kind: DESK_REWORD_KIND, off: !on }) + "\n"); } catch { if (on) rewordOffNow = wasOff; }
+  if (!on) { pickReworded = ""; pickRewordN++; }
+});
 /* An agent's key, click, wheel or scroll in each window, counted, so an order that comes after one is dropped. */
 let deskTouches = 0, pickTouches = 0;
 function countTouches(wc, bump) {
@@ -13447,10 +14429,19 @@ function pickToggle() {
   const press = ++pickPress;
   pickTarget = null;
   const which = caretWhich().then(t => { if (press === pickPress) pickTarget = t; });
-  withClipText(text => pickWithClip(press, which, text));
+  /* The selection first, asked beside which window is in front and before anything of this program comes forward; the
+     clipboard is read only where none came, and written nothing at the press. One trace line names the fact. */
+  caretSelection().then(got => {
+    const words = got && got.words;
+    if (words) { pickTrace(got.fact || "unknown", got.reason || ""); pickWithClip(press, which, words, true, got.editable); } /* plant:selection-first */
+    else { pickTrace("unknown", (got && got.reason) || "clipboard"); withClipText(text => pickWithClip(press, which, text, false, null)); }
+  }).catch(e => { console.error("etiuda: the picker could not open - " + e.message); pickOpening = false; });
 }
-function pickWithClip(press, which, text) {
+/* `selected`: the text is the window's selection, which the picker shows in its box; a clipboard's text never reaches it.
+   `editable` is true, false, or null where the helper could not say, and the page stores it without showing it. */
+function pickWithClip(press, which, text, selected, editable) {
   let clip = text;
+  const shown = selected ? String(text) : "";
   const isOwn = isOwnText(clip);
   const want = !isOwn && readsLikeMessage(clip);
   const clipHash = crypto.createHash("sha256").update(String(clip).replace(/\r\n/g, "\n")).digest("hex");
@@ -13492,6 +14483,12 @@ function pickWithClip(press, which, text) {
       } catch (err) { console.error("etiuda: suggestions could not be scored"); }
     }
     delete open.profiles;
+    if (shown) open.selected = shown;
+    open.editable = editable === true ? true : editable === false ? false : null;
+    /* The foot is offered, and named with the host it sends to, only while a configuration is in force; absent otherwise. */
+    const rewordCfg = rewordWanted() ? deskAiConfig() : null; /* plant:reword-switch-offer */
+    pickRewordOn = !!rewordCfg; pickSelectedNow = shown; pickReworded = ""; pickRewordN++;
+    if (rewordCfg) open.reword = { host: rewordHost(rewordCfg) }; /* plant:reword-offer */
     clip = "";
     const aiOn = open.ai !== false;
     delete open.ai;
@@ -13515,19 +14512,22 @@ function pickWithClip(press, which, text) {
       pickSaid = Object.assign({}, open.words || {}, { look: open.look || {} });
       return ensurePicker().then(() => {
         if (!pickWin || pickWin.isDestroyed()) return null;
-        let at = null;
+        let at = null, area = null;
         try {
           const pt = screen.getCursorScreenPoint();
-          at = pickerPlace(pt, screen.getDisplayNearestPoint(pt).workArea, PICK_SIZE);
+          area = screen.getDisplayNearestPoint(pt).workArea;
+          at = pickerPlace(pt, area, open.reword && open.selected && open.editable === true ? REWORD_SIZE : PICK_SIZE);
         } catch (e) { console.error("etiuda: the pointer could not be read, so the picker is centred - " + e.message); }
         if (at) pickWin.setBounds(at);
         else pickWin.center();
         const win = pickWin;
+        pickTour = !!open.tour; pickTourAdd = 0; pickTourGo = "";
         const drawn = new Promise(done => { pickShown = done; setTimeout(done, 300); });
         win.webContents.send("etiuda:pick-open", JSON.stringify(open));
         const asked = Promise.race([which, new Promise(done => setTimeout(done, CARET_WAIT_MS))]);
         return Promise.all([drawn, asked]).then(() => {
           pickShown = null;
+          if (pickTourAdd && at && area && !win.isDestroyed()) win.setBounds(pickerGrow(at, pickTourAdd, area));
           if (!win.isDestroyed()) { win.show(); win.focus(); }
           /* Not waited for: the opening ends here, and the order, if it comes and is still wanted, paints the strip again. */
           if (orgOrder) orgOrder.then(order => {
@@ -13547,7 +14547,17 @@ ipcMain.on("etiuda:pick-answer", (e, n, text) => {
   const done = pickAsks.get(n);
   if (done) done(String(text == null ? "null" : text));
 });
-ipcMain.on("etiuda:pick-ready", (e) => { if (fromPicker(e) && pickShown) pickShown(); });
+ipcMain.on("etiuda:pick-ready", (e, add) => {
+  if (!fromPicker(e) || !pickShown) return;
+  pickTourAdd = pickTour ? Math.max(0, Math.min(PICK_TOUR_MAX, Math.round(Number(add) || 0))) : 0;
+  pickShown();
+});
+/* The tour's buttons in the picker: the window closes, and the desk hears which was pressed. */
+ipcMain.on("etiuda:pick-tour", (e, go) => {
+  if (!fromPicker(e) || !pickTour) return;
+  pickTourGo = ["next", "back", "skip"].indexOf(go) > -1 ? go : "next";
+  hidePicker(true);
+});
 ipcMain.on("etiuda:pick-close", (e) => { if (fromPicker(e)) hidePicker(true); });
 /* The desk's own door to the picker, its Menu row and its tour, opening it by the pointer as the hotkey does. */
 ipcMain.on("etiuda:pick-show", (e) => {
@@ -13572,6 +14582,11 @@ ipcMain.handle("etiuda:pick-lang", (e) => {
 ipcMain.handle("etiuda:pick-intent", (e, id, multi) => {
   if (!fromPicker(e)) return "null";
   return askDesk("suggest-take", { id: String(id || "").slice(0, 80), multi: multi ? 1 : 0 }).then(v => JSON.stringify(v));
+});
+/* THE REPLIES OF A SUGGESTION, asked for and not taken: the desk answers the rows alone and changes nothing. */
+ipcMain.handle("etiuda:pick-rows", (e, id) => {
+  if (!fromPicker(e)) return "null";
+  return askDesk("suggest-rows", { id: String(id || "").slice(0, 80) }).then(v => JSON.stringify(v));
 });
 /* THE COPY. The desk's page makes the text by its own route and counts it, in the other language for `other`; this
    writes it to the clipboard, has the caret helper press Ctrl+V in the window the agent came from, steps aside, and
@@ -13598,7 +14613,8 @@ ipcMain.handle("etiuda:pick-copy", (e, what) => {
 /* The embedded model's switch as Settings shows it: whether this desk carries the model, whether the organisation's model is
    in force (org), and the person turning it off or on. A sync request from the page; the outcomes go back on etiuda:ai-ranking. */
 ipcMain.on("etiuda:ai-state", (e) => {
-  e.returnValue = fromEngine(e) ? { model: !!(embedSuggest && embedSuggest.installed()), org: !!deskAiConfig() } : null;
+  const c = fromEngine(e) ? deskAiConfig() : null;
+  e.returnValue = fromEngine(e) ? { model: !!(embedSuggest && embedSuggest.installed()), org: !!c, reword: rewordWanted() ? rewordHost(c) : "", rewordAt: rewordHost(c), rewordOn: rewordWanted() } : null; /* plant:reword-switch-state */
 });
 ipcMain.on("etiuda:ai-set", (e, on) => {
   if (!fromEngine(e) || !embedSuggest) return;
@@ -13668,6 +14684,9 @@ function createWindow() {
      controls on it, and a frameless window then leaves Alt+F4 as the only way to close what is
      already a bad moment. The same readPin() the serve path calls, so there is one rule rather
      than two: a window that is going to show the refusal is given the system's frame. */
+  /* The page and the pin are the build's. Absent, the window says how to make them, and it takes
+     the system's frame so the refusal can be closed. */
+  const needsBuild = pageNeedsBuild();
   const framed = !!readPin().why;
   const place = PLACED_ASIDE ? null : readWindowPlace();
   /* A WINDOW REOPENED MAXIMISED IS BUILT AT ITS MAXIMISED SIZE: maximize() shows a hidden window at once with the frame
@@ -13688,7 +14707,7 @@ function createWindow() {
     /* So the band's maximise button raises no Snap Layouts flyout: Windows raises it for a point
        answering WM_NCHITTEST with HTMAXBUTTON, no point of a frameless window does, and
        hookWindowMessage can watch that message but not answer it. */
-    frame: framed,
+    frame: framed || needsBuild,
     backgroundColor: "#00000000",
     ...(PLACED_ASIDE ? Object.assign({ focusable: false }, offscreenAt()) : {}),
     /* Spec section 10: the shell picks the material and the engine leaves the band's pixels
@@ -13822,7 +14841,8 @@ function createWindow() {
     if (pickWin && !pickWin.isDestroyed()) pickWin.destroy();
     if (pickNoteWin && !pickNoteWin.isDestroyed()) pickNoteWin.destroy();
   });
-  win.loadFile(ENGINE);
+  if (needsBuild) win.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(missingBuildDoc()));
+  else win.loadFile(ENGINE);
   watchCatalog(win);
   /* A page loaded again after it was lost asks before closing again (Clément's read, note a): the loss is kept for the
      host answer that reports it, and marked as over, so closeHeld holds again from here. */
@@ -13895,6 +14915,38 @@ function refusalDoc(why) {
     + '</div></div>\n';
 }
 
+/* The page or the pin is not on disk, so nothing is being served yet. */
+function pageNeedsBuild() {
+  return !fs.existsSync(ENGINE) || !fs.existsSync(PIN);
+}
+function missingBuildDoc() {
+  const card = (lead, body) => '<p style="margin:0 0 14px"><b>' + lead + '</b> ' + body + '</p>';
+  return '<!DOCTYPE html>\n<meta charset="utf-8">\n'
+    + '<meta http-equiv="Content-Security-Policy" content="' + policyFor(["'none'"]) + '">\n'
+    + '<title>Etiuda</title>\n'
+    + '<body style="margin:0;background:#1c1917;color:#fff;'
+    + 'font:15px/1.6 system-ui,Segoe UI,sans-serif">\n'
+    + '<div style="max-width:44em;margin:14vh auto;padding:0 28px">'
+    + '<div style="background:#7f1d1d;border-radius:12px;padding:20px 22px;'
+    + 'box-shadow:0 2px 14px rgba(0,0,0,.4)">'
+    + card("Etiuda's page has not been built in this folder yet.",
+        "Run <code>npm run build</code> here, then open Etiuda again.")
+    + card("W tym folderze nie zbudowano jeszcze strony Etiudy.",
+        "Należy uruchomić tu <code>npm run build</code>, a potem ponownie otworzyć Etiudę.")
+    + '<p style="margin:0 0 16px"><a href="' + CLOSE_MARK + '" style="display:inline-block;'
+    + 'padding:7px 16px;border-radius:8px;border:1px solid rgba(255,255,255,.45);'
+    + 'color:#fff;text-decoration:none;font-weight:600">Close Etiuda &middot; Zamknij Etiud&#281;</a></p>'
+    + '<div style="opacity:.75;font:12px/1.5 ui-monospace,Consolas,monospace;margin:0">'
+    + plainText(ENGINE) + '<br>' + plainText(PIN) + '</div>'
+    + '</div></div>\n';
+}
+function startDocument() {
+  if (pageNeedsBuild()) return missingBuildDoc();
+  const pin = readPin();
+  if (pin.why) return refusalDoc(pin.why);
+  return "";
+}
+
 /* THE SIBLING TAG IS NOT SERVED HERE. In a browser it is how a catalog beside the engine arrives;
    under this shell the policy refuses it by design, since a catalog comes through the host, and the
    refusal was a console error on every boot, so a healthy desk never had a clean console (bug hunt
@@ -13905,6 +14957,7 @@ function refusalDoc(why) {
 const SIBLING_TAGS = ['<script src="etiuda-catalog.js"></script>'];
 
 function withPolicy(html) {
+  if (pageNeedsBuild()) return missingBuildDoc();
   const pin = readPin();
   if (pin.why) return refusalDoc(pin.why);
   for (const tag of SIBLING_TAGS) {
@@ -14004,10 +15057,10 @@ function setTrayNotes(on) {
   rebuildTrayMenu();
 }
 let trayNoticeTold = false;
-function maybeFirstClose(win) {
+function maybeFirstClose(win, traced) {
   const w = trayWords();
-  notifyFirstClose({
-    electron: { Notification: Notification, app: app },
+  return notifyFirstClose({
+    electron: traced || { Notification: Notification, app: app },
     appId: APP_IDS.desktop,
     title: w.trayKeepsRunning,
     body: w.trayKeepsBody,
@@ -14015,6 +15068,91 @@ function maybeFirstClose(win) {
     setTold: () => { trayNoticeTold = true; },
     onClick: () => showDesk(win),
   });
+}
+/* Each first-close attempt through maybeFirstClose as before, with its trace line; once told, no attempt and no line. */
+function firstCloseTraced(win) {
+  if (trayNoticeTold === true) return maybeFirstClose(win);
+  let t = null;
+  try {
+    t = trayToastTrace({ Notification: Notification, app: app, harness: harnessLaunch(), defaultAumid: legacyLoginName(),
+      state: trayTraceState, write: trayTraceWrite });
+  } catch { t = null; }
+  if (!t) return maybeFirstClose(win);
+  let got;
+  try { got = maybeFirstClose(win, t.electron); } catch (e) { t.end(null, e); throw e; } /* plant:trace-caught */
+  t.end(got, null);
+  return got;
+}
+/* THE FIRST-CLOSE TRACE: each attempt at the first-close toast appends one line to tray-trace.txt in the user-data folder,
+   naming what Notification.isSupported() answered, the app user model id in force, harnessLaunch() and the outcome, and
+   Windows's own answer on a line of its own when it comes. The attempt is made exactly as it is without the trace. */
+const TRAY_TRACE_FILE = "tray-trace.txt", TRAY_TRACE_MAX_BYTES = 64 * 1024, TRAY_TRACE_RUN_LINES = 6;
+const trayTraceState = { aumid: "", lines: 0 };
+function trayTraceWrite(line) {
+  if (trayTraceState.lines >= TRAY_TRACE_RUN_LINES) return;
+  trayTraceState.lines++;
+  try {
+    const at = path.join(app.getPath("userData"), TRAY_TRACE_FILE);
+    let size = 0;
+    try { size = fs.statSync(at).size; } catch { size = 0; }
+    if (size > TRAY_TRACE_MAX_BYTES) {
+      const text = fs.readFileSync(at, "utf8"), cut = text.indexOf("\n", text.length - TRAY_TRACE_MAX_BYTES / 2);
+      fs.writeFileSync(at, cut < 0 ? "" : text.slice(cut + 1));
+    }
+    fs.appendFileSync(at, line + "\n");
+  } catch { /* an unwritten line costs only itself */ }
+}
+/* Stand-ins for Electron's Notification and app around one attempt, each passing every call through unchanged; end(got, err)
+   writes the attempt's line. o: { Notification, app, harness, defaultAumid, state, write }. */
+function trayToastTrace(o) {
+  const Real = o.Notification, seen = { supported: "", aumid: "", error: "" };
+  const first = e => String(e && e.message || e).split("\n")[0].replace(/[A-Za-z]:\\Users\\[^\\\s"']+/gi, "%USERPROFILE%").slice(0, 200);
+  const stamp = () => new Date().toISOString();
+  let Stand = Real;
+  if (typeof Real === "function") {
+    Stand = function (opts) {
+      let n;
+      try { n = new Real(opts); } catch (e) { seen.error = first(e); throw e; }
+      const show = n.show;
+      try { n.show = function () { try { return show.apply(n, arguments); } catch (e) { seen.error = first(e); throw e; } }; }
+      catch { /* Electron's own show stays */ }
+      try {
+        n.on("show", () => o.write(stamp() + " first close, Windows: shown"));
+        n.on("failed", (ev, err) => o.write(stamp() + " first close, Windows: failed: " + first(err)));
+      } catch { /* no events: the attempt's line stands alone */ }
+      return n;
+    };
+    if (typeof Real.isSupported === "function") Stand.isSupported = function () {
+      try { const r = Real.isSupported(); seen.supported = String(r); return r; }
+      catch (e) { seen.supported = "threw: " + first(e); throw e; }
+    };
+  }
+  const realApp = o.app;
+  const standApp = realApp ? new Proxy(realApp, { get(t, k) {
+    if (k === "setAppUserModelId" && typeof t.setAppUserModelId === "function") {
+      return id => { t.setAppUserModelId(id); seen.aumid = o.state.aumid = String(id); };
+    }
+    const v = t[k];
+    return typeof v === "function" ? v.bind(t) : v;
+  } }) : realApp;
+  function end(got, err) {
+    try {
+      let outcome;
+      if (err) outcome = "thrown: " + first(err);
+      else if (got) outcome = "shown"; /* plant:trace-shown */
+      else if (o.harness) outcome = "not attempted (harnessLaunch)";
+      else if (seen.error) outcome = "thrown: " + seen.error; /* plant:trace-thrown */
+      else if (seen.supported === "false") outcome = "not supported"; /* plant:trace-unsupported */
+      else if (typeof Real !== "function") outcome = "not attempted (no Notification)";
+      else outcome = "not shown (no reason seen)";
+      const aumid = seen.aumid ? seen.aumid + " (this attempt set it)"
+        : o.state.aumid ? o.state.aumid + " (an earlier first close set it)"
+        : o.defaultAumid + " (Electron's default, unless another toast set one)";
+      o.write(stamp() + " first close: isSupported=" + (seen.supported || "not asked") + " aumid=" + aumid
+        + " harnessLaunch=" + !!o.harness + " outcome=" + outcome);
+    } catch { /* the trace never stands in the close's way */ }
+  }
+  return { electron: { Notification: Stand, app: standApp }, end };
 }
 /* Quit from the tray seals open conversations the way an installer close does, then leaves without asking.
    Where the seal fails, the window comes back and the page is asked, and the process stays. */
@@ -14104,13 +15242,13 @@ function ensureTray() {
   return deskTray;
 }
 /* THE JUMP LIST. Recent catalogs this desk itself loaded most recently, newest first,
-   five at most, files that still exist, and the four tasks: Bring the replies over any window,
+   five at most, files that still exist, and the four tasks: Quick replies,
    New tab, Library, Settings. A file that is now gone drops out. */
 function syncJumpList() {
   try {
     const w = trayWords();
     const tasks = [
-      { title: w.jumpReplies || w.trayReplies || "Bring the replies over any window", args: "--picker" },
+      { title: w.jumpReplies || w.trayReplies || "Quick replies", args: "--picker" },
       { title: w.jumpNewTab || "New tab", args: "--new-tab" },
       { title: w.jumpLibrary || "Library", args: "--library" },
       { title: w.jumpSettings || w.traySettings || "Settings", args: "--settings" },
@@ -14216,7 +15354,7 @@ if (!theOnlyOne || (Array.isArray(process.argv) && process.argv.includes("--upda
   app.quit();
 } else {
   try {
-    const honoured = honourPendingReset({ userData: app.getPath("userData"), holdsLock: true });
+    const honoured = honourPendingReset({ userData: app.getPath("userData"), holdsLock: true, defaultCatalog: defaultCatalogFolder, shares: resetShares });
     if (honoured && honoured.ok) {
       try { setStartWithWindows(false); } catch (err) { /* start with Windows could not be changed */ }
     }
@@ -14253,7 +15391,7 @@ if (!theOnlyOne || (Array.isArray(process.argv) && process.argv.includes("--upda
         try { syncJumpList(); } catch { /* the jump list still stands */ }
         hotkeyReady = true; syncHotkey();
         // Asked for here: powerMonitor is not to be used before the app is ready.
-        require("electron").powerMonitor.on("resume", () => resumeFromSleep(theWindow));
+        require("electron").powerMonitor.on("resume", () => { resumeFromSleep(theWindow); proxyCheckedAt = 0; proxyRecheck(); });
       });
     });
   });
@@ -14270,4 +15408,6 @@ app.on("window-all-closed", () => {
 app.on("will-quit", () => {
   try { if (deskTray && typeof deskTray.destroy === "function") deskTray.destroy(); } catch { /* already gone */ }
   try { globalShortcut.unregisterAll(); } catch { /* none held */ }
+  /* See relaunchAfterReset: the lock goes only now, after before-quit's drain, and only for a reset's relaunch. */
+  if (resetRelaunching) { try { if (typeof app.releaseSingleInstanceLock === "function") app.releaseSingleInstanceLock(); } catch { /* the exit lets it go */ } }
 });

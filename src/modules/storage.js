@@ -305,7 +305,7 @@ function nsDel(name){ lsDel(nsKey(name)); }
 /* THE PERSONAL LAYER ORBITS ITS CATALOG: what a person makes over a catalog is kept under that
    catalog's own id and shows only while it is loaded, and what is made on the empty desk is loose,
    under this build's namespace. LAYER_KEYS is the whole layer; the rest of a namespace is the desk's. */
-const LAYER_KEYS=["Pack","Stats","Days","CatOrder","IntentOrder","IntentsAside","LinksAside","RequestsAside","Exported","LooseId","Shared","SharedOwn","SharedFile","EditionMarks"];
+const LAYER_KEYS=["Pack","Stats","Days","CatOrder","IntentOrder","IntentsAside","LinksAside","RequestsAside","Exported","LooseId","Shared","SharedOwn","SharedFile","EditionMarks","Flags","FlagEnds"];
 function layerNsOf(c){
   const id=c ? String(c.id||"").trim() : "";
   return id ? eNsFor(id) : E_NS;
@@ -326,22 +326,6 @@ function eLayers(){
 function noteLayer(ns){
   const l=eLayers();
   if(l.indexOf(ns)<0){ l.push(ns); lsSet(E_LAYERS,JSON.stringify(l)); }
-}
-/* A DESK FROM BEFORE THE ORBIT kept one layer for every catalog, in this build's namespace. It was
-   made against the catalog loaded when this build first ran, so it moves there, once; with none
-   loaded it stays, loose. The marker sits outside E_KEY_RE, as e~carried does. */
-const E_ORBITED="e~orbited";
-function orbitOldLayer(){
-  if(lsGet(E_ORBITED)!=null) return 0;
-  let moved=0;
-  if(E_LAYER!==E_NS && lyGet("Pack")==null){
-    LAYER_KEYS.forEach(n=>{
-      const v=lsGet(E_NS+n);
-      if(v!=null && lsSet(E_LAYER+n,v)){ lsDel(E_NS+n); moved++; }
-    });
-  }
-  lsSet(E_ORBITED,"1");
-  return moved;
 }
 /* ---- carrying a 1.16.7 desk across. Those keys are these names under "pb", and each value
    is COPIED, never moved: a colleague may still open the 1.x engine on the same file://
@@ -388,7 +372,6 @@ export {
   lySet,
   lyDel,
   eLayers,
-  orbitOldLayer,
   eCarryOldKeys,
   eSaveTrouble,
   eDeskTake,

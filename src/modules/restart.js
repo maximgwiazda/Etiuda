@@ -29,6 +29,7 @@ import { initTabs, drawPills } from "./tabs.js";
 import { syncSampleMark } from "./catalog-file.js";
 import { paintCatNow, paintCatWaiting } from "./catalog-offer.js";
 import { forgetEditionMarks } from "./edition-marks.js";
+import { forgetFlagOffered } from "./card-flag-desk.js";
 import { syncRoleWheel } from "./agent.js";
 import { applyPrefs, repaintScreen } from "./settings.js";
 import { focusFirstEntryOnOpen } from "./on-open.js";
@@ -52,6 +53,7 @@ function restartDesk(){
   forgetRowNaturals();
   eForgetRecency();
   forgetEditionMarks();
+  forgetFlagOffered();
   forgetLookEdits();
   rearmTrustRecheck();
   putLang(lsGet("eLang") || uiLang());
