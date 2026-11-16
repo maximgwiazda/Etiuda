@@ -14,7 +14,7 @@ import { _svg } from "./icons.js";
 import { t, toast } from "./ui-lang.js";
 import { cutLeaves, dismissNode } from "./motion.js";
 
-const ICON_REWORD=_svg("ic",'<path d="M3 6h8M3 10h6M3 14h4"/><path d="M15 3l.8 2.2L18 6l-2.2.8L15 9l-.8-2.2L12 6l2.2-.8z"/><path d="M14 12l.5 1.5 1.5.5-1.5.5-.5 1.5-.5-1.5-1.5-.5 1.5-.5z"/>');
+const ICON_REWORD=_svg("ic",'<path d="M3.5 8h7"/><path d="M3.5 12h13"/><path d="M3.5 16h9"/><path d="M15 2.6c.3 1.9 1 2.6 2.9 2.9-1.9.3-2.6 1-2.9 2.9-.3-1.9-1-2.6-2.9-2.9 1.9-.3 2.6-1 2.9-2.9z"/>');
 /* The three acts the menu offers, by the instruction the shell holds for each (shell/desk-ai.cjs REWORD_ACTS). */
 const RW_ACTS=[["shorter","Shorter"],["friendlier","Friendlier"],["formal","More formal"]];
 /* The host the shell names, asked at most once a second, since every card drawn asks: "" where there is no host, no reword

@@ -36,7 +36,7 @@ const PRIO = E.belowNormal();
 console.log("       this run at " + (PRIO.below ? "below-normal" : "priority " + PRIO.priority) + " priority");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const SHOTS = process.env.CARD_SHOTS || "";
-const EXPECTED = 19;
+const EXPECTED = 20;
 let fails = 0, checks = 0, notRun = 0;
 const check = (ok, what, detail) => {
   checks++;
@@ -214,6 +214,17 @@ try {
       && menu.field === "Or say how, then press Enter" && menu.line === "Sends this card's words to " + HOST + ". The card itself changes only if you approve the result."
       && menu.cancel.join() === "Cancel" && menu.expanded === "true" && before.length === 0,
       "cr2 the menu is the blue bubble above the button, its pointer on it, in the copywriter's words, saying where the words go; opening it sends nothing", { menu, before });
+
+    /* cr2b the designer's icon, drawn as the card's other button icons are */
+    const ICON = '<path d="M3.5 8h7"></path><path d="M3.5 12h13"></path><path d="M3.5 16h9"></path><path d="M15 2.6c.3 1.9 1 2.6 2.9 2.9-1.9.3-2.6 1-2.9 2.9-.3-1.9-1-2.6-2.9-2.9 1.9-.3 2.6-1 2.9-2.9z"></path>';
+    const ic = await p.evaluate(sel => {
+      const one = b => { const s = b.querySelector("svg"), c = getComputedStyle(s), pc = getComputedStyle(s.querySelector("path"));
+        return { inner: s.innerHTML, box: s.getAttribute("viewBox"), cls: s.getAttribute("class"), w: c.width, h: c.height, sw: pc.strokeWidth, stroke: pc.stroke, fill: pc.fill, cap: pc.strokeLinecap }; };
+      return { rw: one(document.querySelector(sel + ' .cacts [data-act="reword"]')), edit: one(document.querySelector(sel + ' .cacts [data-act="edit"]')) };
+    }, cardSel(PLAIN2));
+    check(ic.rw.inner === ICON && ic.rw.box === "0 0 20 20" && ic.rw.cls === ic.edit.cls && ic.rw.w === ic.edit.w && ic.rw.h === ic.edit.h
+      && ic.rw.sw === ic.edit.sw && ic.rw.stroke === ic.edit.stroke && ic.rw.fill === "none" && ic.rw.cap === ic.edit.cap,
+      "cr2b the Reword icon is the designer's four paths in a 20 by 20 box, with the same class, size, stroke width, colour and caps as the Edit button's, no fill", ic);
 
     /* cr3 */
     const body = await raw(p, PLAIN);
