@@ -11425,6 +11425,9 @@ function signinHeldIs(held, provider, sub) {
    in signin.json from its first certificate on, a lapse or a lost seat included). One that never held one may be replaced or signed out. */
 function signinAccountKept(st) {
   const m = st && st.managed;
+  /* Machine policy not answered (MANAGED_WAITING): nothing judges the account held, which waits for the answer, and so do Sign out
+     and another account's sign-in. */
+  if (m && m.waiting === true) return !!st.held; /* plant:kept-waits */
   return !!m && !!m.managed && !m.shared && !!st.held && st.held.seated === true /* plant:kept-seated */
     && !signinPolicyRefuses(st.held); /* plant:kept-policy */
 }

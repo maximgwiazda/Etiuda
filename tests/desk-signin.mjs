@@ -3999,7 +3999,7 @@ if (!PLANTS_OFF) {
   await plantWire("dsp99e", ["  if (!held && s.out) { await signinOutAgain(); return \"\"; } /* plant:renew-out */\n", ""], "signoutOwed");
   await plantWire("dsp99f", ["  return signinOutSend(s.out); /* plant:out-again */", "  return Promise.resolve(false);"], "signoutOwed");
   await plantWire("dsp200", ["    if (out === true) { signinLeave(st, me, true); signinSave(); tellSignin(); } /* plant:switch-leaves */\n", ""], "switchLeaves");
-  await plantWire("dsp201", ["    if (got.ok && signinOutFlight) await signinOutFlight; /* plant:out-before-signin */\n", ""], "switchLeaves");
+  await plantWire("dsp201", ["  const ok = await signinOutSend(me.key);", "  const ok = (signinOutSend(me.key), true);"], "switchUnanswered");
   await plantWire("dsp204", ["    const access = signinAccessFor(p, managed, null); /* plant:access-not-held */", "    const access = managed || (st.held && st.held.provider === p.id) ? signinAccessFor(p, managed, st.held) : \"\";"], "accessNotHeld");
   await plant("dsp205", ["  if (settled.cert) settled.seated = true; /* plant:seated-settle */", "  /* plant:seated-settle */"], "seatedKept");
   await plant("dsp206", ["  if (out.held && (h.seated === true || out.held.cert)) out.held.seated = true; /* plant:seated-file */", "  if (out.held && out.held.cert) out.held.seated = true; /* plant:seated-file */"], "seatedKept");

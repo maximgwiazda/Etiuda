@@ -28,7 +28,7 @@ const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const SIGNIN = fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8");
 const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const CHECKS = 29, PLANTS = 41;
+const CHECKS = 30, PLANTS = 42;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -58,10 +58,11 @@ try {
     fnOf("function signinNonce("), lineOf("function signinB64url("), fnOf("function signinSame("), fnOf("function signinAuthorize("),
     fnOf("function signinPageOk("), fnOf("function signinRefusedWhy("), fnOf("function signinClaims("), fnOf("function signinIssuerOk("),
     fnOf("function signinTokens("), fnOf("function signinLanding("), lineOf("const SIGNIN_LOST ="), fnOf("function signinPolicyRefuses("), fnOf("function signinAccountKept("), fnOf("function signinOtherHeld("),
+    MAIN.slice(once(MAIN, "\nconst MANAGED_WAITING =") + 1, MAIN.indexOf("});", once(MAIN, "\nconst MANAGED_WAITING =")) + 3),
     lineOf("function buyManaged(")].join("\n");
 } catch (e) { sliced = e.message; }
 const NAMES = ["managedPolicyFrom", "policyValues", "signinPinTable", "signinPinOk", "signinOffered", "signinAuthorize", "signinPageOk",
-  "signinRefusedWhy", "signinTokens", "signinLanding", "signinOtherHeld", "signinAccountKept", "SIGNIN_LOST", "buyManaged"];
+  "signinRefusedWhy", "signinTokens", "signinLanding", "signinOtherHeld", "signinAccountKept", "MANAGED_WAITING", "SIGNIN_LOST", "buyManaged"];
 /* The slice evaluated, `swap` [from, to] put in place of the one line holding `from`; `kept` stands for signinKept. */
 function shellOf(swap) {
   let text = SHELL;
@@ -208,6 +209,19 @@ CASES.keptSeated = s => {
 /* mm-s10 (review 2026-11-16 09, finding 1; Claude alpha's decision): a kept account that machine policy as it stands refuses is kept
    no more: a tenant pinned, or changed, after it signed in, and Managed set over a personal account; the same tenant pinned, personal
    accounts allowed, or an account whose organisation was not kept (signed in before it was), is kept as before. */
+/* mm-s11 (the account switch meeting the managed floor; the test architect's criterion): while machine policy has not answered,
+   nothing judges the account held against it. A managed, unshared computer with a seated account (its organisation kept, and the
+   table closed as the shell pins it while the read fails): the account waits, kept from Sign out and from another account, as an
+   account never seated does; the read answering keeps it where the answer allows it and releases it where the answer refuses it. */
+CASES.waits = s => {
+  const held = { provider: "microsoft", sub: "sealed:s-1", seated: true, org: { tid: TENANT, hd: "" } };
+  const judged = (managed, h) => { s.setTable(s.signinPinTable(filled(s), managed)); const st = { managed, held: h };
+    const r = [s.signinAccountKept(st), s.signinOtherHeld(st, "s-2")].join(); s.setTable(s.table()); return r; };
+  const W = Object.assign({}, s.MANAGED_WAITING);
+  return W.waiting === true && judged(W, held) === "true,true" && judged(W, Object.assign({}, held, { seated: false })) === "true,true"
+    && judged(W, null) === "false,false" && judged(pol(s, { Managed: 1, SigninTenant: TENANT }), held) === "true,true"
+    && judged(pol(s, { Managed: 1, SigninTenant: OTHER }), held) === "false,false";
+};
 CASES.policyRefuses = s => {
   const at = (vals, org) => { pinned(s, vals); const st = { managed: pol(s, vals), held: Object.assign({ provider: "microsoft", sub: "sealed:s-1", seated: true }, org ? { org } : {}) };
     const r = [s.signinAccountKept(st), s.signinOtherHeld(st, "s-2")]; s.setTable(s.table()); return r.join(); };
@@ -449,13 +463,14 @@ const LIST = [
   ["mm-s7", "keeps", "a managed, unshared computer refuses another account's sign-in and lets the same through"],
   ["mm-s9", "keptSeated", "review 2026-11-16 finding 2: a managed, unshared computer keeps an account only once it has held a seat here, a lost seat included; one given none may be replaced and signed out of"],
   ["mm-s10", "policyRefuses", "review 09 finding 1: a kept account machine policy now refuses (a tenant pinned or changed after it signed in, Managed over a personal account, another provider pinned) is kept no more; one the policy allows, or whose organisation was not kept, is"],
+  ["mm-s11", "waits", "the switch meeting the managed floor: while machine policy has not answered, the account held is neither refused nor released, Sign out and another account wait; the read answering keeps it, or releases it where the answer refuses it"],
   ["mm-s8", "buy", "Buy names no address under Managed, and does with a pin alone"],
   ["mm-p1", "pageUnset", "unset, Account and the panel are byte for byte the same with no policy and with all six off, English and Polish"],
   ["mm1", "m1", "M1: managed and not assigned, Account and the panel say the refusal and whom to ask, and nothing to buy, try or switch"],
   ["mm2", "m2", "M2: managed against unmanaged, the reachable acts differ only by account acts"],
   ["mm3", "m3", "M3: with AllowPersonalAccounts unset no act leads to a personal account or a trial; set, a personal sign-in is offered and no trial"],
   ["mm-p2", "managedSeat", "a managed seat: who decides and when it was checked, the sign-in locked to its provider, no other account or sign out unless shared"],
-  ["mm-p8", "keepsNone", "finding 2: where the shell says the computer keeps no account, Account offers another account and Sign out; otherwise neither, as before"],
+  ["mm-p9", "keepsNone", "finding 2: where the shell says the computer keeps no account, Account offers another account and Sign out; otherwise neither, as before"],
   ["mm-p3", "noRole", "no seat on a managed computer: the no-role words, nothing to try, buy or switch, no code"],
   ["mm-p4", "unmanagedRefused", "unmanaged, an account not assigned is told as the organisation's refusal, another account offered"],
   ["mm-p5", "catalogBothWays", "that the desk works on with its catalog is said only where it holds one, English and Polish, with or without SupportContact"],
@@ -511,11 +526,12 @@ if (!PLANTS_OFF && S) {
   await plantShell("mmp17", ["if (/\\bAADSTS50105\\b/.test(String(said || \"\"))) return \"signin-notassigned\"; /* plant:not-assigned */", ""], "reasons");
   await plantShell("mmp18", ["if (managed === true) return \"appfail\"; /* plant:land-managed */", ""], "reasons");
   await plantShell("mmp19", ["if (!signinAccountKept(st) || !st.held.sub) return false; /* plant:other-held */", "if (!st.held || !st.held.sub) return false;"], "keeps");
-  await plantShell("mmp34", ["return !!m && !!m.managed && !m.shared && !!st.held && st.held.seated === true", "return !!m && !!m.managed && !m.shared && !!st.held"], "keptSeated");
-  await plantPage("mmp35", ["    const keeps=signinKeepsAccount(v);", "    const keeps=signinManaged(v) && !v.managed.shared;"], "keepsNone", "settings");
-  await plantShell("mmp36", ["    && !signinPolicyRefuses(st.held); /* plant:kept-policy */", "    ;"], "policyRefuses");
-  await plantShell("mmp37", ["return !known || !signinPinOk(known.pin, held.org); /* plant:policy-refuses */", "return !known;"], "policyRefuses");
+  await plantShell("mmp38", ["return !!m && !!m.managed && !m.shared && !!st.held && st.held.seated === true", "return !!m && !!m.managed && !m.shared && !!st.held"], "keptSeated");
+  await plantPage("mmp39", ["    const keeps=signinKeepsAccount(v);", "    const keeps=signinManaged(v) && !v.managed.shared;"], "keepsNone", "settings");
+  await plantShell("mmp40", ["    && !signinPolicyRefuses(st.held); /* plant:kept-policy */", "    ;"], "policyRefuses");
+  await plantShell("mmp41", ["return !known || !signinPinOk(known.pin, held.org); /* plant:policy-refuses */", "return !known;"], "policyRefuses");
 
+  await plantShell("mmp42", ["  if (m && m.waiting === true) return !!st.held; /* plant:kept-waits */", "  /* plant:kept-waits */"], "waits");
   await plantShell("mmp20", ["return !!was && !signinSame(was, String(sub)); /* plant:other-same */", "return !signinSame(was, String(sub));"], "keeps");
   plantText("mmp21", ["  if (signinAccountKept(s)) return signinView(); /* plant:out-managed */", ""], wiringHolds);
   await plantPage("mmp22", ["  const rows=[name], buy=buyOffered() && !v.busy && !signinManaged(v) /* plant:buy-page-managed */", "  const rows=[name], buy=buyOffered() && !v.busy"], "m1", "settings");
