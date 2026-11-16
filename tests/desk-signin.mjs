@@ -161,8 +161,13 @@ const PAST_ANSWERS = [
    unset gives each of them without it, an answer of today and not a past one. */
 const UNREVOKED = ANSWER_CASES.filter(c => c.route === "signin/desk" && c.body && c.body.revoked !== undefined)
   .map(c => { const body = Object.assign({}, c.body); delete body.revoked; return { status: c.status, body }; });
+/* The store offered (the held line's "storeOffer": true, the store gate): each seating answer as the service gives it, and as it gave it
+   before, with the field beside it. Studio's service gives it when its half lands with the integration; until its record here holds it,
+   these are its shapes. */
+const OFFERED = ANSWER_CASES.filter(c => c.route === "signin/desk" && c.status === 200 && c.body && c.body.ok === true).concat(PAST_ANSWERS.filter(p => p.status === 200), UNREVOKED.filter(p => p.status === 200))
+  .map(c => ({ status: 200, body: Object.assign({}, c.body, { storeOffer: true }) })); /* plant:offered-record */
 const SERVED = new Set(ANSWER_CASES.filter(c => c.route === "signin/desk").map(c => answerSig(c.status, c.body))
-  .concat(PAST_ANSWERS.concat(UNREVOKED).map(p => answerSig(p.status, p.body))));
+  .concat(PAST_ANSWERS.concat(UNREVOKED, OFFERED).map(p => answerSig(p.status, p.body))));
 /* The observer: while the legs run (and not their plants), each answer the section read, with what it read. */
 const ANSWERS_READ = [];
 let answersWatched = true;
@@ -372,11 +377,11 @@ CASES.managedRead = s => {
 /* The store offered: "storeOffer": true beside a seating answer is the one offer; absent, null, "true", 1 or false is none. A seating answer
    says it afresh (a renewal without it ends it); one that does not reach leaves it as it was; it is kept in signin.json. */
 CASES.storeOffer = s => {
-  /* The field is the held line's, not yet in the record of the service's answers: handed as stray on purpose. */
-  const a = (o, st) => s.signinAnswer(strayAnswer(o, st), DESK_KEY);
+  /* The offer as the service gives it, a known field (OFFERED); a value no service gives is handed as stray, on purpose. */
+  const a = (o, st) => s.signinAnswer(answer(o, st), DESK_KEY), stray = (o, st) => s.signinAnswer(strayAnswer(o, st), DESK_KEY);
   const base = { ok: true, certificate: cert(), code: CODE, doors: [] };
-  const yes = a(Object.assign({ storeOffer: true }, base)), none = a(Object.assign({ storeOffer: true }, base, { certificate: null }));
-  const not = [undefined, null, "true", 1, false, {}].map(v => a(Object.assign(v === undefined ? {} : { storeOffer: v }, base)).storeOffer);
+  const yes = a(Object.assign({ storeOffer: true }, base)), none = a({ ok: true, certificate: null, code: CODE, storeOffer: true });
+  const not = [null, "true", 1, false, {}].map(v => stray(Object.assign({ storeOffer: v }, base)).storeOffer).concat([a(base).storeOffer]);
   const held = { provider: "microsoft", refresh: "sealed:rt", sub: "sealed:s", seed: "6".repeat(64), code: CODE, cert: null, at: 1, checked: 1, reached: true, said: "", ask: false };
   const h1 = s.signinSettle(held, yes, NOW), h2 = s.signinSettle(h1, { ok: false, reason: "unreached" }, NOW), h3 = s.signinSettle(h2, a(base), NOW);
   return yes.storeOffer === true && none.storeOffer === true && not.every(v => v === false) && h1.storeOffer === true && h2.storeOffer === true && h3.storeOffer === false;
