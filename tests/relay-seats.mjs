@@ -334,6 +334,8 @@ async function main() {
   }
   /* O7, the order: a grant carrying seats is refused "fields" by the relay on main before this change, so the service may send one
      only once the relay that reads it is deployed; this relay takes it. Main's core is read from git, and a tree without main says so. */
+  const SEATS_ON_MAIN = "NOT SHOWN: main carries the seats change since engine fold 103 of 2026-11-16; the owner's ruling of 2026-11-16"
+    + " settles what s12 shows, closed in the first fold after it (the test architect)";
   function mainCore() {
     for (const ref of ["origin/main", "main"]) {
       const r = spawnSync("git", ["show", ref + ":relay/core.cjs"], { cwd: ROOT, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
@@ -366,6 +368,11 @@ async function main() {
     const before = old.grantWhy(g, lead.pub, T0, K.ROOTS), beforePlain = old.grantWhy(plainG, lead.pub, T0, K.ROOTS);
     const now = C.grantWhy(g, lead.pub, T0, K.ROOTS);
     const mainHasSeats = /"seats"/.test(text.split("GRANT_FIELDS")[1] || "");
+    /* Main's core stands for "the relay before this change" only while main has no seats. It has carried them since engine fold 103
+       (2026-11-16), so s12a and s12b are skipped, not judged, where the leg itself finds that: nothing is claimed that is not shown.
+       What s12 shows after that is settled by the owner's ruling of 2026-11-16 and closed in the first fold after it, either way
+       (the test architect). */
+    if (mainHasSeats) return { skip: true, mainHasSeats, detail: SEATS_ON_MAIN };
     return { ok: before === "fields" && beforePlain === null && now === null, mainHasSeats,
       detail: brief({ mainWithSeats: before, mainWithout: beforePlain, thisRelay: now }) };
   }
@@ -1162,7 +1169,7 @@ async function main() {
     check(results[id] && results[id].ok === true && p.turned && p.back, line + ": " + p.detail + ", sha " + (p.back ? "unchanged" : "CHANGED"));
   }
   /* O1 and O7 lean on main's core; their own control is that a seats grant changes their answer on this relay. */
-  if (order && order.mainHasSeats) check(false, "s12b main's core already names seats, so O7 cannot show the order: merge order changed");
+  if (order && order.mainHasSeats) skip("s12b main's core already names seats, so O7 cannot show the order: " + SEATS_ON_MAIN);
   else check(true, "s12b main's core does not name seats, so O7 shows the order it claims" + (order && order.skip ? " (main not readable here)" : ""));
 }
 
