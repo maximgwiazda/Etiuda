@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 145;
+const EXPECTED = 147;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -1558,9 +1558,11 @@ async function openSetAsideScene(src) {
   await T.storeTurn();
   const a2 = await T.storeAnswerNow("start");
   const f2 = a2 && a2.folder ? a2.folder : "";
+  const root = path.join(UD, "Set aside");
   const r2 = await open(e);
   const p2 = r.shell.openedPaths.slice();
 
+  fs.rmSync(f1, { recursive: true, force: true });
   fs.rmSync(f2, { recursive: true, force: true });
   const rGone = await open(e);
   const created = fs.existsSync(f2);
@@ -1570,7 +1572,7 @@ async function openSetAsideScene(src) {
     && !!f1 && !!f2 && f2 !== f1
     && r1 === true && p1.length === 1 && p1[0] === f1
     && withArg === false && openedAfterArg === 1
-    && r2 === true && p2.length === 2 && p2[1] === f2
+    && r2 === true && p2.length === 2 && p2[1] === root
     && rGone && rGone.ok === false && rGone.why === "gone" && !created && openedAfterGone === 2;
   return { ok, detail: brief({ before, openedBefore, f1: path.basename(f1), f2: path.basename(f2), r1, p1: p1.map(x => path.basename(x)), withArg, openedAfterArg, r2, p2: p2.map(x => path.basename(x)), rGone, created, openedAfterGone }) };
 }
@@ -1679,28 +1681,35 @@ async function answerStartKeptScene(src) {
     && !none.kept && none.dirs === 0 && none.treeBefore && none.storeHome === "whole" && none.alphaHome === true && none.betaHome === true && none.opened === "gone" && none.line === "ask";
   return { ok, detail: brief({ cat, store, none }) };
 }
-/* (x6r) After a restart the button's channel opens the latest answer's folder, not an earlier one nor a newer-named folder the desk
-   did not make; that folder removed, it answers gone; a name in store.json of another shape opens nothing. */
+/* (x6r) After a restart the button's channel opens the desk's folder when it is the only dated one under Set aside, or Set aside
+   itself when more than one dated folder (including a hand-made one beside the desk's) exists; all removed, it answers gone; a name
+   in store.json of another shape is ignored and opens nothing. (Moved from "opens the desk's" to "opens Set aside holding both",
+   because more than one dated folder under Set aside must keep every folder one click away without ever opening a hand-made one.) */
 async function openAfterRestartScene(src) {
   const r = await renewScene(src), T = r.shell.T, w = r.world, UD = r.shell.UD;
   if (typeof T.storeAnswerNow !== "function") return { ok: false, detail: "no storeAnswerNow" };
   const e = { senderFrame: { parent: null, url: "file:///desk/engine/etiuda.html" } };
+  const restart = async () => { const s = boot(src, { ud: UD, world: w, lab: labOf() }); const got = await s.ipc.handle["etiuda:open-set-aside"](e); return { got, paths: s.openedPaths.slice(), aside: s.T.storeState().aside }; };
   const heldA = T.signinState().held;
   T.signinOutNow();
   seatAnother(T, w, heldA);
   await T.storeTurn();
   const a1 = await T.storeAnswerNow("start");
+  if (T.get().storeSyncTimer) clearTimeout(T.get().storeSyncTimer);
+  const f1 = a1 && a1.folder ? a1.folder : "";
+  const onlyOne = await restart();
   T.signinOutNow();
   T.signinState().held = heldA;
   await T.storeTurn();
   const a2 = await T.storeAnswerNow("start");
   if (T.get().storeSyncTimer) clearTimeout(T.get().storeSyncTimer);
-  const f1 = a1 && a1.folder ? a1.folder : "", f2 = a2 && a2.folder ? a2.folder : "";
-  const decoy = path.join(UD, "Set aside", "2099-12-31 23.59");
+  const f2 = a2 && a2.folder ? a2.folder : "", root = path.join(UD, "Set aside");
+  const decoy = path.join(root, "2099-12-31 23.59");
   fs.mkdirSync(decoy, { recursive: true });
-  const restart = async () => { const s = boot(src, { ud: UD, world: w, lab: labOf() }); const got = await s.ipc.handle["etiuda:open-set-aside"](e); return { got, paths: s.openedPaths.slice() }; };
-  const one = await restart();
+  const many = await restart();
+  fs.rmSync(f1, { recursive: true, force: true });
   fs.rmSync(f2, { recursive: true, force: true });
+  fs.rmSync(decoy, { recursive: true, force: true });
   const gone = await restart();
   const elsewhere = path.join(UD, "elsewhere");
   fs.mkdirSync(elsewhere, { recursive: true });
@@ -1708,11 +1717,101 @@ async function openAfterRestartScene(src) {
   fs.writeFileSync(path.join(UD, "store.json"), JSON.stringify(Object.assign({}, st, { aside: "../elsewhere" })));
   const shaped = await restart();
   const name = p => (p ? path.basename(p) : "");
-  const ok = !!f1 && !!f2 && f1 !== f2 && one.got === true && one.paths.length === 1 && one.paths[0] === f2
-    && gone.got && gone.got.ok === false && gone.got.why === "gone" && gone.paths.length === 0 && fs.existsSync(f1) && fs.existsSync(decoy)
-    && shaped.got && shaped.got.ok === false && shaped.got.why === "gone" && shaped.paths.length === 0;
-  return { ok, detail: brief({ f1: name(f1), f2: name(f2), one: { got: one.got, paths: one.paths.map(name) }, gone: { got: gone.got, paths: gone.paths.map(name) },
-    shaped: { got: shaped.got, paths: shaped.paths.map(name) } }) };
+  const ok = !!f1 && !!f2 && f1 !== f2
+    && onlyOne.got === true && onlyOne.paths.length === 1 && onlyOne.paths[0] === f1
+    && many.got === true && many.paths.length === 1 && many.paths[0] === root
+    && gone.got && gone.got.ok === false && gone.got.why === "gone" && gone.paths.length === 0
+    && shaped.got && shaped.got.ok === false && shaped.got.why === "gone" && shaped.paths.length === 0 && shaped.aside === "";
+  return { ok, detail: brief({ f1: name(f1), f2: name(f2), onlyOne: { got: onlyOne.got, paths: onlyOne.paths.map(name) },
+    many: { got: many.got, paths: many.paths.map(name) }, gone: { got: gone.got, paths: gone.paths.map(name) },
+    shaped: { got: shaped.got, paths: shaped.paths.map(name), aside: shaped.aside } }) };
+}
+/* (x6a) Open this folder when more than one set-aside exists: a kept failure then a success opens Set aside itself (both in the same run
+   and after a restart), removing the named folder leaves Set aside opening itself (never the other folder directly), one set-aside opens
+   its own dated folder, a hand-made dated folder beside it opens Set aside itself, and nothing there answers gone. */
+async function openManySetAsidesScene(src) {
+  let failing = false;
+  const inAside = s => String(s).indexOf(path.sep + "Set aside" + path.sep) >= 0;
+  const fsWrap = real => new Proxy(real, {
+    get(target, prop) {
+      if (prop === "renameSync") {
+        return (from, to) => {
+          if (failing && !inAside(from) && /beta\.ec$/i.test(String(from))) throw new Error("disk full");
+          if (failing && inAside(from) && path.basename(String(from)) === "alpha.ec") throw new Error("disk full");
+          return target.renameSync(from, to);
+        };
+      }
+      const v = target[prop];
+      return typeof v === "function" ? v.bind(target) : v;
+    }
+  });
+  const r = await renewScene(src, { boot: { fsWrap } }), T = r.shell.T, w = r.world, UD = r.shell.UD;
+  if (typeof T.storeAnswerNow !== "function") return { ok: false, detail: "no storeAnswerNow" };
+  const e = { senderFrame: { parent: null, url: "file:///desk/engine/etiuda.html" } };
+  const open = r.shell.ipc.handle["etiuda:open-set-aside"];
+  const catDir = T.storeSyncFolder();
+  fs.mkdirSync(catDir, { recursive: true });
+  fs.writeFileSync(path.join(catDir, "alpha.ec"), Buffer.from("ALPHA_MANY\n"));
+  fs.writeFileSync(path.join(catDir, "beta.ec"), Buffer.from("BETA_MANY\n"));
+  const syncA = T.get().storeSyncing;
+  if (syncA) { syncA.merge(); const c = syncA.channel(); if (c) { c.kick(); await c.idle(); } }
+  const heldA = T.signinState().held;
+  T.signinOutNow();
+  seatAnother(T, w, heldA);
+  await T.storeTurn();
+  failing = true;
+  const a1 = await T.storeAnswerNow("start");
+  failing = false;
+  const f1 = a1 && a1.folder ? a1.folder : "";
+  const afterKept = await open(e);
+  const pAfterKept = r.shell.openedPaths.slice(-1)[0] || "";
+  const a2 = await T.storeAnswerNow("start");
+  if (T.get().storeSyncTimer) clearTimeout(T.get().storeSyncTimer);
+  const f2 = a2 && a2.folder ? a2.folder : "", root = path.join(UD, "Set aside");
+  const twoNow = await open(e);
+  const pTwoNow = r.shell.openedPaths.slice(-1)[0] || "";
+  const restart = async () => { const s = boot(src, { ud: UD, world: w, lab: labOf() }); const got = await s.ipc.handle["etiuda:open-set-aside"](e); return { got, paths: s.openedPaths.slice() }; };
+  const twoRestart = await restart();
+  fs.rmSync(f2, { recursive: true, force: true });
+  const namedGoneOtherLeft = await restart();
+
+  const rc = await renewScene(src), Tc = rc.shell.T, wc = rc.world, UDc = rc.shell.UD;
+  const restartC = async () => { const s = boot(src, { ud: UDc, world: wc, lab: labOf() }); const got = await s.ipc.handle["etiuda:open-set-aside"](e); return { got, paths: s.openedPaths.slice() }; };
+  const heldC = Tc.signinState().held;
+  Tc.signinOutNow();
+  seatAnother(Tc, wc, heldC);
+  await Tc.storeTurn();
+  const ac = await Tc.storeAnswerNow("start");
+  if (Tc.get().storeSyncTimer) clearTimeout(Tc.get().storeSyncTimer);
+  const fc = ac && ac.folder ? ac.folder : "", rootC = path.join(UDc, "Set aside");
+  const oneControlNow = await rc.shell.ipc.handle["etiuda:open-set-aside"](e);
+  const pOneControlNow = rc.shell.openedPaths.slice(-1)[0] || "";
+  const oneControlRestart = await restartC();
+  const handMade = path.join(rootC, "2099-12-31 23.59");
+  fs.mkdirSync(handMade, { recursive: true });
+  const withHandMade = await restartC();
+  fs.rmSync(fc, { recursive: true, force: true });
+  fs.rmSync(handMade, { recursive: true, force: true });
+  const emptyDir = await restartC();
+  fs.rmSync(rootC, { recursive: true, force: true });
+  const noRoot = await restartC();
+
+  const name = p => (p ? path.basename(p) : "");
+  const ok = !!a1 && a1.ok === false && a1.kept === true && !!f1
+    && !!a2 && a2.ok === true && !!f2 && f2 !== f1
+    && afterKept === true && pAfterKept === f1
+    && twoNow === true && pTwoNow === root
+    && twoRestart.got === true && twoRestart.paths.length === 1 && twoRestart.paths[0] === root
+    && namedGoneOtherLeft.got === true && namedGoneOtherLeft.paths.length === 1 && namedGoneOtherLeft.paths[0] === root
+    && !!fc && oneControlNow === true && pOneControlNow === fc
+    && oneControlRestart.got === true && oneControlRestart.paths.length === 1 && oneControlRestart.paths[0] === fc
+    && withHandMade.got === true && withHandMade.paths.length === 1 && withHandMade.paths[0] === rootC
+    && emptyDir.got && emptyDir.got.ok === false && emptyDir.got.why === "gone" && emptyDir.paths.length === 0
+    && noRoot.got && noRoot.got.ok === false && noRoot.got.why === "gone" && noRoot.paths.length === 0;
+  return { ok, detail: brief({ f1: name(f1), f2: name(f2), pAfterKept: name(pAfterKept), pTwoNow: name(pTwoNow),
+    twoRestart: twoRestart.paths.map(name), namedGoneOtherLeft: namedGoneOtherLeft.paths.map(name),
+    fc: name(fc), pOneControlNow: name(pOneControlNow), oneControlRestart: oneControlRestart.paths.map(name),
+    withHandMade: withHandMade.paths.map(name), emptyDir: emptyDir.got, noRoot: noRoot.got }) };
 }
 
 const LEGS = [
@@ -1775,10 +1874,11 @@ const LEGS = [
   ["x6n", answerNotNowScene, "Not now leaves store.json and the hold unchanged, suppresses auto-ask in this run, and asks again on a new run"],
   ["x6f", answerStartRollbackScene, "a failure halfway during set-aside puts back everything moved, leaves no half-made folder, keeps the hold and says so"],
   ["x6w", answerNeighboursScene, "after an answer lifts the hold, A's keys, owed leave, owed store/end and folder token still never reach B"],
-  ["x6o", openSetAsideScene, "opening the set-aside folder uses its no-arg IPC channel, opens only the newest Start from my account folder, refuses page args, and opens/creates nothing when gone"],
+  ["x6o", openSetAsideScene, "opening the set-aside folder uses its no-arg IPC channel, opens the dated folder when one exists and Set aside itself when two do, refuses page args, and opens/creates nothing when gone"],
   ["x6p", answerStartBusyRenameScene, "set-aside moves whose first rename fails busy retry via renamePatiently and succeed"],
   ["x6k", answerStartKeptScene, "a set-aside whose later step fails and whose move back of the catalog, or of the store folder, fails keeps that whole in the set-aside folder, which stays, the log names it, the answer carries it and the button opens it; where every move back succeeds the folder goes"],
-  ["x6r", openAfterRestartScene, "after a restart the button's channel opens the latest answer's set-aside folder, never an earlier one or a newer-named folder the desk did not make; that folder removed it answers gone, and a name of another shape in store.json opens nothing"],
+  ["x6r", openAfterRestartScene, "after a restart the button's channel opens the desk's single dated folder, or Set aside itself when a second or hand-made dated folder is beside it; all removed it answers gone, and a name of another shape in store.json is ignored"],
+  ["x6a", openManySetAsidesScene, "with two set-asides (a kept failure then a success) or with the named folder removed and another dated folder left or with a hand-made dated folder beside the desk's, Open this folder opens Set aside itself before and after a restart; with one set-aside it opens that folder; with none it answers gone"],
 ];
 const results = {};
 const scenes = Object.fromEntries(LEGS.map(([id, scene]) => [id, scene]));
@@ -1874,12 +1974,13 @@ const PLANTS = [
   ["x6f", swap("  if (movedStore) storeMoveFile(movedStore.to, movedStore.from); /* plant:answer-aside-rollback */", "  /* plant:answer-aside-rollback */"), "a failure during set-aside does not put userData/store back"],
   ["x6w", swap("  s.keys = \"\"; s.leave = \"\"; s.owed = \"\"; s.made = \"\"; /* plant:answer-mine-keys */", "  /* plant:answer-mine-keys */"), "answering the hold leaves the earlier account's keys, leave and owed end"],
   ["x6o", swap("  if (args.length) return false; /* plant:open-aside-no-args */", "  if (false) return false; /* plant:open-aside-no-args */"), "the channel accepts a path argument handed by the page"],
-  ["x6o", swap("  if (!folder || !isDir) return { ok: false, why: \"gone\" }; /* plant:open-aside-gone */", "  if (!folder) return { ok: false, why: \"gone\" }; /* plant:open-aside-gone */"), "a gone set-aside folder still calls shell.openPath"],
+  ["x6o", swap("  if (!folder || !isDir) return { ok: false, why: \"gone\" }; /* plant:open-aside-gone */", "  /* plant:open-aside-gone */"), "a gone set-aside folder still calls shell.openPath"],
   ["x6p", swap("  try { renamePatiently(from, to); } /* plant:aside-move-patient */", "  try { fs.renameSync(from, to); } /* plant:aside-move-patient */"), "storeMoveFile uses a bare fs.renameSync instead of renamePatiently"],
   ["x6p", swap("    if (fs.existsSync(sDir)) { renamePatiently(sDir, sDest); movedStore = { from: sDir, to: sDest }; } /* plant:aside-store-patient */", "    if (fs.existsSync(sDir)) { fs.renameSync(sDir, sDest); movedStore = { from: sDir, to: sDest }; } /* plant:aside-store-patient */"), "storeSetAside moves userData/store with a bare fs.renameSync"],
   ["x6k", swap("    if (aside && back) { try { fs.rmSync(aside, { recursive: true, force: true }); } catch {} } /* plant:aside-kept */", "    if (aside) { try { fs.rmSync(aside, { recursive: true, force: true }); } catch {} } /* plant:aside-kept */"), "the set-aside folder removed whether or not every move back succeeded"],
   ["x6r", swap("    s.aside ? { aside: s.aside } : {}), null, 1)", "    {}), null, 1)"), "the set-aside folder's name not kept in store.json, so a restart forgets it"],
   ["x6r", swap(".test(d.aside) ? d.aside : \"\" }; /* plant:store-aside-name */", ".test(d.aside) || ok && typeof d.aside === \"string\" ? d.aside : \"\" }; /* plant:store-aside-name */"), "any name in store.json read as the set-aside folder's"],
+  ["x6a", swap("  return dated.length === 1 && dated[0] === name ? path.join(root, name) : root; /* plant:open-aside-many */", "  return name ? path.join(root, name) : \"\"; /* plant:open-aside-many */"), "the count taken out, so the latest is always opened"],
 ];
 for (const [id, change, what] of PLANTS) {
   const line = "p " + id + " in a copy of shell/main.js turns " + id + " red (" + what + ")";

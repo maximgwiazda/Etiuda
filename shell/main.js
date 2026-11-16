@@ -11002,6 +11002,7 @@ function StoreLib() { return storeLayer || (storeLayer = require(path.join(__dir
    the keys of the store This computer has not yet left (storeLeaveNow), sealed as `keys`; `org` where the organisation refused the folder
    (storeUngiven); `aside` the name of the folder the latest Start from my account made under Set aside (storeAsideFolder). */
 const STORE_FILE = "store.json";
+const STORE_ASIDE_RE = /^\d{4}-\d{2}-\d{2} \d{2}\.\d{2}(?: \(\d{1,6}\))?$/;
 function storeFileRead(text) {
   let d = null;
   try { d = JSON.parse(String(text)); } catch { d = null; }
@@ -11011,7 +11012,7 @@ function storeFileRead(text) {
     leave: ok && typeof d.leave === "string" ? d.leave.slice(0, 200000) : "", who: ok && typeof d.who === "string" && /^[0-9a-f]{32}$/.test(d.who) ? d.who : "",
     made: ok && typeof d.made === "string" && /^[0-9a-f]{32}$/.test(d.made) ? d.made : "", last: ok && typeof d.last === "string" && /^[0-9a-f]{32}$/.test(d.last) ? d.last : "",
     ask: ok && typeof d.ask === "string" && /^[0-9a-f]{32}$/.test(d.ask) ? d.ask : "",
-    aside: ok && typeof d.aside === "string" && /^\d{4}-\d{2}-\d{2} \d{2}\.\d{2}(?: \(\d{1,6}\))?$/.test(d.aside) ? d.aside : "" }; /* plant:store-aside-name */
+    aside: ok && typeof d.aside === "string" && STORE_ASIDE_RE.test(d.aside) ? d.aside : "" }; /* plant:store-aside-name */
 }
 function storeFileText(s) {
   return JSON.stringify(Object.assign({ format: 1, keys: s.keys || "", said: s.said || "" }, s.off === true ? { off: true } : {}, s.told === true ? { told: true } : {},
@@ -11427,11 +11428,20 @@ ipcMain.handle("etiuda:open-set-aside", (e, ...args) => {
 });
 ipcMain.on("etiuda:store-said", (e) => { e.returnValue = null; if (fromEngine(e)) storeSay = ""; });
 
-/* The latest set-aside's folder, by the name store.json keeps, only ever of the shape storeSetAsideDir makes and under its root, so it
-   cannot be a folder this desk did not make; "" where none. */
+/* The folder "Open this folder" opens: the dated folder store.json names when it exists and is the only folder of that shape under
+   Set aside; Set aside itself whenever any folder of that shape is there (two or more, or one other than the named one); "" where
+   none. A folder this desk did not make is never opened directly, only shown inside Set aside. */
 function storeAsideFolder() {
+  const root = path.join(app.getPath("userData"), "Set aside");
+  let entries = [];
+  try { entries = fs.readdirSync(root); } catch { return ""; }
+  const dated = entries.filter(n => {
+    if (!STORE_ASIDE_RE.test(n)) return false;
+    try { return fs.statSync(path.join(root, n)).isDirectory(); } catch { return false; }
+  });
+  if (!dated.length) return "";
   const name = storeState().aside;
-  return name ? path.join(app.getPath("userData"), "Set aside", name) : "";
+  return dated.length === 1 && dated[0] === name ? path.join(root, name) : root; /* plant:open-aside-many */
 }
 async function storeOpenSetAside() {
   const folder = storeAsideFolder();
