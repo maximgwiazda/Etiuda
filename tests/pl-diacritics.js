@@ -172,6 +172,9 @@ const ALLOWED_IN = [
     within: "Wynik nadszedł pusty, więc nie został pokazany. Karta pozostała bez zmian; kolejna próba może się udać." },
   { fold: "kolejna", since: "2026-11-16",
     within: "Jeden z wariantów karty wrócił bez treści, więc wynik nie został pokazany. Karta pozostała bez zmian; kolejna próba może się udać." },
+  /* 2026-11-16. The copywriter's outbox-unreadable line says "zwykle mija" and "zwykle pomaga", "usually", not "zwykłe". */
+  { fold: "zwykle", since: "2026-11-16",
+    within: "Aktualizacje od zespołu są na tym komputerze wstrzymane, bo Etiuda nie może odczytać własnego zapisu zmian jeszcze niewysłanych do zespołu. Żadna zmiana wprowadzona na tym komputerze nie ginie, a zwykle mija to samo. Jeśli nie minie, zwykle pomaga zamknięcie innych programów albo ponowne uruchomienie komputera." },
 ];
 function allowedAt(line, k, at) {
   return ALLOWED_IN.some(a => {

@@ -35,7 +35,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 160;
+const EXPECTED = 166;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const { offWindows } = nodeRequire("./off-windows.cjs");
@@ -4258,6 +4258,283 @@ async function run() {
       return dr1Kept(r) && dr1Faulted(r) && r.row === "" && !r.named;
     });
     check(h.ok, "dr1h lifting plant:own-fault-row leaves the fault off this desk's row: " + JSON.stringify(h));
+  }
+
+  /* ou1 to ou6 (outbox unreadable past the bound, Library): while the outbox cannot be read for longer than
+     OUTBOX_UNREAD_BOUND_MS, the Library shows the copywriter's line in place of the waiting-edits line (whether or not
+     this desk has a file of its own, and winning over taken-back); before the bound nothing shows; after a good read
+     the line is gone and the waiting-edits line is back where it applies; a damaged outbox stays log-only. */
+  const OU_EN = "Updates from the team are paused on this computer, because Etiuda cannot read its own note of the edits not yet sent to the team. No edit made here is lost, and this usually passes by itself. If it does not, closing other programs or restarting the computer usually clears it.";
+  const OU_PL = "Aktualizacje od zespołu są na tym komputerze wstrzymane, bo Etiuda nie może odczytać własnego zapisu zmian jeszcze niewysłanych do zespołu. Żadna zmiana wprowadzona na tym komputerze nie ginie, a zwykle mija to samo. Jeśli nie minie, zwykle pomaga zamknięcie innych programów albo ponowne uruchomienie komputera.";
+  const OU_KEPT_EN = "Your edits are kept on this computer and go to the team as soon as it can take them. To hand them over now, Export saves them in a catalog file for the team's lead.";
+  const OU_KEPT_PL = "Własne zmiany są zachowane na tym komputerze i trafią do zespołu, gdy tylko będzie mógł je przyjąć. Aby przekazać je od razu, Eksportuj zapisze je w pliku katalogu dla lidera zespołu.";
+  const OU_BOUND_MS = 3 * 60 * 1000;
+  const decodeHtml = s => String(s || "").replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  async function paintLibraryHtml(d, lang, opts = {}) {
+    pageDoc();
+    const box = globalThis.document.createElement("div");
+    box.id = "mgCatList";
+    globalThis.document.body.appendChild(box);
+    box.isConnected = true;
+    globalThis.window.E_HOST = {
+      catalogFiles: () => (opts.rows ? Promise.resolve(opts.rows) : d.invoke["etiuda:catalog-files"](eventFor())),
+      branchIdentity: make => d.api.branchIdentity(make),
+      writeBranch: (st, text) => d.api.writeBranch(st, text),
+      catalogLeads: () => [],
+    };
+    const kit = await pageKitOnce();
+    const offMod = opts.offMod || kit.OFF;
+    const stMod = opts.stMod || kit.ST;
+    const prevLang = stMod.lsGet("eUiLang");
+    const prevCat = stMod.lsGet("eCatalog");
+    const prevFile = stMod.nsGet("CatalogFile");
+    try {
+      stMod.lsSet("eUiLang", lang);
+      if (opts.loaded) {
+        stMod.lsSet("eCatalog", CAT_A1);
+        stMod.nsSet("CatalogFile", "lamp-shop.ec");
+      } else {
+        stMod.lsDel("eCatalog");
+        stMod.nsDel("CatalogFile");
+      }
+      box.innerHTML = "pending";
+      offMod.paintCatalogList();
+      const until = Date.now() + 3000;
+      while (Date.now() < until && box.innerHTML === "pending") await sleep(15);
+      const html = String(box.innerHTML || "");
+      return { html, text: decodeHtml(box.textContent || "") };
+    } finally {
+      if (prevLang == null) stMod.lsDel("eUiLang"); else stMod.lsSet("eUiLang", prevLang);
+      if (prevCat == null) stMod.lsDel("eCatalog"); else stMod.lsSet("eCatalog", prevCat);
+      if (prevFile == null) stMod.nsDel("CatalogFile"); else stMod.nsSet("CatalogFile", prevFile);
+      delete globalThis.window.E_HOST;
+    }
+  }
+  async function outboxUnreadScene(name, o = {}) {
+    const share = folder(name + "-share");
+    const { ud, mirror } = teamDesk(name + "-desk", share);
+    const d = loadDesk(ud, o.src ? { src: o.src } : {});
+    const me = d.api.branchIdentity(true);
+    enrol(d, me, [mirror, share]);
+    const tail = "8a8b8c8d", stem = "cat-" + name + "-" + tail, rel = "desks/" + me.id + "/" + stem + ".ec";
+    const outboxPath = path.join(mirror, ".outbox.json");
+    let now = 1e12;
+    const origNow = Date.now;
+    const nodeFs = nodeRequire("node:fs");
+    const origRead = nodeFs.readFileSync;
+    let refuse = false;
+    Date.now = () => now;
+    let s = null, prog = null;
+    try {
+      if (o.syncerPath) {
+        const scMod = nodeRequire(o.syncerPath);
+        s = new scMod.FolderSyncerController({
+          team: TEAM, folder: share, mirror, pin: LEAD, keyFor: e => (e === 1 ? K1 : null),
+          checks, own: me.id, logger: () => {}, now: () => now
+        });
+        prog = s.program;
+        d.api.folderSyncerRun = () => s;
+      } else {
+        s = d.api.folderSyncerRun(null);
+        if (s) { s.stop(); prog = s.program; }
+      }
+      if (!prog) return { syncer: false };
+      if (o.withOwn !== false) {
+        d.api.writeBranch(stem, JSON.stringify(branchOf(me, tail)));
+        prog.syncOnce();
+        if (o.withTakenBack) {
+          fs.writeFileSync(outboxPath, JSON.stringify({
+            kind: "etiuda-folder-outbox", v: 1, owe: {}, floors: {}, back: { [rel]: { n: 3, at: now } }
+          }), "utf8");
+          prog.syncOnce();
+        }
+      } else {
+        fs.writeFileSync(outboxPath, JSON.stringify({ kind: "etiuda-folder-outbox", v: 1, owe: {}, floors: {} }), "utf8");
+        prog.syncOnce();
+      }
+      let preTakenOk = true;
+      if (o.withTakenBack) {
+        const preEn = await paintLibraryHtml(d, "en", { loaded: o.loaded !== false });
+        preTakenOk = preEn.text.indexOf(OU_KEPT_EN) >= 0 && preEn.html.indexOf('data-ec-fault="taken-back"') >= 0;
+      }
+      nodeFs.readFileSync = function (p, enc) {
+        if (refuse && typeof p === "string" && path.resolve(p) === path.resolve(outboxPath)) {
+          const e = new Error("EACCES");
+          e.code = "EACCES";
+          throw e;
+        }
+        return origRead.call(nodeFs, p, enc);
+      };
+      refuse = true;
+      prog.syncOnce();
+      now += OU_BOUND_MS;
+      prog.syncOnce();
+      const beforeEn = await paintLibraryHtml(d, "en", { loaded: o.loaded !== false });
+      const beforePl = await paintLibraryHtml(d, "pl", { loaded: o.loaded !== false });
+
+      now += 1;
+      prog.syncOnce();
+      const syncerPast = typeof prog.outboxUnread === "function" ? prog.outboxUnread() === true : false;
+      const rowsPast = d.api.deskRows() || [];
+      const rowPast = o.withOwn !== false
+        ? (rowsPast.filter(r => r && r.id === me.id + "-" + tail)[0] || null)
+        : (rowsPast.filter(r => r && r.fault === "outbox-unread")[0] || null);
+      const listedPast = await d.ask("etiuda:catalog-files");
+      const hitPast = o.withOwn !== false
+        ? (Array.isArray(listedPast) ? listedPast : []).filter(r => r && r.id === me.id + "-" + tail)[0]
+        : (Array.isArray(listedPast) ? listedPast : []).filter(r => r && r.fault === "outbox-unread")[0];
+      const pastEn = await paintLibraryHtml(d, "en", { loaded: o.loaded !== false });
+      const pastPl = await paintLibraryHtml(d, "pl", { loaded: o.loaded !== false });
+
+      refuse = false;
+      prog.syncOnce();
+      const rowsAfter = d.api.deskRows() || [];
+      const rowAfter = o.withOwn !== false
+        ? (rowsAfter.filter(r => r && r.id === me.id + "-" + tail)[0] || null)
+        : null;
+      const afterEn = await paintLibraryHtml(d, "en", { loaded: o.loaded !== false });
+      const afterPl = await paintLibraryHtml(d, "pl", { loaded: o.loaded !== false });
+
+      return {
+        syncer: true,
+        beforeOk: preTakenOk && beforeEn.text.indexOf(OU_EN) < 0 && beforePl.text.indexOf(OU_PL) < 0
+          && beforeEn.html.indexOf('data-ec-fault="outbox-unread"') < 0,
+        syncerSaid: syncerPast,
+        rowFault: rowPast ? String(rowPast.fault || "") : "",
+        listedFault: hitPast ? String(hitPast.fault || "") : "",
+        pastEnOk: pastEn.text.indexOf(OU_EN) >= 0 && pastEn.html.indexOf('data-ec-fault="outbox-unread"') >= 0
+          && pastEn.text.indexOf(OU_KEPT_EN) < 0 && pastEn.html.indexOf('data-ec-fault="taken-back"') < 0,
+        pastPlOk: pastPl.text.indexOf(OU_PL) >= 0 && pastPl.text.indexOf(OU_KEPT_PL) < 0,
+        clearedSyncer: typeof prog.outboxUnread === "function" ? prog.outboxUnread() === false : false,
+        rowAfterFault: rowAfter ? String(rowAfter.fault || "") : "",
+        afterEnOk: afterEn.text.indexOf(OU_EN) < 0 && afterEn.html.indexOf('data-ec-fault="outbox-unread"') < 0
+          && (o.withTakenBack ? (afterEn.text.indexOf(OU_KEPT_EN) >= 0 && afterEn.html.indexOf('data-ec-fault="taken-back"') >= 0)
+            : o.withOwn === false ? afterEn.text.indexOf(OU_KEPT_EN) < 0 : true),
+        afterPlOk: afterPl.text.indexOf(OU_PL) < 0
+          && (o.withTakenBack ? afterPl.text.indexOf(OU_KEPT_PL) >= 0 : o.withOwn === false ? afterPl.text.indexOf(OU_KEPT_PL) < 0 : true),
+      };
+    } finally {
+      nodeFs.readFileSync = origRead;
+      Date.now = origNow;
+      try { if (s) s.stop(); } catch {}
+    }
+  }
+  {
+    const r = await outboxUnreadScene("ou1", { withOwn: true, withTakenBack: true, loaded: true });
+    check(r.syncer && r.beforeOk && r.syncerSaid && r.rowFault === "outbox-unread" && r.listedFault === "outbox-unread"
+      && r.pastEnOk && r.pastPlOk && r.clearedSyncer && r.rowAfterFault === "taken-back" && r.afterEnOk && r.afterPlOk,
+      "ou1 outbox unreadable past bound replaces waiting-edits / taken-back line in Library in EN and PL, stays quiet before bound, and restores on good read: "
+      + JSON.stringify(r));
+  }
+  {
+    const loadedNoOwn = await outboxUnreadScene("ou2a", { withOwn: false, loaded: true });
+    const unloadedNoOwn = await outboxUnreadScene("ou2b", { withOwn: false, loaded: false });
+    check(loadedNoOwn.syncer && loadedNoOwn.beforeOk && loadedNoOwn.pastEnOk && loadedNoOwn.pastPlOk && loadedNoOwn.afterEnOk && loadedNoOwn.afterPlOk
+      && unloadedNoOwn.syncer && unloadedNoOwn.beforeOk && unloadedNoOwn.pastEnOk && unloadedNoOwn.pastPlOk && unloadedNoOwn.afterEnOk && unloadedNoOwn.afterPlOk,
+      "ou2 outbox unreadable past bound shows in Library in EN and PL even with no own file or waiting edits (loaded and unloaded), and clears on good read: "
+      + JSON.stringify({ loadedNoOwn, unloadedNoOwn }));
+  }
+  {
+    const share = folder("ou3-share");
+    const { ud, mirror } = teamDesk("ou3-desk", share);
+    const d = loadDesk(ud);
+    const me = d.api.branchIdentity(true);
+    enrol(d, me, [mirror, share]);
+    const bothPage = await paintLibraryHtml(d, "en", {
+      loaded: true,
+      rows: [
+        { name: "lamp-shop.ec", mtime: 1000, cards: 1, edition: "2026-02-01", macros: 1, intents: 0, cats: 1, awaiting: [], sample: false, id: "lamp-shop", rev: 1, grew: null, sha: "abc", builtIn: false },
+        { name: "cat-own-11223344.ec", mtime: 1000, cards: 0, edition: "", macros: 0, intents: 0, cats: 0, awaiting: [], sample: false, id: me.id + "-11223344", rev: 1, grew: { id: "lamp-shop", rev: 1, sha: "abc" }, sha: "def", reached: false, relay: false, fault: "taken-back", desk: { id: me.id, name: "" } },
+        { name: ".outbox.json", mtime: 0, cards: -1, edition: "", macros: -1, intents: -1, cats: -1, awaiting: [], sample: false, id: "", rev: 0, grew: null, sha: "", reached: false, relay: false, fault: "outbox-unread", desk: { id: me.id, name: "" } },
+      ]
+    });
+    const damagedOutbox = path.join(mirror, ".outbox.json");
+    fs.writeFileSync(damagedOutbox, "{not-valid-json", "utf8");
+    const s = d.api.folderSyncerRun(null);
+    if (s) s.stop();
+    const prog = s && s.program;
+    if (prog) prog.syncOnce();
+    const asideExists = fs.readdirSync(mirror).some(n => n.startsWith(".outbox.json.") && n.endsWith(".aside"));
+    const damagedPage = await paintLibraryHtml(d, "en", { loaded: true });
+    const unreadFalse = !!prog && typeof prog.outboxUnread === "function" && prog.outboxUnread() === false;
+    const bothOk = bothPage.text.indexOf(OU_EN) >= 0 && bothPage.html.indexOf('data-ec-fault="outbox-unread"') >= 0
+      && bothPage.text.indexOf(OU_KEPT_EN) < 0 && bothPage.html.indexOf('data-ec-fault="taken-back"') < 0;
+    const damagedOk = asideExists && unreadFalse && damagedPage.text.indexOf(OU_EN) < 0
+      && damagedPage.html.indexOf('data-ec-fault="outbox-unread"') < 0;
+    check(bothOk && damagedOk,
+      "ou3 outbox-unread wins over taken-back on the page, and a damaged outbox moved aside stays log-only: "
+      + JSON.stringify({ bothOk, asideExists, unreadFalse, damagedOk }));
+  }
+  if (PLANTS_OFF) {
+    skip("ou4 lifting plant:syncer-outbox-unread leaves outboxUnread false past the bound");
+    skip("ou5 lifting plant:own-outbox-unread-row leaves fault off the desk row");
+    skip("ou6 lifting plant:outbox-unread-page leaves the unreadable line off the Library");
+  } else {
+    const pSync = await testPlant("syncer-outbox-unread", syncerFile, async scratch => {
+      const mod = nodeRequire(scratch);
+      const share = folder("ou4-share"), mirror = folder("ou4-mirror");
+      fs.writeFileSync(path.join(share, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+      fs.writeFileSync(path.join(mirror, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+      fs.writeFileSync(path.join(mirror, ".outbox.json"), JSON.stringify({ kind: "etiuda-folder-outbox", v: 1, owe: {}, floors: {} }), "utf8");
+      let now = 1e12, refuse = true;
+      const io = {
+        readdir: p => fs.readdirSync(p), stat: p => fs.statSync(p),
+        readFile: (p, enc) => {
+          if (refuse && path.basename(String(p)) === ".outbox.json") { const e = new Error("EACCES"); e.code = "EACCES"; throw e; }
+          return fs.readFileSync(p, enc);
+        },
+        writeFile: (p, data) => fs.writeFileSync(p, data), unlink: p => fs.unlinkSync(p),
+        mkdir: p => fs.mkdirSync(p, { recursive: true }), exists: p => fs.existsSync(p), rename: (a, b) => fs.renameSync(a, b)
+      };
+      const prog = mod.createFolderProgram({ team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks, io, logger: () => {}, now: () => now });
+      try {
+        prog.syncOnce();
+        now += OU_BOUND_MS + 1;
+        prog.syncOnce();
+        return typeof prog.outboxUnread === "function" && prog.outboxUnread() === false;
+      } finally { prog.stop(); }
+    });
+    check(pSync.ok, "ou4 lifting plant:syncer-outbox-unread leaves outboxUnread false past the bound: " + JSON.stringify(pSync));
+
+    const pRow = await testPlant("own-outbox-unread-row", mainFile, async scratch => {
+      const r = await outboxUnreadScene("ou5", { src: fs.readFileSync(scratch, "utf8"), withOwn: true, loaded: true });
+      return r.syncer && r.syncerSaid && r.rowFault === "" && r.listedFault === "" && r.pastEnOk === false;
+    });
+    check(pRow.ok, "ou5 lifting plant:own-outbox-unread-row leaves fault off the desk row: " + JSON.stringify(pRow));
+
+    const offerFile = path.join(ROOT, "src", "modules", "catalog-offer.js");
+    const offerBefore = fs.readFileSync(offerFile);
+    let pPageOk = false, pPageWhy = "plant:outbox-unread-page absent";
+    const scratchMods = fs.mkdtempSync(path.join(LAB, "plant-page-ou6-"));
+    try {
+      fs.cpSync(path.join(ROOT, "src", "modules"), scratchMods, { recursive: true });
+      const at = path.join(scratchMods, "catalog-offer.js");
+      const lines = fs.readFileSync(at, "utf8").split("\n");
+      const idx = lines.findIndex(l => l.includes("plant:outbox-unread-page"));
+      if (idx >= 0) {
+        lines.splice(idx, 1);
+        fs.writeFileSync(at, lines.join("\n"), "utf8");
+        const offMod = await import(pathToFileURL(at).href);
+        const stMod = await import(pathToFileURL(path.join(scratchMods, "storage.js")).href);
+        const share = folder("ou6-share");
+        const { ud } = teamDesk("ou6-desk", share);
+        const d = loadDesk(ud);
+        const me = d.api.branchIdentity(true);
+        const got = await paintLibraryHtml(d, "en", {
+          loaded: true,
+          offMod,
+          stMod,
+          rows: [
+            { name: "lamp-shop.ec", mtime: 1000, cards: 1, edition: "2026-02-01", macros: 1, intents: 0, cats: 1, awaiting: [], sample: false, id: "lamp-shop", rev: 1, grew: null, sha: "abc", builtIn: false },
+            { name: ".outbox.json", mtime: 0, cards: -1, edition: "", macros: -1, intents: -1, cats: -1, awaiting: [], sample: false, id: "", rev: 0, grew: null, sha: "", reached: false, relay: false, fault: "outbox-unread", desk: { id: me.id, name: "" } },
+          ]
+        });
+        pPageOk = got.text.indexOf(OU_EN) < 0 && got.html.indexOf('data-ec-fault="outbox-unread"') < 0;
+        pPageWhy = JSON.stringify(got);
+      }
+    } catch (e) { pPageWhy = String(e && e.message || e); }
+    check(pPageOk && fs.readFileSync(offerFile).equals(offerBefore),
+      "ou6 lifting plant:outbox-unread-page leaves the unreadable line off the Library: " + pPageWhy);
   }
 
   /* r5: a directory that does not list is not an empty share (review 24, finding 5). The mirror keeps every file it had,

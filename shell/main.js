@@ -9313,6 +9313,19 @@ function mirrorOwed(file) {
   if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return false;
   try { return FolderSyncer().owedAt(mirror, rel.split(path.sep).join("/")); } catch { return false; }
 }
+/* True while the running syncer has been unable to read its outbox for longer than the bound. */
+function outboxUnreadFault(mirror) {
+  let unread = false;
+  if (mirror && folderSyncer) {
+    try {
+      if (path.resolve(folderSyncer.mirror) === path.resolve(mirror)
+          && typeof folderSyncer.outboxUnread === "function" && folderSyncer.outboxUnread()) {
+        unread = true; /* plant:own-outbox-unread-row */
+      }
+    } catch { /* no outbox */ }
+  }
+  return unread;
+}
 function deskRowOf(file, folder) {
   const x = ecFacts(file, folder);
   if (!x || !x.deskOk) return null;
@@ -9333,6 +9346,7 @@ function deskRowOf(file, folder) {
       if (reached && mirrorOwed(file)) reached = false; /* plant:outbox-row-kept */
       const mirror = folderMirrorHere();
       try { if (mirror && FolderSyncer().takenBackList(mirror, "desks/" + folder + "/").length) fault = "taken-back"; } catch { /* no outbox */ } /* plant:own-fault-row */
+      if (mirror && outboxUnreadFault(mirror)) fault = "outbox-unread";
     }
   }
   return { name: path.basename(file), mtime: x.mtime, cards: x.cards, edition: x.edition, macros: x.macros, intents: x.intents, cats: x.cats,
@@ -9341,12 +9355,23 @@ function deskRowOf(file, folder) {
 }
 function deskRows() {
   const root = catalogFolder();
-  if (!folderAnswers(root)) return [];
-  let ids = [];
-  try { ids = fs.readdirSync(path.join(root, "desks")); } catch { return []; }
-  const onTeam = deskRoster();
-  return ids.filter(n => /^k-[0-9a-f]{16}$/.test(n) && onTeam(n)).sort().reduce((out, n) =>
-    out.concat(ecFilesIn(path.join(root, "desks", n)).map(f => deskRowOf(f, n)).filter(Boolean)), []);
+  const mirror = folderMirrorHere();
+  const unread = !!(mirror && outboxUnreadFault(mirror));
+  let out = [];
+  if (folderAnswers(root)) {
+    let ids = [];
+    try { ids = fs.readdirSync(path.join(root, "desks")); } catch { ids = []; }
+    const onTeam = deskRoster();
+    out = ids.filter(n => /^k-[0-9a-f]{16}$/.test(n) && onTeam(n)).sort().reduce((acc, n) =>
+      acc.concat(ecFilesIn(path.join(root, "desks", n)).map(f => deskRowOf(f, n)).filter(Boolean)), []);
+  }
+  if (unread && !out.some(r => r && r.fault === "outbox-unread")) {
+    const me = branchIdentity(false);
+    out.push({ name: ".outbox.json", mtime: 0, cards: -1, edition: "", macros: -1, intents: -1, cats: -1,
+      awaiting: [], sample: false, id: "", builtIn: false, rev: 0, grew: null, sha: "",
+      reached: false, relay: false, fault: "outbox-unread", desk: { id: me ? me.id : "self", name: "" } });
+  }
+  return out;
 }
 /* What a file says it grew from, or null: the three fields and nothing else. */
 function ecGrew(data) {
