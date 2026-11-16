@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 622;
+const EXPECTED = 629;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -7809,6 +7809,138 @@ async function main() {
     check(sha(wire) === WIRE_SHA && forms.length > 200,
       "1013w the relay's wire is as it was: its routes, methods, refusals and their words, socket closes and signed byte forms digest to "
       + WIRE_SHA.slice(0, 12) + ": " + sha(wire).slice(0, 12));
+  }
+
+  /* ---- pg1: "fewer than a full page means there is no more", true of every page since serves (the test architect's criterion,
+     2026-11-16). A row since leaves out, the lead's answer to a join request above all, is read past, so a page holds a full
+     page of items or every item left; the lead's held rows keep their order; and one request reads a stated number of rows at
+     most. The page is a few items here (limits.sinceMax), 1,000 in pg1b. ---- */
+  {
+    const said = r => (r && r.json && r.json.error) || (r && r.status);
+    const listOf = r => (Array.isArray(r && r.json) ? r.json : []);
+    const guard = async f => { try { return await f(); } catch (e) { return { failed: String(e && e.stack || e) }; } };
+    const how = p => p.detail.split("\n")[0] + ", sha " + (p.back ? "unchanged" : "CHANGED");
+    const answerOf = (w, counter) => {
+      const id = hex(16);
+      const b = B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: w.teamKey || (w.teamKey = crypto.randomBytes(32)),
+        writer: { keyId: w.lead.keyId, privateKey: w.lead.privateKey }, path: "join-answer.json", body: "{}", counter, kind: "file", id });
+      b.place = "answer:" + id;
+      return b;
+    };
+    /* The list read as the client built before this change reads it, each page from the last seq the one before listed until a
+       page shorter than `page`; or read on to an empty page. Each row as [seq, id] in the order served. */
+    async function readList(w, token, page, toEmpty) {
+      const out = [];
+      let after = 0, asked = 0;
+      for (let i = 0; i < 400; i++) {
+        const l = listOf(await since(w, token, after));
+        asked++;
+        for (const e of l) out.push([e.seq, e.meta.id]);
+        if (toEmpty ? l.length === 0 : l.length < page) break;
+        after = l[l.length - 1].seq;
+      }
+      return { out, asked };
+    }
+    /* The test architect's scene in small: the lead's answer first, then nine root files, at a page of four. */
+    async function answerScene() {
+      const w = await world({ limits: { sinceMax: 4 } });
+      const lead = await sessionOf(w, w.lead);
+      const ups = [said(await put(w, lead, answerOf(w, 1)))];
+      const files = [];
+      for (let n = 2; n <= 10; n++) { const b = sealAs(w, w.lead, "f" + n + ".ec", n); files.push(b.id); ups.push(said(await put(w, lead, b))); }
+      if (!ups.every(u => u === 200)) throw new Error("the scene was not set: " + JSON.stringify(ups));
+      const present = await readList(w, lead, 4, false);
+      const first = listOf(await since(w, lead, 0)).length;
+      const got = present.out.map(x => x[1]);
+      return { ok: first === 4 && got.length === files.length && files.every(id => got.indexOf(id) >= 0),
+        detail: "first page " + first + " item(s), the present reading lists " + got.length + " of " + files.length + " files in " + present.asked + " request(s)" };
+    }
+    /* The ordinary page: no limits, the answer and 1,001 root rows put into the store as commit leaves them. */
+    async function ordinaryScene() {
+      const w = await world();
+      const lead = await sessionOf(w, w.lead), st = w.R.stores.get(w.rt), now = w.R.clock.now;
+      const pad = n => String(n).padStart(16, "0");
+      let seq = st.get("seq") || 0;
+      const row = (id, extra) => {
+        seq++;
+        st.put("blob:" + id, Object.assign({ id, supersedes: null, epoch: 1, writer: w.lead.keyId, counter: seq, del: false, size: 4096,
+          sig: "ab".repeat(64), nonce: "cd".repeat(12), seq, at: now, obj: w.rt + "/" + id }, extra || {}));
+        st.put("seq:" + pad(seq), id);
+      };
+      const aid = hex(16);
+      row(aid, { place: "answer:" + aid });
+      for (let n = 0; n < 1001; n++) row(hex(16));
+      st.put("seq", seq);
+      const one = listOf(await since(w, lead, 0));
+      const two = one.length ? listOf(await since(w, lead, one[one.length - 1].seq)) : [];
+      const three = two.length ? listOf(await since(w, lead, two[two.length - 1].seq)) : [];
+      return { ok: C.SINCE_MAX === 1000 && one.length === 1000 && two.length === 1 && three.length === 0,
+        detail: "SINCE_MAX " + C.SINCE_MAX + ", pages of " + [one.length, two.length, three.length].join(", ") + " item(s)" };
+    }
+    /* The lead's list with a removed desk's held rows between its own and an answer row, at a page of three, read to an empty page. */
+    async function heldScene() {
+      const w = await world({ limits: { sinceMax: 3 } });
+      const lead = await sessionOf(w, w.lead), desk = await sessionOf(w, w.desk), other = await sessionOf(w, w.other);
+      const ups = [said(await put(w, lead, answerOf(w, 1)))];
+      ups.push(said(await put(w, desk, sealAs(w, w.desk, "desks/" + w.deskId + "/f1.ec", 1))));
+      ups.push(said(await put(w, lead, sealAs(w, w.lead, "a.ec", 2))));
+      ups.push(said(await put(w, desk, sealAs(w, w.desk, "desks/" + w.deskId + "/f2.ec", 2))));
+      ups.push(said(await put(w, lead, sealAs(w, w.lead, "b.ec", 3))));
+      ups.push(said(await put(w, other, sealAs(w, w.other, "desks/" + w.otherId + "/g.ec", 1))));
+      ups.push(said(await put(w, lead, sealAs(w, w.lead, "c.ec", 4))));
+      const off = await devices(w, [w.devs[1]]);
+      if (!ups.every(u => u === 200) || off.status !== 200) throw new Error("the scene was not set: " + JSON.stringify({ ups, off: said(off) }));
+      const read = await readList(w, lead, 3, true);
+      return { read, held: w.R.stores.get(w.rt).list("held:").map(([, h]) => h.seq).sort((a, b) => a - b) };
+    }
+    /* Eight answers in a run, then two root files, at a page of three and at most five rows read for one request. */
+    async function boundScene() {
+      const w = await world({ limits: { sinceMax: 3, sinceRows: 5 } });
+      const lead = await sessionOf(w, w.lead);
+      const ups = [];
+      for (let n = 1; n <= 8; n++) ups.push(said(await put(w, lead, answerOf(w, n))));
+      for (let n = 9; n <= 10; n++) ups.push(said(await put(w, lead, sealAs(w, w.lead, "f" + n + ".ec", n))));
+      if (!ups.every(u => u === 200)) throw new Error("the scene was not set: " + JSON.stringify(ups));
+      const st = w.R.stores.get(w.rt), list = st.list;
+      let rows = 0, page = [];
+      st.list = (prefix, opts) => { const r = list.call(st, prefix, opts); if (prefix === "seq:") rows += r.length; return r; };
+      try { page = listOf(await since(w, lead, 0)); } finally { st.list = list; }
+      return { ok: rows <= 5 && page.length === 0 && C.SINCE_ROWS_MAX >= C.BLOBS_MAX + C.SINCE_MAX, rows,
+        detail: "one request read " + rows + " row(s) and served " + page.length + " item(s); SINCE_ROWS_MAX " + C.SINCE_ROWS_MAX
+          + " against BLOBS_MAX " + C.BLOBS_MAX + " and SINCE_MAX " + C.SINCE_MAX };
+    }
+
+    const ans = await guard(answerScene);
+    check(ans.ok === true, "pg1a a team that admitted a desk, its answer row at the head of its sequence: the first page at four holds four items,"
+      + " and the client built before this change, which ends at a short page, lists every file: " + (ans.detail || ans.failed));
+    const ord = await guard(ordinaryScene);
+    check(ord.ok === true, "pg1b an ordinary relay, no limits, an answer row and 1,001 root rows: pages of 1,000 and 1, then none: " + (ord.detail || ord.failed));
+    const held = await guard(heldScene);
+    const fillOff = await liftCore("plant:since-fill", async () => {
+      const h = await heldScene();
+      return JSON.stringify(h.read.out.map(x => x[0])) === JSON.stringify(held.read && held.read.out.map(x => x[0]));
+    });
+    const seqsOf = h => h.read.out.map(x => x[0]);
+    const heldOk = !!held.read && held.held.length === 2 && JSON.stringify(seqsOf(held)) === JSON.stringify(seqsOf(held).slice().sort((a, b) => a - b))
+      && new Set(held.read.out.map(x => x[1])).size === held.read.out.length && held.held.every(s => held.read.out.some(x => x[0] === s));
+    check(heldOk && fillOff.turned && fillOff.back, "pg1c the lead's list, a removed desk's two held rows among its own and an answer row, at a page of three:"
+      + " served once each in seq order, the same rows in the same order as since served them before it filled its pages (the fill lifted): "
+      + (held.read ? "seqs " + seqsOf(held).join(",") + ", held at " + held.held.join(",") + ", " : held.failed + ", ") + how(fillOff));
+    const bound = await guard(boundScene);
+    check(bound.ok === true, "pg1d eight answer rows in a run at a page of three and a bound of five rows: one request reads no more than five, and the"
+      + " bound stands above what a team can hold: " + (bound.detail || bound.failed));
+    const LIFTS = [
+      ["since-fill", "pg1a", "the first page holds three and the present reading stops there", async () => (await guard(answerScene)).ok !== true],
+      ["since-fill", "pg1b", "the ordinary first page holds 999", async () => (await guard(ordinaryScene)).ok !== true],
+      ["since-rows", "pg1d", "one request reads every row", async () => { const b = await guard(boundScene); return b.rows > 5; }],
+    ];
+    const base = { pg1a: ans.ok === true, pg1b: ord.ok === true, pg1d: bound.ok === true };
+    let n = 0;
+    for (const [tag, leg, say, turns] of LIFTS) {
+      const p = await liftCore("plant:" + tag, turns);
+      check(base[leg] && p.turned && p.back, "pg1" + String.fromCharCode(101 + n++) + " lifting plant:" + tag + " turns " + leg + " red (" + say
+        + "), and the product file is never written: " + how(p));
+    }
   }
 
   /* ---- 969: no plant wrote a product file (the test architect's condition H1, board 935) ---- */

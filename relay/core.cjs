@@ -42,6 +42,9 @@ const SESSIONS_MAX = 1024;
 const SESSION_SHARE = 16;
 const KEYS_MAX = 1000;
 const SINCE_MAX = 1000;
+/* The most sequence rows one since reads: above every row a team can hold (each row is a live blob's, BLOBS_MAX at most) and a
+   page more, so it ends a page early only where the store breaks that bound. */
+const SINCE_ROWS_MAX = BLOBS_MAX + SINCE_MAX;
 const TOKEN_MAX = 256;
 const META_MAX = 4096;
 /* After a paid grant's until: working for WORK_AFTER_MS, read-only to READ_AFTER_MS, then swept. A trial's grant (paid false)
@@ -698,6 +701,8 @@ function parseMeta(header) {
 function createCore(deps) {
   const store = deps.store, clock = deps.clock;
   const teamMax = deps.limits && Number.isSafeInteger(deps.limits.teamMax) ? deps.limits.teamMax : B.TEAM_MAX;
+  const sinceMax = deps.limits && isCount(deps.limits.sinceMax) ? deps.limits.sinceMax : SINCE_MAX;
+  const sinceRows = deps.limits && isCount(deps.limits.sinceRows) ? deps.limits.sinceRows : SINCE_ROWS_MAX;
   /* For legs only: the roots a grant may trace to. Production code passes none, so the constant stands. */
   const roots = deps.roots === undefined ? [ROOT_PUB] : deps.roots;
   const revokedNow = typeof deps.revoked === "function" ? deps.revoked : () => [];
@@ -1771,18 +1776,32 @@ function createCore(deps) {
     const lapsedSince = lapseGate(false);
     if (lapsedSince) return lapsedSince; /* plant:lapse-since */
     const now = clock(), items = [];
-    const page = store.list("seq:", { after: "seq:" + pad(after), limit: SINCE_MAX });
-    for (const [, id] of page) {
-      const m = store.get("blob:" + id);
-      if (m && !expired(m, now) && !isAnswer(m)) items.push({ seq: m.seq, meta: served(m) });
+    /* A FULL PAGE OR THE LAST: a row left out (an answer, an expired deletion) is read past, as many rows again as items are still
+       wanted, so a page short of sinceMax items holds every item left, which is how the client reads a short page. `last` is the
+       last row read; `ended`, that no row follows it. */
+    let fill = false, rowsMax = Infinity;
+    fill = true; /* plant:since-fill */
+    rowsMax = sinceRows; /* plant:since-rows */
+    let last = after, read = 0, ended = false;
+    while (!ended && items.length < sinceMax && read < rowsMax) {
+      const want = Math.min(sinceMax - items.length, rowsMax - read);
+      const page = store.list("seq:", { after: "seq:" + pad(last), limit: want });
+      ended = page.length < want;
+      for (const [k, id] of page) {
+        read++;
+        last = Number(k.slice(4));
+        const m = store.get("blob:" + id);
+        if (m && !expired(m, now) && !isAnswer(m)) items.push({ seq: m.seq, meta: served(m) });
+      }
+      if (!fill) break;
     }
     if (!readsHeld(s)) return { ok: true, items, lapse: told() };
     /* A removed desk's blobs hold no seq row, so they join the lead's page in seq order, and never past a full page's last row. */
-    const top = page.length >= SINCE_MAX ? Number(page[page.length - 1][0].slice(4)) : Infinity, rows = items.length;
+    const top = ended ? Infinity : last, rows = items.length;
     for (const [, h] of store.list("held:")) if (h && h.seq > after && h.seq <= top && heldLive(h, now)) items.push({ seq: h.seq, meta: served(h) });
     if (items.length === rows) return { ok: true, items, lapse: told() };
     items.sort((x, y) => x.seq - y.seq);
-    return { ok: true, items: items.slice(0, SINCE_MAX), lapse: told() };
+    return { ok: true, items: items.slice(0, sinceMax), lapse: told() };
   }
 
   function blobFor(token, id) {
@@ -2281,7 +2300,7 @@ function createCore(deps) {
 
 module.exports = {
   CHALLENGE_MS, CHALLENGE_SHARE, SESSION_MS, CALL_SKEW_MS, DELEGATION_MAX_MS, KEEP_MS, REMOVED_KEEP_MS, GONE_KEEP_MS, SWEPT_KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, BLOB_MIN, BLOBS_MAX,
-  SESSIONS_MAX, SESSION_SHARE, KEYS_MAX, SINCE_MAX, ROOT_PUB, GRANT_MAX_MS, WORK_AFTER_MS, READ_AFTER_MS, TRIAL_KEEP_MS, STORE_KEEP_PAID_MS, STORE_KEEP_TRIAL_MS, lapseOf, keptGrant, canon, createBytes, create2Bytes, devicesBytes, invitesBytes, helloBytes,
+  SESSIONS_MAX, SESSION_SHARE, KEYS_MAX, SINCE_MAX, SINCE_ROWS_MAX, ROOT_PUB, GRANT_MAX_MS, WORK_AFTER_MS, READ_AFTER_MS, TRIAL_KEEP_MS, STORE_KEEP_PAID_MS, STORE_KEEP_TRIAL_MS, lapseOf, keptGrant, canon, createBytes, create2Bytes, devicesBytes, invitesBytes, helloBytes,
   LEAD_PREFIX, leadBytes, judgeLead,
   DOOR_REFS_MAX, DOOR_CERT_MAX, DOOR_LIVE_MAX, DOOR_PER_PERSON, DOOR_RATE_MAX, DOOR_RATE_MS, DOOR_TRY_SHARE, CERT_SPAN_MS, SEAT_MARGIN_MS, POOLED_GRACE_MS, SEAT_QUIET_MS, FREED_MAX,
   doorBytes, doorHelloBytes, certBytes, certWhy, storeDevicesBytes,
