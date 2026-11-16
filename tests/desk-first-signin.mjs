@@ -271,6 +271,15 @@ try {
         dotted: !!lStyle && lStyle.backgroundImage.includes("radial-gradient"),
         markSize: mRect ? { w: Math.round(mRect.width), h: Math.round(mRect.height) } : null,
         markHasSvg: !!(mark && mark.querySelector("svg")),
+        /* The screen's mark is the header's under a mask id of its own: the header's id stays the only one of its name in
+           the document, and the screen's mark is cut through its own mask. */
+        markOwnMask: (() => {
+          const hm = document.querySelector(".brand-tile svg mask"), fm = mark && mark.querySelector("mask");
+          if (!hm || !fm || !hm.id || !fm.id || fm.id === hm.id) return false;
+          const through = [...mark.querySelectorAll("*")].some(e => ["mask", "fill"].some(a => e.getAttribute(a) === "url(#" + fm.id + ")"));
+          const stray = [...mark.querySelectorAll("*")].some(e => ["mask", "fill"].some(a => e.getAttribute(a) === "url(#" + hm.id + ")"));
+          return document.querySelectorAll('[id="' + hm.id + '"]').length === 1 && through && !stray;
+        })(),
         noWave: !waveLike && (mark ? mark.parentElement.querySelectorAll("svg").length === 1 : false),
         bandVisible: !!bRect && bRect.height > 20,
         hasBrand: !!(band && band.querySelector(".brand[aria-label='Etiuda']")),
@@ -287,8 +296,8 @@ try {
     });
     check(ui.hasScr && ui.sideBySide && ui.dotted && ui.chromeHidden && ui.bandVisible && ui.hasBrand,
       "fs3a two-half layout under blue band with dotted left ground and no rail/tabs/search/pills");
-    check(ui.markHasSvg && ui.markSize && ui.markSize.w === 52 && ui.markSize.h === 52 && ui.noWave,
-      "fs3a 52px mark present with no wavy underline");
+    check(ui.markHasSvg && ui.markSize && ui.markSize.w === 52 && ui.markSize.h === 52 && ui.noWave && ui.markOwnMask,
+      "fs3a 52px mark present with no wavy underline, cut through a mask id of its own while the header's id stands once in the document");
     const hasAllEn = [
       "Sign in to Etiuda",
       "Your seat belongs to your account, so it comes with you to any computer you sign in on, up to three.",
