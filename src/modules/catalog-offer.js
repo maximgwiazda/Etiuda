@@ -33,6 +33,7 @@ import { editionChanges } from "./edition-changes.js";
 import { editionOfferHtml, openEditionPanel, repaintEditionRows, editionCountWords } from "./edition-panel.js";
 import { editionMarksFrom, keepEditionMarks, putEditionMarksBack, editionSay } from "./edition-marks.js";
 import { closeModal } from "./dialog.js";
+import { focusRingOn } from "./dom.js";
 import { deskName, deskKey, deskBase, deskChangeWords, openDeskLook } from "./desk-look.js";
 import { hooks } from "./hooks.js";
 import { catalogTrust, whenTrusted, heldCatalogTrust, heldCatalogSigner, recheckHeldTrust, trustKeyHtml, trustOfferLine,
@@ -869,7 +870,7 @@ function paintCatWaiting(){
   el.setAttribute("title",words);
   el.setAttribute("aria-label",words);
   el.onclick=reopenWaiting;
-  el.onkeydown=e=>{ if(e.key!=="Enter" && e.key!==" ") return; e.preventDefault(); e.stopPropagation(); reopenWaiting(); };
+  el.onkeydown=e=>{ if(e.key!=="Enter" && (e.key!==" " || !focusRingOn(el))) return; e.preventDefault(); e.stopPropagation(); if(!e.repeat) reopenWaiting(); };
 }
 function reopenWaiting(){
   const w=edWaiting, up=document.getElementById("eCatalogOffer");

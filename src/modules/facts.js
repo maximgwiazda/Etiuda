@@ -116,7 +116,8 @@ function wireFactsCopy(){
     if(e.key!=="Enter" && e.key!==" ") return;
     const a=e.target.closest(".fact-link");
     if(!a) return;
-    e.preventDefault();
+    e.preventDefault(); e.stopPropagation();
+    if(e.repeat) return;
     copy(a.getAttribute("data-copy")||a.textContent, "Link copied");
   });
 }

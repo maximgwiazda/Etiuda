@@ -12,8 +12,8 @@ import { scCaptureId, scCaptureSlot, scRepaint, scStopCapture, scListShown } fro
 import { activateTourFocus, endTour, moveTourFocus, tourActive, tourHasFocus } from "./tour.js";
 import { noteUndoTyping, t, takeStandingUndo, toast, toastRefusal } from "./ui-lang.js";
 import { pageKeyScroll } from "./page-scroll.js";
-import { lanesPageScroller } from "./lanes.js";
-import { $, intentEl } from "./dom.js";
+import { lanesKeyFree, lanesPageScroller } from "./lanes.js";
+import { $, focusRingOn, intentEl } from "./dom.js";
 import { closeNotePane } from "./note-pane.js";
 import { eHost } from "./host.js";
 import { closeMoreMenu, closeSettingsMenu } from "./header-menus.js";
@@ -215,6 +215,10 @@ function wireGlobalKeydown(){
       if(d.fixed) continue;
       if(!eventMatchesAction(e,d.id)) continue;
       if(inField&&!d.inField) continue;
+      if(d.id==="lanes"){
+        if(!lanesKeyFree(document.activeElement, intentEl, document.body)) continue;
+        if(e.repeat){ e.preventDefault(); return; }
+      }
       // runShortcut may return false to decline (an editor arrow with no editor open)
       if(hooks.runShortcut(d.id)!==false){
         e.preventDefault();
@@ -266,7 +270,20 @@ function wireGlobalKeydown(){
     const onControl=document.activeElement;
     if(plain && !e.shiftKey && (e.key==="Enter"||e.key===" ") && onControl
        && typeof onControl.matches==="function"
-       && onControl.matches("button:not([disabled]),summary,a[href],[role=menuitem]")) return;
+       && (onControl.matches("button:not([disabled]),summary,a[href],[role=menuitem],[role=switch],[role=checkbox]")
+           || onControl.matches("input[type=checkbox],input[type=radio],input[type=button],input[type=submit],input[type=reset]")
+           || onControl.matches("[role=button]:not([aria-disabled='true']),[role=tab]:not([aria-disabled='true'])"))){
+      if(e.key===" " && !focusRingOn(onControl)){
+        e.preventDefault();
+        return;
+      }
+      if(e.key===" " && !e.defaultPrevented
+         && onControl.matches("[role=button]:not(button):not(input):not(summary):not([aria-disabled='true'])")){
+        e.preventDefault();
+        if(!e.repeat && typeof onControl.click==="function") onControl.click();
+      }
+      return;
+    }
 
     if(!isScreen){
       if(plain && (e.key==="Home"||e.key==="End") && pageKeyScroll(e.key, lanesPageScroller())){ e.preventDefault(); return; }

@@ -216,8 +216,8 @@ check("card-body.js", "810tf1 a card's note, edit, hide and star are buttons in 
    collapse, or content-visibility is hidden, on the control or an ancestor: those skip it, so a
    :focus rule beside them never meets it on the way in. A zero box does not skip it. The note is
    that zero box at rest, so a pointer does not see it, and keyboard focus must give the box back.
-   Enter is left for the button, which opens the note; Space still goes to the lanes. */
-check("template.html", "810tf8 on a default desk the note, edit, hide and star stay in the tab walk, keyboard focus shows the note, and Enter opens it",
+   Enter and Space are both left for the button, which opens the note. */
+check("template.html", "810tf8 on a default desk the note, edit, hide and star stay in the tab walk, keyboard focus shows the note, and Enter and Space are left for the button",
   () => {
     const raw = read("src/template.html");
     const sheet = styleBlock(raw);
@@ -252,18 +252,22 @@ check("template.html", "810tf8 on a default desk the note, edit, hide and star s
     const lp = read("src/modules/list-pointer.js");
     if (lp.indexOf('else if(act==="note") toggleNotePane(actBtn, id);') < 0) return "the note's click does not open the pane";
     const saved = globalThis.document.activeElement;
+    let ring = true;
     const btn = makeEl("noteKey", { tagName: "BUTTON" });
-    btn.matches = sel => sel === "button:not([disabled]),summary,a[href],[role=menuitem]";
-    let enter, space, enterRan, spaceRan;
+    btn.matches = sel => (sel === ":focus-visible" ? ring : sel.indexOf("button:not([disabled])") >= 0);
+    let enter, space, enterRan, spaceRan, ptrSpace, ptrSpaceRan;
     try {
       globalThis.document.activeElement = btn;
       enter = press({ key: "Enter", code: "Enter" });
       enterRan = ran.slice();
       space = press({ key: " ", code: "Space" });
       spaceRan = ran.slice();
+      ring = false;
+      ptrSpace = press({ key: " ", code: "Space" });
+      ptrSpaceRan = ran.slice();
     } finally { globalThis.document.activeElement = saved; }
-    return eq([out.length, enter.defaultPrevented, enterRan.join("+"), space.defaultPrevented, spaceRan.join("+")].join("|"),
-      "0|false||true|lanes");
+    return eq([out.length, enter.defaultPrevented, enterRan.join("+"), space.defaultPrevented, spaceRan.join("+"), ptrSpace.defaultPrevented, ptrSpaceRan.join("+")].join("|"),
+      "0|false||false||true|lanes");
   });
 
 check("shortcuts.js", "810tf2 Tab matches no chat-tab chord, Ctrl+Tab runs the next tab, and Ctrl+Shift+Tab runs the previous",
@@ -380,13 +384,12 @@ check("shortcuts-list.js", "810tf5 the shortcuts list shows Ctrl+Tab, Ctrl+Shift
       "Next tab=Ctrl+Tab | Previous tab=Ctrl+Shift+Tab | New tab=Ctrl+T | Poprzednia rozmowa=Ctrl+Shift+Tab | Nowa rozmowa=Ctrl+T");
   });
 
-check("tabs.js", "810tf6 each conversation's name is a tab stop, named as it reads, and Enter switches to it; Space is left alone"
-  + " and passes on, as it is the lanes' key wherever the focus sits (board 883)",
+check("tabs.js", "810tf6 each conversation's name is a tab stop, named as it reads, and Enter and Space switch to it",
   () => {
     const tabsSrc = read("src/modules/tabs.js");
     const labelOf = new Function("t", "tabs", extractDecl(tabsSrc, "function tabLabel(") + "\nreturn tabLabel;");
     class El {
-      constructor() { this.attrs = {}; this.kids = []; this.cls = new Set(); this.dataset = {}; this.style = {}; }
+      constructor() { this.attrs = {}; this.kids = []; this.cls = new Set(); this.dataset = {}; this.style = {}; this._ring = true; }
       set className(v) { this.cls = new Set(String(v || "").split(/\s+/).filter(Boolean)); }
       get className() { return [...this.cls].join(" "); }
       setAttribute(k, v) { this.attrs[k] = String(v); }
@@ -394,6 +397,7 @@ check("tabs.js", "810tf6 each conversation's name is a tab stop, named as it rea
       appendChild(c) { this.kids.push(c); return c; }
       set innerHTML(v) { if (v === "") this.kids = []; }
       querySelectorAll() { return []; }
+      matches(s) { return s === ":focus-visible" && this._ring; }
     }
     const draw = (lang) => {
       if (lang) ST.lsSet("eUiLang", lang); else ST.lsDel("eUiLang");
@@ -404,11 +408,11 @@ check("tabs.js", "810tf6 each conversation's name is a tab stop, named as it rea
       wrap.querySelectorAll = () => [];
       let switched = null;
       const fn = new Function("document", "$", "tabs", "activeTabId", "t", "tabLabel", "drawTabs", "bindTabScroll",
-        "fitTabLabels", "requestAnimationFrame", "tabAddTitle", "ICON_TAB_X", "ICON_TAB_ADD", "tabDrag", "switchTab", "scrollTabIntoView", "closeTab",
+        "fitTabLabels", "requestAnimationFrame", "tabAddTitle", "ICON_TAB_X", "ICON_TAB_ADD", "tabDrag", "switchTab", "scrollTabIntoView", "closeTab", "focusRingOn",
         extractDecl(tabsSrc, "function drawTabsCore(") + "\nreturn drawTabsCore;");
       fn({ createElement: () => new El() }, s => (s === "#tabsBar" ? bar : s === "#tabsWrap" ? wrap : null),
         tabs, "a", UL.t, labelOf(UL.t, tabs), {}, () => {}, () => {}, () => {}, () => "", "", "", null,
-        id => { switched = id; }, () => {}, () => {})();
+        id => { switched = id; }, () => {}, () => {}, el => !!(el && typeof el.matches === "function" && el.matches(":focus-visible")))();
       const row = el => {
         const name = el.kids[0];
         const shown = name.kids[0] && name.kids[0].textContent;
@@ -416,10 +420,14 @@ check("tabs.js", "810tf6 each conversation's name is a tab stop, named as it rea
           preventDefault() { this.prevented = true; }, stopPropagation() { this.stopped = true; } };
         ev.key = "Enter"; name.onkeydown(ev);
         const entered = switched; switched = null;
+        name._ring = true;
         ev.key = " "; ev.prevented = false; ev.stopped = false; name.onkeydown(ev);
         const spaced = switched, spaceKept = ev.prevented || ev.stopped;
+        name._ring = false; switched = null;
+        ev.key = " "; ev.prevented = false; ev.stopped = false; name.onkeydown(ev);
+        const ptrSpaced = switched, ptrKept = ev.prevented || ev.stopped;
         ev.key = "Enter"; ev.ctrlKey = true; ev.prevented = false; switched = null; name.onkeydown(ev);
-        return [name.tabIndex, name.getAttribute("role"), name.getAttribute("aria-label"), shown, entered, spaced, spaceKept, switched, ev.prevented].join("/");
+        return [name.tabIndex, name.getAttribute("role"), name.getAttribute("aria-label"), shown, entered, spaced, spaceKept, ptrSpaced, ptrKept, switched, ev.prevented].join("/");
       };
       return [row(bar.kids[0]), row(bar.kids[1]), wrap.kids.length].join(" || ");
     };
@@ -429,8 +437,8 @@ check("tabs.js", "810tf6 each conversation's name is a tab stop, named as it rea
     const en = draw("en"), pl = draw("pl");
     ST.lsDel("eUiLang");
     return eq([en, pl, face].join(" ## "),
-      ["0/tab/Marta/Marta/a//false//false || 0/tab/New chat/New chat/b//false//false || 1",
-        "0/tab/Marta/Marta/a//false//false || 0/tab/Nowa rozmowa/Nowa rozmowa/b//false//false || 1",
+      ["0/tab/Marta/Marta/a/a/true//false//false || 0/tab/New chat/New chat/b/b/true//false//false || 1",
+        "0/tab/Marta/Marta/a/a/true//false//false || 0/tab/Nowa rozmowa/Nowa rozmowa/b/b/true//false//false || 1",
         true].join(" ## "));
   });
 

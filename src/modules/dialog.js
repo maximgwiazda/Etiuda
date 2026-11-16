@@ -10,7 +10,7 @@ import { scStopCapture } from "./shortcuts-list.js";
 import { offerUndo, t, tc, translateTree } from "./ui-lang.js";
 import { hooks } from "./hooks.js";
 import { esc } from "./esc.js";
-import { modalEl, modalCard, $, focusKey, sameControl, originOf } from "./dom.js";
+import { modalEl, modalCard, $, focusKey, sameControl, originOf, wireFocusRing } from "./dom.js";
 
 function modalOpen(){ return !modalEl.hidden; }
 /* ---- SHARED MODAL BEHAVIOUR ---------------------------------------------------------------
@@ -367,6 +367,7 @@ let lastInputWasKey=false;
 function wireFocusModality(){
   addEventListener("keydown",()=>{ lastInputWasKey=true; },true);
   addEventListener("pointerdown",()=>{ lastInputWasKey=false; },true);
+  wireFocusRing();
 }
 /* Delegated once, so it survives every innerHTML rebuild without being rewired. */
 function wireModalX(){
@@ -772,7 +773,7 @@ function wireEditorRest(){
   modalCard.addEventListener("keydown",e=>{
     if(!edRest || !modalCard.classList.contains("ed-bar") || (e.key!=="Enter" && e.key!==" ")) return;
     e.preventDefault();
-    edToFront(true);
+    if(!e.repeat) edToFront(true);
   });
   /* Gone, the entry has no Save, Reset or Delete, whatever an editor does to its buttons later. */
   modalCard.addEventListener("click",e=>{
@@ -965,7 +966,7 @@ function edShelve(){
   sh.addEventListener("keydown",e=>{
     if(rec.shell!==sh || !sh.classList.contains("ed-bar") || (e.key!=="Enter" && e.key!==" ")) return;
     e.preventDefault();
-    edActivate(rec,true);
+    if(!e.repeat) edActivate(rec,true);
   });
   rec.shell=sh; rec.state=st; rec.winPlace=edPlaceNow;
   edActiveWin=null;
