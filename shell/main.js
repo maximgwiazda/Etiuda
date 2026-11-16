@@ -11049,7 +11049,7 @@ function storeMine() {
   if (!who) return false;
   if (storeHeld()) {
     if (s.keys || s.leave || s.ask !== who || s.last !== who) { s.keys = ""; s.leave = ""; s.ask = who; s.last = who; storeSave(); } /* plant:store-ask */
-    storeLeaveHere = null; storeNow = null; storeSay = ""; storeFresh = false;
+    storeLeaveHere = null; storeNow = null; storeSay = ""; storeFresh = false; storeAnew = false;
     storeSyncStop();
     storeAgainStop();
     return false;
@@ -11058,7 +11058,7 @@ function storeMine() {
   if (s.who === who) return true; /* plant:store-mine */
   s.keys = ""; s.leave = ""; s.owed = ""; s.made = "";
   s.who = who;
-  storeLeaveHere = null; storeOwedHere = ""; storeNow = null; storeSay = ""; storeFresh = false;
+  storeLeaveHere = null; storeOwedHere = ""; storeNow = null; storeSay = ""; storeFresh = false; storeAnew = false;
   if (storeAccess && storeAccess.who !== who) storeAccess = null;
   storeSyncStop();
   storeAgainStop();
@@ -11110,7 +11110,7 @@ function storeUngiven() { return storeState().org === true ? "consent" : "ungive
 /* At a sign out: the store's keys, and those of a This computer still owed, leave the desk with the person; the folder holds them
    for their return. */
 function storeForget() {
-  storeAccess = null; storeNow = null; storeSay = ""; storeFresh = false;
+  storeAccess = null; storeNow = null; storeSay = ""; storeFresh = false; storeAnew = false;
   storeSyncStop();
   storeAgainStop(); /* plant:store-again-out */
   const s = storeState();
@@ -11383,6 +11383,7 @@ function storeView() {
     signinRefused: !!(held && held.said), conflicts: storeConflicts(), say: storeSay, owed: !!storeOwedRt(),
     ask, askNow: ask && !storeNotNow.has(who), again: storeAgainTimer ? storeAgainAt : 0, /* plant:store-view-again */
     looking: storeLooking, ever: s.told === true, /* plant:store-view-looking */
+    anew: storeAnew, /* plant:store-view-anew */
     seatless: !!held && (!held.cert || held.said === "full"), full: storeFullNow }); /* plant:store-view-room */
 }
 function tellStore() {
@@ -11557,7 +11558,7 @@ async function storeAnswerNow(choice) {
   s.who = who; s.last = who; s.ask = ""; /* plant:answer-mine-who */
   s.keys = ""; s.leave = ""; s.owed = ""; s.made = ""; /* plant:answer-mine-keys */
   s.until = 0; delete s.off; s.said = ""; delete s.told;
-  storeLeaveHere = null; storeOwedHere = ""; storeNow = null; storeSay = ""; storeFresh = false; storeFullNow = false;
+  storeLeaveHere = null; storeOwedHere = ""; storeNow = null; storeSay = ""; storeFresh = false; storeFullNow = false; storeAnew = false;
   storeNotNow.delete(who);
   if (own) { if (own.off) s.off = true; s.owed = own.owed; storeOwedHere = own.here; }
   if (!storeAccess || storeAccess.who !== who) { storeAccess = null; s.org = false; }
@@ -11704,7 +11705,9 @@ async function storeLookNow() {
   storeLooking = true; tellStore(); /* plant:store-look-told */
   try { return await storeLookRun(p, held, me, pol); } finally { storeLooking = false; tellStore(); }
 }
-let storeLooking = false;
+/* storeAnew: this computer made a new store over another computer's ended mark under a policy holding sync on; the row says so until a
+   restart, a sign out, another account seated or the account question answered. In memory alone. */
+let storeLooking = false, storeAnew = false;
 async function storeLookRun(p, held, me, pol) {
   const L = StoreLib(), who = storeState().who, switchAt = storeSwitchNo;
   /* The look keeps to the account it began under and to the switch as it stood, sync still on: its folder token, the service, the relay
@@ -11715,11 +11718,15 @@ async function storeLookRun(p, held, me, pol) {
   const token = folder ? await storeTokenFor(p, held) : {};
   if (token.why) return storeSettle({ state: "unavailable", why: token.why });
   access = storeAccess;
-  const look = await L.storeLook({ folder: folder, local: storeLocal, keep: k => { if (ours()) storeKeep(k); },
+  const io = { folder: folder, local: storeLocal, keep: k => { if (ours()) storeKeep(k); },
     grant: async (rt, sPub, extra) => (ours() ? storeGrant(me.key, rt, sPub, Object.assign({}, extra, { company: pol.company === true })) : { why: "unreached" }),
     relay: { create: async (k, g) => (ours() ? storeRelayCreate(k, g) : { ok: false, why: "relay" }), renew: async (k, g) => (ours() ? storeRelayRenew(k, g) : { ok: false, why: "relay" }),
       devices: async (keys, cert) => (ours() ? storeRelayDevices(keys, cert, me) : { ok: false, why: "relay" }) }, /* plant:store-look-steps */
-    me: { id: me.id, pub: me.key, desk: me.id }, url: STORE_RELAY, rand: n => crypto.randomBytes(n), fresh: storeFresh, made: storeState().made });
+    me: { id: me.id, pub: me.key, desk: me.id }, url: STORE_RELAY, rand: n => crypto.randomBytes(n), fresh: storeFresh, made: storeState().made };
+  let look = await L.storeLook(io);
+  /* Turned off everywhere from another computer while policy holds sync on here: a new store is made over the mark from what is on this
+     computer, as On does for the person, and the row says so (storeAnew); the ended store is asked nothing. */
+  if (look.state === "ended" && pol.held === true && pol.on === true && ours()) { storeAnew = true; tellStore(); look = await L.storeLook(Object.assign({}, io, { fresh: true })); } /* plant:store-anew */
   if (!ours()) return null;
   /* A store made here whose grant or making did not finish is named, so the next look still makes it as the one that replaces. */
   const made = look.state === "paused" && look.made === true && look.keys ? look.keys.rt : look.state === "on" ? "" : storeState().made; /* plant:store-made-kept */

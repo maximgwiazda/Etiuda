@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 174;
+const EXPECTED = 177;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -86,7 +86,7 @@ function worldOf(o) {
   const opt = o || {};
   const R = S.relayEnv({ roots: K.ROOTS, limits: opt.limits });
   R.clock.now = Date.now();
-  const w = { R, grantDown: !!opt.grantDown, access: "stand-in-folder-token-" + crypto.randomBytes(12).toString("hex"), forms: [], service: [], relay: [], graph: [], other: [], file: null, codes: {}, drive: { files: [], calls: [] } };
+  const w = { R, grantDown: !!opt.grantDown, access: "stand-in-folder-token-" + crypto.randomBytes(12).toString("hex"), forms: [], service: [], relay: [], graph: [], other: [], relayAt: [], file: null, codes: {}, drive: { files: [], calls: [] } };
   const json = (status, o) => new Response(Buffer.from(JSON.stringify(o)), { status, headers: { "content-type": "application/json" } });
   const GRAPH = "https://graph.microsoft.com/v1.0/me/drive/special/approot", FILE = GRAPH + ":/etiuda-store.json:/content";
   w.fetch = async (url, init) => {
@@ -148,6 +148,7 @@ function worldOf(o) {
     }
     if (u.startsWith("https://etiuda.dev/relay/v1/")) {
       w.relay.push(body);
+      w.relayAt.push(method + " " + u);
       if (w.relayDown) return json(503, { error: "unavailable" });
       R.clock.now = Date.now();
       const res = await W.fetch(new Request("https://relay.test/relay/v1/" + u.slice("https://etiuda.dev/relay/v1/".length), { method, headers, body: raw && raw.length ? raw : undefined, duplex: "half" }), R.env);
@@ -647,6 +648,53 @@ async function pausesScene(src) {
   const dated = T.storeView();
   const ok = said === "no-role" && until > Date.now() && refusedOn === "on" && refusedEnded === "signin-refused" && lapsed === "lapsed" && dated.line === "paused" && dated.since === at;
   return { ok, detail: brief({ said, refusedOn, refusedEnded, lapsed, dated: dated.line, since: dated.since === at }) };
+}
+
+/* (e7) TURNED OFF EVERYWHERE FROM ANOTHER COMPUTER, POLICY HOLDING SYNC ON: this computer makes a new store over the ended mark from what is
+   on it, and the row says so ("anew"). Nothing on the desk is lost: its desk.json and its catalog as they were, every item it had synced
+   still in its sync state and written into the new store's place. Nothing in the ended store is touched: no grant, making or list asked
+   for it, no store/end, and its mirror here byte for byte. The same mark where nothing holds the switch turns sync off here, as before,
+   and makes nothing. */
+async function anewScene(src) {
+  const r = await renewScene(src, { boot: { policyText: regText({ PersonalStore: "on" }) } }), T = r.shell.T, w = r.world, UD = r.shell.UD;
+  const sync = T.get().storeSyncing, idle = async () => { const c = sync && sync.channel(); if (c) { c.kick(); await c.idle(); } };
+  if (sync && sync.channel()) await sync.channel().idle();
+  T.patchDesk(JSON.stringify({ eAgent: "Ada", eTheme: "dark" }));
+  const own = T.storeSyncFolder();
+  fs.mkdirSync(own, { recursive: true });
+  fs.writeFileSync(path.join(own, "Own.ec"), JSON.stringify({ kind: "etiuda-catalog", format: 2, id: "own" }));
+  if (sync) sync.merge();
+  await idle();
+  const oldRt = w.file ? JSON.parse(w.file).rt : "", items = sync ? Object.keys(sync.state().ledger).sort() : [];
+  const oldMirror = path.join(UD, "store", "mirror", oldRt);
+  const snap = () => { const out = {}; for (const f of [path.join(UD, "desk.json"), path.join(own, "Own.ec")].concat(fs.existsSync(oldMirror) ? filesUnder(oldMirror) : []))
+    out[path.relative(UD, f)] = crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex"); return out; };
+  const before = snap();
+  /* Another computer turned sync off everywhere: the ended mark in the folder in the key's place. */
+  w.file = JSON.stringify({ kind: "etiuda-store-ended", format: 1, rt: oldRt });
+  const svcFrom = w.service.length, relayFrom = w.relayAt.length;
+  await T.storeTurn();
+  const view = T.storeView(), now = T.get().storeNow, file = w.file ? JSON.parse(w.file) : null;
+  await idle();
+  const after = snap(), newRt = file && file.kind === "etiuda-store-key" ? file.rt : "";
+  const askedOld = w.service.slice(svcFrom).filter(b => b.indexOf(oldRt) >= 0).length
+    + w.relayAt.slice(relayFrom).filter(u => /\/(grant|devices)$/.test(u) && u.indexOf("/t/" + oldRt + "/") >= 0).length;
+  const st = sync ? sync.state() : null;
+  let place = "";
+  try { place = fs.readFileSync(path.join(UD, "store", "mirror", newRt, "desks", T.branchIdentity(false).id, "sync.json"), "utf8"); } catch { place = ""; }
+  const changed = Object.keys(before).filter(k => after[k] !== before[k]);
+  /* The control: nothing holds the switch. */
+  const c = await renewScene(src), cT = c.shell.T, cw = c.world, cRt = cw.file ? JSON.parse(cw.file).rt : "";
+  cw.file = JSON.stringify({ kind: "etiuda-store-ended", format: 1, rt: cRt });
+  await cT.storeTurn();
+  const cView = cT.storeView(), cMark = /etiuda-store-ended/.test(String(cw.file));
+  const ok = !!oldRt && items.indexOf("k:eAgent") >= 0 && items.indexOf("f:Own.ec") >= 0 && !!now && now.state === "on" && view.line === "anew" && view.held === true
+    && !!newRt && newRt !== oldRt && T.storeState().off !== true && changed.length === 0 && Object.keys(before).length > 2 && askedOld === 0
+    && !!st && st.rt === newRt && items.every(i => !!st.ledger[i]) && place.indexOf("k:eAgent") >= 0 && place.indexOf("f:Own.ec") >= 0
+    && cView.line === "off" && cT.storeState().off === true && cMark;
+  return { ok, detail: brief({ items, look: now && now.state + "/" + now.why, line: view.line, held: view.held, newStore: !!newRt && newRt !== oldRt, offSet: T.storeState().off === true,
+    snapped: Object.keys(before).length, changed, askedOld, syncRt: !!st && st.rt === newRt, ledgerKept: !!st && items.every(i => !!st.ledger[i]), placed: place.indexOf("k:eAgent") >= 0 && place.indexOf("f:Own.ec") >= 0,
+    control: cView.line + (cT.storeState().off === true ? "/off" : "") + (cMark ? "/mark" : "") }) };
 }
 
 /* (t12) A START OFFLINE: a desk that synced, its sync state holding a kept version, starts again with its certificate standing and the
@@ -2220,6 +2268,7 @@ const LEGS = [
   ["lk", lookingScene, "the page is told when a look begins and ends; while it runs the row says first where no look has had sync on here, checking after; a start before its renewal, nothing looked at, says unconnected, with no date where no look ever found sync on"],
   ["ps", pausesScene, "a renewal refused at the service leaves sync on its current certificate, the row on; that certificate ended, signing in refused; no refusal, a lapse under three days lapsed and one of three or more the dated pause"],
   ["g6h", heldUngivenScene, "policy holding sync on and the folder never allowed, the row says so and its button asks the provider only for the person's trusted click, once, then the look turns sync on, still held"],
+  ["e7", anewScene, "turned off everywhere from another computer, policy holding sync on: a new store from what is on this computer, the row saying so; nothing on the desk lost, nothing asked of the ended store, its mirror as it was; with nothing holding the switch, off as before"],
   ["t12", offlineStartScene, "a desk starting with its certificate standing and neither the provider nor the service reached loads its sync with what it keeps, the row saying the folder is not reached and the look tried again by itself, which it is; the address back, the next try turns the store on and the sync runs"],
   ["gt", teamFolderScene, "joined to a folder team, the store's sync takes no team catalog into the person's store, reads the person's own catalog as removed nowhere, and writes nothing from the store into the team's mirror"],
   ["g1b", consentBusyScene, "while the switch's request for the folder waits on the browser the desk is busy to the page, and an answer after another account took the seat is neither taken for it nor looked with"],
@@ -2338,6 +2387,8 @@ const PLANTS = [
   ["lk", swap("looking: storeLooking, ever: s.told === true, /* plant:store-view-looking */", "looking: false, ever: false, /* plant:store-view-looking */"), "the row told neither that a look runs nor that one had sync on before"],
   ["ps", swap("signinRefused: !!(held && held.said), conflicts:", "signinRefused: false, conflicts:"), "the row not told the sign-in is refused, so an ended certificate reads as a lapse"],
   ["g6h", swap(" || !storePolicyNow().on) return \"none\"; /* plant:consent-ungiven */", " || storePolicyNow().held) return \"none\"; /* plant:consent-ungiven */"), "the press refused wherever policy holds the switch, so the row's button asks nothing"],
+  ["e7", swap("  if (look.state === \"ended\" && pol.held === true && pol.on === true && ours()) { storeAnew = true; tellStore(); look = await L.storeLook(Object.assign({}, io, { fresh: true })); } /* plant:store-anew */\n", ""), "the ended mark followed under a held switch, so sync stops here in silence"],
+  ["e7", swap("    anew: storeAnew, /* plant:store-view-anew */\n", ""), "the new store made but the row not told, so it says on"],
   ["t12", swap("  else if (s.held && s.held.cert && s.held.reached === false) storeTurn(); /* plant:store-renew-unreached */\n", ""), "a renewal that reached nothing makes no look, so the sync waits unloaded and nothing is tried again"],
   ["gt", swap("if (sayJoinPolicy().folder || relayHere() || folderTeamHere() || Object.keys(teamNeedsFolder).length) return \"\"; /* plant:sync-team-folder */", "if (false) return \"\"; /* plant:sync-team-folder */"), "the store's sync lists and writes the team's mirror as the person's folder"],
   ["w1", swap("  if (s.keys || s.leave || storeLeaveHere) {", "  if (false) {"), "a sign-out leaves the store's keys in store.json"],

@@ -9113,6 +9113,7 @@ What you type stays in this browser only.`;
     "Not syncing while signing in on this computer is refused. Sync resumes once signing in works, and nothing on this computer is lost.": "Synchronizacja wstrzymana, dopóki logowanie na tym komputerze jest odrzucane. Zostanie wznowiona, gdy logowanie się powiedzie, a na tym komputerze nic nie ginie.",
     "Your organisation has turned this on, and {PROVIDER} has not yet let Etiuda use its folder in this account.": "Organizacja włączyła tę funkcję, ale konto {PROVIDER} nie zezwala jeszcze Etiudzie na użycie jej folderu na tym koncie.",
     "Allow…": "Zezwól…",
+    "Turned off everywhere from another computer. Your organisation keeps sync on for this computer, so a new synced copy starts from what is on it.": "Wyłączona wszędzie z innego komputera. Organizacja utrzymuje synchronizację na tym komputerze, więc nowa zsynchronizowana kopia powstaje z jego zawartości.",
     "Connecting for the first time.": "Trwa pierwsze łączenie.",
     "Checking for changes.": "Trwa sprawdzanie zmian.",
     "Not connected yet. Sync starts once this computer reaches our service.": "Jeszcze bez połączenia. Synchronizacja ruszy, gdy komputer połączy się z naszą usługą.",
@@ -28220,7 +28221,7 @@ What you type stays in this browser only.`;
       if (b.dataset.signinAct) signinAct(b.dataset.signinAct, b);
     });
   }
-  var SYNC_LINES = ["on", "off", "ending", "ungiven", "ungiven-held", "org-off", "unavailable", "first", "checking", "unconnected", "signin-refused", "again", "spent", "refused", "lapsed", "paused", "conflict", "full", "noseat", "ask"];
+  var SYNC_LINES = ["on", "off", "ending", "ungiven", "ungiven-held", "org-off", "unavailable", "anew", "first", "checking", "unconnected", "signin-refused", "again", "spent", "refused", "lapsed", "paused", "conflict", "full", "noseat", "ask"];
   function syncRead(v) {
     const o = v && typeof v === "object" ? v : {};
     if (o.shown !== true || SYNC_LINES.indexOf(o.line) < 0) return { shown: false, line: "", on: false, held: false, why: "", since: 0, say: "", askNow: false, at: 0 };
@@ -28278,6 +28279,7 @@ What you type stays in this browser only.`;
     if (s.line === "ungiven") return named(t("Off. Turning it on asks {PROVIDER} to let Etiuda use its folder in this account."), "{PROVIDER}", SIGNIN_NAMES[provider] || "Microsoft");
     if (s.line === "ungiven-held") return named(t("Your organisation has turned this on, and {PROVIDER} has not yet let Etiuda use its folder in this account."), "{PROVIDER}", SIGNIN_NAMES[provider] || "Microsoft");
     if (s.line === "unavailable") return syncUnavailable(s.why, provider);
+    if (s.line === "anew") return t("Turned off everywhere from another computer. Your organisation keeps sync on for this computer, so a new synced copy starts from what is on it.");
     if (s.line === "first") return t("Connecting for the first time.");
     if (s.line === "checking") return t("Checking for changes.");
     if (s.line === "unconnected") return t("Not connected yet. Sync starts once this computer reaches our service.");

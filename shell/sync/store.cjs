@@ -321,11 +321,12 @@ function pausedLine(cert, now, signinRefused) {
    last store certificate's end), now, signinRefused, conflicts (cards kept in two versions), say (what waits to be said once), owed
    (a Turn off everywhere the licence service has not answered yet), seatless (the account's seat refused at its last renewal), full
    (the store's room at the relay refused a write, roomNext), again (when the look is tried again by itself, 0 where no try is set),
-   looking (a look runs now), ever (a look has found sync on on this computer before).
+   looking (a look runs now), ever (a look has found sync on on this computer before), anew (a new store made here over another
+   computer's ended mark, policy holding sync on).
    Answers {shown, line, on, held, why, since, say, at}: line "org-off" where policy keeps sync off, "off" where the person turned it off,
    "ungiven" where the folder's consent was never given (off, the switch the person's own way to ask for it; "ungiven-held" where policy
    holds the switch, the row's own button asking instead), "unavailable" where
-   the folder could not be reached for a reason the person cannot mend (never offline), "noseat", "first" and "checking" (a look
+   the folder could not be reached for a reason the person cannot mend (never offline), "noseat", "anew", "first" and "checking" (a look
    running), "signin-refused", "again" and "spent" (a passing failure, `why` its reason), "refused" (`why` "signin", "store" or "relay"),
    "paused" after PAUSE_SAY_MS, "lapsed" before it, "unconnected" (no look yet in this run), "full", "conflict" (a version kept aside),
    else "on", the first that holds in that order. Nothing of a key, a store or a token. Pure. */
@@ -340,6 +341,8 @@ function storeRow(o) {
   if (look && look.state === "unavailable" && look.why === "ungiven") return Object.assign(base, { line: pol.held === true ? "ungiven-held" : "ungiven", on: false, say: "" }); /* plant:row-ungiven */
   if (look && look.state === "unavailable" && look.why !== "offline") return Object.assign(base, { line: "unavailable", why: String(look.why || "") });
   if (o.seatless === true) return Object.assign(base, { line: "noseat" }); /* plant:row-noseat */
+  /* A new store made here over an ended mark under a policy holding sync on (anew): said while its look runs or is on. */
+  if (o.anew === true && (o.looking === true || (look && look.state === "on"))) return Object.assign(base, { line: "anew" }); /* plant:row-anew */
   /* A look running: "first" where none has had sync on here yet (ever), else "checking". */
   if (o.looking === true) return Object.assign(base, { line: o.ever === true ? "checking" : "first" }); /* plant:row-looking */
   /* Signing in refused at the service: nothing syncs once no look holds a current certificate, and nothing renews one until it works. */
