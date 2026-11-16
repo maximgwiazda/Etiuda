@@ -248,17 +248,29 @@ const normRel = (rel) => String(rel || "").replace(/\\/g, "/");
 const OUTBOX_NAME = ".outbox.json";
 const OUTBOX_KIND = "etiuda-folder-outbox";
 const PRIMED_NAME = ".primed";
+/* Null where the outbox exists or cannot be read (any failure other than ENOENT): a caller must not take that for
+   "nothing owed", nor write an empty outbox over it. Off the main thread, a busy read tries again briefly as renameBusy does. */
 function readOutbox(mirror, io, rethrowBusy) {
-  try {
-    const doc = JSON.parse(io.readFile(path.join(mirror, OUTBOX_NAME), "utf8"));
-    if (doc && doc.kind === OUTBOX_KIND && doc.owe && typeof doc.owe === "object") {
-      return { owe: doc.owe, floors: doc.floors && typeof doc.floors === "object" ? doc.floors : {},
-        back: doc.back && typeof doc.back === "object" ? doc.back : {} };
+  const file = path.join(mirror, OUTBOX_NAME);
+  const tries = isMainThread ? 1 : 20;
+  for (let i = 1; ; i++) {
+    try {
+      const doc = JSON.parse(io.readFile(file, "utf8"));
+      if (doc && doc.kind === OUTBOX_KIND && doc.owe && typeof doc.owe === "object") {
+        return { owe: doc.owe, floors: doc.floors && typeof doc.floors === "object" ? doc.floors : {},
+          back: doc.back && typeof doc.back === "object" ? doc.back : {} };
+      }
+      return null;
+    } catch (e) {
+      if (e && e.code === "ENOENT") return { owe: {}, floors: {}, back: {} };
+      if (!isMainThread && i < tries && e && RENAME_BUSY.indexOf(e.code) >= 0) {
+        pause(RENAME_WAIT_MS);
+        continue;
+      }
+      if (rethrowBusy && e && RENAME_BUSY.indexOf(e.code) >= 0) throw e; /* plant:outbox-read-retry */
+      return null;
     }
-  } catch (e) {
-    if (rethrowBusy && e && RENAME_BUSY.indexOf(e.code) >= 0) throw e; /* plant:outbox-read-retry */
   }
-  return { owe: {}, floors: {}, back: {} };
 }
 function writeOutbox(mirror, st, io) {
   const file = path.join(mirror, OUTBOX_NAME);
@@ -308,7 +320,9 @@ function outboxBusyRetrying(fn, onDone, timerSet, keepGoing) {
 function writeOutboxRetrying(mirror, mutate, io, onDone, timerSet, keepGoing) {
   io = io || defaultIO;
   return outboxBusyRetrying(() => {
-    const st = readOutbox(mirror, io);
+    let st = readOutbox(mirror, io, true);
+    if (!st) throw Object.assign(new Error("outbox unreadable"), { code: "EIO" }); /* plant:outbox-write-unread */
+    st = st || { owe: {}, floors: {}, back: {} };
     mutate(st);
     writeOutbox(mirror, st, io);
   }, onDone, timerSet, keepGoing);
@@ -328,13 +342,19 @@ function noteOwed(mirror, rel, io) {
 }
 function owedList(mirror, io) {
   const st = readOutbox(mirror, io || defaultIO);
+  if (!st) return [];
   return Object.keys(st.owe).filter(k => st.owe[k] && st.owe[k].owe)
     .map(k => ({ rel: k, sha: st.owe[k].sha || null, del: !!st.owe[k].del, readOnly: st.owe[k].readOnly || "" }));
 }
-function owedAt(mirror, rel, io) {
+/* True where owed, false where not owed (or ENOENT), null where the outbox could not be read. */
+function outboxOwedState(mirror, rel, io) {
   const st = readOutbox(mirror, io || defaultIO);
+  if (!st) return null;
   const rec = st.owe[normRel(rel)];
   return !!(rec && rec.owe);
+}
+function owedAt(mirror, rel, io) {
+  return outboxOwedState(mirror, rel, io) === true;
 }
 /* A file of this desk's own folder the share has taken back this many times is a fault the Library names. The count is
    forgotten once the share has kept the file this long since the last time. */
@@ -343,6 +363,7 @@ const TAKEN_BACK_QUIET_MS = 30 * 60 * 1000;
 /* The paths under `prefix` (desks/<id>/) the share has taken back TAKEN_BACK_FAULT times or more. */
 function takenBackList(mirror, prefix, io) {
   const st = readOutbox(mirror, io || defaultIO), p = normRel(prefix);
+  if (!st) return [];
   return Object.keys(st.back).filter(k => k.indexOf(p) === 0 && st.back[k] && +st.back[k].n >= TAKEN_BACK_FAULT);
 }
 
@@ -875,6 +896,16 @@ function createFolderProgram(opts) {
   function owe(rel) { return noteOwed(mirror, rel, io); }
   function owed() { return owedList(mirror, io); }
   function isOwed(rel) { return owedAt(mirror, rel, io); }
+  function owedState(rel) { return outboxOwedState(mirror, rel, io); }
+  function holdUnjudged(item) {
+    if (!item || !item.relPath) return;
+    const prev = renameWait.get(item.relPath);
+    if (prev && prev.tmpPath && prev.tmpPath !== item.tmpPath) {
+      try { io.unlink(prev.tmpPath); } catch {}
+    }
+    renameWait.set(item.relPath, item);
+    renameMeta.delete(item.relPath);
+  }
   function landed(results) {
     if (!Array.isArray(results) || !results.length) return;
     /* A copy the share holds newer than this desk's was left there, and the mirror holds this desk's bytes now, so the stamp
@@ -887,6 +918,7 @@ function createFolderProgram(opts) {
     try {
       outboxBusyRetrying(() => {
         const st = readOutbox(mirror, io, true);
+        if (!st) return;
         if (!decided) {
           for (const r of results) {
             const rec = r && st.owe[r.rel];
@@ -896,6 +928,13 @@ function createFolderProgram(opts) {
               clearRels.push(r);
               if (saidWait.has(r.rel)) { saidWait.delete(r.rel); logger("etiuda: " + r.rel + " has reached the team's folder " + folder); }
               if (!r.del && r.size != null) knownMtimes.set(r.rel, { size: r.size, mtimeMs: r.mtimeMs });
+              const waiting = renameWait.get(r.rel);
+              if (waiting) {
+                try { if (waiting.tmpPath) io.unlink(waiting.tmpPath); } catch {}
+                renameWait.delete(r.rel);
+                renameMeta.delete(r.rel);
+                renameSaid.delete(r.rel);
+              }
             } else if (r.changed) {
               if (!!rec.del !== !!r.del || (!rec.del && rec.sha !== r.sha)) continue;
               clearRels.push(r);
@@ -975,10 +1014,12 @@ function createFolderProgram(opts) {
   }
   let floorsDirty = null;
   /* True where the copy may land: its number is at or above the floor kept for its (scope, id) and the copy the mirror holds. */
-  function floorHolds(item, cat) {
+  function floorHolds(item, cat, box) {
     const k = floorKeyOf(item.relPath, cat);
     if (!k) return true;
-    const st = floorsDirty || readOutbox(mirror, io);
+    const raw = floorsDirty || (box !== undefined ? (box || { floors: {} }) : readOutbox(mirror, io));
+    if (!raw) { holdUnjudged(item); return false; }
+    const st = raw;
     let floor = Number.isSafeInteger(st.floors[k.key]) ? st.floors[k.key] : null;
     try {
       const target = path.join(mirror, item.relPath);
@@ -1047,16 +1088,21 @@ function createFolderProgram(opts) {
   /* Step 4 for an own file. True where its fault came or went, so the Library is told. */
   function ownStays(rel, listed, stamp) {
     const key = normRel(rel);
-    if (isOwed(key)) { backSeen.delete(key); return false; }
+    const box = readOutbox(mirror, io);
+    let unreadHold = false;
+    if (!box) unreadHold = true; /* plant:own-stays-owe-unread */
+    if (unreadHold) return false;
+    const relOwed = !!(box && box.owe[key] && box.owe[key].owe);
+    if (relOwed) { backSeen.delete(key); return false; }
     const had = backStamp.get(key), st = listed ? stamp(rel) : null;
     let taken = false;
     taken = !listed || takenNow.has(key) || !!(had && st && had.size === st.size && had.mtimeMs === st.mtimeMs); /* plant:own-gone-owed */
-    if (!taken) { backSeen.delete(key); return forgetBack(key); }
+    if (!taken) { backSeen.delete(key); return forgetBack(key, box); }
     const seen = (backSeen.get(key) || 0) + 1;
     backSeen.set(key, seen);
     if (seen < 2) return false;
     backSeen.delete(key);
-    const was = readOutbox(mirror, io).back[key], n = (was && Number.isSafeInteger(was.n) ? was.n : 0) + 1;
+    const was = box && box.back[key], n = (was && Number.isSafeInteger(was.n) ? was.n : 0) + 1;
     try {
       writeOutboxRetrying(mirror, s => { s.owe[key] = owedRecord(mirror, key, io); s.back[key] = { n, at: clock() }; }, io, null, outboxTimers);
     } catch { return false; }
@@ -1064,8 +1110,10 @@ function createFolderProgram(opts) {
       + "), so the copy on this computer is sent again");
     return n === TAKEN_BACK_FAULT;
   }
-  function forgetBack(key) {
-    const was = readOutbox(mirror, io).back[key];
+  function forgetBack(key, box) {
+    const st = box !== undefined ? box : readOutbox(mirror, io);
+    if (!st) return false;
+    const was = st.back[key];
     if (!was || clock() - (+was.at || 0) < TAKEN_BACK_QUIET_MS) return false;
     try { writeOutboxRetrying(mirror, s => { delete s.back[key]; }, io, null, outboxTimers); } catch { return false; }
     backStamp.delete(key);
@@ -1223,7 +1271,15 @@ function createFolderProgram(opts) {
         stillPending.push(item);
         continue;
       }
-      if (isOwed(item.relPath)) {
+      const box = readOutbox(mirror, io);
+      let unreadHold = false;
+      if (!box) unreadHold = true; /* plant:pending-owe-unread */
+      if (unreadHold) {
+        stillPending.push(item);
+        continue;
+      }
+      const itemOwed = !!(box && box.owe[normRel(item.relPath)] && box.owe[normRel(item.relPath)].owe);
+      if (itemOwed) {
         dropUnjudged(item);
         try { io.unlink(path.join(pendingDir, item.relPath)); } catch {}
         continue;
@@ -1284,7 +1340,7 @@ function createFolderProgram(opts) {
           }
         } catch {}
 
-        if (genuine && !floorHolds(item, judged)) {
+        if (genuine && !floorHolds(item, judged, box)) {
           try { io.unlink(path.join(pendingDir, item.relPath)); } catch {}
         } else if (genuine) {
           const target = path.join(mirror, item.relPath);
@@ -1322,7 +1378,15 @@ function createFolderProgram(opts) {
         continue;
       }
       if (!meta || meta.exhausted) continue;
-      if (isOwed(rel)) {
+      const relOwed = owedState(rel);
+      let unreadHold = false;
+      if (relOwed === null) unreadHold = true; /* plant:retry-owe-unread */
+      if (unreadHold) {
+        meta.tries++;
+        if (meta.tries >= RENAME_LAND_TRIES) meta.exhausted = true;
+        continue;
+      }
+      if (relOwed) {
         dropUnjudged(item);
         renameWait.delete(rel);
         renameMeta.delete(rel);
@@ -1379,7 +1443,7 @@ function createFolderProgram(opts) {
        there (checks.forkSeen), and where the pin is handed to two keys none of them is taken, each read again at the next scan.
        The look runs while that file is owed. Steps 1 and 1b still land nothing of it until the debt is gone. */
     let teamOwed = false;
-    teamOwed = isOwed("etiuda-team.json"); /* plant:team-owe-keep */
+    teamOwed = owedState("etiuda-team.json"); /* plant:team-owe-keep */
     const teamItems = staged.filter(s => s.relPath === "etiuda-team.json" || isTeamConflict(s.relPath));
     if (pin && teamItems.length) { /* plant:owed-fork-look */
       const docs = [];
@@ -1399,8 +1463,13 @@ function createFolderProgram(opts) {
 
     // Step 1: Team file check
     const teamStaged = staged.filter(s => s.relPath === "etiuda-team.json")[0];
-    /* Dropped, not refused, and the stamp forgotten, so the next listing stages the share's copy once the path is no longer owed. */
-    if (teamStaged && teamOwed) {
+    let teamUnreadHold = false;
+    if (teamStaged && teamOwed === null) teamUnreadHold = true; /* plant:team-owe-unread */
+    /* Dropped, not refused, and the stamp forgotten, so the next listing stages the share's copy once the path is no longer owed.
+       Where the outbox cannot be read, kept unjudged and un-forgotten so the next scan judges it again. */
+    if (teamStaged && teamUnreadHold) {
+      holdUnjudged(teamStaged);
+    } else if (teamStaged && teamOwed) {
       dropUnjudged(teamStaged);
     } else if (teamStaged) {
       let text = null;
@@ -1486,7 +1555,14 @@ function createFolderProgram(opts) {
     const teamSiblingsStaged = staged.filter(s => isTeamConflict(s.relPath));
     for (const sibItem of teamSiblingsStaged) {
       /* A sibling lands at its own path and, where it is newer, moves the rev the canonical file is judged by. Neither happens while that file is owed. */
-      if (teamOwed || isOwed(sibItem.relPath)) {
+      const sibOwed = owedState(sibItem.relPath);
+      let sibUnreadHold = false;
+      if (teamOwed === null || sibOwed === null) sibUnreadHold = true; /* plant:team-sibling-owe-unread */
+      if (sibUnreadHold) {
+        holdUnjudged(sibItem);
+        continue;
+      }
+      if (teamOwed || sibOwed) {
         dropUnjudged(sibItem);
         continue;
       }
@@ -1532,8 +1608,16 @@ function createFolderProgram(opts) {
       const relPath = item.relPath;
       if (relPath === "etiuda-team.json" || isTeamConflict(relPath)) continue;
       const tmpPath = item.tmpPath;
+      const box = readOutbox(mirror, io);
+      let unreadHold = false;
+      if (!box) unreadHold = true; /* plant:outbox-unread-keep */
+      if (unreadHold) {
+        holdUnjudged(item);
+        continue;
+      }
+      const itemOwed = !!(box && box.owe[normRel(relPath)] && box.owe[normRel(relPath)].owe);
       let mayLand = true;
-      if (isOwed(relPath)) mayLand = false; /* plant:outbox-owe-keep */
+      if (itemOwed) mayLand = false; /* plant:outbox-owe-keep */
       if (!mayLand) {
         let forget = false;
         forget = true; /* plant:step3-owe-forget */
@@ -1587,7 +1671,7 @@ function createFolderProgram(opts) {
               refuse(item, doc.epoch); /* plant:syncer-refused-held */
               continue;
             }
-            if (!floorHolds(item, cat)) continue;
+            if (!floorHolds(item, cat, box)) continue;
             const target = path.join(mirror, relPath);
             if (landStaged(item, target)) applied.push(relPath);
           }
@@ -1600,11 +1684,11 @@ function createFolderProgram(opts) {
               refuse(item);
               continue;
             }
-            if (!floorHolds(item, doc)) continue;
+            if (!floorHolds(item, doc, box)) continue;
             const target = path.join(mirror, relPath);
             if (landStaged(item, target)) applied.push(relPath);
           } else if (parts.length === 1 && doc.desk && deskFileGenuine(doc, doc.desk.id)) {
-            if (!floorHolds(item, doc)) continue;
+            if (!floorHolds(item, doc, box)) continue;
             const target = path.join(mirror, relPath);
             if (landStaged(item, target)) applied.push(relPath);
           } else {
@@ -1615,7 +1699,7 @@ function createFolderProgram(opts) {
               refuse(item);
               continue;
             }
-            if (!floorHolds(item, doc)) continue;
+            if (!floorHolds(item, doc, box)) continue;
             const target = path.join(mirror, relPath);
             if (landStaged(item, target)) applied.push(relPath);
           }
@@ -1794,8 +1878,12 @@ function createFolderProgram(opts) {
         if (ownStays(relPath, listingMap.has(relPath), stampOf)) faultMoved = true;
         continue;
       }
+      const relOwed = owedState(relPath);
+      let unreadStay = false;
+      if (relOwed === null) unreadStay = true; /* plant:outbox-unread-stay */
+      if (unreadStay) continue;
       let stays = listingMap.has(relPath);
-      if (isOwed(relPath)) stays = true; /* plant:outbox-owe-stay */
+      if (relOwed) stays = true; /* plant:outbox-owe-stay */
       if (stays) {
         missingCount.delete(relPath);
       } else {
@@ -1857,14 +1945,14 @@ function createFolderProgram(opts) {
         if (reread) heldSettled.set(relPath, { size: st.size, mtimeMs: st.mtimeMs });
         else alreadyInMirror = true;
       } else heldSettled.delete(relPath);
-      if (!alreadyInMirror && prev && prev.size === st.size && prev.mtimeMs === st.mtimeMs && io.exists(mirrorFile) && stampStands(st, prev.at)) alreadyInMirror = true;
       const waiting = renameWait.get(relPath);
-      if (waiting && (alreadyInMirror || waiting.size !== st.size || waiting.mtimeMs !== st.mtimeMs)) {
+      if (waiting && (waiting.size !== st.size || waiting.mtimeMs !== st.mtimeMs)) {
         try { if (waiting.tmpPath) io.unlink(waiting.tmpPath); } catch {}
         renameWait.delete(relPath);
         renameMeta.delete(relPath);
         renameSaid.delete(relPath);
       } else if (waiting && waiting.tmpPath && io.exists(waiting.tmpPath)) alreadyInMirror = true;
+      if (!alreadyInMirror && prev && prev.size === st.size && prev.mtimeMs === st.mtimeMs && io.exists(mirrorFile) && stampStands(st, prev.at)) alreadyInMirror = true;
 
       if (!alreadyInMirror) {
         const srcFile = path.join(folder, relPath);
@@ -1902,6 +1990,7 @@ function createFolderProgram(opts) {
     applyScan,
     owe,
     owed,
+    owing: () => { const st = readOutbox(mirror, io); return st === null || Object.keys(st.owe).some(k => st.owe[k] && st.owe[k].owe); },
     isOwed,
     landed,
     setPin,
@@ -2044,7 +2133,7 @@ class FolderSyncerController {
     });
   }
   owing() {
-    try { return this.program.owed().length > 0; } catch { return false; }
+    try { return this.program.owing(); } catch { return true; }
   }
   /* After each scan and each landing while a flush waits: done once nothing is owed, else one more scan, since a scan already
      running when the write was owed read the outbox before it. */
