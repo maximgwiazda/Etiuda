@@ -20,7 +20,7 @@
  *   cr9 Approve and Revert are interface (not selectable); the menu's acts and field take the keyboard
  *   cr11 in the dark theme the reworded slab wears one line (and cr4b: a render that patches the card keeps the rewording)
  *   cr10 the plants, each on a copy of the built page: the names check lifted, the parts check lifted, the filled text sent,
- *       the patched class without the rewording, the dark rule set aside, a placeholder put back,
+ *       the patched class without the rewording, the dark rule set aside, a placeholder put back, the card's buttons let go while the menu stands,
  *       and the rewording written to storage at once, each turning its leg red
  * ETIUDA_PLANTS=off skips cr10 with NOT RUN lines.
  */
@@ -36,7 +36,7 @@ const PRIO = E.belowNormal();
 console.log("       this run at " + (PRIO.below ? "below-normal" : "priority " + PRIO.priority) + " priority");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const SHOTS = process.env.CARD_SHOTS || "";
-const EXPECTED = 21;
+const EXPECTED = 23;
 let fails = 0, checks = 0, notRun = 0;
 const check = (ok, what, detail) => {
   checks++;
@@ -184,7 +184,8 @@ async function shotCard(p, id, name, withMenu) {
   }
   const box = await p.evaluate((sel, m) => { const r = document.querySelector(sel).getBoundingClientRect(), b = m && document.getElementById("eReword");
     const top = Math.min(r.top, b ? b.getBoundingClientRect().top : r.top) - 16, bottom = Math.max(r.bottom, b ? b.getBoundingClientRect().bottom : r.bottom) + 16;
-    return { x: Math.max(0, r.left - 24), y: Math.max(0, top), width: Math.min(innerWidth, r.width + 48), height: bottom - Math.max(0, top) }; }, cardSel(id), !!withMenu);
+    const bb = b ? b.getBoundingClientRect() : r, left = Math.max(0, Math.min(r.left, bb.left) - 24), right = Math.min(innerWidth, Math.max(r.right, bb.right) + 24);
+    return { x: left, y: Math.max(0, top), width: right - left, height: bottom - Math.max(0, top) }; }, cardSel(id), !!withMenu);
   await p.screenshot({ path: path.join(SHOTS, name + ".png"), clip: box });
 }
 
@@ -232,10 +233,46 @@ try {
       && ic.rw.sw === ic.edit.sw && ic.rw.stroke === ic.edit.stroke && ic.rw.fill === "none" && ic.rw.cap === ic.edit.cap,
       "cr2b the Reword icon is the designer's four paths in a 20 by 20 box, with the same class, size, stroke width, colour and caps as the Edit button's, no fill", ic);
 
+    /* cr2c while any bubble from the button stands, the card keeps its buttons out, so the bubble points at a visible button: the pointer
+       moved off the card, with the keyboard's focus in the bubble, in the menu, while waiting and after a refusal; released when it closes */
+    const heldNow = () => p.evaluate(sel => {
+      const c = document.querySelector(sel), ca = c.querySelector(":scope > .chead .cacts"), b = ca.querySelector('[data-act="reword"]'), el = document.getElementById("eReword");
+      const br = b.getBoundingClientRect(), tip = el ? el.querySelector(".bub-tip").getBoundingClientRect() : null, cx = tip ? tip.left + tip.width / 2 : -1;
+      return { hover: c.matches(":hover"), within: c.matches(":focus-within"), opacity: getComputedStyle(ca).opacity, width: Math.round(ca.getBoundingClientRect().width), btn: Math.round(br.width),
+        tipOnButton: !!el && br.width > 0 && cx >= br.left - 1 && cx <= br.right + 1, open: b.getAttribute("aria-expanded") };
+    }, cardSel(PLAIN));
+    const holds = [];
+    await p.mouse.move(4, 4);
+    await sleep(500);
+    holds.push(["menu", await heldNow()]);
+    await p.evaluate(() => { window.__answer = () => new Promise(() => {}); });
+    await p.click('#eReword button[data-rw-act="shorter"]');
+    await p.mouse.move(4, 4);
+    await sleep(500);
+    holds.push(["waiting", await heldNow()]);
+    await p.keyboard.press("Escape");
+    await sleep(150);
+    await openMenu(p, PLAIN);
+    await press(p, "shorter", { ok: false, why: "unreached" });
+    await p.mouse.move(4, 4);
+    await sleep(500);
+    holds.push(["refusal", await heldNow()]);
+    await p.keyboard.press("Escape");
+    await sleep(150);
+    await p.evaluate(() => { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); });
+    await p.mouse.move(4, 4);
+    await sleep(500);
+    const freed = await heldNow();
+    check(holds.every(([, h]) => !h.hover && h.opacity === "1" && h.width > 0 && h.btn > 0 && h.tipOnButton && h.open === "true")
+      && freed.opacity === "0" && freed.width === 0 && freed.open === "false",
+      "cr2c while the menu, its waiting line or its refusal stands the card keeps its buttons out with the pointer gone, the bubble's tip on the Reword button; closed, they go back to waiting for the pointer", { holds, freed });
+    await openMenu(p, PLAIN);
+
     /* cr3 */
     const body = await raw(p, PLAIN);
+    const nBefore = (await sent(p)).length;
     await press(p, "shorter", { ok: true, text: rewordOf(body) });
-    const req = await sent(p);
+    const req = (await sent(p)).slice(nBefore);
     check(req.length === 1 && JSON.stringify(req[0]) === JSON.stringify({ act: "shorter", words: body, how: "", to: "" }) && /\{PAX\}/.test(body)
       && req[0].words.indexOf(NAME.split(" ")[0]) < 0,
       "cr3 one press sends one request: the act and the card's own text in the language shown, {PAX} as the catalog writes it, never the name shown filled in", { req, body });
@@ -396,6 +433,7 @@ try {
     ["patched", "(it.rw ? \" rw-on\" : \"\")", "\"\""],
     ["rim", ":root:not([data-theme=light]) .card.rw-on>.txt::after{content:none}", ""],
     ["words", "No result came back from {ADDRESS}. The card is as it was.", "No answer from {ADDRESS}. The card is as it was."],
+    ["held", ",.card:has([data-act=reword][aria-expanded=true])>.chead .cacts", ""],
   ];
   for (const [name, from, to] of plants) {
     const what = "cr10 " + name + ": the plant on a copy of the built page turns its leg red";
@@ -415,6 +453,11 @@ try {
     } else if (name === "filled") {
       await openMenu(p, PLAIN); await press(p, "shorter", { ok: false, why: "late" });
       said = await sent(p); red = said.length === 1 && said[0].words.indexOf(NAME.split(" ")[0]) > -1;
+    } else if (name === "held") {
+      await openMenu(p, PLAIN);
+      await p.mouse.move(4, 4);
+      await sleep(500);
+      said = await p.evaluate(sel => getComputedStyle(document.querySelector(sel + " > .chead .cacts")).opacity, cardSel(PLAIN)); red = said === "0";
     } else if (name === "words") {
       await openMenu(p, PLAIN); await press(p, "shorter", { ok: false, why: "unreached" });
       said = await p.evaluate(() => (document.querySelector("#eReword .rw-bline") || {}).textContent || ""); red = said !== WORDS.en.none;

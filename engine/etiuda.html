@@ -2677,10 +2677,11 @@ html.raildrag #intentRailList{margin-top:0}
    would simply lose the pencil, the eye and the star. */
 @media (hover:hover){
   .chead .cacts{opacity:0;transition:opacity var(--m-tone) ease}
-  .card:hover>.chead .cacts,.card:focus-within>.chead .cacts{opacity:1}
-  /* While they wait they take no width, so the title runs the whole row and recedes when they
+  .card:hover>.chead .cacts,.card:focus-within>.chead .cacts,.card:has([data-act=reword][aria-expanded=true])>.chead .cacts{opacity:1}
+  /* While a bubble from a card's button stands (Reword's menu, its waiting line, its refusal) the card keeps its buttons out, with the
+     pointer or the keyboard anywhere, so the bubble points at a visible button; closed, they go back to waiting. While they wait they take no width, so the title runs the whole row and recedes when they
      come. The cut pass reads their width from here (cut-text.js, cut-rh). */
-  body:not(.tour-cacts) .card:not(:hover,:focus-within,.is-hidden)>.chead .cacts{
+  body:not(.tour-cacts) .card:not(:hover,:focus-within,.is-hidden):not(:has([data-act=reword][aria-expanded=true]))>.chead .cacts{
     width:0;overflow:hidden;margin-left:calc(-1*var(--chead-gap))}
 }
 /* A tour has no pointer, so a step showcasing the star, the eye or the pencil was pointing at
