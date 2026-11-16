@@ -122,7 +122,7 @@ function computerOf(w, i) {
   const keys = Object.assign({ eTheme: "d" + i + "theme", eUiLang: "d" + i + "lang" }, STATIC_KEYS);
   return {
     i, me, desk: { keys, files: { [SAMPLE_NAME]: SAMPLE, "relay-mirror.json": JSON.stringify({ team: SECRETS.team }) }, big: new Set(), team: false },
-    page: { map: Object.assign({}, keys), owed: new Set(), seen: 0, behind: new Map() }, bridge: null, kept: [], aside: [], online: true, seat: "", ever: false, s: { who: "", last: "", ask: "" },
+    page: { map: Object.assign({}, keys), owed: new Set(), seen: 0, behind: new Map(), win: [] }, bridge: null, kept: [], aside: [], online: true, seat: "", ever: false, s: { who: "", last: "", ask: "" },
     syncFile: null, sync: null, mirrors: new Map(), sent: new Map(), seen: new Map(), heldNow: [], pristineNow: [], failApply: false, keepFail: false,
     knows: new Map(), unattributed: [], mirrorRoot: path.join(WORK, "c" + i),
   };
@@ -275,6 +275,15 @@ function land(w, c) {
   if (!c.page.owed.size) return;
   const keys = {};
   for (const k of c.page.owed) keys[k] = has(c.page.map, k) ? c.page.map[k] : null;
+  /* A field written while its key was owed and landing at the value the desk already holds changes nothing: the person undid their
+     own unsent edit (a star and its removal), so that last write is no work of theirs to keep, and writes the computer never saw stand. */
+  const deskNow = itemsOf(c.desk.keys, {}), landing = itemsOf(keys, {}), lastOf = new Map();
+  for (const wr of c.page.win) lastOf.set(wr.item, wr);
+  for (const wr of lastOf.values()) {
+    const v = has(landing, wr.item) ? landing[wr.item] : null, was = has(deskNow, wr.item) ? deskNow[wr.item] : null;
+    if (wr.value === v && v === was) wr.cancel = true;
+  }
+  c.page.win = [];
   c.page.owed.clear();
   pageWrite(w, c, keys);
   mergeSoon(w, c);
@@ -384,6 +393,7 @@ function write(w, c, item, value) {
   c.knows.set(item, set);
   if (acct) for (const t of String(value).match(TOKEN_RE) || []) w.allowed[acct].add(t);
   else c.unattributed.push(wr);
+  return wr;
 }
 function setPage(w, c, key, v, owed) {
   if (v === null) delete c.page.map[key]; else c.page.map[key] = v;
@@ -415,7 +425,8 @@ function editField(w, c, op, m, owed) {
     if (!p.favourites.length) delete p.favourites;
     item = "k:" + LAYER + "#favourites[]" + m;
   }
-  write(w, c, item, value);
+  const wr = write(w, c, item, value);
+  if (owed || c.page.owed.has(LAYER)) c.page.win.push(wr);
   setPage(w, c, LAYER, Object.keys(p).length ? JSON.stringify(p) : null, owed);
 }
 function editFile(w, c, name, text) {
@@ -584,11 +595,19 @@ function invariants(w) {
      later write, so of a setting's writes made over none of each other one at least must stand. A setting or a removal written on a
      computer before it ever signed in is what it held before joining, which gives way to the store's by design (tests/desk-sync.mjs J1),
      so only its values are judged; one written after sign-in is the person's work in that account however late its first merge. */
-  const over = new Set();
-  for (const wr of w.writes) for (const o of wr.over) over.add(o);
+  const over = new Set(), overAt = new Map();
+  for (const wr of w.writes) for (const o of wr.over) { over.add(o); overAt.set(o, Math.min(overAt.has(o) ? overAt.get(o) : Infinity, wr.step)); }
+  /* A write whose very value the person replaced on another computer, by a write made after it, is no distinct work lost: the same
+     bytes were on that screen and the person wrote over them (one person's computers: a star on one, the same star and its removal on
+     another, seed 107). Writes of the same account only, and only those made before the write over the twin. */
+  for (const wr of w.writes) {
+    if (over.has(wr.id) || wr.value === null) continue;
+    const twin = w.writes.find(x => x !== wr && over.has(x.id) && x.acct === wr.acct && x.item === wr.item && x.value === wr.value && overAt.get(x.id) > wr.step);
+    if (twin) over.add(wr.id);
+  }
   const groups = new Map();
   for (const wr of w.writes) {
-    if (over.has(wr.id) || !wr.acct || (wr.pre && (wr.value === null || REF.isSetting(wr.item)))) continue;
+    if (over.has(wr.id) || wr.cancel || !wr.acct || (wr.pre && (wr.value === null || REF.isSetting(wr.item)))) continue;
     const g = wr.acct + " " + wr.item;
     if (!groups.has(g)) groups.set(g, []);
     groups.get(g).push(wr);
