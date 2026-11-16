@@ -305,6 +305,9 @@ function signinSay(reason, v, p){
       return [t("This team is no longer offered here, or this computer is already in a team, so nothing was sent."), ""];
     case "signin-keyring":
       return [t("Signing in needs a keyring, and none is open on this computer."), t("Installing or unlocking GNOME Keyring or KDE Wallet, then reopening Etiuda, lets this computer sign in.")];
+    /* WORDS OWED (the copywriter): signin-other, why this computer keeps the account it has and whom to ask (the policy's contact, or
+       its IT department); until they come it says the default below. */
+    case "signin-other":
     default:
       return [t("The sign-in did not finish."), t("Nothing changed, and signing in can be tried again.")];
   }

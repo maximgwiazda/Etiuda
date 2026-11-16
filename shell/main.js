@@ -10985,6 +10985,8 @@ function signinFileRead(text, packed) {
   if (out.held) out.held.revoked = out.revoked;
   if (out.held && h.access === true) out.held.access = true; /* the service's answer "access-token", remembered (section 11.11) */
   if (out.held && (h.seated === true || out.held.cert)) out.held.seated = true; /* plant:seated-file */
+  if (out.held && h.org && typeof h.org === "object") out.held.org = { tid: SIGNIN_TENANT.test(String(h.org.tid)) ? String(h.org.tid).toLowerCase() : "", /* plant:org-file */
+    hd: typeof h.org.hd === "string" && h.org.hd.length <= 253 ? h.org.hd.toLowerCase() : "" };
   if (out.held && out.held.cert) {
     const doors = signinDoorsOk(h.doors, packed), sig = typeof h.doorsSig === "string" ? h.doorsSig : "";
     if (signinDoorsSigned(doors, sig, out.held.cert)) Object.assign(out.held, { doors: doors, doorsSig: sig }); /* plant:file-doors-signed */
@@ -11337,6 +11339,9 @@ function signinTake(provider, got, ans, now, access) {
   base.revoked = s.revoked || null; /* plant:revoked-survives */
   if (access === true) base.access = true;
   if (was && was.seated === true && sameAccount()) base.seated = true; /* plant:seated-same */
+  /* The account's organisation as its provider named it, so a policy set later is held to it (signinPolicyRefuses). */
+  const claims = signinClaims(String(got.idToken || ""));
+  if (claims) base.org = { tid: typeof claims.tid === "string" ? claims.tid.toLowerCase() : "", hd: typeof claims.hd === "string" ? claims.hd.toLowerCase() : "" }; /* plant:org-take */
   s.held = signinSettle(base, ans, now);
   s.revoked = s.held.revoked;
   delete s.out; /* this sign-in holds the desk's place again, so a sign out still owed is no longer wanted */
@@ -11351,7 +11356,15 @@ function signinHeldIs(held, provider, sub) {
    in signin.json from its first certificate on, a lapse or a lost seat included). One that never held one may be replaced or signed out. */
 function signinAccountKept(st) {
   const m = st && st.managed;
-  return !!m && !!m.managed && !m.shared && !!st.held && st.held.seated === true; /* plant:kept-seated */
+  return !!m && !!m.managed && !m.shared && !!st.held && st.held.seated === true /* plant:kept-seated */
+    && !signinPolicyRefuses(st.held); /* plant:kept-policy */
+}
+/* Whether machine policy as it stands refuses the account `held` (what signinTokens says as signin-tenant): its provider no longer
+   offered, or its organisation as the provider named it at the sign-in (`org`) outside the pin. False where no `org` was kept. */
+function signinPolicyRefuses(held) {
+  if (!held || !held.org) return false;
+  const known = signinKnown(held.provider);
+  return !known || !signinPinOk(known.pin, held.org); /* plant:policy-refuses */
 }
 /* A MANAGED COMPUTER THAT IS NOT SHARED KEEPS ITS ACCOUNT (decision 49): true where state `st` holds a sign-in the computer keeps
    (signinAccountKept) whose account can be opened and `sub` is another's. A sub that can no longer be opened lets the sign-in through,

@@ -28,7 +28,7 @@ const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const SIGNIN = fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8");
 const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const CHECKS = 27, PLANTS = 35;
+const CHECKS = 28, PLANTS = 37;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -57,7 +57,7 @@ try {
     fnOf("function signinPinOk("), lineOf("let signinPacked ="), fnOf("function signinOffered("), lineOf("const SIGNIN_NONCE_LINE ="),
     fnOf("function signinNonce("), lineOf("function signinB64url("), fnOf("function signinSame("), fnOf("function signinAuthorize("),
     fnOf("function signinPageOk("), fnOf("function signinRefusedWhy("), fnOf("function signinClaims("), fnOf("function signinIssuerOk("),
-    fnOf("function signinTokens("), fnOf("function signinLanding("), lineOf("const SIGNIN_LOST ="), fnOf("function signinAccountKept("), fnOf("function signinOtherHeld("),
+    fnOf("function signinTokens("), fnOf("function signinLanding("), lineOf("const SIGNIN_LOST ="), fnOf("function signinPolicyRefuses("), fnOf("function signinAccountKept("), fnOf("function signinOtherHeld("),
     lineOf("function buyManaged(")].join("\n");
 } catch (e) { sliced = e.message; }
 const NAMES = ["managedPolicyFrom", "policyValues", "signinPinTable", "signinPinOk", "signinOffered", "signinAuthorize", "signinPageOk",
@@ -204,6 +204,16 @@ CASES.keptSeated = s => {
   return s.signinAccountKept(never) === false && s.signinOtherHeld(never, "s-2") === false && s.signinAccountKept(lost) === true
     && s.signinOtherHeld(lost, "s-2") === true && s.signinAccountKept({ managed: SH, held: lost.held }) === false
     && s.signinAccountKept({ managed: null, held: lost.held }) === false && s.signinAccountKept({ managed: M, held: null }) === false;
+};
+/* mm-s10 (review 2026-11-16 09, finding 1; Claude alpha's decision): a kept account that machine policy as it stands refuses is kept
+   no more: a tenant pinned, or changed, after it signed in, and Managed set over a personal account; the same tenant pinned, personal
+   accounts allowed, or an account whose organisation was not kept (signed in before it was), is kept as before. */
+CASES.policyRefuses = s => {
+  const at = (vals, org) => { pinned(s, vals); const st = { managed: pol(s, vals), held: Object.assign({ provider: "microsoft", sub: "sealed:s-1", seated: true }, org ? { org } : {}) };
+    const r = [s.signinAccountKept(st), s.signinOtherHeld(st, "s-2")]; s.setTable(s.table()); return r.join(); };
+  return at({ Managed: 1, SigninTenant: OTHER }, { tid: TENANT, hd: "" }) === "false,false" && at({ Managed: 1 }, { tid: PERSONAL, hd: "" }) === "false,false"
+    && at({ Managed: 1, SigninTenant: TENANT }, { tid: TENANT, hd: "" }) === "true,true" && at({ Managed: 1, AllowPersonalAccounts: 1 }, { tid: PERSONAL, hd: "" }) === "true,true"
+    && at({ Managed: 1, SigninTenant: OTHER }, null) === "true,true" && at({ Managed: 1, SigninProvider: "google" }, { tid: TENANT, hd: "" }) === "false,false";
 };
 /* mm-s8: Buy: a view under Managed names none, unmanaged and a pin alone do. */
 CASES.buy = s => s.buyManaged({ managed: { on: true } }) === true && s.buyManaged({ managed: { on: false, provider: "microsoft" } }) === false
@@ -417,6 +427,7 @@ const LIST = [
   ["mm-s6", "reasons", "AADSTS50105 is signin-notassigned whatever the error; the landing offers another account only off a managed computer"],
   ["mm-s7", "keeps", "a managed, unshared computer refuses another account's sign-in and lets the same through"],
   ["mm-s9", "keptSeated", "review 2026-11-16 finding 2: a managed, unshared computer keeps an account only once it has held a seat here, a lost seat included; one given none may be replaced and signed out of"],
+  ["mm-s10", "policyRefuses", "review 09 finding 1: a kept account machine policy now refuses (a tenant pinned or changed after it signed in, Managed over a personal account, another provider pinned) is kept no more; one the policy allows, or whose organisation was not kept, is"],
   ["mm-s8", "buy", "Buy names no address under Managed, and does with a pin alone"],
   ["mm-p1", "pageUnset", "unset, Account and the panel are byte for byte the same with no policy and with all six off, English and Polish"],
   ["mm1", "m1", "M1: managed and not assigned, Account and the panel say the refusal and whom to ask, and nothing to buy, try or switch"],
@@ -480,6 +491,8 @@ if (!PLANTS_OFF && S) {
   await plantShell("mmp19", ["if (!signinAccountKept(st) || !st.held.sub) return false; /* plant:other-held */", "if (!st.held || !st.held.sub) return false;"], "keeps");
   await plantShell("mmp34", ["return !!m && !!m.managed && !m.shared && !!st.held && st.held.seated === true", "return !!m && !!m.managed && !m.shared && !!st.held"], "keptSeated");
   await plantPage("mmp35", ["    const keeps=signinKeepsAccount(v);", "    const keeps=signinManaged(v) && !v.managed.shared;"], "keepsNone", "settings");
+  await plantShell("mmp36", ["    && !signinPolicyRefuses(st.held); /* plant:kept-policy */", "    ;"], "policyRefuses");
+  await plantShell("mmp37", ["return !known || !signinPinOk(known.pin, held.org); /* plant:policy-refuses */", "return !known;"], "policyRefuses");
 
   await plantShell("mmp20", ["return !!was && !signinSame(was, String(sub)); /* plant:other-same */", "return !signinSame(was, String(sub));"], "keeps");
   plantText("mmp21", ["  if (signinAccountKept(s)) return signinView(); /* plant:out-managed */", ""], wiringHolds);
