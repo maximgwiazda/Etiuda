@@ -290,8 +290,13 @@ async function launch(plan) {
   const shellSrc = f => (fs.existsSync(path.join(SHELL, f)) ? fs.readFileSync(path.join(SHELL, f), "utf8") : fs.readFileSync(path.join(ROOT, "shell", f), "utf8"));
   process.env.XDG_CURRENT_DESKTOP = "GNOME"; /* so the shell's Linux keyring switch (tests/shell-office.mjs 14) stays out, on any machine */
   let latestChecks = null;
-  /* A file main.js requires from beside itself is the tree's: the lab's shell folder holds its built-in catalogs alone. */
-  const beside = n => (path.isAbsolute(n) && path.dirname(n) === SHELL ? path.join(ROOT, "shell", path.basename(n)) : n);
+  /* A file main.js requires from beside itself is the tree's (including subdirectories such as sync/):
+     the lab's shell folder holds its built-in catalogs alone. */
+  const beside = n => {
+    if (!path.isAbsolute(n)) return n;
+    const rel = path.relative(SHELL, n);
+    return rel && !rel.startsWith("..") && !path.isAbsolute(rel) ? path.join(ROOT, "shell", rel) : n;
+  };
   const mockRelay = plan.mockRelay ? {
     pathKey: REAL_CHANNEL.pathKey,
     createChannel: () => ({

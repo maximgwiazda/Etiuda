@@ -104,6 +104,36 @@ retry and 740 and 2 to a failure.
 - **There is no installer log.** The NSIS build that electron-builder bundles is compiled without logging, so the exit
   code is the record, with the deployment tool's own log beside it.
 
+## A managed installation
+
+Etiuda's Group Policy template is in `shell/policy` (`etiuda.admx`, with English and Polish `.adml`), and an all-users
+install carries it in `resources\policy` beside the program. Every setting is machine policy under
+`HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Etiuda`, read and never written; each one's own text says what it does.
+
+### A non-persistent desktop
+
+A desk's identity is two key pairs that Etiuda keeps in the person's profile, in `%APPDATA%\etiuda` (the file
+`desk.json` beside its team's mirrors), sealed by Windows' data protection for that person. The desk is the same desk on
+every host, on its team with its catalog and nobody to let it in again, wherever **the profile keeps that folder and the
+person's Windows data protection keys**:
+
+- an **FSLogix Profile Container**, which keeps the whole profile, or
+- a **roaming profile**, which carries the data protection keys with the person.
+
+Measured on GitHub's Windows runner (run 43496397329): with the whole `%APPDATA%\etiuda` folder discarded between
+sessions the desk came back as a new desk; with its `Local State` file alone discarded and `desk.json` kept, the same desk.
+The person's Documents were unchanged either way.
+
+Where profiles are not kept, two settings say what the desk does when its key cannot be opened on a new host:
+
+- **Keep each desk on a non-persistent desktop** (`NonPersistent`): the desk says what happened and whom to ask (the
+  setting `SupportContact`, or the organisation's IT department), keeps working in everything but signing in, and makes no new desk. Its sign-ins say
+  that it is pooled, so a person's pooled desks hold one place among their three computers, the newest taking it over.
+- **Let a non-persistent desktop make a new desk** (`NonPersistentNewDesk`), with the first: such a desk makes a new
+  desk, as on any computer, and its team may need to let it in again; it still holds one pooled place.
+
+With neither set, a desk whose key cannot be opened makes a new desk, as on any computer.
+
 ## Licence
 
 Etiuda 2.x is source-available under the Etiuda Source-Available Licence 1.0, and `LICENSE`

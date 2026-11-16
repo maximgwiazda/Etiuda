@@ -40,6 +40,8 @@ if (!PICKER && typeof window !== "undefined" && typeof window.addEventListener =
     else if (e.type === "click" && e.composedPath().some(n => n && n.dataset && n.dataset.eOpen === "update")) ipcRenderer.sendSync("etiuda:update-click");
     /* Buy names no address either: main builds the order page's (shell/main.js orderAddress). */
     else if (e.type === "click" && e.composedPath().some(n => n && n.dataset && n.dataset.eOpen === "buy")) ipcRenderer.sendSync("etiuda:buy-click");
+    /* Sync's switch turned on where the folder's consent was never given: main asks the provider only after a click on it. */
+    else if (e.type === "click" && e.composedPath().some(n => n && n.dataset && n.dataset.eOpen === "store-on")) ipcRenderer.sendSync("etiuda:store-on-click");
     /* A sign-in button names its provider; main opens the provider's page only after a click on one. */
     else if (e.type === "click") {
       const b = e.composedPath().find(n => n && n.dataset && n.dataset.eOpen === "signin");
@@ -161,9 +163,11 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   },
   deskSave: (text) => ipcRenderer.sendSync("etiuda:desk-save", text),
   deskWrite: (text) => ipcRenderer.invoke("etiuda:desk-write", text),
-  /* Only the keys this load changed, null for one it deleted; `now` waits for the disk as deskSave does. */
-  deskPatch: (text, now) => (now ? ipcRenderer.sendSync("etiuda:desk-patch-save", text)
-    : ipcRenderer.invoke("etiuda:desk-patch", text)),
+  /* Only the keys this load changed, null for one it deleted; `now` waits for the disk as deskSave does; `took` the tells taken, by key. */
+  deskPatch: (text, now, took) => (now ? ipcRenderer.sendSync("etiuda:desk-patch-save", text, typeof took === "string" ? took : "")
+    : ipcRenderer.invoke("etiuda:desk-patch", text, typeof took === "string" ? took : "")),
+  /* The keys the store's sync put on the desk behind the page, as a patch in text, and the tell's number. */
+  onDeskSynced: (fn) => ipcRenderer.on("etiuda:desk-synced", (_e, text, n) => { try { fn(String(text || ""), Number.isSafeInteger(n) ? n : 0); } catch { /* the page has gone */ } }),
   /* Where the desk is, and the files it refused and kept aside, as text like the desk itself. */
   deskFile: host.deskFile,
   /* The home folder, so a path the page shows can be written %USERPROFILE% rather than by name. */
@@ -299,9 +303,19 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   signinDoor: (n) => ipcRenderer.invoke("etiuda:signin-door", n),
   signinCheck: () => ipcRenderer.invoke("etiuda:signin-check"),
   signinAgain: () => ipcRenderer.invoke("etiuda:signin-again"),
+  /* Sync's folder consent asked again, for a click on the switch's On (data-e-open="store-on"): "asked", or why not. */
+  storeConsent: () => ipcRenderer.invoke("etiuda:store-consent"),
   /* Buy, where the shell names an order page: {offer} now, and the page opened by the shell for a click on it. */
   buyState: () => ipcRenderer.sendSync("etiuda:buy-state"),
   openBuyPage: () => ipcRenderer.invoke("etiuda:buy-open"),
+  /* Sync across computers: the Account row's view (shell/sync/store.cjs storeRow), its switch, and the one thing said, told shown. */
+  storeState: () => ipcRenderer.sendSync("etiuda:store-state"),
+  storeSet: (what) => ipcRenderer.invoke("etiuda:store-set", String(what || "")),
+  storeAnswer: (choice) => ipcRenderer.invoke("etiuda:store-answer", String(choice || "")),
+  openSetAside: () => ipcRenderer.invoke("etiuda:open-set-aside"),
+  storeSaid: () => ipcRenderer.sendSync("etiuda:store-said"),
+  storeOpened: () => ipcRenderer.sendSync("etiuda:store-opened"),
+  onStore: (fn) => ipcRenderer.on("etiuda:store", () => { try { fn(); } catch { /* the page has gone */ } }),
   onSignin: (fn) => ipcRenderer.on("etiuda:signin", (_e, v) => { try { fn(v && typeof v === "object" ? v : {}); } catch { /* the page has gone */ } }),
   /* A proxy's question for a user name and password, as {id, host, port, again}, and the page's answer to it by id;
      an empty user name is "Not now". The answer is handed to the shell and kept nowhere on this side. */

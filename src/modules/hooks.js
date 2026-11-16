@@ -63,6 +63,7 @@ const SLOTS = [
   "cardFillKey",
   "keepPoolAcross",
   "restartDesk",
+  "takeSyncedDesk",
   "scheduleDeskBranch",
 ];
 

@@ -52,6 +52,7 @@ const REASONS = Object.freeze({
   "swept-other-lead": "This team id is kept for its own lead, so a create under another key is not taken.",
   "revoked": "That grant was signed by a revoked key, so the relay did not take it.",
   "withdrawn": "That desk has withdrawn its request, so it was not let in.",
+  "seat-lapsed": "This desk's seat needs a current certificate, so the relay did not open a session.",
 });
 
 function refusal(reason) {

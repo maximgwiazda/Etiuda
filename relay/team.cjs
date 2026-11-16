@@ -11,7 +11,7 @@ const JSON_MAX = 256 * 1024;
 const STATUS = {
   "no-hello": 401, "hello-replay": 401, "nonce-stale": 401, "not-enrolled": 403, "bad-signature": 403, "removed": 403,
   "outside-place": 403, "token-spent": 403, "invite-ended": 403, "token-tries": 403, "team-size": 403, "team-count": 403, "epoch": 409, "replay-counter": 409,
-  "replay-rev": 409, "bad-grant": 403, "swept-other-lead": 403, "revoked": 403, "team-lapsed": 403, "withdrawn": 403, "missing": 404, "superseded": 410, "expired": 410, "blob-size": 413, "rate": 429,
+  "replay-rev": 409, "bad-grant": 403, "swept-other-lead": 403, "revoked": 403, "team-lapsed": 403, "withdrawn": 403, "seat-lapsed": 403, "missing": 404, "superseded": 410, "expired": 410, "blob-size": 413, "rate": 429,
 };
 const CLOSE = { "no-hello": 4401, "removed": 4403, "handed-over": 4403 };
 const DEFAULT_PREFIX = "/relay/v1/";
@@ -22,17 +22,20 @@ const REVOKED_MARK = "etiuda-revoked";
 /* One lead key holds at most this many live teams. The number is Claudius's, 2026-10-28. The lead's object is named
    lead:<key id>, outside the public table, and a team object answers whether it still holds its team on the held path. */
 const TEAMS_PER_LEAD = 25;
+/* A lead's list goes at the release that empties it; one a missed release left is asked again LEAD_KEEP_MS after its last change, and
+   goes once no team it names still holds (section 13 of the licence design; decision 50). */
+const LEAD_KEEP_MS = 30 * 24 * 60 * 60 * 1000;
 const LEAD_PATH = "/etiuda/lead";
 const LEAD_MARK = "etiuda-lead";
 const HELD_PATH = "/etiuda/held";
 const HELD_MARK = "etiuda-held";
 /* One leading slash, one segment, then /v1/ and a trailing slash. A ".." cannot occur in that shape. */
 const PREFIX_RE = /^\/[a-z][a-z0-9-]{0,40}\/v1\/$/;
-const ROUTE_TAIL = "(?:teams|t/([0-9a-f]{32})/(devices|invites|door|hello|session|grant|lead|socket|wrap|states|since/(\\d{1,16})|b/([0-9a-f]{32})))$";
+const ROUTE_TAIL = "(?:teams|t/([0-9a-f]{32})/(devices|invites|door|hello|session|grant|lead|notice|socket|wrap|states|since/(\\d{1,16})|b/([0-9a-f]{32})))$";
 const HEADERS = { "content-type": "application/json", "cache-control": "no-store" };
 /* The methods each route answers, in one table the Worker and the object both ask, so that a path or a method no route answers
    is missing before any object is woken to say so. `since` and `b` are the two routes whose names carry an argument. */
-const METHODS = { teams: ["POST"], devices: ["POST"], invites: ["POST"], door: ["POST"], hello: ["POST"], session: ["POST"], grant: ["POST"], lead: ["POST"], socket: ["GET"],
+const METHODS = { teams: ["POST"], devices: ["POST"], invites: ["POST"], door: ["POST"], hello: ["POST"], session: ["POST"], grant: ["POST"], lead: ["POST"], notice: ["POST"], socket: ["GET"],
   wrap: ["GET"], states: ["GET"], since: ["GET"], b: ["GET", "PUT"] };
 /* The one path this Worker answers under. API_PREFIX names it where set; with none, the path is /relay/v1/. A value of any
    other shape is not a prefix, and the Worker answers unavailable rather than /relay/v1/. */
@@ -161,9 +164,14 @@ const MIGRATION_FAILED = "relay one-spelling migration: failed; tried again at e
 
 function teamObject(deps) {
   /* Keys the Worker decided for this request. Empty is a list, so a flag, not the array, says whether it was sent.
-     Those keys stay for a later call with no header, while this wake lasts. With none, the call reads deps.revoked,
+     Those keys stay for a later call with no header, while this wake lasts, and in the team's own row ("kept") across a hibernation,
+     since a headerless wake (a socket's message, the alarm) cannot ask the list object. With neither, the call reads deps.revoked,
      and a result that is not a list is no list. */
   let headerSet = false, headerKeys = null, carried = null;
+  function keptStored() {
+    const row = deps.store.get("kept");
+    return row && Array.isArray(row.keys) && row.keys.every(k => typeof k === "string") ? row.keys.slice() : null;
+  }
   function useKept(request) {
     const raw = request && request.headers ? request.headers.get("etiuda-kept") : null;
     if (typeof raw !== "string") { headerSet = false; headerKeys = null; return; }
@@ -173,11 +181,20 @@ function teamObject(deps) {
     headerSet = true;
     headerKeys = parsed.slice();
     carried = headerKeys.slice();
+    /* Written only for a team that exists and only when the list moved, so a stranger's request stores nothing. */
+    const was = keptStored() || [];
+    const moved = was.length !== carried.length || carried.some(k => was.indexOf(k) < 0);
+    if (moved && deps.store.get("team") !== undefined) deps.store.put("kept", { keys: carried.slice() });
   }
   function revokedNow() {
     if (headerSet) return headerKeys.slice();
     const read = typeof deps.revoked === "function" ? deps.revoked() : [];
     const envKeys = Array.isArray(read) ? read : [];
+    if (!carried) {
+      let kept = null;
+      kept = keptStored(); /* plant:kept-stored */
+      if (kept) carried = kept;
+    }
     if (!carried) return envKeys.slice();
     const out = carried.slice();
     for (const k of envKeys) if (out.indexOf(k) < 0) out.push(k);
@@ -264,7 +281,7 @@ function teamObject(deps) {
     if (op === "release") {
       const row = deps.store.get("lead");
       const rts = row && Array.isArray(row.rts) ? row.rts.filter(x => x !== rt) : [];
-      deps.store.put("lead", Object.assign({}, row, { rts }));
+      await keepLead(row, rts, row && row.leadKey);
       return reply(200, { ok: true });
     }
     const row = deps.store.get("lead");
@@ -283,25 +300,66 @@ function teamObject(deps) {
       }
     }
     /* Another reserve may have written the list while this one asked (finding 5 of the fourth Grok review of 3cc09cb5): the list is
-       read again after the asks, the ids found dead are dropped from what stands now, and the count, the push and the put are one
-       atomic step, so a place another reserve took is counted. */
-    return deps.store.atomic(() => {
+       read again after the asks, the ids found dead are dropped from what stands now, and the count, the push and the write are one
+       atomic step, so a place another reserve took is counted. The alarm follows the step. */
+    const step = deps.store.atomic(() => {
       let now = row;
       now = deps.store.get("lead"); /* plant:lead-reread */
       let list = now && Array.isArray(now.rts) ? now.rts.filter(x => typeof x === "string") : [];
-      if (repeats && list.indexOf(rt) !== -1) return reaffirm(rt);
+      if (repeats && list.indexOf(rt) !== -1) return { answer: reaffirm(rt), kept: null };
+      let kept = null;
       if (ns) {
-        let kept = list;
-        kept = list.filter(id => !dead.has(id) || heldAgain(id)); /* plant:lead-reap */
-        list = kept;
-        deps.store.put("lead", Object.assign({}, now, { rts: list, leadKey }));
+        let left = list;
+        left = list.filter(id => !dead.has(id) || heldAgain(id)); /* plant:lead-reap */
+        list = left;
+        kept = writeLead(now, list, leadKey);
       }
       const full = list.length >= TEAMS_PER_LEAD;
-      if (full) return refusedFor("team-count"); /* plant:team-count */
+      if (full) return { answer: refusedFor("team-count"), kept }; /* plant:team-count */
       list.push(rt);
-      deps.store.put("lead", Object.assign({}, now, { rts: list, leadKey }));
-      return reply(200, { ok: true, added: true });
+      return { answer: reply(200, { ok: true, added: true }), kept: writeLead(now, list, leadKey) };
     });
+    if (step.kept !== null) await alarmLead(step.kept);
+    return step.answer;
+  }
+  /* The lead's list written, or deleted where it names no team, and its alarm set LEAD_KEEP_MS on or cleared with it. The write is
+     synchronous, so it can sit inside an atomic step, and answers whether a list was kept; the alarm follows it. */
+  function writeLead(row, rts, leadKey) {
+    if (!rts.length) { deps.store.del("lead"); return false; } /* plant:lead-empty */
+    deps.store.put("lead", Object.assign({}, row, { rts }, leadKey ? { leadKey } : {}));
+    return true;
+  }
+  async function alarmLead(kept) {
+    if (!alarm) return;
+    if (kept) await alarm.set(deps.clock() + LEAD_KEEP_MS);
+    else await alarm.clear();
+  }
+  async function keepLead(row, rts, leadKey) {
+    await alarmLead(writeLead(row, rts, leadKey));
+  }
+  /* A lead's list asked again: each team it names asked whether it still holds, a throw keeping the id; the list kept as what holds. */
+  async function leadAlarm(row) {
+    const ns = namespaceOf(deps.teams);
+    const rts = Array.isArray(row.rts) ? row.rts.filter(x => typeof x === "string") : [];
+    if (!ns) return keepLead(row, rts, row.leadKey);
+    const dead = new Set();
+    for (const id of rts) {
+      let holds = true;
+      try { holds = await asksHeld(ns, id, row.leadKey || null); } catch { holds = true; }
+      if (!holds) dead.add(id);
+    }
+    /* A reserve or a release may have written the list while the alarm asked: what stands now is kept, less the ids found dead, in one
+       atomic step, and a list a release took away meanwhile stays gone. */
+    const kept = deps.store.atomic(() => {
+      let now = row;
+      now = deps.store.get("lead"); /* plant:lead-alarm-reread */
+      if (now === undefined) return null;
+      const list = Array.isArray(now.rts) ? now.rts.filter(x => typeof x === "string") : [];
+      let live = list;
+      live = list.filter(id => !dead.has(id) || heldAgain(id)); /* plant:lead-alarm-reap */
+      return writeLead(now, live, now.leadKey);
+    });
+    if (kept !== null) await alarmLead(kept);
   }
 
   async function route(request) {
@@ -356,6 +414,8 @@ function teamObject(deps) {
     }
     if (what === "grant") {
       const renewed = c.renew(rt, body);
+      /* A pooled desk the grant newly names as freed holds no session now (takeSeats); its socket goes with it. */
+      if (renewed.ok) closeWhere(a => !!a.key && !c.sessionByHash(a.ses).ok, "no-hello"); /* plant:freed-sockets */
       if (renewed.ok) await arm(); /* plant:arm-renew */
       return answer(renewed, r => ({ ok: true, lapse: r.lapse }));
     }
@@ -374,11 +434,18 @@ function teamObject(deps) {
       return answer(s, r => Object.assign(r.invite ? { session: r.session, until: r.until, invite: true, lapse: r.lapse } : { session: r.session, until: r.until, lapse: r.lapse },
         r.made ? { made: r.made } : {}, r.door ? { door: r.door } : {}));
     }
+    /* The service's notice: a store-end taken is swept here, before the answer, so the store is gone when the service hears ok. */
+    if (what === "notice") {
+      const n = c.notice(rt, body);
+      if (n.ok) await sweepIfDue(); /* plant:notice-sweep-now */
+      return answer(n, r => ({ ok: true, what: r.what }));
+    }
     if (what === "door") return answer(c.door(rt, body), r => ({ ok: true, refs: r.refs }));
     if (what === "devices") {
       const r = c.devices(rt, body);
       if (r.ok) closeWhere(a => r.withdrawn.indexOf(a.key) > -1, "removed"); /* plant:withdraw-sockets */
       if (r.ok) closeWhere(a => !!a.inv && !c.sessionByHash(a.ses).ok, "no-hello");
+      if (r.ok && r.withdrawn.length) await arm(); /* plant:arm-gone */
       return answer(r, x => ({ rev: x.rev }));
     }
     const r = c.invites(rt, body);
@@ -482,8 +549,18 @@ function teamObject(deps) {
     closeWhere(() => true, "team-lapsed");
     c.wipe(left); /* plant:sweep-wipe */
     if (leadKey && heldRt) { try { await dropLead(leadKey, heldRt); } catch { /* a missed drop is reclaimed at the next reserve */ } } /* plant:lead-drop */
-    if (alarm) await (left.length ? alarm.set(deps.clock() + SWEEP_RETRY_MS) : alarm.clear());
+    /* A missed delete rings again for its objects; otherwise the alarm rings once more, SWEPT_KEEP_MS after the sweep, for the mark alone. */
+    const markEnd = sweptEnd();
+    if (alarm) await (left.length ? alarm.set(deps.clock() + SWEEP_RETRY_MS) : markEnd !== null ? alarm.set(markEnd) : alarm.clear()); /* plant:swept-alarm */
     return true;
+  }
+
+  /* The instant a swept id's mark ends, or null where it holds none or no instant. */
+  /* A store the service ended keeps its mark for good (notice: its id is never made again); every other swept mark ends. */
+  function sweptEnd() {
+    if (deps.store.get("swept") === "ended") return null; /* plant:ended-kept */
+    const at = deps.store.get("sweptAt");
+    return deps.store.get("swept") !== undefined && Number.isSafeInteger(at) ? at + core.SWEPT_KEEP_MS : null;
   }
 
   /* The alarm: the sweep where it is due; otherwise a trial's sockets closed at its until, and the alarm set to the next instant. */
@@ -495,7 +572,15 @@ function teamObject(deps) {
   }
 
   async function onAlarm() {
+    const leadRow = deps.store.get("lead");
+    if (leadRow !== undefined && deps.store.get("team") === undefined) return leadAlarm(leadRow);
     if (await sweepIfDue()) return;
+    /* A swept id's mark goes at its end; an alarm ringing before it (a retry, a stale one) sets the alarm to the end again. A mark kept from
+       before its instant was, with none, stays. */
+    const markEnd = deps.store.get("team") === undefined ? sweptEnd() : null;
+    if (markEnd !== null && deps.clock() >= markEnd) { deps.store.atomic(() => { deps.store.del("swept"); deps.store.del("sweptAt"); }); return; } /* plant:swept-forget */
+    if (markEnd !== null) { if (alarm) await alarm.set(markEnd); return; }
+    c.forgetGone(); /* plant:gone-forget */
     closeEnded();
     if (c.lapseState() === "lapsed") closeWhere(() => true, "team-lapsed"); /* plant:lapse-close */
     await arm();
@@ -637,6 +722,6 @@ class RelayTeam {
   webSocketClose(ws) { return this.object.webSocketClose(ws); }
 }
 
-module.exports = { JSON_MAX, TEAMS_PER_LEAD, teamObject, RelayTeam, routeOf, apiPrefixOf, readCapped, refusedFor, missing, fault, unavailable,
+module.exports = { JSON_MAX, TEAMS_PER_LEAD, LEAD_KEEP_MS, teamObject, RelayTeam, routeOf, apiPrefixOf, readCapped, refusedFor, missing, fault, unavailable,
   REVOKED_PATH, REVOKED_MARK, revokedPathname, revokedMarked, revokedTextOf, revokedReply,
   LEAD_PATH, LEAD_MARK, HELD_PATH, HELD_MARK, leadRequest, heldRequest };

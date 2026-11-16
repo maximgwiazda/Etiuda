@@ -1571,6 +1571,10 @@ try {
     "node:http",
     /* node:net and node:stream, only in shell/proxy-net.cjs: the relay socket's tunnel through a proxy, and a call's answer read as a stream. */
     "node:net", "node:stream",
+    /* A person's store's key life: node:crypto alone, its requests through what the shell hands it; no window, screen, clipboard or key. */
+    "./sync/store.cjs",
+    /* Its sync: node:crypto, node:fs and node:path over the store's own mirror; no window, screen, clipboard or key. */
+    "./sync/sync.cjs",
     "./win-proxy.cjs", "./proxy-net.cjs", "./page-watch.cjs", "./clip-suggest.cjs", "./desk-ai.cjs", "./desk-reset.cjs", "./tray.cjs", "./embed/suggest.cjs", "./core.cjs", "./relay/channel.cjs", "./blob.cjs"];
   /* 5c AS A JUDGEMENT OF A TEXT, so a planted copy can be judged the same way. WIDENED 2026-11-15 by the lead engineer
      (Claudius) on the test architect's word: win-proxy.cjs reads Windows' proxy again without waiting (execFile), so two
