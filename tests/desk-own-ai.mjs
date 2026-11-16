@@ -513,7 +513,10 @@ try {
       "The organisation's model at {HOST} is set, and with both switches off"];
     /* True while the organisation's model ranks too, so they may be drawn then: the suggestion switch's off line (off, nothing
        goes to either model for suggestions), and the connection test's hover (the test sends its fixed prompt alone). */
-    const TRUE_WITH_ORG = ["Suggestions come from matching words, and the model stays unloaded", "Asks the model for a one-word answer."];
+    /* The person's own switch for rewording says only that, turned off, nothing is sent by Reword or Your own words?; it is drawn only
+       where the organisation's model is in force (db9). */
+    const TRUE_WITH_ORG = ["Suggestions come from matching words, and the model stays unloaded", "Asks the model for a one-word answer.",
+      "Reword on cards and Your own words? in Quick replies send the card's words"];
     const found = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8").split("\n")
       .map(l => /^\s*"((?:[^"\\]|\\.)*)":"((?:[^"\\]|\\.)*)",?\s*$/.exec(l)).filter(Boolean)
       .map(m => ({ en: JSON.parse("\"" + m[1] + "\""), pl: JSON.parse("\"" + m[2] + "\"") }))
@@ -689,6 +692,84 @@ try {
       }
     }
   }
+  /* db9: THE PERSON'S OWN SWITCH FOR REWORDING, a row in the AI section where the organisation's model is set and nowhere else, in the
+     copywriter's words (section 4 of her file) in both languages, no quotation marks in them, off hiding Reword on every card and
+     telling the shell, and the ordering's two switches left as they were. */
+  const RW_LABEL = { en: "Rewording", pl: "Przeredagowanie" };
+  const RW_HINT = { en: "Reword on cards and Your own words? in Quick replies send the card's words or the selected words to the organisation's model at {ADDRESS}, only when pressed. Turned off, both are gone and nothing is sent; the choice is yours, on this computer.",
+    pl: "Przycisk Przeredaguj na kartach i Własne słowa? w Szybkich odpowiedziach wysyłają treść karty albo zaznaczony tekst do modelu organizacji pod adresem {ADDRESS}, tylko po kliknięciu. Po wyłączeniu oba znikają i nic nie jest wysyłane; to osobisty wybór na tym komputerze." };
+  const wireRw = (pg, at) => pg.evaluate(a => {
+    window.__rw = { at: a, on: true, calls: [] };
+    window.E_HOST.aiState = () => ({ model: true, org: !!window.__rw.at, reword: window.__rw.on ? window.__rw.at : "", rewordAt: window.__rw.at, rewordOn: window.__rw.on });
+    window.E_HOST.setReword = on => { window.__rw.calls.push(!!on); window.__rw.on = !!on; };
+    window.E_HOST.reword = async () => ({ ok: false, why: "answer" });
+  }, at);
+  const rwRow = (pg) => pg.evaluate(() => {
+    const r = document.querySelector('#setBody [data-row="aireword"]');
+    if (!r) return null;
+    const on = r.querySelector(".set-seg button.on"), rows = [...document.querySelectorAll("#setBody .set-row")].map(x => x.getAttribute("data-row"));
+    return { label: ((r.querySelector(".set-label") || {}).firstChild || {}).textContent || "", on: on ? on.getAttribute("data-val") : "", after: rows.indexOf("aireword") === rows.indexOf("aisearch") + 1,
+      text: r.textContent, titles: [...r.querySelectorAll("[title]")].map(e => e.getAttribute("title")).join(" ") };
+  });
+  {
+    const problems = [];
+    await page.evaluate(() => { localStorage.setItem("eUiLang", "en"); try { setUiLang("en"); } catch (e) {} });
+    await wireRw(page, "");
+    await setHost(page, ORG_ON);
+    await closeTab(); await page.evaluate(() => openSettings("ai")); await sleep(150);
+    if (await rwRow(page)) problems.push("a row where the organisation's model is not set");
+    await wireRw(page, "api.openai.com");
+    await closeTab(); await page.evaluate(() => openSettings("ai")); await sleep(150);
+    const en = await rwRow(page);
+    /* The button as the card's own drawing asks for it (card-reword.js rewordButtonHtml); this page has no catalog of its own to count cards in. */
+    const cards = () => page.evaluate(() => ({ cards: 1, buttons: typeof rewordButtonHtml === "function" && rewordButtonHtml().indexOf('data-act="reword"') > -1 ? 1 : 0 }));
+    const before = await cards();
+    if (!en) problems.push("no row where the organisation's model is set");
+    else {
+      if (en.label !== RW_LABEL.en || en.text.indexOf(RW_HINT.en.split("{ADDRESS}").join("api.openai.com")) < 0 || en.on !== "on" || !en.after) problems.push("the English row " + JSON.stringify(en));
+      if (/["“”„]/.test(en.label + RW_HINT.en)) problems.push("quotation marks in the words");
+    }
+    await page.evaluate(() => { const b = document.querySelector('#setBody [data-row="aireword"] .set-seg button[data-val="off"]'); if (b) b.click(); });
+    await sleep(250);
+    const off = await rwRow(page), asOff = await page.evaluate(() => ({ calls: window.__rw.calls.slice(), ordering: [localStorage.getItem("eAiOff"), localStorage.getItem("eSearchAiOff")], seg: ["aisuggest", "aisearch"].map(k => (document.querySelector('#setBody [data-row="' + k + '"] .set-seg button.on') || {}).dataset?.val || "") }));
+    await closeTab(); await sleep(250);
+    const hidden = await cards();
+    await page.evaluate(() => openSettings("ai")); await sleep(150);
+    await page.evaluate(() => { const b = document.querySelector('#setBody [data-row="aireword"] .set-seg button[data-val="on"]'); if (b) b.click(); });
+    await sleep(250);
+    const asOn = await page.evaluate(() => window.__rw.calls.slice());
+    await closeTab(); await sleep(250);
+    const shown = await cards();
+    if (!off || off.on !== "off" || asOff.calls.join() !== "false" || asOff.ordering.join() !== "," || asOff.seg.join() !== "on,on") problems.push("off: " + JSON.stringify({ off: off && off.on, asOff }));
+    if (!(before.cards > 0 && before.buttons > 0 && hidden.buttons === 0 && shown.buttons > 0 && asOn.join() !== "false")) problems.push("the buttons on the cards " + JSON.stringify({ before, hidden, shown, asOn }));
+    const pl = await boot("pl");
+    await wireRw(pl, "api.openai.com");
+    await setHost(pl, ORG_ON);
+    await pl.evaluate(() => openSettings("ai")); await sleep(200);
+    const plRow = await rwRow(pl);
+    if (!plRow || plRow.label !== RW_LABEL.pl || plRow.text.indexOf(RW_HINT.pl.split("{ADDRESS}").join("api.openai.com")) < 0) problems.push("the Polish row " + JSON.stringify(plRow));
+    await pl.close();
+    check(!problems.length, "db9 the person's own switch is a row in the AI section only where the organisation's model is set, in the copywriter's words in both languages without quotation marks; "
+      + "off tells the shell and takes Reword from every card, on brings it back, and the ordering's two switches stay as they were: " + (problems.join("; ") || "absent, on, off, on, Polish"));
+  }
+
+  /* db9p the plant: the row drawn whether or not the organisation's model is in force */
+  if (PLANTS_OFF) skipPlant("db9p the switch's row drawn without the organisation's model (ETIUDA_PLANTS=off)");
+  else {
+    const built = fs.readFileSync(path.join(lab, "etiuda.html"), "utf8"), needle = "].concat(rw.at ? [";
+    if (built.split(needle).length !== 2) check(false, "db9p the row's anchor found once in engine/etiuda.html", { found: built.split(needle).length - 1 });
+    else {
+      const at = path.join(lab, "etiuda-rw-plant.html");
+      fs.writeFileSync(at, built.replace(needle, "].concat(true ? ["), "utf8");
+      await page.goto("file:///" + at.split(String.fromCharCode(92)).join("/"), { waitUntil: "load", timeout: 60000 });
+      await page.waitForFunction(() => typeof openSettings === "function" && !document.querySelector(".e-launch-veil"), { timeout: 30000 });
+      await wireRw(page, "");
+      await setHost(page, ORG_ON);
+      await page.evaluate(() => openSettings("ai")); await sleep(200);
+      const planted = await rwRow(page);
+      check(!!planted, "db9p with the row drawn whether or not the organisation's model is in force, a row stands where none is set and db9 fails");
+    }
+  }
   await page.close();
 } catch (e) {
   check(false, "the page's part ran", (e && e.message) || String(e));
@@ -696,7 +777,7 @@ try {
   if (browser) await browser.close();
 }
 
-const EXPECTED = 15;
+const EXPECTED = 17;
 const done = asserted + notRun === EXPECTED;
 if (!done) { failed++; console.log("  FAIL ran " + (asserted + notRun) + " checks (" + asserted + " ran, " + notRun + " not run), expected " + EXPECTED); }
 console.log((failed || !done ? "desk-own-ai: " + failed + " of " + asserted + " failed" : "desk-own-ai: all " + asserted + " passed" + (notRun ? ", " + notRun + " NOT RUN" : "")));

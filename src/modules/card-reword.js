@@ -30,6 +30,21 @@ function rewordHostNow(){
   rwHostWas=s && typeof s.reword==="string" ? s.reword : "";
   return rwHostWas;
 }
+/* THE PERSON'S OWN SWITCH, as the shell holds it: `at` the address a reword would go to (empty where no organisation's model is in
+   force, and then Settings draws no row), `on` whether the person has it on for themselves, on unless the shell says otherwise.
+   Off, the shell names no host to the buttons, so they are absent, and it refuses a request however it is made. */
+function rewordState(){
+  const h=eHost();
+  let s=null;
+  try{ s=h && typeof h.aiState==="function" ? h.aiState() : null; }catch(e){ s=null; }
+  return { at:s && typeof s.rewordAt==="string" ? s.rewordAt : "", on:!s || s.rewordOn!==false };
+}
+function rewordSwitchSet(on){
+  const h=eHost();
+  try{ if(h && typeof h.setReword==="function") h.setReword(!!on); }catch(e){}
+  rwHostAt=0;
+  if(!on) closeRewordMenu();
+}
 function rewordButtonHtml(){
   if(!rewordHostNow()) return "";
   const w=t("Reword");
@@ -166,6 +181,8 @@ function revertReword(id){
 }
 
 export {
+  rewordState,
+  rewordSwitchSet,
   rewordHostNow,
   rewordButtonHtml,
   rewordChipHtml,

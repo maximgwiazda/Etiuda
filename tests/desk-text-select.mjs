@@ -404,7 +404,17 @@ try {
     badAllowed: [...factsRep.badAllowed, ...signRep.badAllowed, ...menuRep.badAllowed, ...ctxRep.badAllowed],
   });
 
-  // 3. Settings
+  // 3. Settings, with the organisation's model in force so the AI section shows the person's own switch for rewording (aireword)
+  await page.evaluate(() => {
+    const free = { choice: false, provider: false, endpoint: false, model: false, key: false };
+    window.__stub = Object.assign({}, window.E_HOST);
+    Object.assign(window.E_HOST, {
+      aiState: () => ({ model: false, org: true, reword: "ai.example.test", rewordAt: "ai.example.test", rewordOn: true }), setAi() {}, setSearchAi() {}, setReword() {},
+      deskAiSettings: () => ({ choice: "organisation", on: true, ready: true, provider: "openai", endpoint: "", at: "", host: "ai.example.test", model: "m-own",
+        keyKept: true, keyAway: false, managed: free, ignored: [], sealable: true, services: [{ id: "openai", endpoint: "https://api.openai.com/v1/" }] }),
+      deskAiSave: async () => ({ ok: true, why: "" }), deskAiTest: async () => ({ ok: true }), onAiRanking() {},
+    });
+  });
   await openMenuItem(page, "settings");
   await page.waitForFunction(() => document.body.classList.contains("screen-on") && !!document.querySelector("#screenHost .sx-nav"), { timeout: 10000 });
   const poSettings = await page.evaluate(() => {
@@ -420,7 +430,10 @@ try {
   check(poSettings.label && poSettings.label.us === "none", "PO example: Settings row label user-select: none", poSettings.label);
   check(poSettings.value && poSettings.value.us === "none", "PO example: Settings row control/value user-select: none", poSettings.value);
   check(poSettings.agentNameUs === "text", "Settings text field (#setAgentName) user-select: text", poSettings.agentNameUs);
+  const rwRow = await page.evaluate(() => { const r = document.querySelector('#screenHost [data-row="aireword"]'); return r ? { label: getComputedStyle(r.querySelector(".set-label")).userSelect, ctl: getComputedStyle(r.querySelector(".set-seg button")).userSelect } : null; });
+  check(rwRow && rwRow.label === "none" && rwRow.ctl === "none", "Settings: the person's own switch for rewording is on the walked page, its label and its buttons user-select: none", rwRow);
   recordWalk(await auditScreen(page, "Settings", ["#screenHost"]));
+  await page.evaluate(() => { for (const k of ["aiState", "setAi", "setSearchAi", "setReword", "deskAiSettings", "deskAiSave", "deskAiTest", "onAiRanking"]) { if (k in window.__stub) window.E_HOST[k] = window.__stub[k]; else delete window.E_HOST[k]; } });
 
   // 5. Maintenance (opened via #sxMaint from Settings; walk all 6 pages)
   await page.click("#sxMaint");

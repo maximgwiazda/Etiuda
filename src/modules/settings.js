@@ -30,6 +30,7 @@ import { E_VERSION } from "./env.js";
 import { sxIcon } from "./sx-icons.js";
 import { focusKey, focusSame, originOf } from "./dom.js";
 import { orgModel, orgRanks, syncOrgMark } from "./org-model.js";
+import { rewordState, rewordSwitchSet } from "./card-reword.js";
 import { SIGNIN_NAMES, signinNow, signinShown, signinParts, signinSay, signinNoSeat, signinTold, signinActsHtml, signinWhen, signinProvidersHtml, signinIdentHtml, signinCodeText, signinChoosingNow, signinDoorsHtml, signinDoorRefusedNow,
   signinAct, signinStart, signinOnChange, signinPreviewHtml, signinLinkHtml, signinLinkSelect, signinCopyHtml } from "./signin.js";
 
@@ -486,7 +487,7 @@ function syncAiWords(){
 }
 /* Drawn wherever a model can rank: the built-in one this desk carries, or the organisation's while it is on and ready. */
 function aiGroups(){
-  const st=orgModel(), w=(a,b)=>aiWords(st,a,b);
+  const st=orgModel(), w=(a,b)=>aiWords(st,a,b), rw=rewordState();
   if(!eAiModel() && !orgRanks(st)) return [];
   return [{rows:[
     row("aisuggest","ai",w(t("Suggest intents with the built-in model"),t("Suggest intents with the organisation's model")),
@@ -501,7 +502,13 @@ function aiGroups(){
       onoff("aisearch", eSearchOn(),
         aiSearchOnLine(st),
         t("Off, it matches words only.")))
-  ]}];
+  ].concat(rw.at ? [
+    /* The person's own switch for rewording: a row only where the organisation's model is in force, since it would turn nothing on or off
+       elsewhere; its sentence names the address a reword goes to, the shell's one reading of it. */
+    row("aireword","ai",t("Rewording"),
+      t("Reword on cards and Your own words? in Quick replies send the card's words or the selected words to the organisation's model at {ADDRESS}, only when pressed. Turned off, both are gone and nothing is sent; the choice is yours, on this computer.").split("{ADDRESS}").join(rw.at),
+      onoff("aireword", rw.on))
+  ] : [])}];
 }
 function aiSearchOnLine(st){
   return aiWords(st, t("The model ranks the search beside word matches; nothing leaves this computer"),
@@ -973,6 +980,11 @@ function wirePage(box){
           syncOrgMark();
           syncAiWords();
           toast(on?aiWords(orgModel(),t("Suggestions from the built-in model"),t("Suggestions from the organisation's model")):t("Suggestions from matching words"));
+        }
+        else if(seg==="aireword"){
+          rewordSwitchSet(on);
+          try{ render(); }catch(e){}
+          toast(on?t("On"):t("Off"));
         }
         else if(seg==="aisearch"){
           if(on) lsDel(E_SEARCH_AI_OFF_KEY); else lsSet(E_SEARCH_AI_OFF_KEY,"1");

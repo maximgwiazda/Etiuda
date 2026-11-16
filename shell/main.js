@@ -12844,7 +12844,20 @@ const deskReorder = deskAi.createReorder({ config: deskAiSendConfig, fetch: desk
 /* A REWORD AT A PRESS (shell/desk-ai.cjs createReword), from the picker's foot or a card's Reword, under deskAiSendConfig as
    the order is; where only the policy's facts are stale, the press waits for the look briefly rather than send under them. */
 const REWORD_POLICY_WAIT_MS = 2000;
+/* THE PERSON'S OWN SWITCH FOR REWORDING: on unless the person turned it off for themselves, whatever the organisation's model or
+   machine policy says. Kept in desk-reword.json beside the desk's other settings, on this computer alone and never shared with the
+   organisation; read at each use so a press, an opening and the page's question all see the one answer. It reads nothing of
+   deskAiConfig and is read by nothing that orders results. Off, Reword and "Your own words?" are absent and no reword request is made. */
+const DESK_REWORD_FILE = "desk-reword.json";
+const DESK_REWORD_KIND = "etiuda-desk-reword";
+function rewordWanted() {
+  try {
+    const doc = JSON.parse(fs.readFileSync(deskAiPath(DESK_REWORD_FILE), "utf8"));
+    return !(doc && typeof doc === "object" && doc.kind === DESK_REWORD_KIND && doc.format === 1 && doc.off === true);
+  } catch { return true; }
+}
 async function deskRewordConfig() {
+  if (!rewordWanted()) return null; /* plant:reword-switch-send */
   const end = Date.now() + REWORD_POLICY_WAIT_MS;
   for (;;) {
     const c = deskAiSendConfig(); /* plant:reword-config */
@@ -12866,7 +12879,7 @@ function rewordHost(c) {
    result asked in it are kept here for Enter's put, numbered so an answer overtaken by a later press is not the one put. */
 let pickRewordOn = false, pickSelectedNow = "", pickReworded = "", pickRewordN = 0;
 ipcMain.handle("etiuda:pick-reword", (e, a) => {
-  if (!fromPicker(e) || !pickRewordOn) return { ok: false, why: "off" };
+  if (!fromPicker(e) || !pickRewordOn || !rewordWanted()) return { ok: false, why: "off" }; /* plant:reword-switch-door-pick */
   const n = ++pickRewordN;
   return deskReword.ask(rewordArg(a)).then(r => {
     if (n === pickRewordN) pickReworded = r && r.ok ? r.text : "";
@@ -12903,7 +12916,13 @@ ipcMain.on("etiuda:pick-grow", (e) => {
   pickWin.setBounds({ x: b.x, y: y, width: b.width, height: REWORD_TALL });
 });
 /* A card's Reword in the desk's own window: the same door, the same asks. */
-ipcMain.handle("etiuda:desk-reword", (e, a) => (fromEngine(e) ? deskReword.ask(rewordArg(a)) : { ok: false, why: "refused" }));
+ipcMain.handle("etiuda:desk-reword", (e, a) => (fromEngine(e) && rewordWanted() ? deskReword.ask(rewordArg(a)) : { ok: false, why: fromEngine(e) ? "off" : "refused" })); /* plant:reword-switch-door-desk */
+/* The person's own switch, set from Settings: stored as a file of its own; a result already made for the picker's Enter is let go, and a press from a window opened before refuses at its own door. */
+ipcMain.on("etiuda:reword-set", (e, on) => {
+  if (!fromEngine(e)) return;
+  try { writeReplacing(deskAiPath(DESK_REWORD_FILE), JSON.stringify({ format: 1, kind: DESK_REWORD_KIND, off: !on }) + "\n"); } catch { return; }
+  if (!on) { pickReworded = ""; pickRewordN++; }
+});
 /* An agent's key, click, wheel or scroll in each window, counted, so an order that comes after one is dropped. */
 let deskTouches = 0, pickTouches = 0;
 function countTouches(wc, bump) {
@@ -13058,7 +13077,7 @@ function pickWithClip(press, which, text, selected, editable) {
     if (shown) open.selected = shown;
     open.editable = editable === true ? true : editable === false ? false : null;
     /* The foot is offered, and named with the host it sends to, only while a configuration is in force; absent otherwise. */
-    const rewordCfg = deskAiConfig();
+    const rewordCfg = rewordWanted() ? deskAiConfig() : null; /* plant:reword-switch-offer */
     pickRewordOn = !!rewordCfg; pickSelectedNow = shown; pickReworded = ""; pickRewordN++;
     if (rewordCfg) open.reword = { host: rewordHost(rewordCfg) }; /* plant:reword-offer */
     clip = "";
@@ -13186,7 +13205,7 @@ ipcMain.handle("etiuda:pick-copy", (e, what) => {
    in force (org), and the person turning it off or on. A sync request from the page; the outcomes go back on etiuda:ai-ranking. */
 ipcMain.on("etiuda:ai-state", (e) => {
   const c = fromEngine(e) ? deskAiConfig() : null;
-  e.returnValue = fromEngine(e) ? { model: !!(embedSuggest && embedSuggest.installed()), org: !!c, reword: rewordHost(c) } : null;
+  e.returnValue = fromEngine(e) ? { model: !!(embedSuggest && embedSuggest.installed()), org: !!c, reword: rewordWanted() ? rewordHost(c) : "", rewordAt: rewordHost(c), rewordOn: rewordWanted() } : null; /* plant:reword-switch-state */
 });
 ipcMain.on("etiuda:ai-set", (e, on) => {
   if (!fromEngine(e) || !embedSuggest) return;

@@ -17,7 +17,7 @@ const E = require("./engine.js");
 const puppeteer = require("puppeteer-core");
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 13;
+const EXPECTED = 15;
 let fails = 0, checks = 0, skipped = 0;
 
 function check(ok, what, detail) {
@@ -510,12 +510,26 @@ async function runThemeSuite(browser, enginePath, theme, opts = {}) {
       await page.keyboard.press("Escape");
       await sleep(80);
 
-      // 3. Settings screen (#screenHost).
+      // 3. Settings screen (#screenHost), with the organisation's model in force so the AI section shows the person's own switch for
+      // rewording (aireword), which the walk must reach by keyboard like every other control.
+      await page.evaluate(() => {
+        const free = { choice: false, provider: false, endpoint: false, model: false, key: false };
+        window.__hadHost = "E_HOST" in window;
+        window.E_HOST = Object.assign(window.E_HOST || {}, {
+          aiState: () => ({ model: false, org: true, reword: "ai.example.test", rewordAt: "ai.example.test", rewordOn: true }), setAi() {}, setSearchAi() {}, setReword() {},
+          deskAiSettings: () => ({ choice: "organisation", on: true, ready: true, provider: "openai", endpoint: "", at: "", host: "ai.example.test", model: "m-own",
+            keyKept: true, keyAway: false, managed: free, ignored: [], sealable: true, services: [{ id: "openai", endpoint: "https://api.openai.com/v1/" }] }),
+          deskAiSave: async () => ({ ok: true, why: "" }), deskAiTest: async () => ({ ok: true }), onAiRanking() {},
+        });
+      });
       await page.evaluate(() => window.openScreenTab("settings"));
       await page.waitForSelector("#screenHost:not([hidden])", { timeout: 4000 });
       await sleep(100);
       const setWalk = await walkSurfaceWithTabs(page, theme + ":settings", "#screenHost", { focusFirstInside: true, maxSteps: 140 });
       surfaceSummary.settings = setWalk.results.length;
+      const rwReached = await page.evaluate(() => !!document.querySelector('#screenHost [data-row="aireword"] .set-seg button'));
+      check(rwReached, theme + ": the person's own switch for rewording is on the Settings page the walk covers", { rwReached });
+      await page.evaluate(() => { if (!window.__hadHost) delete window.E_HOST; });
       allFailures.push(...setWalk.failures);
       allExceptions.push(...setWalk.exceptionsSeen);
       await page.evaluate(() => window.closeScreenTab && window.closeScreenTab("settings"));

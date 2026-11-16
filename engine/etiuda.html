@@ -7925,6 +7925,8 @@ What is typed here stays in this browser.`;
     "The service at {ADDRESS} is busy; a later try may go through. The card is as it was.": "Usługa pod adresem {ADDRESS} jest zajęta; późniejsza próba może się udać. Karta pozostała bez zmian.",
     "No result came back from {ADDRESS}. Your words are as you wrote them.": "Z adresu {ADDRESS} nie nadszedł wynik. Zaznaczony tekst pozostał bez zmian.",
     "No result came back from {ADDRESS}. The card is as it was.": "Z adresu {ADDRESS} nie nadszedł wynik. Karta pozostała bez zmian.",
+    "Rewording": "Przeredagowanie",
+    "Reword on cards and Your own words? in Quick replies send the card's words or the selected words to the organisation's model at {ADDRESS}, only when pressed. Turned off, both are gone and nothing is sent; the choice is yours, on this computer.": "Przycisk Przeredaguj na kartach i Własne słowa? w Szybkich odpowiedziach wysyłają treść karty albo zaznaczony tekst do modelu organizacji pod adresem {ADDRESS}, tylko po kliknięciu. Po wyłączeniu oba znikają i nic nie jest wysyłane; to osobisty wybór na tym komputerze.",
     "Press": "Naciśnij",
     "{KEY} clears the search and the intents and shows every card.": "{KEY} czyści wyszukiwanie i intencje i pokazuje wszystkie karty.",
     "Etiuda is ready for its first replies.": "Etiuda czeka na pierwsze odpowiedzi.",
@@ -25512,7 +25514,9 @@ What is typed here stays in this browser.`;
     rewordButtonHtml: () => rewordButtonHtml,
     rewordChipHtml: () => rewordChipHtml,
     rewordHostNow: () => rewordHostNow,
-    rewordKeepsShape: () => rewordKeepsShape
+    rewordKeepsShape: () => rewordKeepsShape,
+    rewordState: () => rewordState,
+    rewordSwitchSet: () => rewordSwitchSet
   });
   var ICON_REWORD = _svg("ic", '<path d="M3.5 8h7"/><path d="M3.5 12h13"/><path d="M3.5 16h9"/><path d="M15 2.6c.3 1.9 1 2.6 2.9 2.9-1.9.3-2.6 1-2.9 2.9-.3-1.9-1-2.6-2.9-2.9 1.9-.3 2.6-1 2.9-2.9z"/>');
   var RW_ACTS = [["shorter", "Shorter"], ["friendlier", "Friendlier"], ["formal", "More formal"]];
@@ -25531,6 +25535,25 @@ What is typed here stays in this browser.`;
     }
     rwHostWas = s && typeof s.reword === "string" ? s.reword : "";
     return rwHostWas;
+  }
+  function rewordState() {
+    const h = eHost();
+    let s = null;
+    try {
+      s = h && typeof h.aiState === "function" ? h.aiState() : null;
+    } catch (e) {
+      s = null;
+    }
+    return { at: s && typeof s.rewordAt === "string" ? s.rewordAt : "", on: !s || s.rewordOn !== false };
+  }
+  function rewordSwitchSet(on) {
+    const h = eHost();
+    try {
+      if (h && typeof h.setReword === "function") h.setReword(!!on);
+    } catch (e) {
+    }
+    rwHostAt = 0;
+    if (!on) closeRewordMenu();
   }
   function rewordButtonHtml() {
     if (!rewordHostNow()) return "";
@@ -39374,7 +39397,7 @@ What is typed here stays in this browser.`;
     hugDottedGround(box);
   }
   function aiGroups() {
-    const st = orgModel(), w = (a, b) => aiWords(st, a, b);
+    const st = orgModel(), w = (a, b) => aiWords(st, a, b), rw = rewordState();
     if (!eAiModel() && !orgRanks(st)) return [];
     return [{ rows: [
       row(
@@ -39407,7 +39430,17 @@ What is typed here stays in this browser.`;
           t("Off, it matches words only.")
         )
       )
-    ] }];
+    ].concat(rw.at ? [
+      /* The person's own switch for rewording: a row only where the organisation's model is in force, since it would turn nothing on or off
+         elsewhere; its sentence names the address a reword goes to, the shell's one reading of it. */
+      row(
+        "aireword",
+        "ai",
+        t("Rewording"),
+        t("Reword on cards and Your own words? in Quick replies send the card's words or the selected words to the organisation's model at {ADDRESS}, only when pressed. Turned off, both are gone and nothing is sent; the choice is yours, on this computer.").split("{ADDRESS}").join(rw.at),
+        onoff("aireword", rw.on)
+      )
+    ] : []) }];
   }
   function aiSearchOnLine(st) {
     return aiWords(
@@ -39898,6 +39931,13 @@ What is typed here stays in this browser.`;
             syncOrgMark();
             syncAiWords();
             toast(on ? aiWords(orgModel(), t("Suggestions from the built-in model"), t("Suggestions from the organisation's model")) : t("Suggestions from matching words"));
+          } else if (seg3 === "aireword") {
+            rewordSwitchSet(on);
+            try {
+              render();
+            } catch (e) {
+            }
+            toast(on ? t("On") : t("Off"));
           } else if (seg3 === "aisearch") {
             if (on) lsDel(E_SEARCH_AI_OFF_KEY);
             else lsSet(E_SEARCH_AI_OFF_KEY, "1");

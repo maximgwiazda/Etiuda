@@ -149,6 +149,8 @@ UI_STRINGS.pl={
   "The service at {ADDRESS} is busy; a later try may go through. The card is as it was.":"Usługa pod adresem {ADDRESS} jest zajęta; późniejsza próba może się udać. Karta pozostała bez zmian.",
   "No result came back from {ADDRESS}. Your words are as you wrote them.":"Z adresu {ADDRESS} nie nadszedł wynik. Zaznaczony tekst pozostał bez zmian.",
   "No result came back from {ADDRESS}. The card is as it was.":"Z adresu {ADDRESS} nie nadszedł wynik. Karta pozostała bez zmian.",
+  "Rewording":"Przeredagowanie",
+  "Reword on cards and Your own words? in Quick replies send the card's words or the selected words to the organisation's model at {ADDRESS}, only when pressed. Turned off, both are gone and nothing is sent; the choice is yours, on this computer.":"Przycisk Przeredaguj na kartach i Własne słowa? w Szybkich odpowiedziach wysyłają treść karty albo zaznaczony tekst do modelu organizacji pod adresem {ADDRESS}, tylko po kliknięciu. Po wyłączeniu oba znikają i nic nie jest wysyłane; to osobisty wybór na tym komputerze.",
   "Press":"Naciśnij",
   "{KEY} clears the search and the intents and shows every card.":"{KEY} czyści wyszukiwanie i intencje i pokazuje wszystkie karty.",
   "Etiuda is ready for its first replies.":"Etiuda czeka na pierwsze odpowiedzi.",

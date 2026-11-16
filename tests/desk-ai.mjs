@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHELL = path.join(ROOT, "shell");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 90;
+const EXPECTED = 95;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* The shell-to-page event that carries each re-order's outcome; the page-to-shell sync request "etiuda:ai-state" is another. */
 const RANKING_CH = "etiuda:ai-ranking";
@@ -1533,6 +1533,74 @@ await block(async () => {
   found.push(...clean);
   check(a.ok && b.ok && found.length === 0 && seen.join() === "control.txt" && fetch.calls.length === 2,
     "dw8 after a reword from the picker and one from the desk, no file in the shell's folder holds the words sent or the result: " + JSON.stringify({ found, sent: fetch.calls.length }));
+});
+
+/* dw9: THE PERSON'S OWN SWITCH FOR REWORDING (shell/main.js etiuda:reword-set, the file desk-reword.json beside desk-ai.json): off for
+   themselves, the opening offers nothing, the picker's two channels and the desk's refuse, ai-state names no host to send to, and no request
+   is made by any route, whatever the organisation's configuration or policy says. On by default; the ordering's own switch is not touched. */
+async function rewordSwitchDrive(o) {
+  const opts = o || {};
+  const fetch = fetchOf(() => ({ status: 200, text: chatSaying("Sorry for the late reply.") }));
+  const ctx = loadMain({ fetch, mainSrc: opts.mainSrc, answer: (op) => op === "open" ? { ai: true, words: {}, look: {} } : null });
+  ctx.T.setConfig(() => RW_CONFIG);
+  const set = on => ctx.on["etiuda:reword-set"] ? ctx.on["etiuda:reword-set"](ENGINE, on) : (() => { throw new Error("no etiuda:reword-set channel"); })();
+  if (opts.offFirst) set(false);
+  const pick = await openOnSelection(ctx, "parcel", true);
+  if (opts.offAfter) set(false);
+  const fromPick = pick.from ? await ctx.handle["etiuda:pick-reword"](pick.from, RW_ARG) : null;
+  const fromDesk = await ctx.handle["etiuda:desk-reword"](ENGINE, RW_ARG);
+  const e = Object.assign({ returnValue: undefined }, ENGINE);
+  ctx.on["etiuda:ai-state"](e);
+  return { ctx, fetch, set, open: pick.open, fromPick, fromDesk, state: e.returnValue, rewords: fetch.calls.filter(isReword) };
+}
+await block(async () => {
+  const off = await rewordSwitchDrive({ offFirst: true });
+  check(off.rewords.length === 0 && !("reword" in off.open) && off.fromPick && off.fromPick.ok === false && off.fromDesk.ok === false
+    && off.state && off.state.reword === "" && off.state.rewordOn === false && off.state.rewordAt === "api.openai.com" && off.state.org === true,
+    "dw9 with the person's switch off, the opening offers no reword, both presses are refused, ai-state names no host to send to though the organisation's model stays in force, and no request is made: "
+    + JSON.stringify({ rewords: off.rewords.length, offered: "reword" in off.open, pick: off.fromPick, desk: off.fromDesk, state: off.state }));
+  /* The canary: the switch turned off AFTER an opening that offered the foot, so a press from that open window, or the desk, still reaches the door. */
+  const late = await rewordSwitchDrive({ offAfter: true });
+  check(late.open.reword && late.fromPick && late.fromPick.ok === false && late.fromDesk.ok === false && late.rewords.length === 0,
+    "dw9b the switch turned off after an opening that offered the foot: a press from that window and one from the desk are refused at the shell and the stand-in service records no request: "
+    + JSON.stringify({ offered: late.open.reword, pick: late.fromPick, desk: late.fromDesk, rewords: late.rewords.length }));
+  /* On again, the file as the person's own desk setting, and the other switches untouched. */
+  const ctl = await rewordSwitchDrive({ offFirst: true });
+  const ud = ctl.ctx.electron.app.getPath("userData"), file = path.join(ud, "desk-reword.json");
+  const offDoc = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : null;
+  ctl.set(true);
+  const onDoc = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : null;
+  const e2 = Object.assign({ returnValue: undefined }, ENGINE);
+  ctl.ctx.on["etiuda:ai-state"](e2);
+  const again = await ctl.ctx.handle["etiuda:desk-reword"](ENGINE, RW_ARG);
+  await ctl.ctx.T.deskReorder.ask("parcel post", ["a", "b"]);
+  const orders = ctl.fetch.calls.filter(c => !isReword(c)).length;
+  check(offDoc && offDoc.off === true && offDoc.kind === "etiuda-desk-reword" && onDoc && onDoc.off === false && !fs.existsSync(path.join(ud, "desk-ai.json"))
+    && e2.returnValue.reword === "api.openai.com" && e2.returnValue.rewordOn === true && again.ok === true && ctl.rewords.length === 0 && orders === 1,
+    "dw9c the switch is the person's own file beside the desk's settings, written by the person's choice alone; on again, the desk's press sends once; the ordering's call is made either way: "
+    + JSON.stringify({ offDoc, onDoc, again: again.ok, orders }));
+  if (PLANTS_OFF) skipPlant("dw9p the door's refusals lifted (ETIUDA_PLANTS=off)");
+  else {
+    let src = MAIN_SRC;
+    for (const k of ["reword-switch-door-pick", "reword-switch-door-desk", "reword-switch-send"]) {
+      const line = src.split("\n").filter(l => l.indexOf("plant:" + k) >= 0);
+      if (line.length !== 1) throw new Error("plant mark " + k + " found " + line.length + " times");
+      src = src.replace(line[0], line[0].replace(/ *(?:\|\||&&) !?rewordWanted\(\)| *if \(!rewordWanted\(\)\) return null;/, ""));
+    }
+    const lifted = await rewordSwitchDrive({ offAfter: true, mainSrc: src });
+    check(src !== MAIN_SRC && lifted.rewords.length > 0, "dw9p with the switch's three refusals lifted (both channels and the config), a press after the switch is off reaches the service and dw9b fails: " + lifted.rewords.length + " sent");
+  }
+  if (PLANTS_OFF) skipPlant("dw9q the offer and the state made while the switch is off (ETIUDA_PLANTS=off)");
+  else {
+    let src = MAIN_SRC;
+    for (const k of ["reword-switch-offer", "reword-switch-state"]) {
+      const line = src.split("\n").filter(l => l.indexOf("plant:" + k) >= 0);
+      if (line.length !== 1) throw new Error("plant mark " + k + " found " + line.length + " times");
+      src = src.replace(line[0], line[0].replace(/rewordWanted\(\) \? /, "true ? "));
+    }
+    const lifted = await rewordSwitchDrive({ offFirst: true, mainSrc: src });
+    check(src !== MAIN_SRC && "reword" in lifted.open && lifted.state.reword !== "", "dw9q with the offer and the state not reading the switch, the opening offers the foot and ai-state names a host while it is off and dw9 fails");
+  }
 });
 
 check(wallHits === 0, "da0 no leg called the global fetch: " + wallHits);

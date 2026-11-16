@@ -245,6 +245,8 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   /* The embedded model: {model} says whether this desk carries it, and the switch is told to the shell as it moves. */
   aiState: () => ipcRenderer.sendSync("etiuda:ai-state"),
   setAi: (on) => ipcRenderer.send("etiuda:ai-set", !!on),
+  /* The person's own switch for rewording, on this computer alone: aiState says whether it is on (rewordOn) and the address a reword would go to (rewordAt). */
+  setReword: (on) => ipcRenderer.send("etiuda:reword-set", !!on),
   /* The organisation's model in Settings: what is in force, never the key; a save of the fields named, each a string; the
      connection test; and each re-order's outcome as the shell reports it on an event of its own, {ranking, failures,
      pausedUntil, slow}, slow while the service usually answers too late to reorder. */
