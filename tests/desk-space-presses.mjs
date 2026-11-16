@@ -34,6 +34,12 @@ const ringNow = page => page.evaluate(() => {
   const ae = document.activeElement;
   return !!(ae && ae !== document.body && ae !== document.documentElement && ae.matches(":focus-visible"));
 });
+/* After Escape closes a dialog: wait for it to be hidden and for focus to be handed back (two frames), bounded, then the usual pause. */
+const settleAfterEscape = async page => {
+  await page.waitForFunction(() => { const m = document.getElementById("modal"); return !m || m.hidden; }, { timeout: 1500, polling: "raf" }).catch(() => null);
+  await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+  await sleep(80);
+};
 const fileUrl = p => "file:///" + p.replace(/\\/g, "/");
 
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-space-presses-"));
@@ -70,6 +76,11 @@ async function openDesk(browser, url, opts = {}) {
       localStorage.setItem("eTheme", "light");
       localStorage.setItem("eTourDone", "1");
       localStorage.setItem("eStill", "1");
+      /* The tour's current keys (the older eTourDone alone no longer silences it): a slow load on an empty desk
+         otherwise lets the tour open late and take the Tab walk into its own buttons. */
+      localStorage.setItem("eTourDone_v3", "1");
+      localStorage.setItem("eTourInvite_v3", "1");
+      localStorage.setItem("eFirstSigninSeen", "1");
     } catch (_) {}
   }, !!opts.empty);
   await page.goto(url, { waitUntil: "load" });
@@ -121,7 +132,13 @@ async function tabTo(page, targetSelector, options = {}) {
   }
 
   for (let i = 0; i < maxSteps; i++) {
+    /* Press Tab, then wait for focus to settle: until activeElement is no longer the element it was before the key
+       (bounded, one frame at a time), so a slow frame under load cannot be read as "still on the old element" and
+       the target walked past unseen. */
+    await page.evaluate(() => { window.__tabPrev = document.activeElement; });
     await page.keyboard.press("Tab");
+    await page.waitForFunction(() => document.activeElement !== window.__tabPrev, { timeout: 1500, polling: "raf" }).catch(() => null);
+    await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
     if (removeMarker) {
       removeMarker = false;
       await page.evaluate(() => {
@@ -142,11 +159,21 @@ async function tabTo(page, targetSelector, options = {}) {
     }, targetSelector, scopeSelector, options.text || "");
     if (hit) return true;
   }
+  if (!walkQuiet) {
+    const where = await page.evaluate(() => {
+      const ae = document.activeElement;
+      if (!ae) return "no active element";
+      return ae.tagName.toLowerCase() + (ae.id ? "#" + ae.id : "") + (ae.className && typeof ae.className === "string" ? "." + ae.className.trim().split(/\s+/).join(".") : "");
+    }).catch(() => "unreadable");
+    console.log("  focus walk missed " + targetSelector + (scopeSelector !== "document" ? " in " + scopeSelector : "") + " after " + maxSteps + " Tab(s): focus was on " + where);
+  }
   return false;
 }
+let walkQuiet = false;
 
 async function runSuite(browser, enginePath, opts = {}) {
   const silent = !!opts.silent;
+  walkQuiet = silent;
   const url = fileUrl(enginePath);
   const results = [];
   const rec = (ok, label, detail) => {
@@ -1281,7 +1308,7 @@ async function runSuite(browser, enginePath, opts = {}) {
       await page.waitForSelector("#modal:not([hidden]) #modalCard", { timeout: 3000 });
       await sleep(80);
       await page.keyboard.press("Escape");
-      await sleep(80);
+      await settleAfterEscape(page);
       const afterEsc = await page.evaluate(() => ({
         modalHidden: !!document.getElementById("modal")?.hidden,
         act: document.activeElement?.getAttribute?.("data-act") || "",
@@ -1337,7 +1364,7 @@ async function runSuite(browser, enginePath, opts = {}) {
       }
       await sleep(80);
       await page.keyboard.press("Escape");
-      await sleep(80);
+      await settleAfterEscape(page);
       const back = await page.evaluate(() => ({
         modalHidden: !!document.getElementById("modal")?.hidden,
         act: document.activeElement?.getAttribute?.("data-act") || ""
@@ -1400,7 +1427,7 @@ async function runSuite(browser, enginePath, opts = {}) {
     await pageEmpty.waitForSelector("#modal:not([hidden]) #modalCard", { timeout: 3000 });
     await sleep(80);
     await pageEmpty.keyboard.press("Escape");
-    await sleep(80);
+    await settleAfterEscape(pageEmpty);
     const afterEsc = await pageEmpty.evaluate(() => ({
       id: document.activeElement?.id || "",
       fv: !!document.activeElement?.matches(":focus-visible"),
