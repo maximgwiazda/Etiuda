@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-sync-"));
-const EXPECTED = 80;
+const EXPECTED = 84;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -802,6 +802,56 @@ async function main() {
     return { ok, detail: brief(held) };
   }
 
+  /* U1: a computer joining a store whose first merge's desk write is refused for one item (the setting the store holds): the merge has not
+     finished, so the next one judges as it would have. The joiner is still joining, its setting held before it joined gives way, and the
+     first computer's later setting stands on both once the desk takes it; what the refused merge did put in place stands too. */
+  async function joinRefusedScene() {
+    const w = worldOf("u1"), a = computer(w, "a");
+    a.desk.keys.eUiLang = "de"; a.desk.keys.eTheme = "dark";
+    seat(a);
+    if ((await a.look()).state !== "on") throw new Error("the store did not come on");
+    await settle(a);
+    w.R.clock.now += HOUR;
+    const b = computer(w, "b");
+    b.desk.keys.eUiLang = "en"; b.desk.keys.eTheme = "light";
+    seat(b);
+    b.desk.refuse = new Set(["k:eTheme"]);
+    const lb = await b.look();
+    await a.look();
+    await settle(a, b);
+    const whileRefused = { a: a.desk.keys.eTheme, b: b.desk.keys.eTheme, langB: b.desk.keys.eUiLang };
+    b.desk.refuse = null;
+    w.R.clock.now += MIN;
+    await settle(a, b); await settle(a, b);
+    const held = { whileRefused, a: a.desk.keys.eTheme, b: b.desk.keys.eTheme, langA: a.desk.keys.eUiLang, langB: b.desk.keys.eUiLang, kept: a.kept.length + b.kept.length };
+    /* The same on a joiner whose catalog folder was a team's when it joined: what it held back then still counts as held before it
+       joined once the folder is its own again, so its older catalog gives way to the first computer's. */
+    const w2 = worldOf("u1t"), c = computer(w2, "c"), F = "Harbour.ec";
+    c.desk.keys.eTheme = "dark"; c.desk.keys.eUiLang = "de"; c.desk.files[F] = "{\"v\":\"c\"}";
+    seat(c);
+    if ((await c.look()).state !== "on") throw new Error("the store did not come on");
+    await settle(c);
+    w2.R.clock.now += HOUR;
+    const d = computer(w2, "d");
+    d.desk.keys.eTheme = "light"; d.desk.keys.eUiLang = "en"; d.desk.files[F] = "{\"v\":\"d\"}"; d.desk.team = true;
+    seat(d);
+    d.desk.refuse = new Set(["k:eTheme"]);
+    await d.look();
+    await c.look();
+    await settle(c, d);
+    d.desk.refuse = null;
+    w2.R.clock.now += MIN;
+    await settle(c, d);
+    d.desk.team = false;
+    w2.R.clock.now += MIN;
+    await settle(c, d); await settle(c, d);
+    const team = { themeD: d.desk.keys.eTheme, fileC: c.desk.files[F], fileD: d.desk.files[F] };
+    const ok = lb.state === "on" && whileRefused.a === "dark" && whileRefused.b === "light" && whileRefused.langB === "de"
+      && held.a === "dark" && held.b === "dark" && held.langA === "de" && held.langB === "de"
+      && team.themeD === "dark" && team.fileC === "{\"v\":\"c\"}" && team.fileD === "{\"v\":\"c\"}";
+    return { ok, detail: brief(Object.assign(held, { team })) };
+  }
+
   /* K15: a version kept here (A's earlier catalog) is let go only once the version overtaking it is here: A's later write whose sync file
      came before its bytes leaves the kept entry standing and takes nothing; once the bytes come, it is taken and the kept one let go. The
      same where both changed it again, the overtaking side's bytes missing. mergeOnce alone. */
@@ -976,6 +1026,7 @@ async function main() {
   const LEGS = [
     ["O1", ownPlaceScene, "a computer alone on its account's store, its sync begun again empty (the store folder set aside, or an empty state over the mirror): it takes its own earlier place back in, the desk and the store keep everything, a computer joining after receives it, and its later edits travel"],
     ["R1", unseenRemovalScene, "a removal met by a new file of the same name made later on a computer whose desk never held it when it took the removal: the new file stands on both and the removal is kept as a version on both, a conflict; where that desk held the file, the new one is made over the removal, nothing kept"],
+    ["U1", joinRefusedScene, "a joining computer whose first merge's desk write is refused for the store's setting is still joining at the next merge: its setting held before it joined gives way, the first computer's later setting stands on both once taken, and what the refused merge put in place stands"],
     ["K15", keptArrivedScene, "a kept version is let go only once the version overtaking it is here: its sync file before its bytes leaves the kept entry and takes nothing, its bytes come and it is taken and the kept let go; the same in a conflict"],
     ["J5", joinEarlyScene, "a second computer joining before the first, which made the store, has sent anything still joins: its setting and untouched sample give way to the first's setting and removal of the sample once they arrive, nothing kept"],
     ["J6", joinSinceScene, "a joining computer's setting changed and sample removed after its account was seated, before its first cycle, are its own: the setting stands on both and the sample stays removed on both, while what it held when seated gives way"],
@@ -1045,6 +1096,9 @@ async function main() {
     ["own place written over", "O1", swap(" ? syncRead(String(io.read(syncRel(o.me.id)) || \"\"), o.me.id) : null;", " ? null : null;"), "a fresh state never reads its own place, so the store's copy of it is written over"],
     ["removal never held taken as seen", "R1", lift("unseen-taken"), "a removal taken where the desk held nothing is read as seen, so the new file is made over it and no computer keeps it"],
     ["new file made over the removal", "R1", swap("was.by === me || unseen.has(item) ? Object.assign", "was.by === me ? Object.assign"), "the new file made over a removal its desk never held, so no computer keeps it"],
+    ["refused first merge taken as finished", "U1", lift("first-unfinished"), "a first merge whose desk refused an item is taken as finished, so the next merge stamps the joiner's held setting now and it overrides the other computer's later one"],
+    ["joining knowledge dropped", "U1", swap('for (const k of ["join", "before", "beforeHeld", "at"]) if (prev[k] !== undefined) rest[k] = prev[k];', "/* dropped */"), "what the refused first merge knew of joining dropped, so the next merge stamps the joiner's held setting now"],
+    ["untouched removal judged as a join removal", "J4", swap(" && untouched.indexOf(item) < 0) {", ") {"), "after a first merge not finished, the person's removal of a sample the refused merge found untouched is made over no entry, so it meets the first computer's as a conflict instead of travelling"],
     ["kept let go in a conflict", "K15", swap("settled(item, null, top.filter(e => (mine && same(e, mine) ? ownOf(e, item) : valueOf(e, item)) !== undefined)); /* plant:kept-overtaken */", "settled(item, null, top); /* plant:kept-overtaken */"), "a kept version let go in a conflict for one whose bytes have not come"],
     ["kept let go early", "K15", swap("      if (mine && same(win, mine)) {\n        settled(item, win);", "      settled(item, win);\n      if (mine && same(win, mine)) {"), "a kept version let go for one whose bytes have not come, so it is kept nowhere"],
     ["join by the store's files", "J5", swap("(st.join === true || Object.keys(own).length > 0 || (st.join === undefined && ", "((st.join === true || st.join === undefined) && ("), "joining read from another computer's sync file alone, so a computer joining before the first has sent takes itself for the first"],
