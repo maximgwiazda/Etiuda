@@ -10,17 +10,20 @@
  *   f2  one click: the flag stands before the bubble is put on the page; the bubble's words are the copywriter's, it hangs
  *       from the button, and its words do not select
  *   f3  Enter with a note keeps the note and closes; Esc, Done and a press elsewhere close and leave the flag; Take it back
- *       removes it; a note refused keeps the bubble and the typed text
+ *       removes it; a note refused keeps the bubble and the typed text; the card's own button pressed while its bubble
+ *       stands (pointer, Enter) closes the bubble and keeps the flag
  *   f4  sent: the button lit, the mark "With the lead" 22 high, radius 7, 10 after the name, unselectable, whole beside a long
  *       name that gives way; a card kept across an intent pick files its badge after the mark (the pool's own check); a
  *       click on the lit button takes the flag back
  *   f5  answered, each outcome: kept and changed say so in the mark and the bubble, and once opened the mark and the lit
- *       button are gone; Esc closes the answer's bubble; a card the edition took away shows nothing
+ *       button are gone; Esc closes the answer's bubble; the lit button pressed while the answer's bubble stands closes it
+ *       and sends nothing; a card the edition took away shows nothing
  *   f6  an answer arriving with an edition while the page is open changes the mark with no reload and PAX left as typed
  *   f7  nothing of this in the top bar
  *   f8  the keyboard: Tab from edit reaches the button, Enter sends and opens, Esc closes and gives the focus back
  * Inline plant proofs in scratch copies of the page: the bubble shown before the flag is sent turns f2 red, a greyed button
- * drawn where no flag can be made turns f1 red, and an answer whose mark stays after it was opened turns f5 red; each is
+ * drawn where no flag can be made turns f1 red, an answer whose mark stays after it was opened turns f5 red, and the button pressed
+ * while its bubble stands acting on the flag turns f3 red; each is
  * skipped with a NOT RUN line when ETIUDA_PLANTS=off. With DESK_FLAG_STILLS naming a folder, stills of each state are written
  * there, and nowhere otherwise.
  *
@@ -39,7 +42,7 @@ console.log("       this run at " + (PRIO.below ? "below-normal" : "priority " +
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const STILLS = process.env.DESK_FLAG_STILLS ? path.resolve(process.env.DESK_FLAG_STILLS) : "";
-const EXPECTED = 99;
+const EXPECTED = 108;
 let fails = 0, checks = 0, notRun = 0;
 const check = (ok, what, detail) => {
   checks++;
@@ -288,6 +291,23 @@ async function runOffered(pageUrl, lang, theme) {
     await sleep(200);
     const f3b = { bubble: !!(await bubNow(p)), flag: await flagOf(p, CARD) };
     check(!f3b.bubble && f3b.flag === null, tag + "f3 Take it back removes the flag and closes", f3b);
+    /* The card's own button while its bubble stands: closes the bubble and nothing else, by the pointer and by Enter. Space
+       presses no card button on the desk (the star neither, before the flag), so it is not asked here. */
+    const own = [];
+    for (const how of ["pointer", "Enter"]) {
+      await clear(p, CARD);
+      await clickFlag(p, CARD);
+      const open = !!(await bubNow(p));
+      if (how === "pointer") await p.click(btnSel(CARD));
+      else { await p.evaluate((b) => document.querySelector(b).focus(), btnSel(CARD)); await p.keyboard.press(how); }
+      await sleep(200);
+      const fl = await flagOf(p, CARD);
+      own.push({ how, open, bubble: !!(await bubNow(p)), sent: !!(fl && fl.state === "sent"),
+        focus: await p.evaluate(() => document.activeElement && document.activeElement.getAttribute("data-act")) });
+    }
+    check(own.every((o) => o.open && !o.bubble && o.sent) && own.slice(1).every((o) => o.focus === "flag"),
+      tag + "f3 the card's own button, pressed while its bubble stands (pointer, Enter), closes the bubble and keeps the flag", own);
+    await clear(p, CARD);
     await clickFlag(p, CARD);
     const typed = "x".repeat(501), ctl = "a" + String.fromCharCode(9) + "b";
     const refused = [];
@@ -430,6 +450,19 @@ async function runOffered(pageUrl, lang, theme) {
     const c2 = { bubble: !!(await bubNow(p)), ...(await goneAfter()) };
     check(cw === W.answered && !!c1 && c1.title === W.answerTitle && c1.line === W.changed && !c2.bubble && !c2.mark && !c2.lit,
       tag + "f5 changed: Answered, the mended line, Esc closes, and the mark and the lit button are gone", { cw, c1, c2 });
+    /* The lit button pressed while the answer's bubble stands closes it and sends nothing new. */
+    await p.evaluate((id) => flagCard(id), CARD);
+    await takeEdition(p, CATALOG, EDIT_KEPT);
+    await sleep(300);
+    await toCard(p, CARD);
+    await p.click(markSel(CARD));
+    await sleep(250);
+    const a1 = !!(await bubNow(p));
+    await p.click(btnSel(CARD));
+    await sleep(250);
+    const a2 = { bubble: !!(await bubNow(p)), flag: await flagOf(p, CARD), ...(await goneAfter()) };
+    check(a1 && !a2.bubble && a2.flag === null && !a2.mark && !a2.lit,
+      tag + "f5 the lit button pressed while the answer's bubble stands closes it and sends no new flag", { a1, a2 });
 
     /* f8 the keyboard. */
     await rest(p);
@@ -491,6 +524,7 @@ try {
     skip("plant:flag-bubble-first the bubble shown before the flag is sent turns f2 red (ETIUDA_PLANTS=off)");
     skip("plant:flag-greyed a greyed button drawn where no flag can be made turns f1 red (ETIUDA_PLANTS=off)");
     skip("plant:flag-mark-stays an answer's mark that stays after it was opened turns f5 red (ETIUDA_PLANTS=off)");
+    skip("plant:flag-own-press the button pressed while its bubble stands acting on the flag turns f3 red (ETIUDA_PLANTS=off)");
   } else {
     const u1 = plant("plant-first", /const (\w+) = flagCard\((\w+)\);/, "showFlagSent($2);\n    const $1 = flagCard($2);");
     let red1 = null;
@@ -522,6 +556,20 @@ try {
       } finally { await closePage(p); }
     }
     check(!!u3 && red3 === true, "plant:flag-mark-stays an answer's mark that stays after it was opened turns f5 red", { located: !!u3, red3 });
+    const u4 = plant("plant-own", /if \(closeOpen && \(sentOpen === id \|\|/, "if (false && (sentOpen === id ||");
+    let red4 = null;
+    if (u4) {
+      const p = await boot(u4, { offered: true });
+      try {
+        await clickFlag(p, CARD);
+        await p.evaluate((b) => document.querySelector(b).focus(), btnSel(CARD));
+        await p.keyboard.press("Enter");
+        await sleep(250);
+        const fl = await flagOf(p, CARD);
+        red4 = { bubble: !!(await bubNow(p)), sent: !!(fl && fl.state === "sent") };
+      } finally { await closePage(p); }
+    }
+    check(!!u4 && !!red4 && !(red4.sent && !red4.bubble), "plant:flag-own-press the button pressed while its bubble stands acting on the flag turns f3 red", { located: !!u4, red4 });
   }
 } catch (e) {
   check(false, "run crashed: " + (e && e.stack ? e.stack.split("\n").slice(0, 3).join(" | ") : e));
@@ -530,7 +578,7 @@ try {
   try { fs.rmSync(lab, { recursive: true, force: true }); } catch (e) {}
 }
 
-const want = EXPECTED - (PLANTS_OFF ? 3 : 0);
+const want = EXPECTED - (PLANTS_OFF ? 4 : 0);
 console.log("RESULT checks=" + checks + " failed=" + fails + (notRun ? " notRun=" + notRun : ""));
 console.log("#counts checks=" + checks + " skipped=" + notRun + " failed=" + fails + " expected=" + want);
 process.exit(fails || checks !== want ? 1 : 0);

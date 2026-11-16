@@ -63,7 +63,13 @@ const markOf=id=>document.querySelector(cardSel(id)+' > .chead .cflag');
 const buttonOf=id=>document.querySelector(cardSel(id)+' > .chead .cacts [data-act="flag"]');
 
 let closeOpen=null;
-function closeFlagBubbles(){ if(closeOpen) closeOpen(); }
+/* "back" gives the focus to the card's own button, as a close from inside the bubble does. */
+function closeFlagBubbles(back){ if(closeOpen) closeOpen(back?"back":undefined); }
+/* A press on the card's own button or its mark is theirs to answer, never a press outside. */
+function pressOnOwn(id, target){
+  const b=buttonOf(id), m=markOf(id);
+  return !!((b && b.contains(target)) || (m && m.contains(target)));
+}
 /* One bubble at a time. Esc, its own close and a press anywhere outside it close it; `after` runs once it has gone. */
 function flagBubble(id, html, origin, width, after){
   closeFlagBubbles();
@@ -76,12 +82,12 @@ function flagBubble(id, html, origin, width, after){
   cutLeaves();
   document.body.appendChild(el);
   hangBubble(el, origin, {width:width});
-  const outside=e=>{ if(!el.contains(e.target)) close(true); };
+  const outside=e=>{ if(!el.contains(e.target) && !pressOnOwn(id, e.target)) close(true); };
   /* Closed from inside, the focus goes back to the card's own button. */
-  const close=away=>{
+  const close=how=>{
     if(closeOpen!==close) return;
     closeOpen=null;
-    const back=!away && el.contains(document.activeElement);
+    const back=how==="back" || (!how && el.contains(document.activeElement));
     document.removeEventListener("pointerdown",outside,true);
     dismissNode(el);
     after();
@@ -122,6 +128,7 @@ function showFlagSent(id){
 }
 /* THE ANSWER IS ITS OUTCOME ALONE. Opening it is the agent having seen it. A card that is gone has nowhere to show it. */
 function showFlagAnswer(id){
+  if(closeOpen && answerOpen && answerOpen.id===id){ closeFlagBubbles(true); return; }
   const f=cardFlag(id);
   if(!f || f.state!=="answered") return;
   if(f.outcome==="gone"){ flagSeen(id); return; }
@@ -138,6 +145,8 @@ function showFlagAnswer(id){
 /* The card's button: a press sends the flag first and then says so; on a lit flag it takes the flag back, or opens the
    answer where one has come. */
 function flagPressed(id){
+  /* While its bubble stands, the button closes it and does nothing else: taking the flag back is the bubble's own. */
+  if(closeOpen && (sentOpen===id || (answerOpen && answerOpen.id===id))){ closeFlagBubbles(true); return; }
   const f=flagState(id);
   if(f && f.state==="answered"){ showFlagAnswer(id); return; }
   if(f){ closeFlagBubbles(); unflagCard(id); return; }

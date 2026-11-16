@@ -17045,8 +17045,12 @@ What is typed here stays in this browser.`;
   var markOf = (id) => document.querySelector(cardSel(id) + " > .chead .cflag");
   var buttonOf = (id) => document.querySelector(cardSel(id) + ' > .chead .cacts [data-act="flag"]');
   var closeOpen = null;
-  function closeFlagBubbles() {
-    if (closeOpen) closeOpen();
+  function closeFlagBubbles(back) {
+    if (closeOpen) closeOpen(back ? "back" : void 0);
+  }
+  function pressOnOwn(id, target) {
+    const b = buttonOf(id), m = markOf(id);
+    return !!(b && b.contains(target) || m && m.contains(target));
   }
   function flagBubble(id, html, origin, width, after) {
     closeFlagBubbles();
@@ -17060,12 +17064,12 @@ What is typed here stays in this browser.`;
     document.body.appendChild(el);
     hangBubble(el, origin, { width });
     const outside = (e) => {
-      if (!el.contains(e.target)) close(true);
+      if (!el.contains(e.target) && !pressOnOwn(id, e.target)) close(true);
     };
-    const close = (away) => {
+    const close = (how) => {
       if (closeOpen !== close) return;
       closeOpen = null;
-      const back = !away && el.contains(document.activeElement);
+      const back = how === "back" || !how && el.contains(document.activeElement);
       document.removeEventListener("pointerdown", outside, true);
       dismissNode(el);
       after();
@@ -17120,6 +17124,10 @@ What is typed here stays in this browser.`;
     }
   }
   function showFlagAnswer(id) {
+    if (closeOpen && answerOpen && answerOpen.id === id) {
+      closeFlagBubbles(true);
+      return;
+    }
     const f = cardFlag(id);
     if (!f || f.state !== "answered") return;
     if (f.outcome === "gone") {
@@ -17144,6 +17152,10 @@ What is typed here stays in this browser.`;
     return seen;
   }
   function flagPressed(id) {
+    if (closeOpen && (sentOpen === id || answerOpen && answerOpen.id === id)) {
+      closeFlagBubbles(true);
+      return;
+    }
     const f = flagState(id);
     if (f && f.state === "answered") {
       showFlagAnswer(id);
