@@ -1479,6 +1479,7 @@ UI_STRINGS.pl={
   "Not syncing just now: {REASON}. Sync tries again by itself, and nothing on this computer is lost.":"Synchronizacja chwilowo nie działa: {REASON}. Sama ponowi próbę, a na tym komputerze nic nie ginie.",
   "Not syncing just now: {REASON}. Sync tries again at {TIME}, and nothing on this computer is lost.":"Synchronizacja chwilowo nie działa: {REASON}. Ponowi próbę o {TIME}, a na tym komputerze nic nie ginie.",
   "Not syncing: {REASON}. Sync tries again within a day, and nothing on this computer is lost.":"Synchronizacja nie działa: {REASON}. Ponowi próbę w ciągu doby, a na tym komputerze nic nie ginie.",
+  "Not syncing while signing in on this computer is refused. Sync resumes once signing in works, and nothing on this computer is lost.":"Synchronizacja wstrzymana, dopóki logowanie na tym komputerze jest odrzucane. Zostanie wznowiona, gdy logowanie się powiedzie, a na tym komputerze nic nie ginie.",
   "Connecting for the first time.":"Trwa pierwsze łączenie.",
   "Checking for changes.":"Trwa sprawdzanie zmian.",
   "Not connected yet. Sync starts once this computer reaches our service.":"Jeszcze bez połączenia. Synchronizacja ruszy, gdy komputer połączy się z naszą usługą.",

@@ -39,7 +39,7 @@ const check = (ok, what, detail) => {
 };
 const skip = what => { skipped++; console.log("  SKIP " + what); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 38;
+const EXPECTED = 41;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const STORE = path.join(E.ROOT, "shell", "sync", "store.cjs");
 const sha = f => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
@@ -159,6 +159,12 @@ const TRUE_LINES = [
     "Synchronizacja nie działa: ten komputer nie może połączyć się z kontem Microsoft. Ponowi próbę w ciągu doby, a na tym komputerze nic nie ginie.", "switch"],
   ["the tries spent, the service busy", { line: "spent", why: "rate" }, "Not syncing: our service is busy. Sync tries again within a day, and nothing on this computer is lost.",
     "Synchronizacja nie działa: nasza usługa jest teraz zajęta. Ponowi próbę w ciągu doby, a na tym komputerze nic nie ginie.", "switch"],
+  ["signing in refused", { line: "signin-refused" }, "Not syncing while signing in on this computer is refused. Sync resumes once signing in works, and nothing on this computer is lost.",
+    "Synchronizacja wstrzymana, dopóki logowanie na tym komputerze jest odrzucane. Zostanie wznowiona, gdy logowanie się powiedzie, a na tym komputerze nic nie ginie.", "switch"],
+  ["a lapse under three days", { line: "lapsed" }, "Not syncing just now. Sync resumes when this computer reaches our service, and nothing on this computer is lost.",
+    "Synchronizacja chwilowo nie działa. Zostanie wznowiona, gdy komputer połączy się z naszą usługą, a na tym komputerze nic nie ginie.", "switch"],
+  ["the dated pause", { line: "paused", since: Date.UTC(2026, 10, 11, 12) }, "Paused since 11 November. It resumes when this computer reaches our service.",
+    "Wstrzymana od 11 listopada. Zostanie wznowiona, gdy komputer połączy się z naszą usługą.", "switch"],
   ["a look running, the first", { line: "first" }, "Connecting for the first time.", "Trwa pierwsze łączenie.", "switch"],
   ["a look running, after one had sync on", { line: "checking" }, "Checking for changes.", "Trwa sprawdzanie zmian.", "switch"],
   ["no look yet in this run", { line: "unconnected" }, "Not connected yet. Sync starts once this computer reaches our service.",
@@ -755,15 +761,17 @@ async function main() {
       [row({ look: { state: "unavailable", why: "consent" } }).line === "unavailable", "the organisation's refusal: not available"],
       [(r => r.line === "ungiven" && r.on === false && r.say === "")(row({ look: { state: "unavailable", why: "ungiven" }, say: "ungiven" })), "the folder's consent never given: off with its switch, nothing said"],
       [row({ conflicts: 2 }).line === "conflict", "a conflict"],
-      [row({ until: now - 2 * D }).line === "on", "paused two days: not yet"],
+      [row({ until: now - 2 * D }).line === "lapsed" && row({ until: now - 2 * D, look: null }).line === "lapsed", "a lapse under three days: lapsed, after a look or before one"],
       [row({ until: now - 3 * D }).line === "paused" && row({ until: now - 3 * D }).since === now - 3 * D, "paused three days"],
-      [row({ until: now - 4 * D, signinRefused: true }).line === "on", "a sign-in refusal: the sign-in says it"],
+      [row({ until: now - 4 * D, signinRefused: true }).line === "signin-refused" && row({ signinRefused: true, look: null }).line === "signin-refused"
+        && row({ signinRefused: true, look: { state: "unavailable", why: "offline" } }).line === "signin-refused", "signing in refused, no look on a current certificate: signin-refused"],
+      [row({ signinRefused: true }).line === "on", "signing in refused, the look on and its certificate current: sync runs on it"],
       [row({ say: "on" }).say === "on" && row({ pol: { on: false, held: false }, say: "on" }).say === "", "the say rides on, never off"],
       [(r => r.line === "noseat" && r.on === true)(row({ seatless: true, signinRefused: true, until: now - 4 * D, conflicts: 1 })), "no seat: said over a conflict and a lapse, the switch on"],
       [row({ seatless: true, look: { state: "unavailable", why: "no-drive" } }).line === "unavailable" && row({ seatless: true, pol: { on: false, held: false } }).line === "off", "no seat: under a folder not reached and the person's own off"],
       [(r => r.line === "full" && r.on === true)(row({ full: true })), "the store's room full, the switch on"],
       [row({ full: true, conflicts: 1 }).line === "full" && row({ full: true, until: now - 3 * D }).line === "paused" && row({ full: true, pol: { on: false, held: false } }).line === "off", "full: over a conflict, under a pause and off"],
-      [row({ conflicts: 1, until: now - 3 * D }).line === "paused" && row({ conflicts: 1, until: now - 2 * D }).line === "conflict", "a conflict: under a pause, said once the pause is not yet said"],
+      [row({ conflicts: 1, until: now - 3 * D }).line === "paused" && row({ conflicts: 1, until: now - 2 * D }).line === "lapsed", "a conflict: under a pause of any length"],
       [((r) => r.line === "ask" && r.on === false && r.held === false && r.askNow === true)(row({ ask: true, askNow: true, pol: { on: false, held: false } })), "ask: waiting for account-change answer even with person off"],
       [row({ ask: true, askNow: true, pol: { on: false, held: true } }).line === "org-off", "ask: under policy off"],
       [ST.roomNext(false, "team-size") === true && ST.roomNext(true, "rate") === true && ST.roomNext(false, "rate") === false && ST.roomNext(true, "") === false, "roomNext: full at team-size, empty at a taken write, else as it was"],
@@ -794,6 +802,13 @@ async function main() {
       ["a look running over a conflict", { looking: true, conflicts: 1 }, "checking", { conflicts: 1 }, "conflict"],
       ["the dated pause over no look yet", { look: null, until: now - 4 * D }, "paused", { look: null }, "unconnected"],
       ["no look yet over a conflict", { look: null, conflicts: 1 }, "unconnected", { conflicts: 1 }, "conflict"],
+      ["a look running over a refused sign-in", { looking: true, signinRefused: true, look: null }, "checking", { signinRefused: true, look: null }, "signin-refused"],
+      ["a refused sign-in over a passing failure", Object.assign({ signinRefused: true }, again), "signin-refused", again, "again"],
+      ["a refused sign-in over a refusal", { signinRefused: true, look: { state: "paused", why: "signin" } }, "signin-refused", { look: { state: "paused", why: "signin" } }, "refused"],
+      ["a lapse over a conflict", { until: now - D, conflicts: 1 }, "lapsed", { conflicts: 1 }, "conflict"],
+      ["a lapse over the room full", { until: now - D, full: true }, "lapsed", { full: true }, "full"],
+      ["a lapse over no look yet", { until: now - D, look: null }, "lapsed", { look: null }, "unconnected"],
+      ["a passing failure over a lapse", Object.assign({ until: now - D }, again), "again", { until: now - D }, "lapsed"],
       ["no seat over a refusal", { seatless: true, look: { state: "paused", why: "store" } }, "noseat", { look: { state: "paused", why: "store" } }, "refused"],
       ["a refusal over a conflict", { conflicts: 1, look: { state: "paused", why: "signin" } }, "refused", { conflicts: 1 }, "conflict"],
       ["a refusal over the room full", { full: true, look: { state: "paused", why: "seat-lapsed" } }, "refused", { full: true }, "full"],
@@ -808,7 +823,8 @@ async function main() {
   /* The row's lines, each lifted or moved in a copy of store.cjs, turn r1 red; the product file is never written. */
   for (const [tag, what] of [["row-ask", "the hold's question read as off"], ["row-noseat", "no seat read as on"], ["row-full", "the room full read as on"],
     ["row-conflict", "the conflict said first, over a pause and the room full"], ["row-passing", "a passing failure read as on"], ["row-refused", "a refusal read as on"], ["row-looking", "a look running read as on"],
-    ["row-unconnected", "no look yet read as on"], ["row-no-date", "no certificate's end read as the first of January"]]) {
+    ["row-unconnected", "no look yet read as on"], ["row-no-date", "no certificate's end read as the first of January"],
+    ["row-signin-refused", "a refused sign-in read as on"], ["row-lapsed", "a lapse under three days read as on"]]) {
     const line = "p r1 " + tag + " lifted in a copy of store.cjs turns r1 red (" + what + "), and the product file is never written";
     if (PLANTS_OFF) { skip(line); continue; }
     const before = sha(STORE), text = fs.readFileSync(STORE, "utf8"), lines = text.split("\n"), at = lines.findIndex(l => l.indexOf("/* plant:" + tag + " */") >= 0);
@@ -930,8 +946,9 @@ async function main() {
       check(!m4.length && bad.length > 0, line, detail);
     } else check(false, line, detail);
   };
+  await truePlant("signin-refused", 'if (s.line === "signin-refused") return t(', 'if (false) return t(', "a refused sign-in said as sync on");
   await truePlant("first", 'if (s.line === "first") return t(', 'if (false) return t(', "the first look said as sync on");
-  await truePlant("refused", 'if (s.line === "refused") return t(', 'if (false) return t(', "a refusal said as sync on");
+  await truePlant("refused", 'if (s.line === "refused" || s.line === "lapsed") return t(', 'if (false) return t(', "a refusal and a lapse said as sync on");
   await truePlant("passing", 'if (s.line === "again" || s.line === "spent") return syncPassing(s, provider);', "", "a passing failure said as sync on");
   if (PLANTS_OFF) skip("p c9d firstSay saying at a look that did not make the store turns c9d red");
   else {

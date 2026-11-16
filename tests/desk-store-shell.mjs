@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 170;
+const EXPECTED = 172;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -626,6 +626,26 @@ async function lookingScene(src) {
   const never = boot(src, { ud: shell.UD, world, lab: labNow, store: {} }).T.storeView();
   const ok = mid1 === "first" && t1 > t0 && after1 === "on" && t2 > t1 && mid2 === "checking" && after2 === "on" && restarted === "unconnected" && never.line === "unconnected" && !never.since;
   return { ok, detail: brief({ mid1, toldAtStart: t1 - t0, after1, toldAtEnd: t2 - t1, mid2, after2, restarted, never: never.line + (never.since ? "/" + never.since : "") }) };
+}
+
+/* (ps) THE PAUSES AS THE ROW READS THEM: a renewal refused at the service leaves sync running on the look's current certificate, the row on;
+   that certificate ended, the row says signing in is refused; with no refusal, a lapse under three days reads "lapsed" and one of three
+   or more the dated pause, its date the certificate's end. */
+async function pausesScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world;
+  w.seatRefused = "no-role";
+  await T.signinRenewNow();
+  const refusedOn = T.storeView().line, said = T.signinState().held ? T.signinState().held.said : "";
+  const until = T.storeState().until;
+  T.storeState().until = Date.now() - 1000;
+  const refusedEnded = T.storeView().line;
+  T.signinState().held.said = "";
+  const lapsed = T.storeView().line;
+  const at = Date.now() - 4 * DAY;
+  T.storeState().until = at;
+  const dated = T.storeView();
+  const ok = said === "no-role" && until > Date.now() && refusedOn === "on" && refusedEnded === "signin-refused" && lapsed === "lapsed" && dated.line === "paused" && dated.since === at;
+  return { ok, detail: brief({ said, refusedOn, refusedEnded, lapsed, dated: dated.line, since: dated.since === at }) };
 }
 
 /* (t12) A START OFFLINE: a desk that synced, its sync state holding a kept version, starts again with its certificate standing and the
@@ -2181,6 +2201,7 @@ const LEGS = [
   ["t7v", againViewScene, "the row is told a passing failure as again, with the reason and the try's own time, while a try is set, and as spent once the tries are spent; nothing of a key, a token, a store or an address"],
   ["rf", refusedViewScene, "a refusal by the licence service (another's store, a fresh sign-in wanted) or by the relay is told as refused with its reason, the relay's only as relay, and no short try is set"],
   ["lk", lookingScene, "the page is told when a look begins and ends; while it runs the row says first where no look has had sync on here, checking after; a start before its renewal, nothing looked at, says unconnected, with no date where no look ever found sync on"],
+  ["ps", pausesScene, "a renewal refused at the service leaves sync on its current certificate, the row on; that certificate ended, signing in refused; no refusal, a lapse under three days lapsed and one of three or more the dated pause"],
   ["t12", offlineStartScene, "a desk starting with its certificate standing and neither the provider nor the service reached loads its sync with what it keeps, the row saying the folder is not reached and the look tried again by itself, which it is; the address back, the next try turns the store on and the sync runs"],
   ["gt", teamFolderScene, "joined to a folder team, the store's sync takes no team catalog into the person's store, reads the person's own catalog as removed nowhere, and writes nothing from the store into the team's mirror"],
   ["g1b", consentBusyScene, "while the switch's request for the folder waits on the browser the desk is busy to the page, and an answer after another account took the seat is neither taken for it nor looked with"],
@@ -2297,6 +2318,7 @@ const PLANTS = [
   ["rf", swap("if (res && res.status === 403 && plainObj(j) && (j.reason === \"signin\" || j.reason === \"store\")) return { why: j.reason };", "if (false) return { why: j.reason };"), "the service's refusal read as not reached, so the row says it tries again"],
   ["lk", swap("  storeLooking = true; tellStore(); /* plant:store-look-told */", "  /* plant:store-look-told */"), "the look's start neither kept nor told, so the row says what it said before"],
   ["lk", swap("looking: storeLooking, ever: s.told === true, /* plant:store-view-looking */", "looking: false, ever: false, /* plant:store-view-looking */"), "the row told neither that a look runs nor that one had sync on before"],
+  ["ps", swap("signinRefused: !!(held && held.said), conflicts:", "signinRefused: false, conflicts:"), "the row not told the sign-in is refused, so an ended certificate reads as a lapse"],
   ["t12", swap("  else if (s.held && s.held.cert && s.held.reached === false) storeTurn(); /* plant:store-renew-unreached */\n", ""), "a renewal that reached nothing makes no look, so the sync waits unloaded and nothing is tried again"],
   ["gt", swap("if (sayJoinPolicy().folder || relayHere() || folderTeamHere() || Object.keys(teamNeedsFolder).length) return \"\"; /* plant:sync-team-folder */", "if (false) return \"\"; /* plant:sync-team-folder */"), "the store's sync lists and writes the team's mirror as the person's folder"],
   ["w1", swap("  if (s.keys || s.leave || storeLeaveHere) {", "  if (false) {"), "a sign-out leaves the store's keys in store.json"],

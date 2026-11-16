@@ -9110,6 +9110,7 @@ What you type stays in this browser only.`;
     "Not syncing just now: {REASON}. Sync tries again by itself, and nothing on this computer is lost.": "Synchronizacja chwilowo nie działa: {REASON}. Sama ponowi próbę, a na tym komputerze nic nie ginie.",
     "Not syncing just now: {REASON}. Sync tries again at {TIME}, and nothing on this computer is lost.": "Synchronizacja chwilowo nie działa: {REASON}. Ponowi próbę o {TIME}, a na tym komputerze nic nie ginie.",
     "Not syncing: {REASON}. Sync tries again within a day, and nothing on this computer is lost.": "Synchronizacja nie działa: {REASON}. Ponowi próbę w ciągu doby, a na tym komputerze nic nie ginie.",
+    "Not syncing while signing in on this computer is refused. Sync resumes once signing in works, and nothing on this computer is lost.": "Synchronizacja wstrzymana, dopóki logowanie na tym komputerze jest odrzucane. Zostanie wznowiona, gdy logowanie się powiedzie, a na tym komputerze nic nie ginie.",
     "Connecting for the first time.": "Trwa pierwsze łączenie.",
     "Checking for changes.": "Trwa sprawdzanie zmian.",
     "Not connected yet. Sync starts once this computer reaches our service.": "Jeszcze bez połączenia. Synchronizacja ruszy, gdy komputer połączy się z naszą usługą.",
@@ -28217,7 +28218,7 @@ What you type stays in this browser only.`;
       if (b.dataset.signinAct) signinAct(b.dataset.signinAct, b);
     });
   }
-  var SYNC_LINES = ["on", "off", "ending", "ungiven", "org-off", "unavailable", "first", "checking", "unconnected", "again", "spent", "refused", "paused", "conflict", "full", "noseat", "ask"];
+  var SYNC_LINES = ["on", "off", "ending", "ungiven", "org-off", "unavailable", "first", "checking", "unconnected", "signin-refused", "again", "spent", "refused", "lapsed", "paused", "conflict", "full", "noseat", "ask"];
   function syncRead(v) {
     const o = v && typeof v === "object" ? v : {};
     if (o.shown !== true || SYNC_LINES.indexOf(o.line) < 0) return { shown: false, line: "", on: false, held: false, why: "", since: 0, say: "", askNow: false, at: 0 };
@@ -28277,8 +28278,9 @@ What you type stays in this browser only.`;
     if (s.line === "first") return t("Connecting for the first time.");
     if (s.line === "checking") return t("Checking for changes.");
     if (s.line === "unconnected") return t("Not connected yet. Sync starts once this computer reaches our service.");
+    if (s.line === "signin-refused") return t("Not syncing while signing in on this computer is refused. Sync resumes once signing in works, and nothing on this computer is lost.");
     if (s.line === "again" || s.line === "spent") return syncPassing(s, provider);
-    if (s.line === "refused") return t("Not syncing just now. Sync resumes when this computer reaches our service, and nothing on this computer is lost.");
+    if (s.line === "refused" || s.line === "lapsed") return t("Not syncing just now. Sync resumes when this computer reaches our service, and nothing on this computer is lost.");
     if (s.line === "paused") return named(t("Paused since {DATE}. It resumes when this computer reaches our service."), "{DATE}", syncDate(s.since));
     if (s.line === "conflict") return t("Changed on two computers: the newer change is in use, and the older one is kept, so nothing is lost.");
     if (s.line === "full") return t("Sync is full, so new changes stay on this computer until something is removed.");
