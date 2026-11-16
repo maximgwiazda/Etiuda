@@ -11388,19 +11388,23 @@ function tellStore() {
 /* THE SWITCH: "on" turns sync on here and looks at once; "here" turns it off on this computer, which forgets the store's keys and
    its last look; "everywhere" also ends the store at the licence service, which deletes the relay's copy, and leaves the ended mark
    in the person's folder, so no other computer writes the key back. Policy that holds the switch refuses all three. */
+let storeSwitchNo = 0;
 async function storeSetNow(what) {
   if (!storeMine()) return storeView();
   if (storePolicyNow().held) return storeView(); /* plant:store-set-held */
+  if (what !== "on" && what !== "here" && what !== "everywhere") return storeView();
+  /* A look still out when the switch moves is no longer this desk's (storeLookNow ours), and on starts a look of its own. */
+  storeSwitchNo++;
   const s = storeState();
   if (what === "on") {
     if (storeLeaveKeys()) storeLeaveOwe(null);
     delete s.off;
     storeFresh = true;
     storeSave();
+    storeFlight = null; /* plant:store-on-fresh */
     storeTurn();
     return storeView();
   }
-  if (what !== "here" && what !== "everywhere") return storeView();
   const keys = what === "everywhere" ? storeLocal() : null, leaving = what === "here" ? storeLocal() : null;
   const cert = storeNow && storeNow.store ? storeNow.store : null;
   if (leaving) storeLeaveOwe(leaving);
@@ -11685,17 +11689,19 @@ async function storeLookNow() {
   if (!pol.on) storeSyncStop();
   if (!pol.on) return null; /* plant:store-off */
   if (!sealsForReal(safeStorage, process.platform)) return storeSettle({ state: "unavailable", why: "" });
-  const L = StoreLib(), who = storeState().who;
-  /* The look keeps to the account it began under: its folder token and its keeping, whoever is seated by the time it ends. */
-  const ours = () => storeState().who === who && storeWho(signinState().held) === who; /* plant:store-look-ours */
+  const L = StoreLib(), who = storeState().who, switchAt = storeSwitchNo;
+  /* The look keeps to the account it began under and to the switch as it stood, sync still on: its folder token, the service, the relay
+     and its keeping, whoever is seated or whatever was switched by the time each step comes. */
+  const ours = () => storeState().who === who && storeWho(signinState().held) === who && storeSwitchNo === switchAt && storeOn(); /* plant:store-look-ours */
   let access = null;
   const folder = L.folderFor(p.id, { ask: storeAsk, token: () => (access && ours() ? access.token : "") });
   const token = folder ? await storeTokenFor(p, held) : {};
   if (token.why) return storeSettle({ state: "unavailable", why: token.why });
   access = storeAccess;
   const look = await L.storeLook({ folder: folder, local: storeLocal, keep: k => { if (ours()) storeKeep(k); },
-    grant: (rt, sPub, extra) => storeGrant(me.key, rt, sPub, Object.assign({}, extra, { company: pol.company === true })),
-    relay: { create: storeRelayCreate, renew: storeRelayRenew, devices: (keys, cert) => storeRelayDevices(keys, cert, me) },
+    grant: async (rt, sPub, extra) => (ours() ? storeGrant(me.key, rt, sPub, Object.assign({}, extra, { company: pol.company === true })) : { why: "unreached" }),
+    relay: { create: async (k, g) => (ours() ? storeRelayCreate(k, g) : { ok: false, why: "relay" }), renew: async (k, g) => (ours() ? storeRelayRenew(k, g) : { ok: false, why: "relay" }),
+      devices: async (keys, cert) => (ours() ? storeRelayDevices(keys, cert, me) : { ok: false, why: "relay" }) }, /* plant:store-look-steps */
     me: { id: me.id, pub: me.key, desk: me.id }, url: STORE_RELAY, rand: n => crypto.randomBytes(n), fresh: storeFresh, made: storeState().made });
   if (!ours()) return null;
   /* A store made here whose grant or making did not finish is named, so the next look still makes it as the one that replaces. */

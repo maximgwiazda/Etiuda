@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 151;
+const EXPECTED = 154;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -1191,6 +1191,38 @@ async function lookOutScene(src) {
   return { ok, detail: brief({ keptForB: !!kept.keys, folderWritesAfterB: writesAfter - writesBefore }) };
 }
 
+/* (s5) THE SWITCH MOVED WHILE A LOOK IS OUT: a look held at the licence service when the person turns sync off here changes nothing once
+   it is answered: no key kept, no call to the relay, the folder's list still without this desk, the sync stopped and the row Off. A look
+   held there when the person turns sync off and on again is not the look On waits on: On starts its own, which turns the store on. */
+async function switchMidLookScene(src) {
+  const hold = w => { let open = null; w.grantGate = new Promise(a => { open = a; }); const at = new Promise(a => { w.onGrant = a; }); return { at, open: () => open() }; };
+  const r = await renewScene(src), T = r.shell.T, w = r.world, me = r.me;
+  const g = hold(w);
+  const flight = T.storeTurn();
+  await g.at;
+  await T.storeSetNow("here");
+  const relayAt = w.relay.length;
+  g.open();
+  await flight;
+  const sync = T.get().storeSyncing, listed = w.file ? (JSON.parse(w.file).devices || []).some(d => d.pub === me.key) : null;
+  const off = { keys: !!T.storeState().keys, relayCalls: w.relay.length - relayAt, listed, syncing: !!sync && sync.running(), line: T.storeView().line };
+  const r2 = await renewScene(src), T2 = r2.shell.T, w2 = r2.world;
+  const g2 = hold(w2);
+  const old = T2.storeTurn();
+  await g2.at;
+  await T2.storeSetNow("here");
+  await T2.storeSetNow("on");
+  const mine = T2.get().storeFlight;
+  g2.open();
+  await old;
+  if (mine) await mine;
+  const s2 = T2.get().storeSyncing, n2 = T2.get().storeNow;
+  const on = { own: !!mine && mine !== old, look: n2 ? n2.state : null, syncing: !!s2 && s2.running(), keys: !!T2.storeState().keys, line: T2.storeView().line };
+  const ok = !off.keys && off.relayCalls === 0 && off.listed === false && !off.syncing && off.line === "off"
+    && on.own && on.look === "on" && on.syncing && on.keys && on.line === "on";
+  return { ok, detail: brief({ off, on }) };
+}
+
 /* (f) MICROSOFT'S FOLDER ASKED APART: the sign-in asks today's scopes alone; once its code is back, the same browser window is sent on from
    the loopback's landing to ask the folder alone; a refusal, or an administrator's approval needed, leaves the desk signed in and says
    "consent" once; a renewal asks the folder quietly and never opens a browser. The browser is a stand-in over real HTTP to the loopback. */
@@ -1961,6 +1993,7 @@ const LEGS = [
   ["w2", s => anotherScene(s, "leave", false), "a This computer A left owed is not written into B's folder with A's keys"],
   ["w3", s => anotherScene(s, "owed", false), "a store/end A left owed is not posted while B is seated"],
   ["w4", lookOutScene, "a look of A's still out when B is seated seals nothing here for B and writes nothing more to the folder"],
+  ["s5", switchMidLookScene, "the switch turned off while a look is out: once answered the look keeps no key, calls the relay no more, leaves the folder's list without this desk, starts no sync and the row says Off; turned off and on again, On starts a look of its own, which turns the store on"],
   ["x1", s => heldScene(s, true), "A synced and signed out; B seated on the same profile: nothing is looked at, uploaded or merged for B (no relay call, no store in B's folder, the sync stopped, no merge set going), and the desk's sync state, mirror and desk.json stay as they were, the store state A's"],
   ["x1d", s => heldScene(s, false), "the same where B signs in straight over A"],
   ["x4", recordScene, "with B seated over A's content store.json names A's account as the state's and B's as last seated and owing the answer, what a later build needs to ask once; B's sign-out deletes nothing of the store's state, mirror or desk.json; A back, A owes the answer in turn"],
@@ -2023,7 +2056,7 @@ const PLANTS = [
   ["f6", swap("if (!clean || landed || sent) return null; /* plant:onward-once */", "if (!clean || landed) return null; /* plant:onward-once */"), "the loopback sends the window on more than once"],
   ["g1", swap("function storeUngiven() { return storeState().org === true ? \"consent\" : \"ungiven\"; }", "function storeUngiven() { return \"consent\"; }"), "a consent never given read as the organisation's, so no switch"],
   ["g1", swap("    await handOut(pending.url); /* plant:consent-open */", "    await handOut(pending.url); handOut(pending.url); /* plant:consent-open */"), "the switch opens the request twice"],
-  ["gn", swap("renew: storeRelayRenew, ", ""), "the look hands the relay no renewal, so the store lapses from its making"],
+  ["gn", swap(" renew: async (k, g) => (ours() ? storeRelayRenew(k, g) : { ok: false, why: \"relay\" }),", ""), "the look hands the relay no renewal, so the store lapses from its making"],
   ["g2", swap("const token = !lacks && ", "const token = "), "Google's answer without the folder's scope taken as the folder's token"],
   ["g2", swap("  const folder = L.folderFor(p.id, {", "  const folder = L.folderFor(\"microsoft\", {"), "the store's folder asked of Microsoft whatever the sign-in, so the store never opens in Google Drive"],
   ["f3", swap("    loop.land(folder || kind || \"back\"); /* plant:folder-land */", "    loop.land(kind || \"back\"); /* plant:folder-land */"), "the second step lands the sign-in's page, not the folder's"],
@@ -2060,13 +2093,15 @@ const PLANTS = [
     return x && swap("  held = !!last && (last !== who || s.ask === who); /* plant:store-held */", "  held = false; /* plant:store-held */")(x); }, "the leave kept for A is B's, the hold lifted"],
   ["w3", text => { const x = swap("  if (s.who === who) return true; /* plant:store-mine */", "  if (true) { s.who = who; return true; } /* plant:store-mine */")(text);
     return x && swap("  held = !!last && (last !== who || s.ask === who); /* plant:store-held */", "  held = false; /* plant:store-held */")(x); }, "the store/end owed for A is B's, the hold lifted"],
+  ["s5", swap(" && storeSwitchNo === switchAt && storeOn(); /* plant:store-look-ours */", "; /* plant:store-look-ours */"), "a look ends as though the switch had not moved: it keeps the keys and starts the sync under a row that says Off"],
+  ["s5", swap("    storeFlight = null; /* plant:store-on-fresh */\n", ""), "On waits on the look already out, begun before the switch was turned off"],
   ["x1", swap("  held = !!last && (last !== who || s.ask === who); /* plant:store-held */", "  held = false; /* plant:store-held */"), "another account takes the desk's store state and looks, makes and syncs as its own"],
   ["x1", swap("  if (!storeSyncing || storeHeld()) return; /* plant:store-held-merge */", "  if (!storeSyncing) return; /* plant:store-held-merge */"), "a change on the desk sets the merge going while another account is seated"],
   ["x4", swap("    if (s.keys || s.leave || s.ask !== who || s.last !== who) { s.keys = \"\"; s.leave = \"\"; s.ask = who; s.last = who; storeSave(); } /* plant:store-ask */", "    if (s.keys || s.leave) { s.keys = \"\"; s.leave = \"\"; storeSave(); } /* plant:store-ask */"), "the account owing the answer, and the one last seated, are not kept"],
   ["x5", swap("  held = !!last && (last !== who || s.ask === who); /* plant:store-held */", "  held = !!s.who && s.who !== who; /* plant:store-held */"), "the hold keyed on whose the state is, so A's return merges B's edit"],
   ["x1d", swap("  held = !!last && (last !== who || s.ask === who); /* plant:store-held */", "  held = false; /* plant:store-held */"), "another account seated straight over takes the store as its own"],
   ["x3", swap("  held = !!last && (last !== who || s.ask === who); /* plant:store-held */", "  held = false; /* plant:store-held */"), "B's seat takes the state, so B's turn leaves its store in the desk's sync state before A is back"],
-  ["w4", swap("  const ours = () => storeState().who === who && storeWho(signinState().held) === who; /* plant:store-look-ours */", "  const ours = () => true; /* plant:store-look-ours */"), "a look ends under whoever is seated"],
+  ["w4", swap("  const ours = () => storeState().who === who && storeWho(signinState().held) === who && storeSwitchNo === switchAt && storeOn(); /* plant:store-look-ours */", "  const ours = () => true; /* plant:store-look-ours */"), "a look ends under whoever is seated"],
   ["d", swap(".indexOf(String(url)) < 0) throw new Error(\"the licence service's door takes", ".indexOf(String(url)) < -1) throw new Error(\"the licence service's door takes"), "the door takes any route"],
   ["x6m", swap("  s.who = who; s.last = who; s.ask = \"\"; /* plant:answer-mine-who */", "  s.last = who; /* plant:answer-mine-who */"), "It is mine leaves ask and who unchanged, so the hold stays"],
   ["x6j", swap("  if (choice === \"mine\" && s.who !== who && !storeSyncFresh()) return { ok: false, choice: \"mine\", folder: \"\", view: storeView() }; /* plant:answer-mine-fresh */\n", ""), "It is mine carries the earlier account's ledger and kept list into the new account's store"],
