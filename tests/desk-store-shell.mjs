@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 149;
+const EXPECTED = 151;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -873,6 +873,58 @@ async function answerMineScene(src) {
     && !!ledger["k:eAgent"] && !!ledger["f:alpha.ec"] && bBack.line === "on" && !!bBackNow && bBackNow.state === "on"
     && aBack.line === "ask" && aBack.askNow === true && !aBackNow;
   return { ok, detail: brief({ viewHeld: viewHeld.line, ans, who: st.who === whoB, ask: st.ask || "", viewAfter: viewAfter.line, hasAgent: !!ledger["k:eAgent"], hasCat: !!ledger["f:alpha.ec"], bBack: bBack.line, aBack: aBack.line }) };
+}
+
+/* (x6j) "It is mine" from a different account joins that account's store as a computer that has never synced: A synced on this desk,
+   then removed a catalog B's other computer holds under the same name, and holds a kept version; B, seated, answers "mine". B's other
+   computer keeps its catalog through every merge after, the catalog reaches this desk, and nothing of A's ledger or kept list is here. */
+async function answerMineJoinsScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world;
+  if (typeof T.storeAnswerNow !== "function") return { ok: false, detail: "no storeAnswerNow" };
+  const run = async s => { if (!s) return; s.merge(); const c = s.channel(); if (c) { c.kick(); await c.idle(); } };
+  const aFile0 = w.file;
+  w.file = null;
+  const bBoot = boot(src, { world: w, held: true, store: { off: true }, lab: labOf() }), Tb = bBoot.T;
+  Tb.branchIdentity(true);
+  await Tb.signinRenewNow();
+  if (Tb.get().storeFlight) await Tb.get().storeFlight;
+  seatAnother(Tb, w, Tb.signinState().held);
+  await Tb.storeAnswerNow("mine");
+  if (Tb.get().storeFlight) await Tb.get().storeFlight;
+  const bDir = Tb.storeSyncFolder(), notes = "{\"made\":\"on B's other computer\"}";
+  fs.mkdirSync(bDir, { recursive: true });
+  fs.writeFileSync(path.join(bDir, "notes.ec"), notes);
+  const bSync = Tb.get().storeSyncing;
+  await run(bSync); await run(bSync);
+  const bFile = w.file;
+  w.file = aFile0;
+  await new Promise(a => setTimeout(a, 20));
+  const dir = T.storeSyncFolder(), syncA = T.get().storeSyncing;
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "notes.ec"), "{\"made\":\"by A\"}");
+  await run(syncA);
+  await new Promise(a => setTimeout(a, 20));
+  fs.rmSync(path.join(dir, "notes.ec"));
+  await run(syncA);
+  if (syncA) { syncA.state().kept.push({ item: "k:eTheme", by: "k-" + "0".repeat(16), t: 1, h: "0".repeat(64) }); syncA.merge(); }
+  const aRemoved = !!syncA && !!syncA.state().ledger["f:notes.ec"] && syncA.state().ledger["f:notes.ec"].h === null;
+  const heldA = T.signinState().held;
+  T.signinOutNow();
+  seatAnother(T, w, heldA);
+  w.file = bFile;
+  await T.storeTurn();
+  const ans = await T.storeAnswerNow("mine");
+  if (T.get().storeFlight) await T.get().storeFlight;
+  const syncB = T.get().storeSyncing;
+  if (syncB && syncB.channel()) await syncB.channel().idle();
+  /* B's other computer takes the list that names this desk, so it reads this desk's place. */
+  await Tb.storeTurn();
+  for (let i = 0; i < 3; i++) { await run(syncB); await run(bSync); }
+  const onB = fs.existsSync(path.join(bDir, "notes.ec")) && fs.readFileSync(path.join(bDir, "notes.ec"), "utf8") === notes;
+  const here = fs.existsSync(path.join(dir, "notes.ec")) && fs.readFileSync(path.join(dir, "notes.ec"), "utf8") === notes;
+  const st = syncB ? syncB.state() : { ledger: {}, kept: ["no sync"] }, view = T.storeView();
+  const ok = aRemoved && !!ans && ans.ok === true && onB && here && st.kept.length === 0 && view.line === "on";
+  return { ok, detail: brief({ aRemoved, ans: ans && ans.ok, keptOnB: onB, reachedHere: here, kept: st.kept.length, line: view.line, entry: st.ledger["f:notes.ec"] ? (st.ledger["f:notes.ec"].h ? "B's" : "removed") : "none" }) };
 }
 
 /* (x6s) "Start from my account": sets aside desk.json, store.json, userData\store, and own .ec files byte for byte (team folders untouched),
@@ -1916,6 +1968,7 @@ const LEGS = [
   ["x2", sameBackScene, "the ordinary case: the same account signed out and back finds its store on, the same store, its sync running, nothing asked"],
   ["x3", backScene, "A turned sync off here, signed out; B came and went; A back finds its own switch as it left it, and, not the account last seated, is held as B was: no look, the sync stopped, the desk's sync state as A left it"],
   ["x6m", answerMineScene, "It is mine lifts the hold, sets who = last = this account, clears ask, merges the desk into this account's store, asks once, and holds the earlier account coming back"],
+  ["x6j", answerMineJoinsScene, "It is mine from a different account joins its store as a computer that has never synced: a catalog the earlier account removed here stays on the new account's other computer and reaches this desk, and the earlier account's kept versions are gone from the row"],
   ["x6s", answerStartScene, "Start from my account sets aside desk.json, store.json, userData/store and own .ec files byte for byte (team folders untouched), clears synced desk keys, uploads none of it, loads this account's own store, and puts a second set-aside beside the first"],
   ["x6sn", answerStartNewAccountScene, "Start from my account for an account with no store yet sets A's content aside and makes B's store empty with nothing of A's uploaded"],
   ["x6n", answerNotNowScene, "Not now leaves store.json and the hold unchanged, suppresses auto-ask in this run, and asks again on a new run"],
@@ -2016,6 +2069,7 @@ const PLANTS = [
   ["w4", swap("  const ours = () => storeState().who === who && storeWho(signinState().held) === who; /* plant:store-look-ours */", "  const ours = () => true; /* plant:store-look-ours */"), "a look ends under whoever is seated"],
   ["d", swap(".indexOf(String(url)) < 0) throw new Error(\"the licence service's door takes", ".indexOf(String(url)) < -1) throw new Error(\"the licence service's door takes"), "the door takes any route"],
   ["x6m", swap("  s.who = who; s.last = who; s.ask = \"\"; /* plant:answer-mine-who */", "  s.last = who; /* plant:answer-mine-who */"), "It is mine leaves ask and who unchanged, so the hold stays"],
+  ["x6j", swap("  if (choice === \"mine\" && s.who !== who && !storeSyncFresh()) return { ok: false, choice: \"mine\", folder: \"\", view: storeView() }; /* plant:answer-mine-fresh */\n", ""), "It is mine carries the earlier account's ledger and kept list into the new account's store"],
   ["x6s", swap("  if (Object.keys(clear).length && !patchDesk(JSON.stringify(clear))) throw new Error(\"desk.json could not be updated\"); /* plant:answer-aside-clear */", "  /* plant:answer-aside-clear */"), "Start from my account does not clear synced desk keys before the new store syncs"],
   ["x6sn", swap("  storeSyncStop(); storeSyncing = null; /* plant:answer-aside-syncing */", "  storeSyncStop(); /* plant:answer-aside-syncing */"), "Start from my account keeps the old sync instance in memory"],
   ["x6n", swap("  storeNotNow.add(who); /* plant:answer-notnow */", "  /* plant:answer-notnow */"), "Not now does not remember the dismissal for this run"],

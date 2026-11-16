@@ -11528,6 +11528,9 @@ async function storeAnswerNow(choice) {
     return { ok: true, choice: "later", folder: "", view: storeView() };
   }
   if (choice !== "mine" && choice !== "start") return { ok: false, choice: "", folder: "", view: storeView() };
+  /* Mine, where the sync state is another account's: this desk joins this account's store as a computer that has never synced, so none
+     of the earlier account's removals, computers or kept versions reach it. */
+  if (choice === "mine" && s.who !== who && !storeSyncFresh()) return { ok: false, choice: "mine", folder: "", view: storeView() }; /* plant:answer-mine-fresh */
   let folder = "";
   if (choice === "start") {
     const set = storeSetAside();
@@ -11822,6 +11825,13 @@ function storeSyncSoon() {
   if (storeSyncTimer.unref) storeSyncTimer.unref();
 }
 function storeSyncStop() { if (storeSyncing) storeSyncing.stop(); }
+/* The sync state begun again, empty, for a computer joining a store as new; false where it could not be written, the old state standing. */
+function storeSyncFresh() {
+  clearTimeout(storeSyncTimer); storeSyncTimer = null;
+  storeSyncStop(); storeSyncing = null;
+  try { fs.mkdirSync(storeSyncDir(), { recursive: true }); writeReplacing(storeSyncDir(STORE_SYNC_FILE), JSON.stringify({ rt: "", ledger: {}, kept: [] })); return true; }
+  catch (e) { console.error("etiuda: the store's sync state could not be begun again - " + e.message); return false; }
+}
 /* What the Account row reads: how many versions another computer made wait here for the person's choice. */
 function storeSyncView() { return { kept: storeSyncing ? storeSyncing.state().kept.length : 0 }; }
 
