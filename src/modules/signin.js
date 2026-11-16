@@ -5,7 +5,7 @@
 import { $ } from "./dom.js";
 import { eHost, eCatalogFolderPinned } from "./host.js";
 import { esc } from "./esc.js";
-import { t, uiLang } from "./ui-lang.js";
+import { t, uiLang, hugDottedGround } from "./ui-lang.js";
 import { agentName } from "./agent.js";
 import { lsGet, lsSet } from "./storage.js";
 import { teamLeads } from "./team-join.js";
@@ -133,6 +133,7 @@ function paintFirstSignin(){
     const first=el.querySelector("button:not(:disabled), input");
     if(first) try{ first.focus({preventScroll:true}); }catch(e){ first.focus(); }
   }
+  hugDottedGround(el); /* plant:first-signin-dots */
 }
 function skipFirstSignin(){
   if(!firstSigninPending && !firstSigninOpen) return;

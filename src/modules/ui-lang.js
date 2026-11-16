@@ -1913,9 +1913,12 @@ function dgTargets(root){
   if(sx){ out.push({ground:sx, start:root}); return out; }
   const main=closest && closest(".stage > .scroller main");
   if(main){ out.push({ground:main, start:root}); return out; }
+  const fs=closest && closest(".fs-left");
+  if(fs){ out.push({ground:fs, start:root}); return out; }
   if(typeof root.querySelectorAll==="function"){
     root.querySelectorAll(".sx-page").forEach(p=>out.push({ground:p, start:p}));
     root.querySelectorAll(".stage > .scroller main").forEach(m=>out.push({ground:m, start:m}));
+    root.querySelectorAll(".fs-left").forEach(f=>out.push({ground:f, start:f}));
   }
   return out;
 }
