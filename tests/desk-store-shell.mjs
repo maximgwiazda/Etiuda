@@ -1846,9 +1846,11 @@ async function pressOn(r, clicked) {
   if (look) await look;
   return { answer, opened: r.shell.opened.slice(before), page: answer === "asked" ? r.b.pages[r.b.pages.length - 1] || { status: 0, body: "" } : null };
 }
-/* (fa) A FOLDER TOKEN IS THE SEATED ACCOUNT'S: a second Google sign-in whose seat the service refuses leaves the folder's token the
-   seated account's, not the refused one's (fa1); and an account signed in straight over another, with no folder token of its own yet, is
-   never handed the other's (fa2). */
+/* (fa) A FOLDER TOKEN IS ONLY EVER ITS OWN ACCOUNT'S: a second Google sign-in as another account leaves the one held as Sign out does,
+   whatever the service then answers (review 08's finding 11, 2026-11-16), so where the new account's seat is refused this computer ends
+   signed out and holds no folder token at all, neither the left account's nor the refused one's (fa1; until that mend it asserted the
+   first account stayed); and an account signed in straight over another, with no folder token of its own yet, is never handed the
+   other's (fa2). */
 async function pressAgain(r, provider) {
   const last = r.b.last;
   r.shell.ipc.on["etiuda:signin-click"](r.e, provider);
@@ -1867,8 +1869,8 @@ async function refusedAccountScene(src) {
   r.mode.access = "stand-in-folder-token-of-another-" + crypto.randomBytes(6).toString("hex");
   await pressAgain(r, "google");
   const a = T.get().storeAccess, held = T.signinState().held;
-  const ok = !!tokA && tokA === r.world.access && !!held && held.sub === heldA.sub && !(a && a.token === r.mode.access);
-  return { ok, detail: brief({ firstToken: !!tokA, stillA: !!held && held.sub === heldA.sub, tokenIsRefusedAccounts: !!a && a.token === r.mode.access }) };
+  const ok = !!tokA && tokA === r.world.access && !!heldA && !held && !a;
+  return { ok, detail: brief({ firstToken: !!tokA, wasA: !!heldA, signedOut: !held, noToken: !a, tokenIsRefusedAccounts: !!a && a.token === r.mode.access }) };
 }
 async function overAnotherScene(src) {
   const r = await signinFlow(src, { quiet: true }), T = r.shell.T, w = r.world;
@@ -2762,7 +2764,7 @@ const LEGS = [
   ["f7", folderCancelScene, "while the browser sent on for the folder has not answered, the sign-in is in progress to the page and Cancel closes the loopback, so a late answer keeps no folder token"],
   ["f7q", folderCancelQuietScene, "Cancel while the folder's quiet refresh is out, the code already back, closes the loopback at once: the window is never sent on"],
   ["f8", folderSlowScene, "a folder step slower than eight seconds still sends the window on for the folder, lands its page and opens the store"],
-  ["fa1", refusedAccountScene, "a second Google sign-in whose seat is refused leaves the folder's token the seated account's"],
+  ["fa1", refusedAccountScene, "a second Google sign-in as another account whose seat is refused leaves this computer signed out, holding no folder token, neither the left account's nor the refused one's"],
   ["fa2", overAnotherScene, "an account seated straight over another, with no folder step of its own, is never handed the other's folder token: its look asks its own"],
   ["w1", s => anotherScene(s, "look", true), "person A synced and signed out, which leaves no store keys here; person B seated on the same profile with an empty folder: B's look writes nothing of A's K or S into B's folder, and makes no store of B's while the desk's content is A's (x1)"],
   ["w1d", s => anotherScene(s, "look", false), "the same where B signs in straight over A's sign-in"],
