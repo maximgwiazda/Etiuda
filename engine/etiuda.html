@@ -29532,6 +29532,10 @@ What is typed here stays in this browser.`;
         return [t("This team is no longer offered here, or this computer is already in a team, so nothing was sent."), ""];
       case "signin-keyring":
         return [t("Signing in needs a keyring, and none is open on this computer."), t("Installing or unlocking GNOME Keyring or KDE Wallet, then reopening Etiuda, lets this computer sign in.")];
+      /* WORDS OWED (the copywriter): signin-switch-out, the line under it: this computer is now signed out of the account it had, and
+         signing in again works once the service answers. */
+      case "signin-switch-out":
+        return [t("The sign-in service could not be reached."), ""];
       /* WORDS OWED (the copywriter): signin-other, why this computer keeps the account it has and whom to ask (the policy's contact, or
          its IT department); until they come it says the default below. */
       case "signin-other":
@@ -29572,6 +29576,7 @@ What is typed here stays in this browser.`;
   }
   var FAIL_FIRST = ["unreached", "signin-unreached", "signin-timeout", "signin-browser", "signin-notallowed", "desks", "no-role", "token", "signin", "signin-refused", "signin-token", "signin-unbound", "signin-state", "signin-none", "signin-preview", "signin-keyring"];
   FAIL_FIRST.push("signin-notassigned", "signin-tenant", "signin-other");
+  FAIL_FIRST.push("signin-switch-out");
   var ANOTHER_FOR = ["signin-notallowed", "signin-notassigned"];
   function signinDoor(v) {
     const d = signinDoorOf(v);

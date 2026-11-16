@@ -11410,14 +11410,20 @@ ipcMain.handle("etiuda:signin", async (e, provider) => {
     const access = signinAccessFor(p, managed, null); /* plant:access-not-held */
     let got = await signinRun(io, p, me.key, Date.now, access || undefined);
     if (got.ok && managed && signinOtherHeld(st, got.sub)) got = { ok: false, reason: "signin-other" }; /* plant:managed-same */
-    /* Another account than the one held: the desk leaves that one as Sign out does, whatever this one's answer. */
-    if (got.ok && st.held && !signinHeldIs(st.held, p.id, got.sub)) { signinLeave(st, me); signinSave(); tellSignin(); } /* plant:switch-leaves */
+    /* Another account than the one held: the desk leaves that one as Sign out does, whatever this one's answer, once the service has
+       answered a call of this switch: the held account's signout/desk where one is sent, else this account's signin/desk. Not
+       answered, the switch is not made and the desk stays with the account it had, nothing owed. */
+    const other = got.ok && !!st.held && !signinHeldIs(st.held, p.id, got.sub);
+    const out = other ? await signinSwitchOut(st, me) : null;
+    if (out === false) got = { ok: false, reason: "unreached" }; /* plant:switch-unanswered */
+    if (out === true) { signinLeave(st, me, true); signinSave(); tellSignin(); } /* plant:switch-leaves */
     /* signout/desk frees this desk key's place whoever held it, so one still out is taken before this sign-in's signin/desk. */
     if (got.ok && signinOutFlight) await signinOutFlight; /* plant:out-before-signin */
     if (got.ok) {
       let ans = await signinSeat(io, p.id, me.key, got.idToken, got.seed, Date.now, got.accessToken);
       let took = !!access;
       if (!access && !ans.ok && ans.reason === "access-token") { const m = await signinSeatAccess(io, p, me.key, got, got.seed, Date.now); ans = m.ans; got = m.got; took = m.access; }
+      if (other && out === null && (ans.ok || ans.reason !== "unreached")) { signinLeave(st, me, true); signinSave(); } /* plant:switch-leaves-after */
       if (signinTake(p.id, got, ans, Date.now(), took) && folderGot) storeTokenTake(folderGot); /* plant:folder-take-after */
       signinFlush();
       if (ans.ok && ans.cert) {
@@ -11425,6 +11431,8 @@ ipcMain.handle("etiuda:signin", async (e, provider) => {
         if (io.store === true && signinFolderApart(p.id)) signinFolderAfter(run, io, p, me.key, got); else storeTurn();
       } /* plant:store-signin */
       signinSaid = ans.ok ? "signin-done" : ans.reason;
+      /* Signed out of the account it had, the service then unreached for this one: said as its own moment, not as nothing changed. */
+      if (out === true && !ans.ok && ans.reason === "unreached") signinSaid = "signin-switch-out"; /* plant:switch-out-said */
       landing = signinLanding(got, ans, managed);
     } else { signinSaid = got.reason; landing = signinLanding(got, undefined, managed); }
   } catch { signinSaid = "unreached"; }
@@ -11467,9 +11475,8 @@ function signinOutNow() {
   tellSignin();
   return signinView();
 }
-function signinLeave(s, me) {
-  if (s.held && me && (!harnessLaunch() || signinLabHeld()) && net && typeof net.fetch === "function"
-    && signinOffered().length) { /* plant:signout-offered */
+function signinLeave(s, me, sent) {
+  if (!sent && signinOutWanted(s, me)) {
     s.out = me.key;
     signinOutSend(me.key);
   }
@@ -11482,6 +11489,20 @@ function signinLeave(s, me) {
   /* Signed out, the account's organisation no longer stands in for this desk: Buy, which needs no sign-in, is offered again. */
   delete s.licenceManaged; /* plant:signout-managed */
   signinWrote = "";
+}
+/* Whether leaving the account `s` holds sends a signout/desk. `sent` above: the switch has had its answer to one already. */
+function signinOutWanted(s, me) {
+  return !!s.held && !!me && (!harnessLaunch() || signinLabHeld()) && !!net && typeof net.fetch === "function"
+    && signinOffered().length > 0; /* plant:signout-offered */
+}
+/* A switch's first call where Sign out would send one: the held account's signout/desk, after any renewal still out. True where the
+   service took it, false where it did not, null where none is sent; never left owed, so a switch not made signs nobody out later. */
+async function signinSwitchOut(s, me) {
+  if (!signinOutWanted(s, me)) return null;
+  s.out = me.key;
+  const ok = await signinOutSend(me.key);
+  if (!ok && s.out === me.key) delete s.out; /* plant:switch-out-unowed */
+  return ok;
 }
 /* One signout/desk for `key`, at once or after the renewal still out, and the owed mark taken off once the service has it. Resolves
    whether it did; never rejects. */

@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 218;
+const EXPECTED = 220;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -132,6 +132,8 @@ function worldOf(o) {
         scope: c.folder ? "openid " + DRIVE_SCOPE : "openid", access_token: c.folder ? c.access || w.access : "stand-in-google-token-not-the-folder", expires_in: 3600 }, c.noRefresh ? {} : { refresh_token: "rt-google" }));
     }
     if (u === STAGING + "signin/desk") {
+      w.seatTries = (w.seatTries || 0) + 1;
+      if (w.serviceDown) throw new TypeError("fetch failed");
       w.service.push(body);
       w.signinAt = Date.now();
       /* A service that keeps stores says so beside the seat (storeOffer); w.noOffer is today's service, which never does. */
@@ -140,6 +142,12 @@ function worldOf(o) {
       if (w.seatRefused) return json(w.seatRefused === "full" ? 409 : 403, { ok: false, reason: w.seatRefused });
       const b = JSON.parse(body);
       return json(200, Object.assign({ ok: true, code: CODE, certificate: seatCert(b.desk, Date.now()), doors: [] }, offer));
+    }
+    /* signout/desk, as the service answers it, kept apart from the service's other bodies; w.serviceDown is the service unreached. */
+    if (u === STAGING + "signout/desk") {
+      if (w.serviceDown) throw new TypeError("fetch failed");
+      (w.signouts = w.signouts || []).push(body);
+      return json(200, { ok: true });
     }
     if (u === STAGING + "store/grant") {
       w.service.push(body);
@@ -979,6 +987,47 @@ async function switchUnseatedScene(src) {
     if (s2) s2.stop();
     if (s1) s1.stop();
     const ok = !!s1 && !!s2 && got.control && got.b && !got.running && !got.keys && !got.up && !got.down;
+    return { ok, detail: brief(got) };
+  } finally { globalThis.WebSocket = ws; }
+}
+/* (x1n) THE SWITCH THE SERVICE NEVER ANSWERS (Claude alpha's decision of 2026-11-16; the test architect's criterion): A synced on two
+   computers; on the first, B signs in through the shell's own handler while the licence service cannot be reached. The switch is not
+   made: A still held with its certificate, no signout owed in memory or in signin.json, no signin/desk posted for B, A's keys still in
+   store.json and its sync running; with only the channels' own cycles and nothing reading the row, A's sync still crosses both ways. */
+async function switchUnreachedScene(src) {
+  const ws = globalThis.WebSocket;
+  globalThis.WebSocket = undefined; /* the channels poll, so their own cycles are driven here and no socket is opened */
+  try {
+    const r = await signinFlow(src, { quiet: true }), T = r.shell.T, w = r.world;
+    const s1 = T.get().storeSyncing;
+    if (s1 && s1.channel()) await s1.channel().idle();
+    const two = boot(src, { world: w, held: true, lab: labOf() }), T2 = two.T;
+    T2.branchIdentity(true);
+    await T2.signinRenewNow();
+    if (T2.get().storeFlight) await T2.get().storeFlight;
+    await T.storeTurn();
+    const s2 = T2.get().storeSyncing, d1 = T.storeSyncFolder(), d2 = T2.storeSyncFolder();
+    fs.mkdirSync(d1, { recursive: true });
+    fs.mkdirSync(d2, { recursive: true });
+    const poll = async (sync, n) => { for (let i = 0; i < n; i++) { const c = sync && sync.channel(); if (c) { c.kick(); await c.idle(); } } };
+    const has = (dir, name, text) => { try { return fs.readFileSync(path.join(dir, name), "utf8") === text; } catch { return false; } };
+    const heldA = T.signinState().held, asked = w.seatTries || 0;
+    w.serviceDown = true;
+    r.mode.sub = "sub-of-another-person";
+    await pressAgain(r, "microsoft");
+    w.serviceDown = false;
+    const held = T.signinState().held, kept = storeJson(r.shell.UD) || {};
+    let file = {};
+    try { file = JSON.parse(fs.readFileSync(path.join(r.shell.UD, "signin.json"), "utf8")); } catch { file = {}; }
+    fs.writeFileSync(path.join(d1, "up.ec"), "{\"c\":2}");
+    await poll(s1, 2); await poll(s2, 2);
+    fs.writeFileSync(path.join(d2, "down.ec"), "{\"c\":3}");
+    await poll(s2, 2); await poll(s1, 2);
+    const got = { a: !!held && held.sub === heldA.sub && !!held.cert, owed: T.signinState().out !== undefined || file.out !== undefined, seatAsked: (w.seatTries || 0) - asked,
+      keys: !!kept.keys, running: !!s1 && s1.running(), up: has(d2, "up.ec", "{\"c\":2}"), down: has(d1, "down.ec", "{\"c\":3}") };
+    if (s2) s2.stop();
+    if (s1) s1.stop();
+    const ok = !!s1 && !!s2 && got.a && !got.owed && got.seatAsked === 0 && got.keys && got.running && got.up && got.down;
     return { ok, detail: brief(got) };
   } finally { globalThis.WebSocket = ws; }
 }
@@ -2775,6 +2824,7 @@ const LEGS = [
   ["x1", s => heldScene(s, true), "A synced and signed out; B seated on the same profile: nothing is looked at, uploaded or merged for B (no relay call, no store in B's folder, the sync stopped, no merge set going), and the desk's sync state, mirror and desk.json stay as they were, the store state A's"],
   ["x1d", s => heldScene(s, false), "the same where B signs in straight over A"],
   ["x1u", switchUnseatedScene, "review 11: A synced on two computers; on one, B signs in through the shell's own handler and the service gives B no seat: with nothing reading the sync row and only the channels' own cycles running, that computer's sync is stopped and A's keys gone from store.json, and nothing crosses either way"],
+  ["x1n", switchUnreachedScene, "Claude alpha's decision: A synced on two computers; B signs in on one while the licence service cannot be reached: no switch, A held with its certificate, no signout owed, no signin/desk for B, A's keys and sync whole, and A's sync still crosses both ways by the channels' own cycles"],
   ["x4", recordScene, "with B seated over A's content store.json names A's account as the state's and B's as last seated and owing the answer, what a later build needs to ask once; B's sign-out deletes nothing of the store's state, mirror or desk.json; A back, A owes the answer in turn"],
   ["x5", returnScene, "A synced; B seated edits the desk and signs out; A back is not the account last seated, so it is held too: no look, no relay call, no merge, B's edit still on the desk and in no store, the sync state as B left it"],
   ["x2", sameBackScene, "the ordinary case: the same account signed out and back finds its store on, the same store, its sync running, nothing asked"],
@@ -2903,8 +2953,9 @@ const PLANTS = [
   ["x1", swap("  if (!storeSyncing || storeHeld()) return; /* plant:store-held-merge */", "  if (!storeSyncing) return; /* plant:store-held-merge */"), "a change on the desk sets the merge going while another account is seated"],
   ["x4", swap("    if (s.keys || s.leave || s.ask !== who || s.last !== who) { s.keys = \"\"; s.leave = \"\"; s.ask = who; s.last = who; storeSave(); } /* plant:store-ask */", "    if (s.keys || s.leave) { s.keys = \"\"; s.leave = \"\"; storeSave(); } /* plant:store-ask */"), "the account owing the answer, and the one last seated, are not kept"],
   ["x5", swap("  held = !!last && (last !== who || s.ask === who); /* plant:store-held */", "  held = !!s.who && s.who !== who; /* plant:store-held */"), "the hold keyed on whose the state is, so A's return merges B's edit"],
+  ["x1n", swap("    if (out === false) got = { ok: false, reason: \"unreached\" }; /* plant:switch-unanswered */", "    /* plant:switch-unanswered */"), "the switch made though the service never answered"],
   ["x1d", swap("  held = !!last && (last !== who || s.ask === who); /* plant:store-held */", "  held = false; /* plant:store-held */"), "another account seated straight over takes the store as its own"],
-  ["x1u", swap("    if (got.ok && st.held && !signinHeldIs(st.held, p.id, got.sub)) { signinLeave(st, me); signinSave(); tellSignin(); } /* plant:switch-leaves */\n", ""), "the sign-in as another account leaves the account it replaces as it was"],
+  ["x1u", swap("    if (out === true) { signinLeave(st, me, true); signinSave(); tellSignin(); } /* plant:switch-leaves */\n", ""), "the sign-in as another account leaves the account it replaces as it was"],
   ["x3", swap("  held = !!last && (last !== who || s.ask === who); /* plant:store-held */", "  held = false; /* plant:store-held */"), "B's seat takes the state, so B's turn leaves its store in the desk's sync state before A is back"],
   ["w4", swap("  const ours = () => storeState().who === who && storeWho(signinState().held) === who && storeSwitchNo === switchAt && storeOn(); /* plant:store-look-ours */", "  const ours = () => true; /* plant:store-look-ours */"), "a look ends under whoever is seated"],
   ["d", swap(".indexOf(String(url)) < 0) throw new Error(\"the licence service's door takes", ".indexOf(String(url)) < -1) throw new Error(\"the licence service's door takes"), "the door takes any route"],

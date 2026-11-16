@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 189;
+const PLANTS = 192;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 164 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 165 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -542,7 +542,7 @@ CASES.renewFail = async s => {
 
 /* ---- the renewal's wiring, evaluated with stand-ins for the shell around it --------------------------------------------- */
 const WIRE_DECLS = ["const SIGNIN_RENEW_MS =", "const SIGNIN_FIRST_MS =", "async function signinRenewNow(", "function armSigninRenew(", "function signinOutNow(",
-  "function signinOutSend(", "function signinOutAgain(", "function signinLeave(", "function signinAccountKept(", "function signinPolicyRefuses("];
+  "function signinOutSend(", "function signinOutAgain(", "function signinLeave(", "function signinAccountKept(", "function signinPolicyRefuses(", "function signinOutWanted("];
 const WIRE_STANDS = ["harnessLaunch", "PLACED_ASIDE", "signinState", "signinOffered", "branchIdentity", "signinIo", "net", "signinRenewHeld",
   "signinSave", "tellSignin", "setTimeout", "pinnedLead", "signinTeamHere", "fs", "path", "sharedFolderForWrite", "SEAT_NAME", "signinView", "signoutAsk", "signinLabHeld", "teamJoin", "cancelJoin", "sendJoin", "theWindow", "unlinkOwn", "stand", "signinRevokedNext",
   "storeTurn", "storeForget", "storeEndAgain", "storeLeaveNow"];
@@ -2404,7 +2404,7 @@ CASES.signoutDoorJoin = async (s, swap) => {
    (signinRun, naming the account `st.sub`), the service (signinSeat answering `st.answer`, signoutAsk), the team's folder, the door's
    join, the store. Every post to the service is kept in `st.order` by route and account, in the order sent. */
 const SWITCH_DECLS = ["function signinTake(", "function signinHeldIs(", "function signinAccountKept(", "function signinPolicyRefuses(", "function signinOtherHeld(", "function signinOutNow(",
-  "function signinLeave(", "function signinOutSend(", "function signinOutAgain(", "function signinTeamHere(", "function signinFlush(", "async function signinRenewNow("];
+  "function signinLeave(", "function signinOutWanted(", "async function signinSwitchOut(", "function signinOutSend(", "function signinOutAgain(", "function signinTeamHere(", "function signinFlush(", "async function signinRenewNow("];
 const SWITCH_STANDS = ["ipcMain", "fromEngine", "LINK_CLICK_MS", "signinState", "signinOffered", "signinPreviewing", "signinKnown", "tellSignin", "net",
   "sealsForReal", "safeStorage", "process", "branchIdentity", "signinIo", "storeOn", "signinFolderApart", "SIGNIN_FOLDER_LAND_MS", "signinAccessFor", "signinRun",
   "signinSeat", "signinSeatAccess", "storeTokenTake", "storeEndAgain", "storeLeaveNow", "signinFolderAfter", "storeTurn", "signinLanding", "signinSave",
@@ -2584,13 +2584,44 @@ CASES.orgKept = async (s, swap) => {
   const odd = s.signinFileRead(s.signinFileText({ held: Object.assign(heldOf(), { org: { tid: "not-a-tenant", hd: "Example.COM" } }) })).held;
   return !!h && !!h.org && h.org.tid === other && h.org.hd === "" && !!back && JSON.stringify(back.org) === JSON.stringify(h.org) && !!odd && odd.org.tid === "" && odd.org.hd === "example.com" && !!w;
 };
-/* Sign out and the switch share one leaving (signinLeave): Sign out is its guards, that call, and its words; the press calls it once,
-   for another account only, before the service is asked. A step added to Sign out outside signinLeave turns this red. */
+/* (11, Claude alpha's decision of the evening) The held account is left only once the service has answered a call of the switch. The
+   service not taking the held account's signout/desk: no switch, the desk still the account it had, with its seat.json, its door's join
+   and its store, no signout owed, no signin/desk sent for the new account, and the page saying the new sign-in did not finish and the
+   computer stays signed in. The signout taken and the service then unreached for the new account: signed out, said as its own moment.
+   Where no signout is sent (a harness start), the new account's signin/desk is the first call: unreached, the desk stays as it was. */
+CASES.switchUnanswered = async (s, swap) => {
+  const run = async (tune) => { const st = switchStand(s, { join: tune.join }); Object.assign(st, tune.st || {}); st.answer = tune.answer || B_ANSWERS().cert;
+    const w = loadSwitch(st, swap), v = await w.press(); await tick(10); return { st, w, v }; };
+  let whole = true;
+  for (const join of [null, doorJoin({ inv: DOOR_ID })]) {
+    const r = await run({ join, st: { outOk: false } });
+    whole = whole && !!r.st.store.held && r.st.store.held.sub === "sealed:s-1" && !!r.st.store.held.cert && r.st.unlinked.length === 0 && r.st.cancels === 0
+      && r.st.forgets === 0 && r.st.store.out === undefined && r.st.order.indexOf("signin/desk s-2") < 0 && r.st.order.indexOf("signout/desk s-1") >= 0 && r.v.said === "unreached"
+      && r.w.wrote() === "kept";
+  }
+  const page = P ? P.signinDoor(P.signinRead({ offered: ["microsoft"], signedIn: "microsoft", code: CODE, seat: "held", said: "unreached" })) : null;
+  const told = !!page && page.moment === "pressed" && /This computer stays signed in with the account it had\./.test(page.say.join(" "));
+  const late = await run({ answer: B_ANSWERS().unreached });
+  const lateOk = late.st.store.held === null && late.v.said === "signin-switch-out" && late.st.store.out === undefined;
+  const lateDoor = P ? P.signinDoor(P.signinRead({ offered: ["microsoft"], said: "signin-switch-out" })) : null;
+  const lateTold = !!lateDoor && lateDoor.moment === "refused" && lateDoor.heading === "The sign-in service could not be reached." && !lateDoor.line;
+  const first = await run({ st: { harnessLaunch: () => true }, answer: B_ANSWERS().unreached }), firstTaken = await run({ st: { harnessLaunch: () => true }, answer: B_ANSWERS().none });
+  const firstOk = !!first.st.store.held && first.st.store.held.sub === "sealed:s-1" && first.st.forgets === 0 && first.st.unlinked.length === 0 && first.st.order.indexOf("signout/desk s-1") < 0
+    && !!firstTaken.st.store.held && firstTaken.st.store.held.sub === "sealed:s-2" && firstTaken.st.forgets === 1 && firstTaken.st.unlinked.length === 1;
+  return whole && told && lateOk && lateTold && firstOk;
+};
+/* Sign out and the switch share one leaving (signinLeave): Sign out is its guards, that call, and its words; the press calls it for
+   another account only, its signout already decided by signinSwitchOut on the same condition (signinOutWanted), at most once on any
+   path and before the new account is taken. A step added to Sign out outside signinLeave turns this red. */
 CASES.switchShared = () => {
   const outNow = tryDeclText("function signinOutNow("), leave = tryDeclText("function signinLeave("), press = ipcSlice('ipcMain.handle("etiuda:signin",');
+  const switchOut = tryDeclText("async function signinSwitchOut(");
   const shape = /^function signinOutNow\(\) \{\n  if \(signinBusy\) return signinView\(\);\n  const s = signinState\(\), me = branchIdentity\(false\);\n  if \([^\n]*\) return signinView\(\); \/\* plant:out-managed \*\/\n  signinLeave\(s, me\);\n  signinSaid = "";\n  signinSave\(\);\n  tellSignin\(\);\n  return signinView\(\);\n\}$/.test(outNow);
-  const once = (press.match(/signinLeave\(/g) || []).length === 1 && press.indexOf("signinLeave(st, me)") > 0 && press.indexOf("signinLeave(st, me)") < press.indexOf("signinSeat(");
-  return shape && once && leave.indexOf("signinOutSend(") > 0 && leave.indexOf("storeForget()") > 0 && leave.indexOf("s.held = null;") > 0;
+  const calls = press.match(/signinLeave\([^)]*\)/g) || [], take = press.indexOf("signinTake(");
+  const once = calls.length === 2 && calls.every(c => c === "signinLeave(st, me, true)") && press.lastIndexOf("signinLeave(") < take
+    && /if \(out === true\) \{ signinLeave/.test(press) && /if \(other && out === null && /.test(press);
+  return shape && once && leave.indexOf("signinOutWanted(s, me)") > 0 && switchOut.indexOf("signinOutWanted(s, me)") > 0 && leave.indexOf("signinOutSend(") > 0
+    && leave.indexOf("storeForget()") > 0 && leave.indexOf("s.held = null;") > 0;
 };
 /* The page is told a sign out is owed only while nobody is signed in and none is out; Account says so under Not signed in, in the
    copywriter's words, Polish too, and says nothing where none is owed. */
@@ -3532,7 +3563,8 @@ const LEGS = [
   ["ds51e", "accessNotHeld", "review 1: on an unmanaged desk held by an account on the service's access path, a new sign-in asks the provider today's scopes and hands the new account no access flag; a managed computer asks the service's scope"],
   ["ds51f", "seatedKept", "review 2: that an account has held a seat here is kept from its first certificate, through an answer of none, signin.json and a restart; an account never given one is not, and on a managed, unshared computer it is replaced by another account's sign-in and signed out of, where one that held a seat is kept from both"],
   ["ds51g", "orgKept", "review 09 finding 1: the account's organisation as its provider named it is kept with the sign-in and in signin.json, so a policy set later is held to it"],
-  ["ds51b", "switchShared", "review 11: Sign out and the switch share one leaving, signinLeave: Sign out is its guards, that call and its words, and the press calls it once, for another account, before the service is asked"],
+  ["ds51h", "switchUnanswered", "review 11, Claude alpha's decision: the held account is left only once the service answers a call of the switch: its signout not taken, the desk stays the account it had, seat.json, door and store whole, nothing owed, no signin/desk sent, and the page says it stays signed in; taken and then unreached, signed out and said so; where no signout is sent, the new account's unreached signin/desk leaves the desk as it was"],
+  ["ds51b", "switchShared", "review 11: Sign out and the switch share one leaving, signinLeave: Sign out is its guards, that call and its words, and the press calls it for another account only, at most once on a path, its signout decided on the same condition, before the new account is taken"],
 ];
 for (let [id, name, line] of LEGS) {
   let ok = false;
@@ -3879,7 +3911,7 @@ if (!PLANTS_OFF) {
   await plantWire("dsp202", ["const send = () => (signinState().out === key ? signoutAsk(", "const send = () => (true ? signoutAsk("], "outStillOwed");
   await plantWire("dsp203", ["    if (got.ok && signinOutFlight) await signinOutFlight; /* plant:out-before-signin */", "    /* plant:out-before-signin */"], "outThenSignin");
   await plantWire("dsp156", ["  delete s.licenceManaged; /* plant:signout-managed */\n", ""], "signoutManaged");
-  await plantWire("dsp30", ["&& signinOffered().length) { /* plant:signout-offered */", ") {"], "signoutNone");
+  await plantWire("dsp30", ["    && signinOffered().length > 0; /* plant:signout-offered */", "    ; /* plant:signout-offered */"], "signoutNone");
   await plantWire("dsp31", ["return !!teamJoin && !(teamJoin.invite && teamJoin.invite.relay); /* plant:flush-asking */", "return false;"], "flushJoin");
   await plantWire("dsp32", ["if (signinWrote === mark && fs.existsSync(file)) return false; /* plant:flush-mark */", "if (signinWrote === cert.sig.value) return false;"], "flushJoin");
   await plantWire("dsp33", ["  catalogFolderChanged(); /* plant:invite-folder-changed */\n", ""], "flushJoinReach");
@@ -3961,12 +3993,15 @@ if (!PLANTS_OFF) {
   await plant("dsp99d", ["  if (/^[0-9a-f]{64}$/.test(String(d.out))) out.out = String(d.out); /* plant:out-kept */\n", ""], "signoutOwed");
   await plantWire("dsp99e", ["  if (!held && s.out) { await signinOutAgain(); return \"\"; } /* plant:renew-out */\n", ""], "signoutOwed");
   await plantWire("dsp99f", ["  return signinOutSend(s.out); /* plant:out-again */", "  return Promise.resolve(false);"], "signoutOwed");
-  await plantWire("dsp200", ["    if (got.ok && st.held && !signinHeldIs(st.held, p.id, got.sub)) { signinLeave(st, me); signinSave(); tellSignin(); } /* plant:switch-leaves */\n", ""], "switchLeaves");
+  await plantWire("dsp200", ["    if (out === true) { signinLeave(st, me, true); signinSave(); tellSignin(); } /* plant:switch-leaves */\n", ""], "switchLeaves");
   await plantWire("dsp201", ["    if (got.ok && signinOutFlight) await signinOutFlight; /* plant:out-before-signin */\n", ""], "switchLeaves");
   await plantWire("dsp204", ["    const access = signinAccessFor(p, managed, null); /* plant:access-not-held */", "    const access = managed || (st.held && st.held.provider === p.id) ? signinAccessFor(p, managed, st.held) : \"\";"], "accessNotHeld");
   await plant("dsp205", ["  if (settled.cert) settled.seated = true; /* plant:seated-settle */", "  /* plant:seated-settle */"], "seatedKept");
   await plant("dsp206", ["  if (out.held && (h.seated === true || out.held.cert)) out.held.seated = true; /* plant:seated-file */", "  if (out.held && out.held.cert) out.held.seated = true; /* plant:seated-file */"], "seatedKept");
   await plantWire("dsp207", ["  if (claims) base.org = {", "  if (false) base.org = {"], "orgKept");
+  await plantWire("dsp208", ["    if (out === false) got = { ok: false, reason: \"unreached\" }; /* plant:switch-unanswered */\n", ""], "switchUnanswered");
+  await plantWire("dsp209", ["  if (!ok && s.out === me.key) delete s.out; /* plant:switch-out-unowed */", "  /* plant:switch-out-unowed */"], "switchUnanswered");
+  await plantWire("dsp210", ["      if (other && out === null && (ans.ok || ans.reason !== \"unreached\")) { signinLeave(st, me, true); signinSave(); } /* plant:switch-leaves-after */", "      if (other && out === null) { signinLeave(st, me, true); signinSave(); } /* plant:switch-leaves-after */"], "switchUnanswered");
   await plantWire("dsp99g", ["{ cancelJoin(); sendJoin(theWindow); } /* plant:signout-door */", "{ }"], "signoutDoorJoin");
   await plantWire("dsp99h", ["    outOwed: !signedIn && !!signinState().out && !signinOutFlight, /* plant:out-owed-view */", "    outOwed: false,"], "outOwedView");
   /* The seat's signature (ds22): each check of the chain, and the file's reading of it. */
