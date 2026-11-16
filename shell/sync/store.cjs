@@ -223,6 +223,8 @@ async function storeLook(io) {
        at the look after its replica shows it, and its sync carries every edit there (shell/sync/sync.cjs). */
     const again = await io.folder.read();
     keys = again.ok && again.text !== null ? keyRead(again.text) : null;
+    /* Its own file written and the read back not answered: the store it wrote stays named made, so the next look makes it. */
+    if (!keys && put.ok && !again.ok) return { state: "unavailable", why: again.why, keys: fresh, made: true }; /* plant:made-unread */
     if (!keys) return { state: "unavailable", why: again.ok ? "refused" : again.why };
     made = keys.rt === fresh.rt; /* plant:made */
   }

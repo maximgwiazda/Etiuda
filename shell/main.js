@@ -11752,7 +11752,7 @@ async function storeLookRun(p, held, me, pol) {
   if (look.state === "ended" && pol.held === true && pol.on === true && ours()) { storeAnew = true; tellStore(); look = await L.storeLook(Object.assign({}, io, { fresh: true })); } /* plant:store-anew */
   if (!ours()) return null;
   /* A store made here whose grant or making did not finish is named, so the next look still makes it as the one that replaces. */
-  const made = look.state === "paused" && look.made === true && look.keys ? look.keys.rt : look.state === "on" ? "" : storeState().made; /* plant:store-made-kept */
+  const made = (look.state === "paused" || look.state === "unavailable") && look.made === true && look.keys ? look.keys.rt : look.state === "on" ? "" : storeState().made; /* plant:store-made-kept */
   if (made !== storeState().made) { storeState().made = made; storeSave(); }
   /* A list this computer wrote that the relay refused as a revision it holds, named until a look is on (store.cjs storeLook). */
   const lost = look.state === "paused" && typeof look.lost === "string" ? look.lost : look.state === "on" ? "" : storeState().lost || "";

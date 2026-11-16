@@ -884,7 +884,7 @@ async function lookRun(e, c) {
   };
   const look = await ST.storeLook(io);
   if (!ours()) return null;
-  c.made = look.state === "paused" && look.made === true && look.keys ? look.keys.rt : look.state === "on" ? "" : c.made;
+  c.made = (look.state === "paused" || look.state === "unavailable") && look.made === true && look.keys ? look.keys.rt : look.state === "on" ? "" : c.made;
   c.lost = look.state === "paused" && typeof look.lost === "string" ? look.lost : look.state === "on" ? "" : c.lost || ""; /* the shell's own rule, store.cjs lost */
   if (look.state === "ended") { c.on = false; c.sealed = null; }
   if (look.state === "on") { c.fresh = false; c.onFor.add(look.keys.rt); }

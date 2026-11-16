@@ -12,7 +12,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-plants-"));
-const EXPECTED = 41;
+const EXPECTED = 43;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -423,6 +423,30 @@ async function main() {
     const ok = la.state === "on" && lb.state === "on" && !first && lc.state === "paused" && !keptC && openB === "open" && lc2.state === "on" && openC === "open" && !!file && file.devices.length === 3;
     return { ok, detail: brief({ c: lc.state + "/" + (lc.why || ""), keptC, b: lb2.state + "/" + (lb2.why || ""), openB, c2: lc2.state + "/" + (lc2.why || ""), openC, listed: file ? file.devices.length : 0 }) };
   }
+  /* E8: sync turned on over the ended mark: this computer's new key file written, and the folder's read back not answered. The answer still
+     names the store it wrote as made, with its keys, so the next look, handed that name as the shell hands it, asks the service to grant
+     it as a replacement and makes it at the relay, on that same store. */
+  async function madeUnreadScene() {
+    const w = worldOf("microsoft"), a = computer(w, "a");
+    const la = await a.look();
+    w.f.text = ST.endedText(la.keys.rt);
+    const folder = w.folder();
+    let wroteFresh = false;
+    const blind = { folder: Object.assign({}, folder, { write: async t => { const r = await folder.write(t); wroteFresh = r.ok; return r; },
+      read: async () => (wroteFresh ? { ok: false, why: "offline" } : folder.read()) }) };
+    w.R.clock.now += 1000;
+    const l1 = await a.look(Object.assign({ fresh: true }, blind));
+    const file = ST.keyRead(w.f.text), rt1 = file ? file.rt : "";
+    const named = l1.made === true && !!l1.keys && l1.keys.rt === rt1 ? rt1 : "";
+    const sentBefore = w.serviceSent.length;
+    w.R.clock.now += 1000;
+    const l2 = await a.look({ made: named });
+    const asks = w.serviceSent.slice(sentBefore).map(s => JSON.parse(s)), first = asks[0] || {};
+    const open = l2.state === "on" ? await opens(w.R, l2.keys.rt, a.me, l2.store) : "off";
+    const ok = !!rt1 && rt1 !== la.keys.rt && l1.state === "unavailable" && !!named && first.rt === rt1 && !!first.extra && first.extra.replace === true
+      && l2.state === "on" && l2.keys.rt === rt1 && open === "open";
+    return { ok, detail: brief({ l1: l1.state + "/" + (l1.why || ""), named: !!named, firstAsk: first.rt === rt1 ? "the written store" : "another", replace: !!(first.extra && first.extra.replace), l2: l2.state, same: !!l2.keys && l2.keys.rt === rt1, open }) };
+  }
   async function enrolFaultScene() {
     const out = {};
     let all = true;
@@ -480,6 +504,7 @@ async function main() {
   const results = {};
   const LEGS = [
     ["R7", againScene, "a look that failed for a passing reason is tried again at growing gaps, seven times in a little over two hours, then not; on, ended or a refusal never"],
+    ["E8", madeUnreadScene, "sync turned on over the ended mark, the new key file written and its read back unanswered: the answer names the store written as made, and the next look grants it as a replacement and makes it, on that store"],
     ["E6", enrolRaceScene, "two computers enrolling from one read of the folder: the second, refused as replay-rev, neither says on nor is kept enrolled nor takes the first off; the first enrols again over the folder at its next look and opens, and the second's next look enrols over it and opens"],
     ["W6", enrolFaultScene, "a second computer's enrolment failing at the folder's write or the relay's list (refused, the process ended there, or the relay's answer lost): the next look enrols it and it opens a session, and a third computer enrols after it"],
     ["G1", grantRefusedScene, "a key file of another store in the folder, refused by the service as another person's, leaves this computer's sealed copy its own; granted, the folder's store is kept"],
@@ -539,6 +564,7 @@ async function main() {
       "a list the folder holds is taken as the relay's, so one the relay never took is not posted again"],
     ["held list refused", "W6", swap("if (d.why !== \"replay-rev\" || tries >= 2) return", "if (true) return"), "a list the relay holds already read as a refusal"],
     ["replay taken as enrolled", "E6", swap("      if (d.ok) break;\n", "      break;\n"), "a list the relay refused as a revision it holds taken as enrolled, so the computer says on and opens nothing"],
+    ["made unread", "E8", lift("made-unread"), "a fresh key file written and its read back failing answered without made, so the next look grants it as no replacement and makes nothing"],
     ["lost list taken", "E6", swap("if (wrote || io.lost === keys.rt + \":\" + keys.rev) return", "if (false) return"), "the folder still holding the list this computer wrote, the relay's refusal taken as enrolled, so it says on and opens nothing"],
     ["seal after grant", "G1", swap("  const sPub = pubOf(keys.s);\n", "  io.keep(keys);\n  const sPub = pubOf(keys.s);\n"), "the folder's keys sealed before the service has granted their store"],
     ["made", "C1", lift("made"), "the first computer makes the file but not the store at the relay"],
