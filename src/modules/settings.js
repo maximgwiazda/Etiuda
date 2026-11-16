@@ -187,7 +187,8 @@ function teamHeadNote(h){
 function teamRowHtml(l,status,bar){
   const notes=[l.relay?t("Relay: {HOST}").split("{HOST}").join(l.relay):l.folder?t("Folder: {FOLDER}").split("{FOLDER}").join(l.folder):"",
     l.removed?t("This team no longer includes this desk."):status,
-    l.policy?t("The organisation's IT sets this desk's team."):bar?t("After leaving a team, this desk can join it again with a new invitation from its lead."):""];
+    l.otherLead?t("The organisation's IT names another lead for this computer, so nothing this team's lead signs is used here.") /* placeholder: the copywriter */
+    :l.policy?t("The organisation's IT sets this desk's team."):bar?t("After leaving a team, this desk can join it again with a new invitation from its lead."):""];
   if(l.head) notes.push(teamHeadNote(l.head)); /* plant:head-show */
   if(l.awaitsEdition) notes.push(t("This desk waits for the team's lead to publish a first edition."));
   if(l.lapse) notes.push(lapseNote(l.lapse)); /* plant:lapse-row */

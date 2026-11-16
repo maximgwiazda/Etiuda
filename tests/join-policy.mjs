@@ -17,6 +17,9 @@
  *
  * A READ THAT FAILED IS NEVER NO POLICY (19o to 19s, review 09's finding 4): the whole shell again, the stand-in answering the
  * look without waiting only when a leg flushes it, so the order of reads and answers is the leg's to set.
+ *
+ * WHERE MACHINE POLICY NAMES A LEAD, THAT KEY ALONE DECIDES EVERY READ (19t, 19u, review 09's finding 2): the reading paths
+ * driven on the whole shell, and the source read for any function that names teamPins without asking the one place.
  */
 process.removeAllListeners("warning");
 process.on("warning", () => {});
@@ -30,7 +33,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
-const EXPECTED = 27;
+const EXPECTED = 31;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -1493,6 +1496,173 @@ function asksAgainBounded(shell) {
     let p = [];
     try { p = src ? asksAgainBounded(src) : ["the plant is not on exactly one line"]; } catch (e) { p = ["harness: " + e.message]; }
     check(!!src && p.length > 0, "19s lifting plant:policy-again arms no look: " + p.length + " problem(s)");
+  }
+}
+
+/* ---- 19t, 19u: WHERE MACHINE POLICY NAMES A LEAD'S KEY, THAT KEY ALONE DECIDES TRUST ON EVERY PATH THAT READS (review 09, finding 2)
+   The test architect's criterion: "where machine policy names a lead's key, that key alone decides trust on every path that reads as on
+   every path that writes, whatever pin was kept." 19h is the scene and asserts the writes; these assert the reads. */
+let trustDesks = 0;
+const signedBy = (signedBytes, body, who, priv) => {
+  const doc = Object.assign({}, body, { sig: { alg: "Ed25519", keyId: who.keyId } });
+  doc.sig.value = crypto.sign(null, signedBytes(doc), priv).toString("hex");
+  return doc;
+};
+function leadReads(shell) {
+  const problems = [];
+  const signedBytes = load(SRC, ["function canonJson(", "function signedBytesOf("], ["signedBytesOf"], ["crypto", "Buffer"], [crypto, Buffer]).signedBytesOf;
+  const A = crypto.generateKeyPairSync("ed25519"), B = crypto.generateKeyPairSync("ed25519");
+  const leadA = { keyId: "quay-old", public: pubHex(A.publicKey) }, leadB = { keyId: "quay-new", public: pubHex(B.publicKey) };
+  const T1 = "t-" + hex(8), T2 = "t-" + hex(8), rt = hex(16);
+  const catOf = (who, priv) => signedBy(signedBytes, { kind: "etiuda-catalog", format: 2, id: "lamp-shop", rev: 3 }, who, priv);
+  const catA = catOf(leadA, A.privateKey), catB = catOf(leadB, B.privateKey);
+  const teamFile = signedBy(signedBytes, { format: 1, kind: "etiuda-team", id: T1, catalogs: ["lamp-shop"], lead: leadA, sealed: true, exportsSealed: false, epoch: 1, roster: [] }, leadA, A.privateKey);
+  /* Desks that joined under A: K pinned A for T1 with A's file in its folder; S the same with T1 a folder team here; R invited under A to
+     the relay team T2. */
+  const folderWithFile = name => {
+    const F = path.join(LAB, name + "-folder");
+    fs.mkdirSync(F, { recursive: true });
+    fs.writeFileSync(path.join(F, "etiuda-team.json"), JSON.stringify(teamFile, null, 1) + "\n", "utf8");
+    return F;
+  };
+  const K = name => { const F = folderWithFile(name); return { keys: { eCatalogFolder: F, eUiLang: "en" }, teamPins: { [T1]: leadA } }; };
+  const S = name => { const F = folderWithFile(name); return { keys: { eCatalogFolder: F, eUiLang: "en" }, teamPins: { [T1]: leadA }, teamShown: { [T1]: { folder: F } } }; };
+  const R = name => { const F = folderWithFile(name); return { keys: { eCatalogFolder: F, eUiLang: "en" }, teamPins: { [T2]: leadA }, teamPinFrom: { [T2]: "invite" },
+    teamChannel: { [T2]: { kind: "relay", rt: rt, url: "https://etiuda.dev/relay/v1" } } }; };
+  /* A desk with no pin at all, a ring in its folder naming A for the catalog; and one with A pinned and no team file in its folder. */
+  const ringed = name => {
+    const F = path.join(LAB, name + "-folder");
+    fs.mkdirSync(F, { recursive: true });
+    fs.writeFileSync(path.join(F, "etiuda-ring.json"), JSON.stringify({ keys: [{ alg: "Ed25519", catalog: "lamp-shop", keyId: leadA.keyId, public: leadA.public }] }), "utf8");
+    return { keys: { eCatalogFolder: F, eUiLang: "en" } };
+  };
+  const bare = name => {
+    const F = path.join(LAB, name + "-folder");
+    fs.mkdirSync(F, { recursive: true });
+    return { keys: { eCatalogFolder: F, eUiLang: "en" }, teamPins: { [T1]: leadA } };
+  };
+  const desk = (make, registry, read) => {
+    const name = "trust-" + (trustDesks++);
+    const L = asWindows(() => loadDesk(name, make(name), standInReg(registry, 65001), shell)), D = Object.assign({}, L, L.api);
+    /* desk.json read first, as the shell reads it at start, so no path below meets a desk with nothing loaded. */
+    D.peek("if (deskKeys === undefined) deskKeys = readDesk(); 0");
+    try { return asWindows(() => read(D)); } finally { D.peek("typeof joinPolicyAgain !== 'undefined' && joinPolicyAgain && clearTimeout(joinPolicyAgain)"); }
+  };
+  const catOk = (D, cat) => D.peek("catalogLeadOk(" + JSON.stringify(cat) + ")");
+  const reads = registry => {
+    const out = desk(K, registry, D => {
+      const pl = D.peek("pinnedLead()");
+      return { catA: catOk(D, catA), catB: catOk(D, catB), pageA: D.peek("leadsForPage()").some(k => k.public === leadA.public), lead: pl ? pl.public : "",
+        pins: Object.keys(D.envelope().teamPins || {}).length + Object.keys(D.peek("teamPins")).length, told: (D.joinView().leads || []).filter(r => r.otherLead === true).length };
+    });
+    out.folderTeam = desk(S, registry, D => { const ft = D.peek("folderTeamHere()"); return ft ? ft.team : ""; });
+    out.relay = desk(R, registry, D => D.peek("relayFollowed(" + JSON.stringify(T2) + ")"));
+    return out;
+  };
+  const one = (make, registry) => desk(make, registry, D => ({ catA: catOk(D, catA), catB: catOk(D, catB) }));
+  const policy = lead => ({ rows: [["LeadKey", "REG_SZ", lead.public]] });
+  const same = (got, want, what) => {
+    const off = Object.keys(want).filter(k => got[k] !== want[k]);
+    if (off.length) problems.push(what + ": " + off.map(k => k + " " + JSON.stringify(got[k] === leadA.public ? "A" : got[k] === leadB.public ? "B" : got[k])).join(", "));
+  };
+  /* Policy names B over pins of A: nothing of A's is trusted on any reading path, through a restart, and the pins stay. */
+  for (const run of ["first", "restart"]) {
+    same(reads(policy(leadB)), { catA: "", catB: "", pageA: false, folderTeam: "", relay: false, lead: "", pins: 2, told: 1 }, "policy names B over pins of A (" + run + ")");
+  }
+  /* The controls: no policy, and a policy naming A itself, trust A on every path as the desk always did. pinnedLead is not read
+     there: a heeded file makes T1 a folder team, whose folder is its mirror, empty here. */
+  const trusted = { catA: leadA.public, catB: "", pageA: true, folderTeam: T1, relay: true, pins: 2, told: 0 };
+  same(reads(null), trusted, "the control, no policy");
+  same(reads(policy(leadA)), trusted, "the control, policy naming A");
+  /* While policy has not answered, no lead is trusted on any reading path. */
+  same(reads("late"), { catA: "", catB: "", pageA: false, folderTeam: "", relay: false, lead: "", pins: 2, told: 0 }, "a read that failed over pins of A");
+  /* Whatever pin was kept includes none: policy naming B trusts B alone, the ring's word for A not read in its place. */
+  same(one(ringed, policy(leadB)), { catA: "", catB: leadB.public }, "no pin, policy names B, a ring names A");
+  same(one(ringed, null), { catA: leadA.public, catB: "" }, "the control, no pin and no policy: the ring decides");
+  /* A pin of A and no team file in the folder: trusted with no policy, never while policy has not answered. */
+  same(one(bare, null), { catA: leadA.public }, "the control, a pin of A and no team file");
+  same(one(bare, "late"), { catA: "" }, "a read that failed, a pin of A and no team file");
+  return problems;
+}
+{
+  let problems = [];
+  try { problems = leadReads(null); } catch (e) { problems.push("harness: " + ((e && e.stack) || e)); }
+  check(problems.length === 0, "19t a policy lead other than a kept pin's: catalogLeadOk, leadsForPage, folderTeamHere, relayFollowed and pinnedLead"
+    + " trust nothing of the kept lead's, through a restart, the pins kept and the team rows told; no pin, the policy's lead alone; while"
+    + " policy has not answered, no lead: " + (problems.join("; ") || "the policy's lead alone"));
+  if (PLANTS_OFF) skip("19t lifting each of the one place's guards turns 19t red (ETIUDA_PLANTS=off)");
+  else {
+    const lifts = [["pin-policy-lead", "  return pin;"], ["pin-waits", "  void 0;"], ["leads-wait", "  void 0;"], ["leads-policy", "    void 0;"],
+      ["folder-publics-trusted", "  const pin = teamPins[doc.id];"], ["folder-team-trusted", "    void 0;"], ["follow-trusted", "  const pin = teamPins[team];"]].map(([name, line]) => {
+      const src = liftPlant(SHELL, name, line);
+      if (!src) return name + " not on exactly one line";
+      let p = [];
+      try { p = leadReads(src); } catch (e) { p = ["harness: " + e.message]; }
+      return p.length ? "" : name + " lifted and 19t still green";
+    }).filter(Boolean);
+    check(lifts.length === 0, "19t lifting each of pin-policy-lead, pin-waits, leads-wait, leads-policy, folder-publics-trusted, folder-team-trusted"
+      + " and follow-trusted turns 19t red: " + (lifts.join("; ") || "each red"));
+  }
+}
+
+/* 19u: ONE PLACE DECIDES, AND A READER ADDED LATER CANNOT SKIP IT. Every function of shell/main.js that names teamPins is either the
+   one place (pinTrusted, pinnedLeadKeys), or named below as keeping the pins rather than trusting them, each with why; a function
+   that lists the kept pins to choose among them must take each through pinTrusted. A new reader of teamPins fails here until it asks
+   the one place or is named, with its reason, by whoever adds it. Reading teamPins in folderLeadPublics again turns it red. */
+const PIN_PLACE = ["pinTrusted", "pinnedLeadKeys"];
+const PIN_KEEPERS = {
+  deskEnvelopeBody: "writes the pins into desk.json", readDesk: "reads them out of it",
+  heedTeam: "judges a team file and writes the pin, policy applied by memberHeedUnderPolicy",
+  policyLetsInviteGo: "lets a join go at the policy's read", inviteBefore: "keeps what an invitation replaces", undoInvite: "puts it back",
+  takeInvite: "pins at an invitation's yes", takeRelayInvite: "pins at a relay invitation's yes", signinDoorJoin: "pins at a door's press",
+  forgetLead: "forgets a pin", leadSeen: "marks a pin seen", leadsView: "lists the kept pins as Settings' team rows",
+  policyHoldsTeam: "the policy's own hold on a kept pin", inviteSettled: "refuses an invitation against any kept pin",
+  signinDoorsShown: "offers no door against any kept pin", teamPinStands: "any kept pin hides the doors",
+  checkInviteRefusal: "ends a join on a refusal its lead signed", leadForPause: "reads a pause, which only stops",
+  relayRingAt: "any kept pin on the relay believes no ring", forkChain: "says a fork, trusting nothing",
+  teamWriteHere: "where a write goes", pickMovedFolder: "a moved team's folder, outranked by the policy's",
+  storeSetAside: "keeps the floors under kept pins",
+};
+/* Each lists the kept pins to choose among them, so it must take each through pinTrusted: folderTeamHere the folder team here,
+   deskRoster the rosters whose desks' files are handed on (any kept pin narrows that). */
+const PIN_LISTERS = ["folderTeamHere", "deskRoster"];
+function pinReaders(src) {
+  const lines = src.replace(/\/\*[\s\S]*?\*\//g, c => c.replace(/[^\n]/g, " ")).split("\n");
+  const out = new Map();
+  let name = "";
+  for (const l of lines) {
+    const m = /^(?:async )?function ([A-Za-z0-9_$]+)\(/.exec(l) || /^ipcMain\.(?:handle|on)\("([^"]+)"/.exec(l);
+    if (m) name = m[1];
+    if (/\bteamPins\b/.test(l.replace(/\/\/.*$/, ""))) {
+      const at = name || (/^let teamPins = \{\};/.test(l) ? "" : "(outside any function)");
+      if (at) out.set(at, (out.get(at) || 0) + 1);
+    }
+    if (/^\}\)?;?\s*$/.test(l)) name = "";
+  }
+  return out;
+}
+function onePlace(src) {
+  const problems = [], readers = pinReaders(src);
+  for (const [fn, n] of readers) if (PIN_PLACE.indexOf(fn) < 0 && PIN_LISTERS.indexOf(fn) < 0 && !Object.prototype.hasOwnProperty.call(PIN_KEEPERS, fn)) problems.push(fn + " reads teamPins (" + n + ")");
+  for (const fn of Object.keys(PIN_KEEPERS)) if (!readers.has(fn)) problems.push(fn + " is named as keeping the pins and names none, so this list is stale");
+  for (const fn of PIN_PLACE.concat(PIN_LISTERS)) if (!readers.has(fn)) problems.push(fn + " names no teamPins, so this list is stale");
+  for (const fn of PIN_LISTERS) {
+    const at = src.indexOf("\nfunction " + fn + "("), body = at < 0 ? "" : src.slice(at, src.indexOf("\n}", at));
+    if (body.indexOf("pinTrusted(") < 0) problems.push(fn + " lists the pins without pinTrusted");
+  }
+  return problems;
+}
+{
+  let problems = [];
+  try { problems = onePlace(SRC); } catch (e) { problems.push("harness: " + ((e && e.stack) || e)); }
+  check(problems.length === 0, "19u every function that names teamPins is the one place or keeps the pins without trusting them, and each that lists"
+    + " them takes each through pinTrusted: " + (problems.join("; ") || "one place"));
+  if (PLANTS_OFF) skip("19u reading teamPins in folderLeadPublics again turns 19u red (ETIUDA_PLANTS=off)");
+  else {
+    const src = liftPlant(SRC, "folder-publics-trusted", "  const pin = teamPins[doc.id];");
+    let p = [];
+    try { p = src ? onePlace(src) : ["the plant is not on exactly one line"]; } catch (e) { p = ["harness: " + e.message]; }
+    check(!!src && p.length > 0, "19u reading teamPins in folderLeadPublics again turns 19u red: " + (p.join("; ") || "still green"));
   }
 }
 

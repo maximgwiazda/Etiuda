@@ -351,6 +351,7 @@ function joinTook(v,changed){
                admitted:l.admitted===true,seen:l.seen===true,lead:String(l.lead||""),folder:String(l.folder||""),
                removed:l.removed===true,policy:l.policy===true};
              if(l.waiting===true) row.waiting=true;
+             if(l.otherLead===true) row.otherLead=true;
              if(typeof l.relay==="string" && l.relay) row.relay=String(l.relay);
              if(l.relayRemoved===true) row.relayRemoved=true;
              const head=headKept(l.head);

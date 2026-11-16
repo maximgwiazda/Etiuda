@@ -1517,6 +1517,8 @@ UI_STRINGS.pl={
   "It could not read yet what the organisation's IT set for this computer, so signing in waits until it can, and it tries again by itself.":"Nie mogła jeszcze odczytać, co dział IT organizacji ustawił dla tego komputera, więc logowanie czeka, aż to się uda, a Etiuda sama próbuje ponownie.",
   "Not sent: Etiuda could not read yet what the organisation's IT set for this computer.":"Nie wysłano: Etiuda nie mogła jeszcze odczytać, co dział IT organizacji ustawił dla tego komputera.",
   "Etiuda could not read yet what the organisation's IT set for this computer, so invitations wait until it can, and it tries again by itself.":"Etiuda nie mogła jeszcze odczytać, co dział IT organizacji ustawił dla tego komputera, więc zaproszenia czekają, aż to się uda, a Etiuda sama próbuje ponownie.",
+  /* placeholder for the copywriter: machine policy names another lead (review 09, finding 2) */
+  "The organisation's IT names another lead for this computer, so nothing this team's lead signs is used here.":"Dział IT organizacji wskazał dla tego komputera innego lidera, więc nic, co podpisuje lider tego zespołu, nie jest tu używane.",
   "Managed by your organisation.":"Zarządzane przez organizację.",
   "Your organisation gave this account its seat on this desk. Its IT department decides who uses Etiuda here, and with which account.":"Miejsce w licencji na tym stanowisku przydzieliła temu kontu organizacja. O tym, kto i jakim kontem korzysta tu z Etiudy, decyduje jej dział IT.",
   "Seat held · checked {WHEN}":"Miejsce zajęte · sprawdzono {WHEN}",

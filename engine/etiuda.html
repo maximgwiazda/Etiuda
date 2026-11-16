@@ -9406,6 +9406,8 @@ What is typed here stays in this browser.`;
     "It could not read yet what the organisation's IT set for this computer, so signing in waits until it can, and it tries again by itself.": "Nie mogła jeszcze odczytać, co dział IT organizacji ustawił dla tego komputera, więc logowanie czeka, aż to się uda, a Etiuda sama próbuje ponownie.",
     "Not sent: Etiuda could not read yet what the organisation's IT set for this computer.": "Nie wysłano: Etiuda nie mogła jeszcze odczytać, co dział IT organizacji ustawił dla tego komputera.",
     "Etiuda could not read yet what the organisation's IT set for this computer, so invitations wait until it can, and it tries again by itself.": "Etiuda nie mogła jeszcze odczytać, co dział IT organizacji ustawił dla tego komputera, więc zaproszenia czekają, aż to się uda, a Etiuda sama próbuje ponownie.",
+    /* placeholder for the copywriter: machine policy names another lead (review 09, finding 2) */
+    "The organisation's IT names another lead for this computer, so nothing this team's lead signs is used here.": "Dział IT organizacji wskazał dla tego komputera innego lidera, więc nic, co podpisuje lider tego zespołu, nie jest tu używane.",
     "Managed by your organisation.": "Zarządzane przez organizację.",
     "Your organisation gave this account its seat on this desk. Its IT department decides who uses Etiuda here, and with which account.": "Miejsce w licencji na tym stanowisku przydzieliła temu kontu organizacja. O tym, kto i jakim kontem korzysta tu z Etiudy, decyduje jej dział IT.",
     "Seat held · checked {WHEN}": "Miejsce zajęte · sprawdzono {WHEN}",
@@ -19254,6 +19256,7 @@ What is typed here stays in this browser.`;
           policy: l.policy === true
         };
         if (l.waiting === true) row2.waiting = true;
+        if (l.otherLead === true) row2.otherLead = true;
         if (typeof l.relay === "string" && l.relay) row2.relay = String(l.relay);
         if (l.relayRemoved === true) row2.relayRemoved = true;
         const head = headKept(l.head);
@@ -40041,7 +40044,7 @@ What is typed here stays in this browser.`;
     const notes = [
       l.relay ? t("Relay: {HOST}").split("{HOST}").join(l.relay) : l.folder ? t("Folder: {FOLDER}").split("{FOLDER}").join(l.folder) : "",
       l.removed ? t("This team no longer includes this desk.") : status,
-      l.policy ? t("The organisation's IT sets this desk's team.") : bar ? t("After leaving a team, this desk can join it again with a new invitation from its lead.") : ""
+      l.otherLead ? t("The organisation's IT names another lead for this computer, so nothing this team's lead signs is used here.") : l.policy ? t("The organisation's IT sets this desk's team.") : bar ? t("After leaving a team, this desk can join it again with a new invitation from its lead.") : ""
     ];
     if (l.head) notes.push(teamHeadNote(l.head));
     if (l.awaitsEdition) notes.push(t("This desk waits for the team's lead to publish a first edition."));

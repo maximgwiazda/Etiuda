@@ -263,10 +263,12 @@ function folderTeamHere() {
   const rawFolder = rawCatalogFolder();
   const j = teamJoin;
   if (j && j.team && (!j.invite || !j.invite.relay)) {
+    if (policyWaits()) return null;
     const folder = (j.invite && j.invite.folder) || rawFolder;
     return { team: j.team, folder: folder, joining: true };
   }
   const teams = Object.keys(teamPins).filter(t => {
+    if (!pinTrusted(t)) return false; /* plant:folder-team-trusted */
     if (teamBarred.has(t)) return false;
     if (teamRelayGone[t] === true) return false;
     if (teamShown[t] && teamShown[t].relay) return false;
@@ -790,9 +792,35 @@ function catalogSigValid(data, pinPublic) {
     return crypto.verify(null, signedBytesOf(data), key, Buffer.from(String(sig.value), "hex")) ? pub : "";
   } catch { return ""; }
 }
-/* The leads this desk has pinned, {keyId, public} once each, one per team it joined. Empty until a team file or the
-   envelope names one. The page's key reads from these too (etiuda:catalog-leads), so what it shows is what is chosen here. */
+/* WHICH LEAD'S KEY IS TRUSTED HERE, the one place every path that reads or writes a team's trust asks (review 09, finding 2): none
+   while machine policy has not answered, the key it names alone where it names one, whatever pin was kept, and the pins kept
+   otherwise. A reader takes a kept pin through pinTrusted and the trusted keys through pinnedLeadKeys, never teamPins itself
+   (tests/join-policy.mjs 19u names the functions that keep the pins rather than trust them). */
+function leadPolicyNow() {
+  if (policyWaits()) return { waits: true, lead: "" };
+  let lead = "";
+  try { lead = sayJoinPolicy().lead || ""; } catch { lead = ""; }
+  return { waits: false, lead: lead };
+}
+function pinTrusted(team) {
+  const pin = teamPins[team];
+  if (!pin) return null;
+  const p = leadPolicyNow();
+  if (p.waits) return null; /* plant:pin-waits */
+  return !p.lead || pin.public === p.lead ? pin : null; /* plant:pin-policy-lead */
+}
+/* One key that verifies nothing: trust narrowed to no lead, so the ring is not read in its place. */
+const LEAD_NONE = Object.freeze({ keyId: "", public: "0".repeat(64) });
+/* The leads this desk trusts, {keyId, public} once each: the pins kept, one per team it joined, empty until a team file or the
+   envelope names one; the policy's lead alone where machine policy names one; LEAD_NONE while it has not answered. The page's
+   key reads from these too (etiuda:catalog-leads), so what it shows is what is chosen here. */
 function pinnedLeadKeys() {
+  const p = leadPolicyNow();
+  if (p.waits) return [LEAD_NONE]; /* plant:leads-wait */
+  if (p.lead) {
+    const kept = Object.keys(teamPins).map(t => teamPins[t]).find(k => !!k && k.public === p.lead);
+    return [{ keyId: kept && typeof kept.keyId === "string" ? kept.keyId : "", public: p.lead }]; /* plant:leads-policy */
+  }
   const out = [];
   Object.keys(teamPins).forEach(t => {
     const pin = teamPins[t], p = pin && String(pin.public || ""), kid = pin && typeof pin.keyId === "string" ? pin.keyId : "";
@@ -897,7 +925,7 @@ function folderLeadPublics() {
   if (!all.length) return null;
   const doc = folderTeamDoc();
   if (!doc) return all;
-  const pin = teamPins[doc.id];
+  const pin = pinTrusted(doc.id); /* plant:folder-publics-trusted */
   if (pin && doc.lead && pin.keyId === doc.lead.keyId && pin.public === doc.lead.public) return [String(pin.public)];
   return [];
 }
@@ -925,10 +953,10 @@ function catalogTrustedPub(data) {
 function leadsForPage() {
   const bound = folderLeadPublics();
   if (bound === null) return [];
-  if (!bound.length) return [{ keyId: "", public: "0".repeat(64) }];
+  if (!bound.length) return [LEAD_NONE];
   const doc = folderTeamDoc();
   if (doc) {
-    const pin = teamPins[doc.id];
+    const pin = pinTrusted(doc.id);
     if (pin && bound.indexOf(String(pin.public)) >= 0) return [{ keyId: pin.keyId, public: String(pin.public) }];
   }
   return pinnedLeadKeys();
@@ -1085,7 +1113,7 @@ function folderSyncerRun(win) {
   }
   /* A syncer that failed once stays off until the desk restarts, so the desk does not swing between share and mirror. */
   if (folderSyncerBroken) return null;
-  const pin = teamPins[ft.team] || (teamJoin && teamJoin.team === ft.team && teamJoin.invite ? teamJoin.invite.lead : null);
+  const pin = pinTrusted(ft.team) || (teamJoin && teamJoin.team === ft.team && teamJoin.invite ? teamJoin.invite.lead : null);
   const mirror = folderMirrorOf(ft.team);
   try { fs.mkdirSync(mirror, { recursive: true }); } catch {}
 
@@ -2062,7 +2090,7 @@ function pinnedLead() {
   const root = catalogFolder();
   if (!folderAnswers(root)) return null;
   const doc = teamTextChosen(root).doc;
-  const pin = doc && teamPins[doc.id];
+  const pin = doc && pinTrusted(doc.id);
   if (!pin || !doc.lead || pin.keyId !== doc.lead.keyId || pin.public !== doc.lead.public) return null;
   return { team: String(doc.id), keyId: pin.keyId, public: pin.public };
 }
@@ -2704,10 +2732,14 @@ function joinOpening(joins, teamId, deskId, commit, trust) {
   return JOIN_HEX_RE.test(String(e.nonce)) ? { lead: { keyId: lead.keyId, public: lead.public }, nonce: e.nonce } : null;
 }
 /* Publics that may sign the joins file for this team. The pin, where this desk has one. The lead of the folder's
-   whole team file when there is no pin, or when that lead is the pin, or a handover from it. */
+   whole team file when there is no pin, or when that lead is the pin, or a handover from it. Where machine policy names a lead,
+   that lead alone, and none while it has not answered. */
 function joinTrustPubs(team, root) {
+  const p = leadPolicyNow();
+  if (p.waits) return [];
+  if (p.lead) return [p.lead];
   const pubs = [];
-  const pin = team && teamPins[team];
+  const pin = team ? pinTrusted(team) : null;
   if (pin && JOIN_HEX_RE.test(String(pin.public))) pubs.push(String(pin.public));
   let chosen = null;
   try { chosen = root ? teamTextChosen(root).doc : null; } catch { chosen = null; }
@@ -3037,9 +3069,7 @@ function ownFilesWithId(dir, id) {
 function teamCovering(root, catalogId) {
   const doc = teamTextChosen(root).doc;
   if (!doc || !teamWhole(doc)) return null;
-  const policy = sayJoinPolicy().lead;
-  if (policy && doc.lead.public !== policy) return null;
-  const pin = teamPins[doc.id];
+  const pin = pinTrusted(doc.id);
   return !!pin && pin.keyId === doc.lead.keyId && pin.public === doc.lead.public && Array.isArray(doc.catalogs)
     && doc.catalogs.map(String).indexOf(catalogId) >= 0 ? doc : null;
 }
@@ -3287,9 +3317,7 @@ function teamUse() {
   if (!folderAnswers(root)) return { away: true };
   const doc = teamTextChosen(root).doc;
   if (!doc || !teamWhole(doc)) return { member: false };
-  const policy = sayJoinPolicy().lead;
-  if (policy && doc.lead.public !== policy) return { member: false };
-  const pin = teamPins[doc.id];
+  const pin = pinTrusted(doc.id);
   if (!pin || pin.keyId !== doc.lead.keyId || pin.public !== doc.lead.public) return { member: false };
   const team = String(doc.id);
   const kept = teamKeys[team] || {};
@@ -3743,7 +3771,7 @@ function privateHere(doc, catalogs) {
 /* Whether the team at this folder lists catalog `id`, by its stored chain. */
 function idListedHere(id) {
   const doc = folderTeamDoc();
-  const pin = doc ? teamPins[doc.id] : null;
+  const pin = doc ? pinTrusted(doc.id) : null;
   if (!pin || pin.keyId !== doc.lead.keyId || pin.public !== doc.lead.public || !Array.isArray(doc.catalogs)) return false;
   const ids = lineageOfId(id);
   return ids.length > 0 && doc.catalogs.map(String).indexOf(ids[ids.length - 1]) >= 0;
@@ -5188,7 +5216,7 @@ function teamSealedHere(team) {
   /* The newest of the team's sealed files this desk can open whose inner catalog the team's pinned lead signed: the highest
      key number, then the highest rev inside it (the test architect's C1 to the desk pilot; a sealed envelope carries no rev
      outside its ciphertext). The team key is every member's, so a seal alone makes no file the lead's. */
-  const pin = teamPins[team];
+  const pin = pinTrusted(team);
   let best = "", bestEpoch = -1, bestRev = -1;
   let files = ecFilesIn(catalogFolder());
   if (!files.length) {
@@ -5218,7 +5246,7 @@ function relayOpens(j) {
   const inv = j && j.invite && j.invite.relay;
   let team = inv && inv.withdrawn !== true && inv.withdrawing !== true && j.refused !== true ? String(j.team) : relayCatalogOwed;
   if (!team && j && j.invite && j.invite.folder && teamKeys[j.team] && Object.keys(teamKeys[j.team]).length && j.refused !== true) team = String(j.team); /* plant:folder-invite-opens */
-  if (!team || !teamPins[team]) return null;
+  if (!team || !pinTrusted(team)) return null;
   if (relayCatalogNamed.has(team)) { if (relayCatalogOwed === team) relayCatalogOwed = ""; return null; }
   const file = relayOpenFile(team);
   if (!file) return null;
@@ -6884,7 +6912,7 @@ function deskEditionRev(catalogId, folder, leadPublic) {
 /* The head of a folder team from its signed etiuda-head.json. Only a genuine head signed by the pinned lead under
    HEAD_PREFIX, and never an older rev than the desk has or an older t than one already seen. */
 function folderHeadShown(team) {
-  const pin = teamPins[team];
+  const pin = pinTrusted(team);
   if (!pin || !pin.public || typeof pin.public !== "string") return null;
   const folder = folderMirrorOf(team);
   if (!folder || !folderAnswers(folder)) return null;
@@ -6925,7 +6953,7 @@ function folderHeadShown(team) {
    seen of that catalog, each `newer` where its rev is above what the desk has loaded of it, never a file unread in the
    mirror. `edition` and `published` are the catalog in use's entry where kept, else the newest kept. */
 function headView(team, editions, t, folder) {
-  const pin = teamPins[team];
+  const pin = pinTrusted(team);
   if (!pin || !Array.isArray(editions) || !folder || !Number.isFinite(t)) return null;
   const doc = teamTextChosen(folder).doc;
   if (!doc || !teamWhole(doc) || String(doc.id) !== team || doc.lead.keyId !== pin.keyId || doc.lead.public !== pin.public
@@ -6995,7 +7023,7 @@ function lapseSeen(team, step) {
    private: what the disclosure at joining, the notice of a changed switch and the private mark's control read. */
 function contentView(read) {
   const doc = read === undefined ? folderTeamDoc() : read;
-  const pin = doc ? teamPins[doc.id] : null;
+  const pin = doc ? pinTrusted(doc.id) : null;
   const team = pin && pin.keyId === doc.lead.keyId && pin.public === doc.lead.public ? String(doc.id) : "";
   const sw = team ? teamContentOf(doc) : null;
   /* `listed`: the team's catalogs, which the private mark is never offered on. */
@@ -7077,7 +7105,7 @@ function teamStateMirror(team) {
    signed so this desk accepts it. The head's announcement is not one: the file is. An empty list, or a team file
    that is not whole under the pinned lead, says nothing. */
 function awaitsFirstEdition(team) {
-  const pin = teamPins[team];
+  const pin = pinTrusted(team);
   if (!pin) return false;
   const root = teamStateMirror(team);
   if (!root || !folderAnswers(root)) return false;
@@ -7119,6 +7147,8 @@ function leadsView() {
       policy: policyHoldsTeam(t, named) };
     /* No Leave is offered while machine policy has not answered, since it could hold this team. */
     if (named && named.unread === true && named.held !== true) row.waiting = true;
+    /* Machine policy names another lead: nothing this team's lead signed is used here, and the row says so. */
+    else if (named && named.lead && named.lead !== teamPins[t].public) row.otherLead = true;
     if (relayHost) row.relay = relayHost; /* plant:settings-relay-row */
     if (relayRemoved) row.relayRemoved = true;
     const head = headShown(t);
@@ -7261,7 +7291,7 @@ function isBuiltinRelayUrl(u) {
 
 const PIN_FROM = ["invite", "policy", "answer"];
 function relayFollowed(team) {
-  const pin = teamPins[team];
+  const pin = pinTrusted(team); /* plant:follow-trusted */
   if (!pin) return false;
   if (PIN_FROM.indexOf(teamPinFrom[team]) >= 0) return true; /* plant:907-from */
   const policy = sayJoinPolicy().lead;
@@ -7280,7 +7310,7 @@ function relayFollowed(team) {
    heeded file names the relay and whose pin the rule above lets it follow. */
 function relayHere() {
   const j = teamJoin, inv = j && j.invite && j.invite.relay;
-  if (inv && (teamPins[j.team] || inv.withdrawing === true) && (teamPinFrom[j.team] === "invite" || inv.withdrawing === true) && inv.end !== "removed" && teamRelayGone[j.team] !== true)
+  if (inv && (pinTrusted(j.team) || inv.withdrawing === true) && (teamPinFrom[j.team] === "invite" || inv.withdrawing === true) && inv.end !== "removed" && teamRelayGone[j.team] !== true)
     return { team: j.team, rt: inv.rt, url: inv.url, joining: true };
   const teams = Object.keys(teamChannel).filter(t => relayFollowed(t) && teamRelayGone[t] !== true).sort();
   if (!teams.length) return null;
@@ -7289,7 +7319,7 @@ function relayHere() {
 /* A team this desk would follow, which the relay has refused. relayHere stays null until a fresh hello on it succeeds. */
 function relayFlagged() {
   const j = teamJoin, inv = j && j.invite && j.invite.relay;
-  if (inv && (teamPins[j.team] || inv.withdrawing === true) && (teamPinFrom[j.team] === "invite" || inv.withdrawing === true) && inv.end !== "removed" && teamRelayGone[j.team] === true)
+  if (inv && (pinTrusted(j.team) || inv.withdrawing === true) && (teamPinFrom[j.team] === "invite" || inv.withdrawing === true) && inv.end !== "removed" && teamRelayGone[j.team] === true)
     return { team: j.team, rt: inv.rt, url: inv.url, joining: true };
   const teams = Object.keys(teamChannel).filter(t => relayFollowed(t) && teamRelayGone[t] === true).sort();
   if (!teams.length) return null;
@@ -7524,7 +7554,7 @@ function relayProbeNext() { return relayProbeMs; }
 function relayRun() {
   if (deskKeys === undefined) deskKeys = readDesk();
   for (const t of Object.keys(teamChannel)) {
-    if (!teamPins[t] || relayFollowed(t) || relaySaidFor.has(t)) continue;
+    if (!pinTrusted(t) || relayFollowed(t) || relaySaidFor.has(t)) continue;
     relaySaidFor.add(t);
     teamSay("team " + t + " names a relay at " + teamChannel[t].url + ", and its lead was pinned by no invitation, machine policy or"
       + " answered request, so this desk does not follow that address and keeps its folder");
@@ -7540,7 +7570,7 @@ function relayRun() {
   /* The lead this desk follows for a team, read when asked: the pin, or while joining the lead the invitation names. */
   const pinFor = w => {
     const j = teamJoin;
-    return teamPins[w.team] || (w.joining && j && j.team === w.team && j.invite && j.invite.lead ? { keyId: j.invite.lead.keyId, public: j.invite.lead.public } : null);
+    return pinTrusted(w.team) || (w.joining && j && j.team === w.team && j.invite && j.invite.lead ? { keyId: j.invite.lead.keyId, public: j.invite.lead.public } : null);
   };
   const pin = want ? pinFor(want) : null;
   /* THE PIN IS NOT IN THE FINGERPRINT (board 931 (7) item 9): a channel that followed a genuine handover itself already judges by
@@ -8100,9 +8130,7 @@ function shareMustSeal(root) {
   heedTeam();
   const doc = teamTextChosen(root).doc;
   if (!doc || !teamWhole(doc) || doc.sealed !== true || doc.exportsSealed === false) return false;
-  const policy = sayJoinPolicy().lead;
-  if (policy && doc.lead.public !== policy) return false;
-  const pinned = teamPins[doc.id];
+  const pinned = pinTrusted(doc.id);
   return !!pinned && pinned.keyId === doc.lead.keyId && pinned.public === doc.lead.public;
 }
 /* Writes the page's merged catalog over the file it read, answered {ok, rev}, or {changed} where the file is no longer
@@ -9275,7 +9303,7 @@ function deskFileGenuine(data, folder) {
    desk id, read once a listing. */
 function deskRoster() {
   heedTeam();
-  const kept = Object.keys(teamPins).filter(t => teamRoster[t]).map(t => teamRoster[t].desks);
+  const kept = Object.keys(teamPins).filter(t => teamRoster[t] && pinTrusted(t)).map(t => teamRoster[t].desks);
   const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "";
   if (!Object.keys(teamPins).length) return () => true;
   return id => id === me || kept.some(ids => ids.indexOf(id) >= 0);
