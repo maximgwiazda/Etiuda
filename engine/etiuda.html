@@ -9118,7 +9118,7 @@ What you type stays in this browser only.`;
     "Connecting for the first time.": "Trwa pierwsze łączenie.",
     "Checking for changes.": "Trwa sprawdzanie zmian.",
     "Not connected yet. Sync starts once this computer reaches our service.": "Jeszcze bez połączenia. Synchronizacja ruszy, gdy komputer połączy się z naszą usługą.",
-    "Sync starts again shortly after Etiuda opens.": "Synchronizacja wznowi się chwilę po uruchomieniu Etiudy.",
+    "Sync starts again in a moment.": "Synchronizacja wznowi się za chwilę.",
     "Not syncing just now. Sync resumes when this computer reaches our service, and nothing on this computer is lost.": "Synchronizacja chwilowo nie działa. Zostanie wznowiona, gdy komputer połączy się z naszą usługą, a na tym komputerze nic nie ginie.",
     "Sign-in": "Logowanie",
     "{PROVIDER} · work accounts of the organisation": "{PROVIDER} · konta służbowe organizacji",
@@ -28286,7 +28286,7 @@ What you type stays in this browser only.`;
     if (s.line === "first") return t("Connecting for the first time.");
     if (s.line === "checking") return t("Checking for changes.");
     if (s.line === "unconnected") return t("Not connected yet. Sync starts once this computer reaches our service.");
-    if (s.line === "resuming") return t("Sync starts again shortly after Etiuda opens.");
+    if (s.line === "resuming") return t("Sync starts again in a moment.");
     if (s.line === "signin-refused") return t("Not syncing while signing in on this computer is refused. Sync runs once signing in works, and nothing on this computer is lost.");
     if (s.line === "again" || s.line === "spent" || s.line === "refused") return syncPassing(s, provider);
     if (s.line === "lapsed") return t("Not syncing just now. Sync resumes when this computer reaches our service, and nothing on this computer is lost.");

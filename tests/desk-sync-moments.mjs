@@ -171,7 +171,7 @@ const TRUE_LINES = [
   ["a look running, after one had sync on", { line: "checking" }, "Checking for changes.", "Trwa sprawdzanie zmian.", "switch"],
   ["no look yet in this run", { line: "unconnected" }, "Not connected yet. Sync starts once this computer reaches our service.",
     "Jeszcze bez połączenia. Synchronizacja ruszy, gdy komputer połączy się z naszą usługą.", "switch"],
-  ["no look yet in this run, one had sync on before", { line: "resuming" }, "Sync starts again shortly after Etiuda opens.", "Synchronizacja wznowi się chwilę po uruchomieniu Etiudy.", "switch"],
+  ["no look yet in this run, one had sync on before", { line: "resuming" }, "Sync starts again in a moment.", "Synchronizacja wznowi się za chwilę.", "switch"],
   ...[["signin", "a fresh sign-in"], ["store", "the folder's store"], ["relay", "the relay"]].map(([why, by]) => ["refused for " + by, { line: "refused", why },
     "Not syncing: our service turned down this computer's last request. Sync tries again within a day, and nothing on this computer is lost.",
     "Synchronizacja nie działa: nasza usługa odrzuciła ostatnią prośbę tego komputera. Ponowi próbę w ciągu doby, a na tym komputerze nic nie ginie.", "switch"]),
