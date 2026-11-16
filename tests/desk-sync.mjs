@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-sync-"));
-const EXPECTED = 55;
+const EXPECTED = 59;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -687,8 +687,81 @@ async function main() {
     return { ok: good(taken) && good(own), detail: brief({ taken, own }) };
   }
 
+  /* J3: the store holds no entry for the shipped sample (the first computer had none when it synced); a second computer joins with its
+     sample untouched: through every merge after the first, it is never recorded as that computer's write, so the first never gets it,
+     and nothing is kept. Edited there, it is the person's own and reaches the first. */
+  async function joinSampleScene() {
+    const w = worldOf("j3"), a = computer(w, "a");
+    a.desk.keys.eTheme = "dark";
+    if ((await a.look()).state !== "on") throw new Error("the store did not come on");
+    await settle(a);
+    w.R.clock.now += HOUR;
+    const b = computer(w, "b");
+    b.desk.files["sample-catalog.ec"] = SAMPLE;
+    const lb = await b.look();
+    await a.look();
+    await settle(a, b);
+    await settle(a, b);
+    const quiet = !has(a.desk.files, "sample-catalog.ec") && b.desk.files["sample-catalog.ec"] === SAMPLE && !b.sync().state().ledger["f:sample-catalog.ec"]
+      && a.kept.length + b.kept.length === 0 && b.desk.keys.eTheme === "dark";
+    const edited = SAMPLE.replace("\"cards\":[]", "\"cards\":[],\"note\":\"mine\"");
+    w.R.clock.now += MIN;
+    b.desk.files["sample-catalog.ec"] = edited;
+    await settle(a, b);
+    const own = a.desk.files["sample-catalog.ec"] === edited && a.kept.length + b.kept.length === 0;
+    return { ok: lb.state === "on" && quiet && own, detail: brief({ b: lb.state, onA: has(a.desk.files, "sample-catalog.ec"), entryOnB: !!b.sync().state().ledger["f:sample-catalog.ec"], kept: [a.kept.length, b.kept.length], quiet, own }) };
+  }
+  /* J4: a joining computer removes the shipped sample it joined with untouched. Where the first computer holds an entry for it (it synced
+     the sample untouched, recording it, as the store's first computer does) and the joiner has not yet put that entry in place (its write
+     refused): the removal is the person's own, made over the first computer's entry, so the first computer's copy goes too, the sample
+     does not come back to the joiner, and nothing is kept. Where no computer holds an entry: nothing is sent and nothing comes back. */
+  async function joinRemoveScene() {
+    const F = "sample-catalog.ec", item = "f:" + F;
+    const w = worldOf("j4"), a = computer(w, "a");
+    a.desk.files[F] = SAMPLE;
+    a.desk.keys.eTheme = "dark";
+    if ((await a.look()).state !== "on") throw new Error("the store did not come on");
+    await settle(a);
+    const aEntry = !!a.sync().state().ledger[item] && a.sync().state().ledger[item].by === a.me.id;
+    w.R.clock.now += HOUR;
+    const b = computer(w, "b");
+    b.desk.files[F] = SAMPLE;
+    b.desk.refuse = new Set([item]);
+    const lb = await b.look();
+    await a.look();
+    await settle(a, b);
+    const waiting = (b.sync().state().untouched || []).indexOf(item) >= 0 && !b.sync().state().ledger[item];
+    b.desk.refuse = null;
+    w.R.clock.now += MIN;
+    delete b.desk.files[F];
+    await settle(a, b);
+    await settle(a, b);
+    const e = b.sync().state().ledger[item];
+    const held = { aEntry, waiting, onA: has(a.desk.files, F), backOnB: has(b.desk.files, F), removalByB: !!e && e.h === null && e.by === b.me.id, kept: a.kept.length + b.kept.length };
+    const w2 = worldOf("j4n"), c = computer(w2, "c");
+    c.desk.keys.eTheme = "dark";
+    if ((await c.look()).state !== "on") throw new Error("the store did not come on");
+    await settle(c);
+    w2.R.clock.now += HOUR;
+    const d = computer(w2, "d");
+    d.desk.files[F] = SAMPLE;
+    await d.look();
+    await c.look();
+    await settle(c, d);
+    w2.R.clock.now += MIN;
+    delete d.desk.files[F];
+    await settle(c, d);
+    await settle(c, d);
+    const none = { onC: has(c.desk.files, F), backOnD: has(d.desk.files, F), entryOnD: !!d.sync().state().ledger[item], entryOnC: !!c.sync().state().ledger[item], kept: c.kept.length + d.kept.length };
+    const ok = lb.state === "on" && held.aEntry && held.waiting && !held.onA && !held.backOnB && held.removalByB && held.kept === 0
+      && !none.onC && !none.backOnD && !none.entryOnD && !none.entryOnC && none.kept === 0;
+    return { ok, detail: brief({ held, none }) };
+  }
+
   const results = {};
   const LEGS = [
+    ["J3", joinSampleScene, "the shipped sample untouched on a computer joining a store that holds no entry for it is never recorded as that computer's write at any merge, so the other computer never gets it and nothing is kept; edited, it is the person's own and reaches the other"],
+    ["J4", joinRemoveScene, "a joining computer removing the sample it joined with untouched: where the first computer holds an entry the removal travels over it, the first computer's copy goes and the sample does not return, nothing kept; where none does, nothing is sent and nothing returns"],
     ["S6", seenScene, "where one version stands over two computers' writes, each computer's seen time is the latest over every entry merged, so a later edit here is made over both: no copy kept and no conflict, with another's entry taken or this computer's own standing"],
     ["C2b", leftWriterScene, "a catalog whose writer has left the store reaches a computer that joins after, from the place of a listed computer holding it under the same hash"],
     ["J1", joinScene, "a second computer joining a store that holds content takes the store's settings, removes its untouched sample where the store removed it, keeps its own card and catalog on both, and offers a setting only it holds, with no version kept"],
@@ -751,6 +824,8 @@ async function main() {
     ["bytes by the writer alone", "C2b", swap("for (const id of new Set([by, ...ids, o.me.id])) {", "for (const id of new Set([by])) {"), "a catalog's bytes read only under the computer that wrote it, so once it has left the store they never arrive"],
     ["taken seen by the winner", "S6", swap("seen: maxSeen(unionSeen(...all.filter(e => !same(e, win) && e.by !== win.by)), win.seen) }; /* plant:seen-max */", "seen: Object.assign(unionSeen(...all.filter(e => !same(e, win) && e.by !== win.by)), win.seen) }; /* plant:seen-max */"), "the entry taken carries the winner's own lower seen times over the others', so a later edit here meets one it was made over as a conflict"],
     ["own seen by its own", "S6", swap("{ seen: unionSeen(...top) }); /* plant:seen-max-mine */", "{ seen: Object.assign(unionSeen(...top), mine.seen) }); /* plant:seen-max-mine */"), "this computer's standing entry keeps its own lower seen times over the others', so its next edit meets one it was made over as a conflict"],
+    ["untouched recorded later", "J3", lift("untouched-skip"), "the untouched sample skipped only at the joining merge, so the next records it as this computer's write and the other computer gets it"],
+    ["untouched removal unrecorded", "J4", lift("untouched-removal"), "the person's removal of an untouched sample recorded nowhere, so the first computer's entry puts it straight back"],
     ["join reached", "J1", lift("join-reached"), "a computer that has never synced merges before a cycle reached the store, so its first merge cannot know it joins"],
     ["one item added", "C7", swap("return SETTINGS.indexOf(s.slice(2)) >= 0 || LAYER_RE.test(s.slice(2)); /* plant:follows */", "return SETTINGS.indexOf(s.slice(2)) >= 0 || LAYER_RE.test(s.slice(2)) || s === \"k:eTeamKeys\"; /* plant:follows */"), "a team's keys follow"],
     ["later stands", "C8", swap("const stay = top.reduce(", "const stay = mine && top.some(e => same(e, mine)) ? mine : top.reduce("), "each computer keeps its own in place, so where its own was the earlier the newer change is not in use"],

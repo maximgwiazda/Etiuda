@@ -199,16 +199,27 @@ function mergeOnce(o) {
   const settled = (item, win, tops) => { kept = kept.filter(k => k.item !== item || !(tops || [win]).some(e => over(e, Object.assign({ seen: {} }, k)))); };
   const patch = {}, copies = [];
   /* A computer that has never synced joining a store the others already hold: what it held before counts as older than anything they
-     wrote, so a setting gives way to the store's; and the shipped sample untouched here (o.pristine) is none of its own, so the store's
-     word on it stands. */
+     wrote, so a setting gives way to the store's; and the shipped sample untouched here (o.pristine) is none of its own at any merge while
+     it stays untouched (state.untouched), so the store's word on it stands. The store's first computer, not joining, records it. */
   const joining = !Object.keys(ledger).length && (o.theirs || []).some(t => t.by !== me && Object.keys(t.items).length);
   const pristine = Array.isArray(o.pristine) ? o.pristine : [];
+  const untouched = ((o.state && Array.isArray(o.state.untouched)) ? o.state.untouched : []).filter(i => typeof i === "string" && !has(ledger, i));
   /* This computer's own changes first: an item whose value is not the one its entry names was changed here. */
-  for (const item of new Set(Object.keys(ledger).concat(Object.keys(local)))) {
+  for (const item of new Set(Object.keys(ledger).concat(Object.keys(local), untouched))) {
     const was = ledger[item], h = has(local, item) ? sha(local[item]) : null;
-    if (was ? was.h === h : h === null) continue; /* plant:recorded */
     if (h === null && heldBy(held, item)) continue; /* plant:held-kept */
-    if (joining && pristine.indexOf(item) >= 0) continue; /* plant:join-pristine */
+    if (!was && untouched.indexOf(item) >= 0) {
+      if (h !== null && pristine.indexOf(item) >= 0) continue; /* plant:untouched-skip */
+      untouched.splice(untouched.indexOf(item), 1);
+      /* Removed here, the person's own removal: made over every entry another computer holds for it, so it travels; with none, nothing. */
+      if (h === null) {
+        const there = (o.theirs || []).filter(x => x.by !== me && x.items[item]).map(x => x.items[item]);
+        if (there.length) ledger[item] = { h: null, by: me, t: Math.max(now, ...there.map(e => e.t + 1)), seen: unionSeen(...there) }; /* plant:untouched-removal */
+        continue;
+      }
+    }
+    if (was ? was.h === h : h === null) continue; /* plant:recorded */
+    if (!was && joining && pristine.indexOf(item) >= 0) { untouched.push(item); continue; } /* plant:join-pristine */
     const t = joining ? 0 : Math.max(now, was ? was.t + 1 : 0); /* plant:join-older */
     ledger[item] = { h, by: me, t, seen: was ? (was.by === me ? Object.assign({}, was.seen) : unionSeen(was)) : {} };
   }
@@ -280,7 +291,7 @@ function mergeOnce(o) {
     for (const item of Object.keys(patch)) if (layerOf(item) === key) delete patch[item];
     patch["k:" + key] = layerText(after, key);
   }
-  return { state: { ledger, kept }, patch, copies, own: placeOf(me, ledger, after), after };
+  return { state: { ledger, kept, untouched: untouched.filter(i => !has(ledger, i)) }, patch, copies, own: placeOf(me, ledger, after), after, untouched };
 }
 /* This computer's place in the store: its sync file and the catalogs its ledger holds. */
 function placeOf(me, ledger, after) {
@@ -300,7 +311,9 @@ function unapplied(prev, r, failed, local, me) {
   const after = {};
   for (const item of Object.keys(r.after)) if (!under(item)) after[item] = r.after[item];
   for (const item of Object.keys(local || {})) if (under(item)) after[item] = local[item];
-  return { state: { ledger, kept }, patch: r.patch, copies: r.copies, own: placeOf(me, ledger, after), after };
+  /* An untouched sample whose store entry could not be put in place is still untouched here. */
+  const still = (r.state.untouched || []).concat((r.untouched || []).filter(i => under(i) && !has(ledger, i) && (r.state.untouched || []).indexOf(i) < 0));
+  return { state: { ledger, kept, untouched: still }, patch: r.patch, copies: r.copies, own: placeOf(me, ledger, after), after, untouched: r.untouched };
 }
 
 /* The person chose one version of an item both changed (`value`, null to remove): taken here over every version it was chosen from,
@@ -311,7 +324,7 @@ function resolve(state, me, item, value, now) {
   const seen = unionSeen(...from.map(k => ({ by: k.by, t: k.t, seen: k.seen || {} })));
   delete seen[me];
   ledger[item] = { h: value === null ? null : sha(value), by: me, t: Math.max(Math.floor(now), ...from.map(k => k.by === me ? k.t + 1 : 0)), seen };
-  return { ledger, kept };
+  return { ledger, kept, untouched: (state.untouched || []).filter(i => i !== item) };
 }
 
 /* ---- the store at its relay, through the relay channel -------------------------------------------------------------------
