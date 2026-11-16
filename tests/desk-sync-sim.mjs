@@ -149,7 +149,7 @@ function computerOf(w, i) {
     i, me, desk: { keys, files: { [SAMPLE_NAME]: SAMPLE, "relay-mirror.json": JSON.stringify({ team: SECRETS.team }) }, big: new Set(), team: false },
     page: { map: Object.assign({}, keys), owed: new Set(), seen: 0, behind: new Map(), win: [] }, bridge: null, kept: [], aside: [], online: true, seat: "", ever: false, s: { who: "", last: "", ask: "" },
     syncFile: null, sync: null, mirrors: new Map(), sent: new Map(), seen: new Map(), heldNow: [], pristineNow: [], failApply: false, keepFail: false,
-    knows: new Map(), unattributed: [], mirrorRoot: path.join(WORK, "c" + i),
+    knows: new Map(), unattributed: [], ledgerSaw: new Set(), mirrorRoot: path.join(WORK, "c" + i),
   };
 }
 function storeOf(w, X) {
@@ -219,6 +219,7 @@ function syncLocal(c) {
     if (!SY.CATALOG_RE.test(n)) continue;
     if (c.desk.big.has(n)) { held.push("f:" + n); continue; }
     files[n] = c.desk.files[n];
+    if (c.seatHeld) c.seatHeld.add("f:" + n);
     if (files[n] === SAMPLE) pristine.push("f:" + n);
   }
   return SY.localItems(c.desk.keys, files, held);
@@ -320,7 +321,7 @@ function createSync(w, c) {
   c.sync = SY.createStoreSync({
     me: { id: c.me.id, pub: c.me.pub, privateKey: c.me.privateKey }, mirrorRoot: c.mirrorRoot,
     channel: opts => channelOf(w, c, opts), io: m => memIO(c, m),
-    load: () => clone(c.syncFile), save: s => { c.syncFile = clone(s); },
+    load: () => clone(c.syncFile), save: s => { c.syncFile = clone(s); for (const [item, e] of Object.entries(s.ledger || {})) if (e && e.h) c.ledgerSaw.add(item + " " + e.h); },
     local: () => syncLocal(c), held: () => c.heldNow, pristine: () => c.pristineNow,
     apply: (patch, copies) => syncApply(w, c, patch, copies),
     pubOf: ST.pubOf, canonBytes: d => Buffer.from(JSON.stringify(d)), now: () => w.now,
@@ -365,7 +366,12 @@ function signIn(w, c, X) {
   c.ever = true;
   if (held(c)) { c.s.ask = X; c.s.last = X; if (c.sync) c.sync.stop(); return; }
   if (c.s.last !== X) c.s.last = X;
-  if (c.s.who !== X) { c.s.who = X; adopt(w, c, X); if (!c.sync) createSync(w, c); c.sync.seated(); } /* model-plant:store-seated */
+  if (c.s.who !== X) {
+    c.s.who = X; adopt(w, c, X); if (!c.sync) createSync(w, c);
+    /* Seated with every catalog held for a team: the catalogs read after are counted, so a removal of one never read is known. */
+    const fresh = c.sync.seated(); /* model-plant:store-seated */
+    c.seatHeld = fresh && c.desk.team ? new Set() : null;
+  }
   look(w, c);
 }
 function signOut(w, c) {
@@ -380,7 +386,7 @@ function answer(w, c, choice) {
   /* The page sends every write it owes before it answers (src/modules/signin.js syncAnswer, eDeskFlush). */
   land(w, c); /* model-plant:answer-flush */
   /* (j) is judged against what the account's store held at the relay as the person answered. */
-  w.promised.push({ X, c: c.i, step: w.stepNo, choice, held: storeHeldNow(w, X) });
+  w.promised.push({ X, c: c.i, step: w.stepNo, choice, held: storeHeldNow(w, X), entries: storeEntriesNow(w, X) });
   /* The desk claimed: what another account wrote here (an account that came and went, or one seated while the question waited) and
      never sent to its own store is handed to the account answering It is mine, by that person's answer, and judged as that account's,
      made over what that account had written here before it. */
@@ -406,6 +412,8 @@ function answer(w, c, choice) {
       for (const wr of w.writes) if (wr.item === item && wr.value === value && (wr.acct === X || wr.claimedBy === X)) { set.add(wr.id); for (const o of wr.over) set.add(o); }
       if (set.size) c.knows.set(item, set);
     }
+    knowRemovals(w, c, X, desk);
+    c.seatHeld = null;
     if (MODEL.answerMineFresh) { c.syncFile = { rt: "", ledger: {}, kept: [] }; if (c.sync) c.sync.stop(); c.sync = null; } /* model-plant:answer-mine-fresh */
   }
   if (choice === "start") {
@@ -415,13 +423,26 @@ function answer(w, c, choice) {
     for (const k of Object.keys(c.desk.keys)) if (REF.follows("k:" + k)) clear[k] = null;
     patchDesk(c, clear);
     deskSyncedTell(c, clear, null, k => SY.follows("k:" + k));
-    c.syncFile = null; c.mirrors.clear(); c.sent.clear(); c.seen.clear(); c.knows = new Map();
+    c.syncFile = null; c.mirrors.clear(); c.sent.clear(); c.seen.clear(); c.knows = new Map(); c.seatHeld = null;
+    knowRemovals(w, c, X, itemsOf(c.desk.keys, c.desk.files));
     if (c.sync) c.sync.stop();
     c.sync = null;
   }
   c.s.who = X; c.s.last = X; c.s.ask = "";
   if (choice === "mine") adopt(w, c, X);
   look(w, c);
+}
+
+/* At an answer the person sees each item the desk lacks: where a removal of that account stands for it, a later write here is made over
+   that removal, as over a value seen. */
+function knowRemovals(w, c, X, desk) {
+  for (const wr of w.writes) {
+    if (wr.acct !== X || wr.value !== null || has(desk, wr.item)) continue;
+    let set = c.knows.get(wr.item);
+    if (!set) { set = new Set(); c.knows.set(wr.item, set); }
+    set.add(wr.id);
+    for (const o of wr.over) set.add(o);
+  }
 }
 
 /* ---- what the person does, and what each write supersedes: a write is made over every write of that item this computer has held ---- */
@@ -440,7 +461,8 @@ function learn(w, c, before) {
 function write(w, c, item, value) {
   const set = c.knows.get(item) || new Set();
   const acct = c.s.last || c.seat || "";
-  const wr = { id: w.writes.length, item, value, comp: c.i, acct, over: new Set(set), step: w.stepNo, pre: !acct };
+  /* Written while the account question waits unanswered: what the desk held when it is claimed (J1; the last Argon read's finding 3). */
+  const wr = { id: w.writes.length, item, value, comp: c.i, acct, over: new Set(set), step: w.stepNo, pre: !acct || held(c) };
   w.writes.push(wr);
   set.add(wr.id);
   c.knows.set(item, set);
@@ -456,13 +478,14 @@ function setPage(w, c, key, v, owed) {
 function editField(w, c, op, m, owed) {
   let p = {};
   try { p = JSON.parse(c.page.map[LAYER] || "{}") || {}; } catch { p = {}; }
-  let item = null, value = null;
+  let item = null, value = null, was = null;
   if (op === "ov" || op === "note") {
     const f = op === "ov" ? "overrides" : "notes", t = token(w);
     p[f] = Object.assign({}, p[f], { [m]: t });
     item = "k:" + LAYER + "#" + f + "/" + m; value = JSON.stringify(t);
   } else if (op === "ovDel") {
     if (!p.overrides || !has(p.overrides, m)) return;
+    was = JSON.stringify(p.overrides[m]);
     delete p.overrides[m];
     if (!Object.keys(p.overrides).length) delete p.overrides;
     item = "k:" + LAYER + "#overrides/" + m;
@@ -474,11 +497,13 @@ function editField(w, c, op, m, owed) {
   } else {
     const list = Array.isArray(p.favourites) ? p.favourites : [];
     if (list.indexOf(m) < 0) return;
+    was = JSON.stringify(m);
     p.favourites = list.filter(x => x !== m);
     if (!p.favourites.length) delete p.favourites;
     item = "k:" + LAYER + "#favourites[]" + m;
   }
   const wr = write(w, c, item, value);
+  if (was !== null) wr.was = was;
   if (owed || c.page.owed.has(LAYER)) c.page.win.push(wr);
   setPage(w, c, LAYER, Object.keys(p).length ? JSON.stringify(p) : null, owed);
 }
@@ -491,9 +516,13 @@ function editFile(w, c, name, text) {
 }
 function removeFile(w, c, name) {
   if (c.desk.team || !has(c.desk.files, name)) return;
+  const was = c.desk.files[name];
   delete c.desk.files[name];
   c.desk.big.delete(name);
-  write(w, c, "f:" + name, null);
+  const wr = write(w, c, "f:" + name, null);
+  wr.was = was;
+  /* A catalog held for a team when its account was seated, removed before any read of the desk saw it: as a removal before joining. */
+  if (c.seatHeld && !c.seatHeld.has("f:" + name)) wr.pre = true;
   mergeSoon(w, c);
 }
 const catalogText = (name, t) => JSON.stringify({ kind: "etiuda-catalog", format: 2, id: name.replace(/\.ec$/i, "").toLowerCase(), note: t, cards: [] });
@@ -588,6 +617,27 @@ function storeHeldNow(w, X) {
   }
   return out;
 }
+/* The entries an account's store holds at the relay, by item: each listed computer's sync.json entry. */
+function storeEntriesNow(w, X) {
+  const st = w.stores[X], out = new Map();
+  if (!st) return out;
+  const ids = new Set(st.devices.map(d => d.id));
+  for (const [rel, f] of w.relays[st.rt] || []) {
+    const m = /^desks\/(k-[0-9a-f]{16})\/sync\.json$/.exec(rel);
+    if (!m || f.del || !ids.has(m[1])) continue;
+    let d = null;
+    try { d = JSON.parse(f.text); } catch { continue; }
+    for (const [item, e] of Object.entries((d && d.items) || {})) {
+      if (!e || typeof e.by !== "string" || !Number.isSafeInteger(e.t)) continue;
+      if (!out.has(item)) out.set(item, []);
+      out.get(item).push({ h: e.h, by: e.by, t: e.t, seen: e.seen || {} });
+    }
+  }
+  return out;
+}
+/* Whether store entry n stands over entry e by the merge's rule: a setting by the later write; otherwise the same computer's later entry
+   or one whose seen covers e. */
+const entryOver = (item, n, e) => (REF.isSetting(item) ? n.t > e.t || (n.t === e.t && n.by > e.by) : n.by === e.by ? n.t > e.t : has(n.seen, e.by) && n.seen[e.by] >= e.t);
 function invariants(w) {
   const fails = [];
   const say = (inv, detail) => fails.push({ inv, detail });
@@ -604,6 +654,9 @@ function invariants(w) {
       /* An item the store held under two values keeps the one standing: the other had given way (a setting's, or a version kept on
          the computer whose write gave way), which (b) judges write by write. (j) asks that the account's copy is not emptied. */
       if ([...hs].some(o => survives(item, o))) continue;
+      /* The store moved on by the merge's rule: every entry that held this value is stood over by one the store holds now (seed 469). */
+      const was = ((p.entries && p.entries.get(item)) || []).filter(e => e.h === h), ents = storeEntriesNow(w, X).get(item) || [];
+      if (was.length && was.every(e => ents.some(n => n.h !== h && entryOver(item, n, e)))) continue;
       /* The item changed by that account's person: after the answer; claimed with it; or on another computer before it, not yet in
          the store as they answered. */
       if (w.writes.some(x => x.item === item && ((x.acct === X && x.step > p.step) || x.claimedBy === X
@@ -691,16 +744,16 @@ function invariants(w) {
   /* A write whose very value the person replaced on another computer, by a write made after it, is no distinct work lost: the same
      bytes were on that screen and the person wrote over them (one person's computers: a star on one, the same star and its removal on
      another, seed 107). Writes of the same account only, and only those made before the write over the twin. */
+  /* Such a write and the first write over its twin are one act of the person's in two places: each is satisfied where the other stands,
+     and lost only where neither does (seeds 1638, 2830: the twin's removal made before any merge saw it, the other star standing). */
+  const alt = new Map(), altAdd = (a, b) => { if (!alt.has(a)) alt.set(a, new Set()); alt.get(a).add(b); };
   for (const wr of w.writes) {
     if (over.has(wr.id) || wr.value === null) continue;
-    const twin = w.writes.find(x => x !== wr && over.has(x.id) && x.acct === wr.acct && x.item === wr.item && x.value === wr.value && overAt.get(x.id) > wr.step);
-    if (twin) over.add(wr.id);
+    for (const twin of w.writes.filter(x => x !== wr && over.has(x.id) && x.acct === wr.acct && x.item === wr.item && x.value === wr.value && overAt.get(x.id) > wr.step))
+      for (const y of w.writes) if (y.over.has(twin.id) && y.step === overAt.get(twin.id) && y.item === wr.item && y.acct === wr.acct) { altAdd(wr.id, y.id); altAdd(y.id, wr.id); }
   }
   const groups = new Map();
   for (const wr of w.writes) {
-    /* A removal the same account's person made the item again after is no work lost: their later act stands (a same-named catalog made
-       anew on a computer that never held the old one, seeds 328 and 1000009). */
-    if (wr.value === null && w.writes.some(x => x.acct === wr.acct && x.item === wr.item && x.value !== null && x.step > wr.step)) continue;
     if (over.has(wr.id) || wr.cancel || wr.claimed || !wr.acct || (wr.pre && (wr.value === null || REF.isSetting(wr.item)))) continue;
     const g = wr.acct + " " + wr.item;
     if (!groups.has(g)) groups.set(g, []);
@@ -708,16 +761,35 @@ function invariants(w) {
   }
   const shown = new Map();
   const itemsNow = c => { if (!shown.has(c.i)) shown.set(c.i, [itemsOf(c.desk.keys, c.desk.files), itemsOf(c.page.map, {})]); return shown.get(c.i); };
-  const stands = wr => {
-    const holders = new Set(syncedTo(w, wr.acct).concat([w.comps[wr.comp]]));
+  const holdersOf = wr => new Set(syncedTo(w, wr.acct).concat([w.comps[wr.comp]]));
+  /* A value of the item standing on a holder's desk or page, or held in the account's store. */
+  const valueStands = (wr, v) => [...holdersOf(wr)].some(c => { const [desk, page] = itemsNow(c); return desk[wr.item] === v || page[wr.item] === v; })
+    || !!(storeHeldNow(w, wr.acct).get(wr.item) || new Set()).has(sha(v));
+  /* A removal is judged by the writes it was made over, the value it took away among them: it holds where none of those values stands,
+     and a value standing in their place is another write's, made over none of them (seeds 902, 2341, 2439: a catalog made and removed
+     before the first merge, another computer's of that name standing). Only where no merge on its computer ever recorded one of those
+     values: one recorded makes the removal a change the merge sees, which meets the other write as a conflict and is kept as a version
+     (seeds 195, 1433 with removals not kept). */
+  const removalHolds = wr => {
+    const vals = new Set(wr.was !== undefined && wr.was !== null ? [wr.was] : []);
+    for (const o of wr.over) { const x = w.writes[o]; if (x.item === wr.item && x.value !== null) vals.add(x.value); }
+    if (!vals.size || [...vals].some(v => valueStands(wr, v) || w.comps[wr.comp].ledgerSaw.has(wr.item + " " + sha(v)))) return false;
+    const now = new Set();
+    for (const c of holdersOf(wr)) for (const items of itemsNow(c)) if (has(items, wr.item)) now.add(items[wr.item]);
+    return w.writes.every(x => x.item !== wr.item || x.value === null || !now.has(x.value) || ![...x.over].some(o => wr.over.has(o)));
+  };
+  const standsAlone = wr => {
+    const holders = holdersOf(wr);
     for (const c of holders) {
       const [desk, page] = itemsNow(c);
       if (wr.value === null ? !has(desk, wr.item) : desk[wr.item] === wr.value || page[wr.item] === wr.value) return true;
     }
     /* Held in its account's store at the relay, though no computer syncs that account now (another account took the last one). */
     { const held = storeHeldNow(w, wr.acct).get(wr.item), st = w.stores[wr.acct]; if (st && (wr.value === null ? !held : !!held && held.has(sha(wr.value)))) return true; }
-    return w.comps.some(c => c.kept.concat(c.aside).some(k => k.item === wr.item && k.value === wr.value));
+    if (w.comps.some(c => c.kept.concat(c.aside).some(k => k.item === wr.item && k.value === wr.value))) return true;
+    return wr.value === null && removalHolds(wr);
   };
+  const stands = wr => standsAlone(wr) || [...(alt.get(wr.id) || [])].some(id => standsAlone(w.writes[id]));
   for (const list of groups.values()) {
     if (REF.isSetting(list[0].item)) { if (!list.some(stands)) say("b", list[0].acct + ": " + list[0].item + " lost every write made over none of the others, " + list.map(x => JSON.stringify(x.value) + " on c" + x.comp + " at #" + x.step).join(", ")); continue; }
     for (const wr of list) if (!stands(wr)) say("b", wr.acct + ": " + wr.item + " = " + JSON.stringify(wr.value) + ", written on c" + wr.comp + " at #" + wr.step + ", stands nowhere and is kept nowhere");
@@ -785,6 +857,7 @@ const FIXED = [
   { seed: 1141, inv: "b", what: "further: a setting changed after sign-in but before the first cycle reaches the store is taken as held before joining and gives way" },
   { seed: 2371, inv: "b", what: "further: the same for the sample removed after sign-in" },
   { seed: 2002, inv: "c", what: "third pass 11 (can follow): a catalog saved signed out after another account was seated is merged into the first account's mirror" },
+  { seed: 888, inv: "b", what: "further (red at 215f8f18): a joining computer's first merge whose desk write fails loses its join marks (sync.cjs unapplied), so its setting held before joining is taken as a fresh write and the person's later setting on another computer gives way" },
   { seed: 1000000, inv: "j", what: "last read 1 (an account walk, red at bc147559): an account alone on a computer comes back after another account and answers Start from my account; its fresh state skips this computer's own place and empties the account's store" },
 ];
 
@@ -1181,7 +1254,7 @@ try { await main(); }
 catch (e) { check(false, "harness: " + (e && e.stack ? e.stack : e)); }
 try { fs.rmSync(WORK, { recursive: true, force: true }); } catch { /* a temp folder */ }
 /* The whole run's checks: each fixed seed, each invariant over the random seeds, and each plant, of both layers. */
-const EXPECTED = FIXED.length + Object.keys(INVARIANTS).length + 6 + FIXED2.length + Object.keys(INVARIANTS2).length + 3;
+const EXPECTED = FIXED.length + Object.keys(INVARIANTS).length + 1 + 7 + FIXED2.length + Object.keys(INVARIANTS2).length + 3;
 const whole = !Object.keys(ARGS).some(a => ["seed", "hunt", "layer", "enrol-seed", "enrol-hunt"].indexOf(a) >= 0);
 console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + (whole ? " expected=" + EXPECTED : ""));
 if (whole && asserted + skipped < EXPECTED) {
