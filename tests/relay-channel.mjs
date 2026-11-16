@@ -62,7 +62,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 468;
+const EXPECTED = 482;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -12489,7 +12489,7 @@ async function sceneF8(mod) {
   const X = relay9(), { tm, BASE, DAYMS } = X;
   const DR = { k: keyPair(true), box: boxPair() }, DK = { k: keyPair(true), box: boxPair() };
   const STATS = "desk statistics kept across removal\n", DK_OLD = "active desk file retracted later\n";
-  const RETIRED = "lead file retracted later\n";
+  const RETIRED = "lead file retracted later\n", NEWEST = "the newest live file in the team\n";
   const statsRel = "desks/" + DR.k.keyId + "/stats.estat", dkOldRel = "desks/" + DK.k.keyId + "/old.ec";
   const afterRel = "desks/" + DR.k.keyId + "/after.ec";
   try {
@@ -12525,6 +12525,13 @@ async function sceneF8(mod) {
     fs.unlinkSync(path.join(dk.mirror, ...dkOldRel.split("/")));
     const dropped = await X.enrol9(2, DK);
     await settle(lead, dk);
+    /* The newest row in the team is a LIVE file, written after the day's deletions. Without it the deletions are the newest
+       rows, they have expired by day 32, the relisted list then stops below each program's place in the sequence, and
+       reconcile removes nothing from such a list (plant:reconcile-top, 2026-11-16): f8a would hold for that reason and not
+       for the one it names, and f8d's plant could not turn it. */
+    put(lead.mirror, "newest.ec", NEWEST);
+    await settle(lead, dk);
+    const newestLanded = read(dk.mirror, "newest.ec") === NEWEST;
     await lead.ch.stop();
     await dk.ch.stop();
 
@@ -12560,11 +12567,11 @@ async function sceneF8(mod) {
       && read(lead.mirror, afterRel) === null && read(dk.mirror, afterRel) === null;
 
     return {
-      setup: before && dropped.status === 200 && leadWhole >= 1 && dkWhole >= 1,
+      setup: before && newestLanded && dropped.status === 200 && leadWhole >= 1 && dkWhole >= 1,
       kept: keptAfter.leadStats && keptAfter.dkStats && keptAfter.leadLane && keptAfter.dkLane,
       activeGone: activeRemoved.leadRetired && activeRemoved.dkRetired && activeRemoved.leadDkOld && activeRemoved.dkDkOld,
       newRefused,
-      detail: JSON.stringify({ before, dropped: dropped.status, leadWhole, dkWhole, keptAfter, activeRemoved, leadNew, dkNew }),
+      detail: JSON.stringify({ before, newestLanded, dropped: dropped.status, leadWhole, dkWhole, keptAfter, activeRemoved, leadNew, dkNew }),
     };
   } finally {
     await X.done();
