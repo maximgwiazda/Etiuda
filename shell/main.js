@@ -11923,6 +11923,7 @@ async function storeSetNow(what) {
   if (storePolicyNow().held) return storeView(); /* plant:store-set-held */
   if (what !== "on" && what !== "here" && what !== "everywhere") return storeView();
   /* A look still out when the switch moves is no longer this desk's (storeLookNow ours), and on starts a look of its own. */
+  const out = storeFlight, at = storeSwitchNo;
   storeSwitchNo++;
   storeSyncCalm();
   const s = storeState();
@@ -11949,8 +11950,24 @@ async function storeSetNow(what) {
   storeSave();
   if (keys) await storeEndEverywhere(keys).catch(() => false);
   if (leaving) await storeLeaveNow(cert); /* plant:store-leave */
+  /* A look out: Off acts again on what that look read, made or enrolled this computer in once it ends (storeOvertaken), since a write of
+     its may land after the leave or the end above read the folder. */
+  if (out) storeOffAfter = out.then(() => storeOffOvertaken(what, at, !!keys, leaving)).catch(() => false); /* plant:off-after-look */
   tellStore();
   return storeView();
+}
+/* A look the switch overtook, {keys, store, at}: the keys it read, wrote or enrolled this computer in, which its own steps no longer keep. */
+let storeOvertaken = null, storeOffAfter = null;
+async function storeOffOvertaken(what, at, ended, left) {
+  const o = storeOvertaken;
+  storeOvertaken = null;
+  if (!o || o.at !== at || storeSwitchNo !== at + 1) return false;
+  if (what === "everywhere") return ended ? false : storeEndEverywhere(o.keys).catch(() => false);
+  const me = branchIdentity(false);
+  if (!me || !o.keys.devices.some(d => d.pub === me.key)) return false;
+  if (left && left.rt === o.keys.rt && o.keys.rev <= left.rev) return false; /* the list Off already left */
+  storeLeaveOwe(o.keys);
+  return storeLeaveNow(o.store);
 }
 ipcMain.on("etiuda:store-state", (e) => { e.returnValue = fromEngine(e) ? storeView() : null; });
 ipcMain.handle("etiuda:store-set", (e, what) => (fromEngine(e) ? storeSetNow(String(what || "")) : null));
@@ -12271,7 +12288,11 @@ async function storeLookRun(p, held, me, pol) {
   /* Turned off everywhere from another computer while policy holds sync on here: a new store is made over the mark from what is on this
      computer, as On does for the person, and the row says so (storeAnew); the ended store is asked nothing. */
   if (look.state === "ended" && pol.held === true && pol.on === true && ours()) { storeAnew = true; tellStore(); look = await L.storeLook(Object.assign({}, io, { fresh: true })); } /* plant:store-anew */
-  if (!ours()) return null;
+  if (!ours()) {
+    /* Overtaken by the switch alone, the account the same: what it found is the switch's to act on (storeOffOvertaken). */
+    if (look && look.keys && storeSwitchNo !== switchAt && storeState().who === who && storeWho(signinState().held) === who) storeOvertaken = { keys: look.keys, store: look.store || null, at: switchAt }; /* plant:look-overtaken */
+    return null;
+  }
   /* A store made here whose grant or making did not finish is named, so the next look still makes it as the one that replaces. */
   const made = (look.state === "paused" || look.state === "unavailable") && look.made === true && look.keys ? look.keys.rt : look.state === "on" ? "" : storeState().made; /* plant:store-made-kept */
   if (made !== storeState().made) { storeState().made = made; storeSave(); }

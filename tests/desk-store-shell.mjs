@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 203;
+const EXPECTED = 206;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -164,6 +164,8 @@ function worldOf(o) {
       if (method === "GET" && u === FILE) return w.file === null ? json(404, { error: { code: "itemNotFound" } }) : new Response(Buffer.from(w.file), { status: 200 });
       if (method === "PUT" && u.startsWith(FILE)) {
         if (/conflictBehavior=fail$/.test(u) && w.file !== null) return json(409, { error: { code: "nameAlreadyExists" } });
+        /* A write held in flight (putGate), landing once the leg opens it. */
+        if (w.putGate) { const g = w.putGate; w.putGate = null; if (w.onPut) w.onPut(); await g; }
         const was = w.file;
         w.file = body;
         return json(was === null ? 201 : 200, { id: "f" });
@@ -202,7 +204,7 @@ function worldOf(o) {
 /* What the leg reads from main.js, appended to its text; a name main.js lacks comes back undefined, so its leg fails alone. */
 const TAIL_NAMES = ["storeView", "storeRoom", "storeSetNow", "storeAnswerNow", "storeSetAsideDir", "storeSyncFolder", "storeState", "storeTokenTake", "signinRun", "signinRenew", "signinIo", "signinRenewNow", "signinServiceAsk", "storeServiceAt", "storeOnFor", "storeTurn", "branchIdentity", "signinState", "patchDesk", "storeForget", "signinLandingHtml", "signinListen",
   "signinOutNow", "storeLeaveNow", "storeSyncApply", "storeSyncSoon", "storeSyncLocal", "deskSyncedTell", "storeTokenFor", "catalogRevSlot", "persistDeskEnvelope"];
-const TAIL_STATE = ["storeNow", "storeAccess", "storeFlight", "storeLeaveFlight", "SIGNIN_SERVICE", "SIGNOUT_SERVICE", "STORE_RELAY", "SIGNIN_PROVIDERS", "storeSyncing", "storeConsentFlight", "storeSyncTimer", "storeSyncPristine", "storeAgainTimer", "catalogRevs", "teamPins"];
+const TAIL_STATE = ["storeNow", "storeAccess", "storeFlight", "storeLeaveFlight", "SIGNIN_SERVICE", "SIGNOUT_SERVICE", "STORE_RELAY", "SIGNIN_PROVIDERS", "storeSyncing", "storeConsentFlight", "storeSyncTimer", "storeSyncPristine", "storeAgainTimer", "catalogRevs", "teamPins", "storeOffAfter"];
 const TAIL = "\n__test.T = {" + TAIL_NAMES.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ")
   + ", setJoin: v => { teamJoin = v; }, setPolicyText: v => { joinPolicyRead = joinPolicyFacts(String(v)); if (typeof joinPolicyReadAt !== \"undefined\") { joinPolicyReadAt = Date.now(); joinPolicyAskedAt = Date.now(); joinPolicyAsking = true; } }, setWindow: v => { theWindow = v; }, get: () => ({" + TAIL_STATE.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ") + "}) };";
 function boot(src, o) {
@@ -2355,6 +2357,45 @@ async function signoutToldScene(src) {
   return { ok, detail: brief({ told, shown: view.shown }) };
 }
 
+/* (z10) OFF WHILE THE FIRST LOOK IS OUT ACTS ON WHAT THAT LOOK FOUND: a computer holding no store keys at its start starts a look; the
+   person turns sync off before it answers. Everywhere ends the store that look read (store/end posted, the ended mark in the folder); This computer, its
+   enrolment written to the folder while the switch moved, takes this computer off the folder's list once that write lands. The look itself
+   keeps nothing (s5). */
+async function offFirstLookScene(src) {
+  const hold = w => { let open = null; w.grantGate = new Promise(a => { open = a; }); const at = new Promise(a => { w.onGrant = a; }); return { at, open: () => open() }; };
+  const settleOff = async T => { const a = T.get().storeOffAfter; if (a) await a; };
+  const r = await renewScene(src), T = r.shell.T, w = r.world;
+  T.storeState().keys = "";
+  const g = hold(w), ends0 = endsPosted(w);
+  const flight = T.storeTurn();
+  await g.at;
+  await T.storeSetNow("everywhere");
+  g.open();
+  await flight;
+  await settleOff(T);
+  let mark = false;
+  try { const j = JSON.parse(w.file); mark = !!j && j.format === 1 && typeof j.rt === "string" && !Array.isArray(j.devices); } catch { mark = false; }
+  const everywhere = { ended: endsPosted(w) > ends0, mark, keys: !!T.storeState().keys, line: T.storeView().line };
+  const r2 = await renewScene(src), T2 = r2.shell.T, w2 = r2.world, me = r2.me;
+  T2.storeState().keys = "";
+  const k = JSON.parse(w2.file);
+  k.devices = k.devices.filter(d => d.pub !== me.key);
+  w2.file = JSON.stringify(k);
+  let open2 = null;
+  w2.putGate = new Promise(a => { open2 = a; });
+  const at2 = new Promise(a => { w2.onPut = a; });
+  const flight2 = T2.storeTurn();
+  await at2;
+  await T2.storeSetNow("here");
+  open2();
+  await flight2;
+  await settleOff(T2);
+  const listed = w2.file ? (JSON.parse(w2.file).devices || []).some(d => d.pub === me.key) : null;
+  const here = { listed, keys: !!T2.storeState().keys, line: T2.storeView().line };
+  const ok = everywhere.ended && everywhere.mark && !everywhere.keys && everywhere.line === "off" && here.listed === false && !here.keys && here.line === "off";
+  return { ok, detail: brief({ everywhere, here }) };
+}
+
 /* (z6) A LOOK MORE THAN AN HOUR AFTER THE LAST SIGN-IN RENEWS IT FIRST: the service grants a store only to a desk it saw sign in within
    the hour. A look whose last reached sign-in is two hours old renews it, then is granted and is on; with the provider out (the renewal
    unreached), the refusal is a look tried again within minutes, not a day, and the row says the service was not reached. */
@@ -2579,6 +2620,7 @@ const LEGS = [
   ["z5", refreshLostScene, "a look after the refresh token was lost says signing in is refused, not the organisation's refusal, and arms no retry; a revoked certificate, once the store certificate has ended, says the same, not a lapse"],
   ["z14", rowToldScene, "a merge keeping a version tells the page; a renewal that lost its refresh token reads as a refused sign-in; the first of two overlapping looks ending leaves the row saying a look runs"],
   ["z7", signoutToldScene, "a sign out tells the page the store's state, so an account question left open closes, the row it reads not shown"],
+  ["z10", offFirstLookScene, "Off while the first look is out, this computer holding no keys at its start: Everywhere ends the store that look read, store/end posted and the ended mark in the folder; This computer takes off the folder's list the computer that look enrolled"],
   ["z6", signinHourScene, "a look more than an hour after the last sign-in renews it first and is granted, on; with the renewal unreached the refusal is tried again within minutes, the row not saying refused"],
   ["z11", signedOutScene, "a change on the desk arms the merge, a sign out clears it, and a change made signed out arms none and changes nothing of the sync state"],
   ["z4", tokenAccountScene, "a folder token asked for one account and answered with another seated is not kept for it, and a look whose token is answered after a sign out says nothing and arms no retry"],
@@ -2711,6 +2753,8 @@ const PLANTS = [
   ["z5", swap(" || signinRevokedHas(held.revoked, held.cert)); /* plant:view-signin-revoked */", "); /* plant:view-signin-revoked */"), "a revoked certificate read as a lapse that resumes by itself"],
   ["z14", swap("finally { storeLooking--; tellStore(); } /* plant:store-look-count */", "finally { storeLooking = 0; tellStore(); } /* plant:store-look-count */"), "the first look ending ends the row's word for both"],
   ["z7", swap("  tellStore(); /* the page's sync bubbles close: no row stands signed out */ /* plant:signout-tell-store */", "  /* plant:signout-tell-store */"), "a sign out tells the page nothing of the store, so the account question stays open"],
+  ["z10", swap("  if (out) storeOffAfter =", "  if (false) storeOffAfter ="), "Off acts on nothing while the first look is out, so its store stays live elsewhere and this computer stays listed"],
+  ["z10", swap("&& storeWho(signinState().held) === who) storeOvertaken = {", "&& false) storeOvertaken = {"), "the overtaken look's keys not handed to the switch"],
   ["z6", swap("      const fresh = await storeSigninFresh(); /* plant:grant-signin-fresh */", "      const fresh = true; /* plant:grant-signin-fresh */"), "the grant asked with an hour-old sign-in, refused for a day"],
   ["z6", swap("      return got && got.why === \"signin\" && !fresh ? { why: \"unreached\" } : got; /* plant:grant-signin-again */", "      return got; /* plant:grant-signin-again */"), "a refusal the renewal could not mend left for a day, the row saying refused"],
   ["z11", swap("storeSyncStop(); storeSyncCalm(); /* plant:forget-calm */", "storeSyncStop(); /* plant:forget-calm */"), "the merge armed before a sign out runs after it"],
