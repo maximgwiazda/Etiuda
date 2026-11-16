@@ -9111,7 +9111,7 @@ What you type stays in this browser only.`;
     "Not syncing just now: {REASON}. Sync tries again by itself, and nothing on this computer is lost.": "Synchronizacja chwilowo nie działa: {REASON}. Sama ponowi próbę, a na tym komputerze nic nie ginie.",
     "Not syncing just now: {REASON}. Sync tries again at {TIME}, and nothing on this computer is lost.": "Synchronizacja chwilowo nie działa: {REASON}. Ponowi próbę o {TIME}, a na tym komputerze nic nie ginie.",
     "Not syncing: {REASON}. Sync tries again within a day, and nothing on this computer is lost.": "Synchronizacja nie działa: {REASON}. Ponowi próbę w ciągu doby, a na tym komputerze nic nie ginie.",
-    "Not syncing while signing in on this computer is refused. Sync resumes once signing in works, and nothing on this computer is lost.": "Synchronizacja wstrzymana, dopóki logowanie na tym komputerze jest odrzucane. Zostanie wznowiona, gdy logowanie się powiedzie, a na tym komputerze nic nie ginie.",
+    "Not syncing while signing in on this computer is refused. Sync runs once signing in works, and nothing on this computer is lost.": "Synchronizacja nie działa, dopóki logowanie na tym komputerze jest odrzucane. Ruszy, gdy logowanie się powiedzie, a na tym komputerze nic nie ginie.",
     "Your organisation has turned this on, and {PROVIDER} has not yet let Etiuda use its folder in this account.": "Organizacja włączyła tę funkcję, ale konto {PROVIDER} nie zezwala jeszcze Etiudzie na użycie jej folderu na tym koncie.",
     "Allow…": "Zezwól…",
     "Turned off everywhere from another computer. Your organisation keeps sync on for this computer, so a new synced copy starts from what is on it.": "Wyłączona wszędzie z innego komputera. Organizacja utrzymuje synchronizację na tym komputerze, więc nowa zsynchronizowana kopia powstaje z jego zawartości.",
@@ -28287,7 +28287,7 @@ What you type stays in this browser only.`;
     if (s.line === "checking") return t("Checking for changes.");
     if (s.line === "unconnected") return t("Not connected yet. Sync starts once this computer reaches our service.");
     if (s.line === "resuming") return t("Sync starts again shortly after Etiuda opens.");
-    if (s.line === "signin-refused") return t("Not syncing while signing in on this computer is refused. Sync resumes once signing in works, and nothing on this computer is lost.");
+    if (s.line === "signin-refused") return t("Not syncing while signing in on this computer is refused. Sync runs once signing in works, and nothing on this computer is lost.");
     if (s.line === "again" || s.line === "spent" || s.line === "refused") return syncPassing(s, provider);
     if (s.line === "lapsed") return t("Not syncing just now. Sync resumes when this computer reaches our service, and nothing on this computer is lost.");
     if (s.line === "paused") return named(t("Paused since {DATE}. It resumes when this computer reaches our service."), "{DATE}", syncDate(s.since));

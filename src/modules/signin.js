@@ -539,7 +539,7 @@ function syncLine(s, provider){
   if(s.line==="checking") return t("Checking for changes.");
   if(s.line==="unconnected") return t("Not connected yet. Sync starts once this computer reaches our service.");
   if(s.line==="resuming") return t("Sync starts again shortly after Etiuda opens.");
-  if(s.line==="signin-refused") return t("Not syncing while signing in on this computer is refused. Sync resumes once signing in works, and nothing on this computer is lost.");
+  if(s.line==="signin-refused") return t("Not syncing while signing in on this computer is refused. Sync runs once signing in works, and nothing on this computer is lost.");
   if(s.line==="again" || s.line==="spent" || s.line==="refused") return syncPassing(s, provider);
   /* A lapse with no reason known. */
   if(s.line==="lapsed") return t("Not syncing just now. Sync resumes when this computer reaches our service, and nothing on this computer is lost.");
