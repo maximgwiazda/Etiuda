@@ -249,7 +249,8 @@ function mergeOnce(o) {
     }
     if (!others.length) continue;
     const all = (mine ? [mine] : []).concat(others);
-    let top = all.filter(a => !all.some(b => b !== a && !same(a, b) && over(b, a)));
+    /* Two entries each made over the other (the same value written on two computers, each merging the other's) both stand. */
+    let top = all.filter(a => !all.some(b => b !== a && !same(a, b) && over(b, a) && !over(a, b))); /* plant:top-mutual */
     /* A setting by the later write, read from each computer's own clock (t is max(now, previous + 1) above), so within the clocks'
        skew the faster clock's write wins. */
     if (isSetting(item)) top = [top.reduce((a, b) => (b.t > a.t || (b.t === a.t && b.by > a.by) ? b : a))];

@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-sync-"));
-const EXPECTED = 63;
+const EXPECTED = 65;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -687,6 +687,40 @@ async function main() {
     return { ok: good(taken) && good(own), detail: brief({ taken, own }) };
   }
 
+  /* SA: the same value written on two computers, each merging the other's first entry before either sends again (a setting, a card starred,
+     a catalog removed): each stands made over the other, and every merge after, on both computers, runs, keeps the value, keeps nothing
+     and moves nothing. mergeOnce alone. */
+  async function sameValueScene() {
+    const A = "k-" + "a".repeat(16), B = "k-" + "b".repeat(16);
+    const placed = (r, me) => SY.syncRead(r.own[SY.syncRel(me)], me);
+    const one = (item, local, files) => {
+      const fileOf = (by, it, h) => (files && files[it] && SY.sha(files[it]) === h ? files[it] : null);
+      const a0 = SY.mergeOnce({ me: A, now: 100, state: { ledger: {}, kept: [] }, local, theirs: [] });
+      const b0 = SY.mergeOnce({ me: B, now: 200, state: { ledger: {}, kept: [] }, local, theirs: [] });
+      const a1 = SY.mergeOnce({ me: A, now: 300, state: a0.state, local, theirs: [placed(b0, B)], fileOf });
+      const b1 = SY.mergeOnce({ me: B, now: 300, state: b0.state, local, theirs: [placed(a0, A)], fileOf });
+      const out = { ran: true, moved: 0, copies: 0, kept: 0, stands: true };
+      try {
+        let sa = a1, sb = b1;
+        for (let i = 0; i < 3; i++) {
+          const na = SY.mergeOnce({ me: A, now: 400 + i, state: sa.state, local, theirs: [placed(sb, B)], fileOf });
+          const nb = SY.mergeOnce({ me: B, now: 400 + i, state: sb.state, local, theirs: [placed(sa, A)], fileOf });
+          out.moved += Object.keys(na.patch).length + Object.keys(nb.patch).length;
+          out.copies += na.copies.length + nb.copies.length;
+          sa = na; sb = nb;
+        }
+        out.kept = sa.state.kept.length + sb.state.kept.length;
+        const h = has(local, item) ? SY.sha(local[item]) : null;
+        out.stands = !!sa.state.ledger[item] && sa.state.ledger[item].h === h && !!sb.state.ledger[item] && sb.state.ledger[item].h === h;
+      } catch (e) { out.ran = String(e && e.message || e).slice(0, 80); }
+      return out;
+    };
+    const setting = one("k:eTheme", { "k:eTheme": "dark" });
+    const star = one("k:e3f9a1~Pack#favourites[]c1", { "k:e3f9a1~Pack#favourites[]c1": JSON.stringify("c1") });
+    const good = x => x.ran === true && x.moved === 0 && x.copies === 0 && x.kept === 0 && x.stands;
+    return { ok: good(setting) && good(star), detail: brief({ setting, star }) };
+  }
+
   /* J3: the store holds no entry for the shipped sample (the first computer had none when it synced); a second computer joins with its
      sample untouched: through every merge after the first, it is never recorded as that computer's write, so the first never gets it,
      and nothing is kept. Edited there, it is the person's own and reaches the first. */
@@ -783,6 +817,7 @@ async function main() {
 
   const results = {};
   const LEGS = [
+    ["SA", sameValueScene, "the same value written on two computers, each merging the other's first entry before either sends again: every merge after runs on both, the value stands, nothing kept or moved, for a setting and for a card starred"],
     ["B2", bridgeScene, "the page's copy of the desk: a write from a copy behind a tell answers what that tell took, once; one after it nothing; a key cleared whole, or held under a clear of every key, is dropped from a write behind it and kept from one after; a load holds every tell before it"],
     ["J3", joinSampleScene, "the shipped sample untouched on a computer joining a store that holds no entry for it is never recorded as that computer's write at any merge, so the other computer never gets it and nothing is kept; edited, it is the person's own and reaches the other"],
     ["J4", joinRemoveScene, "a joining computer removing the sample it joined with untouched: where the first computer holds an entry the removal travels over it, the first computer's copy goes and the sample does not return, nothing kept; where none does, nothing is sent and nothing returns"],
@@ -843,6 +878,7 @@ async function main() {
   const swap = (from, to) => text => (text.split(from).length === 2 ? text.split(from).join(to) : null);
   const scenes = Object.fromEntries(LEGS.map(([id, scene]) => [id, scene]));
   const PLANTS = [
+    ["same over each other", "SA", swap("let top = all.filter(a => !all.some(b => b !== a && !same(a, b) && over(b, a) && !over(a, b))); /* plant:top-mutual */", "let top = all.filter(a => !all.some(b => b !== a && !same(a, b) && over(b, a))); /* plant:top-mutual */"), "two entries each made over the other both set aside, so the merge finds no version standing and throws"],
     ["stale write whole", "B2", swap("const late = l.filter(x => x.n > at); /* plant:desk-stale */", "const late = []; /* plant:desk-stale */"), "a write from a copy behind a tell taken as the person's, so what the sync took is read as removed"],
     ["whole clear written back", "B2", swap("if (late.some(x => x.pre === null)) { dropped.push(k); continue; } /* plant:desk-whole */", "/* plant:desk-whole */"), "a key cleared whole written back from a copy behind the clear"],
     ["every clear written back", "B2", lift("desk-every"), "a key the page held behind a clear of every key written back under the next account"],
