@@ -482,7 +482,7 @@ function signinClicks(root){
 /* ---- sync across computers: what the shell's storeRow answers (shell/sync/store.cjs), the row's words and the one bubble ---------
    The page is told a line (SYNC_LINES), the switch, whether policy holds it, the
    reason, the pause's start and what to say once; never a key, a store or a token. */
-const SYNC_LINES=["on","off","ending","ungiven","ungiven-held","org-off","unavailable","anew","first","checking","unconnected","signin-refused","again","spent","refused","lapsed","paused","conflict","full","noseat","ask"];
+const SYNC_LINES=["on","off","ending","ungiven","ungiven-held","org-off","unavailable","anew","first","checking","unconnected","resuming","signin-refused","again","spent","refused","lapsed","paused","conflict","full","noseat","ask"];
 function syncRead(v){
   const o=v && typeof v==="object" ? v : {};
   if(o.shown!==true || SYNC_LINES.indexOf(o.line)<0) return {shown:false, line:"", on:false, held:false, why:"", since:0, say:"", askNow:false, at:0};
@@ -514,17 +514,18 @@ function syncDate(at){
   return new Date(at).toLocaleDateString(uiLang()==="pl" ? "pl-PL" : "en-GB",{day:"numeric", month:"long"});
 }
 /* A passing failure's reason, which side was not reached, in words the person can check (the copywriter's section 15). */
-function syncPassingWords(why, provider){
+function syncPassingWords(why, provider, refused){
+  if(refused) return t("our service turned down this computer's last request");
   if(why==="offline") return named(t("this computer cannot reach the {PROVIDER} account"),"{PROVIDER}",SIGNIN_NAMES[provider]||"Microsoft");
   if(why==="rate") return t("our service is busy");
   return t("this computer cannot reach our service");
 }
 function syncPassing(s, provider){
-  const frame=s.line==="spent" ? t("Not syncing: {REASON}. Sync tries again within a day, and nothing on this computer is lost.")
+  const frame=s.line==="spent" || s.line==="refused" ? t("Not syncing: {REASON}. Sync tries again within a day, and nothing on this computer is lost.")
     : s.at ? named(t("Not syncing just now: {REASON}. Sync tries again at {TIME}, and nothing on this computer is lost."),"{TIME}",
       new Date(s.at).toLocaleTimeString(uiLang()==="pl" ? "pl-PL" : "en-GB",{hour:"2-digit", minute:"2-digit"}))
     : t("Not syncing just now: {REASON}. Sync tries again by itself, and nothing on this computer is lost.");
-  return named(frame,"{REASON}",syncPassingWords(s.why, provider));
+  return named(frame,"{REASON}",syncPassingWords(s.why, provider, s.line==="refused"));
 }
 /* The row's small line for view `s`, the person signed in with `provider`. */
 function syncLine(s, provider){
@@ -538,10 +539,11 @@ function syncLine(s, provider){
   if(s.line==="first") return t("Connecting for the first time.");
   if(s.line==="checking") return t("Checking for changes.");
   if(s.line==="unconnected") return t("Not connected yet. Sync starts once this computer reaches our service.");
-  if(s.line==="signin-refused") return t("Not syncing while signing in on this computer is refused. Sync resumes once signing in works, and nothing on this computer is lost.");
-  if(s.line==="again" || s.line==="spent") return syncPassing(s, provider);
-  /* A lapse with no reason known, and a refusal the next daily look may pass in the same words. */
-  if(s.line==="refused" || s.line==="lapsed") return t("Not syncing just now. Sync resumes when this computer reaches our service, and nothing on this computer is lost.");
+  if(s.line==="resuming") return t("Sync starts again in a moment.");
+  if(s.line==="signin-refused") return t("Not syncing while signing in on this computer is refused. Sync runs once signing in works, and nothing on this computer is lost.");
+  if(s.line==="again" || s.line==="spent" || s.line==="refused") return syncPassing(s, provider);
+  /* A lapse with no reason known. */
+  if(s.line==="lapsed") return t("Not syncing just now. Sync resumes when this computer reaches our service, and nothing on this computer is lost.");
   if(s.line==="paused") return named(t("Paused since {DATE}. It resumes when this computer reaches our service."),"{DATE}",syncDate(s.since));
   if(s.line==="conflict") return t("Changed on two computers: the newer change is in use, and the older one is kept, so nothing is lost.");
   if(s.line==="full") return t("Sync is full, so new changes stay on this computer until something is removed.");

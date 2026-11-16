@@ -9124,16 +9124,18 @@ What you type stays in this browser only.`;
     "this computer cannot reach the {PROVIDER} account": "ten komputer nie może połączyć się z kontem {PROVIDER}",
     "this computer cannot reach our service": "ten komputer nie może połączyć się z naszą usługą",
     "our service is busy": "nasza usługa jest teraz zajęta",
+    "our service turned down this computer's last request": "nasza usługa odrzuciła ostatnią prośbę tego komputera",
     "Not syncing just now: {REASON}. Sync tries again by itself, and nothing on this computer is lost.": "Synchronizacja chwilowo nie działa: {REASON}. Sama ponowi próbę, a na tym komputerze nic nie ginie.",
     "Not syncing just now: {REASON}. Sync tries again at {TIME}, and nothing on this computer is lost.": "Synchronizacja chwilowo nie działa: {REASON}. Ponowi próbę o {TIME}, a na tym komputerze nic nie ginie.",
     "Not syncing: {REASON}. Sync tries again within a day, and nothing on this computer is lost.": "Synchronizacja nie działa: {REASON}. Ponowi próbę w ciągu doby, a na tym komputerze nic nie ginie.",
-    "Not syncing while signing in on this computer is refused. Sync resumes once signing in works, and nothing on this computer is lost.": "Synchronizacja wstrzymana, dopóki logowanie na tym komputerze jest odrzucane. Zostanie wznowiona, gdy logowanie się powiedzie, a na tym komputerze nic nie ginie.",
+    "Not syncing while signing in on this computer is refused. Sync runs once signing in works, and nothing on this computer is lost.": "Synchronizacja nie działa, dopóki logowanie na tym komputerze jest odrzucane. Ruszy, gdy logowanie się powiedzie, a na tym komputerze nic nie ginie.",
     "Your organisation has turned this on, and {PROVIDER} has not yet let Etiuda use its folder in this account.": "Organizacja włączyła tę funkcję, ale konto {PROVIDER} nie zezwala jeszcze Etiudzie na użycie jej folderu na tym koncie.",
     "Allow…": "Zezwól…",
     "Turned off everywhere from another computer. Your organisation keeps sync on for this computer, so a new synced copy starts from what is on it.": "Wyłączona wszędzie z innego komputera. Organizacja utrzymuje synchronizację na tym komputerze, więc nowa zsynchronizowana kopia powstaje z jego zawartości.",
     "Connecting for the first time.": "Trwa pierwsze łączenie.",
     "Checking for changes.": "Trwa sprawdzanie zmian.",
     "Not connected yet. Sync starts once this computer reaches our service.": "Jeszcze bez połączenia. Synchronizacja ruszy, gdy komputer połączy się z naszą usługą.",
+    "Sync starts again in a moment.": "Synchronizacja wznowi się za chwilę.",
     "Not syncing just now. Sync resumes when this computer reaches our service, and nothing on this computer is lost.": "Synchronizacja chwilowo nie działa. Zostanie wznowiona, gdy komputer połączy się z naszą usługą, a na tym komputerze nic nie ginie.",
     "Sign-in": "Logowanie",
     "{PROVIDER} · work accounts of the organisation": "{PROVIDER} · konta służbowe organizacji",
@@ -28238,7 +28240,7 @@ What you type stays in this browser only.`;
       if (b.dataset.signinAct) signinAct(b.dataset.signinAct, b);
     });
   }
-  var SYNC_LINES = ["on", "off", "ending", "ungiven", "ungiven-held", "org-off", "unavailable", "anew", "first", "checking", "unconnected", "signin-refused", "again", "spent", "refused", "lapsed", "paused", "conflict", "full", "noseat", "ask"];
+  var SYNC_LINES = ["on", "off", "ending", "ungiven", "ungiven-held", "org-off", "unavailable", "anew", "first", "checking", "unconnected", "resuming", "signin-refused", "again", "spent", "refused", "lapsed", "paused", "conflict", "full", "noseat", "ask"];
   function syncRead(v) {
     const o = v && typeof v === "object" ? v : {};
     if (o.shown !== true || SYNC_LINES.indexOf(o.line) < 0) return { shown: false, line: "", on: false, held: false, why: "", since: 0, say: "", askNow: false, at: 0 };
@@ -28276,18 +28278,19 @@ What you type stays in this browser only.`;
   function syncDate(at) {
     return new Date(at).toLocaleDateString(uiLang() === "pl" ? "pl-PL" : "en-GB", { day: "numeric", month: "long" });
   }
-  function syncPassingWords(why, provider) {
+  function syncPassingWords(why, provider, refused) {
+    if (refused) return t("our service turned down this computer's last request");
     if (why === "offline") return named(t("this computer cannot reach the {PROVIDER} account"), "{PROVIDER}", SIGNIN_NAMES[provider] || "Microsoft");
     if (why === "rate") return t("our service is busy");
     return t("this computer cannot reach our service");
   }
   function syncPassing(s, provider) {
-    const frame = s.line === "spent" ? t("Not syncing: {REASON}. Sync tries again within a day, and nothing on this computer is lost.") : s.at ? named(
+    const frame = s.line === "spent" || s.line === "refused" ? t("Not syncing: {REASON}. Sync tries again within a day, and nothing on this computer is lost.") : s.at ? named(
       t("Not syncing just now: {REASON}. Sync tries again at {TIME}, and nothing on this computer is lost."),
       "{TIME}",
       new Date(s.at).toLocaleTimeString(uiLang() === "pl" ? "pl-PL" : "en-GB", { hour: "2-digit", minute: "2-digit" })
     ) : t("Not syncing just now: {REASON}. Sync tries again by itself, and nothing on this computer is lost.");
-    return named(frame, "{REASON}", syncPassingWords(s.why, provider));
+    return named(frame, "{REASON}", syncPassingWords(s.why, provider, s.line === "refused"));
   }
   function syncLine(s, provider) {
     if (s.line === "org-off") return t("Your organisation has not turned this on.");
@@ -28300,9 +28303,10 @@ What you type stays in this browser only.`;
     if (s.line === "first") return t("Connecting for the first time.");
     if (s.line === "checking") return t("Checking for changes.");
     if (s.line === "unconnected") return t("Not connected yet. Sync starts once this computer reaches our service.");
-    if (s.line === "signin-refused") return t("Not syncing while signing in on this computer is refused. Sync resumes once signing in works, and nothing on this computer is lost.");
-    if (s.line === "again" || s.line === "spent") return syncPassing(s, provider);
-    if (s.line === "refused" || s.line === "lapsed") return t("Not syncing just now. Sync resumes when this computer reaches our service, and nothing on this computer is lost.");
+    if (s.line === "resuming") return t("Sync starts again in a moment.");
+    if (s.line === "signin-refused") return t("Not syncing while signing in on this computer is refused. Sync runs once signing in works, and nothing on this computer is lost.");
+    if (s.line === "again" || s.line === "spent" || s.line === "refused") return syncPassing(s, provider);
+    if (s.line === "lapsed") return t("Not syncing just now. Sync resumes when this computer reaches our service, and nothing on this computer is lost.");
     if (s.line === "paused") return named(t("Paused since {DATE}. It resumes when this computer reaches our service."), "{DATE}", syncDate(s.since));
     if (s.line === "conflict") return t("Changed on two computers: the newer change is in use, and the older one is kept, so nothing is lost.");
     if (s.line === "full") return t("Sync is full, so new changes stay on this computer until something is removed.");

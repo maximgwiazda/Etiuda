@@ -351,7 +351,7 @@ function pausedLine(cert, now, signinRefused) {
    holds the switch, the row's own button asking instead), "unavailable" where
    the folder could not be reached for a reason the person cannot mend (never offline), "noseat", "anew", "first" and "checking" (a look
    running), "signin-refused", "again" and "spent" (a passing failure, `why` its reason), "refused" (`why` "signin", "store" or "relay"),
-   "paused" after PAUSE_SAY_MS, "lapsed" before it, "unconnected" (no look yet in this run), "full", "conflict" (a version kept aside),
+   "paused" after PAUSE_SAY_MS, "lapsed" before it, "unconnected" (no look yet in this run, none had sync on here before), "resuming" (the same, one had), "full", "conflict" (a version kept aside),
    else "on", the first that holds in that order. Nothing of a key, a store or a token. Pure. */
 function storeRow(o) {
   if (o.provider !== "microsoft" && o.provider !== "google") return { shown: false };
@@ -382,7 +382,9 @@ function storeRow(o) {
   if (p) return Object.assign(base, { line: "paused", since: p.since });
   /* A lapse under PAUSE_SAY_MS, no reason known: nothing syncs on a certificate that has ended. */
   if (Number.isSafeInteger(o.until) && o.until > 0 && o.now >= o.until) return Object.assign(base, { line: "lapsed" }); /* plant:row-lapsed */
-  /* No look yet in this run: nothing syncs until the first, which the start's renewal makes. */
+  /* No look yet in this run: nothing syncs until the first, which the start's renewal makes. "resuming" where a look found sync on here
+     before (ever), "unconnected" where none has. */
+  if (!look && o.ever === true) return Object.assign(base, { line: "resuming" }); /* plant:row-resuming */
   if (!look) return Object.assign(base, { line: "unconnected" }); /* plant:row-unconnected */
   if (Number(o.conflicts) > 0 && o.full !== true) return Object.assign(base, { line: "conflict" }); /* plant:row-conflict */
   return Object.assign(base, { line: o.full === true ? "full" : "on" }); /* plant:row-full */
