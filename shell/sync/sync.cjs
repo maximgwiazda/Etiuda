@@ -213,7 +213,7 @@ function mergeOnce(o) {
   const valueOf = (e, item) => {
     if (e.h === null) return null;
     if (item.startsWith("k:")) return typeof e.v === "string" ? e.v : undefined;
-    const text = typeof o.fileOf === "function" ? o.fileOf(e.by, item) : null;
+    const text = typeof o.fileOf === "function" ? o.fileOf(e.by, item, e.h) : null;
     return typeof text === "string" && sha(text) === e.h ? text : undefined;
   };
   /* This computer's own entry's value, from what it holds now (its ledger keeps no value). */
@@ -365,7 +365,15 @@ function createStoreSync(o) {
       const doc = syncRead(String(io.read(rel) || ""), m[1]);
       if (doc) out.push(doc);
     }
-    fileOf.f = (by, item) => { const b = io.read(fileRel(by, item)); return b ? b.toString("utf8") : null; };
+    /* A catalog's bytes under that hash from the place of whichever computer holds them: the one that wrote it, any on the list, or this
+       one, since the writer may have left the list or never placed them in this store. */
+    fileOf.f = (by, item, h) => {
+      for (const id of new Set([by, ...ids, o.me.id])) {
+        const b = io.read(fileRel(id, item)), text = b ? b.toString("utf8") : null;
+        if (text !== null && (h === undefined || sha(text) === h)) return text;
+      }
+      return null;
+    };
     return { list: out, fileOf: fileOf.f };
   }
   /* One merge into the mirror of the store this computer last synced to; nothing where it has synced to none yet. */

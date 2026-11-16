@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-sync-"));
-const EXPECTED = 50;
+const EXPECTED = 52;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -648,8 +648,30 @@ async function main() {
         own, onlyHere, kept: [a.sync().state().kept.length, b.sync().state().kept.length] }) };
   }
 
+  /* C2b: a catalog written on a reaches b; a then leaves the store (This computer), and c joins: the catalog's entry on b still names a
+     as its writer, and its bytes are under b's place alone, so c takes them from there, by their hash. */
+  async function leftWriterScene() {
+    const { w, a, b } = await twoOn("c2b");
+    const X = JSON.stringify({ kind: "etiuda-catalog", format: 2, id: "work", cards: [] });
+    a.desk.files["Work.ec"] = X;
+    await settle(a, b);
+    const onB = b.desk.files["Work.ec"] === X && !!b.sync().state().ledger["f:Work.ec"] && b.sync().state().ledger["f:Work.ec"].by === a.me.id;
+    const la = await a.look();
+    const left = await ST.storeLeave({ folder: ST.folderFor("microsoft", { ask: w.f.askFor(w.f), token: () => "access-token" }), keys: a.sealed.keys, me: { pub: a.me.pub },
+      relay: relayIo(w.R, w.relaySent, a.me), cert: async () => la.store });
+    a.stopAll();
+    const c = computer(w, "c");
+    const lc = await c.look();
+    await b.look();
+    await settle(b, c);
+    const listed = (ST.keyRead(w.f.text) || { devices: [] }).devices.map(d => d.id);
+    const ok = onB && left.ok === true && lc.state === "on" && listed.indexOf(a.me.id) < 0 && c.desk.files["Work.ec"] === X && c.kept.length === 0;
+    return { ok, detail: brief({ onB, left: left.ok, c: lc.state, aListed: listed.indexOf(a.me.id) >= 0, onC: c.desk.files["Work.ec"] === X, keptC: c.kept.length }) };
+  }
+
   const results = {};
   const LEGS = [
+    ["C2b", leftWriterScene, "a catalog whose writer has left the store reaches a computer that joins after, from the place of a listed computer holding it under the same hash"],
     ["J1", joinScene, "a second computer joining a store that holds content takes the store's settings, removes its untouched sample where the store removed it, keeps its own card and catalog on both, and offers a setting only it holds, with no version kept"],
     ["G5k", keptGrowthScene, "the same card changed on both computers offline three rounds running: each keeps the earlier writer's last round alone, the overtaken ones let go"],
     ["G5i", itemsCapScene, "another computer's sync file past ITEMS_MAX items is refused whole, not read with its tail dropped; one at the cap is read whole"],
@@ -707,6 +729,7 @@ async function main() {
   const PLANTS = [
     ["join older", "J1", swap("const t = joining ? 0 : Math.max(", "const t = Math.max("), "what a joining computer held before is stamped now, so its settings outrank the store's"],
     ["join sample", "J1", lift("join-pristine"), "an untouched sample on a joining computer taken as its own, so the one deleted elsewhere comes back as a conflict"],
+    ["bytes by the writer alone", "C2b", swap("for (const id of new Set([by, ...ids, o.me.id])) {", "for (const id of new Set([by])) {"), "a catalog's bytes read only under the computer that wrote it, so once it has left the store they never arrive"],
     ["join reached", "J1", lift("join-reached"), "a computer that has never synced merges before a cycle reached the store, so its first merge cannot know it joins"],
     ["one item added", "C7", swap("return SETTINGS.indexOf(s.slice(2)) >= 0 || LAYER_RE.test(s.slice(2)); /* plant:follows */", "return SETTINGS.indexOf(s.slice(2)) >= 0 || LAYER_RE.test(s.slice(2)) || s === \"k:eTeamKeys\"; /* plant:follows */"), "a team's keys follow"],
     ["later stands", "C8", swap("const stay = top.reduce(", "const stay = mine && top.some(e => same(e, mine)) ? mine : top.reduce("), "each computer keeps its own in place, so where its own was the earlier the newer change is not in use"],
