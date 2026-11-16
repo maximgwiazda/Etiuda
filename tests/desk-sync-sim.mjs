@@ -89,6 +89,7 @@ function randomStep(r) {
 /* A walk: each computer signs in to the first account once, the first within its first four steps, the others anywhere in the walk's
    first two thirds, so a computer joins early, late, or before the first has uploaded anything. */
 function stepsOf(seed, max) {
+  if (seed >= ACCOUNT_FROM) return stepsOfAccount(seed);
   const r = rngOf(seed), len = 9 + r.int(Math.max(1, max - 11));
   const joinAt = [r.int(4), r.int(Math.ceil(len * 0.67)), r.int(Math.ceil(len * 0.67))];
   const out = [];
@@ -97,6 +98,30 @@ function stepsOf(seed, max) {
     out.push(randomStep(r));
   }
   return out.map((s, i) => Object.assign(s, { at: i }));
+}
+/* THE ACCOUNT QUESTION'S WALKS (seeds from ACCOUNT_FROM): computer 0 alone in the first account, or with computer 1 beside it; the
+   person works, signs out, the second account signs in on computer 0 and answers one of three ways and works, signs out, and the first
+   account comes back and answers one of three ways and works; ordinary edits and cycles between, nothing failing. Every pair of
+   answers on one and on two computers, in seeded orders. */
+const ACCOUNT_FROM = 1000000, ACCOUNT_SEEDS = 180;
+const ACCOUNT_NOISE = ["set", "field", "field", "fieldOwed", "land", "file", "file", "unfile", "cycle", "cycle", "look"];
+function stepsOfAccount(seed) {
+  const r = rngOf(seed), n = seed - ACCOUNT_FROM, two = n % 2 === 1, answers = ["start", "mine", "later"];
+  const second = answers[Math.floor(n / 2) % 3], first = answers[Math.floor(n / 6) % 3];
+  const out = [], on = two ? [0, 1] : [0];
+  const work = (k, cs) => { for (let i = 0; i < k; i++) { const st = randomStep(r); st.k = r.pick(ACCOUNT_NOISE); st.c = r.pick(cs); if (st.k === "set") st.key = r.pick(SETTING_KEYS); if (st.k === "field" || st.k === "fieldOwed") { st.op = r.pick(FIELD_OPS); st.m = r.pick(MEMBERS); } if (st.k === "file" || st.k === "unfile") st.name = r.pick(FILES); out.push(st); } };
+  out.push({ k: "join", c: 0, cut: false });
+  work(2 + r.int(4), [0]);
+  if (two) { out.push({ k: "join", c: 1, cut: false }); work(1 + r.int(3), on); }
+  out.push({ k: "quiet", c: 0 });
+  out.push({ k: "signInOther", c: 0 });
+  out.push({ k: "answer", c: 0, choice: second });
+  work(1 + r.int(3), on);
+  out.push({ k: "quiet", c: 0 });
+  out.push({ k: "signInBack", c: 0 });
+  out.push({ k: "answer", c: 0, choice: first });
+  work(1 + r.int(3), on);
+  return out.map((st, i) => Object.assign(st, { at: i }));
 }
 function describe(st) {
   const extra = st.key || (st.op ? st.op + " " + st.m : "") || st.name || st.choice || (st.cut ? "cut" : "");
@@ -354,7 +379,23 @@ function answer(w, c, choice) {
   /* (j) is judged against what the account's store held at the relay as the person answered. */
   w.promised.push({ X, c: c.i, step: w.stepNo, choice, held: storeHeldNow(w, X) });
   if (choice === "mine" && c.s.who !== X) {
+    /* The desk claimed by another account: what an earlier account wrote here and never sent to its own store is handed to the one
+       claiming it, by that person's answer, and judged no longer as the earlier account's. */
+    const desk = itemsOf(c.desk.keys, c.desk.files), sent = new Map();
+    for (const wr of w.writes) {
+      if (wr.comp !== c.i || !wr.acct || wr.acct === X || wr.claimed) continue;
+      if (!sent.has(wr.acct)) sent.set(wr.acct, storeHeldNow(w, wr.acct));
+      const inStore = sent.get(wr.acct).get(wr.item), here = has(desk, wr.item) ? desk[wr.item] : null;
+      if (wr.value !== null && here === wr.value && !(inStore && inStore.has(sha(wr.value)))) wr.claimed = true;
+    }
+    /* The person sees what the desk holds as they claim it: a later write here is made over those values, as far as they are this
+       account's own writes; another account's stay unanswered for, so its copy is still judged. */
     c.knows = new Map();
+    for (const [item, value] of Object.entries(desk)) {
+      const set = new Set();
+      for (const wr of w.writes) if (wr.item === item && wr.value === value && wr.acct === X) { set.add(wr.id); for (const o of wr.over) set.add(o); }
+      if (set.size) c.knows.set(item, set);
+    }
     if (MODEL.answerMineFresh) { c.syncFile = { rt: "", ledger: {}, kept: [] }; if (c.sync) c.sync.stop(); c.sync = null; } /* model-plant:answer-mine-fresh */
   }
   if (choice === "start") {
@@ -641,7 +682,10 @@ function invariants(w) {
   }
   const groups = new Map();
   for (const wr of w.writes) {
-    if (over.has(wr.id) || wr.cancel || !wr.acct || (wr.pre && (wr.value === null || REF.isSetting(wr.item)))) continue;
+    /* A removal the same account's person made the item again after is no work lost: their later act stands (a same-named catalog made
+       anew on a computer that never held the old one, seeds 328 and 1000009). */
+    if (wr.value === null && w.writes.some(x => x.acct === wr.acct && x.item === wr.item && x.value !== null && x.step > wr.step)) continue;
+    if (over.has(wr.id) || wr.cancel || wr.claimed || !wr.acct || (wr.pre && (wr.value === null || REF.isSetting(wr.item)))) continue;
     const g = wr.acct + " " + wr.item;
     if (!groups.has(g)) groups.set(g, []);
     groups.get(g).push(wr);
@@ -654,6 +698,8 @@ function invariants(w) {
       const [desk, page] = itemsNow(c);
       if (wr.value === null ? !has(desk, wr.item) : desk[wr.item] === wr.value || page[wr.item] === wr.value) return true;
     }
+    /* Held in its account's store at the relay, though no computer syncs that account now (another account took the last one). */
+    { const held = storeHeldNow(w, wr.acct).get(wr.item), st = w.stores[wr.acct]; if (st && (wr.value === null ? !held : !!held && held.has(sha(wr.value)))) return true; }
     return w.comps.some(c => c.kept.concat(c.aside).some(k => k.item === wr.item && k.value === wr.value));
   };
   for (const list of groups.values()) {
@@ -766,8 +812,23 @@ async function main() {
     counts[r.inv] = (counts[r.inv] || 0) + 1;
     if (!firsts[r.inv]) firsts[r.inv] = { seed, steps: s, r };
   }
+  /* The account question's walks, each pair of answers on one and on two computers. */
+  const acct = { n: 0, steps: 0, first: null, counts: {} };
+  for (let seed = ACCOUNT_FROM; seed < ACCOUNT_FROM + ACCOUNT_SEEDS; seed++) {
+    const s = stepsOf(seed, MAX_STEPS), r = runWalk(seed, s);
+    acct.n++; acct.steps += s.length;
+    if (!r) continue;
+    acct.counts[r.inv] = (acct.counts[r.inv] || 0) + 1;
+    if (!acct.first) acct.first = { seed, steps: s, r };
+  }
+  if (!acct.first) check(true, "the account question: " + acct.n + " walks (every pair of answers, one and two computers) hold every invariant");
+  else {
+    const f = acct.first, short = shrink(f.seed, f.steps, f.r.inv, 400), again = runWalk(f.seed, short);
+    check(false, "the account question: " + Object.entries(acct.counts).map(([k, v]) => "(" + k + ") " + v).join(", ") + " of " + acct.n + " walks broken; the first, seed " + f.seed + ", (" + f.r.inv + ") shrunk to " + short.length + " steps: "
+      + short.map(describe).join(", ") + ": " + (again ? again.detail : f.r.detail) + "; replay: " + replay(f.seed, short));
+  }
   const ran = Date.now() - t0;
-  console.log("  " + count + " seeds from " + from + ", " + steps + " steps, in " + ran + " ms");
+  console.log("  " + count + " seeds from " + from + ", " + steps + " steps, and " + acct.n + " account walks of " + acct.steps + " steps, in " + ran + " ms");
   for (const inv of Object.keys(INVARIANTS)) {
     const f = firsts[inv];
     if (!f) { check(true, "(" + inv + ") " + INVARIANTS[inv] + " holds on every seed"); continue; }
