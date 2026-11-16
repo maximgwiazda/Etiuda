@@ -38,10 +38,12 @@
  *   - a tip with no merge base with the base ref.
  *
  * WHAT "HELD" MATCHES, case-insensitively:
- *   - in the subject: the word "held" as a whole word, anywhere;
+ *   - in the subject: "held" followed by "for" or "until", only where "held" begins the subject or a sentence in it
+ *     (after ". ", "! ", "? " or ": ", since subjects are written "Desk: ..."), after opening brackets or quotes at most;
  *   - in the body: "held" followed by "for" or "until", only where "held" begins a line (after indentation, one
  *     bullet or quote marker and opening brackets or quotes) or begins a sentence (after ". ", "! " or "? ").
- *     So "Held for deploy day" and "Done. Held until Max rules." match, "the files were held for review" does not.
+ *     So "Held for deploy day", "Relay: held until the service deploys" and "Done. Held until Max rules." match, while
+ *     "the files were held for review", "the first account is held as the second was" and "held in the shell" do not.
  *
  * Exit 0 when every tip passes, 1 when any is refused, 2 on a usage or git error. The last line is
  *     #fold-check tips=<n> incoming=<total> held=<n> refused=<n>
@@ -53,12 +55,12 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-export const HELD_SUBJECT = /\bheld\b/i;
+export const HELD_SUBJECT = /(?:^|[.!?:]\s+)[("'[]*held\s+(?:for|until)\b/i;
 export const HELD_BODY = /(?:^|[.!?]\s+)[("'[]*held\s+(?:for|until)\b/i;
 
 export const USAGE = "usage: node tools/fold-check.mjs --base <ref> --note <file> [--max-list <n>] <tip> [<tip>...]\n"
   + "note lines read: `brings: <tip> <n>` and `lifted: <hash> by <who> at <when>`; any mismatch of a count refuses;\n"
-  + "'held' matches as a whole word in a subject, and in a body only as 'Held for' or 'Held until' beginning a line or sentence;\n"
+  + "'held' matches only as 'Held for' or 'Held until' beginning a subject, a body line or a sentence (a subject's also after ': ');\n"
   + "exit 0 pass, 1 refused, 2 usage or git error. See the header of tools/fold-check.mjs.";
 
 /** Whether a commit message says it is held: the matching rule is in the header. */

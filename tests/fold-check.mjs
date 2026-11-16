@@ -75,6 +75,8 @@ function build(lab) {
   mk("heldsub", "main", ["Held for deploy day: the new ids"]);
   mk("heldbody", "main", ["Add the ids", "Why: needed.\n\nHeld for Max's ruling.\n"]);
   mk("heldsentence", "main", ["Add the ids again", "Done in full. Held until the release is signed."]);
+  mk("subjprose", "main", ["Sync: the first account is held as the second was"], ["Harness: the ended mark held in the shell"]);
+  mk("subjcolon", "main", ["Relay: held until the service deploys"]);
   mk("prose", "main", ["Tidy the store", "The files were held for review by the lead and then released; nothing here waits."]);
   mk("oldtwo", "old", ["Old one"], ["Old two"]);
   return repo;
@@ -93,6 +95,8 @@ function scenarios(tool, lab, repo) {
   const hs = git(repo, "rev-parse", "heldsub");
   r.lifted = run(tool, repo, "brings: heldsub 1\n- lifted: " + hs.slice(0, 8) + " by Max at 2026-11-16 12:00\n", [...base, "heldsub"]);
   r.stale = run(tool, repo, "brings: clean 2\nlifted: " + hs.slice(0, 8) + " by Max at 2026-11-16 12:00\n", [...base, "clean"]);
+  r.subjProse = run(tool, repo, "brings: subjprose 2\n", [...base, "subjprose"]);
+  r.subjColon = run(tool, repo, "brings: subjcolon 1\n", [...base, "subjcolon"]);
   r.prose = run(tool, repo, "brings: prose 1\n", [...base, "prose"]);
   r.old = run(tool, repo, "brings: oldtwo 2\n", [...base, "oldtwo"]);
   r.hashName = run(tool, repo, "brings: " + git(repo, "rev-parse", "clean").slice(0, 9) + " 2\n", [...base, "clean"]);
@@ -118,6 +122,10 @@ function main() {
       "fc4 a tip bringing fewer than declared is refused too: " + (r.fewer.refused[0] || "none"));
     check(r.heldSubject.code === 1 && r.heldSubject.refused.some(l => /says it is held/.test(l)) && r.heldSubject.last.includes("held=1"),
       "fc5 a held subject is refused: " + (r.heldSubject.last));
+    check(r.subjProse.code === 0 && r.subjProse.last === "#fold-check tips=1 incoming=2 held=0 refused=0",
+      "fc5b subjects with 'is held as' and 'held in the shell' pass: " + r.subjProse.last);
+    check(r.subjColon.code === 1 && r.subjColon.refused.some(l => /says it is held/.test(l)),
+      "fc5c a subject 'Relay: held until the service deploys' is refused: " + (r.subjColon.refused[0] || "none"));
     check(r.heldBody.code === 1 && r.heldBody.refused.some(l => /says it is held/.test(l)),
       "fc6 a body line 'Held for ...' is refused: " + (r.heldBody.refused[0] || "none"));
     check(r.heldSentence.code === 1 && r.heldSentence.refused.some(l => /says it is held/.test(l)),
@@ -149,7 +157,7 @@ function main() {
     const plant = (name, from, to, seen, what) => {
       if (PLANTS_OFF) { skip(name + " plant: " + what + " is caught (ETIUDA_PLANTS=off)"); return; }
       const src = fs.readFileSync(TOOL, "utf8");
-      const spoiled = src.replace(from, to);
+      const spoiled = src.split(from).join(to);
       if (spoiled === src) { check(false, name + " plant: the spoiling did not apply to the tool's source"); return; }
       const copy = path.join(lab, "planted-" + name + ".mjs");
       fs.writeFileSync(copy, spoiled);
@@ -160,6 +168,10 @@ function main() {
       pr => pr.fewer.code === 0, "a tool that lets a fold bring fewer than declared");
     plant("p2", "(?:for|until)", "(?:xx)",
       pr => pr.heldBody.code === 0 && pr.heldSentence.code === 0, "a tool whose body check no longer sees 'Held for' or 'Held until'");
+    plant("p5", "[.!?:]", "[.!?]",
+      pr => pr.subjColon.code === 0, "a tool whose subject rule no longer sees a sentence after a colon");
+    plant("p6", "(?:for|until)", "(?:xx|yy)",
+      pr => pr.heldSubject.code === 0, "a tool whose subject rule no longer sees 'Held for'");
     plant("p3", "if (!l.hit) {", "if (false) {",
       pr => pr.stale.code === 0, "a tool that lets a stale lifted line stand");
     plant("p4", "if (hits.length === 0) refused.push", "if (false) refused.push",
