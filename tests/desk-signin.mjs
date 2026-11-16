@@ -825,7 +825,8 @@ const DOORJOIN_DECLS = ["function signinDoorsShown(", "function signinDoorJoin("
 const DOORJOIN_STANDS = ["init", "readDesk", "signinState", "branchIdentity", "signinCertOk", "pinnedLead", "joinView", "inviteBeforeFor", "joinCommit",
   "newestEpoch", "teamPins", "teamSeen", "teamPinFrom", "relayMirrorOf", "teamShown", "teamRelayGone", "relayCatalogNamed", "persistDeskEnvelope",
   "relayRun", "catalogFolderChanged", "leadPrint", "crypto", "URL", "Date", "signinDoorAddressOk", "SIGNIN_DESK_PACKED",
-  "deskBranch", "branchIdOf", "teamRoster", "teamLeft", "teamBarred", "sayJoinPolicy", "path", "process", "signinDoorsSigned", "signinRevokedHas", "signinCertEarly"];
+  "deskBranch", "branchIdOf", "teamRoster", "teamLeft", "teamBarred", "sayJoinPolicy", "path", "process", "signinDoorsSigned", "signinRevokedHas", "signinCertEarly",
+  "policyWaits"];
 /* The door's offer and its join with stand-ins: `st` {held, pinned, join, pins, counts}. */
 function loadDoorJoin(s, st, swap) {
   let text = DOORJOIN_DECLS.map(d => tryDeclText(d)).filter(Boolean).join("\n");
@@ -843,7 +844,7 @@ function loadDoorJoin(s, st, swap) {
     catalogFolderChanged: () => {}, leadPrint: pub => crypto.createHash("sha256").update(Buffer.from(String(pub), "hex")).digest("hex").slice(0, 16),
     crypto, URL, Date: { now: () => NOW }, signinDoorAddressOk: st.addressOk || s.signinDoorAddressOk,
     SIGNIN_DESK_PACKED: st.packed === undefined ? true : st.packed, signinDoorsSigned: s.signinDoorsSigned, signinRevokedHas: s.signinRevokedHas,
-    signinCertEarly: s.signinCertEarly };
+    signinCertEarly: s.signinCertEarly, policyWaits: () => false };
   const body = "let deskKeys = {}, teamJoin = init.join, teamStamp = \"x\", joinTold = true;\n" + text
     + "\nreturn { signinDoorsShown, signinDoorJoin, join: () => teamJoin };";
   return new Function(...DOORJOIN_STANDS, body)(...DOORJOIN_STANDS.map(n => vals[n]));
@@ -2007,8 +2008,11 @@ CASES.labOnly = () => {
   const pageNames = fs.readdirSync(path.join(ROOT, "src", "modules")).filter(f => /ETIUDA_SIGNIN_LAB/.test(fs.readFileSync(path.join(ROOT, "src", "modules", f), "utf8")));
   const env = /process\.env\.ETIUDA_SIGNIN_LAB\b|process\.env\[/g;
   return !!block && n(/process\.env\.ETIUDA_SIGNIN_LAB\b/g) === 2 && (block.match(env) || []).length === 2
-    /* The one other assignment is machine policy's pin (decision 49, tests/desk-managed.mjs), which narrows the table and never names one. */
-    && n(/(?<!let )\bSIGNIN_PROVIDERS = /g) === 2 && n(/\n  SIGNIN_PROVIDERS = signinPinTable\(SIGNIN_PROVIDERS, managed\); \/\* plant:pin-taken \*\/\n/g) === 1
+    /* The two other assignments are machine policy's pin (decision 49, tests/desk-managed.mjs), which narrows the shipped table and never
+       names one, and the shipped table itself while policy has not answered (tests/join-policy.mjs 19p). */
+    && n(/(?<!let )\bSIGNIN_PROVIDERS = /g) === 3 && n(/\n  const pinned = signinPinTable\(signinTableBase, managed\);\n/g) === 1
+    && n(/\n  SIGNIN_PROVIDERS = managed\.waiting === true \? signinTableBase : pinned; \/\* plant:signin-file-unpinned \*\/\n/g) === 1
+    && n(/\n  SIGNIN_PROVIDERS = pinned; \/\* plant:pin-taken \*\/\n/g) === 1
     && n(/(?<!let )\bSIGNIN_SERVICE = /g) === 1 && n(/(?<!let )\bSIGNOUT_SERVICE = /g) === 1
     && n(/\bsigninLabUse\(/g) === 3 && /\(testServiceOn = signinLabUse\(signinLabRead\(JSON\.stringify\(fields\)\)\)\)/.test(MAIN) && n(/\bsigninLabOn = true/g) === 1 && /SIGNIN_PROVIDERS = [^\n]*\n  SIGNIN_SERVICE = lab\.signin;\n  SIGNOUT_SERVICE = lab\.signout;/.test(MAIN)
     && !/ipcMain\.(on|handle)\([^\n]*(signinLab|SIGNIN_LAB)/.test(MAIN) &&!/ETIUDA_SIGNIN_LAB/.test(PRELOAD) && pageNames.length === 0;
@@ -2976,7 +2980,7 @@ CASES.fileMax = (s, swap) => {
     const fsStand = { statSync: () => ({ size }), readFileSync: () => { reads++; return kept; } };
     /* signinState also reads machine policy and pins the provider table by it (the sync line's managed half): no policy here. */
     const st = new Function("fs", "path", "app", "SIGNIN_FILE", "SIGNIN_FILE_MAX", "signinFileRead", "SIGNIN_DESK_PACKED", "branchIdentity", "signinFileHeld",
-      "managedPolicy", "signinPinTable", "let signinStore, SIGNIN_PROVIDERS = {};\n" + text + "\nreturn signinState();")(fsStand, path, { getPath: () => "/ud" }, "signin.json",
+      "managedPolicy", "signinPinTable", "let signinStore, SIGNIN_PROVIDERS = {}, signinTableBase, signinPinStamp = \"\";\n" + text + "\nreturn signinState();")(fsStand, path, { getPath: () => "/ud" }, "signin.json",
       s.SIGNIN_FILE_MAX, s.signinFileRead, true, () => ({ key: DESK_KEY }), s.signinFileHeld, () => ({ any: false }), table => table);
     return { reads, held: !!st.held, cert: !!(st.held && st.held.cert) };
   };
@@ -3766,9 +3770,10 @@ check(outside.slice().sort().join() === expectOutside.slice().sort().join(),
   "ds5a nothing local is gated: outside its section the shell names the sign-in only to require its loopback, to arm the renewal and to write the seat after a join: " + outside.join(" "));
 const modules = fs.readdirSync(path.join(ROOT, "src", "modules")).filter(n => n.endsWith(".js"));
 const readers = modules.filter(n => /\bsignin(State|Stop|Out|Check|Again)\b|\bsignIn\(|onSignin/.test(fs.readFileSync(path.join(ROOT, "src", "modules", n), "utf8")));
-check(readers.join() === "signin.js" && /function signinShown\(v\)\{ return !!\(v && \(v\.offered\.length \|\| v\.signedIn\)\); \}/.test(PAGE)
+check(readers.join() === "signin.js" && /function signinShown\(v\)\{ return !!\(v && \(v\.offered\.length \|\| v\.signedIn \|\| signinWaiting\(v\)\)\); \}/.test(PAGE)
   && /if\(signinShown\(v\)\) groups\.push/.test(SETTINGS),
-  "ds5b on the page only signin.js asks the shell, and with nothing offered neither the door nor Account's card is drawn: " + readers.join(","));
+  "ds5b on the page only signin.js asks the shell, and with nothing offered and no wait for machine policy (tests/desk-managed.mjs mm-p8)"
+  + " neither the door nor Account's card is drawn: " + readers.join(","));
 const require = createRequire(import.meta.url);
 const syncer = require(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 check(syncer.isAllowedPath("desks/k-0123456789abcdef/seat.json") === true && syncer.isAllowedPath("desks/k-0123456789abcdef/seat.json.tmp") === false,

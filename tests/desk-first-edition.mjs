@@ -16,6 +16,9 @@ import { createLab } from "./lab-owner.mjs";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
+/* Every reg call is answered by the stand-in, the policy key as not there, so no read of this machine's registry fails into a wait
+   for machine policy (tests/reg-stand.cjs; review 09, finding 4). */
+nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 const EXPECTED = 2;
 const EN = "This desk waits for the team's lead to publish a first edition.";
 const EN_HTML = "This desk waits for the team&#39;s lead to publish a first edition.";

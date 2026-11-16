@@ -20,6 +20,9 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
+/* Every reg call is answered by the stand-in, the policy key as not there, so no read of this machine's registry fails into a wait
+   for machine policy (tests/reg-stand.cjs; review 09, finding 4). */
+nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 /* The floor: every leg below runs, or the file says it did not complete. */
 const EXPECTED = 31 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 3);
 

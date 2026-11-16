@@ -28,7 +28,7 @@ const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const SIGNIN = fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8");
 const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const CHECKS = 28, PLANTS = 37;
+const CHECKS = 29, PLANTS = 41;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -222,8 +222,9 @@ CASES.buy = s => s.buyManaged({ managed: { on: true } }) === true && s.buyManage
 /* ---- the wiring, read as text: where the state, the view, sign-out, Buy and the press take the policy ---------------------- */
 function wiringHolds(src) {
   const at = s => src.indexOf(s) >= 0;
-  return at("  const managed = managedPolicy();\n  SIGNIN_PROVIDERS = signinPinTable(SIGNIN_PROVIDERS, managed); /* plant:pin-taken */")
-    && at("  signinStore.managed = managed;\n")
+  return at("  const managed = managedPolicy(), stamp = JSON.stringify(managed);\n")
+    && at("  const pinned = signinPinTable(signinTableBase, managed);\n")
+    && at("  SIGNIN_PROVIDERS = pinned; /* plant:pin-taken */\n  signinPinStamp = stamp;\n  signinStore.managed = managed;\n")
     && at("if (m && m.any) view.managed = {")
     && at("  if (signinAccountKept(s)) return signinView(); /* plant:out-managed */")
     && at("  if (view.managed) view.managed.keeps = signinAccountKept(st); /* plant:view-keeps */")
@@ -410,6 +411,26 @@ CASES.heldTo = async (s, set, pg) => {
     && allowed.indexOf("Microsoft · accounts the organisation allows") >= 0 && pl.indexOf("Microsoft · konta dopuszczone przez organizację") >= 0;
 };
 
+/* mm-p8: machine policy not read yet (the shell's policyWaits, review 09 finding 4): the panel and Account say the desk waits for the
+   organisation's settings, in their own words (the copywriter's placeholders), offer no provider, Buy or code, and never say the
+   computer is managed; English and Polish. With no policy and nothing offered there is no door, as before. */
+const WAIT_ON = { on: true, shared: false, personal: false, provider: "", tenant: false, closed: true, contact: "", waiting: true };
+const WAIT_WORDS = { en: ["Etiuda is waiting for the organisation's settings.",
+  "It could not read yet what the organisation's IT set for this computer, so signing in waits until it can, and it tries again by itself."],
+  pl: ["Etiuda czeka na ustawienia organizacji.",
+  "Nie mogła jeszcze odczytać, co dział IT organizacji ustawił dla tego komputera, więc logowanie czeka, aż to się uda, a Etiuda sama próbuje ponownie."] };
+CASES.waiting = async (s, set, pg) => {
+  for (const lang of ["en", "pl"]) {
+    const W = WAIT_WORDS[lang], d = await drawn({ offered: [], managed: WAIT_ON }, lang, set, pg), all = words(d.acct + d.door);
+    if (d.moment !== "policy-waiting" || words(d.door).indexOf(W[0]) < 0 || words(d.door).indexOf(W[1]) < 0
+        || words(d.acct).indexOf(W[0]) < 0 || words(d.acct).indexOf(W[1]) < 0) return false;
+    if (/Managed by your organisation|Zarządzane przez organizację/.test(all) || /data-e-provider/.test(d.acct + d.door)
+        || d.acct.indexOf("data-e-open=\"buy\"") >= 0 || all.indexOf(CODE) >= 0) return false;
+  }
+  const none = await drawn({ offered: [] }, "en", set, pg);
+  return none.door === "" && none.acct.indexOf("data-signin-waiting") < 0;
+};
+
 /* ---- the run ---------------------------------------------------------------------------------------------------------- */
 let S = null;
 try { if (!sliced) S = shellOf(null); } catch (e) { sliced = e.message; }
@@ -440,6 +461,7 @@ const LIST = [
   ["mm-p5", "catalogBothWays", "that the desk works on with its catalog is said only where it holds one, English and Polish, with or without SupportContact"],
   ["mm-p7", "noRoleWords", "no role: the copywriter's line, English and Polish, giving way to SupportContact where it is set"],
   ["mm-p6", "heldTo", "the Sign-in row in the one of three states that holds: the tenant's work accounts, any work account, or those the organisation allows"],
+  ["mm-p8", "waiting", "policy not read yet: the panel and Account say the desk waits for the organisation's settings, offer nothing to sign in with, buy or copy, and never say managed"],
 ];
 const run = async (name, s, set, pg) => { try { return !!(await CASES[name](s, set, pg)); } catch (e) { return false; } };
 for (const [id, name, what] of LIST) check(!!S && await run(name, S), id + " " + what);
@@ -519,6 +541,11 @@ if (!PLANTS_OFF && S) {
   await plantPage("mmp32", ["  const line=m.tenant ? t(\"{PROVIDER} · work accounts of the organisation\") : !m.personal ? t(\"{PROVIDER} · work accounts\") /* plant:held-to */",
     "  const line=m.tenant ? t(\"{PROVIDER} · work accounts of the organisation\") : true ? t(\"{PROVIDER} · work accounts\")"], "heldTo", "settings");
   await plantPage("mmp30", ["    case \"signin-notassigned\":\n", ""], "unmanagedRefused", "signin");
+  await plantPage("mmp34", ["function signinWaiting(v){ return !!(v && v.managed && v.managed.waiting); } /* plant:waiting-page */", "function signinWaiting(v){ return false; }"], "waiting", "signin");
+  await plantPage("mmp35", ["function signinShown(v){ return !!(v && (v.offered.length || v.signedIn || signinWaiting(v))); } /* plant:shown-waiting */",
+    "function signinShown(v){ return !!(v && (v.offered.length || v.signedIn)); }"], "waiting", "signin");
+  await plantPage("mmp36", ["  if(signinWaiting(v)) return {moment:\"policy-waiting\", say:signinWaitingWords()}; /* plant:door-waiting */", ""], "waiting", "signin");
+  await plantPage("mmp37", ["  if(signinWaiting(v)){ const s=signinWaitingWords(); return '<div class=\"sgn-top col\"><p class=\"sgn-say\" data-signin-waiting><b>'+esc(s[0])+'</b><span>'+esc(s[1])+'</span></p></div>'; } /* plant:card-waiting */", ""], "waiting", "settings");
   {
     const swap = ["    c ? named(t(\"To ask for access: {CONTACT}.\"),\"{CONTACT}\",c) : t(\"Its IT department can assign one.\")]; /* plant:no-role-contact */",
       "    t(\"Its IT department can assign one.\")];"];

@@ -58,7 +58,7 @@ function signinManagedRead(m){
   if(!m || typeof m!=="object") return null;
   return {on:m.on===true, shared:m.shared===true, personal:m.personal!==false,
     provider:m.provider==="microsoft" || m.provider==="google" ? m.provider : "", tenant:m.tenant===true, closed:m.closed===true,
-    contact:typeof m.contact==="string" && m.contact.length<=200 ? m.contact : "", stranded:m.stranded===true, keeps:m.keeps!==false};
+    contact:typeof m.contact==="string" && m.contact.length<=200 ? m.contact : "", stranded:m.stranded===true, keeps:m.keeps!==false, waiting:m.waiting===true};
 }
 /* A MANAGED COMPUTER (decision 49): nothing to buy, try or switch, and the account it has kept unless the computer is shared or the shell
    says it keeps none (an account that never held a seat here). */
@@ -90,6 +90,13 @@ function signinStrandedWords(v){
     (c ? named(t("To ask for access: {CONTACT}."),"{CONTACT}",c) : t("The organisation's IT department can have the profile keep it."))
       + " " + t("Everything else on this desk works as before; only signing in waits.")];
 }
+/* MACHINE POLICY HAS NOT ANSWERED (the shell's policyWaits): signing in waits for it, said in its own words and never as a managed
+   computer. */
+function signinWaiting(v){ return !!(v && v.managed && v.managed.waiting); } /* plant:waiting-page */
+function signinWaitingWords(){
+  return [t("Etiuda is waiting for the organisation's settings."), /* placeholder: the copywriter */
+    t("It could not read yet what the organisation's IT set for this computer, so signing in waits until it can, and it tries again by itself.")]; /* placeholder: the copywriter */
+}
 /* The reasons that sentence answers: a sign-in outside the pinned tenant always, and the organisation's refusals on a managed computer. */
 function signinRefusedHere(reason, v){
   return reason==="signin-tenant" || (signinManaged(v) && (reason==="signin-notassigned" || reason==="signin-notallowed")); /* plant:refused-here */
@@ -105,8 +112,8 @@ function signinNow(){
   try{ signinV=signinRead(h.signinState()); }catch(e){ signinV=signinRead(null); }
   return signinV;
 }
-/* Whether the door exists: a provider offered, or somebody signed in. */
-function signinShown(v){ return !!(v && (v.offered.length || v.signedIn)); }
+/* Whether the door exists: a provider offered, somebody signed in, or the wait for machine policy to say. */
+function signinShown(v){ return !!(v && (v.offered.length || v.signedIn || signinWaiting(v))); } /* plant:shown-waiting */
 /* FIRST-OPENING SIGN-IN GATE AND MEMORY: shown once on a desk that offers a provider, has
    nobody signed in, has never shown the screen before, and is not pinned by policy (a policy
    desk joins its team from HKLM policy without asking first). Written when the screen opens
@@ -359,6 +366,7 @@ function signinDoorOf(v){
   const p=signinParts(v), acct={act:"account", label:t("Account settings")};
   const ident={initial:p.initial, name:p.name, sub:p.sub, off:p.off};
   if(signinStranded(v)) return {moment:"stranded", say:signinStrandedWords(v)};
+  if(signinWaiting(v)) return {moment:"policy-waiting", say:signinWaitingWords()}; /* plant:door-waiting */
   if(v.busy) return {moment:"waiting", heading:t("Finish signing in in the browser"),
     line:named(t("The browser has opened {PROVIDER}'s sign-in page. Etiuda waits here and carries on by itself when you come back."),"{PROVIDER}",SIGNIN_NAMES[v.busy]),
     wait:named(t("Waiting for {PROVIDER}…"),"{PROVIDER}",SIGNIN_NAMES[v.busy]),
@@ -904,6 +912,8 @@ export {
   signinManaged,
   signinStranded,
   signinStrandedWords,
+  signinWaiting,
+  signinWaitingWords,
   signinKeepsAccount,
   signinCapHolds,
   signinNow,
