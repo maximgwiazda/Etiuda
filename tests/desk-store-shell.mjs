@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 172;
+const EXPECTED = 174;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -200,7 +200,7 @@ const TAIL_NAMES = ["storeView", "storeRoom", "storeSetNow", "storeAnswerNow", "
   "signinOutNow", "storeLeaveNow", "storeSyncApply", "storeSyncSoon", "storeSyncLocal"];
 const TAIL_STATE = ["storeNow", "storeAccess", "storeFlight", "storeLeaveFlight", "SIGNIN_SERVICE", "SIGNOUT_SERVICE", "STORE_RELAY", "SIGNIN_PROVIDERS", "storeSyncing", "storeConsentFlight", "storeSyncTimer", "storeSyncPristine", "storeAgainTimer"];
 const TAIL = "\n__test.T = {" + TAIL_NAMES.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ")
-  + ", setJoin: v => { teamJoin = v; }, setWindow: v => { theWindow = v; }, get: () => ({" + TAIL_STATE.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ") + "}) };";
+  + ", setJoin: v => { teamJoin = v; }, setPolicyText: v => { joinPolicyRead = joinPolicyFacts(String(v)); }, setWindow: v => { theWindow = v; }, get: () => ({" + TAIL_STATE.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ") + "}) };";
 function boot(src, o) {
   const opt = o || {};
   const UD = opt.ud || fs.mkdtempSync(path.join(WORK, "ud-"));
@@ -243,6 +243,7 @@ function boot(src, o) {
   } finally {
     for (const k of Object.keys(env)) { if (was[k] === undefined) delete process.env[k]; else process.env[k] = was[k]; }
   }
+  if (opt.policyText && holder.T) holder.T.setPolicyText(opt.policyText);
   return { T: holder.T, UD, said, opened, openedPaths, ipc, appOn, lab: env.ETIUDA_SIGNIN_LAB };
 }
 function filesUnder(dir) {
@@ -1444,7 +1445,7 @@ async function signinFlow(src, mode) {
   const world = worldOf({ refuseFolder: mode.quiet !== true });
   world.folderDelay = mode.folderDelay || 0;
   const b = browserOf(world, mode);
-  const shell = boot(src, { world, lab: labOf(), store: mode.store, browser: u => { setTimeout(() => { b.last = b.go(u).catch(() => {}); }, 5); } });
+  const shell = boot(src, { world, lab: labOf(), store: mode.store, policyText: mode.policyText, browser: u => { setTimeout(() => { b.last = b.go(u).catch(() => {}); }, 5); } });
   const { T } = shell;
   const e = { senderFrame: { parent: null, url: "file:///desk/engine/etiuda.html" }, returnValue: undefined };
   const provider = mode.provider || "microsoft";
@@ -1733,6 +1734,22 @@ async function consentSwitchScene(src) {
   return { ok, detail: brief({ ungiven, unclicked: unclicked.answer, answer: on.answer, opened: on.opened.length, scope: q.get("scope"), hint: q.get("login_hint"), prompt: q.get("prompt"),
     state: now && now.state, why: now && now.why, adminWhy: admin.now && admin.now.why, adminPress: adminPress.answer, adminOpened: adminPress.opened.length }) };
 }
+/* (g6h) POLICY HOLDING SYNC ON, THE FOLDER NEVER ALLOWED: the row says so ("ungiven-held"), and the row's button asks the provider as the
+   switch's On does: nothing without the person's trusted click, one request with it, then the look, sync on and still held. */
+const REG_HEAD = "Windows Registry Editor Version 5.00\r\n\r\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\r\n";
+const regText = vals => REG_HEAD + Object.entries(vals).map(([k, v]) => "\"" + k + "\"=\"" + String(v) + "\"\r\n").join("") + "\r\n";
+async function heldUngivenScene(src) {
+  const r = await signinFlow(src, { refuse: DECLINED, policyText: regText({ PersonalStore: "on" }) }), T = r.shell.T;
+  const view = T.storeView();
+  const unclicked = await pressOn(r, false);
+  r.mode.refuse = undefined;
+  const on = await pressOn(r, true);
+  const after = T.storeView();
+  const ok = view.line === "ungiven-held" && view.held === true && unclicked.answer === "click" && unclicked.opened.length === 0 && on.answer === "asked" && on.opened.length === 1
+    && folderPage(on.page, "on") && after.line === "on" && after.held === true;
+  return { ok, detail: brief({ view: view.line, held: view.held, unclicked: unclicked.answer, answer: on.answer, opened: on.opened.length, after: after.line, afterHeld: after.held }) };
+}
+
 /* (g2r) A second Google authorization of the same account that names no refresh token (the switch's consent sign-in) keeps the one
    already sealed, as a renewal does, so the person is not asked to sign in again. */
 async function keepRefreshScene(src) {
@@ -2202,6 +2219,7 @@ const LEGS = [
   ["rf", refusedViewScene, "a refusal by the licence service (another's store, a fresh sign-in wanted) or by the relay is told as refused with its reason, the relay's only as relay, and no short try is set"],
   ["lk", lookingScene, "the page is told when a look begins and ends; while it runs the row says first where no look has had sync on here, checking after; a start before its renewal, nothing looked at, says unconnected, with no date where no look ever found sync on"],
   ["ps", pausesScene, "a renewal refused at the service leaves sync on its current certificate, the row on; that certificate ended, signing in refused; no refusal, a lapse under three days lapsed and one of three or more the dated pause"],
+  ["g6h", heldUngivenScene, "policy holding sync on and the folder never allowed, the row says so and its button asks the provider only for the person's trusted click, once, then the look turns sync on, still held"],
   ["t12", offlineStartScene, "a desk starting with its certificate standing and neither the provider nor the service reached loads its sync with what it keeps, the row saying the folder is not reached and the look tried again by itself, which it is; the address back, the next try turns the store on and the sync runs"],
   ["gt", teamFolderScene, "joined to a folder team, the store's sync takes no team catalog into the person's store, reads the person's own catalog as removed nowhere, and writes nothing from the store into the team's mirror"],
   ["g1b", consentBusyScene, "while the switch's request for the folder waits on the browser the desk is busy to the page, and an answer after another account took the seat is neither taken for it nor looked with"],
@@ -2319,6 +2337,7 @@ const PLANTS = [
   ["lk", swap("  storeLooking = true; tellStore(); /* plant:store-look-told */", "  /* plant:store-look-told */"), "the look's start neither kept nor told, so the row says what it said before"],
   ["lk", swap("looking: storeLooking, ever: s.told === true, /* plant:store-view-looking */", "looking: false, ever: false, /* plant:store-view-looking */"), "the row told neither that a look runs nor that one had sync on before"],
   ["ps", swap("signinRefused: !!(held && held.said), conflicts:", "signinRefused: false, conflicts:"), "the row not told the sign-in is refused, so an ended certificate reads as a lapse"],
+  ["g6h", swap(" || !storePolicyNow().on) return \"none\"; /* plant:consent-ungiven */", " || storePolicyNow().held) return \"none\"; /* plant:consent-ungiven */"), "the press refused wherever policy holds the switch, so the row's button asks nothing"],
   ["t12", swap("  else if (s.held && s.held.cert && s.held.reached === false) storeTurn(); /* plant:store-renew-unreached */\n", ""), "a renewal that reached nothing makes no look, so the sync waits unloaded and nothing is tried again"],
   ["gt", swap("if (sayJoinPolicy().folder || relayHere() || folderTeamHere() || Object.keys(teamNeedsFolder).length) return \"\"; /* plant:sync-team-folder */", "if (false) return \"\"; /* plant:sync-team-folder */"), "the store's sync lists and writes the team's mirror as the person's folder"],
   ["w1", swap("  if (s.keys || s.leave || storeLeaveHere) {", "  if (false) {"), "a sign-out leaves the store's keys in store.json"],

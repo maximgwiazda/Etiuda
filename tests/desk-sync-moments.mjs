@@ -39,7 +39,7 @@ const check = (ok, what, detail) => {
 };
 const skip = what => { skipped++; console.log("  SKIP " + what); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 41;
+const EXPECTED = 44;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const STORE = path.join(E.ROOT, "shell", "sync", "store.cjs");
 const sha = f => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
@@ -190,6 +190,56 @@ async function trueLines(pageName) {
         const title = lang === "pl" ? "Synchronizacja między komputerami" : "Sync across computers";
         if (!r || r.title !== title || r.line !== want || r.ctl !== ctl) bad.push({ lang, name, got: r && { line: r.line, ctl: r.ctl }, want });
       }
+    } finally { await page.close(); }
+  }
+  return bad;
+}
+
+/* m6, answering what differed. */
+const HELD_UNGIVEN = { shown: true, line: "ungiven-held", on: false, held: true, why: "", since: 0, say: "" };
+async function allowRow(pageName) {
+  const bad = [];
+  for (const [lang, theme, line, label] of [["en", "light", "Your organisation has turned this on, and Microsoft has not yet let Etiuda use its folder in this account.", "Allow\u2026"],
+    ["pl", "dark", "Organizacja włączyła tę funkcję, ale konto Microsoft nie zezwala jeszcze Etiudzie na użycie jej folderu na tym koncie.", "Zezwól\u2026"]]) {
+    const page = await boot({ page: pageName, lang, theme, view: HELD_UNGIVEN });
+    try {
+      await page.evaluate(() => openSettings("account"));
+      await sleep(150);
+      const r = await rowOf(page);
+      const shown = await page.evaluate(() => {
+        const b = document.querySelector('#setBody [data-row="sync"] [data-sync-act="allow"]');
+        return { sets: window.__st.sets.slice(), marked: !!b && b.getAttribute("data-e-open") === "store-on", type: b ? b.type : "", select: b ? getComputedStyle(b).userSelect : "" };
+      });
+      if (!r || r.line !== line || r.ctl !== "button:" + label) bad.push({ lang, row: r });
+      if (shown.sets.length || !shown.marked || shown.type !== "button") bad.push({ lang, shown });
+      if (lang !== "en") continue;
+      const ring = () => page.evaluate(() => { const b = document.activeElement, c = getComputedStyle(b);
+        return { visible: b.matches(":focus-visible"), look: [c.outlineStyle, c.outlineWidth, c.outlineColor, c.boxShadow, c.backgroundColor, c.color].join(" "), act: b.getAttribute("data-sync-act") || "" }; });
+      const SEL = '#setBody [data-sync-act="allow"]';
+      /* The provider's answer held, so the row is not drawn again and the button keeps the focus it was given. */
+      await page.evaluate(() => { window.E_HOST.storeConsent = () => { window.__st.sets.push("consent"); return new Promise(() => {}); }; });
+      await page.click(SEL);
+      await page.mouse.move(2, 2);
+      await sleep(200);
+      const clicked = await ring();
+      const afterClick = await page.evaluate(() => window.__st.sets.slice());
+      await page.keyboard.press("Shift");
+      await page.evaluate(sel => document.querySelector(sel).focus(), SEL);
+      const keyed = await ring();
+      await page.keyboard.press("Enter");
+      await sleep(150);
+      await page.keyboard.press("Space");
+      await sleep(150);
+      const pressed = await page.evaluate(() => window.__st.sets.slice());
+      /* The desk's own ring, read the same way from the Decide button of the account question's row. */
+      await page.evaluate(() => { window.__st.view = { shown: true, line: "ask", on: false, held: false, why: "", since: 0, say: "", askNow: false }; openSettings("account"); });
+      await sleep(150);
+      await page.keyboard.press("Shift");
+      await page.evaluate(() => document.querySelector('#setBody [data-sync-act="decide"]').focus());
+      const decide = await ring(), decideSelect = await page.evaluate(() => getComputedStyle(document.querySelector('#setBody [data-sync-act="decide"]')).userSelect);
+      if (shown.select !== decideSelect) bad.push({ select: { allow: shown.select, decide: decideSelect } });
+      if (JSON.stringify(afterClick) !== JSON.stringify(["consent"]) || JSON.stringify(pressed) !== JSON.stringify(["consent", "consent", "consent"])) bad.push({ presses: { afterClick, pressed } });
+      if (clicked.visible || clicked.act !== "allow" || !keyed.visible || keyed.act !== "allow" || keyed.look === clicked.look || keyed.look !== decide.look) bad.push({ ring: { clicked, keyed, decide } });
     } finally { await page.close(); }
   }
   return bad;
@@ -363,6 +413,13 @@ async function main() {
      reading of the try's time; with the switch, or what stands in its place. */
   const m4 = await trueLines("etiuda.html");
   check(!m4.length, "m4 the row's lines where sync is not running, in the copywriter's English and Polish, the switch or its stand-in beside each", m4.length ? m4 : undefined);
+
+  /* m6: policy holds sync on and the folder was never allowed: the copywriter's line 6 with its Allow button, English and Polish; showing
+     the row asks nothing; a click, Enter and Space each ask the provider once, as the switch's own On does (storeConsent, the button marked
+     for the preload's trusted click); its text as selectable as the Decide button's, which is the desk's rule; under the keyboard it shows the
+     desk's focus ring, the one the Decide button shows, and none after a click. */
+  const m6 = await allowRow("etiuda.html");
+  check(!m6.length, "m6 under a held switch with the folder never allowed: line 6 and its Allow button (EN, PL), nothing asked on showing, a click, Enter and Space each asking once, the desk's focus ring under the keyboard only, its text selectable as the desk's buttons are", m6.length ? m6 : undefined);
 
   /* c9e: account-change question bubble (#eSyncWhose), EN light & PL dark, 440px, hung from #signinBtn, waits while #signinPanel open. */
   const ASK_NOW = { shown: true, line: "ask", on: false, held: false, why: "", since: 0, say: "", askNow: true };
@@ -760,6 +817,8 @@ async function main() {
       [row({ look: { state: "unavailable", why: "no-drive" } }).why === "no-drive", "no drive"],
       [row({ look: { state: "unavailable", why: "consent" } }).line === "unavailable", "the organisation's refusal: not available"],
       [(r => r.line === "ungiven" && r.on === false && r.say === "")(row({ look: { state: "unavailable", why: "ungiven" }, say: "ungiven" })), "the folder's consent never given: off with its switch, nothing said"],
+      [(r => r.line === "ungiven-held" && r.on === false && r.held === true && r.say === "")(row({ pol: { on: true, held: true }, look: { state: "unavailable", why: "ungiven" }, say: "ungiven" })), "the folder's consent never given, policy holding sync on: ungiven-held, nothing said"],
+      [row({ pol: { on: false, held: true }, look: { state: "unavailable", why: "ungiven" } }).line === "org-off", "the folder's consent never given, policy holding sync off: policy's off"],
       [row({ conflicts: 2 }).line === "conflict", "a conflict"],
       [row({ until: now - 2 * D }).line === "lapsed" && row({ until: now - 2 * D, look: null }).line === "lapsed", "a lapse under three days: lapsed, after a look or before one"],
       [row({ until: now - 3 * D }).line === "paused" && row({ until: now - 3 * D }).since === now - 3 * D, "paused three days"],
@@ -809,6 +868,7 @@ async function main() {
       ["a lapse over the room full", { until: now - D, full: true }, "lapsed", { full: true }, "full"],
       ["a lapse over no look yet", { until: now - D, look: null }, "lapsed", { look: null }, "unconnected"],
       ["a passing failure over a lapse", Object.assign({ until: now - D }, again), "again", { until: now - D }, "lapsed"],
+      ["the folder's consent never given under policy over no seat", { pol: { on: true, held: true }, seatless: true, look: { state: "unavailable", why: "ungiven" } }, "ungiven-held", { pol: { on: true, held: true }, seatless: true }, "noseat"],
       ["no seat over a refusal", { seatless: true, look: { state: "paused", why: "store" } }, "noseat", { look: { state: "paused", why: "store" } }, "refused"],
       ["a refusal over a conflict", { conflicts: 1, look: { state: "paused", why: "signin" } }, "refused", { conflicts: 1 }, "conflict"],
       ["a refusal over the room full", { full: true, look: { state: "paused", why: "seat-lapsed" } }, "refused", { full: true }, "full"],
@@ -824,13 +884,15 @@ async function main() {
   for (const [tag, what] of [["row-ask", "the hold's question read as off"], ["row-noseat", "no seat read as on"], ["row-full", "the room full read as on"],
     ["row-conflict", "the conflict said first, over a pause and the room full"], ["row-passing", "a passing failure read as on"], ["row-refused", "a refusal read as on"], ["row-looking", "a look running read as on"],
     ["row-unconnected", "no look yet read as on"], ["row-no-date", "no certificate's end read as the first of January"],
-    ["row-signin-refused", "a refused sign-in read as on"], ["row-lapsed", "a lapse under three days read as on"]]) {
+    ["row-signin-refused", "a refused sign-in read as on"], ["row-lapsed", "a lapse under three days read as on"],
+    ["row-ungiven", "the folder never allowed read alike whether or not policy holds the switch"]]) {
     const line = "p r1 " + tag + " lifted in a copy of store.cjs turns r1 red (" + what + "), and the product file is never written";
     if (PLANTS_OFF) { skip(line); continue; }
     const before = sha(STORE), text = fs.readFileSync(STORE, "utf8"), lines = text.split("\n"), at = lines.findIndex(l => l.indexOf("/* plant:" + tag + " */") >= 0);
     let red = false, detail = "the plant's anchor is absent";
     if (at >= 0) {
       if (tag === "row-full") lines[at] = lines[at].replace('o.full === true ? "full" : "on"', '"on"');
+      else if (tag === "row-ungiven") lines[at] = lines[at].replace('pol.held === true ? "ungiven-held" : "ungiven"', '"ungiven"');
       else if (tag === "row-no-date") lines[at] = lines[at].replace("Number(o.until) > 0 ? pausedLine({ until: o.until }, o.now, o.signinRefused) : null", "pausedLine({ until: o.until }, o.now, o.signinRefused)");
       else if (tag === "row-conflict") { const moved = lines.splice(at, 1)[0].replace(" && o.full !== true", ""); lines.splice(lines.findIndex(l => l.indexOf("const p = pausedLine(") >= 0), 0, moved); }
       else lines.splice(at, 1);
@@ -946,6 +1008,18 @@ async function main() {
       check(!m4.length && bad.length > 0, line, detail);
     } else check(false, line, detail);
   };
+  if (PLANTS_OFF) skip("p m6 the Allow button's press taken out turns m6 red");
+  else {
+    const ALLOW_PLANT = ['b.onclick = () => syncConsent().then(', 'b.onclick = () => Promise.resolve().then('];
+    const n = PAGE.split(ALLOW_PLANT[0]).length - 1;
+    let detail = "the plant's anchor is there " + n + " times";
+    if (n === 1) {
+      fs.writeFileSync(path.join(lab, "planted-allow.html"), PAGE.split(ALLOW_PLANT[0]).join(ALLOW_PLANT[1]));
+      const bad = await allowRow("planted-allow.html");
+      detail = bad.length ? "red: " + JSON.stringify(bad[0]) : "still held";
+      check(!m6.length && bad.length > 0, "p m6 the Allow button's press taken out turns m6 red", detail);
+    } else check(false, "p m6 the Allow button's press taken out turns m6 red", detail);
+  }
   await truePlant("signin-refused", 'if (s.line === "signin-refused") return t(', 'if (false) return t(', "a refused sign-in said as sync on");
   await truePlant("first", 'if (s.line === "first") return t(', 'if (false) return t(', "the first look said as sync on");
   await truePlant("refused", 'if (s.line === "refused" || s.line === "lapsed") return t(', 'if (false) return t(', "a refusal and a lapse said as sync on");

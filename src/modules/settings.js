@@ -376,6 +376,8 @@ function syncRow(s, provider){
   syncRowLine=s.line;
   let sw=s.line==="unavailable" || s.line==="org-off" ? ""
     : s.line==="ask" ? '<button type="button" class="btn" data-sync-act="decide">'+esc(t("Decide\u2026"))+'</button>'
+    /* Policy holds sync on and the folder was never allowed: the button asks the provider at the person's press alone (syncConsent). */
+    : s.line==="ungiven-held" ? '<button type="button" class="btn" data-e-open="store-on" data-sync-act="allow">'+esc(t("Allow\u2026"))+'</button>'
     : seg("sync",[{v:"off",t:t("Off")},{v:"on",t:t("On")}], s.on?"on":"off", s.held)
       +(s.held ? '<span class="sgn-lock">'+ICON_LOCK+esc(t("Set by your organisation"))+'</span>' : "");
   /* Where the folder's consent was never given, On is the person's trusted click that opens the provider's page (syncConsent). */
@@ -423,6 +425,7 @@ function wireAccountRows(box){
   box.querySelectorAll('[data-e-open="signin"]').forEach(b=>{ b.onclick=()=>signinStart(b.getAttribute("data-e-provider"), "account"); });
   box.querySelectorAll("[data-signin-act]").forEach(b=>{ b.onclick=()=>signinAct(b.getAttribute("data-signin-act"), b); });
   box.querySelectorAll('[data-sync-act="decide"]').forEach(b=>{ b.onclick=()=>askSyncWhose(b); });
+  box.querySelectorAll('[data-sync-act="allow"]').forEach(b=>{ b.onclick=()=>syncConsent().then(()=>{ if(document.getElementById("setBody")) paintSettings(); }); });
   box.querySelectorAll(".sgn-link-f").forEach(f=>{ f.onclick=()=>signinLinkSelect(f); });
   box.querySelectorAll('[data-e-open="buy"]').forEach(b=>{ b.onclick=()=>{
     const h=eHost();

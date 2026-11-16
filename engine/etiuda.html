@@ -9111,6 +9111,8 @@ What you type stays in this browser only.`;
     "Not syncing just now: {REASON}. Sync tries again at {TIME}, and nothing on this computer is lost.": "Synchronizacja chwilowo nie działa: {REASON}. Ponowi próbę o {TIME}, a na tym komputerze nic nie ginie.",
     "Not syncing: {REASON}. Sync tries again within a day, and nothing on this computer is lost.": "Synchronizacja nie działa: {REASON}. Ponowi próbę w ciągu doby, a na tym komputerze nic nie ginie.",
     "Not syncing while signing in on this computer is refused. Sync resumes once signing in works, and nothing on this computer is lost.": "Synchronizacja wstrzymana, dopóki logowanie na tym komputerze jest odrzucane. Zostanie wznowiona, gdy logowanie się powiedzie, a na tym komputerze nic nie ginie.",
+    "Your organisation has turned this on, and {PROVIDER} has not yet let Etiuda use its folder in this account.": "Organizacja włączyła tę funkcję, ale konto {PROVIDER} nie zezwala jeszcze Etiudzie na użycie jej folderu na tym koncie.",
+    "Allow…": "Zezwól…",
     "Connecting for the first time.": "Trwa pierwsze łączenie.",
     "Checking for changes.": "Trwa sprawdzanie zmian.",
     "Not connected yet. Sync starts once this computer reaches our service.": "Jeszcze bez połączenia. Synchronizacja ruszy, gdy komputer połączy się z naszą usługą.",
@@ -28218,7 +28220,7 @@ What you type stays in this browser only.`;
       if (b.dataset.signinAct) signinAct(b.dataset.signinAct, b);
     });
   }
-  var SYNC_LINES = ["on", "off", "ending", "ungiven", "org-off", "unavailable", "first", "checking", "unconnected", "signin-refused", "again", "spent", "refused", "lapsed", "paused", "conflict", "full", "noseat", "ask"];
+  var SYNC_LINES = ["on", "off", "ending", "ungiven", "ungiven-held", "org-off", "unavailable", "first", "checking", "unconnected", "signin-refused", "again", "spent", "refused", "lapsed", "paused", "conflict", "full", "noseat", "ask"];
   function syncRead(v) {
     const o = v && typeof v === "object" ? v : {};
     if (o.shown !== true || SYNC_LINES.indexOf(o.line) < 0) return { shown: false, line: "", on: false, held: false, why: "", since: 0, say: "", askNow: false, at: 0 };
@@ -28274,6 +28276,7 @@ What you type stays in this browser only.`;
     if (s.line === "off") return t("Only on this computer.");
     if (s.line === "ending") return t("Off everywhere. The synced copy is deleted as soon as this computer reaches our service.");
     if (s.line === "ungiven") return named(t("Off. Turning it on asks {PROVIDER} to let Etiuda use its folder in this account."), "{PROVIDER}", SIGNIN_NAMES[provider] || "Microsoft");
+    if (s.line === "ungiven-held") return named(t("Your organisation has turned this on, and {PROVIDER} has not yet let Etiuda use its folder in this account."), "{PROVIDER}", SIGNIN_NAMES[provider] || "Microsoft");
     if (s.line === "unavailable") return syncUnavailable(s.why, provider);
     if (s.line === "first") return t("Connecting for the first time.");
     if (s.line === "checking") return t("Checking for changes.");
@@ -37880,7 +37883,7 @@ What you type stays in this browser only.`;
   var syncRowLine = "";
   function syncRow(s, provider) {
     syncRowLine = s.line;
-    let sw = s.line === "unavailable" || s.line === "org-off" ? "" : s.line === "ask" ? '<button type="button" class="btn" data-sync-act="decide">' + esc(t("Decide…")) + "</button>" : seg2("sync", [{ v: "off", t: t("Off") }, { v: "on", t: t("On") }], s.on ? "on" : "off", s.held) + (s.held ? '<span class="sgn-lock">' + ICON_LOCK2 + esc(t("Set by your organisation")) + "</span>" : "");
+    let sw = s.line === "unavailable" || s.line === "org-off" ? "" : s.line === "ask" ? '<button type="button" class="btn" data-sync-act="decide">' + esc(t("Decide…")) + "</button>" : s.line === "ungiven-held" ? '<button type="button" class="btn" data-e-open="store-on" data-sync-act="allow">' + esc(t("Allow…")) + "</button>" : seg2("sync", [{ v: "off", t: t("Off") }, { v: "on", t: t("On") }], s.on ? "on" : "off", s.held) + (s.held ? '<span class="sgn-lock">' + ICON_LOCK2 + esc(t("Set by your organisation")) + "</span>" : "");
     if (s.line === "ungiven") sw = sw.replace('<button type="button" data-val="on"', '<button type="button" data-e-open="store-on" data-val="on"');
     return row("sync", "teams", t("Sync across computers"), syncLine(s, provider), sw);
   }
@@ -37938,6 +37941,11 @@ What you type stays in this browser only.`;
     });
     box.querySelectorAll('[data-sync-act="decide"]').forEach((b) => {
       b.onclick = () => askSyncWhose(b);
+    });
+    box.querySelectorAll('[data-sync-act="allow"]').forEach((b) => {
+      b.onclick = () => syncConsent().then(() => {
+        if (document.getElementById("setBody")) paintSettings();
+      });
     });
     box.querySelectorAll(".sgn-link-f").forEach((f) => {
       f.onclick = () => signinLinkSelect(f);
