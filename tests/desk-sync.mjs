@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-sync-"));
-const EXPECTED = 52;
+const EXPECTED = 55;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -669,8 +669,27 @@ async function main() {
     return { ok, detail: brief({ onB, left: left.ok, c: lc.state, aListed: listed.indexOf(a.me.id) >= 0, onC: c.desk.files["Work.ec"] === X, keptC: c.kept.length }) };
   }
 
+  /* S6: one version stands where two computers wrote the same bytes, the winner's own `seen` lower than what the other's entry shows; a
+     later edit here is then made over both, so the next merge keeps no copy and calls nothing a conflict. Once with another computer's
+     entry the one taken (the review's own sequence), once with this computer's own entry the one that stands. */
+  async function seenScene() {
+    const A = "k-" + "a".repeat(16), B = "k-" + "b".repeat(16), Cc = "k-" + "c".repeat(16), item = "k:e3f9a1~Pack#notes/c1";
+    const v3 = JSON.stringify("v3"), v4 = JSON.stringify("v4"), h3 = SY.sha(v3), dark = { h: SY.sha("dark"), by: A, t: 1, seen: {} };
+    const eC = { h: h3, by: Cc, t: 100, seen: { [B]: 200 }, v: v3 };
+    const round = (ledger, theirs, now1, now2) => {
+      const r1 = SY.mergeOnce({ me: A, now: now1, state: { ledger, kept: [] }, local: Object.assign({ "k:eTheme": "dark" }, ledger[item] ? { [item]: v3 } : {}), theirs });
+      const r2 = SY.mergeOnce({ me: A, now: now2, state: r1.state, local: { "k:eTheme": "dark", [item]: v4 }, theirs });
+      return { seenC: (r1.state.ledger[item] || { seen: {} }).seen[Cc], copies: r2.copies.length, kept: r2.state.kept.length, stands: !!r2.state.ledger[item] && r2.state.ledger[item].h === SY.sha(v4) };
+    };
+    const taken = round({ "k:eTheme": dark }, [{ by: B, items: { [item]: { h: h3, by: B, t: 300, seen: { [Cc]: 50 }, v: v3 } } }, { by: Cc, items: { [item]: eC } }], 50, 80);
+    const own = round({ "k:eTheme": dark, [item]: { h: h3, by: A, t: 300, seen: { [Cc]: 50 } } }, [{ by: Cc, items: { [item]: { h: h3, by: Cc, t: 100, seen: {}, v: v3 } } }], 350, 400);
+    const good = x => x.seenC === 100 && x.copies === 0 && x.kept === 0 && x.stands;
+    return { ok: good(taken) && good(own), detail: brief({ taken, own }) };
+  }
+
   const results = {};
   const LEGS = [
+    ["S6", seenScene, "where one version stands over two computers' writes, each computer's seen time is the latest over every entry merged, so a later edit here is made over both: no copy kept and no conflict, with another's entry taken or this computer's own standing"],
     ["C2b", leftWriterScene, "a catalog whose writer has left the store reaches a computer that joins after, from the place of a listed computer holding it under the same hash"],
     ["J1", joinScene, "a second computer joining a store that holds content takes the store's settings, removes its untouched sample where the store removed it, keeps its own card and catalog on both, and offers a setting only it holds, with no version kept"],
     ["G5k", keptGrowthScene, "the same card changed on both computers offline three rounds running: each keeps the earlier writer's last round alone, the overtaken ones let go"],
@@ -730,6 +749,8 @@ async function main() {
     ["join older", "J1", swap("const t = joining ? 0 : Math.max(", "const t = Math.max("), "what a joining computer held before is stamped now, so its settings outrank the store's"],
     ["join sample", "J1", lift("join-pristine"), "an untouched sample on a joining computer taken as its own, so the one deleted elsewhere comes back as a conflict"],
     ["bytes by the writer alone", "C2b", swap("for (const id of new Set([by, ...ids, o.me.id])) {", "for (const id of new Set([by])) {"), "a catalog's bytes read only under the computer that wrote it, so once it has left the store they never arrive"],
+    ["taken seen by the winner", "S6", swap("seen: maxSeen(unionSeen(...all.filter(e => !same(e, win) && e.by !== win.by)), win.seen) }; /* plant:seen-max */", "seen: Object.assign(unionSeen(...all.filter(e => !same(e, win) && e.by !== win.by)), win.seen) }; /* plant:seen-max */"), "the entry taken carries the winner's own lower seen times over the others', so a later edit here meets one it was made over as a conflict"],
+    ["own seen by its own", "S6", swap("{ seen: unionSeen(...top) }); /* plant:seen-max-mine */", "{ seen: Object.assign(unionSeen(...top), mine.seen) }); /* plant:seen-max-mine */"), "this computer's standing entry keeps its own lower seen times over the others', so its next edit meets one it was made over as a conflict"],
     ["join reached", "J1", lift("join-reached"), "a computer that has never synced merges before a cycle reached the store, so its first merge cannot know it joins"],
     ["one item added", "C7", swap("return SETTINGS.indexOf(s.slice(2)) >= 0 || LAYER_RE.test(s.slice(2)); /* plant:follows */", "return SETTINGS.indexOf(s.slice(2)) >= 0 || LAYER_RE.test(s.slice(2)) || s === \"k:eTeamKeys\"; /* plant:follows */"), "a team's keys follow"],
     ["later stands", "C8", swap("const stay = top.reduce(", "const stay = mine && top.some(e => same(e, mine)) ? mine : top.reduce("), "each computer keeps its own in place, so where its own was the earlier the newer change is not in use"],

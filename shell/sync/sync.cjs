@@ -175,6 +175,8 @@ function syncText(me, ledger, local) {
 /* Whether entry a was made over entry b: a later write of the same computer, or one that took b first. */
 const over = (a, b) => (a.by === b.by ? a.t > b.t : has(a.seen, b.by) && a.seen[b.by] >= b.t);
 const same = (a, b) => a.by === b.by && a.t === b.t;
+/* Per computer, the later of two seen maps' times, so an entry's own lower time never stands over what was merged. */
+const maxSeen = (a, b) => { const out = Object.assign({}, a); for (const k of Object.keys(b || {})) out[k] = Math.max(out[k] || 0, b[k]); return out; };
 const unionSeen = (...es) => {
   const out = {};
   for (const e of es) if (e) {
@@ -241,12 +243,12 @@ function mergeOnce(o) {
       const win = mine && top.some(e => same(e, mine)) ? mine : top.reduce((a, b) => (b.t > a.t ? b : a));
       settled(item, win);
       if (mine && same(win, mine)) {
-        if (top.length > 1) ledger[item] = Object.assign({}, mine, { seen: Object.assign(unionSeen(...top), mine.seen) });
+        if (top.length > 1) ledger[item] = Object.assign({}, mine, { seen: unionSeen(...top) }); /* plant:seen-max-mine */
         continue;
       }
       const v = valueOf(win, item);
       if (v === undefined) continue; /* its bytes have not arrived yet: the next merge takes it */
-      ledger[item] = { h: win.h, by: win.by, t: win.t, seen: Object.assign(unionSeen(...all.filter(e => !same(e, win) && e.by !== win.by)), win.seen) };
+      ledger[item] = { h: win.h, by: win.by, t: win.t, seen: maxSeen(unionSeen(...all.filter(e => !same(e, win) && e.by !== win.by)), win.seen) }; /* plant:seen-max */
       patch[item] = v;
       continue;
     }
