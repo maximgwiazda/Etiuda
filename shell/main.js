@@ -12038,6 +12038,15 @@ function storeSetAside() {
     /* The catalog loaded on the desk goes aside with the rest (in the copy of desk.json above), so the next account does not see it. */
     if (Object.prototype.hasOwnProperty.call(deskKeys || {}, "eCatalog")) clear.eCatalog = null; /* plant:aside-catalog */
     if (Object.keys(clear).length && !patchDesk(JSON.stringify(clear))) throw new Error("desk.json could not be updated"); /* plant:answer-aside-clear */
+    /* The floors that refuse an older edition go aside too (in the copy of desk.json above), so what the last account was handed never
+       refuses the next one's own catalogs; a floor under a team lead's pinned key is the team's and stays. */
+    const leads = new Set(Object.keys(teamPins).map(t => String(teamPins[t] && teamPins[t].public)));
+    let floors = false;
+    for (const id of Object.keys(catalogRevs)) {
+      for (const pub of Object.keys(catalogRevs[id] || {})) if (!leads.has(pub)) { delete catalogRevs[id][pub]; floors = true; } /* plant:aside-floors */
+      if (!Object.keys(catalogRevs[id] || {}).length) delete catalogRevs[id];
+    }
+    if (floors) persistDeskEnvelope();
     deskSyncedTell(clear, null, k => L.follows("k:" + k));
     return { folder: aside, kept: false };
   } catch (e) {

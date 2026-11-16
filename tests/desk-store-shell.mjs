@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 198;
+const EXPECTED = 201;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -201,8 +201,8 @@ function worldOf(o) {
 /* ---- the shell, evaluated whole: `src` is shell/main.js's text or a planted copy of it ---- */
 /* What the leg reads from main.js, appended to its text; a name main.js lacks comes back undefined, so its leg fails alone. */
 const TAIL_NAMES = ["storeView", "storeRoom", "storeSetNow", "storeAnswerNow", "storeSetAsideDir", "storeSyncFolder", "storeState", "storeTokenTake", "signinRun", "signinRenew", "signinIo", "signinRenewNow", "signinServiceAsk", "storeServiceAt", "storeOnFor", "storeTurn", "branchIdentity", "signinState", "patchDesk", "storeForget", "signinLandingHtml", "signinListen",
-  "signinOutNow", "storeLeaveNow", "storeSyncApply", "storeSyncSoon", "storeSyncLocal", "deskSyncedTell", "storeTokenFor"];
-const TAIL_STATE = ["storeNow", "storeAccess", "storeFlight", "storeLeaveFlight", "SIGNIN_SERVICE", "SIGNOUT_SERVICE", "STORE_RELAY", "SIGNIN_PROVIDERS", "storeSyncing", "storeConsentFlight", "storeSyncTimer", "storeSyncPristine", "storeAgainTimer"];
+  "signinOutNow", "storeLeaveNow", "storeSyncApply", "storeSyncSoon", "storeSyncLocal", "deskSyncedTell", "storeTokenFor", "catalogRevSlot", "persistDeskEnvelope"];
+const TAIL_STATE = ["storeNow", "storeAccess", "storeFlight", "storeLeaveFlight", "SIGNIN_SERVICE", "SIGNOUT_SERVICE", "STORE_RELAY", "SIGNIN_PROVIDERS", "storeSyncing", "storeConsentFlight", "storeSyncTimer", "storeSyncPristine", "storeAgainTimer", "catalogRevs", "teamPins"];
 const TAIL = "\n__test.T = {" + TAIL_NAMES.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ")
   + ", setJoin: v => { teamJoin = v; }, setPolicyText: v => { joinPolicyRead = joinPolicyFacts(String(v)); if (typeof joinPolicyReadAt !== \"undefined\") { joinPolicyReadAt = Date.now(); joinPolicyAskedAt = Date.now(); joinPolicyAsking = true; } }, setWindow: v => { theWindow = v; }, get: () => ({" + TAIL_STATE.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ") + "}) };";
 function boot(src, o) {
@@ -1292,6 +1292,33 @@ async function answerStartCatalogScene(src) {
   const leaked = w.relay.filter(b => b.indexOf("A_LOADED_ONLY") >= 0).length;
   const ok = !!ans && ans.ok === true && !("eCatalog" in deskAfter) && aside.eCatalog === cat && toldGone && leaked === 0;
   return { ok, detail: brief({ okAns: ans && ans.ok, onDesk: "eCatalog" in deskAfter, aside: aside.eCatalog === cat, toldGone, leaked }) };
+}
+
+/* (z2r) START FROM MY ACCOUNT TAKES THE FLOORS ASIDE: the revisions this desk was handed under a signing key, which refuse an older edition
+   of the same catalog (belowCatalogRev reads catalogRevSlot alone), go aside with the desk under Start, kept in the set-aside desk.json,
+   so the next account's own edition is not refused; a floor under a team lead's pinned key is the team's and stays; It is mine keeps
+   them all. */
+async function floorsScene(src, choice) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world, UD = r.shell.UD;
+  const own = "a".repeat(64), lead = "b".repeat(64);
+  T.get().teamPins["t-floors"] = { keyId: "lead-key", public: lead };
+  T.get().catalogRevs["a-floor"] = { [own]: 7, [lead]: 4 };
+  T.persistDeskEnvelope();
+  const heldA = T.signinState().held;
+  T.signinOutNow();
+  seatAnother(T, w, heldA);
+  await T.storeTurn();
+  const ans = await T.storeAnswerNow(choice);
+  if (T.get().storeFlight) await T.get().storeFlight;
+  const floorOf = f => { try { const d = JSON.parse(fs.readFileSync(f, "utf8")); return d.catalogRevs && d.catalogRevs["a-floor"] ? d.catalogRevs["a-floor"] : {}; } catch { return null; } };
+  return { ans, ownNow: T.catalogRevSlot("a-floor", own), leadNow: T.catalogRevSlot("a-floor", lead), disk: floorOf(path.join(UD, "desk.json")),
+    aside: ans && ans.folder ? floorOf(path.join(ans.folder, "desk.json")) : null };
+}
+async function answerStartFloorsScene(src) {
+  const st = await floorsScene(src, "start"), mine = await floorsScene(src, "mine");
+  const ok = !!st.ans && st.ans.ok === true && st.ownNow === 0 && st.leadNow === 4 && !!st.disk && st.disk["a".repeat(64)] === undefined && st.disk["b".repeat(64)] === 4
+    && !!st.aside && st.aside["a".repeat(64)] === 7 && !!mine.ans && mine.ans.ok === true && mine.ownNow === 7 && mine.leadNow === 4;
+  return { ok, detail: brief({ start: { ok: st.ans && st.ans.ok, own: st.ownNow, lead: st.leadNow, disk: st.disk, aside: st.aside }, mine: { ok: mine.ans && mine.ans.ok, own: mine.ownNow, lead: mine.leadNow } }) };
 }
 
 /* (x6n) "Not now": nothing changes, the hold stays, askNow becomes false in this run, and a fresh run asks again. */
@@ -2536,6 +2563,7 @@ const LEGS = [
   ["x6r", openAfterRestartScene, "after a restart the button's channel opens the desk's single dated folder, or Set aside itself when a second or hand-made dated folder is beside it; all removed it answers gone, and a name of another shape in store.json is ignored"],
   ["x6l", asideLinkScene, "a link under Set aside bearing the name store.json keeps is never opened as the set-aside folder: Open this folder answers gone; a real folder of that name is opened"],
   ["z2c", answerStartCatalogScene, "Start from my account takes the loaded catalog aside with the rest: in the set-aside desk.json, gone from the desk's, the page told, nothing of it in B's store"],
+  ["z2r", answerStartFloorsScene, "Start from my account takes the floors that refuse an older edition aside with the desk, kept in the set-aside desk.json, so the next account's own edition is not refused; a team lead's floor stays; It is mine keeps them all"],
   ["z5", refreshLostScene, "a look after the refresh token was lost says signing in is refused, not the organisation's refusal, and arms no retry; a revoked certificate, once the store certificate has ended, says the same, not a lapse"],
   ["z14", rowToldScene, "a merge keeping a version tells the page; a renewal that lost its refresh token reads as a refused sign-in; the first of two overlapping looks ending leaves the row saying a look runs"],
   ["z6", signinHourScene, "a look more than an hour after the last sign-in renews it first and is granted, on; with the renewal unreached the refusal is tried again within minutes, the row not saying refused"],
@@ -2664,6 +2692,8 @@ const PLANTS = [
   ["z2c", swap("    if (Object.prototype.hasOwnProperty.call(deskKeys || {}, \"eCatalog\")) clear.eCatalog = null; /* plant:aside-catalog */\n", ""), "the loaded catalog left on the desk for the next account"],
   ["z14", swap("      if (kept !== storeKeptTold) { storeKeptTold = kept; tellStore(); } /* plant:kept-told */", "      /* plant:kept-told */"), "a merge that keeps a version tells the page nothing"],
   ["z14", swap("(!!held.said || held.ask === true || signinRevokedHas(", "(!!held.said || signinRevokedHas("), "a lost refresh token read as nothing wrong"],
+  ["z2r", swap("if (!leads.has(pub)) { delete catalogRevs[id][pub]; floors = true; } /* plant:aside-floors */", "if (false) { delete catalogRevs[id][pub]; floors = true; } /* plant:aside-floors */"), "the floors kept on the desk, so the next account's own edition is refused"],
+  ["z2r", swap("if (!leads.has(pub)) { delete", "if (true) { delete"), "a team lead's floor taken aside with the account's"],
   ["z5", swap("  if (!refresh) return { why: \"signin\" }; /* plant:token-no-refresh */", "  if (!refresh) return { why: \"consent\" }; /* plant:token-no-refresh */"), "a look with no refresh token to open says the organisation refused the folder"],
   ["z5", swap(" || signinRevokedHas(held.revoked, held.cert)); /* plant:view-signin-revoked */", "); /* plant:view-signin-revoked */"), "a revoked certificate read as a lapse that resumes by itself"],
   ["z14", swap("finally { storeLooking--; tellStore(); } /* plant:store-look-count */", "finally { storeLooking = 0; tellStore(); } /* plant:store-look-count */"), "the first look ending ends the row's word for both"],
