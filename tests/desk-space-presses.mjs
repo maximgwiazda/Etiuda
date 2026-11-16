@@ -76,6 +76,11 @@ async function openDesk(browser, url, opts = {}) {
       localStorage.setItem("eTheme", "light");
       localStorage.setItem("eTourDone", "1");
       localStorage.setItem("eStill", "1");
+      /* The tour's current keys (the older eTourDone alone no longer silences it): a slow load on an empty desk
+         otherwise lets the tour open late and take the Tab walk into its own buttons. */
+      localStorage.setItem("eTourDone_v3", "1");
+      localStorage.setItem("eTourInvite_v3", "1");
+      localStorage.setItem("eFirstSigninSeen", "1");
     } catch (_) {}
   }, !!opts.empty);
   await page.goto(url, { waitUntil: "load" });
