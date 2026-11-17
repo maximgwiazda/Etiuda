@@ -34,8 +34,33 @@ function agentParts(raw){
    it, the first-run question and Settings, then have nothing to tell each other. Starts empty
    and is never seeded - a de-branded engine must not ship carrying its author's identity. */
 const E_AGENT_KEY="eAgent";
+const E_AGENT_AUTO_KEY="eAgentAuto";
+const E_AGENT_NOTE_SEEN="eAgentNoteSeen";
 function agentName(){ const v=lsGet(E_AGENT_KEY); return v!=null?String(v):""; }
 function setAgentName(v){ lsSet(E_AGENT_KEY,String(v||"")); renderFillsSoon(); }
+function readAgentAuto(){
+  const raw=lsGet(E_AGENT_AUTO_KEY);
+  if(!raw || raw==="typed") return null;
+  try{
+    const o=JSON.parse(raw);
+    return o && typeof o==="object" && typeof o.name==="string" && o.name && (o.form==="initial" || o.form==="whole")
+      ? {name:o.name, form:o.form} : null;
+  }catch(e){ return null; }
+}
+/* Typing or clearing the field makes it the agent's own, so neither renewal nor another sign-in replaces it. */
+function typeAgentName(v){
+  lsSet(E_AGENT_AUTO_KEY,"typed"); /* plant:agent-type-mark */
+  setAgentName(v);
+}
+function agentNameNote(){
+  if(lsGet(E_AGENT_NOTE_SEEN)==="1") return null;
+  const auto=readAgentAuto();
+  if(!auto || agentName().trim()!==auto.name) return null;
+  return auto;
+}
+function markAgentNameNoteSeen(){
+  lsSet(E_AGENT_NOTE_SEEN,"1",true);
+}
 /* A FILL IS A BURST, NOT AN EVENT. {AGENT}, {PAX} and {ROLE} are substituted while the cards
    are built, so a keystroke in one of those boxes used to rebuild all of them - 40ms of
    Firefox per letter, and a pasted name arrived visibly behind the hand. The value is stored
@@ -121,14 +146,24 @@ function wireNameField(root,raw){
   return inp;
 }
 // An answer, empty included: an empty name is "later", and the question is not asked again.
-function keepAgentName(v){ setAgentName(String(v||"").trim()); lsSet(E_NAME_ASKED,"1"); }
+function keepAgentName(v){
+  const s=String(v||"").trim();
+  if(s){
+    const auto=readAgentAuto();
+    if(!auto || auto.name!==s) lsSet(E_AGENT_AUTO_KEY,"typed");
+    setAgentName(s);
+  }else{
+    setAgentName("");
+  }
+  lsSet(E_NAME_ASKED,"1");
+}
 function nameAnswered(){ return lsGet(E_NAME_ASKED)==="1"; }
 /* THE TOUR'S FIELD IS KEPT AS IT IS TYPED, so no way out of the step loses it. Emptied, it is no
    answer, and the first signed copy asks unless an answer stood before the step. */
 function keepTypedName(v,answered){
   const s=String(v||"").trim();
-  if(s){ keepAgentName(s); return; }
-  setAgentName("");
+  if(s){ typeAgentName(s); lsSet(E_NAME_ASKED,"1"); return; }
+  typeAgentName("");
   if(!answered) lsDel(E_NAME_ASKED);
 }
 /** The question as a bubble hanging from the reply that was clicked, so it stands over whatever is
@@ -179,6 +214,9 @@ export {
   agentParts,
   agentName,
   setAgentName,
+  typeAgentName,
+  agentNameNote,
+  markAgentNameNoteSeen,
   renderFillsSoon,
   askAgentName,
   nameFieldHtml,

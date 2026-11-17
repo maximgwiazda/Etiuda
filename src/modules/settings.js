@@ -16,7 +16,7 @@ import { applyUiLang } from "./repaint.js";
 import { pillsLocked, togglePillsLock, syncLayoutPrefs } from "./pills-box.js";
 import { rereadCollapsed } from "./collapse.js";
 import { applyStoredFactsSize } from "./facts.js";
-import { agentName, setAgentName } from "./agent.js";
+import { agentName, typeAgentName, agentNameNote, markAgentNameNoteSeen } from "./agent.js";
 import { eHost, eHasShared, E_AI_OFF_KEY, eAiOn, eAiModel, eTellAi, E_SEARCH_AI_OFF_KEY, eSearchOn, eTellSearch } from "./host.js";
 import { armSearch, clearSearchMeaning } from "./search-meaning.js";
 import { hooks } from "./hooks.js";
@@ -967,6 +967,61 @@ function sxRefocus(host,fk,inPage){
   const to=page && inPage && page.querySelector(inPage);
   if(to) try{ to.focus({preventScroll:true}); }catch(e){ to.focus(); }
 }
+let agentNoteDrop=null, agentNoteObs=null, agentNoteEsc=null;
+function closeAgentNameBubble(){
+  if(agentNoteDrop){ agentNoteDrop(); agentNoteDrop=null; }
+  if(agentNoteObs){ agentNoteObs.disconnect(); agentNoteObs=null; }
+  if(agentNoteEsc){ removeEventListener("keydown",agentNoteEsc,true); agentNoteEsc=null; }
+  const old=typeof document!=="undefined" ? document.getElementById("eAgentNote") : null;
+  if(old) old.remove();
+}
+function syncAgentNameBubble(box){
+  if(typeof document==="undefined" || !document.body) return;
+  const field=box && box.querySelector ? box.querySelector("#setAgentName") : null;
+  if(!field){ closeAgentNameBubble(); return; }
+  const note=agentNameNote();
+  if(!note) return;
+  if(document.getElementById("eAgentNote")) return;
+  markAgentNameNoteSeen(); /* plant:agent-note-once */
+  let tpl=t("{NAME} comes from your account: the first name and the first letter of the surname. Replies that sign with your name use it, and the team's lead sees this desk by it. It can be changed here at any time.");
+  if(note.form==="whole") tpl=t("{NAME} is the name on your account. Replies that sign with your name use it, and the team's lead sees this desk by it. It can be changed here at any time."); /* plant:agent-note-form */
+  const el=document.createElement("div");
+  el.className="bub bub-ask";
+  el.id="eAgentNote";
+  el.setAttribute("role","dialog");
+  el.setAttribute("aria-labelledby","eAgentNoteTitle");
+  const h3=document.createElement("h3");
+  h3.id="eAgentNoteTitle";
+  h3.textContent=t("The name on this desk");
+  const p=document.createElement("p");
+  p.textContent=tpl.split("{NAME}").join(note.name);
+  const acts=document.createElement("div");
+  acts.className="tour-actions";
+  const btn=document.createElement("button");
+  btn.type="button";
+  btn.className="btn primary";
+  btn.id="eAgentNoteDone";
+  btn.textContent=t("Done");
+  btn.onclick=closeAgentNameBubble;
+  acts.appendChild(btn);
+  el.appendChild(h3);
+  el.appendChild(p);
+  el.appendChild(acts);
+  document.body.appendChild(el);
+  agentNoteEsc=e=>{
+    if(e.key!=="Escape" || !el.isConnected) return;
+    e.preventDefault(); e.stopPropagation(); closeAgentNameBubble();
+  };
+  addEventListener("keydown",agentNoteEsc,true);
+  agentNoteDrop=hangBubble(el,()=>document.getElementById("setAgentName"));
+  const sh=document.getElementById("screenHost");
+  if(sh && typeof MutationObserver==="function"){
+    agentNoteObs=new MutationObserver(()=>{
+      if(sh.hidden || !document.getElementById("setAgentName")) closeAgentNameBubble();
+    });
+    agentNoteObs.observe(sh,{childList:true,subtree:true,attributes:true,attributeFilter:["hidden"]});
+  }
+}
 function paintSettings(){
   const host=settingsHost(), box=host && host.querySelector("#setBody");
   if(!box) return;
@@ -976,6 +1031,7 @@ function paintSettings(){
   wireHotkeyRow(box);
   wirePage(box);
   translateTree(box);
+  syncAgentNameBubble(box); /* plant:agent-note-show */
   /* The conflict's notice ends once its line has been on the page (signin.js syncOpened). */
   if (syncRowLine === "conflict" && box.querySelector('[data-row="sync"]')) syncOpened();
 }
@@ -1020,7 +1076,7 @@ function wirePage(box){
   if(joinBtn) joinBtn.onclick=()=>openJoinPaste();
   /* Stored on the keystroke, like every other row here: there is no Save on this screen. */
   const nameBox=box.querySelector("#setAgentName");
-  if(nameBox) nameBox.oninput=()=>setAgentName(nameBox.value);
+  if(nameBox) nameBox.oninput=()=>typeAgentName(nameBox.value);
   const act=(id,fn)=>{ const b=box.querySelector(id); if(b) b.onclick=fn; };
   act("#setReset",resetAllSettings);
   act("#setResetKeys",resetShortcuts);
