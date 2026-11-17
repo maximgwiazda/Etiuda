@@ -2832,6 +2832,7 @@ const SPKI_ED25519 = Buffer.from("302a300506032b6570032100", "hex");
 let deskBranch = null;                         // {sign:{pub,priv}, box:{pub,priv}}: hex publics, sealed privates
 let deskBranchOld = [];                        // pairs the envelope could never open again, kept aside and never deleted
 let deskStranded = false;                      // the key would not open and machine policy keeps the desk (section 12): said, not replaced
+let deskStrandedFor = "";
 let branchRevs = {};                           // desk file id -> the last edition written, kept when the file is removed
 let readRevs = {};                             // desk file id -> the highest rev this desk has handed on
 let catalogRevs = {};                          // catalog id -> {signing public -> the highest rev handed to the page under it}, kept when teamKeys is empty
@@ -2938,8 +2939,11 @@ function branchIdentity(make) {
   if (!deskBranch || !openPrivate(deskBranch.sign.priv)) {
     /* The company's non-persistent desktop without its consent to churn: nothing is made or set aside, the page says why. */
     if (deskBranch && managedStrands(managedPolicy())) { /* plant:np-guard */
-      if (!deskStranded) console.error("etiuda: the desk's branch key could not be opened on this profile, and machine policy keeps this desk rather than make a new one");
-      deskStranded = true;
+      if (!deskStranded) {
+        console.error("etiuda: the desk's branch key could not be opened on this profile, and machine policy keeps this desk rather than make a new one");
+        deskStranded = true;
+        if (typeof tellSignin === "function") tellSignin(); /* plant:np-tell */
+      }
       return null;
     }
     const back = wasOld.slice().reverse().find(p => !!openPrivate(p.sign.priv) && !!openPrivate(p.box.priv)); /* plant:branch-back */
@@ -2974,6 +2978,21 @@ function branchIdentity(make) {
     }
   }
   return { id: branchIdOf(deskBranch.sign.pub), key: deskBranch.sign.pub, box: deskBranch.box.pub };
+}
+/* Whether the kept branch key cannot open on a non-persistent desktop kept by policy, checked once per key only when
+   NonPersistent (and not waiting on policy) applies: never creates, replaces or writes a key, and never asks on ordinary desks. */
+function deskKeyStranded(pol) {
+  if (!pol || pol.waiting === true || !managedStrands(pol)) return false;
+  if (deskStranded) return true;
+  if (!deskBranch || !branchSealable()) return false;
+  if (deskStrandedFor === deskBranch.sign.priv) return false;
+  deskStrandedFor = deskBranch.sign.priv;
+  if (!openPrivate(deskBranch.sign.priv)) {
+    console.error("etiuda: the desk's branch key could not be opened on this profile, and machine policy keeps this desk rather than make a new one");
+    deskStranded = true;
+    return true;
+  }
+  return false;
 }
 /* The same canonical form as the engine's v2Canonical, with the signature folded as v2SigFold does:
    tests/desk-ipc.mjs verifies a file's signature through the engine's own functions. */
@@ -11356,7 +11375,7 @@ function signinView() {
   /* Only where machine policy sets any of its six values, so an unmanaged desk's view is the same object as before. */
   const m = st.managed;
   if (m && m.any) view.managed = { on: m.managed, shared: m.shared, personal: m.personal, provider: m.provider, tenant: !!m.tenant, closed: m.closed, contact: m.contact, /* plant:view-managed */
-    stranded: deskStranded };
+    stranded: deskKeyStranded(m) };
   if (view.managed) view.managed.keeps = signinAccountKept(st); /* plant:view-keeps */
   /* Policy has not answered: the page says the desk waits for it, and never that the computer is managed. */
   if (m && m.waiting === true) view.managed.waiting = true; /* plant:view-waiting */

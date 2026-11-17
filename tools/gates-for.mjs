@@ -167,7 +167,9 @@ export function globMatches(glob, rel) {
 export const SCANS = {
   "tests/chain-split.mjs": ["tests/**/*.{js,mjs,cjs}", "package.json"],
   "tests/fold-check.mjs": ["tools/fold-check.mjs"],
-  "tests/i18n-scan.js": ["src/template.html", "src/modules/*.js", "src/main.js"],
+  /* shell/policy too: the scan refuses a string beginning PLACEHOLDER in the Group Policy template, which tests/join-policy.mjs 19f
+     cannot know of in a policy it does not yet hold by bytes (the test architect, 2026-11-17). */
+  "tests/i18n-scan.js": ["src/template.html", "src/modules/*.js", "src/main.js", "shell/policy/**"],
   "tests/pl-diacritics.js": ["src/**/*.{js,mjs,css,html}", "shell/**/*.{js,mjs,css,html}"],
   "tests/css-layers.js": ["src/template.html"],
   "tests/css-order.js": ["src/template.html"],

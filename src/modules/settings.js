@@ -184,10 +184,15 @@ function teamHeadNote(h){
    sealed keys and bars the team once its Undo has lapsed. The head, where the shell has one, is a note under the
    name: the newest edition, when it was published, how old the news is, and how many of the team's other catalogs
    have an edition newer than this desk has loaded. It never disables a control. A listed catalog with no edition yet says that this desk waits for the lead's first edition. */
+function teamOtherLeadNote(){
+  const v=signinNow(), c=v && v.managed ? v.managed.contact : "";
+  return c ? t("The organisation's IT names another lead for this computer, so nothing this team's lead signs is used here. To ask about it: {CONTACT}.").split("{CONTACT}").join(c)
+    : t("The organisation's IT names another lead for this computer, so nothing this team's lead signs is used here. The organisation's IT department can say which team this computer belongs to.");
+}
 function teamRowHtml(l,status,bar){
   const notes=[l.relay?t("Relay: {HOST}").split("{HOST}").join(l.relay):l.folder?t("Folder: {FOLDER}").split("{FOLDER}").join(l.folder):"",
     l.removed?t("This team no longer includes this desk."):status,
-    l.otherLead?t("The organisation's IT names another lead for this computer, so nothing this team's lead signs is used here.") /* placeholder: the copywriter */
+    l.otherLead?teamOtherLeadNote() /* plant:other-lead-words */
     :l.policy?t("The organisation's IT sets this desk's team."):bar?t("After leaving a team, this desk can join it again with a new invitation from its lead."):""];
   if(l.head) notes.push(teamHeadNote(l.head)); /* plant:head-show */
   if(l.awaitsEdition) notes.push(t("This desk waits for the team's lead to publish a first edition."));
@@ -269,8 +274,11 @@ function closeHost(){
 /* A MANAGED COMPUTER'S LINE (decision 49): who decides, the seat it gave where one is held, and on a shared computer that another may sign in. */
 function accountManagedHtml(v){
   if(!signinManaged(v) || signinWaiting(v)) return "";
-  const held=v.signedIn && v.seat==="held", shared=v.managed.shared;
+  const held=v.signedIn && v.seat==="held", shared=v.managed.shared, c=v.managed.contact;
+  const closed=!v.signedIn && !v.offered.length; /* plant:managed-closed-line */
   const line=[held ? t("Your organisation gave this account its seat on this desk. Its IT department decides who uses Etiuda here, and with which account.") : "",
+    closed ? (c ? t("No sign-in is offered on this computer just now. To ask about it: {CONTACT}.").split("{CONTACT}").join(c)
+      : t("No sign-in is offered on this computer just now; the organisation's IT department decides it.")) : "",
     shared ? t("A shared computer: another person may sign in here, with an account of your organisation.") : ""].filter(Boolean).join(" ");
   return '<p class="sgn-say" data-signin-managed><b>'+esc(t("Managed by your organisation."))+'</b>'+(line?'<span>'+esc(line)+'</span>':'')+'</p>';
 }
@@ -286,10 +294,10 @@ function lockedHtml(value){
   return '<span class="sgn-val">'+esc(value)+'</span><span class="sgn-lock">'+ICON_LOCK+esc(t("Set by your organisation"))+'</span>';
 }
 function accountCardHtml(v){
-  /* The desk's key not kept by a non-persistent profile (section 12): the card says so and offers nothing that would make a new desk. */
-  if(signinStranded(v)){ const s=signinStrandedWords(v); return '<div class="sgn-top col"><p class="sgn-say" data-signin-stranded><b>'+esc(s[0])+'</b><span>'+esc(s[1])+'</span></p></div>'; }
   /* Machine policy has not answered: the card says the desk waits for it, and offers nothing to sign in with. */
   if(signinWaiting(v)){ const s=signinWaitingWords(); return '<div class="sgn-top col"><p class="sgn-say" data-signin-waiting><b>'+esc(s[0])+'</b><span>'+esc(s[1])+'</span></p></div>'; } /* plant:card-waiting */
+  /* The desk's key not kept by a non-persistent profile (section 12): the card says so and offers nothing that would make a new desk. */
+  if(signinStranded(v)){ const s=signinStrandedWords(v); return '<div class="sgn-top col"><p class="sgn-say" data-signin-stranded><b>'+esc(s[0])+'</b><span>'+esc(s[1])+'</span></p></div>'; }
   const p=signinParts(v), choosing=signinChoosingNow();
   if(v.signedIn && !choosing){
     const keeps=signinKeepsAccount(v);
@@ -316,10 +324,10 @@ function accountCardHtml(v){
   const failed=v.said && v.said!=="signin-done" && v.said!=="signin-cancelled" && !v.signedIn;
   if(failed){ const s=signinSay(v.said, v); h+=signinIdentHtml({initial:"", name:s[0], sub:s[1]}); }
   else h+=signinIdentHtml({initial:"", name:t("Not signed in"),
-    sub:t("Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.")});
+    sub:v.offered.length ? t("Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.") : ""});
   h+=accountManagedHtml(v);
   if(v.outOwed) h+='<p class="sgn-cap" data-signin-out-owed>'+esc(t("This computer is signed out. Its place among the account's three computers is freed by itself as soon as the sign-in service can be reached."))+'</p>';
-  h+='<div>'+(v.said==="signin-preview" ? "" : signinPreviewHtml(v))+signinProvidersHtml(v.offered, true)
+  if(v.offered.length) h+='<div>'+(v.said==="signin-preview" ? "" : signinPreviewHtml(v))+signinProvidersHtml(v.offered, true)
     +(signinCapHolds(v) ? '<p class="sgn-cap">'+esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account."))+'</p>' : '') /* plant:card-cap */
     +'<p class="sgn-cap">'+esc(t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account."))+'</p></div>';
   if(choosing && v.signedIn) h+='<span class="sgn-acts"><button type="button" class="btn" data-signin-act="keep">'+esc(t("Cancel"))+'</button></span>';
@@ -340,21 +348,22 @@ function accountGroups(){
   const name=row("name","user",t("Your name"),"",'<input type="text" id="setAgentName" autocomplete="off" spellcheck="false"'
     +' placeholder="'+esc(t("first name"))+'" value="'+esc(agentName())+'">');
   const v=signinNow(), groups=[];
-  if(signinShown(v)) groups.push({rows:[], after:accountCardHtml(v)});
-  const rows=[name], buy=buyOffered() && !v.busy && !signinManaged(v) /* plant:buy-page-managed */
+  if(signinShown(v) || signinManaged(v)) groups.push({rows:[], after:accountCardHtml(v)}); /* plant:account-managed-closed */
+  const stranded=signinStranded(v) && !signinWaiting(v);
+  const rows=[name], buy=!stranded && buyOffered() && !v.busy && !signinManaged(v) /* plant:buy-page-managed */
     && !v.licenceManaged; /* plant:account-buy-managed */
   /* A managed tenant's account: nothing to buy, and who holds the licence instead (the copywriter's placeholder words). */
-  const held=v.licenceManaged ? row("buy","forward",t("Licence for one person"),t("Your organisation holds the Etiuda licence for this account, so there is nothing to buy here."),"") : null;
+  const held=!stranded && v.licenceManaged ? row("buy","forward",t("Licence for one person"),t("Your organisation holds the Etiuda licence for this account, so there is nothing to buy here."),"") : null;
   const cause=v.cause==="own-licence" ? t("Your organisation's licence follows the roles its IT department assigns, and this account has none, so it keeps its seat on the licence bought before.")
     : v.cause==="assigned" ? t("Your organisation has given this account a role, so it uses the organisation's licence; its seat on the licence bought before is not used meanwhile.") : "";
-  if(v.signedIn && !signinChoosingNow()){
+  if(!stranded && v.signedIn && !signinChoosingNow()){ /* plant:account-stranded-rows */
     const p=signinParts(v), val=x=>'<span class="sgn-val">'+esc(x)+'</span>', join=pair=>pair[0]+" "+pair[1];
     /* A press at a door the shell refused is said on the team's row, where it was pressed. */
     const doorSaid=signinDoorRefusedNow() ? signinSay("door", v)[0] : "";
     rows.push(p.team ? row("team","people",t("Team"),doorSaid||(p.team.lead?t("Led by {LEAD}").split("{LEAD}").join(p.team.lead):""),val(p.teamName))
       : v.doors.length && v.seat==="held" ? row("team","people",t("A team on this licence"),doorSaid||t("This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation."),signinDoorsHtml(v.doors))
       : v.deskOnly && v.seat==="held" ? row("team","people",t("Working without a team"),doorSaid||t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed."),"") /* plant:account-desk-only */
-      : row("team","people",t("No team yet"),doorSaid||t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself."),""));
+      : row("team","people",t("No team yet"),doorSaid||(signinManaged(v)?t("No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself."):t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself.")),"")); /* plant:no-team-managed */
     /* A managed computer shows the provider it is held to in the code's place, since nobody there is admitted by code. */
     if(v.managed && v.managed.provider) rows.push(row("signin","user",t("Sign-in"),"",lockedHtml(signinHeldTo(v.managed))));
     if(v.code && !signinManaged(v)) rows.push(row("code","code",t("Your sign-in code"), /* plant:code-row-managed */t("Not a secret. It tells a team's lead which account is yours."),
@@ -370,7 +379,7 @@ function accountGroups(){
   } else if(buy && !v.signedIn) rows.push(buyRow(v));
   else if(held && !v.signedIn) rows.push(held);
   groups.push({rows});
-  const s=v.signedIn && !signinChoosingNow() ? syncNow() : null;
+  const s=!stranded && v.signedIn && !signinChoosingNow() ? syncNow() : null; /* plant:account-stranded-sync */
   if(s && s.shown) groups.push({rows:[syncRow(s, v.signedIn)]});
   return groups;
 }
@@ -673,9 +682,9 @@ function orgTestLine(r){
   return why==="provider" ? t("No AI service is set up yet. One is chosen from the Menu, under Settings, then Data and defaults.")
     : why==="endpoint" ? t("Needed for this service: the full https address the organisation gives for it.")
     : why==="model" ? t("No model is named for the AI service, so nothing was sent. The model is named from the Menu, under Settings, then Data and defaults.")
-    : why==="key" ? t("No key is kept for this address, so nothing was sent.") // placeholder: Claudette
+    : why==="key" ? t("No key is kept for this address, so nothing was sent.")
     : why==="keyNoService" ? t("Not sent: the organisation set a key without naming its service.")
-    : why==="waiting" ? t("Not sent: Etiuda could not read yet what the organisation's IT set for this computer.") // placeholder: the copywriter
+    : why==="waiting" ? t("Not sent: Etiuda could not yet read what the organisation's IT set for this computer.")
     : why==="keyAway" ? t("The organisation's Group Policy sets the AI service's key, and that key goes only to the address the policy sets or to the service's own, never to an address typed here, so nothing was sent.")
     : why==="late" ? t("The AI service did not answer in time, so the request was given up.")
     : why==="busy" ? t("The AI service is busy and asked Etiuda to wait; a later try may go through.")

@@ -9027,12 +9027,12 @@ What is typed here stays in this browser.`;
     "{HOST} has not answered three times in a row, so the built-in model ranks on this computer, sending nothing, and the desk asks {HOST} again in a minute.": "{HOST} nie odpowiedział trzy razy z rzędu, więc kolejność ustala model wbudowany na tym komputerze, niczego nie wysyłając, a stanowisko zapyta {HOST} ponownie za minutę.",
     "organisation's model not answering, word matches only": "model organizacji nie odpowiada, tylko dopasowanie słów",
     "{HOST} has not answered three times in a row, so the search matches words alone, and the desk asks {HOST} again in a minute.": "{HOST} nie odpowiedział trzy razy z rzędu, więc wyszukiwanie dopasowuje tylko słowa, a stanowisko zapyta {HOST} ponownie za minutę.",
-    // placeholder: Claudette, the eight lines below, which her words do not cover
+    "No key is kept for this address, so nothing was sent.": "Dla tego adresu nie zachowano klucza, więc nic nie zostało wysłane.",
+    // placeholder: Claudette, the seven lines below, which her words do not cover
     "Until the service, the model and the key are complete, the built-in model ranks and nothing is sent.": "Dopóki usługa, model i klucz nie są uzupełnione, kolejność ustala model wbudowany i nic nie jest wysyłane.",
     "That model name could not be kept.": "Tej nazwy modelu nie udało się zachować.",
     "That key could not be kept.": "Tego klucza nie udało się zachować.",
     "The setting could not be saved just now.": "Tego ustawienia nie udało się teraz zapisać.",
-    "No key is kept for this address, so nothing was sent.": "Dla tego adresu nie zachowano klucza, więc nic nie zostało wysłane.",
     "The key kept here was given for the previous service or address, so it was forgotten rather than sent to this one. A key for this one goes in the Key field.": "Zachowany klucz podano dla poprzedniej usługi lub adresu, więc został usunięty, zamiast trafić pod nowy. Klucz dla nowego wpisuje się w polu Klucz.",
     // placeholder: Claudette
     "Could not reach {HOST}.": "Nie udało się połączyć z {HOST}.",
@@ -9358,6 +9358,8 @@ What is typed here stays in this browser.`;
     "This team is no longer offered here, or this computer is already in a team, so nothing was sent.": "Ten zespół nie jest już tu proponowany albo ten komputer należy już do zespołu, więc nic nie wysłano.",
     "The team did not let this computer in. Its lead can send an invitation instead.": "Zespół nie wpuścił tego komputera. Jego lider może zamiast tego wysłać zaproszenie.",
     "No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself.": "Żaden zespół nie przyjął jeszcze tego konta. Gdy lider zespołu przyjmie je po kodzie poniżej, katalog przyjdzie sam.",
+    "No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself.": "Żaden zespół nie przyjął jeszcze tego konta. Gdy lider zespołu je przyjmie, katalog przyjdzie sam.",
+    "This account is signed in, and no team has admitted it yet. Once a lead admits it, the catalog arrives by itself.": "To konto jest zalogowane, ale żaden zespół jeszcze go nie przyjął. Gdy lider zespołu je przyjmie, katalog przyjdzie sam.",
     "Your sign-in code": "Kod logowania",
     "Not a secret. It tells a team's lead which account is yours.": "To nie tajemnica. Po nim lider zespołu rozpoznaje, czyje to konto.",
     "Check now": "Sprawdź teraz",
@@ -9386,9 +9388,11 @@ What is typed here stays in this browser.`;
     "This account's organisation has not allowed Etiuda at its sign-in provider.": "Organizacja tego konta nie dopuściła Etiudy u swojego dostawcy logowania.",
     "Your organisation no longer gives this account access to Etiuda.": "Organizacja nie przyznaje już temu kontu dostępu do Etiudy.",
     "This desk keeps its catalog and works with it as before, but new editions from the team no longer reach it. The organisation's IT department can give access again.": "To stanowisko zachowuje swój katalog i działa z nim jak dotąd, ale nowe wydania od zespołu już do niego nie trafiają. Dostęp może przywrócić dział IT organizacji.",
+    "This desk keeps its catalog and works with it as before, but new editions from the team no longer reach it. To ask for access: {CONTACT}.": "To stanowisko zachowuje swój katalog i działa z nim jak dotąd, ale nowe wydania od zespołu już do niego nie trafiają. W sprawie dostępu: {CONTACT}.",
     "This account's sign-in needs renewing.": "Logowanie tego konta wymaga odnowienia.",
     "This desk keeps its catalog and works with it as before. Signing in again, under Account, brings the team's new editions back.": "To stanowisko zachowuje swój katalog i działa z nim jak dotąd. Po ponownym zalogowaniu się w części Konto nowe wydania od zespołu znów zaczną docierać.",
     "Its IT department can allow it; another account can be used meanwhile.": "Może to zmienić jej dział IT; do tego czasu można użyć innego konta.",
+    "To ask for access: {CONTACT}. Another account can be used meanwhile.": "W sprawie dostępu: {CONTACT}. Do tego czasu można użyć innego konta.",
     "No Etiuda licence has a seat for this account.": "Żadna licencja Etiudy nie ma miejsca dla tego konta.",
     "The sign-in worked. A seat comes from a trial, a purchase, or a team's lead admitting the account; another account can be used meanwhile.": "Logowanie się powiodło. Miejsce daje okres próbny, zakup albo przyjęcie konta przez lidera zespołu; do tego czasu można użyć innego konta.",
     "The sign-in service cannot be reached just now.": "Usługa logowania jest teraz nieosiągalna.",
@@ -9404,15 +9408,22 @@ What is typed here stays in this browser.`;
     "This computer's profile did not keep this desk's key.": "Profil na tym komputerze nie zachował klucza tego stanowiska.",
     "The organisation's IT department can have the profile keep it.": "Dział IT organizacji może sprawić, że profil będzie go zachowywał.",
     "Everything else on this desk works as before; only signing in waits.": "Wszystko inne na tym stanowisku działa jak dotąd; czeka tylko logowanie.",
+    "Everything else on this desk works as before.": "Wszystko inne na tym stanowisku działa jak dotąd.",
     "Etiuda keeps working with the catalog it has.": "Etiuda działa dalej na katalogu, który już ma.",
-    /* placeholders for the copywriter: the desk waits for machine policy to be read (review 09, finding 4) */
-    "Etiuda is waiting for the organisation's settings.": "Etiuda czeka na ustawienia organizacji.",
-    "It could not read yet what the organisation's IT set for this computer, so signing in waits until it can, and it tries again by itself.": "Nie mogła jeszcze odczytać, co dział IT organizacji ustawił dla tego komputera, więc logowanie czeka, aż to się uda, a Etiuda sama próbuje ponownie.",
-    "Not sent: Etiuda could not read yet what the organisation's IT set for this computer.": "Nie wysłano: Etiuda nie mogła jeszcze odczytać, co dział IT organizacji ustawił dla tego komputera.",
-    "Etiuda could not read yet what the organisation's IT set for this computer, so invitations wait until it can, and it tries again by itself.": "Etiuda nie mogła jeszcze odczytać, co dział IT organizacji ustawił dla tego komputera, więc zaproszenia czekają, aż to się uda, a Etiuda sama próbuje ponownie.",
-    /* placeholder for the copywriter: machine policy names another lead (review 09, finding 2) */
-    "The organisation's IT names another lead for this computer, so nothing this team's lead signs is used here.": "Dział IT organizacji wskazał dla tego komputera innego lidera, więc nic, co podpisuje lider tego zespołu, nie jest tu używane.",
+    /* The desk waits for machine policy to be read, or machine policy names another lead (the copywriter, B6). */
+    "Waiting for the organisation's settings": "Oczekiwanie na ustawienia organizacji",
+    "Etiuda could not yet read what the organisation's IT set for this computer, so signing in waits. It tries again by itself, every few seconds at first and then once a minute, and everything already on this computer works as before.": "Etiuda nie mogła jeszcze odczytać tego, co dział IT organizacji ustawił dla tego komputera, więc logowanie czeka. Sama ponawia próbę, najpierw co kilka sekund, potem raz na minutę, a wszystko, co już jest na tym komputerze, działa jak dotąd.",
+    "Not sent: Etiuda could not yet read what the organisation's IT set for this computer.": "Nie wysłano: Etiuda nie mogła jeszcze odczytać tego, co dział IT organizacji ustawił dla tego komputera.",
+    "This invitation waits until Etiuda can read what the organisation's IT set for this computer. Nothing is lost: it can be used again then.": "To zaproszenie czeka, aż Etiuda odczyta, co dział IT organizacji ustawił dla tego komputera. Nic nie ginie: można go wtedy użyć ponownie.",
+    "The organisation's IT names another lead for this computer, so nothing this team's lead signs is used here. To ask about it: {CONTACT}.": "Dział IT organizacji wskazał dla tego komputera innego lidera, więc nic, co podpisuje lider tego zespołu, nie jest tu używane. W tej sprawie: {CONTACT}.",
+    "The organisation's IT names another lead for this computer, so nothing this team's lead signs is used here. The organisation's IT department can say which team this computer belongs to.": "Dział IT organizacji wskazał dla tego komputera innego lidera, więc nic, co podpisuje lider tego zespołu, nie jest tu używane. Dział IT organizacji może wyjaśnić, do którego zespołu należy ten komputer.",
+    /* Another account refused on a managed computer (the copywriter, B1). */
+    "This computer stays with the account it has.": "Ten komputer zostaje przy koncie, które już ma.",
+    "Your organisation manages the accounts on this computer, so another account cannot sign in here; nothing changed. To ask about it: {CONTACT}.": "Organizacja zarządza kontami na tym komputerze, więc nie można się tu zalogować innym kontem; nic się nie zmieniło. W tej sprawie: {CONTACT}.",
+    "Your organisation manages the accounts on this computer, so another account cannot sign in here; nothing changed. The organisation's IT department decides which account is used here.": "Organizacja zarządza kontami na tym komputerze, więc nie można się tu zalogować innym kontem; nic się nie zmieniło. O tym, jakie konto jest tu używane, decyduje dział IT organizacji.",
     "Managed by your organisation.": "Zarządzane przez organizację.",
+    "No sign-in is offered on this computer just now; the organisation's IT department decides it.": "Na tym komputerze nie jest teraz dostępne logowanie; decyduje o tym dział IT organizacji.",
+    "No sign-in is offered on this computer just now. To ask about it: {CONTACT}.": "Na tym komputerze nie jest teraz dostępne logowanie. W tej sprawie: {CONTACT}.",
     "Your organisation gave this account its seat on this desk. Its IT department decides who uses Etiuda here, and with which account.": "Miejsce w licencji na tym stanowisku przydzieliła temu kontu organizacja. O tym, kto i jakim kontem korzysta tu z Etiudy, decyduje jej dział IT.",
     "Seat held · checked {WHEN}": "Miejsce zajęte · sprawdzono {WHEN}",
     "A shared computer: another person may sign in here, with an account of your organisation.": "Wspólny komputer: może się tu zalogować inna osoba, kontem organizacji.",
@@ -19427,7 +19438,7 @@ What is typed here stays in this browser.`;
     }
     if (joinMode === "refused") return {
       title: t("Join a team"),
-      line: joinWhy === "relay-mirror" ? t("Etiuda could not make its own copy of the team's files on this computer, so nothing was written. Once the disk has room and Etiuda may write in its folder, Join again; the invitation still works.") : joinWhy === "folder-not-writable" ? t("This computer can only read from the team's folder; joining needs permission to write, such as Content manager or Editor. Once that is granted, join again; the invitation still works.") : joinWhy === "silent" ? t("This folder could not be reached, so nothing was written.") : joinWhy === "pinned" ? t("This invitation names a team this desk already knows, but with a different lead's key. It was not used, and nothing changed. Tell the team's lead about it.") : joinWhy === "barred" ? t("This invitation names a team whose lead was forgotten on this desk. It was not used, and nothing changed. To join, ask from the team's catalog instead.") : joinWhy === "foreign" ? t("This folder holds another team, or the same team under a different lead's key, so nothing was written. Tell the team's lead about it.") : joinWhy === "unreadable" ? t("The team file in this folder could not be read, so this desk did not join and nothing was written. Let the team's lead know, so they can check the folder.") : joinWhy === "check" ? t("This code does not match this invitation. Ask the lead again before joining.") : joinWhy === "policy" ? t("The organisation's IT sets this desk's team, so invitations are turned off.") : joinWhy === "waiting" ? t("Etiuda could not read yet what the organisation's IT set for this computer, so invitations wait until it can, and it tries again by itself.") : t("This invitation cannot be read, so nothing was changed."),
+      line: joinWhy === "relay-mirror" ? t("Etiuda could not make its own copy of the team's files on this computer, so nothing was written. Once the disk has room and Etiuda may write in its folder, Join again; the invitation still works.") : joinWhy === "folder-not-writable" ? t("This computer can only read from the team's folder; joining needs permission to write, such as Content manager or Editor. Once that is granted, join again; the invitation still works.") : joinWhy === "silent" ? t("This folder could not be reached, so nothing was written.") : joinWhy === "pinned" ? t("This invitation names a team this desk already knows, but with a different lead's key. It was not used, and nothing changed. Tell the team's lead about it.") : joinWhy === "barred" ? t("This invitation names a team whose lead was forgotten on this desk. It was not used, and nothing changed. To join, ask from the team's catalog instead.") : joinWhy === "foreign" ? t("This folder holds another team, or the same team under a different lead's key, so nothing was written. Tell the team's lead about it.") : joinWhy === "unreadable" ? t("The team file in this folder could not be read, so this desk did not join and nothing was written. Let the team's lead know, so they can check the folder.") : joinWhy === "check" ? t("This code does not match this invitation. Ask the lead again before joining.") : joinWhy === "policy" ? t("The organisation's IT sets this desk's team, so invitations are turned off.") : joinWhy === "waiting" ? t("This invitation waits until Etiuda can read what the organisation's IT set for this computer. Nothing is lost: it can be used again then.") : t("This invitation cannot be read, so nothing was changed."),
       body: "",
       acts: [["back", t("Cancel")]]
     };
@@ -29309,9 +29320,10 @@ What is typed here stays in this browser.`;
   }
   function signinStrandedWords(v) {
     const c = v && v.managed ? v.managed.contact : "";
+    const offered2 = !!(v && (v.offered.length || v.signedIn));
     return [
       t("This computer's profile did not keep this desk's key."),
-      (c ? named(t("To ask for access: {CONTACT}."), "{CONTACT}", c) : t("The organisation's IT department can have the profile keep it.")) + " " + t("Everything else on this desk works as before; only signing in waits.")
+      (c ? named(t("To ask for access: {CONTACT}."), "{CONTACT}", c) : t("The organisation's IT department can have the profile keep it.")) + " " + (offered2 ? t("Everything else on this desk works as before; only signing in waits.") : t("Everything else on this desk works as before."))
     ];
   }
   function signinWaiting(v) {
@@ -29319,9 +29331,8 @@ What is typed here stays in this browser.`;
   }
   function signinWaitingWords() {
     return [
-      t("Etiuda is waiting for the organisation's settings."),
-      /* placeholder: the copywriter */
-      t("It could not read yet what the organisation's IT set for this computer, so signing in waits until it can, and it tries again by itself.")
+      t("Waiting for the organisation's settings"),
+      t("Etiuda could not yet read what the organisation's IT set for this computer, so signing in waits. It tries again by itself, every few seconds at first and then once a minute, and everything already on this computer works as before.")
     ];
   }
   function signinRefusedHere(reason, v) {
@@ -29343,7 +29354,7 @@ What is typed here stays in this browser.`;
     return signinV;
   }
   function signinShown(v) {
-    return !!(v && (v.offered.length || v.signedIn || signinWaiting(v)));
+    return !!(v && (v.offered.length || v.signedIn || signinWaiting(v) || signinStranded(v)));
   }
   var FIRST_SIGNIN_KEY = "eFirstSigninSeen";
   function firstSigninSeen() {
@@ -29358,6 +29369,7 @@ What is typed here stays in this browser.`;
     const seen = o && "seen" in o ? !!o.seen : firstSigninSeen();
     const policy = o && "policy" in o ? !!o.policy : eCatalogFolderPinned();
     if (policy) return false;
+    if (signinStranded(s)) return false;
     return !!(s && s.offered.length && !s.signedIn && !seen);
   }
   var firstSigninPending = false;
@@ -29527,12 +29539,22 @@ What is typed here stays in this browser.`;
         return [t("The sign-in service could not be reached."), t("Nothing changed: this computer is not signed in, and Etiuda works as before.")];
       /* Where Managed is not set, decision 20 (b)'s words serve an account not assigned as they serve the organisation's refusal. */
       case "signin-notassigned":
-      case "signin-notallowed":
-        return [t("This account's organisation has not allowed Etiuda at its sign-in provider."), t("Its IT department can allow it; another account can be used meanwhile.")];
+      case "signin-notallowed": {
+        const c = v && v.managed ? v.managed.contact : "";
+        return [
+          t("This account's organisation has not allowed Etiuda at its sign-in provider."),
+          c ? named(t("To ask for access: {CONTACT}. Another account can be used meanwhile."), "{CONTACT}", c) : t("Its IT department can allow it; another account can be used meanwhile.")
+        ];
+      }
       case "no-role":
         return signinNoRoleWords(v);
-      case "seat-removed":
-        return [t("Your organisation no longer gives this account access to Etiuda."), t("This desk keeps its catalog and works with it as before, but new editions from the team no longer reach it. The organisation's IT department can give access again.")];
+      case "seat-removed": {
+        const c = v && v.managed ? v.managed.contact : "";
+        return [
+          t("Your organisation no longer gives this account access to Etiuda."),
+          c ? named(t("This desk keeps its catalog and works with it as before, but new editions from the team no longer reach it. To ask for access: {CONTACT}."), "{CONTACT}", c) : t("This desk keeps its catalog and works with it as before, but new editions from the team no longer reach it. The organisation's IT department can give access again.")
+        ];
+      }
       case "seat-renew":
         return [t("This account's sign-in needs renewing."), t("This desk keeps its catalog and works with it as before. Signing in again, under Account, brings the team's new editions back.")];
       case "desks":
@@ -29541,7 +29563,10 @@ What is typed here stays in this browser.`;
       case "full":
         return p && p.team && p.team.lead ? [named(t("{TEAM} has no free seat just now."), "{TEAM}", p.teamName), named(t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and {LEAD}, the team's lead, sees this account's sign-in code among those who have signed in."), "{LEAD}", p.team.lead)] : [t("No seat is free on the organisation's licence just now."), t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and the team's lead sees this account's sign-in code among those who have signed in.")];
       case "asklead":
-        return [t("The organisation's Etiuda licence seats the people its leads add."), t("Give the team's lead this code. Once added, this desk takes its seat by itself; nothing more is needed here.")];
+        return [
+          t("The organisation's Etiuda licence seats the people its leads add."),
+          signinManaged(v) ? t("This account is signed in, and no team has admitted it yet. Once a lead admits it, the catalog arrives by itself.") : t("Give the team's lead this code. Once added, this desk takes its seat by itself; nothing more is needed here.")
+        ];
       case "nolicence":
         return [t("No Etiuda licence has a seat for this account."), t("The sign-in worked. A seat comes from a trial, a purchase, or a team's lead admitting the account; another account can be used meanwhile.")];
       case "offline":
@@ -29560,9 +29585,13 @@ What is typed here stays in this browser.`;
          signing in again works once the service answers. */
       case "signin-switch-out":
         return [t("The sign-in service could not be reached."), ""];
-      /* WORDS OWED (the copywriter): signin-other, why this computer keeps the account it has and whom to ask (the policy's contact, or
-         its IT department); until they come it says the default below. */
-      case "signin-other":
+      case "signin-other": {
+        const c = v && v.managed ? v.managed.contact : "";
+        return [
+          t("This computer stays with the account it has."),
+          c ? named(t("Your organisation manages the accounts on this computer, so another account cannot sign in here; nothing changed. To ask about it: {CONTACT}."), "{CONTACT}", c) : t("Your organisation manages the accounts on this computer, so another account cannot sign in here; nothing changed. The organisation's IT department decides which account is used here.")
+        ];
+      }
       default:
         return [t("The sign-in did not finish."), t("Nothing changed, and signing in can be tried again.")];
     }
@@ -29573,6 +29602,7 @@ What is typed here stays in this browser.`;
   var SIGNIN_REASON_SAID = ["desks", "no-role", "signin-notallowed", "unreached", "signin-unreached", "signin-timeout", "signin-browser", "signin-notassigned", "signin-tenant"];
   function signinTold(v) {
     if (!v || !v.signedIn) return null;
+    if (v.said === "signin-other") return { kind: "pressed", say: signinSay("signin-other", v), acts: [{ act: "choose", label: t("Try again"), solid: true }] };
     if (FAIL_FIRST.indexOf(v.said) >= 0) return {
       kind: "pressed",
       say: [t("The new sign-in did not finish."), named(
@@ -29615,8 +29645,8 @@ What is typed here stays in this browser.`;
     if (!signinShown(v)) return null;
     const p = signinParts(v), acct = { act: "account", label: t("Account settings") };
     const ident = { initial: p.initial, name: p.name, sub: p.sub, off: p.off };
-    if (signinStranded(v)) return { moment: "stranded", say: signinStrandedWords(v) };
     if (signinWaiting(v)) return { moment: "policy-waiting", say: signinWaitingWords() };
+    if (signinStranded(v)) return { moment: "stranded", say: signinStrandedWords(v) };
     if (v.busy) return {
       moment: "waiting",
       heading: t("Finish signing in in the browser"),
@@ -29669,10 +29699,12 @@ What is typed here stays in this browser.`;
       moment: "asklead",
       ident,
       say: signinSay("asklead", v),
-      code: v.code,
+      code: signinManaged(v) ? "" : v.code,
+      /* plant:asklead-code-managed */
       acts: [{ act: "check", label: t("Check now") }, acct],
-      own: v.seat === "held" && v.trialUntil ? [
+      own: signinManaged(v) ? null : v.seat === "held" && v.trialUntil ? [
         t("This account's own trial is running."),
+        /* plant:asklead-trial-managed */
         named(t("Fourteen days, until {DATE}, on up to three computers. A lead can add this account at any time, without waiting for the trial to end."), "{DATE}", signinDay(v.trialUntil))
       ] : null
     };
@@ -40053,11 +40085,15 @@ What is typed here stays in this browser.`;
     if (!others.length) return said;
     return said + " " + (others.length === 1 ? t("Another catalog of the team has a newer edition.") : t("Other catalogs of the team with a newer edition: {N}.").split("{N}").join(String(others.length)));
   }
+  function teamOtherLeadNote() {
+    const v = signinNow(), c = v && v.managed ? v.managed.contact : "";
+    return c ? t("The organisation's IT names another lead for this computer, so nothing this team's lead signs is used here. To ask about it: {CONTACT}.").split("{CONTACT}").join(c) : t("The organisation's IT names another lead for this computer, so nothing this team's lead signs is used here. The organisation's IT department can say which team this computer belongs to.");
+  }
   function teamRowHtml(l, status, bar) {
     const notes = [
       l.relay ? t("Relay: {HOST}").split("{HOST}").join(l.relay) : l.folder ? t("Folder: {FOLDER}").split("{FOLDER}").join(l.folder) : "",
       l.removed ? t("This team no longer includes this desk.") : status,
-      l.otherLead ? t("The organisation's IT names another lead for this computer, so nothing this team's lead signs is used here.") : l.policy ? t("The organisation's IT sets this desk's team.") : bar ? t("After leaving a team, this desk can join it again with a new invitation from its lead.") : ""
+      l.otherLead ? teamOtherLeadNote() : l.policy ? t("The organisation's IT sets this desk's team.") : bar ? t("After leaving a team, this desk can join it again with a new invitation from its lead.") : ""
     ];
     if (l.head) notes.push(teamHeadNote(l.head));
     if (l.awaitsEdition) notes.push(t("This desk waits for the team's lead to publish a first edition."));
@@ -40127,9 +40163,11 @@ What is typed here stays in this browser.`;
   }
   function accountManagedHtml(v) {
     if (!signinManaged(v) || signinWaiting(v)) return "";
-    const held = v.signedIn && v.seat === "held", shared = v.managed.shared;
+    const held = v.signedIn && v.seat === "held", shared = v.managed.shared, c = v.managed.contact;
+    const closed = !v.signedIn && !v.offered.length;
     const line = [
       held ? t("Your organisation gave this account its seat on this desk. Its IT department decides who uses Etiuda here, and with which account.") : "",
+      closed ? c ? t("No sign-in is offered on this computer just now. To ask about it: {CONTACT}.").split("{CONTACT}").join(c) : t("No sign-in is offered on this computer just now; the organisation's IT department decides it.") : "",
       shared ? t("A shared computer: another person may sign in here, with an account of your organisation.") : ""
     ].filter(Boolean).join(" ");
     return '<p class="sgn-say" data-signin-managed><b>' + esc(t("Managed by your organisation.")) + "</b>" + (line ? "<span>" + esc(line) + "</span>" : "") + "</p>";
@@ -40143,13 +40181,13 @@ What is typed here stays in this browser.`;
     return '<span class="sgn-val">' + esc(value) + '</span><span class="sgn-lock">' + ICON_LOCK2 + esc(t("Set by your organisation")) + "</span>";
   }
   function accountCardHtml(v) {
-    if (signinStranded(v)) {
-      const s = signinStrandedWords(v);
-      return '<div class="sgn-top col"><p class="sgn-say" data-signin-stranded><b>' + esc(s[0]) + "</b><span>" + esc(s[1]) + "</span></p></div>";
-    }
     if (signinWaiting(v)) {
       const s = signinWaitingWords();
       return '<div class="sgn-top col"><p class="sgn-say" data-signin-waiting><b>' + esc(s[0]) + "</b><span>" + esc(s[1]) + "</span></p></div>";
+    }
+    if (signinStranded(v)) {
+      const s = signinStrandedWords(v);
+      return '<div class="sgn-top col"><p class="sgn-say" data-signin-stranded><b>' + esc(s[0]) + "</b><span>" + esc(s[1]) + "</span></p></div>";
     }
     const p = signinParts(v), choosing = signinChoosingNow();
     if (v.signedIn && !choosing) {
@@ -40179,11 +40217,11 @@ What is typed here stays in this browser.`;
     } else h += signinIdentHtml({
       initial: "",
       name: t("Not signed in"),
-      sub: t("Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.")
+      sub: v.offered.length ? t("Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.") : ""
     });
     h += accountManagedHtml(v);
     if (v.outOwed) h += '<p class="sgn-cap" data-signin-out-owed>' + esc(t("This computer is signed out. Its place among the account's three computers is freed by itself as soon as the sign-in service can be reached.")) + "</p>";
-    h += "<div>" + (v.said === "signin-preview" ? "" : signinPreviewHtml(v)) + signinProvidersHtml(v.offered, true) + (signinCapHolds(v) ? '<p class="sgn-cap">' + esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.")) + "</p>" : "") + '<p class="sgn-cap">' + esc(t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account.")) + "</p></div>";
+    if (v.offered.length) h += "<div>" + (v.said === "signin-preview" ? "" : signinPreviewHtml(v)) + signinProvidersHtml(v.offered, true) + (signinCapHolds(v) ? '<p class="sgn-cap">' + esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.")) + "</p>" : "") + '<p class="sgn-cap">' + esc(t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account.")) + "</p></div>";
     if (choosing && v.signedIn) h += '<span class="sgn-acts"><button type="button" class="btn" data-signin-act="keep">' + esc(t("Cancel")) + "</button></span>";
     return h + "</div>";
   }
@@ -40208,14 +40246,15 @@ What is typed here stays in this browser.`;
   function accountGroups() {
     const name = row("name", "user", t("Your name"), "", '<input type="text" id="setAgentName" autocomplete="off" spellcheck="false" placeholder="' + esc(t("first name")) + '" value="' + esc(agentName()) + '">');
     const v = signinNow(), groups = [];
-    if (signinShown(v)) groups.push({ rows: [], after: accountCardHtml(v) });
-    const rows = [name], buy = buyOffered() && !v.busy && !signinManaged(v) && !v.licenceManaged;
-    const held = v.licenceManaged ? row("buy", "forward", t("Licence for one person"), t("Your organisation holds the Etiuda licence for this account, so there is nothing to buy here."), "") : null;
+    if (signinShown(v) || signinManaged(v)) groups.push({ rows: [], after: accountCardHtml(v) });
+    const stranded = signinStranded(v) && !signinWaiting(v);
+    const rows = [name], buy = !stranded && buyOffered() && !v.busy && !signinManaged(v) && !v.licenceManaged;
+    const held = !stranded && v.licenceManaged ? row("buy", "forward", t("Licence for one person"), t("Your organisation holds the Etiuda licence for this account, so there is nothing to buy here."), "") : null;
     const cause = v.cause === "own-licence" ? t("Your organisation's licence follows the roles its IT department assigns, and this account has none, so it keeps its seat on the licence bought before.") : v.cause === "assigned" ? t("Your organisation has given this account a role, so it uses the organisation's licence; its seat on the licence bought before is not used meanwhile.") : "";
-    if (v.signedIn && !signinChoosingNow()) {
+    if (!stranded && v.signedIn && !signinChoosingNow()) {
       const p = signinParts(v), val = (x) => '<span class="sgn-val">' + esc(x) + "</span>", join = (pair) => pair[0] + " " + pair[1];
       const doorSaid = signinDoorRefusedNow() ? signinSay("door", v)[0] : "";
-      rows.push(p.team ? row("team", "people", t("Team"), doorSaid || (p.team.lead ? t("Led by {LEAD}").split("{LEAD}").join(p.team.lead) : ""), val(p.teamName)) : v.doors.length && v.seat === "held" ? row("team", "people", t("A team on this licence"), doorSaid || t("This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation."), signinDoorsHtml(v.doors)) : v.deskOnly && v.seat === "held" ? row("team", "people", t("Working without a team"), doorSaid || t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed."), "") : row("team", "people", t("No team yet"), doorSaid || t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself."), ""));
+      rows.push(p.team ? row("team", "people", t("Team"), doorSaid || (p.team.lead ? t("Led by {LEAD}").split("{LEAD}").join(p.team.lead) : ""), val(p.teamName)) : v.doors.length && v.seat === "held" ? row("team", "people", t("A team on this licence"), doorSaid || t("This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation."), signinDoorsHtml(v.doors)) : v.deskOnly && v.seat === "held" ? row("team", "people", t("Working without a team"), doorSaid || t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed."), "") : row("team", "people", t("No team yet"), doorSaid || (signinManaged(v) ? t("No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself.") : t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself.")), ""));
       if (v.managed && v.managed.provider) rows.push(row("signin", "user", t("Sign-in"), "", lockedHtml(signinHeldTo(v.managed))));
       if (v.code && !signinManaged(v)) rows.push(row(
         "code",
@@ -40241,7 +40280,7 @@ What is typed here stays in this browser.`;
     } else if (buy && !v.signedIn) rows.push(buyRow(v));
     else if (held && !v.signedIn) rows.push(held);
     groups.push({ rows });
-    const s = v.signedIn && !signinChoosingNow() ? syncNow() : null;
+    const s = !stranded && v.signedIn && !signinChoosingNow() ? syncNow() : null;
     if (s && s.shown) groups.push({ rows: [syncRow(s, v.signedIn)] });
     return groups;
   }
@@ -40630,7 +40669,7 @@ What is typed here stays in this browser.`;
     const at = (s) => s.split("{HOST}").join(host).split("{MODEL}").join(model);
     if (r && r.ok && Number.isFinite(r.ms)) return at(t("Connected: {HOST} answered in {SECONDS} s, model {MODEL}.")).split("{SECONDS}").join((r.ms / 1e3).toFixed(1).replace(".", uiLang() === "pl" ? "," : "."));
     if (r && r.ok) return at(t("Connected: {HOST} answered, model {MODEL}."));
-    return why === "provider" ? t("No AI service is set up yet. One is chosen from the Menu, under Settings, then Data and defaults.") : why === "endpoint" ? t("Needed for this service: the full https address the organisation gives for it.") : why === "model" ? t("No model is named for the AI service, so nothing was sent. The model is named from the Menu, under Settings, then Data and defaults.") : why === "key" ? t("No key is kept for this address, so nothing was sent.") : why === "keyNoService" ? t("Not sent: the organisation set a key without naming its service.") : why === "waiting" ? t("Not sent: Etiuda could not read yet what the organisation's IT set for this computer.") : why === "keyAway" ? t("The organisation's Group Policy sets the AI service's key, and that key goes only to the address the policy sets or to the service's own, never to an address typed here, so nothing was sent.") : why === "late" ? t("The AI service did not answer in time, so the request was given up.") : why === "busy" ? t("The AI service is busy and asked Etiuda to wait; a later try may go through.") : why === "unreached" ? at(t("Could not reach {HOST}.")) : at(t("{HOST} answered with an error, so the connection is not confirmed."));
+    return why === "provider" ? t("No AI service is set up yet. One is chosen from the Menu, under Settings, then Data and defaults.") : why === "endpoint" ? t("Needed for this service: the full https address the organisation gives for it.") : why === "model" ? t("No model is named for the AI service, so nothing was sent. The model is named from the Menu, under Settings, then Data and defaults.") : why === "key" ? t("No key is kept for this address, so nothing was sent.") : why === "keyNoService" ? t("Not sent: the organisation set a key without naming its service.") : why === "waiting" ? t("Not sent: Etiuda could not yet read what the organisation's IT set for this computer.") : why === "keyAway" ? t("The organisation's Group Policy sets the AI service's key, and that key goes only to the address the policy sets or to the service's own, never to an address typed here, so nothing was sent.") : why === "late" ? t("The AI service did not answer in time, so the request was given up.") : why === "busy" ? t("The AI service is busy and asked Etiuda to wait; a later try may go through.") : why === "unreached" ? at(t("Could not reach {HOST}.")) : at(t("{HOST} answered with an error, so the connection is not confirmed."));
   }
   function orgModelHostCall() {
     const h = eHost();
