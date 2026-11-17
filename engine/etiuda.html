@@ -5909,6 +5909,7 @@ What is typed here stays in this browser.`;
   __export(words_exports, {
     WORD_PREFIX_MIN: () => WORD_PREFIX_MIN,
     WORD_STEM_MIN: () => WORD_STEM_MIN,
+    foldAccents: () => foldAccents,
     foldDiacritics: () => foldDiacritics,
     sharedPrefixLen: () => sharedPrefixLen,
     splitWords: () => splitWords,
@@ -6008,6 +6009,9 @@ What is typed here stays in this browser.`;
       if (t2.charCodeAt(i) > 127) return t2.replace(FOLD_RE, (ch) => FOLD[ch] || ch);
     }
     return t2;
+  }
+  function foldAccents(s) {
+    return String(s || "").toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[łŁ]/g, "l");
   }
   function splitWords(s) {
     return foldDiacritics(String(s == null ? "" : s).toLowerCase()).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
@@ -19977,7 +19981,7 @@ What is typed here stays in this browser.`;
     wireShortcutsList: () => wireShortcutsList
   });
   function scFold(s) {
-    return String(s || "").toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return foldAccents(s);
   }
   function scMatch(d, q) {
     return !q || scFold(t(d.label) + " " + (d.hint ? t(d.hint) : "")).indexOf(q) >= 0;
@@ -38883,7 +38887,7 @@ What is typed here stays in this browser.`;
     { key: "data", icon: "cards", name: t("Catalog & data"), lede: t("The catalog in use on this desk, and loading another catalog file.") }
   ];
   function libFold(s) {
-    return String(s || "").toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+    return foldAccents(s).trim();
   }
   function rememberedLib() {
     const order = ["catmac", "intents", "who", "data"];

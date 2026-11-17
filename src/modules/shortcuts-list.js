@@ -1,11 +1,12 @@
 import { SC_DEFS, formatActionChord, formatChord, scChord, scChord2 } from "./shortcuts.js";
 import { t, toast } from "./ui-lang.js";
 import { esc } from "./esc.js";
+import { foldAccents } from "./words.js";
 
 /* The list, its capture handling and its reset are ONE component, rendered into whatever
    container asks, so a rebinding made anywhere behaves identically. A search narrows it to
    the actions whose name or hint holds the words, already folded to lower case without accents. */
-function scFold(s){ return String(s||"").toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,""); }
+function scFold(s){ return foldAccents(s); }
 function scMatch(d,q){ return !q || scFold(t(d.label)+" "+(d.hint?t(d.hint):"")).indexOf(q)>=0; }
 function shortcutsShown(q){ return SC_DEFS.filter(d=>scMatch(d,q)).length; }
 function shortcutsListHtml(q){

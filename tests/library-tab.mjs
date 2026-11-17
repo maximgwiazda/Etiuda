@@ -975,6 +975,74 @@ await checkAsync("L20 a card titled Settings keeps that title through an interfa
   }
 });
 
+/* Library search (#libSearch) folds Polish l-stroke on both sides across cards, categories,
+   intents and ROLE suggestions, while rows without it stay hidden. */
+await checkAsync("L21 searching the Library with plain l finds Polish rows with l-stroke, and excludes rows without it", async () => {
+  if (wired) return wired;
+  const CAT = await import(MOD("catalog.js"));
+  const RP = await import(MOD("repaint.js"));
+  const ST = await import(MOD("storage.js"));
+  const hadUi = ST.lsGet("eUiLang");
+  const hadLang = AS.lang;
+  const hadWho = Array.isArray(PK.pack.who) ? PK.pack.who.slice() : null;
+  const catalog = {
+    format: 2, kind: "etiuda-catalog", id: "lamp-lstroke", rev: 1, name: "Lamp l-stroke", date: "2026-01-09",
+    langs: [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }],
+    tags: [
+      { id: "t-pay", kind: "shelf", label: { en: "Płatności", pl: "Płatności" } },
+      { id: "t-ship", kind: "shelf", label: { en: "Dostawa", pl: "Dostawa" } },
+      { id: "t-glass", kind: "request", clause: { en: "Broken glass", pl: "Pęknięte szkło" } },
+      { id: "t-acct", kind: "request", clause: { en: "Account", pl: "Konto" } },
+    ],
+    cards: [
+      { id: "c-bed", shelf: "t-pay", bodyShape: "plain", requests: ["t-glass"],
+        title: { en: "Bed frame", pl: "Łóżko drewniane" }, body: { en: "Bed.", pl: "Tekst." } },
+      { id: "c-win", shelf: "t-ship", bodyShape: "plain", requests: ["t-acct"],
+        title: { en: "Window", pl: "Okno" }, body: { en: "Window.", pl: "Okno." } },
+    ],
+  };
+  try {
+    if (!CAT.storeCatalog(CAT.parseCatalogFile(JSON.stringify(catalog)))) return "the catalog was not stored";
+    AS.putLang("pl");
+    RP.setUiLang("pl");
+    H.hooks.restartDesk();
+    await settle();
+    PK.pack.who = ["Dział", "Konto"];
+    MG.openManage();
+    await settle();
+    const search = host().querySelector("#libSearch");
+    if (!search) return "no #libSearch";
+    const run = q => { search.value = q; search.oninput(); };
+    const visCard = id => {
+      const r = host().querySelector('.mg-card-row[data-cardrow="' + id + '"]');
+      return !!r && !r.hasAttribute("hidden");
+    };
+    const visCat = k => {
+      const c = host().querySelector('.mg-cat[data-cat="' + k + '"]');
+      return !!c && !c.hasAttribute("hidden");
+    };
+    const visInt = id => {
+      const r = host().querySelector('.manage-row[data-introw="' + id + '"]');
+      return !!r && !r.hasAttribute("hidden");
+    };
+    const visWho = w => {
+      const r = host().querySelector('.lw-name[data-wrow="' + w + '"]');
+      return !!r && !r.hasAttribute("hidden");
+    };
+    const cardOk = ["lozko", "łóżko", "Łóżko"].every(q => { run(q); return visCard("c-bed") && !visCard("c-win"); });
+    const catOk = ["platnosci", "płatności", "PŁATNOŚCI"].every(q => { run(q); return visCat("t-pay") && !visCat("t-ship"); });
+    const intOk = ["szklo", "szkło"].every(q => { run(q); return visInt("t:t-glass") && !visInt("t:t-acct"); });
+    const whoOk = ["dzial", "dział"].every(q => { run(q); return visWho("Dział") && !visWho("Konto"); });
+    run("");
+    return (cardOk && catOk && intOk && whoOk) || JSON.stringify({ cardOk, catOk, intOk, whoOk });
+  } finally {
+    if (hadWho == null) delete PK.pack.who; else PK.pack.who = hadWho;
+    try { AS.putLang(hadLang); } catch (e) {}
+    try { if (hadUi == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", hadUi); } catch (e) {}
+    try { RP.setUiLang(hadUi === "pl" ? "pl" : "en"); } catch (e) {}
+  }
+});
+
 /* ================================================================================================
    THE FAILURE PATHS: each plant lifted in a scratch copy of src/, the leg it guards run there by a child.
    ================================================================================================ */
@@ -986,6 +1054,7 @@ const PLANTS = [
   { tag: "card-title-unmarked", file: "manage.js", leg: "L20",
     lift: src => src.includes('<span class="mg-card-lab" data-i18n-skip>')
       ? src.replace('<span class="mg-card-lab" data-i18n-skip>', '<span class="mg-card-lab">') : null },
+  { tag: "l-stroke-fold", file: "words.js", leg: "L21" },
 ];
 if (childAt < 0) {
   for (const p of PLANTS) {

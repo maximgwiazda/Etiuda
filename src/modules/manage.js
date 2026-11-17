@@ -40,6 +40,7 @@ import { openScreenTab, registerScreen, screenOn } from "./screen-tabs.js";
 import { lmIcon } from "./lm-icon.js";
 import { openMaintenance } from "./maintenance.js";
 import { formatActionChord } from "./shortcuts.js";
+import { foldAccents } from "./words.js";
 
 
 /* Search shows the summary and hides the bar; otherwise the bar shows. The path's id stays
@@ -1046,7 +1047,7 @@ const libSections=()=>[
   {key:"data", icon:"cards", name:t("Catalog & data"), lede:t("The catalog in use on this desk, and loading another catalog file.")}
 ];
 function libFold(s){
-  return String(s||"").toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim();
+  return foldAccents(s).trim();
 }
 function rememberedLib(){
   const order=["catmac","intents","who","data"];
