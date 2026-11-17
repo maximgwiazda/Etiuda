@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-seats-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 136;
+const EXPECTED = 142;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* ETIUDA_PLANT_ONLY, a comma list of plant tags or planted names: only those plants run, every other is skipped, so one plant is proved
    alone without the whole sweep. */
@@ -400,17 +400,15 @@ async function main() {
     dw.R.clock.now = knockCert.until + M + HOUR;
     prove(dw, "b", span);
     await sessionAs(dw, "b");
-    /* The withdrawal's session is an invitation's: its run-out certificate is refused, and a current one opens it (piece C-2, point 3). */
-    const ranOut = await session(dw, k, knockCert);
-    const again = await session(dw, k, certFor(k.pub, hex(16), dw.R.clock.now, span));
+    const again = await session(dw, k, knockCert);
     const del = B.seal({ relayTeamId: dw.rt, epoch: 1, teamKey: sealKey, writer: { keyId: k.keyId, privateKey: k.privateKey },
       path: "desks/" + place + "/join.json", body: "", counter: 2, place: "desk:" + place, kind: "delete", supersedes: ask.id });
     const taken = await putBlob(dw, again.json && again.json.session, del);
     const ok = refused(lapsedSeat, "seat-lapsed") && removedA.status === 200 && refused(toldRemoved, "removed")
       && refused(lapse, "team-lapsed") && roRemoved.status === 200 && dw.door.status === 200 && knock.status === 200 && up.status === 200
-      && refused(ranOut, "seat-lapsed") && opened(again) && taken.status === 200;
+      && opened(again) && taken.status === 200;
     return { ok, detail: brief({ seatLapsed: said(lapsedSeat), leadRemoves: said(removedA), thenTold: said(toldRemoved),
-      lapsedTeam: said(lapse), lapsedRemoves: said(roRemoved), doorUp: said(up), withdrawRanOut: said(ranOut), withdrawSession: said(again), withdrawn: said(taken) }) };
+      lapsedTeam: said(lapse), lapsedRemoves: said(roRemoved), doorUp: said(up), withdrawSession: said(again), withdrawn: said(taken) }) };
   }
   function putBlob(w, token, blob, extra) {
     const meta = Object.assign({ v: 1, id: blob.id, supersedes: blob.supersedes, epoch: blob.epoch, writer: blob.writerKeyId,
@@ -597,7 +595,7 @@ async function main() {
     await leg("s9 " + name, () => teamOfOneScene(span), "case (2) a team of one desk: with the lead's Studio closed nothing advances the evidence and the desk keeps opening; with it running, a removed desk is cut within the grant's twelve hours and the margin after its end");
     await leg("s10 " + name, () => studioClosedScene(span), "case (2) a team whose lead's Studio is closed for eight days: colleagues proving daily are never refused, and the removed desk is cut within a day and the margin of its end by their evidence alone");
     await leg("s11 " + name, () => companyBrokenScene(span), "case (2) a company whose own Entra breaks every renewal on one day: nobody is cut three days past every end; once one person proves, the others' run-out certificates are refused until each desk renews, and then open");
-    await leg("s13 " + name, () => letGoScene(span), "O8 night decision 6: the lead removes a desk whose seat lapsed and it is then told removed, a lapsed team's lead still removes a desk, and a door request is taken back on a current certificate, its run-out one refused as at every invitation's session");
+    await leg("s13 " + name, () => letGoScene(span), "O8 night decision 6: the lead removes a desk whose seat lapsed and it is then told removed, a lapsed team's lead still removes a desk, and a door request is taken back after its certificate ran out past the evidence");
   }
   await leg("s12a", orderScene, "O7 the order: a grant carrying seats is refused fields by the relay before this change (engine abc58e9f's core, a fixture) and taken by this one, and the earlier relay takes the same grant without seats");
   await leg("s14a", shapeScene, "a grant's seats out of shape (live after the issue, negative or fractional, a licence not 32 lowercase hex, an extra or missing field, not an object) is refused shape, and at a create or a renewal bad-grant, before any team keeps it");
@@ -1277,6 +1275,57 @@ async function main() {
   await leg("s25a", memberTakenScene, "a following Studio's marked certificate is taken at a key hello and at the invitation stage on both arms as a desk's would be (any licence on the ordinary arm, the team's on the strict arm), and the session's seat records the mark, an unmarked one's not");
   await leg("s25b", memberDoorScene, "at the door a marked certificate is refused not-enrolled, a stranger's new request and an enrolled desk's knock alike, on an ordinary and an Entra team, while the same desks' unmarked certificates ask and open");
   await leg("s25c", memberBytesScene, "the member mark is signed: a marked certificate stripped of the field, and an unmarked one given it after its signing, are refused on both arms, and the marked one as signed opens");
+  /* A DESK ALWAYS TAKES BACK ITS OWN REQUEST: a stranger's door request up, its certificate then run out, its key's hello opens a session
+     that withdraws the request and does nothing else: it lists nothing, reads neither the lead's answer nor a wrap, opens no socket,
+     sends no other request, and after the withdrawal the desk can neither knock, ask again, nor resume; one holding a current certificate
+     still opens the session as built. On an ordinary and an Entra team. */
+  async function withdrawScene() {
+    const rows = {};
+    for (const [kind, o] of [["ordinary", {}], ["entra", { seats: true }]]) {
+      const w = await team(o), L = w.licence, k = keyPair(true), cert = certFor(k.pub, L, w.R.clock.now, HOUR);
+      await doorOf(w, [L]);
+      const knock = await knockWith(w, k, cert), id = knock.json && knock.json.door;
+      const place = "k-" + hex(8), sealKey = crypto.randomBytes(32);
+      const ask = B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: sealKey, writer: { keyId: k.keyId, privateKey: k.privateKey },
+        path: "desks/" + place + "/join.json", body: JSON.stringify({ ask: 1 }), counter: 1, place: "desk:" + place, kind: "file" });
+      const up = await putBlob(w, knock.json && knock.json.session, ask, { pub: k.pub });
+      /* The lead answers it, so there is something of the lead's for the request's session to try to read. */
+      const ls = await session(w, w.lead, kind === "entra" ? certFor(w.lead.pub, L, w.R.clock.now, 7 * DAY) : undefined);
+      const answer = B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: sealKey, id, writer: { keyId: w.lead.keyId, privateKey: w.lead.privateKey },
+        path: "answer.json", body: "joined", counter: 1, place: "root", kind: "file" });
+      answer.place = "answer:" + id;
+      const answered = await putBlob(w, ls.json && ls.json.session, answer);
+      w.R.clock.now = cert.until + 2 * HOUR;
+      const s = await session(w, k, cert), token = opened(s) ? s.json.session : "", row = rowOf(w, s) || {};
+      const tried = {
+        since: said(await call(w.R, "GET", "/relay/v1/t/" + w.rt + "/since/0", { token })),
+        answer: said(await call(w.R, "GET", "/relay/v1/t/" + w.rt + "/b/" + id, { token })),
+        wrap: said(await call(w.R, "GET", "/relay/v1/t/" + w.rt + "/wrap", { token })),
+        socket: said(await call(w.R, "GET", "/relay/v1/t/" + w.rt + "/socket", { token })),
+        otherRequest: said(await putBlob(w, token, B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: sealKey, writer: { keyId: k.keyId, privateKey: k.privateKey },
+          path: "desks/" + place + "/join2.json", body: "again", counter: 2, place: "desk:" + place, kind: "file" }), { pub: k.pub })),
+      };
+      const del = B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: sealKey, writer: { keyId: k.keyId, privateKey: k.privateKey },
+        path: "desks/" + place + "/join.json", body: "", counter: 3, place: "desk:" + place, kind: "delete", supersedes: ask.id });
+      const withdrawn = await putBlob(w, token, del);
+      const inv = storeOf(w).get("inv:" + id) || {};
+      const after = {
+        askAgain: said(await putBlob(w, token, B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: sealKey, writer: { keyId: k.keyId, privateKey: k.privateKey },
+          path: "desks/" + place + "/join.json", body: "again", counter: 4, place: "desk:" + place, kind: "file" }), { pub: k.pub })),
+        knock: said(await knockWith(w, k, cert)),
+        resume: said(await session(w, k, cert)),
+      };
+      const seated = await session(w, k, certFor(k.pub, hex(16), w.R.clock.now, 7 * DAY));
+      const r = { knock: said(knock), up: up.status, answered: answered.status, withdrawSession: said(s), marked: row.withdraw === true && !row.seat, tried,
+        withdrawn: withdrawn.status, requestGone: storeOf(w).get("blob:" + ask.id) === undefined && inv.withdrawn === true && inv.uploaded === false, after, seated: said(seated) };
+      r.ok = knock.status === 200 && up.status === 200 && answered.status === 200 && opened(s) && r.marked
+        && Object.values(tried).every(x => x === "seat-lapsed") && withdrawn.status === 200 && r.requestGone
+        && after.askAgain === "seat-lapsed" && after.knock === "not-enrolled" && after.resume === "seat-lapsed" && opened(seated) && !(rowOf(w, seated) || {}).withdraw;
+      rows[kind] = r;
+    }
+    return { ok: rows.ordinary.ok && rows.entra.ok, detail: brief(rows) };
+  }
+  await leg("s26a", withdrawScene, "a desk always takes back its own request: its certificate run out, its key's hello opens a session that withdraws the door request, the request's row then gone, and that session lists, reads the lead's answer or a wrap, opens a socket or sends another request no more than the desk can then knock, ask again or resume; a current certificate's session is opened as built; on an ordinary and an Entra team");
   await leg("s24i", storeScene, "a person's store: a session opens on its store certificate alone, a seat certificate or none is refused, and a store session, carrying no seat, still reads twenty minutes on");
 
   /* ---- the plants: each guard lifted in a copy of relay/core.cjs turns its named leg red, and the product file is never written ---- */
@@ -1333,6 +1382,7 @@ async function main() {
   /* The planted faults of the ordinary arm that no plant line lifts. */
   const MARK_LOOP = "for (const m of CERT_MARKS) if (c[m.field] === true) lines.push(m.line);";
   const PLANTED = {
+    withdrawAny: { name: "the withdrawal's exemption widened to any resume", edits: [["    exempt = letGo && !seat.ok; /* plant:withdraw-exempt */", "    exempt = !seat.ok;"]] },
     folderBack: { name: "the folder arm restored", edits: [["    const lapsedPut = goes ? null : lapseGate(true);",
       '    const lapsedPut = goes || (lapseState() === "read-only" && !s.inv && !!m && m.writer === team.lead.keyId && m.place === "root" && !!m.channel && m.channel.kind === "folder") ? null : lapseGate(true);']] },
     pooledOutside: { name: "the pooled mark signed as no line", edits: [[MARK_LOOP, MARK_LOOP.replace("=== true)", "=== true && m.field !== \"pooled\")")]] },
@@ -1405,6 +1455,11 @@ async function main() {
     [PLANTED.memberOutside, "s25a", memberTakenScene, "a marked certificate signed with its line is refused"],
     ["door-member", "s25b", memberDoorScene, "the door takes a marked certificate"],
     [PLANTED.memberOutside, "s25c", memberBytesScene, "a certificate given the mark after its signing is taken"],
+    ["withdraw-exempt", "s26a", withdrawScene, "a desk whose certificate ran out cannot take back its request"],
+    ["withdraw-reads", "s26a", withdrawScene, "a withdrawal's session reads the team"],
+    ["withdraw-only", "s26a", withdrawScene, "a withdrawal's session sends another request"],
+    [PLANTED.withdrawAny, "s26a", withdrawScene, "the exemption widened to any resume, so a resume that is not a withdrawal opens"],
+    [PLANTED.withdrawAny, "s24g", inviteStageScene, "the exemption widened to any resume, so an unseated resume opens"],
     ["store-session", "s24i", storeScene, "a store's session is judged by the seat gate, so its store certificate is refused and a seat certificate opens it"],
   ];
   for (const [tag, id, scene, what] of PLANTS) {

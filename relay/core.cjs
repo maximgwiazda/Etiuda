@@ -1511,15 +1511,20 @@ function createCore(deps) {
   }
 
   /* A bound invitation's session again, by its key's hello: lapse first, as issue would judge it, and the seat as the token hello asked
-     it, a withdrawal's session included. */
+     it. A DESK ALWAYS TAKES BACK ITS OWN REQUEST: where the request is up (letGo) and no current seat comes, the session opens marked
+     `withdraw`, which reads nothing (sessionOf) and writes only that request's withdrawal (admitInvite), so no seat is asked for it. */
   function resumeBound(b, held) {
     if (entriesShut()) return later();
     const letGo = held.inv.uploaded === true;
     const lapsed = lapseGate(false);
     if (lapsed && !letGo) return lapsed;
     const seat = anySeat(b.seat, b.pub);
-    if (!seat.ok) return seat; /* plant:resume-seat */
-    return issue(b.challenge, seated({ key: null, inv: held.id, bound: b.key, letGo }, seat), () => {
+    let exempt = false;
+    exempt = letGo && !seat.ok; /* plant:withdraw-exempt */
+    if (!seat.ok && !exempt) return seat; /* plant:resume-seat */
+    const who = seated({ key: null, inv: held.id, bound: b.key, letGo }, exempt ? { ok: true } : seat);
+    if (exempt) who.withdraw = true;
+    return issue(b.challenge, who, () => {
       for (const [k, x] of store.list("ses:")) if (x.inv === held.id) store.del(k);
     });
   }
@@ -1686,6 +1691,7 @@ function createCore(deps) {
       for (const [k] of held.slice(0, Math.max(0, held.length - SESSIONS_MAX + 1))) store.del(k); /* plant:session-cap */
       const row = who.bound ? { key: who.key, inv: who.inv, bound: who.bound, until } : { key: who.key, inv: who.inv, until };
       if (plain(who.seat)) row.seat = who.seat; /* plant:session-seat-kept */
+      if (who.withdraw === true) row.withdraw = true;
       store.put("ses:" + sha256(token), row);
     });
     const out = who.inv ? { ok: true, session: token, until, invite: true, lapse: told() } : { ok: true, session: token, until, lapse: told() };
@@ -1769,10 +1775,19 @@ function createCore(deps) {
     lapsed = seatLapsed(s); /* plant:session-seat */
     if (lapsed) return lapsed;
     const out = { ok: true, hash: h, key: s.key, inv: s.inv, bound: s.bound || null, until: s.until };
+    if (s.withdraw === true) out.withdraw = true;
     if (quietSession(out)) out.quiet = true; /* plant:rejoin-quiet */
     return out;
   }
-  const sessionOf = token => sessionByHash(is(HEX64, token) ? sha256(token) : null);
+  const anySessionOf = token => sessionByHash(is(HEX64, token) ? sha256(token) : null);
+  /* The session every read route asks (since, a blob, the wrap, the states, the socket): a withdrawal's session (resumeBound) is refused
+     here, so it reads nothing; only admit takes it, through anySessionOf. */
+  function sessionOf(token) {
+    const s = anySessionOf(token);
+    let reads = true;
+    reads = !(s.ok && s.withdraw === true); /* plant:withdraw-reads */
+    return reads ? s : no("seat-lapsed");
+  }
   /* A key's session on a team with seats, judged again at each use from the certificate its hello carried: a freed name, a run-out the
      evidence now passes by the margin, or a pooled grace the service ended refuses it as seatGate refuses a new hello. A session that
      carried none, or another licence's, holds no seat. A store's sessions are judged by their end alone; any other by ordinaryLapsed. */
@@ -1922,7 +1937,7 @@ function createCore(deps) {
   function admit(rt, token, m, pathId) {
     const team = teamOf(rt);
     if (!team) return no("not-enrolled");
-    const s = sessionOf(token);
+    const s = anySessionOf(token);
     if (!s.ok) return s; /* plant:put-session */
     /* A desk taking its request back is let go whatever the lapse; admitWithdraw judges it as at any other time. */
     let goes = false;
@@ -1953,6 +1968,8 @@ function createCore(deps) {
     const inv = store.get("inv:" + s.inv);
     if (!inv && spentMarker(s.inv)) return no("token-spent");
     if (!inv) return no("no-hello");
+    /* A withdrawal's session writes that withdrawal and nothing else: no request, no second withdrawal once the first is taken. */
+    if (s.withdraw === true && !(inv.uploaded && m.del === true)) return no("seat-lapsed"); /* plant:withdraw-only */
     if (inv.uploaded && m.del === true) return admitWithdraw(team, s, m, inv);
     if (inv.uploaded) return no("token-spent"); /* plant:invite-once */
     if (inv.spentAt === undefined) return no("token-spent"); /* plant:invite-pruned */
