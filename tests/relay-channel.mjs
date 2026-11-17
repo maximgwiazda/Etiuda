@@ -62,7 +62,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 499;
+const EXPECTED = 503;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -9136,6 +9136,90 @@ if (partOn("p_pg2")) {
       + topOff.detail + ", sha " + (topOff.back ? "restored" : "differs"));
   } catch (e) {
     check(false, "harness (the legs pg2): " + (e && e.stack ? e.stack : e));
+  }
+}
+
+/* ---- pg3: THE CLIENT IN THE FIELD AGAINST THIS RELAY'S since (the test architect, 2026-11-17; Claude alpha's question of that night,
+   whether the old client had ever been run against the new since, which decides whether the relay's half may deploy ahead of a
+   client installer). The client is shell/relay/channel.cjs of engine abc58e9f, the desk build in use when the paging mend was
+   made, kept as a fixture with its sha256 held here (a "before" read from a moving ref stops being one). It ends a catch-up and a
+   relist at a page of fewer than SINCE_MAX items, so it is served rightly only by a relay whose short page is the last. Its
+   SINCE_MAX is set to the relay's page of four in a scratch copy, as pg2's client "as built before" is, so the rule is met with
+   ten files and not a thousand. The scene: the lead's answer, which since leaves out, then nine files. ---- */
+const PG3_FIXTURE = { file: path.join(ROOT, "tests", "fixtures", "relay-channel-abc58e9f.cjs.txt"), from: "abc58e9f",
+  sha256: "012f1fd1ccaada1d0e530e80dfaa791dbde9f5e2d7fbaaed9218325ad01c47a6" };
+function pg3Client(page) {
+  let text;
+  try { text = fs.readFileSync(PG3_FIXTURE.file, "utf8").replace(/\r\n/g, "\n"); } catch { return { why: "the fixture is absent" }; }
+  if (sha(Buffer.from(text, "utf8")) !== PG3_FIXTURE.sha256) return { why: "the fixture is not the bytes captured from " + PG3_FIXTURE.from };
+  if (text.split("const SINCE_MAX = 1000;").length !== 2 || text.split("r.json.length < SINCE_MAX").length !== 3)
+    return { why: "the fixture does not end a list at a page of fewer than SINCE_MAX items, in the catch-up and in the relist" };
+  return { mod: loadPlantedChannel(text.replace("const SINCE_MAX = 1000;", "const SINCE_MAX = " + page + ";")) };
+}
+/* A desk new to the team catches up from nothing, with client `mod`, on a relay whose page is four (`cut`: as since served before
+   it filled its pages): what its mirror holds beside what the client of this tree holds on the same relay. */
+async function pg3Join(mod, cut) {
+  const x = pgRelay(4, cut);
+  const DO = keyPair(true), DN = keyPair(true);
+  const tm = { rt: hex(16), id: "t-" + hex(8), key: crypto.randomBytes(32) };
+  await x.team(tm.rt, tm.id, [DO, DN]);
+  const tag = (cut ? "c" : "m") + "-" + hex(4);
+  const lead = pgProgram(C, x, "pg3-lead-" + tag, tm, LEAD, "root", { more: { agree: () => crypto.randomBytes(32) } });
+  put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, [member(DO), member(DN)]));
+  lead.ch.start();
+  await settle(lead);
+  await lead.ch.writeAnswer({ answer: "joined", inv: hex(16), deskId: keyPair(true).keyId, deskBox: "ab".repeat(32), leadBox: "cd".repeat(32) });
+  for (let i = 0; i < 9; i++) put(lead.mirror, "pad/p" + i + ".ec", "pad " + i + "\n");
+  await settle(lead);
+  await lead.ch.stop();
+  const top = x.top(tm.rt);
+  const run = async (m, who, name) => {
+    const d = pgProgram(m, x, name + tag, tm, who, "desk:" + who.keyId);
+    d.ch.start();
+    await settle(d);
+    const first = pgPrint(d, top);
+    /* Its later cycles, as a running desk makes them: a client that stopped short reads on. */
+    for (let i = 0; i < 6 && d.prog.state().seq < top; i++) await settle(d);
+    const after = pgPrint(d, top);
+    const since = d.t.log.filter(l => l.startsWith("GET since/")).length;
+    await d.ch.stop();
+    return { first, after, since };
+  };
+  const old = await run(mod, DO, "pg3-old-"), now = await run(C, DN, "pg3-now-");
+  const pads = pr => pr.files.filter(f => f.startsWith("pad/"));
+  return { oldFirst: pads(old.first).length, oldAfter: pads(old.after).length, oldAtTop: old.after.atTop, oldPending: old.after.pending,
+    nowAfter: pads(now.after).length, same: JSON.stringify(pads(old.after)) === JSON.stringify(pads(now.after)) && pads(now.after).length === 9,
+    teamSame: old.after.files.filter(f => f.startsWith(C.TEAM_NAME + " ")).join() === now.after.files.filter(f => f.startsWith(C.TEAM_NAME + " ")).join(),
+    since: old.since };
+}
+
+if (partOn("p_pg3")) {
+  try {
+    markPart("p_pg3");
+    const held = pg3Client(4);
+    check(!!held.mod, "pg3a the client of engine " + PG3_FIXTURE.from + " is held as a fixture by its sha256, and ends a list at a page of fewer than SINCE_MAX items in its catch-up and its relist: "
+      + (held.mod ? "held" : held.why));
+    if (held.mod) {
+      const keys = [keyPair(true), keyPair(true)];
+      const joined = await pg3Join(held.mod, false);
+      check(joined.oldFirst === 9 && joined.oldAfter === 9 && joined.oldAtTop && joined.oldPending === 0 && joined.same && joined.teamSame,
+        "pg3b that client, new to a team whose first page holds the lead's answer, catches up from this relay with every file, and its mirror is the one"
+        + " this tree's client holds: " + joined.oldFirst + " of 9 once it settles, " + joined.oldAfter + " of 9 after its later cycles, " + (joined.oldAtTop ? "at the top" : "short of the top")
+        + ", pending " + joined.oldPending + ", the same files " + (joined.same ? "yes" : "no") + ", the same team file " + (joined.teamSame ? "yes" : "no") + ", " + joined.since + " since request(s)");
+      const relisted = await pgRelist(held.mod, false, { keys });
+      check(relisted.atTop && relisted.before === 9 && relisted.listed >= 1 && relisted.lost === 0,
+        "pg3c that client, away thirty days, relists the whole team against this relay and removes nothing: " + relisted.lost + " of " + relisted.before
+        + " removed, the list asked from the start " + relisted.listed + " time(s)");
+      /* The control: the same client and the same relist against a relay that cuts its pages, which is what it was served by before
+         the mend. It must show the fault, or pg3c would pass on any relay. (Its catch-up from nothing reads on at its next cycles
+         and ends whole on either relay, so the relist is where a cut page costs it files.) */
+      const cutRelist = await pgRelist(held.mod, true, { keys });
+      check(cutRelist.atTop && cutRelist.before === 9 && cutRelist.lost > 0,
+        "pg3d the control: against a relay that cuts its pages the same client's relist removes files it should keep: "
+        + cutRelist.lost + " of " + cutRelist.before + " removed");
+    } else for (const id of ["pg3b", "pg3c", "pg3d"]) check(false, id + " not run: " + held.why);
+  } catch (e) {
+    check(false, "harness (the legs pg3): " + (e && e.stack ? e.stack : e));
   }
 }
 
