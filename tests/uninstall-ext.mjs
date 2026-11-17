@@ -14,7 +14,7 @@ const require = createRequire(import.meta.url);
 const NSH_AT = process.env.UNINSTALL_EXT_NSH || path.join(ROOT, "shell", "installer.nsh");
 const NSH = fs.readFileSync(NSH_AT, "utf8").replace(/\r\n/g, "\n");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 6;
+const EXPECTED = 8;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -206,6 +206,24 @@ try {
   check(own.left.length === 0 && own.counts.ext === 1 && !!tb && tb.defs.ETIUDA_EC_EXT === I.TEST.desk.ext
     && tb.defs.ETIUDA_EC_CLASS_KEY === "Software\\Classes\\" + I.TEST.desk.catalogClass && holds(cases(tb)),
     "ue4 the test build's copy names its own ." + I.TEST.desk.ext + " and " + I.TEST.desk.catalogClass + " and behaves the same, so the runner's leg measures this block");
+  /* ue7, ue8: the uninstall removes its own build's named shortcuts, read as text (no installer runs here). */
+  const ownLinks = text => {
+    const mac = text.indexOf("\n!macro customUnInstall\n"), end = text.indexOf("\n!macroend", mac);
+    const head = mac < 0 ? "" : text.slice(mac, end).split("!ifndef INSTALL_CHECKS_OWN_COPY")[0].replace(/\s+#\s*plant:[\w-]+/g, "");
+    return /\$\{IfNot\} \$\{isKeepShortcuts\}\n\s*\$\{AndIfNot\} \$\{isUpdated\}\n\s*Delete "\$SMPROGRAMS\\\$\{SHORTCUT_NAME\}\.lnk"\n\s*Delete "\$DESKTOP\\\$\{SHORTCUT_NAME\}\.lnk"\n\s*\$\{EndIf\}/.test(head);
+  };
+  check(ownLinks(NSH), "ue7 customUnInstall deletes $SMPROGRAMS and $DESKTOP ${SHORTCUT_NAME}.lnk in the scope being uninstalled, outside --keep-shortcuts and an update, ahead of and outside the own-copy guard Studio's cut defines");
+  const OWN_PLANTS = [
+    ["own-links-keep", "${IfNot} ${isKeepShortcuts} # plant:own-links-keep", "${IfNot} ${Errors} # plant:own-links-keep"],
+    ["own-links-update", "${AndIfNot} ${isUpdated} # plant:own-links-update", "${AndIfNot} ${Errors} # plant:own-links-update"],
+    ["own-links-menu", "Delete \"$SMPROGRAMS\\${SHORTCUT_NAME}.lnk\" # plant:own-links-menu", "Delete \"$SMPROGRAMS\\Other.lnk\" # plant:own-links-menu"],
+    ["own-links-desktop", "Delete \"$DESKTOP\\${SHORTCUT_NAME}.lnk\" # plant:own-links-desktop", "Delete \"$DESKTOP\\Other.lnk\" # plant:own-links-desktop"],
+  ];
+  if (PLANTS_OFF) { skipped += 1; console.log("  skip ue8 (ETIUDA_PLANTS=off)"); }
+  else {
+    const said2 = OWN_PLANTS.map(([tag, from, to]) => NSH.split(from).length !== 2 ? tag + " anchor missing" : ownLinks(NSH.replace(from, to)) ? tag + " stayed green" : tag + " red");
+    check(said2.every(s => / red$/.test(s)), "ue8 each line of the own-shortcut removal put in another form turns ue7 red: " + said2.join(", "));
+  }
   const PLANTS = [
     ["ext-updated", "${IfNot} ${isUpdated} # plant:ext-updated", "${IfNot} ${Errors} # plant:ext-updated"],
     ["ext-default", "${If} $R3 != $R5 # plant:ext-default", "${If} 1 == 0 # plant:ext-default"],
