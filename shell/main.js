@@ -7666,7 +7666,7 @@ function relayRun() {
     },
     /* The relay named this desk's request at the standing door: kept, and the request written with its seat and that id. */
     onDoor: id => { signinDoorKept(team, mirror, id); }, /* plant:door-on */
-    /* A team whose licence follows Entra asks each session for this desk's seat certificate. */
+    /* Every hello for this desk's own key carries its seat certificate (seatHello in shell/relay/channel.cjs). */
     ...signinRelaySeatIo(team),
     onTeam: () => {
       const j = teamJoin;
