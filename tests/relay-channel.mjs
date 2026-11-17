@@ -62,7 +62,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 488;
+const EXPECTED = 489;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -12487,7 +12487,7 @@ if (partOn("pF4")) {
 /* ---- finding (8): a relisting never removes what a lead or colleague kept of a removed desk ---- */
 async function sceneF8(mod) {
   const X = relay9(), { tm, BASE, DAYMS } = X;
-  const DR = { k: keyPair(true), box: boxPair() }, DK = { k: keyPair(true), box: boxPair() };
+  const DR = { k: keyPair(true), box: boxPair() }, DK = { k: keyPair(true), box: boxPair() }, DA = { k: keyPair(true), box: boxPair() };
   const STATS = "desk statistics kept across removal\n", DK_OLD = "active desk file retracted later\n";
   const RETIRED = "lead file retracted later\n", NEWEST = "the newest live file in the team\n";
   const statsRel = "desks/" + DR.k.keyId + "/stats.estat", dkOldRel = "desks/" + DK.k.keyId + "/old.ec";
@@ -12495,35 +12495,38 @@ async function sceneF8(mod) {
   try {
     X.clockOn();
     const made = await X.admin9("POST", "/relay/v1/teams", createBody(tm.rt, X.RS.clock.now));
-    const enrolled = await X.enrol9(1, DR, DK);
+    const enrolled = await X.enrol9(1, DR, DK, DA);
     if (made.status !== 200 || enrolled.status !== 200) throw new Error("the team was not made: " + JSON.stringify([made.json, enrolled.json]));
     const lead = X.lead9(mod, "f8-lead-" + X.tag);
     const dr = X.desk9(mod, "f8-rem-" + X.tag, DR);
     const dk = X.desk9(mod, "f8-keep-" + X.tag, DK);
-    put(lead.mirror, mod.TEAM_NAME, X.doc9(1, [DR, DK]));
+    const da = X.desk9(mod, "f8-away-" + X.tag, DA);
+    put(lead.mirror, mod.TEAM_NAME, X.doc9(1, [DR, DK, DA]));
     put(lead.mirror, "lane.ec", ED9[0]);
     put(lead.mirror, "retired.ec", RETIRED);
     lead.ch.start();
     await settle(lead);
-    dr.ch.start(); dk.ch.start();
-    await settle(dr, dk, lead);
+    dr.ch.start(); dk.ch.start(); da.ch.start();
+    await settle(dr, dk, da, lead);
     put(dr.mirror, statsRel, STATS);
     put(dk.mirror, dkOldRel, DK_OLD);
-    await settle(dr, dk, lead);
-    const before = read(lead.mirror, statsRel) === STATS && read(dk.mirror, statsRel) === STATS
-      && read(lead.mirror, "retired.ec") === RETIRED && read(lead.mirror, dkOldRel) === DK_OLD;
+    await settle(dr, dk, da, lead);
+    const before = read(lead.mirror, statsRel) === STATS && read(dk.mirror, statsRel) === STATS && read(da.mirror, statsRel) === STATS
+      && read(lead.mirror, "retired.ec") === RETIRED && read(da.mirror, "retired.ec") === RETIRED
+      && read(lead.mirror, dkOldRel) === DK_OLD && read(da.mirror, dkOldRel) === DK_OLD;
 
-    /* Day 1: lead removes DR (team file rev 2 + /devices drop) and retracts retired.ec; dk retracts dkOldRel. */
+    /* Day 1: da stops before both retractions; lead removes DR (team file rev 2 + /devices drop) and retracts retired.ec; dk retracts dkOldRel. */
+    await da.ch.stop();
     X.at(BASE + DAYMS);
     await dr.ch.stop();
-    const doc2Raw = JSON.parse(X.doc9(1, [DK]));
+    const doc2Raw = JSON.parse(X.doc9(1, [DK, DA]));
     doc2Raw.rev = 2;
     const doc2Obj = signDoc(doc2Raw, LEAD);
     const doc2 = JSON.stringify(doc2Obj, null, 1) + "\n";
     put(lead.mirror, mod.TEAM_NAME, doc2);
     fs.unlinkSync(path.join(lead.mirror, "retired.ec"));
     fs.unlinkSync(path.join(dk.mirror, ...dkOldRel.split("/")));
-    const dropped = await X.enrol9(2, DK);
+    const dropped = await X.enrol9(2, DK, DA);
     await settle(lead, dk);
     /* The newest row in the team is a LIVE file, written after the day's deletions. Without it the deletions are the newest
        rows, they have expired by day 32, the relisted list then stops below each program's place in the sequence, and
@@ -12532,50 +12535,78 @@ async function sceneF8(mod) {
     put(lead.mirror, "newest.ec", NEWEST);
     await settle(lead, dk);
     const newestLanded = read(dk.mirror, "newest.ec") === NEWEST;
+    const stoppedHeld = read(da.mirror, "retired.ec") === RETIRED && read(da.mirror, dkOldRel) === DK_OLD;
     await lead.ch.stop();
     await dk.ch.stop();
 
-    /* Day 32 (> LISTED_KEEP_MS = 29 days, and > REMOVED_KEEP_MS = 7 days): relisting runs on both lead and dk. */
+    /* Day 32 (> LISTED_KEEP_MS = 29 days, and > REMOVED_KEEP_MS = 7 days): relisting runs on lead, dk, and da. */
     X.at(BASE + 32 * DAYMS);
-    const leadFrom = lead.log.length, dkFrom = dk.log.length;
-    lead.ch.start(); dk.ch.start();
-    await settle(lead, dk);
+    const leadFrom = lead.log.length, dkFrom = dk.log.length, daFrom = da.log.length;
+    lead.ch.start(); dk.ch.start(); da.ch.start();
+    await settle(lead, dk, da);
     const leadWhole = lead.log.slice(leadFrom).filter(c => c === "GET since/0").length;
     const dkWhole = dk.log.slice(dkFrom).filter(c => c === "GET since/0").length;
+    const daWhole = da.log.slice(daFrom).filter(c => c === "GET since/0").length;
     const keptAfter = {
       leadStats: read(lead.mirror, statsRel) === STATS,
       dkStats: read(dk.mirror, statsRel) === STATS,
+      daStats: read(da.mirror, statsRel) === STATS,
       leadLane: read(lead.mirror, "lane.ec") === ED9[0],
       dkLane: read(dk.mirror, "lane.ec") === ED9[0],
+      daLane: read(da.mirror, "lane.ec") === ED9[0],
     };
     const activeRemoved = {
       leadRetired: read(lead.mirror, "retired.ec") === null,
       dkRetired: read(dk.mirror, "retired.ec") === null,
+      daRetired: read(da.mirror, "retired.ec") === null,
       leadDkOld: read(lead.mirror, dkOldRel) === null,
       dkDkOld: read(dk.mirror, dkOldRel) === null,
+      daDkOld: read(da.mirror, dkOldRel) === null,
     };
 
-    /* A removed writer's new file (even injected/accepted directly) still does not land on lead or dk. */
+    /* A removed writer's new file (even injected/accepted directly) still does not land on lead, dk, or da. */
     const afterBlob = B.seal({ relayTeamId: tm.rt, epoch: 1, teamKey: X.K9.get(1),
       writer: { keyId: DR.k.keyId, privateKey: DR.k.privateKey },
       path: afterRel, body: "new after removal\n", counter: Date.now() + 60 * 60 * 1000,
       place: "desk:" + DR.k.keyId, kind: "file" });
     const leadNew = lead.prog.acceptBlob({ blob: afterBlob, teamDoc: doc2Obj, teamKey: X.K9.get(1) });
     const dkNew = dk.prog.acceptBlob({ blob: afterBlob, teamDoc: doc2Obj, teamKey: X.K9.get(1) });
+    const daNew = da.prog.acceptBlob({ blob: afterBlob, teamDoc: doc2Obj, teamKey: X.K9.get(1) });
     const newRefused = leadNew.ok === false && leadNew.reason === "removed"
       && dkNew.ok === false && dkNew.reason === "removed"
-      && read(lead.mirror, afterRel) === null && read(dk.mirror, afterRel) === null;
+      && daNew.ok === false && daNew.reason === "removed"
+      && read(lead.mirror, afterRel) === null && read(dk.mirror, afterRel) === null && read(da.mirror, afterRel) === null;
 
     return {
-      setup: before && newestLanded && dropped.status === 200 && leadWhole >= 1 && dkWhole >= 1,
-      kept: keptAfter.leadStats && keptAfter.dkStats && keptAfter.leadLane && keptAfter.dkLane,
-      activeGone: activeRemoved.leadRetired && activeRemoved.dkRetired && activeRemoved.leadDkOld && activeRemoved.dkDkOld,
+      setup: before && stoppedHeld && newestLanded && dropped.status === 200 && leadWhole >= 1 && dkWhole >= 1 && daWhole >= 1,
+      kept: keptAfter.leadStats && keptAfter.dkStats && keptAfter.daStats
+        && keptAfter.leadLane && keptAfter.dkLane && keptAfter.daLane,
+      activeGone: activeRemoved.leadRetired && activeRemoved.dkRetired && activeRemoved.daRetired
+        && activeRemoved.leadDkOld && activeRemoved.dkDkOld && activeRemoved.daDkOld,
       newRefused,
-      detail: JSON.stringify({ before, newestLanded, dropped: dropped.status, leadWhole, dkWhole, keptAfter, activeRemoved, leadNew, dkNew }),
+      detail: JSON.stringify({ before, stoppedHeld, newestLanded, dropped: dropped.status, leadWhole, dkWhole, daWhole, keptAfter, activeRemoved, leadNew, dkNew, daNew }),
     };
   } finally {
     await X.done();
   }
+}
+async function liftReconcileRemove(fn) {
+  const src = path.join(ROOT, "shell", "relay", "channel.cjs");
+  const beforeBytes = fs.readFileSync(src);
+  const digest = sha(beforeBytes);
+  const target = "try { if (rel) io.remove(rel); } catch (e) { say(rel + \" could not be removed from the mirror - \" + (e && e.message)); continue; }";
+  let turned = false, detail = "reconcile removal line absent";
+  try {
+    const text = beforeBytes.toString("utf8");
+    if (text.split(target).length === 2) {
+      const lifted = loadPlantedChannel(text.split(target).join("continue;"));
+      turned = await fn(lifted);
+      detail = turned ? "the check lifted" : "the check still held";
+    }
+  } catch (e) {
+    detail = e && e.stack ? e.stack : String(e);
+  }
+  return { turned, back: sha(fs.readFileSync(src)) === digest, detail };
 }
 if (partOn("pF8")) {
   try {
@@ -12587,11 +12618,20 @@ if (partOn("pF8")) {
       "f8b the same relisting still removes retracted files of the lead and an active rostered desk once their deletions are no longer listed: " + s.detail);
     check(s.newRefused,
       "f8c a removed writer's new file still does not land (refused removed): " + s.detail);
-    if (PLANTS_OFF) skip("f8d lifting plant:reconcile-removed turns f8a red (relisting deletes the removed desk's kept file)");
-    else {
+    if (PLANTS_OFF) {
+      skip("f8d lifting plant:reconcile-removed turns f8a red (relisting deletes the removed desk's kept file)");
+      skip("f8e lifting reconcile's removal of an unlisted live file turns f8b red (a stopped desk keeps retracted files after relist)");
+    } else {
       const p = await liftChannel("plant:reconcile-removed", async mod => !(await sceneF8(mod)).kept);
       check(p.turned && p.back, "f8d lifting plant:reconcile-removed turns f8a red (relisting deletes the removed desk's kept file), and the product file is never written: "
         + p.detail + ", sha " + (p.back ? "restored" : "differs"));
+      let liftedF8 = null;
+      const q = await liftReconcileRemove(async mod => {
+        liftedF8 = await sceneF8(mod);
+        return liftedF8.setup && !liftedF8.activeGone;
+      });
+      check(q.turned && q.back, "f8e lifting reconcile's removal of an unlisted live file turns f8b red (a stopped desk keeps retracted files after relist), and the product file is never written: "
+        + q.detail + (liftedF8 ? " " + liftedF8.detail : "") + ", sha " + (q.back ? "restored" : "differs"));
     }
   } catch (e) {
     check(false, "harness (the leg f8a): " + (e && e.stack ? e.stack : e));
