@@ -4108,8 +4108,7 @@ function teamRevOf(doc) {
   return Number.isSafeInteger(doc.rev) && doc.rev >= 0 ? doc.rev : null;
 }
 /* A whole team file's channel: absent is the folder; null where it is neither the folder nor a relay named by its relay
-   team id and an https address, which nothing heeds. A relay at an address knownRelayAddress does not take, the rule an
-   invitation keeps, is {kind: "elsewhere"}: never a relay channel, so no path that keeps or follows a channel reaches it. */
+   team id and an https address, which nothing heeds. */
 function teamChannelOf(doc) {
   const c = doc.channel;
   if (c === undefined) return { kind: "folder" };
@@ -4117,10 +4116,16 @@ function teamChannelOf(doc) {
   if (c.kind === "folder") return { kind: "folder" };
   if (c.kind !== "relay" || typeof c.rt !== "string" || !/^[0-9a-f]{32}$/.test(c.rt) || typeof c.url !== "string"
     || c.url.length > 512 || !/^https:\/\/[a-z0-9.-]+(?::[0-9]{1,5})?(?:\/[A-Za-z0-9._~-]+)*\/?$/.test(c.url)) return null;
-  let known = true;
-  known = knownRelayAddress(c.url); /* plant:channel-known */
-  if (!known) return { kind: "elsewhere" };
   return { kind: "relay", rt: c.rt, url: c.url };
+}
+/* THE ONE PLACE A TEAM'S RELAY ADDRESS IS ASKED: teamChannelOf's channel, where a relay at an address knownRelayAddress does not
+   take (the rule an invitation keeps) is {kind: "elsewhere"}, never a relay channel. Every write of teamChannel takes it from here.
+   teamChannelOf stays the shape alone, for readers that slice it out with no neighbours (tests/desk-signin.mjs). */
+function heededChannelOf(doc) {
+  const c = teamChannelOf(doc);
+  let known = true;
+  known = !c || c.kind !== "relay" || knownRelayAddress(c.url); /* plant:channel-known */
+  return known ? c : { kind: "elsewhere" };
 }
 /* Said once for team `team` whose heeded file names a relay this build does not use; the address is not said. */
 function relayElsewhereSay(team) {
@@ -5018,7 +5023,7 @@ function heedTeam() {
   if (r.stop || r.needKey) return;
   /* A whole file is heeded only where its rev and channel read, and where it is not an older epoch than the floor kept
      for its team and lead key, nor a lower rev at that epoch. */
-  const rev = teamRevOf(doc), channel = teamChannelOf(doc);
+  const rev = teamRevOf(doc), channel = heededChannelOf(doc);
   /* Nothing in such a file is used, as with a channel this desk does not read: the team, its catalog and its channel stay. */
   if (channel && channel.kind === "elsewhere") { relayElsewhereSay(r.team || doc.id); return; } /* plant:elsewhere-heed */
   if (rev === null || channel === null) {
@@ -6274,7 +6279,8 @@ function undoInvite(team, b, inv) {
   if (b.pin) teamPins[team] = b.pin; else delete teamPins[team];
   if (b.from) teamPinFrom[team] = b.from; else delete teamPinFrom[team];
   if (b.shown) teamShown[team] = b.shown; else delete teamShown[team];
-  if (b.channel) teamChannel[team] = b.channel; else delete teamChannel[team];
+  const kept = b.channel ? heededChannelOf({ channel: b.channel }) : null;
+  if (kept && kept.kind === "relay") teamChannel[team] = kept; else delete teamChannel[team];
   if (b.left) teamLeft[team] = b.left; else delete teamLeft[team];
   if (b.barred) teamBarred.add(team); else teamBarred.delete(team);
   if (typeof inv.folder === "string" && deskKeys[CATALOG_FOLDER_KEY] === inv.folder) deskSetOwn(CATALOG_FOLDER_KEY, typeof inv.was === "string" && inv.was ? inv.was : undefined); /* plant:c8-own */
@@ -8395,7 +8401,7 @@ function readDesk() {
       });
     });
     if (doc && table(doc.teamChannel)) Object.keys(doc.teamChannel).forEach(t => {
-      const c = SEALED_TEAM_RE.test(t) && table(doc.teamChannel[t]) ? teamChannelOf({ channel: doc.teamChannel[t] }) : null;
+      const c = SEALED_TEAM_RE.test(t) && table(doc.teamChannel[t]) ? heededChannelOf({ channel: doc.teamChannel[t] }) : null;
       if (c && c.kind === "relay") teamChannel[t] = c;
     });
     if (doc && table(doc.teamPinFrom)) Object.keys(doc.teamPinFrom).forEach(t => {
