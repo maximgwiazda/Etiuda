@@ -5064,7 +5064,7 @@ check(regStand.held(), "rs1 every reg call was answered by the stand-in, the pol
     if (table.indexOf("  " + JSON.stringify(en) + ":" + JSON.stringify(pl) + ",") < 0) bad.push("table: " + en.slice(0, 40));
     if (fs.readFileSync(path.join(ROOT, file), "utf8").indexOf("t(" + JSON.stringify(en) + ")") < 0) bad.push("code: " + en.slice(0, 40));
   }
-  check(bad.length === 0, "15eq the folder-not-writable, not-a-folder and could-not-open lines and the local-changes note stand as the copywriter wrote them, in both languages: " + JSON.stringify(bad));
+  check(bad.length === 0, "15ex the folder-not-writable, not-a-folder and could-not-open lines and the local-changes note stand as the copywriter wrote them, in both languages: " + JSON.stringify(bad));
 }
 console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + " expected=" + EXPECTED);
 if (asserted + skipped < EXPECTED) {
