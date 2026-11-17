@@ -410,10 +410,16 @@ const CERT_FIELDS = ["kind", "format", "licence", "desk", "person", "code", "iss
 const CODE_RE = /^[0-9A-HJKMNP-TV-Z]{16}$/;
 /* The bytes the service signs, restated from its seatCertBytes: the kind's line, then format, licence, desk, person, code,
    issued, until and the signing key's id, one a line. A change there is a change here, or no certificate opens the door. */
-/* `pooled`, present only as true, says the desk is pooled, and is signed: the line "pooled" after the key id; without it the bytes are as before. */
+/* A CERTIFICATE'S MARKS, the one place they are named: each a field present only as true and signed as its line after the key id, in
+   this order, as the service's seatCertBytes signs them; without any the bytes are as before. `door` says whether certWhy (the door and
+   the strict arm) takes the mark; the ordinary arm takes every mark here. A new mark is a row. */
+const CERT_MARKS = [
+  { field: "pooled", line: "pooled", door: true },
+  { field: "deskOnly", line: "desk-only", door: false },
+];
 function certBytes(c) {
   const lines = [c.format, c.licence, c.desk, c.person, c.code, c.issued, c.until, c.sig.keyId];
-  if (c.pooled === true) lines.push("pooled"); /* plant:cert-pooled-bytes */
+  for (const m of CERT_MARKS) if (c[m.field] === true) lines.push(m.line);
   return Buffer.from(CERT_KIND + "\n" + lines.map(String).join("\n"), "utf8");
 }
 const utcDay = ms => (Number.isSafeInteger(ms) && Math.abs(ms) <= 8.64e15 ? new Date(ms).toISOString().slice(0, 10) : null);
@@ -442,16 +448,33 @@ function certWhy(cert, deskPub, refs, now, roots, revoked, runOut) {
   const rs = roots === undefined ? [ROOT_PUB] : roots;
   if (!Array.isArray(rs) || rs.length < 1 || !rs.every(r => is(HEX64, r)) || !Number.isSafeInteger(now) || !is(HEX64, deskPub)) return "setup";
   if (!Array.isArray(refs) || refs.length < 1) return "door";
+  return certJudged(cert, deskPub, licence => refs.indexOf(licence) > -1, m => m.door, now, rs, revoked, runOut === true);
+}
+
+/* THE ORDINARY ARM's judgement of a desk key's certificate, apart from certWhy so that no argument the door passes can mean "any
+   licence": every check certWhy makes but the licence, a desk-only certificate taken, and an ended one refused. */
+function seatCertWhy(cert, deskPub, now, roots, revoked) {
+  const rs = roots === undefined ? [ROOT_PUB] : roots;
+  if (!Array.isArray(rs) || rs.length < 1 || !rs.every(r => is(HEX64, r)) || !Number.isSafeInteger(now) || !is(HEX64, deskPub)) return "setup";
+  let runOut = true;
+  runOut = false; /* plant:seat-ordinary-ended */
+  return certJudged(cert, deskPub, () => true, () => true, now, rs, revoked, runOut);
+}
+
+/* The body certWhy and seatCertWhy share, past their setup: `takes(licence)` whether the caller takes that licence, `marks(mark)` whether
+   it takes that row of CERT_MARKS at all. */
+function certJudged(cert, deskPub, takes, marks, now, rs, revoked, runOut) {
   if (!plain(cert) || canonBytesWithin(cert, DOOR_CERT_MAX) > DOOR_CERT_MAX) return "size"; /* plant:cert-size */
   if (cert.kind !== CERT_KIND) return "kind";
-  if (!exactly(cert, cert.pooled === true ? CERT_FIELDS.concat(["pooled"]) : CERT_FIELDS) || cert.format !== 1 || !is(HEX32, cert.licence) || !is(HEX64, cert.desk) || !is(HEX64, cert.person)
+  const fields = CERT_FIELDS.concat(CERT_MARKS.filter(m => marks(m) && cert[m.field] === true).map(m => m.field));
+  if (!exactly(cert, fields) || cert.format !== 1 || !is(HEX32, cert.licence) || !is(HEX64, cert.desk) || !is(HEX64, cert.person)
     || !is(CODE_RE, cert.code) || !Number.isSafeInteger(cert.issued) || !Number.isSafeInteger(cert.until) || cert.issued <= 0
     || cert.until <= cert.issued || !plain(cert.sig) || !exactly(cert.sig, SIG_FIELDS) || cert.sig.alg !== "Ed25519" || !isId(cert.sig.keyId)
     || !is(HEX128, cert.sig.value)) return "shape";
   if (cert.until - cert.issued > CERT_SPAN_MS) return "span"; /* plant:cert-span */
   if (cert.pooled === true && cert.until - cert.issued > POOLED_CERT_SPAN_MS) return "span"; /* plant:cert-pooled-span */
   if (cert.desk !== deskPub) return "desk"; /* plant:cert-desk */
-  if (refs.indexOf(cert.licence) < 0) return "licence"; /* plant:cert-licence */
+  if (!takes(cert.licence)) return "licence"; /* plant:cert-licence */
   if (cert.issued > now + CALL_SKEW_MS) return "future"; /* plant:cert-future */
   if (now >= cert.until && runOut !== true) return "ended"; /* plant:cert-ended */
   const via = certViaWhy(cert.via, cert.issued, rs);
@@ -771,10 +794,14 @@ function createCore(deps) {
   /* A desk's or a Studio's session on a team whose grant carries seats, before it is issued: `cert` judged by certWhy for the seats' licence, its run
      ending decided here. A current one opens the session and its issue is kept as evidence; a run-out one opens it until the evidence
      (the grant's live, or the newest issue of a certificate taken at this team's sessions) passes its until by SEAT_MARGIN_MS, so an
-     outage of the service or of Microsoft for everyone refuses nobody. Answers {ok, note} or the refusal; an ordinary team {ok}. */
+     outage of the service or of Microsoft for everyone refuses nobody. Answers {ok, note} or the refusal; a team without seats, anySeat's. */
   function seatGate(cert, deskPub) {
     const seats = store.get("seats");
-    if (!plain(seats)) return { ok: true }; /* plant:seat-ordinary */
+    if (!plain(seats)) {
+      let ordinary = { ok: true };
+      ordinary = anySeat(cert, deskPub); /* plant:seat-ordinary */
+      return ordinary;
+    }
     const now = clock();
     /* A pooled desk the service freed (its person's place taken by another pooled desk) is refused outright while the grant names it,
        on a certificate issued before it was freed; one issued since (its person came back to it) is judged as any other. */
@@ -792,6 +819,17 @@ function createCore(deps) {
     const ran = seatRunOut(seats, seat, now, true);
     return ran.ok ? { ok: true, seat, note: null } : ran;
   }
+
+  /* THE ORDINARY ARM: a current certificate of any licence for this desk key (seatCertWhy), on a team without seats and at every invitation's
+     hello. It writes nothing; its session keeps the seat and ends at the certificate's end (`end`, as a store's), re-judged by seatLapsed. */
+  function anySeat(cert, deskPub) {
+    if (seatCertWhy(cert, deskPub, clock(), roots, revokedNow()) !== null) return no("seat-lapsed");
+    const out = { ok: true, seat: seatOf(cert, deskPub), note: null };
+    out.end = cert.until; /* plant:seat-session-cap */
+    return out;
+  }
+  /* What a session keeps of the certificate its hello carried. */
+  const seatOf = (cert, deskPub) => ({ pub: deskPub, licence: cert.licence, issued: cert.issued, until: cert.until, pooled: cert.pooled === true });
 
   /* A run-out certificate (`seat`, as seatGate keeps it) judged against the team's evidence at `now`; `mark` keeps a refusal ("pr:"),
      which only a hello does. */
@@ -1390,9 +1428,13 @@ function createCore(deps) {
     /* A token is spent only while the team works: a lapsed team could not enrol the key it would bind. */
     const lapsedToken = lapseGate(true);
     if (lapsedToken) return lapsedToken; /* plant:lapse-token */
+    /* THE INVITATION STAGE asks a seat on every team, of any licence (the person is on no team's licence until admitted), before the token
+       is spent or a session issued, so a refusal spends neither, counts no try and leaves the challenge good for the desk's retry. */
+    const tokenSeat = anySeat(b.seat, b.pub);
+    if (!tokenSeat.ok) return tokenSeat;
     const who = { key: null, inv: b.inv };
     if (binds) who.bound = b.key;
-    return issue(b.challenge, who, () => {
+    return issue(b.challenge, seated(who, tokenSeat), () => {
       const next = Object.assign({}, inv, { spent: true, spentAt: clock() }); /* plant:token-spend */
       if (binds) { next.key = b.key; next.pub = b.pub; }
       store.put("inv:" + b.inv, next);
@@ -1422,9 +1464,10 @@ function createCore(deps) {
       /* Every computer of a store holds its lead key S, and the folder holds it too, so S signs lists and opens no session. */
       if (team.store) return no("not-enrolled"); /* plant:store-lead-hello */
       /* A Studio is judged as a desk is, by its person: on a team whose grant carries seats the lead's session carries the certificate
-         of its person's lead seat. What takes access away is a signed call, never a session, so a lapsed seat still lets the lead go. */
+         of its person's lead seat. What takes access away is a signed call, never a session, so a lapsed seat still lets the lead go.
+         On a team without seats the lead's key is not asked: its grant is its seat. */
       let seat = { ok: true };
-      seat = seatGate(b.seat, b.pub); /* plant:seat-lead */
+      if (plain(store.get("seats"))) seat = seatGate(b.seat, b.pub); /* plant:seat-lead */
       if (!seat.ok) return seat;
       return issue(b.challenge, seated({ key: b.key, inv: null }, seat), seat.note);
     }
@@ -1438,27 +1481,49 @@ function createCore(deps) {
       if (gone.pub !== b.pub) return no("bad-signature"); /* plant:removed-sig */
       /* The invitation's session again, only where the lead registered it after this removal, for its one upload. */
       const held = boundInvite(b.key);
-      if (held && registeredAfter(held.inv, gone) && held.inv.pub === b.pub)
-        return entriesShut() ? later() : issue(b.challenge, { key: null, inv: held.id, bound: b.key, letGo: held.inv.uploaded === true }, () => {
-          for (const [k, x] of store.list("ses:")) if (x.inv === held.id) store.del(k);
-        });
+      if (held && registeredAfter(held.inv, gone) && held.inv.pub === b.pub) return resumeBound(b, held);
       return no("removed"); /* plant:removed-key */
     }
     if (!dev) {
       /* A key on no list that a token hello bound: the invitation's session again, for its one upload and then its answer alone, and only one held. */
       const held = boundInvite(b.key);
-      if (held && held.inv.pub === b.pub) /* plant:invite-resume */
-        return entriesShut() ? later() : issue(b.challenge, { key: null, inv: held.id, bound: b.key, letGo: held.inv.uploaded === true }, () => {
-          for (const [k, x] of store.list("ses:")) if (x.inv === held.id) store.del(k);
-        });
+      if (held && held.inv.pub === b.pub) return resumeBound(b, held); /* plant:invite-resume */
       return no("not-enrolled"); /* plant:key-enrolled */
     }
     if (dev.pub !== b.pub) return no("bad-signature"); /* plant:key-sig */
+    /* A store's desk is judged by its store certificate alone; any other desk by the team's seats, lapse first where they are the
+       ordinary arm. */
+    let storeOnly = false;
+    storeOnly = !!team.store; /* plant:store-session */
+    const lapsedFirst = storeOnly ? null : ordinaryLapse();
+    if (lapsedFirst) return lapsedFirst;
     let seat = { ok: true };
-    seat = seatGate(b.seat, b.pub); /* plant:seat-session */
-    if (team.store) seat = storeGate(team, b.seat, b.pub); /* plant:store-session */
+    seat = storeOnly ? storeGate(team, b.seat, b.pub) : seatGate(b.seat, b.pub); /* plant:seat-session */
     if (!seat.ok) return seat;
     return issue(b.challenge, seated({ key: b.key, inv: null }, seat), seat.note);
+  }
+
+  /* On a team without seats, the lapse is told before the seat is asked, so a lapsed team's desk is not sent to renew a seat that cannot
+     help; the strict arm keeps its order as built. */
+  function ordinaryLapse() {
+    if (plain(store.get("seats"))) return null;
+    let lapsed = null;
+    lapsed = lapseGate(false); /* plant:lapse-first */
+    return lapsed;
+  }
+
+  /* A bound invitation's session again, by its key's hello: lapse first, as issue would judge it, and the seat as the token hello asked
+     it, a withdrawal's session included. */
+  function resumeBound(b, held) {
+    if (entriesShut()) return later();
+    const letGo = held.inv.uploaded === true;
+    const lapsed = lapseGate(false);
+    if (lapsed && !letGo) return lapsed;
+    const seat = anySeat(b.seat, b.pub);
+    if (!seat.ok) return seat; /* plant:resume-seat */
+    return issue(b.challenge, seated({ key: null, inv: held.id, bound: b.key, letGo }, seat), () => {
+      for (const [k, x] of store.list("ses:")) if (x.inv === held.id) store.del(k);
+    });
   }
 
   /* THE STANDING DOOR (board 980, A4): a desk whose person signed in to the licence service asks to join with no invitation, its
@@ -1487,6 +1552,8 @@ function createCore(deps) {
     if (dev && dev.pub !== b.pub) return no("bad-signature");
     if (dev) {
       /* An enrolled desk knocking is a desk session, so the team's seats judge the certificate it knocks with. */
+      const lapsedFirst = ordinaryLapse();
+      if (lapsedFirst) return lapsedFirst;
       let seat = { ok: true };
       seat = seatGate(b.door, b.pub); /* plant:seat-door */
       return seat.ok ? issue(b.challenge, seated({ key: b.key, inv: null }, seat), seat.note) : seat;
@@ -1500,10 +1567,12 @@ function createCore(deps) {
       if (!spendDoorTry(b.challenge)) return no("rate");
       return no("not-enrolled");
     }
-    /* A key already bound to a request, by the door or by a token, opens that request's session again and asks nothing new. */
+    /* A key already bound to a request, by the door or by a token, opens that request's session again and asks nothing new. A request's
+       session keeps the certificate it knocked with, as an invitation's keeps its seat, and ends at its end. */
+    const knocked = { ok: true, seat: seatOf(b.door, b.pub), end: b.door.until };
     const bound = boundInvite(b.key);
     if (bound && bound.inv.pub === b.pub)
-      return issue(b.challenge, { key: null, inv: bound.id, bound: b.key, letGo: bound.inv.uploaded === true }, () => {
+      return issue(b.challenge, seated({ key: null, inv: bound.id, bound: b.key, letGo: bound.inv.uploaded === true }, knocked), () => {
         for (const [k, x] of store.list("ses:")) if (x.inv === bound.id) store.del(k);
       });
     const lapsedDoor = lapseGate(true);
@@ -1522,7 +1591,7 @@ function createCore(deps) {
     const stamps = (Array.isArray(store.get("doorAt")) ? store.get("doorAt") : []).filter(at => Number.isSafeInteger(at) && now - at < DOOR_RATE_MS);
     if (stamps.length >= DOOR_RATE_MAX) return no("rate"); /* plant:door-rate */
     const id = random(16);
-    return issue(b.challenge, { key: null, inv: id, bound: b.key }, () => {
+    return issue(b.challenge, seated({ key: null, inv: id, bound: b.key }, knocked), () => {
       const ord = (store.get("ord") || 0) + 1;
       store.put("ord", ord);
       store.put("inv:" + id, { door: true, spent: true, spentAt: now, uploaded: false, fails: 0, key: b.key, pub: b.pub, box: b.box,
@@ -1587,7 +1656,9 @@ function createCore(deps) {
     return { ok: true, refs: b.refs.slice() };
   }
 
-  /* What a session's gate said, kept with it: a seat's certificate, judged again at each use (seatLapsed), and a store certificate's end. */
+  /* What a session's gate said, kept with it: a seat's certificate, judged again at each use (seatLapsed), and the end of a store certificate
+     or of an ordinary arm's seat, past which issue sets no session. Every session for a desk's key carries one or the other; only the
+     lead's on a team without seats, and one issued by a relay before the ordinary arm, carry neither. */
   const seated = (who, seat) => Object.assign(who, plain(seat.seat) ? { seat: seat.seat } : {}, Number.isSafeInteger(seat.end) ? { end: seat.end } : {});
   /* The session is kept by its sha256, so the store holds nothing a reader could present. */
   function issue(nonce, who, also) {
@@ -1614,8 +1685,9 @@ function createCore(deps) {
       for (const k of evicted) store.del(k);
       held = held.filter(([k]) => !evicted.has(k));
       for (const [k] of held.slice(0, Math.max(0, held.length - SESSIONS_MAX + 1))) store.del(k); /* plant:session-cap */
-      store.put("ses:" + sha256(token), Object.assign(who.bound ? { key: who.key, inv: who.inv, bound: who.bound, until } : { key: who.key, inv: who.inv, until },
-        plain(who.seat) ? { seat: who.seat } : {}));
+      const row = who.bound ? { key: who.key, inv: who.inv, bound: who.bound, until } : { key: who.key, inv: who.inv, until };
+      if (plain(who.seat)) row.seat = who.seat; /* plant:session-seat-kept */
+      store.put("ses:" + sha256(token), row);
     });
     const out = who.inv ? { ok: true, session: token, until, invite: true, lapse: told() } : { ok: true, session: token, until, lapse: told() };
     /* A door request's session names its id, which is where the lead's answer is written: the desk has no invitation to read it from. */
@@ -1704,10 +1776,12 @@ function createCore(deps) {
   const sessionOf = token => sessionByHash(is(HEX64, token) ? sha256(token) : null);
   /* A key's session on a team with seats, judged again at each use from the certificate its hello carried: a freed name, a run-out the
      evidence now passes by the margin, or a pooled grace the service ended refuses it as seatGate refuses a new hello. A session that
-     carried none, or another licence's, holds no seat. */
+     carried none, or another licence's, holds no seat. A store's sessions are judged by their end alone; any other by ordinaryLapsed. */
   function seatLapsed(s) {
+    const team = store.get("team");
+    if (team && team.store) return null;
     const seats = s.key && !s.inv ? store.get("seats") : undefined;
-    if (!plain(seats)) return null;
+    if (!plain(seats)) return ordinaryLapsed(s);
     const seat = s.seat;
     if (!plain(seat) || seat.licence !== seats.licence) return no("seat-lapsed");
     const named = Array.isArray(seats.freed) ? seats.freed.find(f => plain(f) && f.key === seat.pub) : undefined;
@@ -1716,6 +1790,15 @@ function createCore(deps) {
     if (now < seat.until) return null;
     const ran = seatRunOut(seats, seat, now, false);
     return ran.ok ? null : ran;
+  }
+  /* The ordinary arm's session, and every invitation's: refused from its certificate's end, the instant certWhy calls it ended, and
+     answered as a session past its own end is, so the desk says hello again at once and is asked its seat there. One that carries
+     no seat passes to its own end. */
+  function ordinaryLapsed(s) {
+    if (!plain(s.seat)) return null;
+    let ended = false;
+    ended = clock() >= s.seat.until; /* plant:seat-ordinary-life */
+    return ended ? no("no-hello") : null;
   }
 
   function expired(m, now) {
