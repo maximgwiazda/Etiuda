@@ -35,7 +35,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 168;
+const EXPECTED = 170;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const { offWindows } = nodeRequire("./off-windows.cjs");
@@ -5362,6 +5362,109 @@ async function run() {
       return got.flushed && got.delFlushed && !got.keptOut1 && !got.lostAgain;
     });
     check(planted.ok, "a3b lifting plant:own-deleted-kept lets deleted own files put back on the share land in the mirror again: " + JSON.stringify(planted));
+  }
+
+  /* a4: a path owed again is always sent and cleared, whatever was last sent for it, and landed() giving up
+     on a busy outbox after a second must not leave the path unsendable. */
+  async function owedAgainScene(mod, name) {
+    const share = folder(name + "-share");
+    const mirror = folder(name + "-mirror");
+    const dId = "k-" + crypto.randomBytes(8).toString("hex");
+    const rel = "desks/" + dId + "/cat-a4-12345678.ec";
+    const teamText = JSON.stringify(teamFile({ epoch: 1, rev: 1 }));
+    fs.writeFileSync(path.join(share, "etiuda-team.json"), teamText, "utf8");
+    fs.writeFileSync(path.join(mirror, "etiuda-team.json"), teamText, "utf8");
+    const mPath = path.join(mirror, ...rel.split("/"));
+    const sPath = path.join(share, ...rel.split("/"));
+    fs.mkdirSync(path.dirname(mPath), { recursive: true });
+    fs.mkdirSync(path.dirname(sPath), { recursive: true });
+    const bytes1 = JSON.stringify({ format: 2, kind: "etiuda-catalog", id: dId + "-12345678", rev: 1, cards: [] }) + "\n";
+    const bytes2 = JSON.stringify({ format: 2, kind: "etiuda-catalog", id: dId + "-12345678", rev: 2, cards: [] }) + "\n";
+
+    /* Way 1: owe a deletion, let it flush and clear, then owe a write and a deletion before the next flush. */
+    let delFlushed = false, drained = false, shareGone = false;
+    const ctl1 = new mod.FolderSyncerController({
+      team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks, own: dId, pollMs: 60000, logger: () => {}
+    });
+    let scans1 = 0;
+    const origApply1 = ctl1.program.applyScan.bind(ctl1.program);
+    ctl1.program.applyScan = (msg) => { scans1++; return origApply1(msg); };
+    try {
+      ctl1.start();
+      const sDeadline = Date.now() + 3000;
+      while (Date.now() < sDeadline && scans1 < 1) await sleep(15);
+      fs.writeFileSync(mPath, bytes1, "utf8");
+      fs.writeFileSync(sPath, bytes1, "utf8");
+      fs.unlinkSync(mPath);
+      mod.noteOwed(mirror, rel);
+      delFlushed = (await ctl1.flushNow(2000)) && !ctl1.owing() && !fs.existsSync(sPath);
+      fs.writeFileSync(mPath, bytes2, "utf8");
+      mod.noteOwed(mirror, rel);
+      fs.unlinkSync(mPath);
+      mod.noteOwed(mirror, rel);
+      drained = (await ctl1.flushNow(1500)) && !ctl1.owing();
+      shareGone = !fs.existsSync(sPath);
+    } finally { ctl1.stop(); }
+
+    /* Way 2: landed() gives up on a busy outbox after 20 tries (~1s); once the outbox clears, the path still sends and clears. */
+    const share2 = folder(name + "-busy-share");
+    const mirror2 = folder(name + "-busy-mirror");
+    fs.writeFileSync(path.join(share2, "etiuda-team.json"), teamText, "utf8");
+    fs.writeFileSync(path.join(mirror2, "etiuda-team.json"), teamText, "utf8");
+    const rel2 = "desks/" + dId + "/cat-a4-busy.ec";
+    const mPath2 = path.join(mirror2, ...rel2.split("/"));
+    const sPath2 = path.join(share2, ...rel2.split("/"));
+    fs.mkdirSync(path.dirname(mPath2), { recursive: true });
+    fs.writeFileSync(mPath2, bytes1, "utf8");
+    mod.noteOwed(mirror2, rel2);
+    let busyOutbox = true, readTries = 0;
+    const busyErr = () => { const e = new Error("EBUSY"); e.code = "EBUSY"; return e; };
+    const io2 = {
+      readdir: d => fs.readdirSync(d),
+      stat: p => fs.statSync(p),
+      readFile: (p, enc) => {
+        if (busyOutbox && path.basename(String(p)) === ".outbox.json") { readTries++; throw busyErr(); }
+        return fs.readFileSync(p, enc);
+      },
+      writeFile: (p, data) => fs.writeFileSync(p, data),
+      unlink: p => fs.unlinkSync(p),
+      mkdir: d => fs.mkdirSync(d, { recursive: true }),
+      exists: p => fs.existsSync(p),
+      rename: (a, b) => fs.renameSync(a, b)
+    };
+    let gaveUp = false, recovered = false, landed2 = false;
+    const ctl2 = new mod.FolderSyncerController({
+      team: TEAM, folder: share2, mirror: mirror2, pin: LEAD, keys: { 1: K1 }, checks, own: dId, pollMs: 60000, io: io2, logger: () => {}
+    });
+    try {
+      ctl2.start();
+      const deadline = Date.now() + 3000;
+      while (Date.now() < deadline && !fs.existsSync(sPath2)) await sleep(20);
+      await sleep(1250);
+      const triesAtEnd = readTries;
+      await sleep(150);
+      busyOutbox = false;
+      gaveUp = triesAtEnd >= 20 && readTries === triesAtEnd && ctl2.owing();
+      recovered = (await ctl2.flushNow(1500)) && !ctl2.owing();
+      landed2 = fs.existsSync(sPath2) && fs.readFileSync(sPath2, "utf8") === bytes1;
+    } finally { ctl2.stop(); }
+
+    return { delFlushed, drained, shareGone, gaveUp, recovered, landed2 };
+  }
+  {
+    const g = await owedAgainScene(syncerMod, "a4a");
+    check(g.delFlushed && g.drained && g.shareGone && g.gaveUp && g.recovered && g.landed2,
+      "a4a a path owed again in the same state before the next flush drains, and landed() giving up on a busy outbox leaves the path sendable: "
+      + JSON.stringify(g));
+  }
+  if (PLANTS_OFF) skip("a4b lifting plant:worker-sent-clear leaves re-owed and busy-landed paths stuck in the outbox: NOT RUN");
+  else {
+    const workerFile = path.join(ROOT, "shell", "folder", "syncer-worker.cjs");
+    const planted = await testPlant("worker-sent-clear", workerFile, async (scratch) => {
+      const got = await owedAgainScene(nodeRequire(path.join(syncerCopy(scratch, "syncer-worker.cjs"), "syncer.cjs")), "a4b");
+      return got.delFlushed && !got.drained && got.gaveUp && !got.recovered;
+    });
+    check(planted.ok, "a4b lifting plant:worker-sent-clear leaves re-owed and busy-landed paths stuck in the outbox: " + JSON.stringify(planted));
   }
 
   if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") {

@@ -359,7 +359,7 @@ function writeOutbox(mirror, st, io) {
 }
 /* Runs fn; on the main thread a busy code is tried again, 20 tries RENAME_WAIT_MS apart, off it the code is thrown.
    keepGoing is a new owe: past 20 it is said once and still tried, so the record is not dropped while the rename refuses. */
-function outboxBusyRetrying(fn, onDone, timerSet, keepGoing) {
+function outboxBusyRetrying(fn, onDone, timerSet, keepGoing, onFail) {
   let busyCodes = RENAME_BUSY;
   busyCodes = OUTBOX_CAN_PASS; /* plant:outbox-can-pass */
   try {
@@ -386,8 +386,8 @@ function outboxBusyRetrying(fn, onDone, timerSet, keepGoing) {
           timer = setTimeout(step, RENAME_WAIT_MS);
           if (timer.unref) timer.unref();
           if (timerSet) timerSet.add(timer);
-        }
-      }
+        } else if (onFail) onFail();
+      } else if (onFail) onFail();
     }
   };
   timer = setTimeout(step, RENAME_WAIT_MS);
@@ -990,8 +990,11 @@ function createFolderProgram(opts) {
     renameWait.set(item.relPath, item);
     renameMeta.delete(item.relPath);
   }
-  function landed(results) {
-    if (!Array.isArray(results) || !results.length) return;
+  function landed(results, onSettled) {
+    if (!Array.isArray(results) || !results.length) {
+      if (onSettled) onSettled(true);
+      return;
+    }
     /* A copy the share holds newer than this desk's was left there, and the mirror holds this desk's bytes now, so the stamp
        read before no longer stands for what the mirror holds: forgotten here and in the worker (held's forget), so the share's
        copy is read again at the next listing (review 24, finding 1's put-back case). Forgetting costs one read at most. */
@@ -1069,8 +1072,13 @@ function createFolderProgram(opts) {
           if (clearRels.length || updateRels.length) onOwed();
           if (unreadChanged) onChange({ team, applied: [] });
         }
-      }, outboxTimers);
-    } catch {}
+        if (onSettled) onSettled(true);
+      }, outboxTimers, false, () => {
+        if (onSettled) onSettled(false);
+      });
+    } catch {
+      if (onSettled) onSettled(false);
+    }
   }
   /* A desk's catalog answer sealed to the lead's box for this team: judged by its place and its envelope alone, never opened. */
   function leadAnswerAt(relPath, doc) {
@@ -2221,7 +2229,18 @@ class FolderSyncerController {
           this.sendHeld();
           this.flushCheck();
         } else if (msg.type === "landed") {
-          this.program.landed(msg.results);
+          let syncNow = true;
+          const settle = () => {
+            if (this.worker && !this.stopped && msg.id != null) {
+              this.worker.postMessage({ type: "landed-done", id: msg.id });
+            }
+            if (!syncNow) {
+              this.sendHeld();
+              this.flushCheck();
+            }
+          };
+          this.program.landed(msg.results, settle);
+          syncNow = false;
           this.sendHeld();
           this.flushCheck();
         } else if (msg.type === "need-own") {
