@@ -62,7 +62,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 474;
+const EXPECTED = 488;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -7088,10 +7088,11 @@ if (deskOn()) try {
         "994a a desk away while the old lead puts up a team file with a later counter and the lead then hands the team to a new key, both"
         + " in one since page, follows the handover and opens the new key's edition, head and span: the old lead's file " + (a.x ? a.x.old : "?")
         + ", " + sceneText(a.x, a.err));
-      if (PLANTS_OFF) skip("994b lifting plant:handed-wins lets the old lead's later counter win the page, so the desk stays on the old lead");
+      if (PLANTS_OFF) skip("994b lifting plant:handed-wins with plant:page-ends lets the old lead's later counter win the page, so the desk stays on the old lead");
       else {
-        const b = await liftApp("plant:handed-wins", async app => { const x = await handoverUnderOld("994b", false, app, 8000); return x.synced && x.old === 200 && x.moved === 200 && !!x.now && x.now.pin === "the old lead"; });
-        check(b.turned && b.back, "994b lifting plant:handed-wins lets the old lead's later counter win the page, so the desk stays on the old lead,"
+        /* With plant:page-ends: a page with items is never the last now, so the two meet in one look only where a short page is. */
+        const b = await liftApp(["plant:handed-wins", "plant:page-ends"], async app => { const x = await handoverUnderOld("994b", false, app, 8000); return x.synced && x.old === 200 && x.moved === 200 && !!x.now && x.now.pin === "the old lead"; });
+        check(b.turned && b.back, "994b lifting plant:handed-wins with plant:page-ends lets the old lead's later counter win the page, so the desk stays on the old lead,"
           + " and the product file is never written: " + b.detail + ", sha " + (b.back ? "restored" : "differs"));
       }
       const c = await run(handoverUnderOld, "994c", true);
@@ -7138,11 +7139,12 @@ if (deskOn()) try {
         check(j.turned && j.back, "994j lifting plant:ahead-land never lands the held handover, so the desk stays on the old lead, and the product file"
           + " is never written: " + j.detail + ", sha " + (j.back ? "restored" : "differs"));
       }
-      if (PLANTS_OFF) skip("994k lifting plant:ahead-park with plant:item-held drops what the new key wrote on the first page, so the desk follows without its head");
+      if (PLANTS_OFF) skip("994k lifting plant:ahead-park with plant:item-held and plant:later-hold drops what the new key wrote on the first page, so the desk follows without its head");
       else {
-        /* Paired: stage 5's kept head (plant:item-held) also carries the new key's head across the pages, so ahead-park alone is redundancy. */
-        const k = await liftApp(["plant:ahead-park", "plant:item-held"], async app => { const x = await handoverAcrossPages("994k", app, 8000); return x.synced && x.moved === 200 && !!x.now && x.now.pin === "the new lead" && x.now.head !== "Handover edition"; });
-        check(k.turned && k.back, "994k lifting plant:ahead-park with plant:item-held drops what the new key wrote on the first page, so the desk follows without its head,"
+        /* Paired: stage 5's kept head (plant:item-held) also carries the new key's head across the pages, so ahead-park alone is redundancy;
+           and a page's files held for the last page (plant:later-hold) carry them too. */
+        const k = await liftApp(["plant:ahead-park", "plant:item-held", "plant:later-hold"], async app => { const x = await handoverAcrossPages("994k", app, 8000); return x.synced && x.moved === 200 && !!x.now && x.now.pin === "the new lead" && x.now.head !== "Handover edition"; });
+        check(k.turned && k.back, "994k lifting plant:ahead-park with plant:item-held and plant:later-hold drops what the new key wrote on the first page, so the desk follows without its head,"
           + " and the product file is never written: " + k.detail + ", sha " + (k.back ? "restored" : "differs"));
       }
       const lText = x => (x ? "synced " + x.synced + ", the K3 file by K1 " + x.thief + ", pages from the stand-in " + x.pages + ", desk pin "
@@ -7845,10 +7847,11 @@ if (partOn("p994p")) {
     const p = await staleInOnePage(C);
     check(p.ok === true, "994p a first-epoch handover to K3 and the pinned lead's own move to the second epoch in one since page, the desk's mirror"
       + " on the first: the desk lands the second epoch under the pin and does not follow K3: " + pText(p));
-    if (PLANTS_OFF) skip("994q lifting plant:epoch-first puts the stale handover first, so the desk follows K3");
+    if (PLANTS_OFF) skip("994q lifting plant:epoch-first with plant:page-ends puts the stale handover first, so the desk follows K3");
     else {
-      const q = await liftChannel("plant:epoch-first", async mod => { const x = await staleInOnePage(mod); return x.first === 1 && x.thief === 200 && x.leadPin === "K1" && x.pin === "K3"; });
-      check(q.turned && q.back, "994q lifting plant:epoch-first puts the stale handover first, so the desk follows K3, and the product file is never"
+      /* With plant:page-ends: a page with items is never the last now, so the two meet in one look only where a short page is. */
+      const q = await liftChannel(["plant:epoch-first", "plant:page-ends"], async mod => { const x = await staleInOnePage(mod); return x.first === 1 && x.thief === 200 && x.leadPin === "K1" && x.pin === "K3"; });
+      check(q.turned && q.back, "994q lifting plant:epoch-first with plant:page-ends puts the stale handover first, so the desk follows K3, and the product file is never"
         + " written: " + q.detail + ", sha " + (q.back ? "restored" : "differs"));
     }
   } catch (e) {
@@ -8775,14 +8778,341 @@ if (partOn("p923a")) {
       "923a a desk file listed before the lead's newer team file, whose fetch the relay answers 503 once, is not judged against the older roster that does not name its writer, and lands at the next cycle: "
       + (w.listedBefore ? "listed before rev 3" : "not listed before rev 3") + ", 503 answered " + w.failed + ", the mirror's rev " + w.rev
       + ", the desk file " + (w.landed ? "landed" : "missing") + " after " + w.fetchedDesk + " fetch(es)");
-    const wholePlant = await liftChannel("plant:page-whole", async mod => {
+    const wholePlant = await liftChannel(["plant:page-whole", "plant:later-hold"], async mod => {
       const x = await pageWhole(mod);
       return x.listedBefore && x.failed === 1 && x.rev === 3 && !x.landed;
     });
-    check(wholePlant.turned && wholePlant.back, "923b lifting plant:page-whole judges the desk file against the older roster and loses it, and the product file is never written: "
+    check(wholePlant.turned && wholePlant.back, "923b lifting plant:page-whole with plant:later-hold judges the desk file against the older roster and loses it, and the product file is never written: "
       + wholePlant.detail + ", sha " + (wholePlant.back ? "restored" : "differs"));
   } catch (e) {
     check(false, "harness (the legs 923a): " + (e && e.stack ? e.stack : e));
+  }
+}
+
+/* ---- pg2: a catch-up lands the same mirror whatever the page size (the test architect's criterion for finding 1 of the relay
+   review, 2026-11-16), and the end of the list is an empty page, so a relay that cuts its pages loses nothing ("fewer than a
+   full page means there is no more", his criterion for his own finding). Each scene runs on a relay of its own whose page is a
+   few items (limits.sinceMax) or the ordinary 1,000; a "cut" relay is that relay with plant:since-fill lifted, since as it
+   served before it read past a row it leaves out. The client "as built before" is this file with plant:page-ends and
+   plant:listed-ends lifted and its SINCE_MAX set to the relay's page. ---- */
+const PG_DAY = 24 * 60 * 60 * 1000;
+let pgCutTeam = null;
+function pgTeamModule() {
+  if (pgCutTeam) return pgCutTeam;
+  const text = fs.readFileSync(path.join(ROOT, "relay", "core.cjs"), "utf8").split(/\n/);
+  const at = text.findIndex(l => l.indexOf("plant:since-fill") >= 0);
+  if (at < 0) throw new Error("plant:since-fill is absent");
+  text.splice(at, 1);
+  const dir = fs.mkdtempSync(path.join(LAB, "relay-cut-"));
+  fs.mkdirSync(path.join(dir, "relay"));
+  fs.mkdirSync(path.join(dir, "shell", "relay"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "relay", "core.cjs"), text.join("\n"));
+  fs.copyFileSync(path.join(ROOT, "relay", "team.cjs"), path.join(dir, "relay", "team.cjs"));
+  fs.writeFileSync(path.join(dir, "shell", "relay", "blob.cjs"), "module.exports = require(" + JSON.stringify(path.join(ROOT, "shell", "relay", "blob.cjs")) + ");\n");
+  pgCutTeam = nodeRequire(path.join(dir, "relay", "team.cjs"));
+  return pgCutTeam;
+}
+/* A relay of its own: `page` items a page (0, the ordinary), `cut` as since served before it filled its pages. */
+function pgRelay(page, cut) {
+  const o = { roots: K.ROOTS };
+  if (page) o.limits = { sinceMax: page };
+  if (cut) o.team = pgTeamModule();
+  const RL = S.relayEnv(o);
+  RL.clock.now = Date.UTC(2026, 9, 1, 12);
+  const lfetch = (url, init) => {
+    const i = Object.assign({}, init);
+    if (i.body && i.method !== "GET") i.duplex = "half"; else delete i.body;
+    return W.fetch(new Request(url, i), RL.env);
+  };
+  const x = { RL, shift: 0 };
+  x.admin = async (method, p, json) => {
+    const res = await lfetch("https://relay.test" + p, { method, headers: { "content-type": "application/json" }, body: Buffer.from(JSON.stringify(json), "utf8") });
+    return { status: res.status, json: JSON.parse(Buffer.from(await res.arrayBuffer()).toString("utf8") || "null") };
+  };
+  /* A transport over this relay, its calls logged; `fail(method, rel)` true answers that call 503. */
+  x.transport = fail => {
+    const t = { log: [] };
+    t.request = async (method, url, headers, body) => {
+      const rel = String(url).replace(/^https:\/\/[^/]+\/relay\/v1\/t\/[0-9a-f]{32}\//, "");
+      t.log.push(method + " " + rel);
+      if (fail && fail(method, rel)) return { status: 503, header: () => null, bytes: Buffer.from(JSON.stringify({ error: "fault" })) };
+      const res = await lfetch(url, { method, headers, body });
+      const bytes = Buffer.from(await res.arrayBuffer());
+      return { status: res.status, header: n => res.headers.get(n), bytes, socket: null };
+    };
+    return t;
+  };
+  x.team = async (rt, id, keys) => {
+    const t = RL.clock.now;
+    const made = await x.admin("POST", "/relay/v1/teams", K.createBody(rt, LEAD, t, b => signHex(LEAD, b), { grantOpts: { fields: { until: t + 44 * PG_DAY } } }));
+    if (made.status !== 200) throw new Error("a team was not made: " + JSON.stringify(made.json));
+    return x.enrol(rt, keys, 1);
+  };
+  x.enrol = async (rt, keys, rev) => {
+    const list = keys.map(k => ({ id: k.keyId, pub: k.pub, desk: k.keyId })), t = RL.clock.now;
+    const r = await x.admin("POST", "/relay/v1/t/" + rt + "/devices", { keys: list, rev, t, sig: signHex(LEAD, core.devicesBytes(rt, rev, t, list)) });
+    if (r.status !== 200) throw new Error("desks were not enrolled: " + JSON.stringify(r.json));
+  };
+  x.jump = ms => { RL.clock.now += ms; x.shift += ms; };
+  x.top = rt => RL.stores.get(rt).get("seq") || 0;
+  return x;
+}
+function pgProgram(mod, x, name, tm, who, place, o) {
+  const t = x.transport(o && o.fail), said = [];
+  const mirror = path.join(LAB, name);
+  const ch = mod.createChannel(Object.assign({
+    rt: tm.rt, url: URLV1, mirror, stateFile: path.join(LAB, name + ".json"),
+    pin: () => ({ teamId: tm.id, rt: tm.rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
+    me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place }),
+    keyFor: e => (e === 1 ? tm.key : null), sealEpoch: () => 1,
+    request: t.request, connect: null, pollMs: 1e9, watch: false, clock: () => Date.now() + x.shift,
+    say: l => said.push(l),
+  }, o && o.more));
+  return { name, ch, t, said, mirror, prog: ch.program };
+}
+/* The mirror as path and sha256, the team file's rev, the pending count, the held count, and whether the place reached the top. */
+function pgPrint(p, top) {
+  const files = [];
+  const walk = (dir, rel) => {
+    let names = [];
+    try { names = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const d of names) {
+      const r = rel ? rel + "/" + d.name : d.name;
+      if (d.isDirectory()) walk(path.join(dir, d.name), r);
+      else files.push(r + " " + sha(fs.readFileSync(path.join(dir, d.name))).slice(0, 12));
+    }
+  };
+  walk(p.mirror, "");
+  const st = p.prog.state();
+  return { files: files.sort(), pending: st.pending.length, later: (st.later || []).length, atTop: st.seq === top, seq: st.seq, top };
+}
+const pgSame = (a, b) => JSON.stringify([a.files, a.pending, a.later, a.atTop]) === JSON.stringify([b.files, b.pending, b.later, b.atTop]);
+/* A copy of this file with the lines tagged lifted, and SINCE_MAX set to `page` where given. */
+function pgLift(tags, page) {
+  const src = fs.readFileSync(path.join(ROOT, "shell", "relay", "channel.cjs"), "utf8");
+  const lines = src.split(/\n/);
+  const at = tags.map(tg => lines.findIndex(l => l.indexOf(tg) >= 0));
+  if (!at.every(i => i >= 0)) return null;
+  at.sort((a, b) => b - a).forEach(i => lines.splice(i, 1));
+  let text = lines.join("\n");
+  if (page) {
+    if (text.split("const SINCE_MAX = 1000;").length !== 2) return null;
+    text = text.replace("const SINCE_MAX = 1000;", "const SINCE_MAX = " + page + ";");
+  }
+  return loadPlantedChannel(text);
+}
+async function pgPlant(tags, page, fn) {
+  const file = path.join(ROOT, "shell", "relay", "channel.cjs"), digest = sha(fs.readFileSync(file));
+  let turned = false, detail = "plant line absent";
+  try {
+    const mod = pgLift(tags, page);
+    if (mod) { turned = await fn(mod); detail = turned ? "the check lifted" : "the check still held"; }
+  } catch (e) { detail = e && e.stack ? e.stack : String(e); }
+  return { turned, back: sha(fs.readFileSync(file)) === digest, detail: String(detail).split("\n")[0] };
+}
+
+/* The scene of finding 1, at a page of `page` items. The lead names D0 and D1 at rev 1; D1 syncs and goes away. The lead answers a
+   join request, D0 sends a file, the lead names D2 at rev 2, D2 sends a file, the lead writes eight files and then rev 3, which
+   buries rev 2: D1, back, is listed D0's and D2's files pages before the team file that names D2. Then a desk new to the team,
+   named at rev 4, joins from nothing. `stop`: D1's first cycle back meets a 503 on rev 3 and the program is closed and opened
+   again before it reads on. */
+async function pgAway(mod, page, cut, o) {
+  const opts = o || {};
+  const x = pgRelay(page, cut);
+  const D0 = opts.keys[0], D1 = opts.keys[1], D2 = opts.keys[2], D3 = opts.keys[3];
+  const tm = { rt: opts.rt, id: opts.id, key: opts.key };
+  await x.team(tm.rt, tm.id, [D0, D1, D2]);
+  const tag = (page || "all") + (cut ? "c" : "") + "-" + hex(4);
+  const lead = pgProgram(C, x, "pg-lead-" + tag, tm, LEAD, "root", { more: { agree: () => opts.dh } });
+  put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, [member(D0), member(D1)]));
+  lead.ch.start();
+  await settle(lead);
+  const d1Name = "pg-d1-" + tag;
+  const first = pgProgram(mod, x, d1Name, tm, D1, "desk:" + D1.keyId);
+  first.ch.start();
+  await settle(first);
+  await first.ch.stop();
+  await lead.ch.writeAnswer({ answer: "joined", inv: opts.inv, deskId: D3.keyId, deskBox: "ab".repeat(32), leadBox: "cd".repeat(32) });
+  const d0 = pgProgram(C, x, "pg-d0-" + tag, tm, D0, "desk:" + D0.keyId);
+  put(d0.mirror, "desks/" + D0.keyId + "/stats.estat", "{\"counted\":0}\n");
+  d0.ch.start();
+  await settle(d0);
+  await d0.ch.stop();
+  put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 2, [member(D0), member(D1), member(D2)]));
+  await settle(lead);
+  const d2 = pgProgram(C, x, "pg-d2-" + tag, tm, D2, "desk:" + D2.keyId);
+  put(d2.mirror, "desks/" + D2.keyId + "/stats.estat", "{\"counted\":2}\n");
+  d2.ch.start();
+  await settle(d2);
+  await d2.ch.stop();
+  for (let i = 0; i < 8; i++) put(lead.mirror, "pad/p" + i + ".ec", "pad " + i + "\n");
+  await settle(lead);
+  put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 3, [member(D0), member(D1), member(D2)]));
+  await settle(lead);
+  const blobs = x.RL.stores.get(tm.rt).dump().map(([k, v]) => [k, JSON.parse(v)]).filter(([k]) => k.startsWith("blob:")).map(([, v]) => v);
+  const of = w => blobs.filter(v => v.writer === w && !v.del).sort((a, b) => b.seq - a.seq)[0] || null;
+  const b0 = of(D0.keyId), b2 = of(D2.keyId), teamNow = blobs.find(v => v.id === x.RL.stores.get(tm.rt).get("teamFile")) || null;
+  const out = { order: !!(b0 && b2 && teamNow && b0.seq < b2.seq && b2.seq < teamNow.seq) };
+  let failed = 0;
+  const fail = opts.stop ? (m, rel) => m === "GET" && teamNow && rel === "b/" + teamNow.id && failed++ === 0 : null;
+  let back = pgProgram(mod, x, d1Name, tm, D1, "desk:" + D1.keyId, { fail });
+  const logs = [back.t.log];
+  back.ch.start();
+  if (opts.stop) {
+    await back.ch.idle();
+    const st = back.prog.state();
+    out.paused = { failed, later: (st.later || []).length, past: !!b2 && st.seq > b2.seq, missing: read(back.mirror, "desks/" + D2.keyId + "/stats.estat") === null };
+    await back.ch.stop();
+    back = pgProgram(mod, x, d1Name, tm, D1, "desk:" + D1.keyId);
+    logs.push(back.t.log);
+    back.ch.start();
+  }
+  await settle(back);
+  out.d1 = pgPrint(back, x.top(tm.rt));
+  out.fetched0 = b0 ? [].concat(...logs).filter(l => l === "GET b/" + b0.id).length : -1;
+  out.since = back.t.log.filter(l => l.startsWith("GET since/")).length;
+  await back.ch.stop();
+  const again = pgProgram(mod, x, d1Name, tm, D1, "desk:" + D1.keyId);
+  again.ch.start();
+  await settle(again);
+  out.restarted = pgPrint(again, x.top(tm.rt));
+  await again.ch.stop();
+  await x.enrol(tm.rt, [D0, D1, D2, D3], 2);
+  put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 4, [member(D0), member(D1), member(D2), member(D3)]));
+  await settle(lead);
+  const d3 = pgProgram(mod, x, "pg-d3-" + tag, tm, D3, "desk:" + D3.keyId);
+  d3.ch.start();
+  await settle(d3);
+  out.d3 = pgPrint(d3, x.top(tm.rt));
+  await d3.ch.stop();
+  await lead.ch.stop();
+  out.d2file = "desks/" + D2.keyId + "/stats.estat";
+  return out;
+}
+const pgHas = (pr, rel) => pr.files.some(f => f.startsWith(rel + " "));
+/* The test architect's scene for his own finding, in small: the lead's answer, then nine files; D1 syncs, is away thirty days, and
+   relists the whole team against a relay whose page is four. What D1's mirror holds after. */
+async function pgRelist(mod, cut, o) {
+  const opts = o || {};
+  const x = pgRelay(4, cut);
+  const D1 = opts.keys[1];
+  const tm = { rt: hex(16), id: "t-" + hex(8), key: crypto.randomBytes(32) };
+  await x.team(tm.rt, tm.id, [D1]);
+  const tag = (cut ? "c" : "m") + "-" + hex(4);
+  const lead = pgProgram(C, x, "pgr-lead-" + tag, tm, LEAD, "root", { more: { agree: () => crypto.randomBytes(32) } });
+  put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, [member(D1)]));
+  lead.ch.start();
+  await settle(lead);
+  await lead.ch.writeAnswer({ answer: "joined", inv: hex(16), deskId: keyPair(true).keyId, deskBox: "ab".repeat(32), leadBox: "cd".repeat(32) });
+  for (let i = 0; i < 9; i++) put(lead.mirror, "pad/p" + i + ".ec", "pad " + i + "\n");
+  await settle(lead);
+  await lead.ch.stop();
+  const name = "pgr-d1-" + tag;
+  let d = pgProgram(C, x, name, tm, D1, "desk:" + D1.keyId);
+  d.ch.start();
+  for (let i = 0; i < 6 && d.prog.state().seq < x.top(tm.rt); i++) await settle(d);
+  const before = pgPrint(d, x.top(tm.rt));
+  await d.ch.stop();
+  x.jump(30 * PG_DAY);
+  d = pgProgram(mod, x, name, tm, D1, "desk:" + D1.keyId);
+  d.ch.start();
+  await settle(d);
+  const after = pgPrint(d, x.top(tm.rt));
+  const listed = d.t.log.filter(l => l === "GET since/0").length;
+  await d.ch.stop();
+  const pads = pr => pr.files.filter(f => f.startsWith("pad/")).length;
+  return { before: pads(before), after: pads(after), atTop: before.atTop, listed, lost: pads(before) - pads(after) };
+}
+
+if (partOn("p_pg2")) {
+  try {
+    markPart("p_pg2");
+    const keys = [keyPair(true), keyPair(true), keyPair(true), keyPair(true)];
+    const fixed = { keys, rt: hex(16), id: "t-" + hex(8), key: crypto.randomBytes(32), inv: hex(16), dh: crypto.randomBytes(32) };
+    const small = await pgAway(C, 4, false, fixed);
+    const all = await pgAway(C, 0, false, fixed);
+    const cutSmall = await pgAway(C, 4, true, fixed);
+    const lines = p => "D2's file " + (pgHas(p, small.d2file) ? "landed" : "missing") + ", " + p.files.length + " file(s), pending " + p.pending + ", held " + p.later
+      + ", seq " + (p.atTop ? "at the top" : p.seq + " of " + p.top);
+    check(small.order && all.order && pgHas(all.d1, small.d2file) && pgSame(small.d1, all.d1) && pgSame(cutSmall.d1, all.d1),
+      "pg2a a desk away across more files than a page, the team file that names a writer on a later page than its file: the same mirror,"
+      + " pending list and place at a page of four, at a page of four from a relay that cuts its pages, and at the ordinary page: four, " + lines(small.d1)
+      + "; cut, " + lines(cutSmall.d1) + "; ordinary, " + lines(all.d1));
+    check(pgSame(small.restarted, all.d1) && pgSame(cutSmall.restarted, all.d1) && pgSame(all.restarted, all.d1),
+      "pg2b after a restart and three cycles the mirrors are as they were: four, " + lines(small.restarted) + "; ordinary, " + lines(all.restarted));
+    check(pgHas(all.d3, small.d2file) && pgSame(small.d3, all.d3) && pgSame(cutSmall.d3, all.d3),
+      "pg2c a desk new to the team, joining from nothing, lands the same mirror at a page of four, cut and not, and at the ordinary page: four, "
+      + lines(small.d3) + "; ordinary, " + lines(all.d3));
+    const stopFixed = Object.assign({}, fixed, { stop: true });
+    const halted = await pgAway(C, 4, false, stopFixed);
+    check(small.fetched0 === 1 && all.fetched0 === 1 && halted.fetched0 === 1,
+      "pg2d a file whose writer the desk's roster names is fetched once, at the last page, and not on its own page as well, a catch-up stopped"
+      + " and restarted between included: four, " + small.fetched0 + " fetch(es); ordinary, " + all.fetched0 + "; stopped, " + halted.fetched0);
+    const p = halted.paused || {};
+    check(p.failed === 1 && p.later > 0 && p.past && p.missing && pgSame(halted.d1, all.d1),
+      "pg2e a catch-up stopped by a 503 on the team file after its first pages, closed and opened again: the desk file waits held with the"
+      + " place past it (held " + p.later + ", place past it " + !!p.past + ", in the mirror " + !p.missing + "), and lands after the restart: " + lines(halted.d1));
+    const hold = await pgPlant(["plant:later-hold", "plant:later-listed"], 0, async mod => {
+      const y = await pgAway(mod, 4, false, fixed);
+      return !pgHas(y.d1, small.d2file) && !pgSame(y.d1, all.d1);
+    });
+    check(hold.turned && hold.back, "pg2f lifting plant:later-hold with plant:later-listed judges each page against the roster"
+      + " the desk holds then, and D2's file is lost at a page of four: " + hold.detail + ", sha " + (hold.back ? "restored" : "differs"));
+    const listedOnly = await pgPlant(["plant:later-listed"], 0, async mod => (await pgAway(mod, 4, false, stopFixed)).fetched0 === 2);
+    check(listedOnly.turned && listedOnly.back, "pg2g lifting plant:later-listed fetches the named writer's file on its own page, and again at the last once a restart has let its bytes go: "
+      + listedOnly.detail + ", sha " + (listedOnly.back ? "restored" : "differs"));
+    const keptOff = await pgPlant(["plant:later-kept"], 0, async mod => {
+      const y = await pgAway(mod, 4, false, stopFixed);
+      return !pgHas(y.d1, small.d2file);
+    });
+    check(keptOff.turned && keptOff.back, "pg2h lifting plant:later-kept forgets the held file at the restart, and it is lost: "
+      + keptOff.detail + ", sha " + (keptOff.back ? "restored" : "differs"));
+    const endsOff = await pgPlant(["plant:page-ends"], 4, async mod => {
+      const y = await pgAway(mod, 4, true, fixed);
+      return !pgHas(y.d1, small.d2file);
+    });
+    check(endsOff.turned && endsOff.back, "pg2i lifting plant:page-ends takes the relay's cut page of three for the last, and D2's file is lost: "
+      + endsOff.detail + ", sha " + (endsOff.back ? "restored" : "differs"));
+
+    /* His own finding: a relist thirty days on, against a relay that cuts its pages and one that does not. */
+    const relist = await pgRelist(C, true, fixed);
+    check(relist.before === 9 && relist.atTop && relist.listed === 1 && relist.lost === 0,
+      "pg2j thirty days away, the whole team relisted from a relay that cuts its first page to three: nothing is removed (" + relist.before + " files before, "
+      + relist.after + " after, relisted " + relist.listed + " time(s))");
+    const braceList = await pgPlant(["plant:reconcile-top"], 0, async mod => (await pgRelist(mod, true, fixed)).lost === 0);
+    const braceTop = await pgPlant(["plant:listed-ends"], 4, async mod => (await pgRelist(mod, true, fixed)).lost === 0);
+    check(braceList.turned && braceTop.turned && braceList.back && braceTop.back, "pg2k each brace holds alone against the cut relay: with plant:reconcile-top"
+      + " lifted the list read to an empty page loses nothing (" + braceList.detail + "), and with plant:listed-ends lifted the cut list stops below the"
+      + " desk's place and reconcile removes nothing (" + braceTop.detail + ")");
+    let lostBoth = 0;
+    const both = await pgPlant(["plant:reconcile-top", "plant:listed-ends", "plant:page-ends"], 4, async mod => { lostBoth = (await pgRelist(mod, true, fixed)).lost; return lostBoth > 0; });
+    check(both.turned && both.back, "pg2l lifting both braces, the client as built before, against the cut relay removes " + lostBoth + " live file(s): "
+      + both.detail + ", sha " + (both.back ? "restored" : "differs"));
+    let lostMended = -1;
+    const mended = await pgPlant(["plant:reconcile-top", "plant:listed-ends", "plant:page-ends"], 4, async mod => { lostMended = (await pgRelist(mod, false, fixed)).lost; return lostMended === 0; });
+    check(mended.turned && mended.back, "pg2m the client as built before, against the relay that fills its pages: nothing is removed (" + lostMended + "): "
+      + mended.detail + ", sha " + (mended.back ? "restored" : "differs"));
+    /* reconcile on its own: a list whose top is below the program's place removes nothing. */
+    const direct = async mod => {
+      const dir = fs.mkdtempSync(path.join(LAB, "pg-top-"));
+      const io = C.diskIO(dir);
+      const prog = mod.createProgram({ io, pin: PIN, clock: Date.now });
+      const st = prog.state();
+      for (let i = 1; i <= 4; i++) {
+        io.write("pad/p" + i + ".ec", "pad " + i + "\n");
+        st.applied["pad/p" + i + ".ec"] = { writer: LEAD.keyId, epoch: 1, counter: i, id: hex(16), at: Date.now(), sha: sha(Buffer.from("pad " + i + "\n")), del: false };
+      }
+      st.seq = 40;
+      const list = [{ seq: 3, meta: { id: st.applied["pad/p1.ec"].id } }];
+      return { dropped: prog.reconcile(list).length, left: io.list().length };
+    };
+    const kept = await direct(C);
+    const topOff = await pgPlant(["plant:reconcile-top"], 0, async mod => (await direct(mod)).dropped === 3);
+    check(kept.dropped === 0 && kept.left === 4 && topOff.turned && topOff.back, "pg2n reconcile given a list that stops at seq 3, the program's place 40: nothing"
+      + " removed (" + kept.dropped + " dropped, " + kept.left + " left); lifting plant:reconcile-top removes the three it does not name: "
+      + topOff.detail + ", sha " + (topOff.back ? "restored" : "differs"));
+  } catch (e) {
+    check(false, "harness (the legs pg2): " + (e && e.stack ? e.stack : e));
   }
 }
 
@@ -11792,7 +12122,8 @@ function teamKept(mod) {
   const row = (body, counter) => ({ writer: LEAD.keyId, epoch: 1, counter, id: hex(16), at: 1, sha: sha(Buffer.from(body)) });
   const state = { kind: "etiuda-relay-channel", v: 1, seq: 9, applied: { [C.TEAM_NAME]: row(TEXT, 1), "lane.ec": row(LANE, 2) } };
   const prog = mod.createProgram({ io, load: () => state });
-  const dropped = prog.reconcile([]);
+  /* A whole list reaches the program's place (reconcile refuses one that stops below it) and names neither file. */
+  const dropped = prog.reconcile([{ seq: 9, meta: { id: hex(16) } }]);
   return { ok: dropped.length === 1 && dropped[0] === "lane.ec" && files.has(C.TEAM_NAME) && !files.has("lane.ec"), dropped };
 }
 if (partOn("p1162")) {
@@ -12158,7 +12489,7 @@ async function sceneF8(mod) {
   const X = relay9(), { tm, BASE, DAYMS } = X;
   const DR = { k: keyPair(true), box: boxPair() }, DK = { k: keyPair(true), box: boxPair() };
   const STATS = "desk statistics kept across removal\n", DK_OLD = "active desk file retracted later\n";
-  const RETIRED = "lead file retracted later\n";
+  const RETIRED = "lead file retracted later\n", NEWEST = "the newest live file in the team\n";
   const statsRel = "desks/" + DR.k.keyId + "/stats.estat", dkOldRel = "desks/" + DK.k.keyId + "/old.ec";
   const afterRel = "desks/" + DR.k.keyId + "/after.ec";
   try {
@@ -12194,6 +12525,13 @@ async function sceneF8(mod) {
     fs.unlinkSync(path.join(dk.mirror, ...dkOldRel.split("/")));
     const dropped = await X.enrol9(2, DK);
     await settle(lead, dk);
+    /* The newest row in the team is a LIVE file, written after the day's deletions. Without it the deletions are the newest
+       rows, they have expired by day 32, the relisted list then stops below each program's place in the sequence, and
+       reconcile removes nothing from such a list (plant:reconcile-top, 2026-11-16): f8a would hold for that reason and not
+       for the one it names, and f8d's plant could not turn it. */
+    put(lead.mirror, "newest.ec", NEWEST);
+    await settle(lead, dk);
+    const newestLanded = read(dk.mirror, "newest.ec") === NEWEST;
     await lead.ch.stop();
     await dk.ch.stop();
 
@@ -12229,11 +12567,11 @@ async function sceneF8(mod) {
       && read(lead.mirror, afterRel) === null && read(dk.mirror, afterRel) === null;
 
     return {
-      setup: before && dropped.status === 200 && leadWhole >= 1 && dkWhole >= 1,
+      setup: before && newestLanded && dropped.status === 200 && leadWhole >= 1 && dkWhole >= 1,
       kept: keptAfter.leadStats && keptAfter.dkStats && keptAfter.leadLane && keptAfter.dkLane,
       activeGone: activeRemoved.leadRetired && activeRemoved.dkRetired && activeRemoved.leadDkOld && activeRemoved.dkDkOld,
       newRefused,
-      detail: JSON.stringify({ before, dropped: dropped.status, leadWhole, dkWhole, keptAfter, activeRemoved, leadNew, dkNew }),
+      detail: JSON.stringify({ before, newestLanded, dropped: dropped.status, leadWhole, dkWhole, keptAfter, activeRemoved, leadNew, dkNew }),
     };
   } finally {
     await X.done();
