@@ -48,7 +48,7 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 202;
+const PLANTS = 204;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
@@ -210,8 +210,10 @@ const answer = (obj, status) => ({ status: status || 200, bytes: Buffer.from(JSO
 const strayAnswer = (obj, status) => Object.assign(answer(obj, status), { stray: true });
 /* The service's own making of the nonce and of the desk's signed bytes, written here from the lines the interface names. */
 const serviceNonce = (key, seed) => crypto.createHash("sha256").update("etiuda-licence-signin-nonce\n" + key + "\n" + seed).digest("hex");
-const serviceBytes = (provider, idToken, desk, t) => Buffer.from("etiuda-licence-signin-desk\n" + [provider,
-  crypto.createHash("sha256").update(idToken).digest("hex"), desk, t].join("\n"), "utf8");
+/* A first sign-in's seed is the bytes' last line, "seed:" and its hex, where the body carries one (the service's requests.mjs seedLine,
+   since review 2's finding 12); a renewal, which sends no seed, signs the lines before it alone. */
+const serviceBytes = (provider, idToken, desk, t, seed) => Buffer.from("etiuda-licence-signin-desk\n" + [provider,
+  crypto.createHash("sha256").update(idToken).digest("hex"), desk, t].concat(seed ? ["seed:" + seed] : []).join("\n"), "utf8");
 const signWith = k => bytes => crypto.sign(null, bytes, k.privateKey).toString("hex");
 /* The service's bytes for the desk's sign-out, written here from the interface: its line `etiuda-licence-signout-desk`, then the
    desk's public half and t, one a line. */
@@ -328,9 +330,10 @@ CASES.deskBody = s => {
   const token = jwt(msClaims("n")), seed = "2".repeat(64), t = NOW;
   const first = s.signinDeskBody("microsoft", token, DESK_KEY, seed, t, signWith(signKey));
   const renew = s.signinDeskBody("microsoft", token, DESK_KEY, "", t, signWith(signKey));
-  const bytes = serviceBytes("microsoft", token, DESK_KEY, t);
-  const ok = b => !!b && crypto.verify(null, bytes, signKey.publicKey, Buffer.from(b.sig, "hex")) && !crypto.verify(null, bytes, otherKey.publicKey, Buffer.from(b.sig, "hex"));
-  return ok(first) && ok(renew) && Object.keys(first).join() === "provider,idToken,desk,seed,t,sig" && first.seed === seed && first.desk === DESK_KEY
+  const ok = (b, bytes) => !!b && crypto.verify(null, bytes, signKey.publicKey, Buffer.from(b.sig, "hex")) && !crypto.verify(null, bytes, otherKey.publicKey, Buffer.from(b.sig, "hex"));
+  /* The first sign-in's seed is inside what the desk signs, so a copy with it taken out does not verify as a renewal's bytes. */
+  return ok(first, serviceBytes("microsoft", token, DESK_KEY, t, seed)) && !crypto.verify(null, serviceBytes("microsoft", token, DESK_KEY, t), signKey.publicKey, Buffer.from(first.sig, "hex"))
+    && ok(renew, serviceBytes("microsoft", token, DESK_KEY, t)) && Object.keys(first).join() === "provider,idToken,desk,seed,t,sig" && first.seed === seed && first.desk === DESK_KEY
     && Object.keys(renew).join() === "provider,idToken,desk,t,sig" && first.t === t
     && s.signinDeskBody("elsewhere", token, DESK_KEY, seed, t, signWith(signKey)) === null && s.signinDeskBody("microsoft", token, DESK_KEY, seed, t, () => "") === null;
 };
@@ -4018,8 +4021,15 @@ if (!PLANTS_OFF) {
   await plant("dsp8", ["return \"signin-notallowed\"; /* plant:not-allowed */", "return \"signin-refused\";"], "notAllowed");
   await plant("dspo1", ["const storeOffer = j.storeOffer === true; /* plant:offer-read */", "const storeOffer = !!j.storeOffer;"], "storeOffer");
   await plant("dspo2", ["    storeOffer: ans.storeOffer === true }); /* plant:wait-settle */", "    storeOffer: held.storeOffer === true || ans.storeOffer === true }); /* plant:wait-settle */"], "storeOffer");
-  await plant("dsp9", ["const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t })) || \"\"); /* plant:desk-signed */",
-    "const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t + 1 })) || \"\");"], "deskBody");
+  await plant("dsp9", ["const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t, seed: seed || \"\" })) || \"\"); /* plant:desk-signed */",
+    "const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t + 1, seed: seed || \"\" })) || \"\");"], "deskBody");
+  /* Review 2's finding 12, its residual: the seed signed as the bytes' last line. Planted out, the first sign-in's signature is over a
+     renewal's bytes, which ds3a refuses. */
+  await plant("dsp9s", ["const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t, seed: seed || \"\" })) || \"\"); /* plant:desk-signed */",
+    "const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t })) || \"\");"], "deskBody");
+  /* The seed line itself left out of the desk's byte form (plant:desk-seed-line), the same red from the bytes' side. */
+  await plant("dsp9t", ["  return Buffer.from(SIGNIN_DESK_LINE + \"\\n\" + [o.provider, o.tokenHash, o.desk, o.t].concat(o.seed ? [\"seed:\" + o.seed] : []).map(String).join(\"\\n\"), \"utf8\"); /* plant:desk-seed-line */",
+    "  return Buffer.from(SIGNIN_DESK_LINE + \"\\n\" + [o.provider, o.tokenHash, o.desk, o.t].map(String).join(\"\\n\"), \"utf8\");"], "deskBody");
   await plant("dsp10", ["if (seed) body.seed = String(seed); /* plant:seed-first */", "body.seed = String(seed);"], "deskBody");
   await plant("dsp11", ["if ([SIGNIN_SERVICE, SIGNOUT_SERVICE, storeServiceAt(\"store/grant\"), storeServiceAt(\"store/end\")].indexOf(String(url)) < 0) throw new Error(\"the licence service's door takes signin/desk, signout/desk, store/grant and store/end only\"); /* plant:service-host */", ""], "serviceDoor");
   await plant("dsp27", ["if ([SIGNIN_SERVICE, SIGNOUT_SERVICE, storeServiceAt(\"store/grant\"), storeServiceAt(\"store/end\")].indexOf(String(url)) < 0) throw new Error(\"the licence service's door takes signin/desk, signout/desk, store/grant and store/end only\"); /* plant:service-host */", ""], "signoutDoor");

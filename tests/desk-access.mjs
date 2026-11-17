@@ -99,7 +99,7 @@ function tableOn(s, service) {
   s.setTable(Object.freeze(out));
 }
 const MS = { id: "microsoft", clientId: MS_ID, clientSecret: "" }, G = { id: "google", clientId: G_ID, clientSecret: "" };
-const today = { desk: (provider, idToken, desk, t) => Buffer.from("etiuda-licence-signin-desk\n" + [provider, sha(idToken), desk, t].join("\n"), "utf8"),
+const today = { desk: (provider, idToken, desk, t, seed) => Buffer.from("etiuda-licence-signin-desk\n" + [provider, sha(idToken), desk, t].concat(seed ? ["seed:" + seed] : []).join("\n"), "utf8"),
   managed: (provider, idToken, access, desk, t) => Buffer.from("etiuda-licence-signin-desk-managed\n" + [provider, sha(idToken), sha(access), desk, t].join("\n"), "utf8") };
 const scopeOf = url => new URL(url).searchParams.get("scope");
 const formOf = buf => new URLSearchParams(Buffer.from(buf).toString("utf8"));
@@ -113,7 +113,7 @@ CASES.ordinary = s => {
   const got = s.signinTokens({ status: 200, bytes: Buffer.from(JSON.stringify({ id_token: jwt(idClaims({ nonce: "n" })), access_token: "graph", refresh_token: "r" })) }, MS, "n", NOW);
   const body = s.signinDeskBody("microsoft", "id.tok.en", DESK, SEED, NOW, sign);
   return path === "" && scopeOf(url) === "openid profile offline_access" && url.indexOf("api%3A") < 0 && form.get("scope") === "openid profile offline_access"
-    && got.ok && !("accessToken" in got) && Object.keys(body).join() === "provider,idToken,desk,seed,t,sig" && verifies(today.desk("microsoft", "id.tok.en", DESK, NOW), body.sig);
+    && got.ok && !("accessToken" in got) && Object.keys(body).join() === "provider,idToken,desk,seed,t,sig" && verifies(today.desk("microsoft", "id.tok.en", DESK, NOW, SEED), body.sig);
 };
 CASES.personal = s => {
   tableOn(s, SERVICE_ID);

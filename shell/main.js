@@ -10738,13 +10738,14 @@ function signinKept(storage, sealed) {
 /* THE LICENCE SERVICE'S DOOR for the desk, beside fetchNote's: one POST of JSON to signin/desk alone, the body at most 8 KiB. The
    bytes the desk key signs are the service's own (requests.mjs signinDeskBytes): its line, then the provider, the SHA-256 of the
    ID token's characters, the desk's public half and t, one a line. A first sign-in sends the seed its token's nonce was made
-   of; a renewal sends none. */
+   of, and signs it as the bytes' last line, "seed:" and its hex (requests.mjs seedLine), so a copy with the seed taken out or
+   swapped fails the signature rather than reading as a renewal; a renewal sends none and signs the lines before it alone. */
 let SIGNIN_SERVICE = "https://etiuda.dev/licence/v1/signin/desk";
 const SIGNIN_BODY_MAX = 8 * 1024, SIGNIN_SERVICE_MAX = 32 * 1024;
 const SIGNIN_DESK_LINE = "etiuda-licence-signin-desk";
 function signinTokenHash(idToken) { return crypto.createHash("sha256").update(String(idToken), "utf8").digest("hex"); }
 function signinDeskBytes(o) {
-  return Buffer.from(SIGNIN_DESK_LINE + "\n" + [o.provider, o.tokenHash, o.desk, o.t].map(String).join("\n"), "utf8");
+  return Buffer.from(SIGNIN_DESK_LINE + "\n" + [o.provider, o.tokenHash, o.desk, o.t].concat(o.seed ? ["seed:" + o.seed] : []).map(String).join("\n"), "utf8"); /* plant:desk-seed-line */
 }
 /* With the service's access token (section 11.11): the service's managed line over both tokens' hashes, requests.mjs
    signinDeskManagedBytes. */
@@ -10792,7 +10793,7 @@ function signinDeskBody(provider, idToken, desk, seed, t, sign, accessToken, poo
   if (seed && !/^[0-9a-f]{64}$/.test(String(seed))) return null;
   if (pooled === true) return signinDeskPooledBody(provider, idToken, desk, seed, t, sign, accessToken); /* plant:pooled-body */
   if (accessToken !== undefined) return signinDeskManagedBody(provider, idToken, desk, seed, t, sign, accessToken); /* plant:access-body */
-  const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t })) || ""); /* plant:desk-signed */
+  const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t, seed: seed || "" })) || ""); /* plant:desk-signed */
   if (!/^[0-9a-f]{128}$/.test(sig)) return null;
   const body = { provider: String(provider), idToken: idToken, desk: String(desk) };
   if (seed) body.seed = String(seed); /* plant:seed-first */

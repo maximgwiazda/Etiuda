@@ -165,10 +165,10 @@ CASES.pooled = s => {
   const pm = s.signinDeskBody("microsoft", ID, DESK, "", T, sign, ACC, true);
   const plain = s.signinDeskBody("microsoft", ID, DESK, SEED, T, sign), notPooled = s.signinDeskBody("microsoft", ID, DESK, SEED, T, sign, undefined, false);
   return !!p && Object.keys(p).join() === "provider,idToken,desk,pooled,seed,t,sig" && p.pooled === true
-    && verifies(lines("etiuda-licence-signin-desk-pooled", ["microsoft", sha(ID), DESK, T]), p.sig) && !verifies(lines("etiuda-licence-signin-desk", ["microsoft", sha(ID), DESK, T]), p.sig)
+    && verifies(lines("etiuda-licence-signin-desk-pooled", ["microsoft", sha(ID), DESK, T]), p.sig) && !verifies(lines("etiuda-licence-signin-desk", ["microsoft", sha(ID), DESK, T, "seed:" + SEED]), p.sig)
     && !!pm && Object.keys(pm).join() === "provider,idToken,accessToken,desk,pooled,t,sig"
     && verifies(lines("etiuda-licence-signin-desk-managed-pooled", ["microsoft", sha(ID), sha(ACC), DESK, T]), pm.sig)
-    && !!plain && !("pooled" in plain) && verifies(lines("etiuda-licence-signin-desk", ["microsoft", sha(ID), DESK, T]), plain.sig)
+    && !!plain && !("pooled" in plain) && verifies(lines("etiuda-licence-signin-desk", ["microsoft", sha(ID), DESK, T, "seed:" + SEED]), plain.sig)
     && JSON.stringify(Object.keys(notPooled)) === JSON.stringify(Object.keys(plain))
     && MAIN.indexOf("signinDeskBody(provider, idToken, deskKey, seed, now(), io.sign, accessToken || undefined, io.pooled === true);") >= 0
     && MAIN.indexOf("get pooled() { const m = signinState().managed; return !!(m && m.nonPersistent); },") >= 0;
