@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 /* The floor: every leg below runs, or the file says it did not complete. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 101;
+const EXPECTED = 105;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -1173,6 +1173,119 @@ try {
       + " the old lead: pin key 0 " + (hs.pin === hs.w.L[0].public) + ", said " + hs.said
       + ", row " + JSON.stringify(hs.row && hs.row.fork));
 
+    /* Canonical stays under key 0; sibling hands key 0 to key 1, then sibling alone moves to key 1 with no step from
+       key 0, and then hands key 1 to key 2 with the one step key 1 to key 2. */
+    async function pinnedSibling(plant) {
+      const w = await forkWorld(plant);
+      w.both(w.led(0, 1), w.led(1, 2, [w.step(0, 1)]));
+      const firstOpens = await w.opens(2), pin1 = w.pin();
+      put(w.FD, "etiuda-team (1).json", w.led(1, 3));
+      const sibL1Opens = await w.opens(3), pin1Stay = w.pin();
+      put(w.FD, "etiuda-team (1).json", w.led(2, 4, [w.step(1, 2)]));
+      const sibL2Opens = await w.opens(4), pin2 = w.pin();
+      const canon = JSON.parse(fs.readFileSync(path.join(w.FD, "etiuda-team.json"), "utf8"));
+      return { w, firstOpens, pin1, sibL1Opens, pin1Stay, sibL2Opens, pin2,
+        two: w.said(FORK_TWO), later: w.said(FORK_LATER), canonLead: canon.lead && canon.lead.public };
+    }
+    const ps = await pinnedSibling(null);
+    check(ps.w.admitted && ps.firstOpens && ps.pin1 === ps.w.L[1].public
+      && ps.canonLead === ps.w.L[0].public
+      && ps.sibL1Opens && ps.pin1Stay === ps.w.L[1].public
+      && ps.sibL2Opens && ps.pin2 === ps.w.L[2].public
+      && ps.two === 0 && ps.later === 0,
+      "14cf after a sibling handover L0 to L1 with canonical still L0, the desk reads a sibling by L1 with no step from L0"
+      + " and then a sibling handing L1 to L2: canonical L0 " + (ps.canonLead === ps.w.L[0].public)
+      + ", L1 opens " + ps.sibL1Opens + ", L2 opens " + ps.sibL2Opens + ", pin L2 " + (ps.pin2 === ps.w.L[2].public)
+      + ", fork two " + ps.two + " later " + ps.later);
+
+    /* Nothing is loosened: under a pinned L1 with canonical still L0, a sibling under an untrusted lead, a sibling not
+       ahead, an altered sibling, and a sibling of another pinned team's id stay refused. */
+    {
+      const rw = await forkWorld(null);
+      rw.both(rw.led(0, 1), rw.led(1, 2, [rw.step(0, 1)]));
+      const rwPin1 = await rw.opens(2) && rw.pin() === rw.L[1].public;
+      const rwMirror = syncerMod.folderMirrorOf(rw.D.ud, rw.T);
+      const putMirror = (dir, name, txt) => {
+        clock += 1000;
+        const p = path.join(dir, name);
+        fs.writeFileSync(p, txt, "utf8");
+        try { fs.utimesSync(p, clock / 1000, clock / 1000); } catch {}
+      };
+      put(rw.FD, "etiuda-team (1).json", rw.led(3, 3));
+      putMirror(rwMirror, "etiuda-team (1).json", rw.led(3, 3));
+      const untrustedOpens = await rw.opens(3), untrustedPinOk = rw.pin() === rw.L[1].public;
+      putMirror(rwMirror, "etiuda-team.json", rw.led(0, 3));
+      putMirror(rwMirror, "etiuda-team (1).json", rw.led(1, 3));
+      const equalOpens = await rw.opens(3);
+      putMirror(rwMirror, "etiuda-team.json", rw.led(0, 4));
+      putMirror(rwMirror, "etiuda-team (1).json", rw.led(1, 3));
+      const lowerOpens = await rw.opens(3);
+      putMirror(rwMirror, "etiuda-team.json", rw.led(0, 1));
+      const badSib = JSON.parse(rw.led(1, 3));
+      badSib.sig.value = badSib.sig.value.slice(0, -1) + (badSib.sig.value.endsWith("0") ? "1" : "0");
+      putMirror(rwMirror, "etiuda-team (1).json", JSON.stringify(badSib));
+      const badSibOpens = await rw.opens(3);
+
+      const T_oth = "t-ff" + crypto.randomBytes(7).toString("hex");
+      const FD_oth = folder("sib-other-team"), FD_main = folder("sib-main-team");
+      const D_oth = newDesk("sib-other", FD_oth);
+      const me_oth = await D_oth.ask("etiuda:branch-identity", true);
+      const KO1 = crypto.randomBytes(32), KO2 = crypto.randomBytes(32), KM1 = crypto.randomBytes(32);
+      put(FD_oth, "etiuda-team.json", JSON.stringify(teamFile({ team: T_oth, epoch: 1, roster: [entry(me_oth, KO1, 1, T_oth)] })));
+      put(FD_oth, "lamps.ec", seal(KO1, 1, A2At(1), T_oth));
+      const othPinned = (await read(D_oth, "lamps.ec")) === A2At(1).trim();
+      D_oth.close();
+      const envOth = JSON.parse(fs.readFileSync(path.join(D_oth.ud, "desk.json"), "utf8"));
+      envOth.keys.eCatalogFolder = FD_main;
+      fs.writeFileSync(path.join(D_oth.ud, "desk.json"), JSON.stringify(envOth), "utf8");
+      const kMain = crypto.generateKeyPairSync("ed25519");
+      const LMain = { keyId: "other-main-0", public: pubHex(kMain.publicKey) };
+      const T_main = "t-00" + crypto.randomBytes(7).toString("hex");
+      put(FD_main, "etiuda-team.json", JSON.stringify(teamFile({ team: T_main, keyId: LMain.keyId, public: LMain.public,
+        signer: kMain.privateKey, epoch: 1, roster: [entry(me_oth, KM1, 1, T_main)] })));
+      put(FD_main, "lamps.ec", seal(KM1, 1, A2At(1), T_main));
+      const D_oth2 = loadDesk(D_oth.ud);
+      syncFolder(FD_main);
+      const mainPinned = (await read(D_oth2, "lamps.ec")) === A2At(1).trim();
+      const othMirror = syncerMod.folderMirrorOf(D_oth2.ud, T_main);
+      putMirror(othMirror, "etiuda-team (1).json", JSON.stringify(teamFile({ team: T_oth, epoch: 2, roster: [entry(me_oth, KO2, 2, T_oth)] })));
+      put(FD_main, "lamps.ec", seal(KO2, 2, A2At(2), T_oth));
+      const otherTeamOpens = (await read(D_oth2, "lamps.ec")) === A2At(2).trim();
+      D_oth2.close();
+      check(rwPin1 && !untrustedOpens && untrustedPinOk && !equalOpens && !lowerOpens && !badSibOpens
+        && othPinned && mainPinned && !otherTeamOpens,
+        "14cg nothing is loosened for a conflict sibling under a pinned lead: untrusted opens " + untrustedOpens
+        + ", equal rank opens " + equalOpens + ", lower epoch opens " + lowerOpens
+        + ", altered signature opens " + badSibOpens + ", other pinned team opens " + otherTeamOpens);
+
+      /* A desk with no pin yet behaves as today: refuses an L1 sibling without a step from L0, follows one with it. */
+      const FD_np = folder("sib-nopin"), D_np = newDesk("sib-nopin", FD_np);
+      const me_np = await D_np.ask("etiuda:branch-identity", true);
+      const kn0 = crypto.generateKeyPairSync("ed25519"), kn1 = crypto.generateKeyPairSync("ed25519");
+      const LN0 = { keyId: "np-lead-0", public: pubHex(kn0.publicKey) };
+      const LN1 = { keyId: "np-lead-1", public: pubHex(kn1.publicKey) };
+      const T_np = "t-" + crypto.randomBytes(8).toString("hex"), KN2 = crypto.randomBytes(32);
+      const npCanon = JSON.stringify(teamFile({ team: T_np, keyId: LN0.keyId, public: LN0.public, signer: kn0.privateKey, epoch: 1, roster: [] }));
+      const npSibNoStep = JSON.stringify(teamFile({ team: T_np, keyId: LN1.keyId, public: LN1.public, signer: kn1.privateKey,
+        epoch: 2, roster: [entry(me_np, KN2, 2, T_np)] }));
+      const npStep = { format: 1, kind: "etiuda-team-handover", team: T_np, from: LN0, to: LN1, sig: { alg: "Ed25519", keyId: LN0.keyId } };
+      npStep.sig.value = crypto.sign(null, Buffer.concat([Buffer.from("etiuda-team-handover\n", "utf8"), Buffer.from(V2.v2SignedBytes(npStep))]), kn0.privateKey).toString("hex");
+      const npSibWithStep = JSON.stringify(teamFile({ team: T_np, keyId: LN1.keyId, public: LN1.public, signer: kn1.privateKey,
+        epoch: 2, roster: [entry(me_np, KN2, 2, T_np)], handover: [npStep] }));
+      put(FD_np, "etiuda-team.json", npCanon);
+      put(FD_np, "etiuda-team (1).json", npSibNoStep);
+      putMirror(syncerMod.folderMirrorOf(D_np.ud, T_np), "etiuda-team (1).json", npSibNoStep);
+      put(FD_np, "lamps.ec", seal(KN2, 2, A2At(2), T_np));
+      const noPinRefused = (await read(D_np, "lamps.ec")) !== A2At(2).trim() && !((D_np.envelope().teamPins || {})[T_np]);
+      put(FD_np, "etiuda-team (1).json", npSibWithStep);
+      const noPinFollowed = (await read(D_np, "lamps.ec")) === A2At(2).trim()
+        && ((D_np.envelope().teamPins || {})[T_np] || {}).public === LN1.public;
+      D_np.close();
+      check(noPinRefused && noPinFollowed,
+        "14ci a desk with no pin yet still refuses a sibling without a step from canonical and follows one with it: refused "
+        + noPinRefused + ", followed " + noPinFollowed);
+    }
+
     /* The agent dismisses the notice: the shell keeps it, a restart included, for that fork only. */
     const dz = await laterScene(null);
     await dz.w.D.ask("etiuda:team-join", "fork-seen", dz.w.T);
@@ -1461,6 +1574,16 @@ try {
       });
       check(r.turned && r.back,
         "14cc lifting plant:sib-handover in a scratch copy of shell/main.js leaves the desk on the old lead, and the product file is never written: "
+        + r.detail + ", sha " + (r.back ? "restored" : "differs"));
+    }
+    if (PLANTS_OFF) skip("14cj lifting plant:sib-pin in a scratch copy of shell/main.js strands the desk on canonical L0 after L0 to L1");
+    else {
+      const r = await liftDesk("main.js", "sib-pin", async p => {
+        const s = await pinnedSibling(p);
+        return s.firstOpens && !s.sibL1Opens && !s.sibL2Opens && s.pin2 !== s.w.L[2].public;
+      });
+      check(r.turned && r.back,
+        "14cj lifting plant:sib-pin in a scratch copy of shell/main.js strands the desk on canonical L0 after L0 to L1, and the product file is never written: "
         + r.detail + ", sha " + (r.back ? "restored" : "differs"));
     }
     if (PLANTS_OFF) skip("14ce lifting plant:fork-note-key in a scratch copy of src/modules/team-join.js leaves the second fork unsaid");
