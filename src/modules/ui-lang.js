@@ -1483,6 +1483,8 @@ UI_STRINGS.pl={
   "Signing in again settles it; until then, Etiuda keeps working with the catalog it has.":"Wystarczy zalogować się ponownie; do tego czasu Etiuda działa dalej na katalogu, który już ma.",
   "The new sign-in did not finish.":"Nowe logowanie nie dobiegło końca.",
   "This computer stays signed in with the account it had. {REASON}":"Ten komputer pozostaje zalogowany kontem, którego używał. {REASON}",
+  "This computer is now signed out of the account it had. Signing in, with either account, works once the sign-in service answers, and nothing on this desk is lost meanwhile.":"Ten komputer jest teraz wylogowany z konta, którego używał. Logowanie dowolnym z tych kont będzie możliwe, gdy usługa logowania odpowie, a do tego czasu nic na tym stanowisku nie ginie.",
+  "The sign-in service did not confirm the change of account.":"Usługa logowania nie potwierdziła zmiany konta.",
   "This account is already in use on three computers.":"To konto działa już na trzech komputerach.",
   "This account has no Etiuda role in its organisation, so it holds no seat.":"To konto nie ma w swojej organizacji żadnej roli w Etiudzie, więc nie zajmuje miejsca w licencji.",
   "Its IT department can assign one.":"Może ją przydzielić dział IT organizacji.",

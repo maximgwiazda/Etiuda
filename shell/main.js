@@ -11495,7 +11495,7 @@ ipcMain.handle("etiuda:signin", async (e, provider) => {
        answered, the switch is not made and the desk stays with the account it had, nothing owed. */
     const other = got.ok && !!st.held && !signinHeldIs(st.held, p.id, got.sub);
     const out = other ? await signinSwitchOut(st, me) : null;
-    if (out === false) got = { ok: false, reason: "unreached" }; /* plant:switch-unanswered */
+    if (out === false) got = { ok: false, reason: "signin-switch-unmade" }; /* plant:switch-unanswered */
     if (out === true) { signinLeave(st, me, true); signinSave(); tellSignin(); } /* plant:switch-leaves */
     /* signout/desk frees this desk key's place whoever held it, so one still out is taken before this sign-in's signin/desk. */
     if (got.ok && signinOutFlight) await signinOutFlight; /* plant:out-before-signin */

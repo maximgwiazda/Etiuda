@@ -318,10 +318,10 @@ function signinSay(reason, v, p){
       return [t("This team is no longer offered here, or this computer is already in a team, so nothing was sent."), ""];
     case "signin-keyring":
       return [t("Signing in needs a keyring, and none is open on this computer."), t("Installing or unlocking GNOME Keyring or KDE Wallet, then reopening Etiuda, lets this computer sign in.")];
-    /* WORDS OWED (the copywriter): signin-switch-out, the line under it: this computer is now signed out of the account it had, and
-       signing in again works once the service answers. */
     case "signin-switch-out":
-      return [t("The sign-in service could not be reached."), ""];
+      return [t("The sign-in service could not be reached."), t("This computer is now signed out of the account it had. Signing in, with either account, works once the sign-in service answers, and nothing on this desk is lost meanwhile.")]; /* plant:switch-out-words */
+    case "signin-switch-unmade":
+      return [t("The sign-in service did not confirm the change of account."), ""];
     /* WORDS OWED (the copywriter): signin-other, why this computer keeps the account it has and whom to ask (the policy's contact, or
        its IT department); until they come it says the default below. */
     case "signin-other":
@@ -332,7 +332,7 @@ function signinSay(reason, v, p){
 /* No free seat: the service's wait, "waiting", or its refusal, "full"; either way the shell renews quietly until a seat frees. */
 function signinNoSeat(v){ return v.refused==="waiting" || v.refused==="full"; } /* plant:no-seat */
 /* Refusals whose own heading names the reason a sign-in pressed while signed in failed for. */
-const SIGNIN_REASON_SAID=["desks","no-role","signin-notallowed","unreached","signin-unreached","signin-timeout","signin-browser","signin-notassigned","signin-tenant"];
+const SIGNIN_REASON_SAID=["desks","no-role","signin-notallowed","unreached","signin-unreached","signin-timeout","signin-browser","signin-notassigned","signin-tenant","signin-switch-unmade"];
 /* What a signed-in desk is told over its moment, or null: {kind, say, acts, providers}. "pressed", a sign-in the person pressed while
    signed in that failed, which leaves the desk signed in as it was; else a refusal the shell kept from a renewal or Check now. */
 function signinTold(v){
@@ -353,8 +353,8 @@ function signinTold(v){
 const FAIL_FIRST=["unreached","signin-unreached","signin-timeout","signin-browser","signin-notallowed","desks","no-role","token","signin","signin-refused","signin-token","signin-unbound","signin-state","signin-none","signin-preview","signin-keyring"];
 /* Decision 49's own: an account not assigned, a sign-in outside the pinned tenant, and another account on a managed computer. */
 FAIL_FIRST.push("signin-notassigned","signin-tenant","signin-other");
-/* A switch whose held account was signed out at the service, the service then unreached for the new one (shell/main.js, the press). */
-FAIL_FIRST.push("signin-switch-out");
+/* A switch whose held account was signed out at the service, the service then unreached for the new one, or whose switch signout was not confirmed (shell/main.js, the press). */
+FAIL_FIRST.push("signin-switch-out","signin-switch-unmade"); /* plant:switch-unmade-first */
 /* The refusals whose way on is another account, where the computer offers one. */
 const ANOTHER_FOR=["signin-notallowed","signin-notassigned"];
 /* THE DOOR'S CONTENT for the view `v`, whatever form draws it: {moment, ident, heading, line, say, calm, code, providers, cap, privacy, foot,

@@ -48,7 +48,7 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 200;
+const PLANTS = 202;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
@@ -2639,26 +2639,47 @@ CASES.orgKept = async (s, swap) => {
    and its store, no signout owed, no signin/desk sent for the new account, and the page saying the new sign-in did not finish and the
    computer stays signed in. The signout taken and the service then unreached for the new account: signed out, said as its own moment.
    Where no signout is sent (a harness start), the new account's signin/desk is the first call: unreached, the desk stays as it was. */
+const SWITCH_OUT_LINE_EN = "This computer is now signed out of the account it had. Signing in, with either account, works once the sign-in service answers, and nothing on this desk is lost meanwhile.";
+const SWITCH_OUT_LINE_PL = "Ten komputer jest teraz wylogowany z konta, którego używał. Logowanie dowolnym z tych kont będzie możliwe, gdy usługa logowania odpowie, a do tego czasu nic na tym stanowisku nie ginie.";
+const SWITCH_UNMADE_REASON_EN = "The sign-in service did not confirm the change of account.";
+const SWITCH_UNMADE_REASON_PL = "Usługa logowania nie potwierdziła zmiany konta.";
 CASES.switchUnanswered = async (s, swap) => {
+  const storage = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
+  const wordsOk = (pg) => {
+    if (!pg) return false;
+    const unmade = pg.signinDoor(pg.signinRead({ offered: ["microsoft"], signedIn: "microsoft", code: CODE, seat: "held", said: "signin-switch-unmade" }));
+    const ord = pg.signinDoor(pg.signinRead({ offered: ["microsoft"], signedIn: "microsoft", code: CODE, seat: "held", said: "unreached" }));
+    const lateDoor = pg.signinDoor(pg.signinRead({ offered: ["microsoft"], said: "signin-switch-out" }));
+    let plUnmade = null, plLate = null;
+    storage.lsSet("eUiLang", "pl");
+    try {
+      plUnmade = pg.signinDoor(pg.signinRead({ offered: ["microsoft"], signedIn: "microsoft", code: CODE, seat: "held", said: "signin-switch-unmade" }));
+      plLate = pg.signinDoor(pg.signinRead({ offered: ["microsoft"], said: "signin-switch-out" }));
+    } finally { storage.lsSet("eUiLang", "en"); }
+    return !!unmade && unmade.moment === "pressed" && sayIs(unmade.say, SAY_PRESSED(SWITCH_UNMADE_REASON_EN))
+      && unmade.acts[0] && unmade.acts[0].act === "choose" && unmade.acts[0].label === "Try again"
+      && !!ord && ord.moment === "pressed" && sayIs(ord.say, SAY_PRESSED("The sign-in service could not be reached."))
+      && !!lateDoor && lateDoor.moment === "refused" && lateDoor.heading === "The sign-in service could not be reached." && lateDoor.line === SWITCH_OUT_LINE_EN
+      && !!plUnmade && plUnmade.say[0] === "Nowe logowanie nie dobiegło końca."
+      && plUnmade.say[1] === "Ten komputer pozostaje zalogowany kontem, którego używał. " + SWITCH_UNMADE_REASON_PL
+      && !!plLate && plLate.heading === "Nie udało się połączyć z usługą logowania." && plLate.line === SWITCH_OUT_LINE_PL;
+  };
+  if (swap && !Array.isArray(swap)) return wordsOk(swap);
   const run = async (tune) => { const st = switchStand(s, { join: tune.join }); Object.assign(st, tune.st || {}); st.answer = tune.answer || B_ANSWERS().cert;
     const w = loadSwitch(st, swap), v = await w.press(); await tick(10); return { st, w, v }; };
   let whole = true;
   for (const join of [null, doorJoin({ inv: DOOR_ID })]) {
     const r = await run({ join, st: { outOk: false } });
     whole = whole && !!r.st.store.held && r.st.store.held.sub === "sealed:s-1" && !!r.st.store.held.cert && r.st.unlinked.length === 0 && r.st.cancels === 0
-      && r.st.forgets === 0 && r.st.store.out === undefined && r.st.order.indexOf("signin/desk s-2") < 0 && r.st.order.indexOf("signout/desk s-1") >= 0 && r.v.said === "unreached"
+      && r.st.forgets === 0 && r.st.store.out === undefined && r.st.order.indexOf("signin/desk s-2") < 0 && r.st.order.indexOf("signout/desk s-1") >= 0 && r.v.said === "signin-switch-unmade"
       && r.w.wrote() === "kept";
   }
-  const page = P ? P.signinDoor(P.signinRead({ offered: ["microsoft"], signedIn: "microsoft", code: CODE, seat: "held", said: "unreached" })) : null;
-  const told = !!page && page.moment === "pressed" && /This computer stays signed in with the account it had\./.test(page.say.join(" "));
   const late = await run({ answer: B_ANSWERS().unreached });
   const lateOk = late.st.store.held === null && late.v.said === "signin-switch-out" && late.st.store.out === undefined;
-  const lateDoor = P ? P.signinDoor(P.signinRead({ offered: ["microsoft"], said: "signin-switch-out" })) : null;
-  const lateTold = !!lateDoor && lateDoor.moment === "refused" && lateDoor.heading === "The sign-in service could not be reached." && !lateDoor.line;
   const first = await run({ st: { harnessLaunch: () => true }, answer: B_ANSWERS().unreached }), firstTaken = await run({ st: { harnessLaunch: () => true }, answer: B_ANSWERS().none });
   const firstOk = !!first.st.store.held && first.st.store.held.sub === "sealed:s-1" && first.st.forgets === 0 && first.st.unlinked.length === 0 && first.st.order.indexOf("signout/desk s-1") < 0
     && !!firstTaken.st.store.held && firstTaken.st.store.held.sub === "sealed:s-2" && firstTaken.st.forgets === 1 && firstTaken.st.unlinked.length === 1;
-  return whole && told && lateOk && lateTold && firstOk;
+  return whole && wordsOk(P) && lateOk && firstOk;
 };
 /* Nothing written to signin.json while a switch's signout is still out says a signout is owed for an account the desk still holds; a
    start from such a file signs nobody out, while Sign out still keeps its owed mark. */
@@ -4118,7 +4139,7 @@ if (!PLANTS_OFF) {
   await plant("dsp205", ["  if (settled.cert) settled.seated = true; /* plant:seated-settle */", "  /* plant:seated-settle */"], "seatedKept");
   await plant("dsp206", ["  if (out.held && (h.seated === true || out.held.cert)) out.held.seated = true; /* plant:seated-file */", "  if (out.held && out.held.cert) out.held.seated = true; /* plant:seated-file */"], "seatedKept");
   await plantWire("dsp207", ["  if (claims) base.org = {", "  if (false) base.org = {"], "orgKept");
-  await plantWire("dsp208", ["    if (out === false) got = { ok: false, reason: \"unreached\" }; /* plant:switch-unanswered */\n", ""], "switchUnanswered");
+  await plantWire("dsp208", ["    if (out === false) got = { ok: false, reason: \"signin-switch-unmade\" }; /* plant:switch-unanswered */\n", ""], "switchUnanswered");
   await plantWire("dsp209", ["  signinOutFlight = flight; /* plant:switch-out-in-flight */", "  s.out = me.key; signinOutFlight = flight;"], "switchUnanswered");
   await plantWire("dsp211", ["  const ok = await flight; /* plant:switch-out-await */", "  s.out = me.key;\n  const ok = await flight;\n  if (!ok && s.out === me.key) delete s.out;"], "switchOutWindow");
   await plantWire("dsp210", ["      if (other && out === null && (ans.ok || ans.reason !== \"unreached\")) { signinLeave(st, me, true); signinSave(); } /* plant:switch-leaves-after */", "      if (other && out === null) { signinLeave(st, me, true); signinSave(); } /* plant:switch-leaves-after */"], "switchUnanswered");
@@ -4187,6 +4208,10 @@ if (!PLANTS_OFF) {
   await plantPage("dsp83", ["if(!r || r===\"signin\" || signinNoSeat(v)) return null; /* plant:told-renewal */", "return null;"], "toldRenewal");
   await plantPage("dsp83b", ["  if(r===\"signin-notassigned\") return {kind:\"renewal\", say:signinSay(\"signin-notassigned\", v), acts:[]}; /* plant:told-notassigned */\n", ""], "toldRenewal");
   await plantPage("dsp84", ["  if(FAIL_FIRST.indexOf(v.said)>=0) return {kind:\"pressed\",", "  if(false) return {kind:\"pressed\","], "toldPressed");
+  await plantPage("dsp212", ["return [t(\"The sign-in service could not be reached.\"), t(\"This computer is now signed out of the account it had. Signing in, with either account, works once the sign-in service answers, and nothing on this desk is lost meanwhile.\")]; /* plant:switch-out-words */",
+    "return [t(\"The sign-in service could not be reached.\"), \"\"];"], "switchUnanswered");
+  await plantPage("dsp213", ["FAIL_FIRST.push(\"signin-switch-out\",\"signin-switch-unmade\"); /* plant:switch-unmade-first */",
+    "FAIL_FIRST.push(\"signin-switch-out\");"], "switchUnanswered");
   await plantPage("dsp84b", ["    acts:(v.link ? [{act:\"again\", label:t(\"Open the browser again\")}] : []).concat([{act:\"stop\", label:t(\"Cancel\")}]), link:v.link}; /* plant:waiting-again */",
     "    acts:[{act:\"again\", label:t(\"Open the browser again\")}, {act:\"stop\", label:t(\"Cancel\")}], link:v.link};"], "waitingAgain");
   {
