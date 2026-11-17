@@ -263,10 +263,12 @@ function folderTeamHere() {
   const rawFolder = rawCatalogFolder();
   const j = teamJoin;
   if (j && j.team && (!j.invite || !j.invite.relay)) {
+    if (policyWaits()) return null;
     const folder = (j.invite && j.invite.folder) || rawFolder;
     return { team: j.team, folder: folder, joining: true };
   }
   const teams = Object.keys(teamPins).filter(t => {
+    if (!pinTrusted(t)) return false; /* plant:folder-team-trusted */
     if (teamBarred.has(t)) return false;
     if (teamRelayGone[t] === true) return false;
     if (teamShown[t] && teamShown[t].relay) return false;
@@ -790,9 +792,35 @@ function catalogSigValid(data, pinPublic) {
     return crypto.verify(null, signedBytesOf(data), key, Buffer.from(String(sig.value), "hex")) ? pub : "";
   } catch { return ""; }
 }
-/* The leads this desk has pinned, {keyId, public} once each, one per team it joined. Empty until a team file or the
-   envelope names one. The page's key reads from these too (etiuda:catalog-leads), so what it shows is what is chosen here. */
+/* WHICH LEAD'S KEY IS TRUSTED HERE, the one place every path that reads or writes a team's trust asks (review 09, finding 2): none
+   while machine policy has not answered, the key it names alone where it names one, whatever pin was kept, and the pins kept
+   otherwise. A reader takes a kept pin through pinTrusted and the trusted keys through pinnedLeadKeys, never teamPins itself
+   (tests/join-policy.mjs 19u names the functions that keep the pins rather than trust them). */
+function leadPolicyNow() {
+  if (policyWaits()) return { waits: true, lead: "" };
+  let lead = "";
+  try { lead = sayJoinPolicy().lead || ""; } catch { lead = ""; }
+  return { waits: false, lead: lead };
+}
+function pinTrusted(team) {
+  const pin = teamPins[team];
+  if (!pin) return null;
+  const p = leadPolicyNow();
+  if (p.waits) return null; /* plant:pin-waits */
+  return !p.lead || pin.public === p.lead ? pin : null; /* plant:pin-policy-lead */
+}
+/* One key that verifies nothing: trust narrowed to no lead, so the ring is not read in its place. */
+const LEAD_NONE = Object.freeze({ keyId: "", public: "0".repeat(64) });
+/* The leads this desk trusts, {keyId, public} once each: the pins kept, one per team it joined, empty until a team file or the
+   envelope names one; the policy's lead alone where machine policy names one; LEAD_NONE while it has not answered. The page's
+   key reads from these too (etiuda:catalog-leads), so what it shows is what is chosen here. */
 function pinnedLeadKeys() {
+  const p = leadPolicyNow();
+  if (p.waits) return [LEAD_NONE]; /* plant:leads-wait */
+  if (p.lead) {
+    const kept = Object.keys(teamPins).map(t => teamPins[t]).find(k => !!k && k.public === p.lead);
+    return [{ keyId: kept && typeof kept.keyId === "string" ? kept.keyId : "", public: p.lead }]; /* plant:leads-policy */
+  }
   const out = [];
   Object.keys(teamPins).forEach(t => {
     const pin = teamPins[t], p = pin && String(pin.public || ""), kid = pin && typeof pin.keyId === "string" ? pin.keyId : "";
@@ -897,7 +925,7 @@ function folderLeadPublics() {
   if (!all.length) return null;
   const doc = folderTeamDoc();
   if (!doc) return all;
-  const pin = teamPins[doc.id];
+  const pin = pinTrusted(doc.id); /* plant:folder-publics-trusted */
   if (pin && doc.lead && pin.keyId === doc.lead.keyId && pin.public === doc.lead.public) return [String(pin.public)];
   return [];
 }
@@ -925,10 +953,10 @@ function catalogTrustedPub(data) {
 function leadsForPage() {
   const bound = folderLeadPublics();
   if (bound === null) return [];
-  if (!bound.length) return [{ keyId: "", public: "0".repeat(64) }];
+  if (!bound.length) return [LEAD_NONE];
   const doc = folderTeamDoc();
   if (doc) {
-    const pin = teamPins[doc.id];
+    const pin = pinTrusted(doc.id);
     if (pin && bound.indexOf(String(pin.public)) >= 0) return [{ keyId: pin.keyId, public: String(pin.public) }];
   }
   return pinnedLeadKeys();
@@ -1085,7 +1113,7 @@ function folderSyncerRun(win) {
   }
   /* A syncer that failed once stays off until the desk restarts, so the desk does not swing between share and mirror. */
   if (folderSyncerBroken) return null;
-  const pin = teamPins[ft.team] || (teamJoin && teamJoin.team === ft.team && teamJoin.invite ? teamJoin.invite.lead : null);
+  const pin = pinTrusted(ft.team) || (teamJoin && teamJoin.team === ft.team && teamJoin.invite ? teamJoin.invite.lead : null);
   const mirror = folderMirrorOf(ft.team);
   try { fs.mkdirSync(mirror, { recursive: true }); } catch {}
 
@@ -2062,7 +2090,7 @@ function pinnedLead() {
   const root = catalogFolder();
   if (!folderAnswers(root)) return null;
   const doc = teamTextChosen(root).doc;
-  const pin = doc && teamPins[doc.id];
+  const pin = doc && pinTrusted(doc.id);
   if (!pin || !doc.lead || pin.keyId !== doc.lead.keyId || pin.public !== doc.lead.public) return null;
   return { team: String(doc.id), keyId: pin.keyId, public: pin.public };
 }
@@ -2704,10 +2732,14 @@ function joinOpening(joins, teamId, deskId, commit, trust) {
   return JOIN_HEX_RE.test(String(e.nonce)) ? { lead: { keyId: lead.keyId, public: lead.public }, nonce: e.nonce } : null;
 }
 /* Publics that may sign the joins file for this team. The pin, where this desk has one. The lead of the folder's
-   whole team file when there is no pin, or when that lead is the pin, or a handover from it. */
+   whole team file when there is no pin, or when that lead is the pin, or a handover from it. Where machine policy names a lead,
+   that lead alone, and none while it has not answered. */
 function joinTrustPubs(team, root) {
+  const p = leadPolicyNow();
+  if (p.waits) return [];
+  if (p.lead) return [p.lead];
   const pubs = [];
-  const pin = team && teamPins[team];
+  const pin = team ? pinTrusted(team) : null;
   if (pin && JOIN_HEX_RE.test(String(pin.public))) pubs.push(String(pin.public));
   let chosen = null;
   try { chosen = root ? teamTextChosen(root).doc : null; } catch { chosen = null; }
@@ -3037,9 +3069,7 @@ function ownFilesWithId(dir, id) {
 function teamCovering(root, catalogId) {
   const doc = teamTextChosen(root).doc;
   if (!doc || !teamWhole(doc)) return null;
-  const policy = sayJoinPolicy().lead;
-  if (policy && doc.lead.public !== policy) return null;
-  const pin = teamPins[doc.id];
+  const pin = pinTrusted(doc.id);
   return !!pin && pin.keyId === doc.lead.keyId && pin.public === doc.lead.public && Array.isArray(doc.catalogs)
     && doc.catalogs.map(String).indexOf(catalogId) >= 0 ? doc : null;
 }
@@ -3287,9 +3317,7 @@ function teamUse() {
   if (!folderAnswers(root)) return { away: true };
   const doc = teamTextChosen(root).doc;
   if (!doc || !teamWhole(doc)) return { member: false };
-  const policy = sayJoinPolicy().lead;
-  if (policy && doc.lead.public !== policy) return { member: false };
-  const pin = teamPins[doc.id];
+  const pin = pinTrusted(doc.id);
   if (!pin || pin.keyId !== doc.lead.keyId || pin.public !== doc.lead.public) return { member: false };
   const team = String(doc.id);
   const kept = teamKeys[team] || {};
@@ -3743,7 +3771,7 @@ function privateHere(doc, catalogs) {
 /* Whether the team at this folder lists catalog `id`, by its stored chain. */
 function idListedHere(id) {
   const doc = folderTeamDoc();
-  const pin = doc ? teamPins[doc.id] : null;
+  const pin = doc ? pinTrusted(doc.id) : null;
   if (!pin || pin.keyId !== doc.lead.keyId || pin.public !== doc.lead.public || !Array.isArray(doc.catalogs)) return false;
   const ids = lineageOfId(id);
   return ids.length > 0 && doc.catalogs.map(String).indexOf(ids[ids.length - 1]) >= 0;
@@ -4325,38 +4353,8 @@ function policyWords(facts, lang) {
     noUpdate: facts.noUpdate === true, unread: facts.unread === true, held: facts.held === true };
 }
 function joinPolicyFrom(text, lang) { return policyWords(joinPolicyFacts(text), lang); }
-/* THE LAST GOOD READ, beside desk.json, so a read that fails holds it rather than none, across a restart too. Plain, as the
-   key itself is readable by every account of this computer, and without AiKey, the one secret among the values, which then
-   waits for a good read. Null where there is none or it is not this shape. It sits in userData, which the person can write:
-   a person who can also make the read fail could put pins of their own in it, but such a person could already make the read
-   fail and drop every pin, so holding the last good read widens nothing (Claude α, 2026-11-15: no seal, which would not stop
-   that person and would add a way for an honest desk to fail). */
-const POLICY_GOOD_FILE = "policy-last-good.json";
-function policyGoodLoad() {
-  try {
-    const doc = JSON.parse(fs.readFileSync(path.join(app.getPath("userData"), POLICY_GOOD_FILE), "utf8"));
-    if (!doc || doc.kind !== "etiuda-policy-last-good" || doc.format !== 1 || typeof doc.folder !== "string" || typeof doc.lead !== "string") return null;
-    if ((doc.folder && !policyFolderOk(doc.folder)) || (doc.lead && !policyLeadOk(doc.lead))) return null;
-    const values = Object.create(null);
-    const given = doc.values && typeof doc.values === "object" && !Array.isArray(doc.values) ? doc.values : {};
-    Object.keys(given).forEach(k => { const v = given[k]; if (k !== "aikey" && v && typeof v.type === "string" && typeof v.value === "string") values[k] = { type: v.type, value: v.value }; });
-    const bad = Array.isArray(doc.bad) ? doc.bad.filter(b => b === "folder" || b === "lead" || b === "beside") : [];
-    return { folder: doc.folder, lead: doc.lead, bad: bad, noUpdate: doc.noUpdate === true, values: values, unread: false };
-  } catch { return null; }
-}
-function policyGoodSave(facts) {
-  try {
-    const values = {};
-    Object.keys(facts.values || {}).forEach(k => { if (k !== "aikey") values[k] = facts.values[k]; });
-    const text = JSON.stringify({ format: 1, kind: "etiuda-policy-last-good", folder: facts.folder, lead: facts.lead, bad: facts.bad,
-      noUpdate: facts.noUpdate === true, values: values });
-    const file = path.join(app.getPath("userData"), POLICY_GOOD_FILE);
-    let was = "";
-    try { was = fs.readFileSync(file, "utf8"); } catch { /* none kept yet */ }
-    if (was === text) return;
-    writeReplacing(file, text);
-  } catch { /* the next good read keeps it */ }
-}
+/* NO COPY OF A READ IS KEPT ON DISK: the person can write userData, and nothing a user can write is ever read as IT's word. A
+   policy-last-good.json an earlier build left there is not read. */
 /* A read that failed is asked again at the first ask once this has passed, so one failure does not stand for the run. */
 const POLICY_REREAD_MS = 60 * 60 * 1000;
 /* How often a running desk looks at the key again, so a policy turned off, or an AiKey removed, stops the next send within about
@@ -4364,7 +4362,12 @@ const POLICY_REREAD_MS = 60 * 60 * 1000;
    lands, and a send waits for facts no older than the look and its grace (policyFresh). */
 const POLICY_LOOK_MS = 60 * 1000;
 const POLICY_LOOK_GRACE_MS = 15 * 1000;
-let joinPolicyRead = null, joinPolicyReadAt = 0, joinPolicyGood = null, joinPolicyAskedAt = 0, joinPolicyAsking = false;
+/* While no read in this run has answered, the key is looked at again unasked: after this, then twice as long each time up to
+   POLICY_LOOK_MS, one look at a time, each under reg's own five-second timeout (policyAgainArm). */
+const POLICY_AGAIN_FIRST_MS = 5 * 1000;
+/* joinPolicyGood is this run's last good read, in memory alone; joinPolicyHeard, where set, is told when the facts in force change. */
+let joinPolicyRead = null, joinPolicyReadAt = 0, joinPolicyGood = null, joinPolicyAskedAt = 0, joinPolicyAsking = false,
+  joinPolicyAgain = null, joinPolicyAgainMs = 0, joinPolicyHeard = null;
 /* The scratch file reg exports the key into, and its folder; both go whatever happens, and nothing of them is logged. */
 function policyScratch() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-policy-"));
@@ -4381,26 +4384,48 @@ function policyExported(at) {
   return bytes.length % 2 === 0 && bytes[0] === 0xff && bytes[1] === 0xfe ? { text: bytes.subarray(2).toString("utf16le"), unread: false }
     : { text: "", unread: true };
 }
-/* A read's facts made the ones in force: a good read is kept as the last good read, and a read that failed holds it. */
+/* A read's facts made the ones in force: a good read is kept as this run's last good read, and a read that failed holds it. */
 function policyTake(text, unread) {
   const read = joinPolicyFacts(text, unread);
-  if (!read.unread) { joinPolicyGood = read; policyGoodSave(read); }
+  if (!read.unread) joinPolicyGood = read;
   else {
-    /* A read that failed holds the last good read, every pin and switch it set, said as unread; with none, it is none. */
-    const good = joinPolicyGood || (joinPolicyGood = policyGoodLoad());
+    /* A read that failed holds this run's last good read, every pin and switch it set, said as unread; with none, policy waits. */
+    const good = joinPolicyGood;
     if (good) { read.folder = good.folder; read.lead = good.lead; read.bad = good.bad; read.noUpdate = good.noUpdate; read.values = good.values; read.held = true; } /* plant:policy-hold-good */
   }
+  const was = joinPolicyRead;
   joinPolicyRead = read;
   joinPolicyReadAt = Date.now();
   joinPolicyAskedAt = joinPolicyReadAt;
+  policyAgainArm();
+  if (was && policyStamp(was) !== policyStamp(read) && typeof joinPolicyHeard === "function") joinPolicyHeard();
 }
-/* The minute's look, without waiting: one at a time, its facts taken when reg answers, judged as the first read judges them. */
+/* What of a read the running desk acts on, as one string: whether it waits, and its pins, switches and values. */
+function policyStamp(r) {
+  return JSON.stringify([r.unread === true && r.held !== true, r.folder, r.lead, r.noUpdate === true, r.values || null]);
+}
+/* The unasked look while no read in this run has answered, and none once one has. */
+function policyAgainArm() {
+  const r = joinPolicyRead;
+  if (process.platform !== "win32" || !r || r.unread !== true || r.held === true) {
+    if (joinPolicyAgain) clearTimeout(joinPolicyAgain);
+    joinPolicyAgain = null;
+    joinPolicyAgainMs = 0;
+    return;
+  }
+  if (joinPolicyAgain) return;
+  joinPolicyAgainMs = joinPolicyAgainMs ? Math.min(joinPolicyAgainMs * 2, POLICY_LOOK_MS) : POLICY_AGAIN_FIRST_MS; /* plant:policy-again */
+  joinPolicyAgain = setTimeout(() => { joinPolicyAgain = null; policyLookLater(); }, joinPolicyAgainMs);
+  if (joinPolicyAgain.unref) joinPolicyAgain.unref();
+}
+/* The minute's look, without waiting: one at a time, its facts taken when reg answers, judged as the first read judges them.
+   A scratch folder that cannot be made, or a look that cannot start, is a read that failed. */
 function policyLookLater() {
   if (joinPolicyAsking || process.platform !== "win32") return;
   joinPolicyAsking = true;
   joinPolicyAskedAt = Date.now();
   let at = null;
-  try { at = policyScratch(); } catch { joinPolicyAsking = false; return; }
+  try { at = policyScratch(); } catch { joinPolicyAsking = false; try { policyTake("", true); } catch { /* the facts in force stand */ } return; }
   try {
     execFile(REG_TOOL, ["export", POLICY_KEY, at.file, "/y"], regOpts(execFile, { windowsHide: true, timeout: 5000 }), err => {
       let got = { text: "", unread: !(err && (err.code === 1 || err.status === 1)) };
@@ -4408,7 +4433,7 @@ function policyLookLater() {
       finally { policyScratchGone(at); joinPolicyAsking = false; }
       try { policyTake(got.text, got.unread); } catch { /* the facts in force stand */ }
     });
-  } catch { policyScratchGone(at); joinPolicyAsking = false; }
+  } catch { policyScratchGone(at); joinPolicyAsking = false; try { policyTake("", true); } catch { /* the facts in force stand */ } }
 }
 /* Whether the facts in force are recent enough for a send: read within the look and its grace, or no policy to look at. */
 function policyFresh() {
@@ -4418,8 +4443,8 @@ function policyFresh() {
    (POLICY_REREAD_MS), both waiting, since that ask needs the answer; between them, looked at again a minute after the last
    read, without waiting (POLICY_LOOK_MS). The one program started is reg.exe at its fixed path, exporting
    this one key to a scratch file, which holds the registry's own UTF-16 where reg's printing would be in the
-   console's code page. A failure, and any system but Windows, is no policy; reg's own exit 1 is a key that is not there,
-   and any other failure is a read that failed, kept as unread. */
+   console's code page. Any system but Windows is no policy; reg's own exit 1 is a key that is not there, and any other
+   failure is a read that failed, kept as unread, never as no policy (policyWaits). */
 function readJoinPolicy(lang) {
   if (joinPolicyRead === null || (joinPolicyRead.unread && Date.now() - joinPolicyReadAt >= POLICY_REREAD_MS)) { /* plant:policy-reread */
     let text = "", unread = false;
@@ -4444,6 +4469,14 @@ function updateLookOff() {
 }
 function updateLookUnsure() {
   try { const p = readJoinPolicy("en"); return p.unread === true && p.held !== true; } catch { return true; }
+}
+/* WHETHER MACHINE POLICY HAS NOT ANSWERED: on Windows, a read that failed with no good read before it in this run. Whatever
+   policy could forbid waits while this holds, and nothing else does; a computer whose key is not there has its answer. */
+function policyWaits() {
+  if (process.platform !== "win32") return false;
+  let p = null;
+  try { p = readJoinPolicy("en"); } catch { return true; }
+  return p.unread === true && p.held !== true; /* plant:policy-waits */
 }
 /* A MANAGED INSTALLATION (decision 49): Managed, SharedComputer, AllowPersonalAccounts, SigninProvider, SigninTenant and
    SupportContact, from policyValues' reading, machine policy alone. A pin that cannot be read closes the sign-in rather than
@@ -4501,9 +4534,14 @@ function managedPolicyFrom(values) {
 /* A NON-PERSISTENT DESKTOP (decision 49, section 12): where machine policy sets NonPersistent and not NonPersistentNewDesk, a desk
    whose own key will not open is reported, never silently replaced by a new desk. Pure. */
 function managedStrands(pol) { return !!pol && pol.nonPersistent === true && pol.nonPersistentNewDesk !== true; } /* plant:np-strands */
-/* The machine's answer, once a run, as the team values are read. */
+/* Everything the six and NonPersistent could forbid, while policy has not answered: no provider, no other account, no sign out,
+   nothing to buy, no personal account, the desk's own key never replaced; `waiting` says why, so nothing says the computer is managed. */
+const MANAGED_WAITING = Object.freeze({ any: true, managed: true, shared: false, personal: false, provider: "", tenant: "", closed: true, contact: "",
+  nonPersistent: true, nonPersistentNewDesk: false, waiting: true });
+/* The machine's answer as the team values are read. */
 function managedPolicy() {
-  try { readJoinPolicy("en"); } catch { /* no policy is read as none */ }
+  try { readJoinPolicy("en"); } catch { /* policyWaits says what a read that throws is */ }
+  if (policyWaits()) return Object.assign({}, MANAGED_WAITING); /* plant:mp-waits */
   return managedPolicyFrom(joinPolicyRead && joinPolicyRead.values);
 }
 /* THE DESK'S OPTIONAL CUSTOMER MODEL (board 992). Off by default; on, the organisation's own service ranks the search and the
@@ -4664,6 +4702,7 @@ function deskAiNow() {
  *  Null on a harness launch too, as the note look is, so no test start sends a query to a service configured on this desk. */
 function deskAiConfig() {
   if (harnessLaunch()) return null;
+  if (policyWaits()) return null; /* plant:ai-waits */
   let now = null;
   try { now = deskAiNow(); } catch { return null; }
   const j = now.joined;
@@ -4729,6 +4768,8 @@ function deskAiTest() {
   try { now = deskAiNow(); } catch { return Promise.resolve({ ok: false, why: "none", host: "", model: "" }); }
   const j = now.joined, a = deskAiAnswer(j, !!now.key, [], false);
   const said = why => Promise.resolve({ ok: false, why: why, host: a.host, model: j.model });
+  /* The address and key policy might set are not known yet, so nothing is sent to the ones written here. */
+  if (policyWaits()) return said("waiting"); /* plant:ai-test-waits */
   if (j.keyNoService) return said("keyNoService");
   if (!deskAiService(j.provider)) return said("provider");
   if (!j.endpoint) return said("endpoint");
@@ -4902,6 +4943,8 @@ function folderForkSeen(docs, team, leads) {
    keeps this desk's key for its epoch. What it learns is in teamPins and teamKeys, and in the desk envelope. */
 function heedTeam() {
   if (deskKeys === undefined) deskKeys = readDesk();
+  /* Nothing is pinned, barred or unbarred while machine policy has not answered; the file is heeded once it does. */
+  if (policyWaits()) return; /* plant:heed-waits */
   const root = catalogFolder();
   if (!folderAnswers(root)) return;
   const file = path.join(root, TEAM_NAME);
@@ -5173,7 +5216,7 @@ function teamSealedHere(team) {
   /* The newest of the team's sealed files this desk can open whose inner catalog the team's pinned lead signed: the highest
      key number, then the highest rev inside it (the test architect's C1 to the desk pilot; a sealed envelope carries no rev
      outside its ciphertext). The team key is every member's, so a seal alone makes no file the lead's. */
-  const pin = teamPins[team];
+  const pin = pinTrusted(team);
   let best = "", bestEpoch = -1, bestRev = -1;
   let files = ecFilesIn(catalogFolder());
   if (!files.length) {
@@ -5203,7 +5246,7 @@ function relayOpens(j) {
   const inv = j && j.invite && j.invite.relay;
   let team = inv && inv.withdrawn !== true && inv.withdrawing !== true && j.refused !== true ? String(j.team) : relayCatalogOwed;
   if (!team && j && j.invite && j.invite.folder && teamKeys[j.team] && Object.keys(teamKeys[j.team]).length && j.refused !== true) team = String(j.team); /* plant:folder-invite-opens */
-  if (!team || !teamPins[team]) return null;
+  if (!team || !pinTrusted(team)) return null;
   if (relayCatalogNamed.has(team)) { if (relayCatalogOwed === team) relayCatalogOwed = ""; return null; }
   const file = relayOpenFile(team);
   if (!file) return null;
@@ -6436,10 +6479,12 @@ function relayKept(r) {
     && (r.box === undefined || /^[0-9a-f]{64}$/.test(String(r.box)));
 }
 /* Whether this desk takes invitations: "" where it does, else the refusal every invitation gets, at read and at yes.
+   "waiting" while machine policy has not answered (policyWaits).
    "policy" while machine policy names a team folder or a lead, unless an invitation matches the policy.
    A named lead must match, and a named folder must match. LeadKey-only needs the lead alone; folder-only
    stays shut, since nothing names who may invite. A UNC path and a mapped drive read as different folders. */
 function inviteDoor(parsed) {
+  if (policyWaits()) return "waiting"; /* plant:invite-waits */
   const named = sayJoinPolicy();
   if (!named.folder && !named.lead) return "";
   if (!named.lead) return "policy";
@@ -6867,7 +6912,7 @@ function deskEditionRev(catalogId, folder, leadPublic) {
 /* The head of a folder team from its signed etiuda-head.json. Only a genuine head signed by the pinned lead under
    HEAD_PREFIX, and never an older rev than the desk has or an older t than one already seen. */
 function folderHeadShown(team) {
-  const pin = teamPins[team];
+  const pin = pinTrusted(team);
   if (!pin || !pin.public || typeof pin.public !== "string") return null;
   const folder = folderMirrorOf(team);
   if (!folder || !folderAnswers(folder)) return null;
@@ -6908,7 +6953,7 @@ function folderHeadShown(team) {
    seen of that catalog, each `newer` where its rev is above what the desk has loaded of it, never a file unread in the
    mirror. `edition` and `published` are the catalog in use's entry where kept, else the newest kept. */
 function headView(team, editions, t, folder) {
-  const pin = teamPins[team];
+  const pin = pinTrusted(team);
   if (!pin || !Array.isArray(editions) || !folder || !Number.isFinite(t)) return null;
   const doc = teamTextChosen(folder).doc;
   if (!doc || !teamWhole(doc) || String(doc.id) !== team || doc.lead.keyId !== pin.keyId || doc.lead.public !== pin.public
@@ -6978,7 +7023,7 @@ function lapseSeen(team, step) {
    private: what the disclosure at joining, the notice of a changed switch and the private mark's control read. */
 function contentView(read) {
   const doc = read === undefined ? folderTeamDoc() : read;
-  const pin = doc ? teamPins[doc.id] : null;
+  const pin = doc ? pinTrusted(doc.id) : null;
   const team = pin && pin.keyId === doc.lead.keyId && pin.public === doc.lead.public ? String(doc.id) : "";
   const sw = team ? teamContentOf(doc) : null;
   /* `listed`: the team's catalogs, which the private mark is never offered on. */
@@ -7060,7 +7105,7 @@ function teamStateMirror(team) {
    signed so this desk accepts it. The head's announcement is not one: the file is. An empty list, or a team file
    that is not whole under the pinned lead, says nothing. */
 function awaitsFirstEdition(team) {
-  const pin = teamPins[team];
+  const pin = pinTrusted(team);
   if (!pin) return false;
   const root = teamStateMirror(team);
   if (!root || !folderAnswers(root)) return false;
@@ -7100,6 +7145,10 @@ function leadsView() {
       lead: shown.lead || "", folder: shown.folder || "",
       removed: (admitted && !!me && !!roster && roster.desks.indexOf(me) < 0) || relayRemoved,
       policy: policyHoldsTeam(t, named) };
+    /* No Leave is offered while machine policy has not answered, since it could hold this team. */
+    if (named && named.unread === true && named.held !== true) row.waiting = true;
+    /* Machine policy names another lead: nothing this team's lead signed is used here, and the row says so. */
+    else if (named && named.lead && named.lead !== teamPins[t].public) row.otherLead = true;
     if (relayHost) row.relay = relayHost; /* plant:settings-relay-row */
     if (relayRemoved) row.relayRemoved = true;
     const head = headShown(t);
@@ -7157,7 +7206,7 @@ function forgetLead(team, left) {
   if (deskKeys === undefined) deskKeys = readDesk();
   if (!SEALED_TEAM_RE.test(team) || !teamPins[team]) return joinView();
   /* Settings offers no Leave where policy holds the team; one sent anyway changes nothing. "It does not match" still forgets. */
-  if (left === true && policyHoldsTeam(team, readJoinPolicy("en"))) return joinView();
+  if (left === true && (policyWaits() || policyHoldsTeam(team, readJoinPolicy("en")))) return joinView(); /* plant:leave-waits */
   const ch = teamChannel[team];
   if (ch && ch.kind === "relay") setRelayTeamAside(ch.rt); /* plant:leave-aside */
   /* The note this desk left in a folder team's mirror goes too, owed to that share, so a later return does not send it. */
@@ -7242,7 +7291,7 @@ function isBuiltinRelayUrl(u) {
 
 const PIN_FROM = ["invite", "policy", "answer"];
 function relayFollowed(team) {
-  const pin = teamPins[team];
+  const pin = pinTrusted(team); /* plant:follow-trusted */
   if (!pin) return false;
   if (PIN_FROM.indexOf(teamPinFrom[team]) >= 0) return true; /* plant:907-from */
   const policy = sayJoinPolicy().lead;
@@ -7261,7 +7310,7 @@ function relayFollowed(team) {
    heeded file names the relay and whose pin the rule above lets it follow. */
 function relayHere() {
   const j = teamJoin, inv = j && j.invite && j.invite.relay;
-  if (inv && (teamPins[j.team] || inv.withdrawing === true) && (teamPinFrom[j.team] === "invite" || inv.withdrawing === true) && inv.end !== "removed" && teamRelayGone[j.team] !== true)
+  if (inv && (pinTrusted(j.team) || inv.withdrawing === true) && (teamPinFrom[j.team] === "invite" || inv.withdrawing === true) && inv.end !== "removed" && teamRelayGone[j.team] !== true)
     return { team: j.team, rt: inv.rt, url: inv.url, joining: true };
   const teams = Object.keys(teamChannel).filter(t => relayFollowed(t) && teamRelayGone[t] !== true).sort();
   if (!teams.length) return null;
@@ -7270,7 +7319,7 @@ function relayHere() {
 /* A team this desk would follow, which the relay has refused. relayHere stays null until a fresh hello on it succeeds. */
 function relayFlagged() {
   const j = teamJoin, inv = j && j.invite && j.invite.relay;
-  if (inv && (teamPins[j.team] || inv.withdrawing === true) && (teamPinFrom[j.team] === "invite" || inv.withdrawing === true) && inv.end !== "removed" && teamRelayGone[j.team] === true)
+  if (inv && (pinTrusted(j.team) || inv.withdrawing === true) && (teamPinFrom[j.team] === "invite" || inv.withdrawing === true) && inv.end !== "removed" && teamRelayGone[j.team] === true)
     return { team: j.team, rt: inv.rt, url: inv.url, joining: true };
   const teams = Object.keys(teamChannel).filter(t => relayFollowed(t) && teamRelayGone[t] === true).sort();
   if (!teams.length) return null;
@@ -7505,7 +7554,7 @@ function relayProbeNext() { return relayProbeMs; }
 function relayRun() {
   if (deskKeys === undefined) deskKeys = readDesk();
   for (const t of Object.keys(teamChannel)) {
-    if (!teamPins[t] || relayFollowed(t) || relaySaidFor.has(t)) continue;
+    if (!pinTrusted(t) || relayFollowed(t) || relaySaidFor.has(t)) continue;
     relaySaidFor.add(t);
     teamSay("team " + t + " names a relay at " + teamChannel[t].url + ", and its lead was pinned by no invitation, machine policy or"
       + " answered request, so this desk does not follow that address and keeps its folder");
@@ -7521,7 +7570,7 @@ function relayRun() {
   /* The lead this desk follows for a team, read when asked: the pin, or while joining the lead the invitation names. */
   const pinFor = w => {
     const j = teamJoin;
-    return teamPins[w.team] || (w.joining && j && j.team === w.team && j.invite && j.invite.lead ? { keyId: j.invite.lead.keyId, public: j.invite.lead.public } : null);
+    return pinTrusted(w.team) || (w.joining && j && j.team === w.team && j.invite && j.invite.lead ? { keyId: j.invite.lead.keyId, public: j.invite.lead.public } : null);
   };
   const pin = want ? pinFor(want) : null;
   /* THE PIN IS NOT IN THE FINGERPRINT (board 931 (7) item 9): a channel that followed a genuine handover itself already judges by
@@ -8081,9 +8130,7 @@ function shareMustSeal(root) {
   heedTeam();
   const doc = teamTextChosen(root).doc;
   if (!doc || !teamWhole(doc) || doc.sealed !== true || doc.exportsSealed === false) return false;
-  const policy = sayJoinPolicy().lead;
-  if (policy && doc.lead.public !== policy) return false;
-  const pinned = teamPins[doc.id];
+  const pinned = pinTrusted(doc.id);
   return !!pinned && pinned.keyId === doc.lead.keyId && pinned.public === doc.lead.public;
 }
 /* Writes the page's merged catalog over the file it read, answered {ok, rev}, or {changed} where the file is no longer
@@ -9256,7 +9303,7 @@ function deskFileGenuine(data, folder) {
    desk id, read once a listing. */
 function deskRoster() {
   heedTeam();
-  const kept = Object.keys(teamPins).filter(t => teamRoster[t]).map(t => teamRoster[t].desks);
+  const kept = Object.keys(teamPins).filter(t => teamRoster[t] && pinTrusted(t)).map(t => teamRoster[t].desks);
   const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "";
   if (!Object.keys(teamPins).length) return () => true;
   return id => id === me || kept.some(ids => ids.indexOf(id) >= 0);
@@ -10742,8 +10789,9 @@ function signinCertOk(c, deskKey) {
     .concat(c.deskOnly === true ? ["desk-only"] : []).map(String).join("\n"), "utf8"); /* plant:cert-desk-only-bytes */
   return signinVerified(d.key.pub, bytes, c.sig.value); /* plant:cert-sig */
 }
-/* A certificate issued later than now, past the same five minutes the ID token and the relay's door allow (certWhy "future"),
-   stands nowhere yet: no door, no seat, no "held". */
+/* A certificate issued later than now, past the same five minutes the ID token and the relay's door allow (certWhy "future"), stands
+   nowhere on this desk yet: no door asked, offered or knocked, no seat.json, and Account reads it as lapsed. A relay session still
+   carries it (signinSeatCert), and the relay judges it by its own clock. */
 function signinCertEarly(cert, now) {
   return !!cert && Number.isSafeInteger(cert.issued) && cert.issued > now + SIGNIN_SKEW_MS; /* plant:cert-early */
 }
@@ -10895,6 +10943,7 @@ function signinLapsed(held, now) {
    sign-in takes it again. Whatever the answer, the list it carried replaces the kept one only where it is later (signinRevokedNext). */
 function signinSettle(held, ans, now) {
   const settled = signinSettleSeat(held, ans, now);
+  if (settled.cert) settled.seated = true; /* plant:seated-settle */
   return Object.assign(settled, { revoked: signinRevokedNext(held && held.revoked, ans.revoked) }); /* plant:revoked-settle */
 }
 function signinSettleSeat(held, ans, now) {
@@ -10983,6 +11032,9 @@ function signinFileRead(text, packed) {
   out.revoked = signinRevokedOk(d.revoked) ? d.revoked : null; /* plant:revoked-file */
   if (out.held) out.held.revoked = out.revoked;
   if (out.held && h.access === true) out.held.access = true; /* the service's answer "access-token", remembered (section 11.11) */
+  if (out.held && (h.seated === true || out.held.cert)) out.held.seated = true; /* plant:seated-file */
+  if (out.held && h.org && typeof h.org === "object") out.held.org = { tid: SIGNIN_TENANT.test(String(h.org.tid)) ? String(h.org.tid).toLowerCase() : "", /* plant:org-file */
+    hd: typeof h.org.hd === "string" && h.org.hd.length <= 253 ? h.org.hd.toLowerCase() : "" };
   if (out.held && out.held.cert) {
     const doors = signinDoorsOk(h.doors, packed), sig = typeof h.doorsSig === "string" ? h.doorsSig : "";
     if (signinDoorsSigned(doors, sig, out.held.cert)) Object.assign(out.held, { doors: doors, doorsSig: sig }); /* plant:file-doors-signed */
@@ -11101,12 +11153,18 @@ if (!INSTALLED && !app.isPackaged && process.env.ETIUDA_SIGNIN_LAB) { /* plant:l
 function signinLabHeld() {
   return signinLabOn && !!signinState().held; /* plant:lab-held */
 }
-/* The state, read once. Its first read also pins the providers to machine policy, before the file is judged by them and before any
-   view, press or renewal, each of which reads the state first; `managed` rides beside it, unwritten, for every caller. */
+/* The state, read from signin.json at the first ask and again whenever machine policy answers otherwise, so no answer stands for
+   the run: each read pins the providers to the policy in force, from the shipped table, before the file is judged by them and
+   before any view, press or renewal, each of which reads the state first. While policy has not answered the file is judged by the
+   shipped table, so a sign-in held is kept for the answer to judge. A sign-in, renewal or sign out in flight finishes first.
+   `managed` rides beside it, unwritten, for every caller. */
+let signinTableBase, signinPinStamp = "";
 function signinState() {
-  if (signinStore !== undefined) return signinStore;
-  const managed = managedPolicy();
-  SIGNIN_PROVIDERS = signinPinTable(SIGNIN_PROVIDERS, managed); /* plant:pin-taken */
+  const managed = managedPolicy(), stamp = JSON.stringify(managed);
+  if (signinStore !== undefined && (stamp === signinPinStamp || signinBusy || signinRenewing || signinOutFlight)) return signinStore; /* plant:signin-follows */
+  if (signinTableBase === undefined) signinTableBase = SIGNIN_PROVIDERS;
+  const pinned = signinPinTable(signinTableBase, managed);
+  SIGNIN_PROVIDERS = managed.waiting === true ? signinTableBase : pinned; /* plant:signin-file-unpinned */
   let text = "";
   try {
     const at = path.join(app.getPath("userData"), SIGNIN_FILE);
@@ -11117,6 +11175,8 @@ function signinState() {
   signinStore = signinFileRead(text, SIGNIN_DESK_PACKED); /* plant:door-file-packed */
   const me = branchIdentity(false);
   signinStore = signinFileHeld(signinStore, text, me ? me.key : ""); /* plant:file-held */
+  SIGNIN_PROVIDERS = pinned; /* plant:pin-taken */
+  signinPinStamp = stamp;
   signinStore.managed = managed;
   return signinStore;
 }
@@ -11288,12 +11348,26 @@ function signinView() {
   const m = st.managed;
   if (m && m.any) view.managed = { on: m.managed, shared: m.shared, personal: m.personal, provider: m.provider, tenant: !!m.tenant, closed: m.closed, contact: m.contact, /* plant:view-managed */
     stranded: deskStranded };
+  if (view.managed) view.managed.keeps = signinAccountKept(st); /* plant:view-keeps */
+  /* Policy has not answered: the page says the desk waits for it, and never that the computer is managed. */
+  if (m && m.waiting === true) view.managed.waiting = true; /* plant:view-waiting */
   return view;
 }
 function tellSignin() {
   const win = theWindow;
   if (win && !win.isDestroyed()) win.webContents.send("etiuda:signin", signinView());
 }
+/* MACHINE POLICY ANSWERED OTHERWISE (policyTake): the running desk follows at once, the sign-in, the join and the catalog told
+   again under the facts now in force, and the relay looked at. */
+function policyHeard() {
+  const win = theWindow;
+  if (!win || win.isDestroyed()) return;
+  tellSignin();
+  sendJoin(win);
+  if (catalogFolder() !== watchedFolder) catalogFolderChanged(); else armFolder(win);
+  relaySoon();
+}
+joinPolicyHeard = () => setImmediate(policyHeard);
 /* The landing page in the shell's language. */
 function signinPageHtml(kind) {
   const pl = (() => { try { return shellWords().lang === "pl"; } catch { return false; } })();
@@ -11328,22 +11402,47 @@ function signinTake(provider, got, ans, now, access) {
   if (ans.managed === true || ans.ok) { const was = !!s.licenceManaged; if (ans.managed === true) s.licenceManaged = true; else delete s.licenceManaged; if (was !== !!s.licenceManaged && !ans.ok) signinSave(); }
   if (!ans.ok && ans.reason !== "full") return false; /* plant:take-refused */
   /* An answer naming no refresh token (a second authorization of the same account) keeps the one sealed, as a renewal does. */
-  const was = s.held, sameAccount = () => !!was && was.provider === provider && !!was.sub && signinSame(signinKept(safeStorage, was.sub), String(got.sub));
+  const was = s.held, sameAccount = () => signinHeldIs(was, provider, got.sub);
   const base = { provider: provider, refresh: signinKeep(safeStorage, process.platform, got.refreshToken) || (sameAccount() ? was.refresh || "" : ""), /* plant:take-keeps-refresh */
     sub: signinKeep(safeStorage, process.platform, got.sub), seed: got.seed, code: "", cert: null, at: 0, checked: now, reached: true, said: "", ask: false, doors: [] };
   base.revoked = s.revoked || null; /* plant:revoked-survives */
   if (access === true) base.access = true;
+  if (was && was.seated === true && sameAccount()) base.seated = true; /* plant:seated-same */
+  /* The account's organisation as its provider named it, so a policy set later is held to it (signinPolicyRefuses). */
+  const claims = signinClaims(String(got.idToken || ""));
+  if (claims) base.org = { tid: typeof claims.tid === "string" ? claims.tid.toLowerCase() : "", hd: typeof claims.hd === "string" ? claims.hd.toLowerCase() : "" }; /* plant:org-take */
   s.held = signinSettle(base, ans, now);
   s.revoked = s.held.revoked;
   delete s.out; /* this sign-in holds the desk's place again, so a sign out still owed is no longer wanted */
   signinSave();
   return true;
 }
-/* A MANAGED COMPUTER THAT IS NOT SHARED KEEPS ITS ACCOUNT (decision 49): true where state `st` holds a sign-in whose account can be
-   opened and `sub` is another's. A sub that can no longer be opened lets the sign-in through, so a lost keyring never locks the desk. */
-function signinOtherHeld(st, sub) {
+/* Whether `held` is the account the provider named, `provider` and `sub`: false where its sub can no longer be opened. */
+function signinHeldIs(held, provider, sub) {
+  return !!held && held.provider === provider && !!held.sub && signinSame(signinKept(safeStorage, held.sub), String(sub));
+}
+/* Whether the computer keeps the account state `st` holds: managed, not shared, and that account has held a seat here (`seated`, kept
+   in signin.json from its first certificate on, a lapse or a lost seat included). One that never held one may be replaced or signed out. */
+function signinAccountKept(st) {
   const m = st && st.managed;
-  if (!m || !m.managed || m.shared || !st.held || !st.held.sub) return false; /* plant:other-held */
+  /* Machine policy not answered (MANAGED_WAITING): nothing judges the account held, which waits for the answer, and so do Sign out
+     and another account's sign-in. */
+  if (m && m.waiting === true) return !!st.held; /* plant:kept-waits */
+  return !!m && !!m.managed && !m.shared && !!st.held && st.held.seated === true /* plant:kept-seated */
+    && !signinPolicyRefuses(st.held); /* plant:kept-policy */
+}
+/* Whether machine policy as it stands refuses the account `held` (what signinTokens says as signin-tenant): its provider no longer
+   offered, or its organisation as the provider named it at the sign-in (`org`) outside the pin. False where no `org` was kept. */
+function signinPolicyRefuses(held) {
+  if (!held || !held.org) return false;
+  const known = signinKnown(held.provider);
+  return !known || !signinPinOk(known.pin, held.org); /* plant:policy-refuses */
+}
+/* A MANAGED COMPUTER THAT IS NOT SHARED KEEPS ITS ACCOUNT (decision 49): true where state `st` holds a sign-in the computer keeps
+   (signinAccountKept) whose account can be opened and `sub` is another's. A sub that can no longer be opened lets the sign-in through,
+   so a lost keyring never locks the desk. */
+function signinOtherHeld(st, sub) {
+  if (!signinAccountKept(st) || !st.held.sub) return false; /* plant:other-held */
   const was = signinKept(safeStorage, st.held.sub);
   return !!was && !signinSame(was, String(sub)); /* plant:other-same */
 }
@@ -11378,13 +11477,24 @@ ipcMain.handle("etiuda:signin", async (e, provider) => {
   tellSignin();
   let landing = "appfail";
   try {
-    const access = managed || (st.held && st.held.provider === p.id) ? signinAccessFor(p, managed, st.held) : "";
+    /* What is asked is the account signed in to's, which nothing knows yet: machine policy's path or today's, never the held account's. */
+    const access = signinAccessFor(p, managed, null); /* plant:access-not-held */
     let got = await signinRun(io, p, me.key, Date.now, access || undefined);
     if (got.ok && managed && signinOtherHeld(st, got.sub)) got = { ok: false, reason: "signin-other" }; /* plant:managed-same */
+    /* Another account than the one held: the desk leaves that one as Sign out does, whatever this one's answer, once the service has
+       answered a call of this switch: the held account's signout/desk where one is sent, else this account's signin/desk. Not
+       answered, the switch is not made and the desk stays with the account it had, nothing owed. */
+    const other = got.ok && !!st.held && !signinHeldIs(st.held, p.id, got.sub);
+    const out = other ? await signinSwitchOut(st, me) : null;
+    if (out === false) got = { ok: false, reason: "unreached" }; /* plant:switch-unanswered */
+    if (out === true) { signinLeave(st, me, true); signinSave(); tellSignin(); } /* plant:switch-leaves */
+    /* signout/desk frees this desk key's place whoever held it, so one still out is taken before this sign-in's signin/desk. */
+    if (got.ok && signinOutFlight) await signinOutFlight; /* plant:out-before-signin */
     if (got.ok) {
       let ans = await signinSeat(io, p.id, me.key, got.idToken, got.seed, Date.now, got.accessToken);
       let took = !!access;
       if (!access && !ans.ok && ans.reason === "access-token") { const m = await signinSeatAccess(io, p, me.key, got, got.seed, Date.now); ans = m.ans; got = m.got; took = m.access; }
+      if (other && out === null && (ans.ok || ans.reason !== "unreached")) { signinLeave(st, me, true); signinSave(); } /* plant:switch-leaves-after */
       if (signinTake(p.id, got, ans, Date.now(), took) && folderGot) storeTokenTake(folderGot); /* plant:folder-take-after */
       signinFlush();
       if (ans.ok && ans.cert) {
@@ -11392,6 +11502,8 @@ ipcMain.handle("etiuda:signin", async (e, provider) => {
         if (io.store === true && signinFolderApart(p.id)) signinFolderAfter(run, io, p, me.key, got); else storeTurn();
       } /* plant:store-signin */
       signinSaid = ans.ok ? "signin-done" : ans.reason;
+      /* Signed out of the account it had, the service then unreached for this one: said as its own moment, not as nothing changed. */
+      if (out === true && !ans.ok && ans.reason === "unreached") signinSaid = "signin-switch-out"; /* plant:switch-out-said */
       landing = signinLanding(got, ans, managed);
     } else { signinSaid = got.reason; landing = signinLanding(got, undefined, managed); }
   } catch { signinSaid = "unreached"; }
@@ -11422,13 +11534,20 @@ ipcMain.handle("etiuda:signin-stop", (e) => {
 /* Sign out: this computer forgets the account, its tokens, code and certificate, takes its seat.json out of the team's folder and
    lets go of a request made at a team's door, which its certificate no longer stands for; the team and its catalog stay. Its place at
    the licence service is freed by one signed signout/desk, sent after any renewal still out, so the service takes it last; one not
-   taken is owed (`out`), said on the page and asked again at the renewal's next turn. The person's seat on the licence is untouched. */
+   taken is owed (`out`), said on the page and asked again at the renewal's next turn. The person's seat on the licence is untouched.
+   signinLeave is that work for the account state `s` holds, Sign out's and a sign-in as another account's alike. */
 function signinOutNow() {
   if (signinBusy) return signinView();
   const s = signinState(), me = branchIdentity(false);
-  if (s.managed && s.managed.managed && !s.managed.shared) return signinView(); /* plant:out-managed */
-  if (s.held && me && (!harnessLaunch() || signinLabHeld()) && net && typeof net.fetch === "function"
-    && signinOffered().length) { /* plant:signout-offered */
+  if (signinAccountKept(s)) return signinView(); /* plant:out-managed */
+  signinLeave(s, me);
+  signinSaid = "";
+  signinSave();
+  tellSignin();
+  return signinView();
+}
+function signinLeave(s, me, sent) {
+  if (!sent && signinOutWanted(s, me)) {
     s.out = me.key;
     signinOutSend(me.key);
   }
@@ -11441,15 +11560,26 @@ function signinOutNow() {
   /* Signed out, the account's organisation no longer stands in for this desk: Buy, which needs no sign-in, is offered again. */
   delete s.licenceManaged; /* plant:signout-managed */
   signinWrote = "";
-  signinSaid = "";
-  signinSave();
-  tellSignin();
-  return signinView();
+}
+/* Whether leaving the account `s` holds sends a signout/desk. `sent` above: the switch has had its answer to one already. */
+function signinOutWanted(s, me) {
+  return !!s.held && !!me && (!harnessLaunch() || signinLabHeld()) && !!net && typeof net.fetch === "function"
+    && signinOffered().length > 0; /* plant:signout-offered */
+}
+/* A switch's first call where Sign out would send one: the held account's signout/desk, after any renewal still out. True where the
+   service took it, false where it did not, null where none is sent; never left owed, so a switch not made signs nobody out later. */
+async function signinSwitchOut(s, me) {
+  if (!signinOutWanted(s, me)) return null;
+  s.out = me.key;
+  const ok = await signinOutSend(me.key);
+  if (!ok && s.out === me.key) delete s.out; /* plant:switch-out-unowed */
+  return ok;
 }
 /* One signout/desk for `key`, at once or after the renewal still out, and the owed mark taken off once the service has it. Resolves
    whether it did; never rejects. */
 function signinOutSend(key) {
-  const send = () => signoutAsk(signinIo({ loop: null }), key, Date.now); /* plant:signout-post */
+  /* Sent when its turn comes only while still owed: a sign-in that took the desk's place meanwhile no longer wants it. */
+  const send = () => (signinState().out === key ? signoutAsk(signinIo({ loop: null }), key, Date.now) : Promise.resolve(false)); /* plant:signout-post */
   const flight = (signinRenewing ? signinRenewing.then(send, send) : send()).then(ok => { /* plant:signout-after-renew */
     if (signinOutFlight === flight) signinOutFlight = null;
     const st = signinState();
@@ -11624,7 +11754,9 @@ function storeOnFor(values, personOff) {
   return StoreLib().storePolicy(managedPolicyFrom(values).managed === true, personalStoreFrom(values), personOff === true); /* plant:store-policy */
 }
 function storePolicyNow() {
-  try { readJoinPolicy("en"); } catch { /* no policy is read as none */ }
+  try { readJoinPolicy("en"); } catch { /* policyWaits says what a read that throws is */ }
+  /* While policy has not answered, sync is held off as Managed holds it, since policy could. */
+  if (policyWaits()) return StoreLib().storePolicy(true, undefined, storeState().off); /* plant:store-waits */
   return storeOnFor(joinPolicyRead && joinPolicyRead.values, storeState().off);
 }
 function storeOn() { return storePolicyNow().on === true; }

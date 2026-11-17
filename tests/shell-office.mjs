@@ -206,6 +206,8 @@ function loadShell(opts) {
     const key = String(args && args[1] || "");
     const planted = typeof o.reg === "function" ? o.reg(args) : o.reg;
     if (planted instanceof Error) throw planted;
+    /* Machine policy's key, unplanted, is not there, as reg's exit 1 says: a read that failed would make the desk wait for it. */
+    if (planted === undefined && key === "HKLM\\SOFTWARE\\Policies\\Etiuda") { const e = new Error("reg.exe exited 1"); e.status = 1; throw e; }
     if (planted === undefined) return (key === CONN_KEY || key === MACHINE_CONN_KEY) ? QUIET_CONN : QUIET;
     if (typeof planted === "string" && (key === CONN_KEY || key === MACHINE_CONN_KEY) && !planted.includes("DefaultConnectionSettings")) {
       return connDump(1, key);
