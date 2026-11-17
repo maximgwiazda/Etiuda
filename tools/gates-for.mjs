@@ -121,6 +121,10 @@ export const SUBJECT = {
     "src/modules/catalog-boot.js",
     "src/modules/catalog-file.js",
     "src/modules/catalog.js",
+    /* The leg launches the real shell, so the shell's main file is its subject too: a ceiling stops a leg that reads a whole
+       directory from running on every change, and must not hide the one file the leg launches. Engine fold 108's own area
+       ended green on a tree where this leg was red, because a change to shell/main.js alone never planned it (2026-11-17). */
+    "shell/main.js",
   ],
   "tests/result-line.mjs": GATE_TOOLS,
 };
@@ -167,7 +171,9 @@ export function globMatches(glob, rel) {
 export const SCANS = {
   "tests/chain-split.mjs": ["tests/**/*.{js,mjs,cjs}", "package.json"],
   "tests/fold-check.mjs": ["tools/fold-check.mjs"],
-  "tests/i18n-scan.js": ["src/template.html", "src/modules/*.js", "src/main.js"],
+  /* shell/policy too: the scan refuses a string beginning PLACEHOLDER in the Group Policy template, which tests/join-policy.mjs 19f
+     cannot know of in a policy it does not yet hold by bytes (the test architect, 2026-11-17). */
+  "tests/i18n-scan.js": ["src/template.html", "src/modules/*.js", "src/main.js", "shell/policy/**"],
   "tests/pl-diacritics.js": ["src/**/*.{js,mjs,css,html}", "shell/**/*.{js,mjs,css,html}"],
   "tests/css-layers.js": ["src/template.html"],
   "tests/css-order.js": ["src/template.html"],

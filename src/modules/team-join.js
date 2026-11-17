@@ -350,6 +350,8 @@ function joinTook(v,changed){
              const row={team:String(l.team),print:String(l.print||""),
                admitted:l.admitted===true,seen:l.seen===true,lead:String(l.lead||""),folder:String(l.folder||""),
                removed:l.removed===true,policy:l.policy===true};
+             if(l.waiting===true) row.waiting=true;
+             if(l.otherLead===true) row.otherLead=true;
              if(typeof l.relay==="string" && l.relay) row.relay=String(l.relay);
              if(l.relayRemoved===true) row.relayRemoved=true;
              const head=headKept(l.head);
@@ -531,6 +533,7 @@ function joinInviteParts(){
       :joinWhy==="unreadable"?t("The team file in this folder could not be read, so this desk did not join and nothing was written. Let the team's lead know, so they can check the folder.")
       :joinWhy==="check"?t("This code does not match this invitation. Ask the lead again before joining.")
       :joinWhy==="policy"?t("The organisation's IT sets this desk's team, so invitations are turned off.")
+      :joinWhy==="waiting"?t("This invitation waits until Etiuda can read what the organisation's IT set for this computer. Nothing is lost: it can be used again then.")
       :t("This invitation cannot be read, so nothing was changed."),
     body:"", acts:[["back",t("Cancel")]]};
   return null;

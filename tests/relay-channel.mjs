@@ -62,7 +62,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 468;
+const EXPECTED = 474;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -12257,6 +12257,178 @@ if (partOn("pF8")) {
     }
   } catch (e) {
     check(false, "harness (the leg f8a): " + (e && e.stack ? e.stack : e));
+  }
+}
+
+/* ---- honest rejoin inside the seven-day hold (review finding 3): a desk that joined by invitation, was admitted (its
+   join.json deleted), is removed, and is invited back inside the hold; its new request names that held deletion, is taken,
+   reaches the lead's mirror, and the held row stays for the lead. ---- */
+async function liftCore(tag, fn) {
+  const src = path.join(ROOT, "relay", "core.cjs");
+  const beforeBytes = fs.readFileSync(src);
+  const digest = sha(beforeBytes);
+  const origCreateCore = core.createCore;
+  let turned = false, detail = "plant line absent";
+  try {
+    const lines = beforeBytes.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf(tag) >= 0);
+    if (at >= 0) {
+      lines.splice(at, 1);
+      const dir = fs.mkdtempSync(path.join(LAB, "core-plant-"));
+      fs.mkdirSync(path.join(dir, "relay"), { recursive: true });
+      fs.mkdirSync(path.join(dir, "shell", "relay"), { recursive: true });
+      fs.writeFileSync(path.join(dir, "relay", "core.cjs"), lines.join("\n"), "utf8");
+      fs.writeFileSync(path.join(dir, "shell", "relay", "blob.cjs"), "module.exports = require(" + JSON.stringify(path.join(ROOT, "shell", "relay", "blob.cjs")) + ");\n", "utf8");
+      const lifted = nodeRequire(path.join(dir, "relay", "core.cjs"));
+      core.createCore = lifted.createCore;
+      turned = await fn();
+      detail = turned ? "the check lifted" : "the check still held";
+    }
+  } catch (e) {
+    detail = e && e.stack ? e.stack : String(e);
+  } finally {
+    core.createCore = origCreateCore;
+  }
+  return { turned, back: sha(fs.readFileSync(src)) === digest, detail };
+}
+
+async function rejoinScene() {
+  const tm = await freshTeam([]);
+  const tag = tm.rt.slice(0, 8);
+  const k1 = crypto.randomBytes(32), deskKey = keyPair(true);
+  const inv1 = hex(16), token1 = hex(32), ki1 = C.inviteSealKey(hex(16));
+  const inv2 = hex(16), token2 = hex(32), ki2 = C.inviteSealKey(hex(16));
+  const addInvite = (id, token) => {
+    const add = [{ id, hash: sha(Buffer.from(token, "utf8")) }], t = R.clock.now;
+    return admin("POST", "/relay/v1/t/" + tm.rt + "/invites", { add, drop: [], t, sig: signHex(LEAD, core.invitesBytes(tm.rt, t, add, [])) });
+  };
+  const setDevices = (keys, rev) => {
+    const t = R.clock.now;
+    return admin("POST", "/relay/v1/t/" + tm.rt + "/devices", { keys, rev, t, sig: signHex(LEAD, core.devicesBytes(tm.rt, rev, t, keys)) });
+  };
+  const inv1Res = await addInvite(inv1, token1);
+  const live = [{ id: inv1, key: ki1 }];
+  let current = { inv: inv1, token: token1, seal: ki1 };
+  const puts = [];
+  const deskT = transport("rv3-desk-" + tag);
+  const deskReq = async (m, u, h, b) => {
+    const res = await deskT.request(m, u, h, b);
+    if (m === "PUT" && h && h["etiuda-blob"]) {
+      puts.push({
+        meta: JSON.parse(Buffer.from(h["etiuda-blob"], "base64url").toString("utf8")),
+        status: res.status,
+        said: Buffer.from(res.bytes).toString("utf8"),
+      });
+    }
+    return res;
+  };
+  const lead = opened(C, "rv3-lead-" + tag, tm, LEAD, "root", {
+    keyFor: e => (e === 1 ? k1 : null), sealEpoch: () => 1, inviteKeys: () => live.slice(),
+  });
+  const desk = opened(C, "rv3-desk-" + tag, tm, deskKey, "desk:" + deskKey.keyId, {
+    keyFor: e => (e === 1 ? k1 : null), sealEpoch: () => 1, invite: () => current,
+    request: deskReq, connect: deskT.connect,
+  });
+  try {
+    const rel = "desks/" + deskKey.keyId + "/join.json";
+    const firstAsk = "{\"kind\":\"etiuda-join\",\"note\":\"first\"}\n";
+    const backAsk = "{\"kind\":\"etiuda-join\",\"note\":\"back\"}\n";
+    put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, []));
+    lead.prog.loadTeamFile(JSON.parse(teamBody(tm, 1, 1, [])));
+    lead.ch.start();
+    await lead.ch.idle();
+    put(desk.mirror, rel, firstAsk);
+    desk.ch.start();
+    await desk.ch.idle();
+    await once(lead);
+    const firstAtLead = read(lead.mirror, rel) === firstAsk;
+
+    /* Admitted: the key enrolled, the team file names the desk, and its join.json is deleted. */
+    R.clock.now += 1000;
+    const yes = await setDevices([{ id: deskKey.keyId, pub: deskKey.pub, desk: deskKey.keyId }], 2);
+    put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 2, [member(deskKey)]));
+    lead.prog.loadTeamFile(JSON.parse(teamBody(tm, 1, 2, [member(deskKey)])));
+    await once(lead);
+    current = null;
+    await desk.ch.stop();
+    desk.ch.start();
+    await desk.ch.idle();
+    fs.unlinkSync(path.join(desk.mirror, ...rel.split("/")));
+    R.clock.now += 1000;
+    await once(desk);
+    await once(desk);
+    const s = relayStore(tm.rt);
+    const delBlobs = s.list("blob:").map(([, m]) => m).filter(m => m.writer === deskKey.keyId && m.del === true);
+    const delId = delBlobs.length === 1 ? delBlobs[0].id : null;
+    await once(lead);
+    const leadCleared = read(lead.mirror, rel) === null;
+
+    /* Removed: the lead drops the desk, and the relay holds that deletion for the lead. */
+    R.clock.now += 1000;
+    put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 3, []));
+    lead.prog.loadTeamFile(JSON.parse(teamBody(tm, 1, 3, [])));
+    await once(lead);
+    const off = await setDevices([], 3);
+    const heldBefore = s.list("held:").map(([, h]) => h);
+    const heldRowBefore = delId ? s.get("held:" + delId) : null;
+    const heldForLead = !!delId && heldBefore.length === 1 && !!heldRowBefore && heldRowBefore.del === true
+      && heldRowBefore.writer === deskKey.keyId && R.bucket.objects.has(heldRowBefore.obj);
+    await desk.ch.stop();
+
+    /* Invited back inside the hold: the new request names the held deletion, is taken, and reaches the lead's mirror. */
+    R.clock.now += 60000;
+    const inv2Res = await addInvite(inv2, token2);
+    live.push({ id: inv2, key: ki2 });
+    current = { inv: inv2, token: token2, seal: ki2 };
+    const mark = puts.length;
+    put(desk.mirror, rel, backAsk);
+    desk.ch.start();
+    await desk.ch.idle();
+    await once(desk);
+    await once(lead);
+    const reask = puts.slice(mark);
+    const namesHeld = reask.length >= 1 && !!delId && reask[0].meta.supersedes === delId && reask[0].meta.del === false;
+    const taken = reask.length >= 1 && reask.some(p => p.status === 200);
+    const atLead = read(lead.mirror, rel) === backAsk;
+    const heldRowAfter = delId ? s.get("held:" + delId) : null;
+    const heldKept = !!heldRowAfter && heldRowAfter.id === delId && heldRowAfter.del === true
+      && heldRowAfter.writer === deskKey.keyId && R.bucket.objects.has(heldRowAfter.obj);
+    const setup = inv1Res.status === 200 && firstAtLead && yes.status === 200 && leadCleared && off.status === 200 && inv2Res.status === 200;
+    const detail = JSON.stringify({
+      setup: { inv1: inv1Res.status, firstAtLead, yes: yes.status, leadCleared, off: off.status, inv2: inv2Res.status },
+      delId,
+      heldBefore: heldBefore.length,
+      reask: reask.map(p => ({ sup: p.meta.supersedes, del: p.meta.del, status: p.status, said: p.status === 200 ? "" : p.said })),
+      atLead,
+      heldKept,
+    });
+    return { setup, heldForLead, namesHeld, taken, atLead, heldKept, detail };
+  } finally {
+    try { await desk.ch.stop(); } catch { /* already stopped */ }
+    try { await lead.ch.stop(); } catch { /* already stopped */ }
+  }
+}
+
+if (partOn("pRv3")) {
+  try {
+    markPart("pRv3");
+    const r = await rejoinScene();
+    check(r.setup && r.heldForLead, "rv3f after a desk that joined by invitation is admitted (its join.json deleted) and removed, the relay holds its deleted request for the lead: " + r.detail);
+    check(r.setup && r.namesHeld, "rv3g the re-invited desk's new request inside the hold names that held deletion as what it supersedes: " + r.detail);
+    check(r.setup && r.taken, "rv3h the re-invited desk's new request is taken by the relay: " + r.detail);
+    check(r.setup && r.atLead, "rv3i the re-invited desk's new join.json reaches the lead's mirror on the lead's next look: " + r.detail);
+    check(r.setup && r.heldKept, "rv3j the held deletion row is still there for the lead afterwards: " + r.detail);
+    if (PLANTS_OFF) skip("rv3k lifting plant:invite-held turns rv3j red (the re-invited request lets go of the held deletion)");
+    else {
+      const p = await liftCore("plant:invite-held", async () => {
+        const x = await rejoinScene();
+        return x.setup && x.heldForLead && x.namesHeld && x.taken && x.atLead && !x.heldKept;
+      });
+      check(r.heldKept && p.turned && p.back, "rv3k lifting plant:invite-held turns rv3j red (the re-invited request lets go of the held deletion), and the product file is never written: "
+        + p.detail.split("\n")[0] + ", sha " + (p.back ? "restored" : "differs"));
+    }
+  } catch (e) {
+    check(false, "harness (the leg rv3f): " + (e && e.stack ? e.stack : e));
   }
 }
 

@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 218;
+const EXPECTED = 223;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -132,6 +132,8 @@ function worldOf(o) {
         scope: c.folder ? "openid " + DRIVE_SCOPE : "openid", access_token: c.folder ? c.access || w.access : "stand-in-google-token-not-the-folder", expires_in: 3600 }, c.noRefresh ? {} : { refresh_token: "rt-google" }));
     }
     if (u === STAGING + "signin/desk") {
+      w.seatTries = (w.seatTries || 0) + 1;
+      if (w.serviceDown) throw new TypeError("fetch failed");
       w.service.push(body);
       w.signinAt = Date.now();
       /* A service that keeps stores says so beside the seat (storeOffer); w.noOffer is today's service, which never does. */
@@ -140,6 +142,12 @@ function worldOf(o) {
       if (w.seatRefused) return json(w.seatRefused === "full" ? 409 : 403, { ok: false, reason: w.seatRefused });
       const b = JSON.parse(body);
       return json(200, Object.assign({ ok: true, code: CODE, certificate: seatCert(b.desk, Date.now()), doors: [] }, offer));
+    }
+    /* signout/desk, as the service answers it, kept apart from the service's other bodies; w.serviceDown is the service unreached. */
+    if (u === STAGING + "signout/desk") {
+      if (w.serviceDown) throw new TypeError("fetch failed");
+      (w.signouts = w.signouts || []).push(body);
+      return json(200, { ok: true });
     }
     if (u === STAGING + "store/grant") {
       w.service.push(body);
@@ -943,6 +951,86 @@ async function heldScene(src, out) {
     syncState: storeTree(UD) === tree ? "as it was" : "changed", desk: deskText(UD) === desk ? "as it was" : "changed", whose: kept.who === whoA ? "A" : "not A" };
   const ok = !!a && a.kind === "etiuda-store-key" && !n && got.relayCalls === 0 && !got.bFolder && !got.syncing && !timer && got.syncState === "as it was" && got.desk === "as it was" && got.whose === "A";
   return { ok, detail: brief(got) };
+}
+/* (x1u) "USE ANOTHER ACCOUNT" TO ONE THE SERVICE GIVES NO SEAT (review 2026-11-16, finding 11, the test architect's reproduction): A
+   synced on two computers of one store; on the first, B signs in through the shell's own handler and the service answers ok with no
+   certificate. Nothing reads the sync row; only the channels' own cycles run, as their poll does. The first computer's sync is stopped
+   and A's keys gone from store.json, as a sign out leaves them, and nothing crosses either way. */
+async function switchUnseatedScene(src) {
+  const ws = globalThis.WebSocket;
+  globalThis.WebSocket = undefined; /* the channels poll, so their own cycles are driven here and no socket is opened */
+  try {
+    const r = await signinFlow(src, { quiet: true }), T = r.shell.T, w = r.world;
+    const s1 = T.get().storeSyncing;
+    if (s1 && s1.channel()) await s1.channel().idle();
+    const two = boot(src, { world: w, held: true, lab: labOf() }), T2 = two.T;
+    T2.branchIdentity(true);
+    await T2.signinRenewNow();
+    if (T2.get().storeFlight) await T2.get().storeFlight;
+    await T.storeTurn();
+    const s2 = T2.get().storeSyncing, d1 = T.storeSyncFolder(), d2 = T2.storeSyncFolder();
+    fs.mkdirSync(d1, { recursive: true });
+    fs.mkdirSync(d2, { recursive: true });
+    const poll = async (sync, n) => { for (let i = 0; i < n; i++) { const c = sync && sync.channel(); if (c) { c.kick(); await c.idle(); } } };
+    const has = (dir, name, text) => { try { return fs.readFileSync(path.join(dir, name), "utf8") === text; } catch { return false; } };
+    fs.writeFileSync(path.join(d1, "before.ec"), "{\"c\":1}");
+    await poll(s1, 2); await poll(s2, 2);
+    const control = has(d2, "before.ec", "{\"c\":1}");
+    w.seatRefused = "none";
+    r.mode.sub = "sub-of-another-person";
+    await pressAgain(r, "microsoft");
+    const held = T.signinState().held, kept = storeJson(r.shell.UD) || {}, running = !!s1 && s1.running();
+    fs.writeFileSync(path.join(d1, "up.ec"), "{\"c\":2}");
+    await poll(s1, 2); await poll(s2, 2);
+    fs.writeFileSync(path.join(d2, "down.ec"), "{\"c\":3}");
+    await poll(s2, 2); await poll(s1, 2);
+    const got = { control, b: !!held && !held.cert && held.sub === sealedOf("sub-of-another-person"), running, keys: !!kept.keys, up: has(d2, "up.ec", "{\"c\":2}"), down: has(d1, "down.ec", "{\"c\":3}") };
+    if (s2) s2.stop();
+    if (s1) s1.stop();
+    const ok = !!s1 && !!s2 && got.control && got.b && !got.running && !got.keys && !got.up && !got.down;
+    return { ok, detail: brief(got) };
+  } finally { globalThis.WebSocket = ws; }
+}
+/* (x1n) THE SWITCH THE SERVICE NEVER ANSWERS (Claude alpha's decision of 2026-11-16; the test architect's criterion): A synced on two
+   computers; on the first, B signs in through the shell's own handler while the licence service cannot be reached. The switch is not
+   made: A still held with its certificate, no signout owed in memory or in signin.json, no signin/desk posted for B, A's keys still in
+   store.json and its sync running; with only the channels' own cycles and nothing reading the row, A's sync still crosses both ways. */
+async function switchUnreachedScene(src) {
+  const ws = globalThis.WebSocket;
+  globalThis.WebSocket = undefined; /* the channels poll, so their own cycles are driven here and no socket is opened */
+  try {
+    const r = await signinFlow(src, { quiet: true }), T = r.shell.T, w = r.world;
+    const s1 = T.get().storeSyncing;
+    if (s1 && s1.channel()) await s1.channel().idle();
+    const two = boot(src, { world: w, held: true, lab: labOf() }), T2 = two.T;
+    T2.branchIdentity(true);
+    await T2.signinRenewNow();
+    if (T2.get().storeFlight) await T2.get().storeFlight;
+    await T.storeTurn();
+    const s2 = T2.get().storeSyncing, d1 = T.storeSyncFolder(), d2 = T2.storeSyncFolder();
+    fs.mkdirSync(d1, { recursive: true });
+    fs.mkdirSync(d2, { recursive: true });
+    const poll = async (sync, n) => { for (let i = 0; i < n; i++) { const c = sync && sync.channel(); if (c) { c.kick(); await c.idle(); } } };
+    const has = (dir, name, text) => { try { return fs.readFileSync(path.join(dir, name), "utf8") === text; } catch { return false; } };
+    const heldA = T.signinState().held, asked = w.seatTries || 0;
+    w.serviceDown = true;
+    r.mode.sub = "sub-of-another-person";
+    await pressAgain(r, "microsoft");
+    w.serviceDown = false;
+    const held = T.signinState().held, kept = storeJson(r.shell.UD) || {};
+    let file = {};
+    try { file = JSON.parse(fs.readFileSync(path.join(r.shell.UD, "signin.json"), "utf8")); } catch { file = {}; }
+    fs.writeFileSync(path.join(d1, "up.ec"), "{\"c\":2}");
+    await poll(s1, 2); await poll(s2, 2);
+    fs.writeFileSync(path.join(d2, "down.ec"), "{\"c\":3}");
+    await poll(s2, 2); await poll(s1, 2);
+    const got = { a: !!held && held.sub === heldA.sub && !!held.cert, owed: T.signinState().out !== undefined || file.out !== undefined, seatAsked: (w.seatTries || 0) - asked,
+      keys: !!kept.keys, running: !!s1 && s1.running(), up: has(d2, "up.ec", "{\"c\":2}"), down: has(d1, "down.ec", "{\"c\":3}") };
+    if (s2) s2.stop();
+    if (s1) s1.stop();
+    const ok = !!s1 && !!s2 && got.a && !got.owed && got.seatAsked === 0 && got.keys && got.running && got.up && got.down;
+    return { ok, detail: brief(got) };
+  } finally { globalThis.WebSocket = ws; }
 }
 /* (x4) What the desk needs to ask once is kept, and nothing goes: with B seated, store.json names A's account as the state's, B's as last
    seated and as owing the answer; B's sign-out deletes nothing of the store's state, its mirror or desk.json; A back, A owes the answer. */
@@ -1808,9 +1896,11 @@ async function pressOn(r, clicked) {
   if (look) await look;
   return { answer, opened: r.shell.opened.slice(before), page: answer === "asked" ? r.b.pages[r.b.pages.length - 1] || { status: 0, body: "" } : null };
 }
-/* (fa) A FOLDER TOKEN IS THE SEATED ACCOUNT'S: a second Google sign-in whose seat the service refuses leaves the folder's token the
-   seated account's, not the refused one's (fa1); and an account signed in straight over another, with no folder token of its own yet, is
-   never handed the other's (fa2). */
+/* (fa) A FOLDER TOKEN IS ONLY EVER ITS OWN ACCOUNT'S: a second Google sign-in as another account leaves the one held as Sign out does,
+   whatever the service then answers (review 08's finding 11, 2026-11-16), so where the new account's seat is refused this computer ends
+   signed out and holds no folder token at all, neither the left account's nor the refused one's (fa1; until that mend it asserted the
+   first account stayed); and an account signed in straight over another, with no folder token of its own yet, is never handed the
+   other's (fa2). */
 async function pressAgain(r, provider) {
   const last = r.b.last;
   r.shell.ipc.on["etiuda:signin-click"](r.e, provider);
@@ -1829,8 +1919,8 @@ async function refusedAccountScene(src) {
   r.mode.access = "stand-in-folder-token-of-another-" + crypto.randomBytes(6).toString("hex");
   await pressAgain(r, "google");
   const a = T.get().storeAccess, held = T.signinState().held;
-  const ok = !!tokA && tokA === r.world.access && !!held && held.sub === heldA.sub && !(a && a.token === r.mode.access);
-  return { ok, detail: brief({ firstToken: !!tokA, stillA: !!held && held.sub === heldA.sub, tokenIsRefusedAccounts: !!a && a.token === r.mode.access }) };
+  const ok = !!tokA && tokA === r.world.access && !!heldA && !held && !a;
+  return { ok, detail: brief({ firstToken: !!tokA, wasA: !!heldA, signedOut: !held, noToken: !a, tokenIsRefusedAccounts: !!a && a.token === r.mode.access }) };
 }
 async function overAnotherScene(src) {
   const r = await signinFlow(src, { quiet: true }), T = r.shell.T, w = r.world;
@@ -2005,7 +2095,7 @@ async function keepRefreshScene(src) {
 async function googleSwitchScene(src) {
   const r = await signinFlow(src, { provider: "google", untick: true });
   const first = r.qs[0] || new URLSearchParams();
-  const ungiven = !!r.now && r.now.why === "ungiven" && !!r.held && !!r.held.cert;
+  const ungiven = !!r.now && r.now.why === "ungiven" && !!r.held && !!r.held.cert && folderPage(r.page, "off");
   r.mode.untick = false;
   const on = await pressOn(r, true);
   const q = on.opened.length === 1 ? new URL(on.opened[0]).searchParams : new URLSearchParams();
@@ -2821,7 +2911,7 @@ const LEGS = [
   ["f7", folderCancelScene, "while the browser sent on for the folder has not answered, the sign-in is in progress to the page and Cancel closes the loopback, so a late answer keeps no folder token"],
   ["f7q", folderCancelQuietScene, "Cancel while the folder's quiet refresh is out, the code already back, closes the loopback at once: the window is never sent on"],
   ["f8", folderSlowScene, "a folder step slower than eight seconds still sends the window on for the folder, lands its page and opens the store"],
-  ["fa1", refusedAccountScene, "a second Google sign-in whose seat is refused leaves the folder's token the seated account's"],
+  ["fa1", refusedAccountScene, "a second Google sign-in as another account whose seat is refused leaves this computer signed out, holding no folder token, neither the left account's nor the refused one's"],
   ["fa2", overAnotherScene, "an account seated straight over another, with no folder step of its own, is never handed the other's folder token: its look asks its own"],
   ["w1", s => anotherScene(s, "look", true), "person A synced and signed out, which leaves no store keys here; person B seated on the same profile with an empty folder: B's look writes nothing of A's K or S into B's folder, and makes no store of B's while the desk's content is A's (x1)"],
   ["w1d", s => anotherScene(s, "look", false), "the same where B signs in straight over A's sign-in"],
@@ -2831,6 +2921,8 @@ const LEGS = [
   ["s5", switchMidLookScene, "the switch turned off while a look is out: once answered the look keeps no key, calls the relay no more, leaves the folder's list without this desk, starts no sync and the row says Off; turned off and on again, On starts a look of its own, which turns the store on"],
   ["x1", s => heldScene(s, true), "A synced and signed out; B seated on the same profile: nothing is looked at, uploaded or merged for B (no relay call, no store in B's folder, the sync stopped, no merge set going), and the desk's sync state, mirror and desk.json stay as they were, the store state A's"],
   ["x1d", s => heldScene(s, false), "the same where B signs in straight over A"],
+  ["x1u", switchUnseatedScene, "review 11: A synced on two computers; on one, B signs in through the shell's own handler and the service gives B no seat: with nothing reading the sync row and only the channels' own cycles running, that computer's sync is stopped and A's keys gone from store.json, and nothing crosses either way"],
+  ["x1n", switchUnreachedScene, "Claude alpha's decision: A synced on two computers; B signs in on one while the licence service cannot be reached: no switch, A held with its certificate, no signout owed, no signin/desk for B, A's keys and sync whole, and A's sync still crosses both ways by the channels' own cycles"],
   ["x4", recordScene, "with B seated over A's content store.json names A's account as the state's and B's as last seated and owing the answer, what a later build needs to ask once; B's sign-out deletes nothing of the store's state, mirror or desk.json; A back, A owes the answer in turn"],
   ["x5", returnScene, "A synced; B seated edits the desk and signs out; A back is not the account last seated, so it is held too: no look, no relay call, no merge, B's edit still on the desk and in no store, the sync state as B left it"],
   ["x2", sameBackScene, "the ordinary case: the same account signed out and back finds its store on, the same store, its sync running, nothing asked"],
@@ -2908,6 +3000,8 @@ const PLANTS = [
   ["g1", swap("    await handOut(pending.url); /* plant:consent-open */", "    await handOut(pending.url); handOut(pending.url); /* plant:consent-open */"), "the switch opens the request twice"],
   ["gn", swap(" renew: async (k, g) => (ours() ? storeRelayRenew(k, g) : { ok: false, why: \"relay\" }),", ""), "the look hands the relay no renewal, so the store lapses from its making"],
   ["g2", swap("const token = !lacks && ", "const token = "), "Google's answer without the folder's scope taken as the folder's token"],
+  ["g2", swap("  const took = signinFolderTake(io, same.ok ? res : { status: 0 }, p.id, now()); /* plant:folder-same */\n  return same.ok && took ? \"folder-on\" : \"folder-off\";",
+    "  signinFolderTake(io, same.ok ? res : { status: 0 }, p.id, now()); /* plant:folder-same */\n  return same.ok ? \"folder-on\" : \"folder-off\";"), "Google's answer without the folder's scope lands on Sync is on"],
   ["g2", swap("  const folder = L.folderFor(p.id, {", "  const folder = L.folderFor(\"microsoft\", {"), "the store's folder asked of Microsoft whatever the sign-in, so the store never opens in Google Drive"],
   ["f3", swap("    loop.land(folder || kind || \"back\"); /* plant:folder-land */", "    loop.land(kind || \"back\"); /* plant:folder-land */"), "the second step lands the sign-in's page, not the folder's"],
   ["h", swap("Nothing changed. It can be turned on in Account at any time. This tab can be closed.", "Nothing changed. It can be turned on in Account at any time. You can close this tab."), "a folder page closing in other words than the sign-in's"],
@@ -2960,7 +3054,9 @@ const PLANTS = [
   ["x1", swap("  if (!storeSyncing || storeHeld()) return; /* plant:store-held-merge */", "  if (!storeSyncing) return; /* plant:store-held-merge */"), "a change on the desk sets the merge going while another account is seated"],
   ["x4", swap("    if (s.keys || s.leave || s.ask !== who || s.last !== who) { s.keys = \"\"; s.leave = \"\"; s.ask = who; s.last = who; storeSave(); } /* plant:store-ask */", "    if (s.keys || s.leave) { s.keys = \"\"; s.leave = \"\"; storeSave(); } /* plant:store-ask */"), "the account owing the answer, and the one last seated, are not kept"],
   ["x5", swap("  held = !!last && (last !== who || s.ask === who); /* plant:store-held */", "  held = !!s.who && s.who !== who; /* plant:store-held */"), "the hold keyed on whose the state is, so A's return merges B's edit"],
+  ["x1n", swap("    if (out === false) got = { ok: false, reason: \"signin-switch-unmade\" }; /* plant:switch-unanswered */", "    /* plant:switch-unanswered */"), "the switch made though the service never answered"],
   ["x1d", swap("  held = !!last && (last !== who || s.ask === who); /* plant:store-held */", "  held = false; /* plant:store-held */"), "another account seated straight over takes the store as its own"],
+  ["x1u", swap("    if (out === true) { signinLeave(st, me, true); signinSave(); tellSignin(); } /* plant:switch-leaves */\n", ""), "the sign-in as another account leaves the account it replaces as it was"],
   ["x3", swap("  held = !!last && (last !== who || s.ask === who); /* plant:store-held */", "  held = false; /* plant:store-held */"), "B's seat takes the state, so B's turn leaves its store in the desk's sync state before A is back"],
   ["w4", swap("  const ours = () => storeState().who === who && storeWho(signinState().held) === who && storeSwitchNo === switchAt && storeOn(); /* plant:store-look-ours */", "  const ours = () => true; /* plant:store-look-ours */"), "a look ends under whoever is seated"],
   ["d", swap(".indexOf(String(url)) < 0) throw new Error(\"the licence service's door takes", ".indexOf(String(url)) < -1) throw new Error(\"the licence service's door takes"), "the door takes any route"],

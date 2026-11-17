@@ -193,5 +193,28 @@
         <decimal value="0" />
       </disabledValue>
     </policy>
+    <policy name="PersonalStore" class="Machine" displayName="$(string.PersonalStore)" explainText="$(string.PersonalStore_Explain)" key="Software\Policies\Etiuda" presentation="$(presentation.PersonalStore)">
+      <parentCategory ref="Etiuda" />
+      <supportedOn ref="SUPPORTED_Etiuda" />
+      <elements>
+        <enum id="PersonalStoreList" valueName="PersonalStore" required="true">
+          <item displayName="$(string.PersonalStore_off)">
+            <value>
+              <string>off</string>
+            </value>
+          </item>
+          <item displayName="$(string.PersonalStore_on)">
+            <value>
+              <string>on</string>
+            </value>
+          </item>
+          <item displayName="$(string.PersonalStore_company)">
+            <value>
+              <string>company</string>
+            </value>
+          </item>
+        </enum>
+      </elements>
+    </policy>
   </policies>
 </policyDefinitions>

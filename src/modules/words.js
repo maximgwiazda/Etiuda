@@ -30,6 +30,12 @@ function foldDiacritics(s){
   for(let i=0;i<t.length;i++){ if(t.charCodeAt(i)>127) return t.replace(FOLD_RE,ch=>FOLD[ch]||ch); }
   return t;
 }
+/* Case-insensitive NFD accent fold for UI search (Settings, Shortcuts, Library):
+   NFD strips combining marks, and Polish "ł"/"Ł" (which has no combining form) folds to "l". */
+function foldAccents(s){
+  return String(s||"").toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .replace(/[łŁ]/g,"l"); /* plant:l-stroke-fold */
+}
 /** Words of a haystack, for both the combo filters and macro search. */
 function splitWords(s){
   return foldDiacritics(String(s==null?"":s).toLowerCase()).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
@@ -54,6 +60,7 @@ function wordMatchesTerm(word, term){
 
 export {
   foldDiacritics,
+  foldAccents,
   splitWords,
   sharedPrefixLen,
   wordMatchesTerm,

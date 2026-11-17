@@ -1998,7 +1998,10 @@ function createCore(deps) {
       store.put("rate:" + m.writer, j.stamps);
       store.put("bytes", (store.get("bytes") || 0) + ct.length);
       if (j.old) bury(j.old, "superseded", now, drop); /* plant:supersede-drop */
-      const heldOld = m.supersedes === null ? undefined : store.get("held:" + m.supersedes);
+      /* An invitation's upload lets go of no held file it names: what a removed desk left stays the lead's until its keep ends. */
+      let keepHeld = false;
+      keepHeld = !!j.a.invite; /* plant:invite-held */
+      const heldOld = m.supersedes === null || keepHeld ? undefined : store.get("held:" + m.supersedes);
       if (heldOld) release(heldOld, drop); /* plant:held-supersede */
       if (j.a.lead && m.epoch > j.a.team.epoch) store.put("team", Object.assign({}, j.a.team, { epoch: m.epoch }));
       if (j.a.invite) {
@@ -2011,11 +2014,16 @@ function createCore(deps) {
         if (j.a.withdraw) {
           next.uploaded = false;
           next.withdrawn = true; /* plant:e4-withdrawn */
+          next.withdrawal = m.id;
           const answer = store.get("blob:" + j.a.invite);
           if (answer && isAnswer(answer)) unserve(answer, drop);
         } else {
           next.asked = m.id;
           delete next.withdrawn; /* plant:e4-ask-again */
+          /* An invitation keeps one live row of its own: a request buries its earlier withdrawal, whether it names it or not. */
+          const taken = is(HEX32, next.withdrawal) ? store.get("blob:" + next.withdrawal) : undefined;
+          if (taken) bury(taken, "superseded", now, drop); /* plant:e7-bury-withdrawal */
+          delete next.withdrawal;
           /* A request is the key's current one, on whichever invitation: an earlier invitation's withdrawal by the same key ends. */
           for (const [k, v] of store.list("inv:")) if (v.withdrawn === true && v.key === m.writer) { const x = Object.assign({}, v); delete x.withdrawn; store.put(k, x); } /* plant:e5-clear */
         }

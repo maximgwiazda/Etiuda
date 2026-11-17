@@ -351,14 +351,18 @@ async function readOnlyScene(kind, syncerDir) {
       }, 10);
       hist.enable();
       const ctl = new syncer.FolderSyncerController({
-        team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: crypto.randomBytes(32) }, checks, pollMs: 150,
+        team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: crypto.randomBytes(32) }, checks, pollMs: 500,
         logger: s => said.push(String(s)), onOwed: () => { owedEvents++; }
       });
+      let landedCalls = 0;
       try {
         ctl.program.landed([{ rel, del: false, ok: false, code: "EACCES" }]);
         owedEvents = 0;
+        const origLanded = ctl.program.landed.bind(ctl.program);
+        ctl.program.landed = (results, onSettled) => { landedCalls++; return origLanded(results, onSettled); };
         ctl.start();
         out.cleared = await until(outboxCleared, 1500);
+        out.landedCalls = landedCalls;
         out.clearAfterFirstMs = firstAt ? Date.now() - firstAt : null;
         out.outboxReads = outboxReads;
         out.owedEvents = owedEvents;
@@ -412,7 +416,7 @@ const thawGreen = r => r.thawed === true && r.mirrorWritable === true && r.refus
 const copyGreen = r => !r.threw && r.bytes === true && r.copyWritable === true && r.timeKept === true && r.sourceStillMarked === true && r.noTemp === true;
 const tickGreen = r => !r.killed && !r.noResult && r.landed === true && r.sameStamp === true && r.next === true;
 const settledGreen = r => !r.killed && !r.noResult && r.landed === true && r.sameStamp === true && r.next === false;
-const outboxReadGreen = r => !r.killed && !r.noResult && r.cleared === true && r.owedAfter === false
+const outboxReadGreen = r => !r.killed && !r.noResult && r.cleared === true && r.landedCalls === 1 && r.owedAfter === false
   && r.shareMatches === true && r.outboxReads >= 2 && r.owedEvents === 1 && r.saidKept === 1 && r.saidReached === 1 && under50(r.maxStallMs);
 
 async function main() {

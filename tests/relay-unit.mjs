@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 622;
+const EXPECTED = 630;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -6743,6 +6743,184 @@ async function main() {
       check(base[leg] && p.turned && p.back, "1163" + String.fromCharCode(102 + n++) + " lifting plant:" + tag + " turns " + leg + " red (" + say
         + "), and the product file is never written: " + how(p));
     }
+  }
+
+  /* ---- rv3 and rv7: the relay core's part of Argon's relay review of 2026-11-16, its findings 3 and 7 as the test architect
+     reproduced them. rv3: nothing a removed desk sends through an invitation lets go of what the hold keeps for the lead. rv7: an
+     invitation holds at most one live row of its own at a time, a new request burying that invitation's earlier withdrawal. ---- */
+  {
+    const T0V = 1800000000000;
+    const stOf = w => w.R.stores.get(w.rt);
+    const said = r => (r && r.json && r.json.error) || (r && r.status);
+    const guard = async f => { try { return await f(); } catch (e) { return { failed: String(e && e.stack || e) }; } };
+    const how = p => p.detail.split("\n")[0] + ", sha " + (p.back ? "unchanged" : "CHANGED");
+    const idsOf = r => (Array.isArray(r && r.json) ? r.json.map(e => e.meta.id) : []);
+    const askAs = (w, who, place, counter, supersedes) => B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: crypto.randomBytes(32),
+      writer: { keyId: who.keyId, privateKey: who.privateKey }, path: "desks/" + place.slice(5) + "/join.json", body: "ask " + counter,
+      counter, place, kind: "file", supersedes: supersedes || null });
+    const takeBack = (w, who, place, counter, supersedes) => B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: crypto.randomBytes(32),
+      writer: { keyId: who.keyId, privateKey: who.privateKey }, path: "desks/" + place.slice(5) + "/join.json", body: "", counter, place,
+      kind: "delete", supersedes });
+    /* The desk writes two files and is taken off; a minute on the lead registers an invitation and the desk's key takes it. */
+    async function removedInvited() {
+      const R = relayEnv();
+      R.clock.now = T0V;
+      const w = await world({ R });
+      const deskSes = await sessionOf(w, w.desk), place = "desk:" + w.deskId;
+      const f1 = sealAs(w, w.desk, "desks/" + w.deskId + "/f1.ec", 1), f2 = sealAs(w, w.desk, "desks/" + w.deskId + "/f2.ec", 2);
+      const ups = [said(await put(w, deskSes, f1)), said(await put(w, deskSes, f2))];
+      const objs = [f1, f2].map(b => (stOf(w).get("blob:" + b.id) || {}).obj);
+      R.clock.now += MIN;
+      const off = await devices(w, [w.devs[1]]);
+      R.clock.now += MIN;
+      const token = hex(32), id = hex(16);
+      const inv = await invites(w, [{ id, hash: sha(token) }], []);
+      const hello = await boundHello(w, w.desk, id, token);
+      const s = hello.json && hello.json.session;
+      if (!ups.every(u => u === 200) || off.status !== 200 || inv.status !== 200 || !s)
+        throw new Error("the scene was not set: " + JSON.stringify({ ups, off: said(off), inv: said(inv), hello: said(hello) }));
+      return { w, s, place, f1, f2, objs, id };
+    }
+    /* What the lead holds of the two files: listed, fetched with their bytes, their held rows and objects. */
+    async function leadHolds(h) {
+      const leadSes = await sessionOf(h.w, h.w.lead);
+      const listed = idsOf(await since(h.w, leadSes));
+      const got = [];
+      for (const b of [h.f1, h.f2]) {
+        const g = await getBlob(h.w, leadSes, b.id);
+        got.push(g.status === 200 && Buffer.from(g.bytes).equals(Buffer.from(b.ciphertext)) ? "bytes" : said(g));
+      }
+      const rows = [h.f1, h.f2].map(b => stOf(h.w).get("held:" + b.id) !== undefined);
+      const objs = h.objs.map(o => h.w.R.bucket.objects.has(o));
+      const all = [h.f1, h.f2].every(b => listed.indexOf(b.id) > -1) && got.every(x => x === "bytes") && rows.every(Boolean) && objs.every(Boolean);
+      return { all, listed: [h.f1, h.f2].map(b => listed.indexOf(b.id) > -1), got, rows, objs };
+    }
+    /* The route the test architect reproduced: a request naming the first held file, its withdrawal, a request naming the second. */
+    async function heldScene() {
+      const h = await removedInvited(), w = h.w;
+      const j1 = askAs(w, w.desk, h.place, 10, h.f1.id);
+      const a1 = said(await put(w, h.s, j1, { extra: { pub: w.desk.pub } }));
+      w.R.clock.now += 2000;
+      const w1 = said(await put(w, h.s, takeBack(w, w.desk, h.place, 11, j1.id)));
+      w.R.clock.now += 2000;
+      const j2 = askAs(w, w.desk, h.place, 12, h.f2.id);
+      const a2 = said(await put(w, h.s, j2, { extra: { pub: w.desk.pub } }));
+      const kept = await leadHolds(h);
+      return { ok: a1 === 200 && w1 === 200 && a2 === 200 && kept.all, detail: JSON.stringify({ answers: [a1, w1, a2], kept }) };
+    }
+    /* An honest round on the same invitation names no held file: a request, its withdrawal, a request naming that withdrawal. */
+    async function honestScene() {
+      const h = await removedInvited(), w = h.w;
+      const r1 = askAs(w, w.desk, h.place, 10, null);
+      const a1 = said(await put(w, h.s, r1, { extra: { pub: w.desk.pub } }));
+      w.R.clock.now += 2000;
+      const d1 = takeBack(w, w.desk, h.place, 11, r1.id);
+      const b1 = said(await put(w, h.s, d1));
+      w.R.clock.now += 2000;
+      const r2 = askAs(w, w.desk, h.place, 12, d1.id);
+      const a2 = said(await put(w, h.s, r2, { extra: { pub: w.desk.pub } }));
+      const leadSes = await sessionOf(w, w.lead);
+      const listed = idsOf(await since(w, leadSes));
+      const row = stOf(w).get("inv:" + h.id) || {};
+      const kept = await leadHolds(h);
+      return { ok: a1 === 200 && b1 === 200 && a2 === 200 && listed.indexOf(r2.id) > -1 && row.uploaded === true && kept.all,
+        detail: JSON.stringify({ answers: [a1, b1, a2], listed: listed.indexOf(r2.id) > -1, uploaded: row.uploaded === true, kept: kept.all }) };
+    }
+
+    const held = await guard(heldScene);
+    check(held.ok === true, "rv3a a removed desk's requests through an invitation registered after its removal, naming its held files (and the withdrawal"
+      + " between them), are answered as before, and the lead still lists and fetches both held files with their bytes, their rows and objects"
+      + " kept: " + (held.detail || held.failed));
+    /* The one route left beside the supersedes: an upload through that invitation under the held file's own id. */
+    async function sameIdScene() {
+      const h = await removedInvited(), w = h.w;
+      const again = B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: crypto.randomBytes(32), writer: { keyId: w.desk.keyId, privateKey: w.desk.privateKey },
+        path: "desks/" + w.deskId + "/join.json", body: "ask 10", counter: 10, place: h.place, kind: "file", id: h.f1.id });
+      const up = await put(w, h.s, again, { extra: { pub: w.desk.pub } });
+      const kept = await leadHolds(h);
+      return { ok: again.id === h.f1.id && refused(up, "replay-counter") && kept.all, detail: JSON.stringify({ sameId: again.id === h.f1.id, up: said(up), kept: kept.all }) };
+    }
+    const sameId = await guard(sameIdScene);
+    check(sameId.ok === true, "rv3d an upload through that invitation under a held file's own id is refused replay-counter, and the lead still lists and"
+      + " fetches both held files: " + (sameId.detail || sameId.failed));
+    const honest = await guard(honestScene);
+    check(honest.ok === true, "rv3b on that invitation the removed desk's honest round (a request, its withdrawal, a request naming that withdrawal) is"
+      + " answered as before, the lead lists the second request, and both held files stay the lead's: " + (honest.detail || honest.failed));
+
+    /* One invitation's key asks and takes back, round after round, each request naming nothing, as only a modified client sends. */
+    const ROUNDS = 40;
+    async function roundsScene(final) {
+      const R = relayEnv();
+      R.clock.now = T0V;
+      const w = await world({ R });
+      const who = keyPair(true), place = "desk:k-" + hex(8), token = hex(32), id = hex(16);
+      R.clock.now += 1;
+      await invites(w, [{ id, hash: sha(token) }], []);
+      const hello = await boundHello(w, who, id, token);
+      const s = hello.json && hello.json.session;
+      if (!s) throw new Error("no invitation session: " + said(hello));
+      const mine = () => stOf(w).list("blob:").filter(([, m]) => m.writer === who.keyId).map(([, m]) => m);
+      const before = stOf(w).list("blob:").length;
+      let c = 0, answers = new Set(), lastW = null, firstW = null;
+      for (let i = 0; i < ROUNDS; i++) {
+        const r = askAs(w, who, place, ++c, null);
+        answers.add(said(await put(w, s, r, { extra: { pub: who.pub } })));
+        R.clock.now += 2000;
+        const d = takeBack(w, who, place, ++c, r.id);
+        answers.add(said(await put(w, s, d)));
+        R.clock.now += 2000;
+        if (!firstW) firstW = d.id;
+        lastW = d.id;
+      }
+      let tail = null;
+      if (final) {
+        const r = askAs(w, who, place, ++c, null);
+        answers.add(said(await put(w, s, r, { extra: { pub: who.pub } })));
+        tail = r.id;
+      }
+      const live = mine();
+      const leadSes = await sessionOf(w, w.lead);
+      const listed = (await since(w, leadSes)).json || [];
+      const theirs = listed.filter(e => e.meta && e.meta.writer === who.keyId).map(e => e.meta.id);
+      const early = await getBlob(w, leadSes, firstW);
+      return { w, who, live: live.length, liveIds: live.map(m => m.id), dels: live.filter(m => m.del).length, added: stOf(w).list("blob:").length - before, counted: stOf(w).get("blobs") === stOf(w).list("blob:").length,
+        answers: [...answers], lastW, firstW, tail, theirs, early: said(early) };
+    }
+    async function roundsOk() {
+      const a = await roundsScene(false), b = await roundsScene(true);
+      const ok = a.answers.length === 1 && a.answers[0] === 200 && a.live === 1 && a.dels === 1 && a.liveIds[0] === a.lastW && a.added === 1 && a.counted
+        && b.answers.length === 1 && b.answers[0] === 200 && b.live === 1 && b.dels === 0 && b.liveIds[0] === b.tail && b.added === 1 && b.counted;
+      return { ok, a, b, detail: JSON.stringify({ rounds: ROUNDS, afterRounds: { answers: a.answers, live: a.live, deletions: a.dels, added: a.added, counted: a.counted },
+        afterAnotherRequest: { answers: b.answers, live: b.live, deletions: b.dels, added: b.added, counted: b.counted } }) };
+    }
+    const rounds = await guard(roundsOk);
+    check(rounds.ok === true, "rv7a " + ROUNDS + " rounds of a request naming nothing and its withdrawal on one invitation, each answered as before, leave"
+      + " that invitation one live row (the last withdrawal), and one more request leaves it one (that request), the team's blob count up by"
+      + " one each time: " + (rounds.detail || rounds.failed));
+    /* What the lead reads: the same as after an honest client's request naming the withdrawal, which the relay has always buried. */
+    async function leadReads() {
+      const r = rounds.ok === true ? rounds : await roundsOk();
+      const b = r.b;
+      const ok = b.theirs.length === 1 && b.theirs[0] === b.tail && b.early === "superseded";
+      return { ok, detail: JSON.stringify({ listed: b.theirs.length, isTheRequest: b.theirs[0] === b.tail, earlierWithdrawal: b.early }) };
+    }
+    const reads = await guard(leadReads);
+    check(reads.ok === true, "rv7b after those rounds and a request the lead lists that invitation's request alone, and a fetch of a withdrawal it never"
+      + " listed answers superseded, as after an honest request naming its withdrawal: " + (reads.detail || reads.failed));
+
+    const LIFTS = [
+      ["rv3c", "invite-held", "rv3a", "a request through an invitation lets go of the removed desk's held file it names", heldScene],
+      ["rv7c", "e7-bury-withdrawal", "rv7a", "each withdrawal stays live beside the next request", roundsOk],
+    ];
+    const base = { rv3a: held.ok === true, rv7a: rounds.ok === true };
+    for (const [at, tag, leg, say, scene] of LIFTS) {
+      const p = await liftCore("plant:" + tag, async () => (await guard(scene)).ok !== true);
+      check(base[leg] && p.turned && p.back, at + " lifting plant:" + tag + " turns " + leg + " red (" + say
+        + "), and the product file is never written: " + how(p));
+    }
+    const heldId = await swapCore(' || store.get("held:" + m.id) !== undefined', "", async () => (await guard(sameIdScene)).ok !== true);
+    check(sameId.ok === true && heldId.turned && heldId.back, "rv3e taking the held row out of the upload's id check turns rv3d red (the upload under the"
+      + " held id is taken and the lead is served it in place of the held file), and the product file is never written: " + how(heldId));
   }
 
   /* ---- 1153: the previous release's requests, kept frozen in relay/test/previous/, answered as before (the version policy's point

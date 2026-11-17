@@ -20,6 +20,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const SELF = fileURLToPath(import.meta.url);
 const ROOT = path.resolve(path.dirname(SELF), "..");
 const nodeRequire = createRequire(import.meta.url);
+/* Every reg call is answered by the stand-in, the policy key as not there, so no read of this machine's registry fails into a wait
+   for machine policy (tests/reg-stand.cjs; review 09, finding 4). */
+nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 const REAL_CHANNEL = nodeRequire(path.join(ROOT, "shell", "relay", "channel.cjs"));
 const REAL_CORE = nodeRequire(path.join(ROOT, "relay", "core.cjs"));
 const REAL_BLOB = nodeRequire(path.join(ROOT, "shell", "relay", "blob.cjs"));

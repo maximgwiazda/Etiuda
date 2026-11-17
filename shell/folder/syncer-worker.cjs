@@ -37,7 +37,8 @@ let kickDebounce = null;
 const knownMtimes = new Map(); // relPath -> { size, mtimeMs }
 const heldStamps = new Map();     // relPath -> { size, mtimeMs } the main thread refused or parked
 const heldSeen = new Map();       // that stamp, once it had stood long enough to be staged again
-const sentNow = new Map();         // relPath -> the sha (or "del") this worker wrote, until the outbox stops owing it
+let landedId = 0;
+const sentNow = new Map();         // relPath -> { val, id } this worker wrote, until landed settles or the outbox stops owing it
 const casHeld = new Map();         // ask id -> the lock a compare and swap holds
 const CAS_HOLD_MS = 20000;
 
@@ -81,20 +82,26 @@ function walkFolder(baseDir, sub = "") {
 }
 
 /* The outbox first, read from the mirror at each listing, so a listing taken after it shows what landed. A record written
-   here is not written again while the main thread has yet to clear it. Answers the paths still owed. */
+   here is not written again while landed() on the main thread is still settling it. Answers the paths still owed. */
 function flushOutbox() {
   const owed = S.owedList(mirror);
   const rels = new Set(owed.map(it => it.rel));
   for (const rel of Array.from(sentNow.keys())) if (!rels.has(rel)) sentNow.delete(rel);
-  const due = owed.filter(it => sentNow.get(it.rel) !== (it.del ? "del" : it.sha));
+  const due = owed.filter(it => {
+    const cur = sentNow.get(it.rel);
+    return !cur || cur.val !== (it.del ? "del" : it.sha);
+  });
   if (due.length) {
     const results = S.flushOwed(folder, mirror, due, null, own);
+    const id = ++landedId;
+    let any = false;
     for (const r of results) {
       if (!r.ok) continue;
-      sentNow.set(r.rel, r.del ? "del" : r.sha);
+      any = true;
+      sentNow.set(r.rel, { val: r.del ? "del" : r.sha, id });
       if (!r.del && r.size != null) knownMtimes.set(r.rel, { size: r.size, mtimeMs: r.mtimeMs });
     }
-    if (parentPort && !stopped) parentPort.postMessage({ type: "landed", folder, results });
+    if (parentPort && !stopped) parentPort.postMessage({ type: "landed", id: any ? id : null, folder, results });
   }
   return rels;
 }
@@ -269,6 +276,10 @@ if (parentPort) {
         if (seen && (seen.size !== h.size || seen.mtimeMs !== h.mtimeMs)) heldSeen.delete(h.rel);
       }
       for (const rel of Array.from(heldSeen.keys())) if (!still.has(rel)) heldSeen.delete(rel);
+    } else if (msg.type === "landed-done") {
+      for (const [rel, cur] of Array.from(sentNow.entries())) {
+        if (cur && cur.id === msg.id) sentNow.delete(rel); /* plant:worker-sent-clear */
+      }
     } else if (msg.type === "own") {
       ownLive = typeof msg.own === "string" ? msg.own : "";
       /* A push rides ahead of a kick, which runs the listing. A reply to need-own runs it here. */

@@ -58,11 +58,12 @@ function signinManagedRead(m){
   if(!m || typeof m!=="object") return null;
   return {on:m.on===true, shared:m.shared===true, personal:m.personal!==false,
     provider:m.provider==="microsoft" || m.provider==="google" ? m.provider : "", tenant:m.tenant===true, closed:m.closed===true,
-    contact:typeof m.contact==="string" && m.contact.length<=200 ? m.contact : "", stranded:m.stranded===true};
+    contact:typeof m.contact==="string" && m.contact.length<=200 ? m.contact : "", stranded:m.stranded===true, keeps:m.keeps!==false, waiting:m.waiting===true};
 }
-/* A MANAGED COMPUTER (decision 49): nothing to buy, try or switch, and the account it has kept unless the computer is shared. */
+/* A MANAGED COMPUTER (decision 49): nothing to buy, try or switch, and the account it has kept unless the computer is shared or the shell
+   says it keeps none (an account that never held a seat here). */
 function signinManaged(v){ return !!(v && v.managed && v.managed.on); }
-function signinKeepsAccount(v){ return signinManaged(v) && !v.managed.shared; } /* plant:keeps-account */
+function signinKeepsAccount(v){ return signinManaged(v) && !v.managed.shared && v.managed.keeps; } /* plant:keeps-account */
 /* Where a provider is pinned or personal accounts are off, the line naming personal accounts would not hold. */
 function signinCapHolds(v){ return !(v && v.managed && (v.managed.on || v.managed.provider || !v.managed.personal)); } /* plant:cap-holds */
 /* The refusal of an account the organisation has not given access, and whom to ask: the policy's contact as written, or its IT;
@@ -85,9 +86,18 @@ function signinNoRoleWords(v){
 function signinStranded(v){ return !!(v && v.managed && v.managed.stranded); } /* plant:np-page */
 function signinStrandedWords(v){
   const c=v && v.managed ? v.managed.contact : "";
+  const offered=!!(v && (v.offered.length || v.signedIn)); /* plant:stranded-offered */
   return [t("This computer's profile did not keep this desk's key."),
     (c ? named(t("To ask for access: {CONTACT}."),"{CONTACT}",c) : t("The organisation's IT department can have the profile keep it."))
-      + " " + t("Everything else on this desk works as before; only signing in waits.")];
+      + " " + (offered ? t("Everything else on this desk works as before; only signing in waits.")
+        : t("Everything else on this desk works as before."))];
+}
+/* MACHINE POLICY HAS NOT ANSWERED (the shell's policyWaits): signing in waits for it, said in its own words and never as a managed
+   computer. */
+function signinWaiting(v){ return !!(v && v.managed && v.managed.waiting); } /* plant:waiting-page */
+function signinWaitingWords(){ /* plant:waiting-words */
+  return [t("Waiting for the organisation's settings"),
+    t("Etiuda could not yet read what the organisation's IT set for this computer, so signing in waits. It tries again by itself, every few seconds at first and then once a minute, and everything already on this computer works as before.")];
 }
 /* The reasons that sentence answers: a sign-in outside the pinned tenant always, and the organisation's refusals on a managed computer. */
 function signinRefusedHere(reason, v){
@@ -104,8 +114,8 @@ function signinNow(){
   try{ signinV=signinRead(h.signinState()); }catch(e){ signinV=signinRead(null); }
   return signinV;
 }
-/* Whether the door exists: a provider offered, or somebody signed in. */
-function signinShown(v){ return !!(v && (v.offered.length || v.signedIn)); }
+/* Whether the door exists: a provider offered, somebody signed in, or the wait for machine policy to say. */
+function signinShown(v){ return !!(v && (v.offered.length || v.signedIn || signinWaiting(v) || signinStranded(v))); } /* plant:shown-waiting */
 /* FIRST-OPENING SIGN-IN GATE AND MEMORY: shown once on a desk that offers a provider, has
    nobody signed in, has never shown the screen before, and is not pinned by policy (a policy
    desk joins its team from HKLM policy without asking first). Written when the screen opens
@@ -119,6 +129,7 @@ function firstSigninDue(v, opts){
   const seen=o && "seen" in o ? !!o.seen : firstSigninSeen();
   const policy=o && "policy" in o ? !!o.policy : eCatalogFolderPinned();
   if(policy) return false; /* plant:first-signin-gate */
+  if(signinStranded(s)) return false; /* plant:first-signin-stranded */
   return !!(s && s.offered.length && !s.signedIn && !seen);
 }
 let firstSigninPending=false, firstSigninOpen=false, firstSigninWaits=[];
@@ -174,7 +185,9 @@ function paintFirstSignin(){
       +'<h2 class="fs-rh">'+esc(t("Signing in"))+'</h2>'
       +rightBody
     +'</div></div></div>';
-  if(d && d.moment==="refused"){
+  let showSkip=d && d.moment==="refused";
+  if(d && d.moment==="managed-refused") showSkip=true; /* plant:first-signin-managed-skip */
+  if(showSkip){
     const acts=el.querySelector(".sgn-acts");
     if(acts){
       acts.insertAdjacentHTML("beforeend", skipBtn);
@@ -183,6 +196,9 @@ function paintFirstSignin(){
       const rin=el.querySelector(".fs-right-in");
       if(rin) rin.insertAdjacentHTML("beforeend", '<div class="fs-skip">'+skipBtn+skipLine+'</div>');
     }
+  }else if(d && d.moment==="stranded"){
+    const rin=el.querySelector(".fs-right-in");
+    if(rin) rin.insertAdjacentHTML("beforeend", '<div class="fs-skip"><button type="button" class="btn primary fs-skip-btn" id="firstSigninSkip">'+esc(t("Continue"))+'</button></div>'); /* plant:first-signin-stranded-btn */
   }
   if(hadFocus){
     const first=el.querySelector("button:not(:disabled), input");
@@ -274,12 +290,18 @@ function signinSay(reason, v, p){
       return [t("The sign-in service could not be reached."), t("Nothing changed: this computer is not signed in, and Etiuda works as before.")];
     /* Where Managed is not set, decision 20 (b)'s words serve an account not assigned as they serve the organisation's refusal. */
     case "signin-notassigned":
-    case "signin-notallowed":
-      return [t("This account's organisation has not allowed Etiuda at its sign-in provider."), t("Its IT department can allow it; another account can be used meanwhile.")];
+    case "signin-notallowed": /* plant:unmanaged-contact */
+      { const c=v && v.managed ? v.managed.contact : "";
+        return [t("This account's organisation has not allowed Etiuda at its sign-in provider."),
+          c ? named(t("To ask for access: {CONTACT}. Another account can be used meanwhile."),"{CONTACT}",c)
+            : t("Its IT department can allow it; another account can be used meanwhile.")]; }
     case "no-role":
       return signinNoRoleWords(v);
-    case "seat-removed":
-      return [t("Your organisation no longer gives this account access to Etiuda."), t("This desk keeps its catalog and works with it as before, but new editions from the team no longer reach it. The organisation's IT department can give access again.")];
+    case "seat-removed": /* plant:seat-removed-contact */
+      { const c=v && v.managed ? v.managed.contact : "";
+        return [t("Your organisation no longer gives this account access to Etiuda."),
+          c ? named(t("This desk keeps its catalog and works with it as before, but new editions from the team no longer reach it. To ask for access: {CONTACT}."),"{CONTACT}",c)
+            : t("This desk keeps its catalog and works with it as before, but new editions from the team no longer reach it. The organisation's IT department can give access again.")]; }
     case "seat-renew":
       return [t("This account's sign-in needs renewing."), t("This desk keeps its catalog and works with it as before. Signing in again, under Account, brings the team's new editions back.")];
     case "desks":
@@ -289,7 +311,9 @@ function signinSay(reason, v, p){
         ? [named(t("{TEAM} has no free seat just now."),"{TEAM}",p.teamName), named(t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and {LEAD}, the team's lead, sees this account's sign-in code among those who have signed in."),"{LEAD}",p.team.lead)]
         : [t("No seat is free on the organisation's licence just now."), t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and the team's lead sees this account's sign-in code among those who have signed in.")];
     case "asklead":
-      return [t("The organisation's Etiuda licence seats the people its leads add."), t("Give the team's lead this code. Once added, this desk takes its seat by itself; nothing more is needed here.")];
+      return [t("The organisation's Etiuda licence seats the people its leads add."),
+        signinManaged(v) ? t("This account is signed in, and no team has admitted it yet. Once a lead admits it, the catalog arrives by itself.") /* plant:asklead-line-managed */
+          : t("Give the team's lead this code. Once added, this desk takes its seat by itself; nothing more is needed here.")];
     case "nolicence":
       return [t("No Etiuda licence has a seat for this account."), t("The sign-in worked. A seat comes from a trial, a purchase, or a team's lead admitting the account; another account can be used meanwhile.")];
     case "offline":
@@ -304,6 +328,15 @@ function signinSay(reason, v, p){
       return [t("This team is no longer offered here, or this computer is already in a team, so nothing was sent."), ""];
     case "signin-keyring":
       return [t("Signing in needs a keyring, and none is open on this computer."), t("Installing or unlocking GNOME Keyring or KDE Wallet, then reopening Etiuda, lets this computer sign in.")];
+    case "signin-switch-out":
+      return [t("The sign-in service could not be reached."), t("This computer is now signed out of the account it had. Signing in, with either account, works once the sign-in service answers, and nothing on this desk is lost meanwhile.")]; /* plant:switch-out-words */
+    case "signin-switch-unmade":
+      return [t("The sign-in service did not confirm the change of account."), ""];
+    case "signin-other": /* plant:signin-other-words */
+      { const c=v && v.managed ? v.managed.contact : "";
+        return [t("This computer stays with the account it has."),
+          c ? named(t("Your organisation manages the accounts on this computer, so another account cannot sign in here; nothing changed. To ask about it: {CONTACT}."),"{CONTACT}",c)
+            : t("Your organisation manages the accounts on this computer, so another account cannot sign in here; nothing changed. The organisation's IT department decides which account is used here.")]; }
     default:
       return [t("The sign-in did not finish."), t("Nothing changed, and signing in can be tried again.")];
   }
@@ -311,17 +344,19 @@ function signinSay(reason, v, p){
 /* No free seat: the service's wait, "waiting", or its refusal, "full"; either way the shell renews quietly until a seat frees. */
 function signinNoSeat(v){ return v.refused==="waiting" || v.refused==="full"; } /* plant:no-seat */
 /* Refusals whose own heading names the reason a sign-in pressed while signed in failed for. */
-const SIGNIN_REASON_SAID=["desks","no-role","signin-notallowed","unreached","signin-unreached","signin-timeout","signin-browser","signin-notassigned","signin-tenant"];
+const SIGNIN_REASON_SAID=["desks","no-role","signin-notallowed","unreached","signin-unreached","signin-timeout","signin-browser","signin-notassigned","signin-tenant","signin-switch-unmade"];
 /* What a signed-in desk is told over its moment, or null: {kind, say, acts, providers}. "pressed", a sign-in the person pressed while
    signed in that failed, which leaves the desk signed in as it was; else a refusal the shell kept from a renewal or Check now. */
 function signinTold(v){
   if(!v || !v.signedIn) return null;
+  if(v.said==="signin-other") return {kind:"pressed", say:signinSay("signin-other", v), acts:[{act:"choose", label:t("Try again"), solid:true}]}; /* plant:told-other */
   if(FAIL_FIRST.indexOf(v.said)>=0) return {kind:"pressed", say:[t("The new sign-in did not finish."), named(t("This computer stays signed in with the account it had. {REASON}"),"{REASON}",
     SIGNIN_REASON_SAID.indexOf(v.said)>=0 ? signinSay(v.said, v)[0] : "").trim()],
     acts:[{act:"choose", label:ANOTHER_FOR.indexOf(v.said)>=0 && !signinRefusedHere(v.said, v) ? t("Use another account") : t("Try again"), solid:true}]}; /* plant:told-pressed */
   const r=v.refused;
   if(!r || r==="signin" || signinNoSeat(v)) return null; /* plant:told-renewal */
   if(r==="no-role") return {kind:"renewal", say:signinSay("no-role", v), acts:[]}; /* plant:told-no-role */
+  if(r==="signin-notassigned") return {kind:"renewal", say:signinSay("signin-notassigned", v), acts:[]}; /* plant:told-notassigned */
   if(r==="desks") return {kind:"desks", say:[t("This account is signed in on three computers already."),
     t("A seat holds three computers. Signing out on one of the others frees its place, and this computer checks again by itself.")],
     acts:[{act:"check", label:t("Check now"), solid:true}]};
@@ -331,6 +366,8 @@ function signinTold(v){
 const FAIL_FIRST=["unreached","signin-unreached","signin-timeout","signin-browser","signin-notallowed","desks","no-role","token","signin","signin-refused","signin-token","signin-unbound","signin-state","signin-none","signin-preview","signin-keyring"];
 /* Decision 49's own: an account not assigned, a sign-in outside the pinned tenant, and another account on a managed computer. */
 FAIL_FIRST.push("signin-notassigned","signin-tenant","signin-other");
+/* A switch whose held account was signed out at the service, the service then unreached for the new one, or whose switch signout was not confirmed (shell/main.js, the press). */
+FAIL_FIRST.push("signin-switch-out","signin-switch-unmade"); /* plant:switch-unmade-first */
 /* The refusals whose way on is another account, where the computer offers one. */
 const ANOTHER_FOR=["signin-notallowed","signin-notassigned"];
 /* THE DOOR'S CONTENT for the view `v`, whatever form draws it: {moment, ident, heading, line, say, calm, code, providers, cap, privacy, foot,
@@ -348,11 +385,12 @@ function signinDoorOf(v){
   if(!signinShown(v)) return null;
   const p=signinParts(v), acct={act:"account", label:t("Account settings")};
   const ident={initial:p.initial, name:p.name, sub:p.sub, off:p.off};
+  if(signinWaiting(v)) return {moment:"policy-waiting", say:signinWaitingWords()}; /* plant:door-waiting */
   if(signinStranded(v)) return {moment:"stranded", say:signinStrandedWords(v)};
   if(v.busy) return {moment:"waiting", heading:t("Finish signing in in the browser"),
     line:named(t("The browser has opened {PROVIDER}'s sign-in page. Etiuda waits here and carries on by itself when you come back."),"{PROVIDER}",SIGNIN_NAMES[v.busy]),
     wait:named(t("Waiting for {PROVIDER}…"),"{PROVIDER}",SIGNIN_NAMES[v.busy]),
-    acts:[{act:"again", label:t("Open the browser again")}, {act:"stop", label:t("Cancel")}], link:v.link};
+    acts:(v.link ? [{act:"again", label:t("Open the browser again")}] : []).concat([{act:"stop", label:t("Cancel")}]), link:v.link}; /* plant:waiting-again */
   if(!v.signedIn){
     if(FAIL_FIRST.indexOf(v.said)>=0){
       const s=signinSay(v.said, v);
@@ -380,9 +418,9 @@ function signinDoorOf(v){
   /* ASK YOUR LEAD: the organisation's licence seats the people its
      leads add, so the code is given to a lead; beside it, never in its place, the person's own trial where it runs, which the service
      started at the sign-in. */
-  if(v.askLead) return {moment:"asklead", ident, say:signinSay("asklead", v), code:v.code,
+  if(v.askLead) return {moment:"asklead", ident, say:signinSay("asklead", v), code:signinManaged(v)?"":v.code, /* plant:asklead-code-managed */
     acts:[{act:"check", label:t("Check now")}, acct],
-    own:v.seat==="held" && v.trialUntil ? [t("This account's own trial is running."),
+    own:signinManaged(v)?null:v.seat==="held" && v.trialUntil ? [t("This account's own trial is running."), /* plant:asklead-trial-managed */
       named(t("Fourteen days, until {DATE}, on up to three computers. A lead can add this account at any time, without waiting for the trial to end."),"{DATE}",signinDay(v.trialUntil))] : null};
   /* No certificate: the service found no licence with a seat for this account. The code still shows, since a lead admits by it, save on
      a managed computer, where nobody is admitted by code. */
@@ -894,6 +932,8 @@ export {
   signinManaged,
   signinStranded,
   signinStrandedWords,
+  signinWaiting,
+  signinWaitingWords,
   signinKeepsAccount,
   signinCapHolds,
   signinNow,

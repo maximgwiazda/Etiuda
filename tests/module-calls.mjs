@@ -116,6 +116,11 @@ const eq = (got, want) => got === want ? true
     () => eq(W.foldDiacritics("łódź"), "lodz"));
   check("words.js", "foldDiacritics leaves plain ASCII untouched",
     () => eq(W.foldDiacritics("refund policy"), "refund policy"));
+  check("words.js", "foldAccents folds NFD marks and Polish l-stroke without folding other letters",
+    () => eq(W.foldAccents("Łóżko"), "lozko")
+      && eq(W.foldAccents("zażółć gęślą"), "zazolc gesla")
+      && eq(W.foldAccents("Settings"), "settings")
+      && eq(W.foldAccents("øßæ"), "øßæ"));
   check("words.js", "splitWords lowercases, folds and drops punctuation",
     () => eq(W.splitWords("Zmiana, bagaż!").join("|"), "zmiana|bagaz"));
   check("words.js", "sharedPrefixLen counts the shared head",
@@ -688,6 +693,29 @@ const CARD_B = {
       const s = K.cardSearchScore(CARD_B, ["refund"], []);
       return s.tier === 0 ? true : "title match came back tier " + s.tier
         + " body " + r.tier;
+    });
+  const SP = await import(MOD("spell.js"));
+  const CARD_LSTROKE = {
+    id: "c-lstroke", c: "gen",
+    t: "Stół", tPl: "Łóżko drewniane",
+    en: "Wooden table.", pl: "Drewniane łóżko i stół.",
+    k: "szkło", note: "", notePl: ""
+  };
+  const CARD_NOL = {
+    id: "c-other", c: "gen",
+    t: "Window", tPl: "Okno dachowe",
+    en: "Roof window.", pl: "Okno dachowe.",
+    k: "szyba", note: "", notePl: ""
+  };
+  check("card-search.js", "main card search already folds Polish l-stroke on both sides",
+    () => {
+      const hits = ["lozko", "łóżko", "Łóżko", "stol", "szklo"].every(
+        q => CS.cardMatchesSearch(CARD_LSTROKE, SP.cardSearchTerms(q)) === true
+      );
+      const misses = ["lozko", "łóżko"].every(
+        q => CS.cardMatchesSearch(CARD_NOL, SP.cardSearchTerms(q)) === false
+      );
+      return hits && misses ? true : "hits=" + hits + " misses=" + misses;
     });
 }
 
@@ -6141,6 +6169,47 @@ const CARD_B = {
       return ok || [blur.slice(0, 120), zzz.slice(0, 120), zzzPl.slice(0, 120)].join(" | ");
     });
 
+    check("settings.js", "searching Settings with plain l finds Polish rows and shortcuts with l-stroke, and excludes rows without it", () => {
+      const hadLang = ST.lsGet("eUiLang");
+      ST.lsSet("eUiLang", "pl");
+      try {
+        const plain = SET.settingsPageHtml("general", "tlo");
+        const stroke = SET.settingsPageHtml("general", "tło");
+        const upper = SET.settingsPageHtml("general", "TŁO");
+        const scPlain = SET.settingsPageHtml("general", "przelacz");
+        const scStroke = SET.settingsPageHtml("general", "przełącz");
+        const glassOk = [plain, stroke, upper].every(
+          h => h.indexOf('data-seg="glass"') >= 0 && h.indexOf('data-seg="theme"') < 0
+        );
+        const scOk = [scPlain, scStroke].every(
+          h => h.indexOf('id="scListInline"') >= 0 && h.indexOf('data-seg="theme"') < 0
+        );
+        /* Exercise paintKeysInline -> wireShortcutsList via #sxSearch as the real screen does. */
+        const origQs = screenHost.querySelector;
+        const inlineBox = el({ id: "scListInline" });
+        screenHost.querySelector = s => s === "#scListInline" ? inlineBox : origQs.call(screenHost, s);
+        let inlineOk = false;
+        try {
+          shutAll();
+          SET.openSettings("all");
+          const sxSearch = screenHost.querySelector("#sxSearch");
+          if (sxSearch && typeof sxSearch.oninput === "function") {
+            sxSearch.value = "przelacz";
+            sxSearch.oninput();
+            const ih = inlineBox.innerHTML || "";
+            inlineOk = ih.indexOf('data-sc="langToggle"') >= 0 && ih.indexOf('data-sc="clearIntent"') < 0;
+            sxSearch.value = "";
+            sxSearch.oninput();
+          }
+        } finally {
+          screenHost.querySelector = origQs;
+        }
+        return (glassOk && scOk && inlineOk) || JSON.stringify({ glassOk, scOk, inlineOk });
+      } finally {
+        if (hadLang == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", hadLang);
+      }
+    });
+
     check("settings.js", "D3-6 Reset defaults clears the same keys as the dialog's did, and leaves the name, the reply language and the tabs", () => {
       const TODAY = ["eTheme", "eGlassOff", "eMotionOff", "eUiLang", "ePillsLock", "eRailLock", "ePills", "eRail", "eShortcuts", "eHdrPills",
         "eNoteHover", "eDeckOff", "eRailW", "eFactsW", "eFactsH", "eCollapsed", "eSharedEdit", "eHotkey"];
@@ -6224,6 +6293,42 @@ const CARD_B = {
       SC.loadShortcuts();
       return ok || "eShortcuts " + ST.lsGet("eShortcuts") + ", maintenance " + SC.formatActionChord("maintenance");
     });
+
+    if (process.env.ETIUDA_PLANTS === "off") {
+      skipped++;
+      console.log("  SKIP words.js: lifting plant:l-stroke-fold turns shortcuts-list.js and settings.js red (ETIUDA_PLANTS=off)");
+    } else {
+      await check("words.js", "lifting plant:l-stroke-fold in a scratch copy turns shortcuts and settings l-stroke searches red", async () => {
+        const fsMod = await import("node:fs");
+        const osMod = await import("node:os");
+        const wordsSrc = fsMod.readFileSync(join(MODDIR, "words.js"), "utf8");
+        const lines = wordsSrc.split("\n");
+        const at = lines.findIndex(l => l.indexOf("plant:l-stroke-fold") >= 0);
+        if (at < 0) return "plant:l-stroke-fold is absent from words.js";
+        lines.splice(at, 1);
+        const dir = fsMod.mkdtempSync(join(osMod.tmpdir(), "etiuda-lstroke-plant-"));
+        const modulesUrl = pathToFileURL(MODDIR).href + "/";
+        const rewrite = s => s.replace(/from\s+"\.\/([^"]+)"/g, (_, m) =>
+          (m === "words.js" || m === "shortcuts-list.js") ? 'from "./' + m + '"' : 'from "' + modulesUrl + m + '"');
+        const hadLang = ST.lsGet("eUiLang");
+        try {
+          fsMod.writeFileSync(join(dir, "package.json"), '{"type":"module"}');
+          fsMod.writeFileSync(join(dir, "words.js"), lines.join("\n"), "utf8");
+          fsMod.writeFileSync(join(dir, "shortcuts-list.js"), rewrite(fsMod.readFileSync(join(MODDIR, "shortcuts-list.js"), "utf8")), "utf8");
+          fsMod.writeFileSync(join(dir, "settings.js"), rewrite(fsMod.readFileSync(join(MODDIR, "settings.js"), "utf8")), "utf8");
+          const sSCL = await import(pathToFileURL(join(dir, "shortcuts-list.js")).href + "?t=" + Date.now());
+          const sSET = await import(pathToFileURL(join(dir, "settings.js")).href + "?t=" + Date.now());
+          ST.lsSet("eUiLang", "pl");
+          const scTurned = sSCL.scFold("Łóżko") !== "lozko"
+            && sSCL.shortcutsListHtml(sSCL.scFold("przelacz")).indexOf('data-sc="langToggle"') < 0;
+          const setTurned = sSET.settingsPageHtml("general", "tlo").indexOf('data-seg="glass"') < 0;
+          return (scTurned && setTurned) || JSON.stringify({ scTurned, setTurned });
+        } finally {
+          if (hadLang == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", hadLang);
+          try { fsMod.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
+        }
+      });
+    }
   } finally {
     shutAll();
     T.tabs.splice(0, T.tabs.length);
@@ -7352,6 +7457,23 @@ const CARD_B = {
       ST.lsDel("eShortcuts");
       SC.loadShortcuts();
       return !matchesF2 && matchesRebound;
+    });
+
+    check("shortcuts-list.js", "shortcuts search folds Polish l-stroke on both sides", () => {
+      const hadLang = ST.lsGet("eUiLang");
+      ST.lsSet("eUiLang", "pl");
+      try {
+        const folded = SCL.scFold("Łóżko") === "lozko" && SCL.scFold("łódź") === "lodz" && SCL.scFold("øßæ") === "øßæ";
+        const queries = ["przelacz", "przełącz", "PRZEŁĄCZ"].map(q => SCL.scFold(q));
+        const shownOk = queries.every(q => SCL.shortcutsShown(q) > 0);
+        const htmlOk = queries.every(q => {
+          const h = SCL.shortcutsListHtml(q);
+          return h.indexOf('data-sc="langToggle"') >= 0 && h.indexOf('data-sc="clearIntent"') < 0;
+        });
+        return (folded && shownOk && htmlOk) || JSON.stringify({ folded, shownOk, htmlOk });
+      } finally {
+        if (hadLang == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", hadLang);
+      }
     });
 
     // D4-7. context-menu rows show F2 as Studio's do

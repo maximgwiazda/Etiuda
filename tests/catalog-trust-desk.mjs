@@ -45,6 +45,9 @@ const ROOT = path.resolve(path.dirname(SELF), "..");
 let MOD_ROOT = ROOT;
 const MOD = n => pathToFileURL(path.join(MOD_ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
+/* Every reg call is answered by the stand-in, the policy key as not there, so no read of this machine's registry fails into a wait
+   for machine policy (tests/reg-stand.cjs; review 09, finding 4). */
+nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 /* The channel's own key function, so a key-format change in the channel reaches these legs too (E2). */
 const REAL_CHANNEL = nodeRequire(path.join(ROOT, "shell", "relay", "channel.cjs"));
 
