@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 192;
+const PLANTS = 193;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 165 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 166 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1178,6 +1178,14 @@ CASES.pageAskLead = async () => {
     && html.indexOf('sgn-own"') > html.indexOf("data-signin-act") && !!had && had.moment === "asklead" && hadHtml.indexOf("sgn-own") < 0
     && pl.indexOf("Licencja Etiudy tej organizacji daje miejsce osobom, które dodają jej liderzy.") > 0 && pl.indexOf("Trwa własny okres próbny tego konta.") > 0 && pl.indexOf("do 27 lis") > 0
     && P.signinDoor(view({ signedIn: "microsoft", code: CODE, seat: "held", deskOnly: true })).moment === "noteam";
+};
+/* Finding 6: signin.json keeps askLead across a restart, with a desk-only trial cert and with no cert; absent reads false. */
+CASES.askLeadFile = s => {
+  const trial = cert({ deskOnly: true, until: NOW + 14 * 86400000 });
+  const withTrial = s.signinFileRead(s.signinFileText({ held: heldOf({ cert: trial, askLead: true, doors: [] }) })).held;
+  const noCert = s.signinFileRead(s.signinFileText({ held: heldOf({ cert: null, askLead: true, doors: [] }) })).held;
+  const plain = s.signinFileRead(s.signinFileText({ held: heldOf({ cert: trial, askLead: false, doors: [] }) })).held;
+  return !!withTrial && withTrial.askLead === true && !!noCert && noCert.askLead === true && !!plain && plain.askLead === false;
 };
 /* Two refusals told apart in their own words: the organisation at its provider, and no licence with a seat at our service. */
 CASES.pageTwoRefusals = () => {
@@ -3555,6 +3563,7 @@ const LEGS = [
   ["ds22e", "doorsSigned", "a door is taken only under the service's signature by the certificate's key, over those doors in that order under that certificate; an older service's answer without one holds the seat, offers no door and says nothing; a stranger's door added, a door changed, another key's or another certificate's signature is no door"],
   ["ds22f", "doorsFile", "signin.json keeps doors only with their signature under the certificate it holds: doors edited, the signature gone (an older build's file) or no certificate is no door, and the certificate stays"],
   ["ds26a", "pageAskLead", "a desk its organisation's licence does not seat, the switch seating only people added, is told to give its lead the code, with Check now and Account, and under a hairline its own trial and its end, nothing there once the trial is had; Polish too (decision 47, held for Max's ruling)"],
+  ["ds26b", "askLeadFile", "review 6: signin.json keeps askLead across a restart, with a trial certificate or none, and reads false otherwise"],
   ["ds49a", "relaySeatAnswer", "the service's no-role is read as itself at a renewal: the certificate kept to its own end, no sign-in asked"],
   ["ds49b", "relaySeatWire", "the team whose relay refused this desk's seat is kept and told once, said removed where the service found no role and renew otherwise, cleared by its own open or the channel let go"],
   ["ds49c", "seatRenewGap", "a relay session carries the desk's own standing certificate or none, and a run-out one is renewed first at most once an hour, a renewal already out waited on"],
@@ -3985,6 +3994,7 @@ if (!PLANTS_OFF) {
     "if (j.certificate === null) return Object.assign({ ok: true, code: String(j.code), cert: null, doors: [], askLead, storeOffer }, signinManagedOf(j));"], "waitRead");
   await plant("dsp80", ["said: ans.waiting === true ? \"waiting\" : \"\", ask: false, askLead: ans.askLead === true, managed: ans.managed === true, cause: ans.managed === true ? ans.cause || \"\" : \"\",",
     "said: \"\", ask: false, askLead: ans.askLead === true, managed: ans.managed === true, cause: ans.managed === true ? ans.cause || \"\" : \"\","], "waitRead");
+  await plant("dsp80b", ["askLead: h.askLead === true, /* plant:file-ask-lead */", "askLead: false,"], "askLeadFile");
   await plantWire("dsp93", ["  if (Object.keys(teamPins).some(teamPinStands)) return []; /* plant:door-pin-stands */\n", ""], "doorPins");
   await plantWire("dsp94", ["    if (inviteDoor({ lead: { public: d.lead } })) return null; /* plant:door-policy */\n", ""], "doorPolicy");
   await plantWire("dsp95", ["    if (pin && (pin.keyId !== d.keyId || pin.public !== d.lead)) return null; /* plant:door-pinned */\n", ""], "doorPins");

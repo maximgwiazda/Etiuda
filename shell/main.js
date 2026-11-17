@@ -11027,6 +11027,7 @@ function signinFileRead(text, packed) {
       seed: String(h.seed), code: SIGNIN_CODE.test(String(h.code)) ? String(h.code) : "",
       cert: h.cert && typeof h.cert === "object" && signinCertOk(h.cert, h.cert.desk) ? h.cert : null, /* plant:file-cert */
       at: num(h.at), checked: num(h.checked), reached: h.reached !== false, said: typeof h.said === "string" ? h.said : "", ask: h.ask === true,
+      askLead: h.askLead === true, /* plant:file-ask-lead */
       doors: [], doorsSig: "", revoked: null, managed: h.managed === true, cause: h.cause === "own-licence" || h.cause === "assigned" ? h.cause : "", storeOffer: h.storeOffer === true };
   /* The list is beside `held`, and the held seat judges by it. */
   out.revoked = signinRevokedOk(d.revoked) ? d.revoked : null; /* plant:revoked-file */
