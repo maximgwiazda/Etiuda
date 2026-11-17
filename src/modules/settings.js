@@ -973,8 +973,8 @@ function syncAgentNameBubble(box){
   if(!note) return;
   if(document.getElementById("eAgentNote")) return;
   markAgentNameNoteSeen(); /* plant:agent-note-once */
-  let tpl=t("{NAME} comes from your account: the first name and the first letter of the surname. It can be changed here at any time.");
-  if(note.form==="whole") tpl=t("{NAME} is the name on your account. It can be changed here at any time."); /* plant:agent-note-form */
+  let tpl=t("{NAME} comes from your account: the first name and the first letter of the surname. Replies that sign with your name use it, and the team's lead sees this desk by it. It can be changed here at any time.");
+  if(note.form==="whole") tpl=t("{NAME} is the name on your account. Replies that sign with your name use it, and the team's lead sees this desk by it. It can be changed here at any time."); /* plant:agent-note-form */
   const el=document.createElement("div");
   el.className="bub bub-ask";
   el.id="eAgentNote";

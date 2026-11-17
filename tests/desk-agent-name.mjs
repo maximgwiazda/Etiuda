@@ -46,14 +46,14 @@ function notRun(line) {
 /* Copywriter's Section A words (state/briefs/words-desk-name-and-managed-2026-11-16.md). */
 const COPY_EN = {
   "title": "The name on this desk",
-  "initial": "{NAME} comes from your account: the first name and the first letter of the surname. It can be changed here at any time.",
-  "whole": "{NAME} is the name on your account. It can be changed here at any time.",
+  "initial": "{NAME} comes from your account: the first name and the first letter of the surname. Replies that sign with your name use it, and the team's lead sees this desk by it. It can be changed here at any time.",
+  "whole": "{NAME} is the name on your account. Replies that sign with your name use it, and the team's lead sees this desk by it. It can be changed here at any time.",
   "close": "Done"
 };
 const COPY_PL = {
   "title": "Imię na tym stanowisku",
-  "initial": "{NAME} pochodzi z konta: to imię i pierwsza litera nazwiska. Można to zmienić tutaj w dowolnej chwili.",
-  "whole": "{NAME} to nazwa z konta. Można ją zmienić tutaj w dowolnej chwili.",
+  "initial": "{NAME} pochodzi z konta: to imię i pierwsza litera nazwiska. Ta nazwa trafia do odpowiedzi podpisywanych imieniem, a lider zespołu widzi pod nią to stanowisko. Można ją zmienić tutaj w dowolnej chwili.",
+  "whole": "{NAME} to nazwa z konta. Ta nazwa trafia do odpowiedzi podpisywanych imieniem, a lider zespołu widzi pod nią to stanowisko. Można ją zmienić tutaj w dowolnej chwili.",
   "close": "Gotowe"
 };
 
