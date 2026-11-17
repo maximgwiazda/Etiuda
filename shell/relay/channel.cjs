@@ -138,6 +138,8 @@ const TAKEN_MAX = 4096;
 /* The relay keeps a deletion 30 days (relay/core.cjs KEEP_MS). A catch-up that last reached the top longer ago than a day
    short of that may have missed one, so it lists the whole team again and drops what the relay no longer lists. */
 const LISTED_KEEP_MS = 29 * 24 * 60 * 60 * 1000;
+/* An unjudged relist (the list's top below st.seq) is asked again after a day, until one judges. */
+const RELIST_RETRY_MS = 24 * 60 * 60 * 1000;
 /* The relay holds a removed desk's blobs for the lead this long (relay/core.cjs REMOVED_KEEP_MS). */
 const REMOVED_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
 /* How far a removed desk's clock may run ahead of the lead's and its last file sealed before the removal still be taken. */
@@ -438,7 +440,7 @@ function freshState() {
   return { kind: STATE_KIND, v: 1, seq: 0, counters: {}, revs: {}, trust: {}, applied: {}, taken: {}, sent: {}, sentInv: {},
     refused: {}, own: 0, bytes: 0, leadEpoch: 0, pending: [], gone: {}, tokenUsed: false, invited: false,
     tokenUsedIds: {}, invitedIds: {}, replyLostIds: {}, lostBlobs: {}, unkeptIds: {}, headT: null, heldHead: null, heldItem: null, lapse: null, skew: 0, made: null, suspect: false,
-    pin: null, chain: null, was: [], forks: {}, fork: null, behind: {}, stranded: null, listed: null, ahead: { held: [], steps: [] }, later: [] };
+    pin: null, chain: null, was: [], forks: {}, fork: null, behind: {}, stranded: null, listed: null, listedAsked: null, ahead: { held: [], steps: [] }, later: [] };
 }
 
 /* A state read back, field by field: what is not its shape is dropped, so a damaged file costs that field and no more. */
@@ -455,6 +457,7 @@ function stateOf(x, now) {
   s.heldHead = heldHeadOf(x.heldHead); /* plant:held-head-load */
   s.heldItem = heldItemOf(x.heldItem);
   if (Number.isSafeInteger(x.listed)) s.listed = x.listed;
+  if (Number.isSafeInteger(x.listedAsked)) s.listedAsked = x.listedAsked;
   s.lapse = lapseKept(x.lapse);
   if (Number.isSafeInteger(x.skew)) s.skew = x.skew;
   if (typeof x.made === "string" && MADE_RE.test(x.made)) s.made = x.made;
@@ -2007,19 +2010,32 @@ function createProgram(opts) {
         persist();
       }
     },
-    /* Whether a catch-up starting at `now`, the relay's clock, is to list the whole team again: this program has been here, and
-       its last catch-up to reach the top began longer ago than LISTED_KEEP_MS. A record from before the stamp is not. */
+    /* Whether a catch-up starting at `now`, the relay's clock, is past the deletion keep: this program has been here, and
+       its last judged catch-up or relist began longer ago than LISTED_KEEP_MS. A record from before the stamp is not. */
     listedBefore(now) {
       let behind = false;
       behind = st.seq > 0 && Number.isSafeInteger(st.listed) && now - st.listed > LISTED_KEEP_MS; /* plant:listed-behind */
       return behind;
     },
-    /* A catch-up that began at `t` reached the top. Kept on disk only once it moves by more than an hour, as the skew is. */
+    /* Whether a relist past the keep may be asked at `now`: not already asked within a day. */
+    relistDue(now) {
+      let due = true;
+      due = !Number.isSafeInteger(st.listedAsked) || now < st.listedAsked || now - st.listedAsked >= RELIST_RETRY_MS; /* plant:relist-day */
+      return due;
+    },
+    /* A catch-up that began at `t` reached the top, or a relist judged. Kept on disk only once it moves by more than an hour, as the skew is. */
     noteListed(t) {
       if (!Number.isSafeInteger(t)) return;
-      const far = !Number.isSafeInteger(st.listed) || t - st.listed > ECHO_MS;
+      const far = !Number.isSafeInteger(st.listed) || t - st.listed > ECHO_MS || st.listedAsked !== null;
       st.listed = Math.max(t, Number.isSafeInteger(st.listed) ? st.listed : t);
+      st.listedAsked = null;
       if (far) persist();
+    },
+    /* An unjudged relist asked at `t`: the keep stamp stays where it was so it asks again after a day. */
+    noteListedAsked(t) {
+      if (!Number.isSafeInteger(t)) return;
+      st.listedAsked = t;
+      persist();
     },
     /* The relay's whole list, `items`, after a catch-up past the deletion keep: a file this program took or sent whose blob the
        list no longer names is dropped from the mirror, as a deletion would have dropped it. The team file stays, and so does
@@ -2056,6 +2072,7 @@ function createProgram(opts) {
         dropped.push(rel || key);
       }
       if (dropped.length) persist();
+      Object.defineProperty(dropped, "judged", { value: true });
       return dropped;
     },
   };
@@ -2575,7 +2592,8 @@ function createChannel(opts) {
   }
 
   /* The top reached on this computer's own key: past the deletion keep, the whole list first, and what it no longer names
-     dropped; then the stamp. A list that does not come whole leaves both for the next cycle. */
+     dropped; then the stamp. A list that does not come whole, or stops below st.seq so reconcile did not judge, leaves the
+     stamp where it was and retries after a day until one judges. */
   /* Whether this desk was left behind, judged once a whole catch-up has been read (the lead box's stranded desk). */
   function judgeStranded() {
     if (prog.judgeBehind() && typeof o.onStranded === "function") {
@@ -2584,11 +2602,13 @@ function createChannel(opts) {
   }
   async function caughtUp(began, behind) {
     if (!session || session.by !== "key") return { ok: true };
-    if (behind && !prog.suspect()) {
+    if (behind) {
+      if (prog.suspect() || !prog.relistDue(began)) return { ok: true };
       const all = await listedWhole();
       if (!all) return { ok: true };
       const dropped = prog.reconcile(all);
       if (dropped.length) say("the relay no longer holds " + dropped.length + " file(s) this computer kept while it was away, so they were removed");
+      if (!dropped.judged) { prog.noteListedAsked(began); return { ok: true }; } /* plant:relist-unjudged */
     }
     prog.noteListed(began);
     return { ok: true };

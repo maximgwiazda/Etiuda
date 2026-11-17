@@ -62,7 +62,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 503;
+const EXPECTED = 507;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -9287,6 +9287,140 @@ if (partOn("p_pg4")) {
     }
   } catch (e) {
     check(false, "harness (the legs pg4): " + (e && e.stack ? e.stack : e));
+  }
+}
+
+/* ---- pg5: a relist that reconcile did not judge (the list's top below st.seq) is not stamped as done; it is asked
+   again no sooner than a day after it was last asked and no later than the first catch-up after that day, until one is
+   judged; a judged relist is stamped as today. ---- */
+async function scenePg5(mod) {
+  const x = pgRelay(0, false);
+  const D0 = keyPair(true), DA = keyPair(true);
+  const tm = { rt: hex(16), id: "t-" + hex(8), key: crypto.randomBytes(32) };
+  const RETIRED = "retracted before the month away\n", NEWEST = "a live file written once back\n";
+  const HOUR = 60 * 60 * 1000;
+  await x.team(tm.rt, tm.id, [D0, DA]);
+  const tag = "pg5-" + hex(4);
+  const lead = pgProgram(mod, x, "pg5-lead-" + tag, tm, LEAD, "root");
+  const d0 = pgProgram(mod, x, "pg5-d0-" + tag, tm, D0, "desk:" + D0.keyId);
+  const da = pgProgram(mod, x, "pg5-da-" + tag, tm, DA, "desk:" + DA.keyId);
+  const t0 = x.RL.clock.now;
+  try {
+    put(lead.mirror, mod.TEAM_NAME, teamBody(tm, 1, 1, [member(D0), member(DA)]));
+    put(lead.mirror, "lane.ec", "{\"note\":\"Lane Board edition one\"}\n");
+    put(lead.mirror, "retired.ec", RETIRED);
+    lead.ch.start(); d0.ch.start(); da.ch.start();
+    await settle(lead, d0, da);
+
+    /* Day 1: da stops, then lead retracts retired.ec (no newer live file follows it). */
+    await da.ch.stop();
+    x.jump(PG_DAY);
+    fs.unlinkSync(path.join(lead.mirror, "retired.ec"));
+    await settle(lead, d0);
+    await lead.ch.stop();
+    await d0.ch.stop();
+
+    /* Day 32 (> 29d keep, deletion > 30d expired): da returns, relists once, reconcile does not judge (top < st.seq). */
+    x.jump(31 * PG_DAY);
+    const n0 = da.t.log.length;
+    da.ch.start();
+    await settle(da);
+    const relist1 = da.t.log.slice(n0).filter(c => c === "GET since/0").length;
+    const stamp1 = da.prog.state().listed;
+    const retired1 = read(da.mirror, "retired.ec") === RETIRED;
+
+    /* Less than a day later (+12h): no relist is asked. */
+    x.jump(12 * HOUR);
+    const n1 = da.t.log.length;
+    await settle(da);
+    const relistUnderDay = da.t.log.slice(n1).filter(c => c === "GET since/0").length;
+
+    /* More than a day after the first ask (+13h, total +25h): still no live file, asks again and still does not stamp. */
+    x.jump(13 * HOUR);
+    const n2 = da.t.log.length;
+    await settle(da);
+    const relistOverDay = da.t.log.slice(n2).filter(c => c === "GET since/0").length;
+    const stamp2 = da.prog.state().listed;
+    const savedMid = read(LAB, da.name + ".json");
+
+    /* Less than a day after the second ask (+12h): no relist is asked. */
+    x.jump(12 * HOUR);
+    const n3 = da.t.log.length;
+    await settle(da);
+    const relistUnderDay2 = da.t.log.slice(n3).filter(c => c === "GET since/0").length;
+
+    /* More than a day after the second ask (+13h, total +25h), with a live file written: first catch-up judges, drops retired.ec, and stamps. */
+    x.jump(13 * HOUR);
+    lead.ch.start();
+    await settle(lead);
+    put(lead.mirror, "newest.ec", NEWEST);
+    await settle(lead);
+    await lead.ch.stop();
+    const n4 = da.t.log.length;
+    da.ch.kick();
+    await da.ch.idle();
+    const relistJudged = da.t.log.slice(n4).filter(c => c === "GET since/0").length;
+    const retiredAfter = read(da.mirror, "retired.ec");
+    const newestAfter = read(da.mirror, "newest.ec");
+    const stampJudged = da.prog.state().listed;
+
+    /* More than a day after the judged relist (+25h): stamped as done, so no relist is asked. */
+    x.jump(25 * HOUR);
+    const n5 = da.t.log.length;
+    await settle(da);
+    const relistAfterJudged = da.t.log.slice(n5).filter(c => c === "GET since/0").length;
+
+    return {
+      BASE: t0, DAYMS: PG_DAY, relist1, stamp1, retired1, relistUnderDay, relistOverDay, stamp2,
+      relistUnderDay2, relistJudged, retiredAfter, newestAfter, stampJudged, relistAfterJudged,
+      savedMid,
+    };
+  } finally {
+    await da.ch.stop();
+    await d0.ch.stop();
+    await lead.ch.stop();
+  }
+}
+
+if (partOn("p_pg5")) {
+  try {
+    markPart("p_pg5");
+    const s = await scenePg5(C);
+    const notStampedBefore = Number.isSafeInteger(s.stamp1) && s.stamp1 < s.BASE + s.DAYMS
+      && Number.isSafeInteger(s.stamp2) && s.stamp2 < s.BASE + s.DAYMS;
+    const stampedAfter = Number.isSafeInteger(s.stampJudged) && s.stampJudged >= s.BASE + 34 * s.DAYMS;
+    check(s.relist1 === 1 && s.retired1 && notStampedBefore && s.relistUnderDay === 0
+      && s.relistOverDay === 1 && s.relistUnderDay2 === 0 && s.relistJudged === 1
+      && s.retiredAfter === null && s.newestAfter === "a live file written once back\n"
+      && stampedAfter && s.relistAfterJudged === 0,
+      "pg5a an unjudged relist (list top below st.seq) is not stamped, is not asked again before a day, is asked on the first catch-up"
+      + " past a day, and once a live file lets reconcile judge, removes the retracted file and stamps: "
+      + JSON.stringify({ relist1: s.relist1, under: s.relistUnderDay, over: s.relistOverDay, under2: s.relistUnderDay2,
+        judged: s.relistJudged, afterJudged: s.relistAfterJudged, retiredAfter: s.retiredAfter,
+        stamp1Delta: s.stamp1 - s.BASE, stampJudgedDelta: s.stampJudged - s.BASE }));
+    const oldShape = { kind: "etiuda-relay-channel", v: 1, seq: 5, listed: s.BASE };
+    const inNew = C.stateOf(oldShape, s.BASE + 32 * s.DAYMS);
+    const oldClient = pg3Client(1000);
+    const midObj = s.savedMid ? JSON.parse(s.savedMid) : null;
+    const inOld = oldClient.mod && midObj ? oldClient.mod.stateOf(midObj, s.BASE + 33 * s.DAYMS) : null;
+    check(inNew.listed === s.BASE && inNew.listedAsked === null && !!inOld && inOld.seq === midObj.seq && inOld.listed === midObj.listed,
+      "pg5b a state file written before this change reads its listed stamp in the new program, and a state file with an unjudged ask reads"
+      + " its sequence and listed stamp in the old client: inNew=" + JSON.stringify({ listed: inNew.listed, listedAsked: inNew.listedAsked })
+      + ", inOld=" + (inOld ? JSON.stringify({ seq: inOld.seq, listed: inOld.listed }) : "none"));
+    const unjudgedOff = await pgPlant(["plant:relist-unjudged"], 0, async mod => {
+      const r = await scenePg5(mod);
+      return r.relistOverDay === 0 && r.retiredAfter !== null;
+    });
+    check(unjudgedOff.turned && unjudgedOff.back, "pg5c lifting plant:relist-unjudged stamps the unjudged relist as done, so no retry runs"
+      + " past a day and the retracted file stays: " + unjudgedOff.detail + ", sha " + (unjudgedOff.back ? "restored" : "differs"));
+    const dayOff = await pgPlant(["plant:relist-day"], 0, async mod => {
+      const r = await scenePg5(mod);
+      return r.relistUnderDay > 0;
+    });
+    check(dayOff.turned && dayOff.back, "pg5d lifting plant:relist-day drops the one-day wait, so a catch-up less than a day later relists"
+      + " again: " + dayOff.detail + ", sha " + (dayOff.back ? "restored" : "differs"));
+  } catch (e) {
+    check(false, "harness (the legs pg5): " + (e && e.stack ? e.stack : e));
   }
 }
 
