@@ -126,6 +126,8 @@ const PENDING_MAX = 1000;
 /* What a catch-up holds for its last page (holdLater): more than the relay lists (relay/core.cjs BLOBS_MAX), past which a file is
    judged as it arrives; and the bytes of those already fetched it keeps that long. */
 const LATER_MAX = 8192, LATER_BYTES_MAX = 64 * 1024 * 1024;
+/* A held file asked for and answered with another file's description: a fault, so it and the rest stay held. */
+const OTHER_FILE = Object.freeze({ ok: false, reason: "other-file", said: "The relay answered a file asked for with another file's description, so that file waits for the next catch-up.", served: false });
 /* A catch-up's handovers held until its last page, and the handover steps its team files showed (applyBatch). */
 const AHEAD_MAX = 16, AHEAD_STEPS_MAX = 64;
 const aheadStep = s => table(s) && s.kind === B.HANDOVER_KIND && JSON.stringify(s).length <= 4096;
@@ -2440,7 +2442,8 @@ function createChannel(opts) {
   async function catchUp() {
     const who = me();
     const began = relayNow(), behind = prog.listedBefore(began);
-    const kept = new Map();
+    /* What it holds for the last page: bytes and description where the bytes fit, the description as listed for every held row. */
+    const kept = new Map(), listed = new Map();
     let keptBytes = 0;
     for (let round = 0; round < 1000; round++) {
       const st = prog.state();
@@ -2472,7 +2475,7 @@ function createChannel(opts) {
         if (own) continue; /* plant:own-skip */
         if (!Number.isSafeInteger(m.size) || m.size < 0 || !HEX32.test(String(m.id))) { sayOnce("a file the relay listed was left out: " + B.REASONS["bad-signature"]); continue; }
         if (m.size > B.BLOB_MAX) { say("a file from " + m.writer + " was left out: " + B.REASONS["blob-size"]); continue; } /* plant:in-size-listed */
-        if (!whole && prog.holdListed(e.seq, m)) continue; /* plant:later-listed */
+        if (!whole && prog.holdListed(e.seq, m)) { listed.set(m.id, m); continue; } /* plant:later-listed */
         const got = await authed("GET", "b/" + m.id);
         /* Not served for a reason that can pass (see gone): what came before it is applied and the next cycle asks from it.
            Where the lead has a blob listed from here on, which may be the team file a desk's file is judged under, the
@@ -2487,7 +2490,10 @@ function createChannel(opts) {
           return got.refused || refusalOf(got); /* plant:fetch-kept */
         }
         if (got.status !== 200) continue;
-        items.push({ seq: e.seq, meta: table(got.meta) && got.meta.id === m.id ? got.meta : m, ct: got.bytes });
+        /* An answer without its description (a proxy may drop the header) is judged under the one listed. */
+        let meta = table(got.meta) && got.meta.id === m.id ? got.meta : null;
+        meta = meta || m; /* plant:listed-meta */
+        if (meta) items.push({ seq: e.seq, meta, ct: got.bytes });
       }
       /* The last page lands what the catch-up held, fetched again; at the round cap nothing held is followed, and the next
          catch-up reads on. */
@@ -2506,13 +2512,15 @@ function createChannel(opts) {
       if (!whole) {
         const later = new Set(prog.later().map(h => h.id));
         for (const x of items) {
+          if (!later.has(x.meta.id)) continue;
+          listed.set(x.meta.id, x.meta);
           const n = toBytes(x.ct) ? toBytes(x.ct).length : 0;
-          if (later.has(x.meta.id) && keptBytes + n <= LATER_BYTES_MAX) { kept.set(x.meta.id, x); keptBytes += n; }
+          if (keptBytes + n <= LATER_BYTES_MAX) { kept.set(x.meta.id, x); keptBytes += n; }
         }
       }
       /* Judged on the last page alone: a catch-up that ran out at the round cap read part of the list, and the next cycle reads on. */
       if (whole) {
-        const held = await landLater(kept);
+        const held = await landLater(kept, listed);
         if (!held.ok) return held;
         judgeStranded(); /* plant:stranded-whole */
         return caughtUp(began, behind);
@@ -2522,24 +2530,48 @@ function createChannel(opts) {
   }
 
   /* What the catch-up held for its last page, taken from what it kept or fetched again, then judged in the relay's order: each
-     against the floor that stood when it was listed, so the order of the pages changes nothing. A fetch that fails keeps the rest. */
-  async function landLater(kept) {
+     against the floor that stood when it was listed, so the order of the pages changes nothing. A fetch that fails keeps the rest.
+     A held file is let go only once it lands, is refused, or the relay says it is gone: a 200 without its description is judged
+     under the one listed, from this catch-up or the relay's list read again, and otherwise stays held for the next catch-up. */
+  async function landLater(kept, listed) {
+    const stay = new Set(), asked = new Set();
     for (;;) {
-      const held = prog.later().sort((a, b) => a.seq - b.seq).slice(0, SINCE_MAX);
-      if (!held.length) return { ok: true };
+      const held = prog.later().filter(h => !stay.has(h.id)).sort((a, b) => a.seq - b.seq).slice(0, SINCE_MAX);
+      if (!held.length) break;
       const items = [], done = [];
       let fault = null;
       for (const h of held) {
         const k = kept.get(h.id);
         const got = k ? { status: 200, meta: k.meta, bytes: k.ct } : await authed("GET", "b/" + h.id);
-        if (got.status === 200 && table(got.meta) && got.meta.id === h.id) items.push({ seq: h.seq, meta: got.meta, ct: got.bytes, floor: h.floor });
-        else if (got.status !== 200 && !gone(got)) { fault = got.refused || refusalOf(got); break; }
+        if (got.status !== 200) {
+          if (!gone(got)) { fault = got.refused || refusalOf(got); break; }
+          done.push(h.id);
+          continue;
+        }
+        if (table(got.meta) && got.meta.id !== h.id) { fault = OTHER_FILE; break; } /* plant:later-other */
+        let meta = table(got.meta) ? got.meta : null;
+        if (!meta) meta = describedAs(listed, h); /* plant:later-described */
+        if (!meta && !asked.has(h.id)) { fault = await relistHeld(h, held, listed, asked); if (fault) break; meta = describedAs(listed, h); } /* plant:later-relist */
+        if (!meta) { stay.add(h.id); continue; } /* plant:later-stay */
+        items.push({ seq: h.seq, meta, ct: got.bytes, floor: h.floor });
         done.push(h.id);
       }
       if (items.length) prog.applyBatch(items, ctx(), { later: true });
       prog.unhold(done);
       if (fault) return fault;
     }
+    if (stay.size) sayOnce("a file the relay sent without its description is held, and asked for again at the next catch-up");
+    return { ok: true };
+  }
+  const describedAs = (listed, h) => { const m = listed.get(h.id); return table(m) && m.id === h.id ? m : null; };
+  /* The relay's list read again from just before a held row, each held row of `held` it names at its own place taken into `listed`. */
+  async function relistHeld(h, held, listed, asked) {
+    const r = await authed("GET", "since/" + Math.max(0, h.seq - 1));
+    if (r.status !== 200 || !Array.isArray(r.json)) return r.refused || refusalOf(r);
+    const at = new Map(held.map(x => [x.id, x.seq]));
+    for (const e of r.json) if (table(e) && table(e.meta) && at.get(e.meta.id) === e.seq) { listed.set(e.meta.id, e.meta); asked.add(e.meta.id); }
+    asked.add(h.id);
+    return null;
   }
 
   /* The top reached on this computer's own key: past the deletion keep, the whole list first, and what it no longer names

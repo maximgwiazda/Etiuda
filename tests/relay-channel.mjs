@@ -62,7 +62,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 489;
+const EXPECTED = 499;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -8829,8 +8829,9 @@ function pgRelay(page, cut) {
     const res = await lfetch("https://relay.test" + p, { method, headers: { "content-type": "application/json" }, body: Buffer.from(JSON.stringify(json), "utf8") });
     return { status: res.status, json: JSON.parse(Buffer.from(await res.arrayBuffer()).toString("utf8") || "null") };
   };
-  /* A transport over this relay, its calls logged; `fail(method, rel)` true answers that call 503. */
-  x.transport = fail => {
+  /* A transport over this relay, its calls logged; `fail(method, rel)` true answers that call 503; `alter(method, rel, name, value)`
+     answers a response header in place of the relay's, as a proxy between desk and relay might. */
+  x.transport = (fail, alter) => {
     const t = { log: [] };
     t.request = async (method, url, headers, body) => {
       const rel = String(url).replace(/^https:\/\/[^/]+\/relay\/v1\/t\/[0-9a-f]{32}\//, "");
@@ -8838,7 +8839,7 @@ function pgRelay(page, cut) {
       if (fail && fail(method, rel)) return { status: 503, header: () => null, bytes: Buffer.from(JSON.stringify({ error: "fault" })) };
       const res = await lfetch(url, { method, headers, body });
       const bytes = Buffer.from(await res.arrayBuffer());
-      return { status: res.status, header: n => res.headers.get(n), bytes, socket: null };
+      return { status: res.status, header: n => (alter ? alter(method, rel, n, res.headers.get(n)) : res.headers.get(n)), bytes, socket: null };
     };
     return t;
   };
@@ -8858,7 +8859,7 @@ function pgRelay(page, cut) {
   return x;
 }
 function pgProgram(mod, x, name, tm, who, place, o) {
-  const t = x.transport(o && o.fail), said = [];
+  const t = x.transport(o && o.fail, o && o.alter), said = [];
   const mirror = path.join(LAB, name);
   const ch = mod.createChannel(Object.assign({
     rt: tm.rt, url: URLV1, mirror, stateFile: path.join(LAB, name + ".json"),
@@ -8915,7 +8916,9 @@ async function pgPlant(tags, page, fn) {
    join request, D0 sends a file, the lead names D2 at rev 2, D2 sends a file, the lead writes eight files and then rev 3, which
    buries rev 2: D1, back, is listed D0's and D2's files pages before the team file that names D2. Then a desk new to the team,
    named at rev 4, joins from nothing. `stop`: D1's first cycle back meets a 503 on rev 3 and the program is closed and opened
-   again before it reads on. */
+   again before it reads on. Where D1 is back (not the program opened again after it, `again`): `strip`, every blob it fetches
+   comes without its description header; `other`, D0's file comes once described as another id; `relistFail`, after the restart
+   the list read again from just before D0's file is answered 503 once; `peek`, the place and the held rows after its first cycle. */
 async function pgAway(mod, page, cut, o) {
   const opts = o || {};
   const x = pgRelay(page, cut);
@@ -8955,7 +8958,18 @@ async function pgAway(mod, page, cut, o) {
   const out = { order: !!(b0 && b2 && teamNow && b0.seq < b2.seq && b2.seq < teamNow.seq) };
   let failed = 0;
   const fail = opts.stop ? (m, rel) => m === "GET" && teamNow && rel === "b/" + teamNow.id && failed++ === 0 : null;
-  let back = pgProgram(mod, x, d1Name, tm, D1, "desk:" + D1.keyId, { fail });
+  let others = 0;
+  const alter = (opts.strip || opts.other) ? (m, rel, name, value) => {
+    if (name !== "etiuda-blob" || m !== "GET" || !rel.startsWith("b/")) return value;
+    if (opts.other && b0 && rel === "b/" + b0.id && value && others++ === 0) {
+      const meta = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+      return Buffer.from(JSON.stringify(Object.assign(meta, { id: hex(16) })), "utf8").toString("base64url");
+    }
+    return opts.strip ? null : value;
+  } : null;
+  const d0file = "desks/" + D0.keyId + "/stats.estat", d2file = "desks/" + D2.keyId + "/stats.estat";
+  const look = p => { const st = p.prog.state(); return { later: (st.later || []).length, past: !!b2 && st.seq > b2.seq, missing0: read(p.mirror, d0file) === null, missing2: read(p.mirror, d2file) === null }; };
+  let back = pgProgram(mod, x, d1Name, tm, D1, "desk:" + D1.keyId, { fail, alter });
   const logs = [back.t.log];
   back.ch.start();
   if (opts.stop) {
@@ -8963,12 +8977,20 @@ async function pgAway(mod, page, cut, o) {
     const st = back.prog.state();
     out.paused = { failed, later: (st.later || []).length, past: !!b2 && st.seq > b2.seq, missing: read(back.mirror, "desks/" + D2.keyId + "/stats.estat") === null };
     await back.ch.stop();
-    back = pgProgram(mod, x, d1Name, tm, D1, "desk:" + D1.keyId);
+    let relistFailed = 0;
+    const failAfter = opts.relistFail ? (m, rel) => m === "GET" && !!b0 && rel === "since/" + (b0.seq - 1) && relistFailed++ === 0 : null;
+    back = pgProgram(mod, x, d1Name, tm, D1, "desk:" + D1.keyId, { fail: failAfter, alter });
     logs.push(back.t.log);
     back.ch.start();
+    if (opts.relistFail) { await back.ch.idle(); out.relisted = Object.assign({ failed: relistFailed }, look(back)); }
+  } else if (opts.peek || opts.other) {
+    await back.ch.idle();
+    out.peek = Object.assign({ others }, look(back));
   }
   await settle(back);
   out.d1 = pgPrint(back, x.top(tm.rt));
+  out.d1look = look(back);
+  out.relists = b0 && b2 ? [].concat(...logs).filter(l => l === "GET since/" + (b0.seq - 1) || l === "GET since/" + (b2.seq - 1)).length : -1;
   out.fetched0 = b0 ? [].concat(...logs).filter(l => l === "GET b/" + b0.id).length : -1;
   out.since = back.t.log.filter(l => l.startsWith("GET since/")).length;
   await back.ch.stop();
@@ -8986,7 +9008,8 @@ async function pgAway(mod, page, cut, o) {
   out.d3 = pgPrint(d3, x.top(tm.rt));
   await d3.ch.stop();
   await lead.ch.stop();
-  out.d2file = "desks/" + D2.keyId + "/stats.estat";
+  out.d2file = d2file;
+  out.d0file = d0file;
   return out;
 }
 const pgHas = (pr, rel) => pr.files.some(f => f.startsWith(rel + " "));
@@ -9113,6 +9136,73 @@ if (partOn("p_pg2")) {
       + topOff.detail + ", sha " + (topOff.back ? "restored" : "differs"));
   } catch (e) {
     check(false, "harness (the legs pg2): " + (e && e.stack ? e.stack : e));
+  }
+}
+
+/* ---- pg4: a file a catch-up held is let go only once it lands, is refused with a word said, or the relay says it is gone (the
+   test architect's criterion for the paging mend's return, 2026-11-17). A blob answered 200 without its description header, as a
+   proxy or gateway between desk and relay may leave it, lands under the description the catch-up listed where that is in hand,
+   under the relay's list read again where it is not, and otherwise stays held for the next catch-up; one described as another id
+   is a fault, not a file. The scenes are pg2's (pgAway), D1 back through a stand-in that strips the header on purpose. ---- */
+if (partOn("p_pg4")) {
+  try {
+    markPart("p_pg4");
+    const keys = [keyPair(true), keyPair(true), keyPair(true), keyPair(true)];
+    const fixed = { keys, rt: hex(16), id: "t-" + hex(8), key: crypto.randomBytes(32), inv: hex(16), dh: crypto.randomBytes(32) };
+    const all = await pgAway(C, 0, false, fixed);
+    const small = await pgAway(C, 4, false, fixed);
+    const strip = Object.assign({}, fixed, { strip: true }), stopStrip = Object.assign({}, strip, { stop: true });
+    const lines = p => "D0's file " + (pgHas(p, all.d0file) ? "landed" : "missing") + ", D2's file " + (pgHas(p, all.d2file) ? "landed" : "missing")
+      + ", " + p.files.length + " file(s), held " + p.later + ", seq " + (p.atTop ? "at the top" : p.seq + " of " + p.top);
+    const inHand = await pgAway(C, 4, false, strip);
+    check(pgHas(all.d1, all.d0file) && pgSame(inHand.d1, all.d1) && inHand.since === small.since,
+      "pg4a every blob answered without its description, at a page of four: the file held unfetched for the last page lands under the"
+      + " description its page listed, the same mirror as the ordinary page, and the list is read no more often (" + inHand.since + " lists, "
+      + small.since + " with the header): " + lines(inHand.d1));
+    const restart = await pgAway(C, 4, false, stopStrip);
+    check(pgSame(restart.d1, all.d1) && pgSame(restart.restarted, all.d1) && restart.relists >= 1,
+      "pg4b a row held by a catch-up stopped by a 503, the program closed and opened again before its last page, every blob then answered"
+      + " without its description: the relay's list is read again from just before the held row (" + restart.relists + " time(s)) and the held"
+      + " files land: " + lines(restart.d1));
+    const relistFail = await pgAway(C, 4, false, Object.assign({}, stopStrip, { relistFail: true }));
+    const rf = relistFail.relisted || {};
+    check(rf.failed === 1 && rf.later >= 1 && rf.past && rf.missing0 && pgSame(relistFail.d1, all.d1),
+      "pg4c that list read again answered 503 once: the held files stay held with the place past them (held " + rf.later + ", D0's file in the mirror "
+      + !rf.missing0 + "), and land at the next catch-up: " + lines(relistFail.d1));
+    const other = await pgAway(C, 4, false, Object.assign({}, fixed, { other: true }));
+    const ot = other.peek || {};
+    check(ot.others === 1 && ot.later >= 1 && ot.missing0 && pgSame(other.d1, all.d1),
+      "pg4d D0's held file answered once with another id's description is a fault, not a file: it stays held (held " + ot.later + ", in the mirror "
+      + !ot.missing0 + "), and lands once the relay answers it as itself: " + lines(other.d1));
+    const ordinary = await pgAway(C, 0, false, strip);
+    check(pgSame(ordinary.d1, all.d1),
+      "pg4e at the ordinary page, every blob answered without its description: D2's file, fetched on its own page, is judged under the description"
+      + " its page listed (plant:listed-meta), and D0's, held to the last page, lands as in pg4a: " + lines(ordinary.d1));
+    /* With the list not read again, a row whose description is not in hand stays held, and lands once the header comes. */
+    let stays = null;
+    const relistOff = await pgPlant(["plant:later-relist"], 0, async mod => {
+      stays = await pgAway(mod, 4, false, stopStrip);
+      return !pgSame(stays.d1, all.d1);
+    });
+    const sl = (stays && stays.d1look) || {};
+    check(relistOff.turned && relistOff.back && sl.later >= 1 && sl.missing0 && sl.past && pgSame(stays.restarted, all.d1),
+      "pg4f lifting plant:later-relist turns pg4b, and the held files then stay held, never let go (held " + sl.later + ", D0's file in the mirror "
+      + !sl.missing0 + ", place past them " + !!sl.past + "), and land at the next catch-up once the header passes: " + relistOff.detail
+      + ", sha " + (relistOff.back ? "restored" : "differs") + (stays ? "; after, " + lines(stays.restarted) : ""));
+    const LIFTS = [
+      ["pg4a", ["plant:later-described"], "the description in hand is passed over and the list read again", async mod => (await pgAway(mod, 4, false, strip)).since !== small.since],
+      ["pg4f", ["plant:later-relist", "plant:later-stay"], "the held files are let go in silence and never land", async mod => !pgHas((await pgAway(mod, 4, false, stopStrip)).restarted, all.d0file)],
+      ["pg4d", ["plant:later-other"], "the file described as another id is let go", async mod => !pgHas((await pgAway(mod, 4, false, Object.assign({}, fixed, { other: true }))).restarted, all.d0file)],
+      ["pg4e", ["plant:listed-meta"], "a blob without its description is left out", async mod => !pgSame((await pgAway(mod, 0, false, strip)).d1, all.d1)],
+    ];
+    let n = 0;
+    for (const [leg, tags, say, turns] of LIFTS) {
+      const p = await pgPlant(tags, 0, turns);
+      check(p.turned && p.back, "pg4" + String.fromCharCode(103 + n++) + " lifting " + tags.join(" with ") + " turns " + leg + " red (" + say + "): "
+        + p.detail + ", sha " + (p.back ? "restored" : "differs"));
+    }
+  } catch (e) {
+    check(false, "harness (the legs pg4): " + (e && e.stack ? e.stack : e));
   }
 }
 
