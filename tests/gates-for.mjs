@@ -394,7 +394,9 @@ try {
 
   /* The desk trust leg copies all of src/ and the result line reads whole directories, so the trace
      names them for a file they do not judge. The subject is a ceiling: motion.js reaches neither,
-     the trust module still reaches the desk, and the gate runner still reaches the result line. */
+     the trust module still reaches the desk, and the gate runner still reaches the result line.
+     shell/main.js reaches the desk since 2026-11-17: the leg launches the real shell, and a change to the shell's policy read
+     turned it red in a fold whose area never planned it (this check held the opposite until then). */
   const ceilingFiles = ["src/modules/motion.js", "src/modules/catalog-trust.js", "tools/gate-run.mjs", "shell/main.js"];
   let ceilingRows = [];
   let ceilingErr = "";
@@ -413,10 +415,10 @@ try {
   if (motionNames.has(lineLeg)) ceilingMiss.push("motion.js names result-line");
   if (!trustNames.has(deskLeg)) ceilingMiss.push("catalog-trust.js misses the desk");
   if (!toolNames.has(lineLeg)) ceilingMiss.push("gate-run.mjs misses result-line");
-  if (shellNames.has(deskLeg)) ceilingMiss.push("shell/main.js names the desk");
+  if (!shellNames.has(deskLeg)) ceilingMiss.push("shell/main.js misses the desk");
   check(ceilingMiss.length === 0,
     "gf24 the desk trust leg and the result line run only for their subject: "
-    + (ceilingMiss.length ? ceilingMiss.join("; ") : "motion.js names neither, catalog-trust.js names the desk, gate-run names the result line, shell/main.js does not name the desk"));
+    + (ceilingMiss.length ? ceilingMiss.join("; ") : "motion.js names neither, catalog-trust.js names the desk, gate-run names the result line, shell/main.js names the desk (the leg launches the real shell)"));
 
   const subject = gfTool.SUBJECT;
   const subjectMiss = [];

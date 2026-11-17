@@ -121,6 +121,10 @@ export const SUBJECT = {
     "src/modules/catalog-boot.js",
     "src/modules/catalog-file.js",
     "src/modules/catalog.js",
+    /* The leg launches the real shell, so the shell's main file is its subject too: a ceiling stops a leg that reads a whole
+       directory from running on every change, and must not hide the one file the leg launches. Engine fold 108's own area
+       ended green on a tree where this leg was red, because a change to shell/main.js alone never planned it (2026-11-17). */
+    "shell/main.js",
   ],
   "tests/result-line.mjs": GATE_TOOLS,
 };
