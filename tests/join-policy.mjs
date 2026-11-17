@@ -33,7 +33,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
-const EXPECTED = 31;
+const EXPECTED = 33;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -651,6 +651,7 @@ function parseXml(text, where) {
 }
 const under = (el, name) => el.kids.reduce((out, k) => out.concat(k.name === name ? [k] : [], under(k, name)), []);
 
+let templateDocs = null;
 {
   const problems = [];
   const files = { admx: path.join(ROOT, "shell", "policy", "etiuda.admx"),
@@ -690,6 +691,7 @@ const under = (el, name) => el.kids.reduce((out, k) => out.concat(k.name === nam
     Managed: { onOff: true, desk: true }, SharedComputer: { onOff: true, desk: true }, AllowPersonalAccounts: { onOff: true, desk: true },
     SigninProvider: { list: ["microsoft", "google"], desk: true }, SigninTenant: { text: "253", desk: true }, SupportContact: { text: "200", desk: true },
     NonPersistent: { onOff: true, desk: true }, NonPersistentNewDesk: { onOff: true, desk: true },
+    PersonalStore: { list: ["off", "on", "company"], desk: true },
   };
   let deskText = "";
   try { deskText = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8").toLowerCase(); } catch (e) { problems.push("shell/main.js unread"); }
@@ -760,9 +762,29 @@ const under = (el, name) => el.kids.reduce((out, k) => out.concat(k.name === nam
       if (!want || c.length !== 1 || c[0].name !== want[0] || c[0].attrs.refId !== want[1] || !words) problems.push(lang + " presentation " + p.attrs.id);
     }
     for (const s of strings) if (!s.text.trim()) problems.push(lang + " string " + s.attrs.id + " is empty");
-    const text = id => (strings.find(s => s.attrs.id === id) || { text: "" }).text;
+    const text = id => (strings.find(s => s.attrs.id === id) || { text: "" }).text.replace(/\r\n/g, "\n");
     if (text("EtiudaCat") !== "Etiuda") problems.push(lang + " category name");
+    const B2 = {
+      en: {
+        name: "Set sync across computers",
+        explain: "This policy setting decides whether Etiuda keeps a person's own catalogs, edits and settings in a folder of their own Microsoft or Google account, so that they follow the person to every computer they sign in on (\"Sync across computers\" in Etiuda's Settings).\n\nIf you enable this policy setting, its value decides, and the person cannot change it: \"off\" turns sync off; \"on\" turns it on, in the person's own account, and the copy stays theirs whatever happens to the licence; \"company\" turns it on in the same folder, but ties the copy to the organisation's licence, so when the person is removed from the licence, sync ends at once and nothing on the computer is lost.\n\nIf you disable or do not configure this policy setting, sync is on from sign-in and the person can turn it off, except where \"Manage the accounts on this computer for the organisation\" is enabled: there sync is off.",
+        managedB: "Sync across computers is off unless \"Set sync across computers\" turns it on. Everything else in both programs works as on any computer.",
+        managedC: "\n\nAn account once kept on a managed computer stays kept. It stops being kept when \"Treat this computer as shared\" is enabled, when \"Set the sign-in provider\" or \"Set the organisation's sign-in tenant\" changes so that the account falls outside it, or when the file signin.json in that person's %APPDATA%\\etiuda folder is removed.",
+      },
+      pl: {
+        name: "Ustaw synchronizację między komputerami",
+        explain: "To ustawienie zasad określa, czy Etiuda przechowuje własne katalogi, zmiany i ustawienia danej osoby w folderze na jej własnym koncie Microsoft lub Google, tak by towarzyszyły jej na każdym komputerze, na którym się zaloguje („Synchronizacja między komputerami” w Ustawieniach Etiudy).\n\nJeśli to ustawienie zasad zostanie włączone, decyduje jego wartość, a osoba korzystająca z Etiudy nie może jej zmienić: „off” wyłącza synchronizację; „on” ją włącza, na własnym koncie tej osoby, a kopia pozostaje jej niezależnie od losów licencji; „company” włącza ją w tym samym folderze, ale wiąże kopię z licencją organizacji, więc gdy osoba zostanie usunięta z licencji, synchronizacja od razu się kończy, a na komputerze nic nie ginie.\n\nJeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane, synchronizacja jest włączona od zalogowania i osoba może ją wyłączyć, z wyjątkiem komputerów, na których włączone jest „Zarządzaj kontami na tym komputerze w imieniu organizacji”: tam synchronizacja jest wyłączona.",
+        managedB: "Synchronizacja między komputerami jest wyłączona, chyba że włączy ją ustawienie „Ustaw synchronizację między komputerami”. Wszystko inne w obu aplikacjach działa tak jak na każdym komputerze.",
+        managedC: "\n\nKonto raz zachowane na komputerze zarządzanym pozostaje zachowane. Przestaje nim być, gdy zostanie włączone ustawienie „Traktuj ten komputer jako wspólny”, gdy „Ustaw dostawcę logowania” lub „Ustaw dzierżawę logowania organizacji” zmieni się tak, że konto znajdzie się poza nim, albo gdy zostanie usunięty plik signin.json w folderze %APPDATA%\\etiuda tej osoby.",
+      },
+    }[lang];
+    if (text("PersonalStore") !== B2.name) problems.push(lang + " PersonalStore displayName");
+    if (text("PersonalStore_Explain") !== B2.explain) problems.push(lang + " PersonalStore_Explain");
+    const mg = text("Managed_Explain");
+    if (!mg.includes(B2.managedB)) problems.push(lang + " Managed_Explain missing B2(b)");
+    if (!mg.includes(B2.managedC)) problems.push(lang + " Managed_Explain missing B2(c)");
   }
+  templateDocs = doc;
   if (order.en && order.pl && order.en.join() !== order.pl.join()) problems.push("en and pl ids in another order");
   if (raw.pl && (!raw.pl.includes("stanowisko") || !/[ąćęłńóśźż]/i.test(raw.pl))) problems.push("polish copy");
   if (raw.en && !raw.en.includes("full path") && !raw.en.includes("Full path")) problems.push("english copy");
@@ -1663,6 +1685,100 @@ function onePlace(src) {
     let p = [];
     try { p = src ? onePlace(src) : ["the plant is not on exactly one line"]; } catch (e) { p = ["harness: " + e.message]; }
     check(!!src && p.length > 0, "19u reading teamPins in folderLeadPublics again turns 19u red: " + (p.join("; ") || "still green"));
+  }
+}
+
+/* 19v: EVERY MACHINE POLICY VALUE THE SHELL READS IS DECLARED AND EXPLAINED IN THE TEMPLATE (review 09 finding 3).
+   Scans shell/main.js for every function that reads policyValues' output (including joinPolicyRead.values and any
+   function it passes values to), extracts every value name read from it, and checks that etiuda.admx declares each as
+   a machine policy under Software\Policies\Etiuda with non-empty displayName and explainText in both languages. */
+function shellPolicyFunctions(src) {
+  const clean = src.replace(/\/\*[\s\S]*?\*\//g, c => c.replace(/[^\n]/g, " ")).replace(/\/\/[^\n]*/g, "");
+  const fns = new Map();
+  const re = /^(?:async )?function ([A-Za-z0-9_$]+)\(([^)]*)\)/gm;
+  let m;
+  while ((m = re.exec(clean)) !== null) {
+    const start = m.index, end = clean.indexOf("\n}", start);
+    if (end > start) fns.set(m[1], { params: m[2], body: clean.slice(start, end + 2) });
+  }
+  const readers = new Set(["policyRegSz"]);
+  const SEED_SKIP = new Set(["readJoinPolicy", "policyLookLater", "policyAgainArm", "policyTake", "policyStamp", "policyFresh", "sayJoinPolicy", "deskAiNow"]);
+  for (const [name, fn] of fns) {
+    if (SEED_SKIP.has(name)) continue;
+    if (/\bvalues\b/.test(fn.params) || /policyValues\s*\(/.test(fn.body) || /\bjoinPolicyRead\s*(?:&&\s*joinPolicyRead\s*)?\.values\b/.test(fn.body)) {
+      readers.add(name);
+    }
+  }
+  let added = true;
+  while (added) {
+    added = false;
+    for (const name of [...readers]) {
+      const fn = fns.get(name);
+      if (!fn) continue;
+      for (const [callee] of fns) {
+        if (readers.has(callee)) continue;
+        const callRe = new RegExp("\\b" + callee + "\\s*\\([^)]*\\bvalues\\b");
+        if (callRe.test(fn.body)) { readers.add(callee); added = true; }
+      }
+    }
+  }
+  const names = new Set();
+  const managedMatch = clean.match(/\bMANAGED_NAMES\s*=\s*Object\.freeze\(\[([\s\S]*?)\]\)/);
+  const managedNames = managedMatch ? [...managedMatch[1].matchAll(/"([A-Za-z0-9_]+)"/g)].map(x => x[1].toLowerCase()) : [];
+  for (const fnName of readers) {
+    const fn = fns.get(fnName);
+    if (!fn) continue;
+    const b = fn.body;
+    if (/\bMANAGED_NAMES\b/.test(b)) for (const n of managedNames) names.add(n);
+    for (const x of b.matchAll(/policyRegSz\s*\([^,]+,\s*"([A-Za-z0-9_]+)"\s*\)/g)) names.add(x[1].toLowerCase());
+    for (const x of b.matchAll(/\b(?:own|text)\s*\(\s*"([A-Za-z0-9_]+)"\s*\)/g)) names.add(x[1].toLowerCase());
+    for (const x of b.matchAll(/\bvalues\s*\[\s*"([A-Za-z0-9_]+)"\s*\]/g)) names.add(x[1].toLowerCase());
+    for (const x of b.matchAll(/hasOwnProperty\.call\s*\(\s*values\s*,\s*"([A-Za-z0-9_]+)"\s*\)/g)) names.add(x[1].toLowerCase());
+    for (const x of b.matchAll(/\bvalues\s*\.\s*([A-Za-z0-9_$]+)/g)) names.add(x[1].toLowerCase());
+  }
+  return names;
+}
+function policyTemplateCoversShell(src, docs) {
+  const problems = [];
+  if (!docs || !docs.admx || !docs.en || !docs.pl) return ["template not parsed"];
+  const admxPolicies = new Map();
+  for (const p of under(docs.admx, "policy")) {
+    if (String(p.attrs.key || "").toLowerCase() !== "software\\policies\\etiuda" || p.attrs.class !== "Machine") continue;
+    let vName = p.attrs.valueName;
+    if (!vName) {
+      const els = under(p, "elements"), kids = els.length ? els[0].kids : [];
+      if (kids.length === 1) vName = kids[0].attrs.valueName;
+    }
+    if (vName) admxPolicies.set(vName.toLowerCase(), p);
+  }
+  const strMap = d => {
+    const m = new Map();
+    for (const s of under(d, "string")) m.set(s.attrs.id, s.text.trim());
+    return m;
+  };
+  const enStr = strMap(docs.en), plStr = strMap(docs.pl);
+  const strId = v => { const m = /^\$\(string\.([^)]+)\)$/.exec(v || ""); return m ? m[1] : ""; };
+  for (const name of [...shellPolicyFunctions(src)].sort()) {
+    const p = admxPolicies.get(name);
+    if (!p) { problems.push(name + " is read by shell/main.js but missing from etiuda.admx"); continue; }
+    const dn = strId(p.attrs.displayName), ex = strId(p.attrs.explainText);
+    if (!dn || !enStr.get(dn) || !plStr.get(dn)) problems.push(name + " missing displayName in en or pl");
+    if (!ex || !enStr.get(ex) || !plStr.get(ex)) problems.push(name + " missing explainText in en or pl");
+  }
+  return problems;
+}
+{
+  let problems = [];
+  try { problems = policyTemplateCoversShell(SRC, templateDocs); } catch (e) { problems.push("harness: " + ((e && e.stack) || e)); }
+  check(problems.length === 0, "19v every machine policy value read by shell/main.js is declared in etiuda.admx and has a displayName and explainText in English and Polish: "
+    + (problems.join("; ") || "all covered"));
+  if (PLANTS_OFF) skip("19v reading an undeclared policy value in shell/main.js turns 19v red (ETIUDA_PLANTS=off)");
+  else {
+    const marker = "function personalStoreFrom(values) {";
+    const planted = SRC.includes(marker) ? SRC.replace(marker, marker + "\n  const extra = values && values.undeclaredpolicy;") : "";
+    const p = planted ? policyTemplateCoversShell(planted, templateDocs) : ["marker missing"];
+    check(!!planted && p.some(s => s.includes("undeclaredpolicy")),
+      "19v reading an undeclared policy value in shell/main.js turns 19v red: " + (p.join("; ") || "still green"));
   }
 }
 

@@ -76,7 +76,9 @@ Jeśli to ustawienie zasad nie zostanie skonfigurowane, model wybiera się w Ust
       <string id="Managed">Zarządzaj kontami na tym komputerze w imieniu organizacji</string>
       <string id="Managed_Explain">To ustawienie zasad oznacza ten komputer jako zarządzany przez organizację, która decyduje wtedy, kto i jakim kontem loguje się tu do Etiudy i Etiudy Studio.
 
-Jeśli to ustawienie zasad zostanie włączone, obie aplikacje nie proponują zakupu ani okresu próbnego; nie oferują innego konta ani wylogowania i zostają przy koncie, które się zalogowało, chyba że włączone jest „Traktuj ten komputer jako wspólny”; nie pokazują też niczego, co może zrobić tylko osoba, do której należy licencja. Konta osobiste nie są oferowane, chyba że włączone jest „Zezwalaj na konta osobiste”. W części Konto obu aplikacji widać, że zarządza nimi organizacja. Wszystko inne w obu aplikacjach działa tak jak na każdym komputerze.
+Jeśli to ustawienie zasad zostanie włączone, obie aplikacje nie proponują zakupu ani okresu próbnego; nie oferują innego konta ani wylogowania i zostają przy koncie, które się zalogowało, chyba że włączone jest „Traktuj ten komputer jako wspólny”; nie pokazują też niczego, co może zrobić tylko osoba, do której należy licencja. Konta osobiste nie są oferowane, chyba że włączone jest „Zezwalaj na konta osobiste”. W części Konto obu aplikacji widać, że zarządza nimi organizacja. Synchronizacja między komputerami jest wyłączona, chyba że włączy ją ustawienie „Ustaw synchronizację między komputerami”. Wszystko inne w obu aplikacjach działa tak jak na każdym komputerze.
+
+Konto raz zachowane na komputerze zarządzanym pozostaje zachowane. Przestaje nim być, gdy zostanie włączone ustawienie „Traktuj ten komputer jako wspólny”, gdy „Ustaw dostawcę logowania” lub „Ustaw dzierżawę logowania organizacji” zmieni się tak, że konto znajdzie się poza nim, albo gdy zostanie usunięty plik signin.json w folderze %APPDATA%\etiuda tej osoby.
 
 Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane, obie aplikacje pokazują ustawienia konta tak jak na każdym komputerze.</string>
       <string id="SharedComputer">Traktuj ten komputer jako wspólny</string>
@@ -129,6 +131,15 @@ Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane,
 Jeśli to ustawienie zasad zostanie włączone, stanowisko, którego klucza nie można otworzyć w tym profilu, tworzy nowe stanowisko, tak jak na każdym komputerze, i może być konieczne ponowne przyjęcie go do zespołu. Jego logowania nadal oznaczają je jako współdzielone, więc zajmuje jedno miejsce spośród trzech komputerów danej osoby.
 
 Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane, takie stanowisko zostaje zachowane, Etiuda wyjaśnia, co się stało, a nowe stanowisko nie powstaje.</string>
+      <string id="PersonalStore">Ustaw synchronizację między komputerami</string>
+      <string id="PersonalStore_Explain">To ustawienie zasad określa, czy Etiuda przechowuje własne katalogi, zmiany i ustawienia danej osoby w folderze na jej własnym koncie Microsoft lub Google, tak by towarzyszyły jej na każdym komputerze, na którym się zaloguje („Synchronizacja między komputerami” w Ustawieniach Etiudy).
+
+Jeśli to ustawienie zasad zostanie włączone, decyduje jego wartość, a osoba korzystająca z Etiudy nie może jej zmienić: „off” wyłącza synchronizację; „on” ją włącza, na własnym koncie tej osoby, a kopia pozostaje jej niezależnie od losów licencji; „company” włącza ją w tym samym folderze, ale wiąże kopię z licencją organizacji, więc gdy osoba zostanie usunięta z licencji, synchronizacja od razu się kończy, a na komputerze nic nie ginie.
+
+Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane, synchronizacja jest włączona od zalogowania i osoba może ją wyłączyć, z wyjątkiem komputerów, na których włączone jest „Zarządzaj kontami na tym komputerze w imieniu organizacji”: tam synchronizacja jest wyłączona.</string>
+      <string id="PersonalStore_off">PLACEHOLDER FOR THE COPYWRITER: option label for PersonalStore value off</string>
+      <string id="PersonalStore_on">PLACEHOLDER FOR THE COPYWRITER: option label for PersonalStore value on</string>
+      <string id="PersonalStore_company">PLACEHOLDER FOR THE COPYWRITER: option label for PersonalStore value company</string>
     </stringTable>
     <presentationTable>
       <presentation id="TeamFolder">
@@ -171,6 +182,9 @@ Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane,
         <textBox refId="SupportContactBox">
           <label>Kogo prosić:</label>
         </textBox>
+      </presentation>
+      <presentation id="PersonalStore">
+        <dropdownList refId="PersonalStoreList" noSort="true">PLACEHOLDER FOR THE COPYWRITER: dropdown label for PersonalStore</dropdownList>
       </presentation>
     </presentationTable>
   </resources>

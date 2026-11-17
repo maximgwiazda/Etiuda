@@ -76,7 +76,9 @@ If you do not configure this policy setting, the model is chosen in Etiuda's Set
       <string id="Managed">Manage the accounts on this computer for the organisation</string>
       <string id="Managed_Explain">This policy setting marks this computer as managed by your organisation, which then decides who signs in to Etiuda and Etiuda Studio here, and with which account.
 
-If you enable this policy setting, both programs show nothing to buy and no trial; offer no other account and no way to sign out, and keep the account that signed in, unless "Treat this computer as shared" is enabled; and hide everything that only the licence's owner may do. Personal accounts are not offered unless "Allow personal accounts" is enabled. Account, in each program, says that the organisation manages it. Everything else in both programs works as on any computer.
+If you enable this policy setting, both programs show nothing to buy and no trial; offer no other account and no way to sign out, and keep the account that signed in, unless "Treat this computer as shared" is enabled; and hide everything that only the licence's owner may do. Personal accounts are not offered unless "Allow personal accounts" is enabled. Account, in each program, says that the organisation manages it. Sync across computers is off unless "Set sync across computers" turns it on. Everything else in both programs works as on any computer.
+
+An account once kept on a managed computer stays kept. It stops being kept when "Treat this computer as shared" is enabled, when "Set the sign-in provider" or "Set the organisation's sign-in tenant" changes so that the account falls outside it, or when the file signin.json in that person's %APPDATA%\etiuda folder is removed.
 
 If you disable or do not configure this policy setting, both programs show their account settings as on any computer.</string>
       <string id="SharedComputer">Treat this computer as shared</string>
@@ -129,6 +131,15 @@ If you disable or do not configure this policy setting, a desk whose key cannot 
 If you enable this policy setting, a desk whose own key cannot be opened on this profile makes a new desk, as on any computer, and its team may need to let it in again. Its sign-ins still mark it as pooled, so it holds one place among the person's three computers.
 
 If you disable or do not configure this policy setting, such a desk is kept, Etiuda says what happened, and no new desk is made.</string>
+      <string id="PersonalStore">Set sync across computers</string>
+      <string id="PersonalStore_Explain">This policy setting decides whether Etiuda keeps a person's own catalogs, edits and settings in a folder of their own Microsoft or Google account, so that they follow the person to every computer they sign in on ("Sync across computers" in Etiuda's Settings).
+
+If you enable this policy setting, its value decides, and the person cannot change it: "off" turns sync off; "on" turns it on, in the person's own account, and the copy stays theirs whatever happens to the licence; "company" turns it on in the same folder, but ties the copy to the organisation's licence, so when the person is removed from the licence, sync ends at once and nothing on the computer is lost.
+
+If you disable or do not configure this policy setting, sync is on from sign-in and the person can turn it off, except where "Manage the accounts on this computer for the organisation" is enabled: there sync is off.</string>
+      <string id="PersonalStore_off">PLACEHOLDER FOR THE COPYWRITER: option label for PersonalStore value off</string>
+      <string id="PersonalStore_on">PLACEHOLDER FOR THE COPYWRITER: option label for PersonalStore value on</string>
+      <string id="PersonalStore_company">PLACEHOLDER FOR THE COPYWRITER: option label for PersonalStore value company</string>
     </stringTable>
     <presentationTable>
       <presentation id="TeamFolder">
@@ -171,6 +182,9 @@ If you disable or do not configure this policy setting, such a desk is kept, Eti
         <textBox refId="SupportContactBox">
           <label>Whom to ask:</label>
         </textBox>
+      </presentation>
+      <presentation id="PersonalStore">
+        <dropdownList refId="PersonalStoreList" noSort="true">PLACEHOLDER FOR THE COPYWRITER: dropdown label for PersonalStore</dropdownList>
       </presentation>
     </presentationTable>
   </resources>
