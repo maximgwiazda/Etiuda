@@ -378,7 +378,7 @@ try {
     const rose = floorOf(ud);
     put(folder, "etiuda-team.json", teamDoc(2, 1));
     put(folder, "etiuda-team (1).json", teamDoc(3, 1));
-    syncMirror(ud, folder);
+    put(path.join(ud, "folder-mirror", teamId), "etiuda-team (1).json", teamDoc(3, 1));
     const B = boot(ud);
     B.test.heed();
     const held = floorOf(ud);
