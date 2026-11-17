@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 220;
+const EXPECTED = 221;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -2094,7 +2094,7 @@ async function keepRefreshScene(src) {
 async function googleSwitchScene(src) {
   const r = await signinFlow(src, { provider: "google", untick: true });
   const first = r.qs[0] || new URLSearchParams();
-  const ungiven = !!r.now && r.now.why === "ungiven" && !!r.held && !!r.held.cert;
+  const ungiven = !!r.now && r.now.why === "ungiven" && !!r.held && !!r.held.cert && folderPage(r.page, "off");
   r.mode.untick = false;
   const on = await pressOn(r, true);
   const q = on.opened.length === 1 ? new URL(on.opened[0]).searchParams : new URLSearchParams();
@@ -2902,6 +2902,8 @@ const PLANTS = [
   ["g1", swap("    await handOut(pending.url); /* plant:consent-open */", "    await handOut(pending.url); handOut(pending.url); /* plant:consent-open */"), "the switch opens the request twice"],
   ["gn", swap(" renew: async (k, g) => (ours() ? storeRelayRenew(k, g) : { ok: false, why: \"relay\" }),", ""), "the look hands the relay no renewal, so the store lapses from its making"],
   ["g2", swap("const token = !lacks && ", "const token = "), "Google's answer without the folder's scope taken as the folder's token"],
+  ["g2", swap("  const took = signinFolderTake(io, same.ok ? res : { status: 0 }, p.id, now()); /* plant:folder-same */\n  return same.ok && took ? \"folder-on\" : \"folder-off\";",
+    "  signinFolderTake(io, same.ok ? res : { status: 0 }, p.id, now()); /* plant:folder-same */\n  return same.ok ? \"folder-on\" : \"folder-off\";"), "Google's answer without the folder's scope lands on Sync is on"],
   ["g2", swap("  const folder = L.folderFor(p.id, {", "  const folder = L.folderFor(\"microsoft\", {"), "the store's folder asked of Microsoft whatever the sign-in, so the store never opens in Google Drive"],
   ["f3", swap("    loop.land(folder || kind || \"back\"); /* plant:folder-land */", "    loop.land(kind || \"back\"); /* plant:folder-land */"), "the second step lands the sign-in's page, not the folder's"],
   ["h", swap("Nothing changed. It can be turned on in Account at any time. This tab can be closed.", "Nothing changed. It can be turned on in Account at any time. You can close this tab."), "a folder page closing in other words than the sign-in's"],

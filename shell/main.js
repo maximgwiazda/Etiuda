@@ -10266,6 +10266,7 @@ function signinFolderTake(io, res, provider, now) {
   const token = !lacks && !!res && res.status === 200 && !!j && typeof j.access_token === "string" && j.access_token.length <= SIGNIN_FOLDER_TOKEN_MAX ? j.access_token : "";
   const secs = j && Number(j.expires_in) > 0 ? Number(j.expires_in) : 3600;
   io.folderToken({ provider: String(provider), token: token, until: now + secs * 1000 });
+  return !!token;
 }
 /* A JWT's claims, unverified: the licence service verifies the signature; the desk reads only what says the answer is its own. */
 function signinClaims(jwt) {
@@ -10629,8 +10630,8 @@ async function signinFolderBack(io, p, pending, query, got, now) {
   try { res = await io.tokenAsk(at, signinCodeForm(p, pending, back.code)); }
   catch (e) { signinTrace(io, p.id, "folder", "signin-unreached", { detail: e && e.message }, [back.code, pending.verifier, p.clientSecret]); return "folder-off"; }
   const same = signinTokens(res, p, pending.nonce, now(), String(got.sub));
-  signinFolderTake(io, same.ok ? res : { status: 0 }, p.id, now()); /* plant:folder-same */
-  return same.ok ? "folder-on" : "folder-off";
+  const took = signinFolderTake(io, same.ok ? res : { status: 0 }, p.id, now()); /* plant:folder-same */
+  return same.ok && took ? "folder-on" : "folder-off";
 }
 /* The refresh token sealed by the system's store, as base64, or "" where the store seals nothing for real (sealsForReal: no
    keyring, or Linux's basic_text): no refresh token is kept there, and the next renewal asks the person to sign in again. */
