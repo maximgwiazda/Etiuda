@@ -29354,6 +29354,7 @@ What is typed here stays in this browser.`;
     const seen = o && "seen" in o ? !!o.seen : firstSigninSeen();
     const policy = o && "policy" in o ? !!o.policy : eCatalogFolderPinned();
     if (policy) return false;
+    if (signinStranded(s)) return false;
     return !!(s && s.offered.length && !s.signedIn && !seen);
   }
   var firstSigninPending = false;
@@ -29400,7 +29401,9 @@ What is typed here stays in this browser.`;
       rightBody = signinPanelHtml(Object.assign({}, d, { foot: "" }));
     }
     el.innerHTML = '<div class="fs-grid"><div class="fs-left"><div class="fs-left-in"><div class="fs-body">' + firstSigninMarkHtml() + '<h1 id="fsHeading">' + esc(t("Sign in to Etiuda")) + '</h1><p class="fs-lede">' + esc(t("Your seat belongs to your account, so it comes with you to any computer you sign in on, up to three.")) + '</p><h2 class="fs-steps-h">' + esc(t("What happens")) + '</h2><ol class="fs-steps"><li><span class="fs-step-n" aria-hidden="true">1</span><span>' + esc(t("The browser opens the sign-in page")) + '</span></li><li><span class="fs-step-n" aria-hidden="true">2</span><span>' + esc(t("You choose your account there")) + '</span></li><li><span class="fs-step-n" aria-hidden="true">3</span><span>' + esc(t("Etiuda carries on here by itself")) + '</span></li></ol></div><p class="fs-foot">' + esc(t("No licence key to keep")) + '</p></div></div><div class="fs-right"><div class="fs-right-in"><h2 class="fs-rh">' + esc(t("Signing in")) + "</h2>" + rightBody + "</div></div></div>";
-    if (d && d.moment === "refused") {
+    let showSkip = d && d.moment === "refused";
+    if (d && d.moment === "managed-refused") showSkip = true;
+    if (showSkip) {
       const acts = el.querySelector(".sgn-acts");
       if (acts) {
         acts.insertAdjacentHTML("beforeend", skipBtn);
@@ -29409,6 +29412,9 @@ What is typed here stays in this browser.`;
         const rin = el.querySelector(".fs-right-in");
         if (rin) rin.insertAdjacentHTML("beforeend", '<div class="fs-skip">' + skipBtn + skipLine + "</div>");
       }
+    } else if (d && d.moment === "stranded") {
+      const rin = el.querySelector(".fs-right-in");
+      if (rin) rin.insertAdjacentHTML("beforeend", '<div class="fs-skip"><button type="button" class="btn primary fs-skip-btn" id="firstSigninSkip">' + esc(t("Continue")) + "</button></div>");
     }
     if (hadFocus) {
       const first = el.querySelector("button:not(:disabled), input");

@@ -127,6 +127,7 @@ function firstSigninDue(v, opts){
   const seen=o && "seen" in o ? !!o.seen : firstSigninSeen();
   const policy=o && "policy" in o ? !!o.policy : eCatalogFolderPinned();
   if(policy) return false; /* plant:first-signin-gate */
+  if(signinStranded(s)) return false; /* plant:first-signin-stranded */
   return !!(s && s.offered.length && !s.signedIn && !seen);
 }
 let firstSigninPending=false, firstSigninOpen=false, firstSigninWaits=[];
@@ -182,7 +183,9 @@ function paintFirstSignin(){
       +'<h2 class="fs-rh">'+esc(t("Signing in"))+'</h2>'
       +rightBody
     +'</div></div></div>';
-  if(d && d.moment==="refused"){
+  let showSkip=d && d.moment==="refused";
+  if(d && d.moment==="managed-refused") showSkip=true; /* plant:first-signin-managed-skip */
+  if(showSkip){
     const acts=el.querySelector(".sgn-acts");
     if(acts){
       acts.insertAdjacentHTML("beforeend", skipBtn);
@@ -191,6 +194,9 @@ function paintFirstSignin(){
       const rin=el.querySelector(".fs-right-in");
       if(rin) rin.insertAdjacentHTML("beforeend", '<div class="fs-skip">'+skipBtn+skipLine+'</div>');
     }
+  }else if(d && d.moment==="stranded"){
+    const rin=el.querySelector(".fs-right-in");
+    if(rin) rin.insertAdjacentHTML("beforeend", '<div class="fs-skip"><button type="button" class="btn primary fs-skip-btn" id="firstSigninSkip">'+esc(t("Continue"))+'</button></div>'); /* plant:first-signin-stranded-btn */
   }
   if(hadFocus){
     const first=el.querySelector("button:not(:disabled), input");
