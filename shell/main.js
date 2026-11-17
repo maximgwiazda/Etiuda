@@ -848,8 +848,9 @@ function sameTeamLead(doc, cur) {
 /* The team file this folder is read as. The canonical file wins unless a conflict sibling is a
    genuine team file at a higher epoch or rev, under the same team and lead where the canonical
    file parses. A sibling under another lead of the same team is read only where its handovers run
-   from that canonical lead to the lead it names, and it is ahead. A sibling that is not genuine,
-   or lower, stays on disk and is not the one read.
+   from that canonical lead to the lead it names, or where it is under the lead this desk has pinned
+   for this team or its handovers run from that pinned lead to the lead it names, and it is ahead.
+   A sibling that is not genuine, or lower, stays on disk and is not the one read.
    `missing` is the canonical file being absent and no sibling taken, which is still "no team file". */
 function teamTextChosen(root) {
   const file = path.join(root, TEAM_NAME);
@@ -873,7 +874,10 @@ function teamTextChosen(root) {
     if (!doc || !teamWhole(doc)) continue;
     if (canonDoc && canonDoc.id && doc.id !== canonDoc.id) continue;
     if (canonDoc && !sameTeamLead(doc, canonDoc)) {
+      const pin = teamPins[doc.id];
+      const byPin = !!pin && (pin.keyId !== canonDoc.lead.keyId || pin.public !== canonDoc.lead.public);
       if (handedTo(doc, canonDoc.lead) && teamAhead(doc, best.doc)) best = { file: sib, text: sibText, doc: doc }; /* plant:sib-handover */
+      if (byPin && ((doc.lead.keyId === pin.keyId && doc.lead.public === pin.public) || handedTo(doc, pin)) && teamAhead(doc, best.doc)) best = { file: sib, text: sibText, doc: doc }; /* plant:sib-pin */
       continue;
     }
     if (teamAhead(doc, best.doc)) best = { file: sib, text: sibText, doc: doc }; /* plant:f3-team-sibling */
@@ -4975,7 +4979,10 @@ function heedTeam() {
     const had = teamWas[r.team] || [];
     teamWas[r.team] = had.concat(handedPath(doc, wasPin).filter(k => !had.some(h => h.public === k.public))).slice(-HANDOVER_STEPS); /* plant:fork-was */
   }
-  if (r.pinned) teamPins[r.team] = r.state.pins[r.team];
+  if (r.pinned) {
+    teamPins[r.team] = r.state.pins[r.team];
+    if (wasPin && (wasPin.keyId !== r.state.pins[r.team].keyId || wasPin.public !== r.state.pins[r.team].public)) teamStamp = "";
+  }
   if (r.unbar) { teamBarred.delete(r.team); delete teamLeft[r.team]; }
   let changed = r.changed;
   /* The consent the agent was shown goes with a heeded file holding another switch or none, and with a lead that moved. */
