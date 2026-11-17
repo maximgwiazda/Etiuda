@@ -2631,17 +2631,26 @@ function createChannel(opts) {
   }
 
   /* Blobs left for want of a key, fetched again once a key for their epoch is held, each judged against the floor that
-     stood when it first arrived. */
+     stood when it first arrived. A 200 without its description is judged under the relay's list read again, and stays
+     pending otherwise; one naming another id stays pending and is said once. */
   async function retryPending() {
     const c = ctx();
     const held = new Set(prog.ahead().map(h => h.lead));
     const ready = prog.pending().filter(p => c.keyFor(p.epoch) && !held.has(p.writer));
     if (!ready.length) return;
-    const items = [];
+    const items = [], listed = new Map(), asked = new Set();
     for (const p of ready) {
       const got = await authed("GET", "b/" + p.id);
-      if (got.status === 200 && table(got.meta) && got.meta.id === p.id) items.push({ seq: p.seq, meta: got.meta, ct: got.bytes, floor: p.floor });
-      else if (got.status === 200 || gone(got)) prog.unpend(p.id); /* plant:pending-kept */
+      if (got.status !== 200) {
+        if (gone(got)) prog.unpend(p.id); /* plant:pending-kept */
+        continue;
+      }
+      if (table(got.meta) && got.meta.id !== p.id) { sayOnce("the relay: " + OTHER_FILE.said); continue; } /* plant:pending-other */
+      let meta = table(got.meta) ? got.meta : null;
+      if (!meta) meta = describedAs(listed, p);
+      if (!meta && !asked.has(p.id)) { const fault = await relistHeld(p, ready, listed, asked); if (fault) break; meta = describedAs(listed, p); } /* plant:pending-relist */
+      if (!meta) { sayOnce("a file the relay sent without its description is held, and asked for again at the next catch-up"); continue; }
+      items.push({ seq: p.seq, meta, ct: got.bytes, floor: p.floor });
     }
     if (items.length) prog.applyBatch(items, c);
   }

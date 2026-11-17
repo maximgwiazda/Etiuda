@@ -62,7 +62,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 507;
+const EXPECTED = 513;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -9421,6 +9421,140 @@ if (partOn("p_pg5")) {
       + " again: " + dayOff.detail + ", sha " + (dayOff.back ? "restored" : "differs"));
   } catch (e) {
     check(false, "harness (the legs pg5): " + (e && e.stack ? e.stack : e));
+  }
+}
+
+/* ---- pg6: retryPending (a file that waited for its key) leaves the pending list only where it landed, the relay said
+   gone, or it was refused; a 200 without its description is judged under a description from relistHeld or stays
+   pending, and one naming another id stays pending and is said once. ---- */
+async function scenePg6(mod, opts) {
+  const o = opts || {};
+  const x = pgRelay(0, false);
+  const D1 = keyPair(true);
+  const tm = { rt: hex(16), id: "t-" + hex(8), key: crypto.randomBytes(32) };
+  const key2 = crypto.randomBytes(32);
+  await x.team(tm.rt, tm.id, [D1]);
+  const tag = "pg6-" + hex(4);
+  const keys = new Map([[1, tm.key], [2, key2]]);
+  let leadEpoch = 1;
+  const lead = pgProgram(C, x, "pg6-lead-" + tag, tm, LEAD, "root", {
+    more: { keyFor: e => keys.get(e) || null, sealEpoch: () => leadEpoch },
+  });
+  const d1Keys = new Map([[1, tm.key]]);
+  let mode = "normal", otherCount = 0, relistFailed = 0, targetId = null, relistRel = null;
+  const fail = (m, rel) => {
+    if (mode === "relistFail" && m === "GET" && relistRel && rel === relistRel && relistFailed++ === 0) return true;
+    return false;
+  };
+  const alter = (m, rel, name, value) => {
+    if (name !== "etiuda-blob" || m !== "GET" || !rel.startsWith("b/")) return value;
+    if (mode === "strip" || mode === "relistFail") return null;
+    if (mode === "other" && targetId && rel === "b/" + targetId && value && otherCount++ === 0) {
+      const meta = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+      return Buffer.from(JSON.stringify(Object.assign(meta, { id: hex(16) })), "utf8").toString("base64url");
+    }
+    return value;
+  };
+  const d1 = pgProgram(mod, x, "pg6-d1-" + tag, tm, D1, "desk:" + D1.keyId, {
+    fail, alter, more: { keyFor: e => d1Keys.get(e) || null, sealEpoch: () => 1 },
+  });
+  try {
+    put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, [member(D1)]));
+    lead.ch.start();
+    await settle(lead);
+    d1.ch.start();
+    await settle(d1);
+
+    /* Epoch 2 team file and two epoch-2 files while d1 holds only epoch 1's key: all wait in d1's pending list. */
+    leadEpoch = 2;
+    put(lead.mirror, C.TEAM_NAME, teamBody(tm, 2, 1, [member(D1)]));
+    put(lead.mirror, "pad/ep2a.ec", "epoch two file a\n");
+    put(lead.mirror, "pad/ep2b.ec", "epoch two file b\n");
+    await settle(lead);
+    await settle(d1);
+    const blobs = x.RL.stores.get(tm.rt).dump().map(([k, v]) => [k, JSON.parse(v)]).filter(([k]) => k.startsWith("blob:")).map(([, v]) => v);
+    const ep2Blobs = blobs.filter(v => v.writer === LEAD.keyId && v.epoch === 2 && !v.del).sort((a, b) => a.seq - b.seq);
+    const ep2aBlob = ep2Blobs[1] || null;
+    targetId = ep2aBlob ? ep2aBlob.id : null;
+    relistRel = ep2Blobs[0] ? "since/" + (ep2Blobs[0].seq - 1) : null;
+    const pendBefore = d1.prog.state().pending.length;
+
+    if (o.supersede) {
+      /* Supersede the first pending blob while d1 still has not retried, so GET b/<old> returns 410 gone. */
+      put(lead.mirror, "pad/ep2a.ec", "epoch two file a v2\n");
+      await settle(lead);
+    }
+
+    /* Now d1 holds key 2, and its transport strips or swaps headers during retryPending. */
+    d1Keys.set(2, key2);
+    mode = o.mode || "strip";
+    const logFrom = d1.t.log.length;
+    d1.ch.kick();
+    await d1.ch.idle();
+    const firstCalls = d1.t.log.slice(logFrom);
+    const relists = relistRel ? firstCalls.filter(l => l === "GET " + relistRel).length : 0;
+    const mid = {
+      pending: d1.prog.state().pending.length,
+      a: read(d1.mirror, "pad/ep2a.ec"),
+      b: read(d1.mirror, "pad/ep2b.ec"),
+      said: d1.said.slice(),
+    };
+
+    /* Next cycle with normal headers: anything still pending lands. */
+    mode = "normal";
+    await settle(d1);
+    return {
+      pendBefore, relists, relistFailed, otherCount, mid,
+      afterPending: d1.prog.state().pending.length,
+      afterA: read(d1.mirror, "pad/ep2a.ec"),
+      afterB: read(d1.mirror, "pad/ep2b.ec"),
+      said: d1.said.slice(),
+    };
+  } finally {
+    await d1.ch.stop();
+    await lead.ch.stop();
+  }
+}
+
+if (partOn("p_pg6")) {
+  try {
+    markPart("p_pg6");
+    const strip = await scenePg6(C, { mode: "strip" });
+    check(strip.pendBefore >= 2 && strip.mid.pending === 0 && strip.relists === 1
+      && strip.mid.a === "epoch two file a\n" && strip.mid.b === "epoch two file b\n",
+      "pg6a retryPending with every header stripped reads the list again once (" + strip.relists + ") and lands both pending files: "
+      + JSON.stringify({ before: strip.pendBefore, midPending: strip.mid.pending, a: !!strip.mid.a, b: !!strip.mid.b }));
+    const rfail = await scenePg6(C, { mode: "relistFail" });
+    check(rfail.relistFailed === 1 && rfail.mid.pending >= 2 && rfail.mid.a === null && rfail.afterPending === 0
+      && rfail.afterA === "epoch two file a\n" && rfail.afterB === "epoch two file b\n",
+      "pg6b retryPending with headers stripped and the relist answered 503 once keeps the pending rows and lands them next cycle: "
+      + JSON.stringify({ before: rfail.pendBefore, midPending: rfail.mid.pending, afterPending: rfail.afterPending, a: !!rfail.afterA }));
+    const other = await scenePg6(C, { mode: "other" });
+    const otherSaid = other.mid.said.some(l => l.indexOf("another file's description") >= 0);
+    check(other.otherCount === 1 && other.mid.pending >= 1 && other.mid.a === null && otherSaid
+      && other.afterPending === 0 && other.afterA === "epoch two file a\n",
+      "pg6c retryPending answered once with another id's header stays pending, says the fault once, and lands next cycle: "
+      + JSON.stringify({ midPending: other.mid.pending, otherSaid, afterPending: other.afterPending, a: !!other.afterA }));
+    const relistOff = await pgPlant(["plant:pending-relist"], 0, async mod => {
+      const r = await scenePg6(mod, { mode: "strip" });
+      return r.mid.a === null;
+    });
+    check(relistOff.turned && relistOff.back, "pg6d lifting plant:pending-relist turns pg6a red (headerless pending files never land): "
+      + relistOff.detail + ", sha " + (relistOff.back ? "restored" : "differs"));
+    const otherOff = await pgPlant(["plant:pending-other"], 0, async mod => {
+      const r = await scenePg6(mod, { mode: "other" });
+      return !r.mid.said.some(l => l.indexOf("another file's description") >= 0);
+    });
+    check(otherOff.turned && otherOff.back, "pg6e lifting plant:pending-other turns pg6c red (other-id answer not refused as OTHER_FILE): "
+      + otherOff.detail + ", sha " + (otherOff.back ? "restored" : "differs"));
+    const keptOff = await pgPlant(["plant:pending-kept"], 0, async mod => {
+      const r = await scenePg6(mod, { mode: "normal", supersede: true });
+      return r.afterPending > 0;
+    });
+    check(keptOff.turned && keptOff.back, "pg6f lifting plant:pending-kept leaves a superseded (410 gone) pending row stuck in pending: "
+      + keptOff.detail + ", sha " + (keptOff.back ? "restored" : "differs"));
+  } catch (e) {
+    check(false, "harness (the legs pg6): " + (e && e.stack ? e.stack : e));
   }
 }
 
