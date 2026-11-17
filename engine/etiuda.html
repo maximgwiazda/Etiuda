@@ -9404,6 +9404,7 @@ What is typed here stays in this browser.`;
     "This computer's profile did not keep this desk's key.": "Profil na tym komputerze nie zachował klucza tego stanowiska.",
     "The organisation's IT department can have the profile keep it.": "Dział IT organizacji może sprawić, że profil będzie go zachowywał.",
     "Everything else on this desk works as before; only signing in waits.": "Wszystko inne na tym stanowisku działa jak dotąd; czeka tylko logowanie.",
+    "Everything else on this desk works as before.": "Wszystko inne na tym stanowisku działa jak dotąd.",
     "Etiuda keeps working with the catalog it has.": "Etiuda działa dalej na katalogu, który już ma.",
     /* placeholders for the copywriter: the desk waits for machine policy to be read (review 09, finding 4) */
     "Etiuda is waiting for the organisation's settings.": "Etiuda czeka na ustawienia organizacji.",
@@ -29311,9 +29312,10 @@ What is typed here stays in this browser.`;
   }
   function signinStrandedWords(v) {
     const c = v && v.managed ? v.managed.contact : "";
+    const offered2 = !!(v && (v.offered.length || v.signedIn));
     return [
       t("This computer's profile did not keep this desk's key."),
-      (c ? named(t("To ask for access: {CONTACT}."), "{CONTACT}", c) : t("The organisation's IT department can have the profile keep it.")) + " " + t("Everything else on this desk works as before; only signing in waits.")
+      (c ? named(t("To ask for access: {CONTACT}."), "{CONTACT}", c) : t("The organisation's IT department can have the profile keep it.")) + " " + (offered2 ? t("Everything else on this desk works as before; only signing in waits.") : t("Everything else on this desk works as before."))
     ];
   }
   function signinWaiting(v) {
@@ -29345,7 +29347,7 @@ What is typed here stays in this browser.`;
     return signinV;
   }
   function signinShown(v) {
-    return !!(v && (v.offered.length || v.signedIn || signinWaiting(v)));
+    return !!(v && (v.offered.length || v.signedIn || signinWaiting(v) || signinStranded(v)));
   }
   var FIRST_SIGNIN_KEY = "eFirstSigninSeen";
   function firstSigninSeen() {
@@ -29360,6 +29362,7 @@ What is typed here stays in this browser.`;
     const seen = o && "seen" in o ? !!o.seen : firstSigninSeen();
     const policy = o && "policy" in o ? !!o.policy : eCatalogFolderPinned();
     if (policy) return false;
+    if (signinStranded(s)) return false;
     return !!(s && s.offered.length && !s.signedIn && !seen);
   }
   var firstSigninPending = false;
@@ -29630,8 +29633,8 @@ What is typed here stays in this browser.`;
     if (!signinShown(v)) return null;
     const p = signinParts(v), acct = { act: "account", label: t("Account settings") };
     const ident = { initial: p.initial, name: p.name, sub: p.sub, off: p.off };
-    if (signinStranded(v)) return { moment: "stranded", say: signinStrandedWords(v) };
     if (signinWaiting(v)) return { moment: "policy-waiting", say: signinWaitingWords() };
+    if (signinStranded(v)) return { moment: "stranded", say: signinStrandedWords(v) };
     if (v.busy) return {
       moment: "waiting",
       heading: t("Finish signing in in the browser"),
@@ -40162,13 +40165,13 @@ What is typed here stays in this browser.`;
     return '<span class="sgn-val">' + esc(value) + '</span><span class="sgn-lock">' + ICON_LOCK2 + esc(t("Set by your organisation")) + "</span>";
   }
   function accountCardHtml(v) {
-    if (signinStranded(v)) {
-      const s = signinStrandedWords(v);
-      return '<div class="sgn-top col"><p class="sgn-say" data-signin-stranded><b>' + esc(s[0]) + "</b><span>" + esc(s[1]) + "</span></p></div>";
-    }
     if (signinWaiting(v)) {
       const s = signinWaitingWords();
       return '<div class="sgn-top col"><p class="sgn-say" data-signin-waiting><b>' + esc(s[0]) + "</b><span>" + esc(s[1]) + "</span></p></div>";
+    }
+    if (signinStranded(v)) {
+      const s = signinStrandedWords(v);
+      return '<div class="sgn-top col"><p class="sgn-say" data-signin-stranded><b>' + esc(s[0]) + "</b><span>" + esc(s[1]) + "</span></p></div>";
     }
     const p = signinParts(v), choosing = signinChoosingNow();
     if (v.signedIn && !choosing) {
@@ -40228,10 +40231,11 @@ What is typed here stays in this browser.`;
     const name = row("name", "user", t("Your name"), "", '<input type="text" id="setAgentName" autocomplete="off" spellcheck="false" placeholder="' + esc(t("first name")) + '" value="' + esc(agentName()) + '">');
     const v = signinNow(), groups = [];
     if (signinShown(v) || signinManaged(v)) groups.push({ rows: [], after: accountCardHtml(v) });
-    const rows = [name], buy = buyOffered() && !v.busy && !signinManaged(v) && !v.licenceManaged;
-    const held = v.licenceManaged ? row("buy", "forward", t("Licence for one person"), t("Your organisation holds the Etiuda licence for this account, so there is nothing to buy here."), "") : null;
+    const stranded = signinStranded(v) && !signinWaiting(v);
+    const rows = [name], buy = !stranded && buyOffered() && !v.busy && !signinManaged(v) && !v.licenceManaged;
+    const held = !stranded && v.licenceManaged ? row("buy", "forward", t("Licence for one person"), t("Your organisation holds the Etiuda licence for this account, so there is nothing to buy here."), "") : null;
     const cause = v.cause === "own-licence" ? t("Your organisation's licence follows the roles its IT department assigns, and this account has none, so it keeps its seat on the licence bought before.") : v.cause === "assigned" ? t("Your organisation has given this account a role, so it uses the organisation's licence; its seat on the licence bought before is not used meanwhile.") : "";
-    if (v.signedIn && !signinChoosingNow()) {
+    if (!stranded && v.signedIn && !signinChoosingNow()) {
       const p = signinParts(v), val = (x) => '<span class="sgn-val">' + esc(x) + "</span>", join = (pair) => pair[0] + " " + pair[1];
       const doorSaid = signinDoorRefusedNow() ? signinSay("door", v)[0] : "";
       rows.push(p.team ? row("team", "people", t("Team"), doorSaid || (p.team.lead ? t("Led by {LEAD}").split("{LEAD}").join(p.team.lead) : ""), val(p.teamName)) : v.doors.length && v.seat === "held" ? row("team", "people", t("A team on this licence"), doorSaid || t("This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation."), signinDoorsHtml(v.doors)) : v.deskOnly && v.seat === "held" ? row("team", "people", t("Working without a team"), doorSaid || t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed."), "") : row("team", "people", t("No team yet"), doorSaid || (signinManaged(v) ? t("No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself.") : t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself.")), ""));
@@ -40260,7 +40264,7 @@ What is typed here stays in this browser.`;
     } else if (buy && !v.signedIn) rows.push(buyRow(v));
     else if (held && !v.signedIn) rows.push(held);
     groups.push({ rows });
-    const s = v.signedIn && !signinChoosingNow() ? syncNow() : null;
+    const s = !stranded && v.signedIn && !signinChoosingNow() ? syncNow() : null;
     if (s && s.shown) groups.push({ rows: [syncRow(s, v.signedIn)] });
     return groups;
   }

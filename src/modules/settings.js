@@ -289,10 +289,10 @@ function lockedHtml(value){
   return '<span class="sgn-val">'+esc(value)+'</span><span class="sgn-lock">'+ICON_LOCK+esc(t("Set by your organisation"))+'</span>';
 }
 function accountCardHtml(v){
-  /* The desk's key not kept by a non-persistent profile (section 12): the card says so and offers nothing that would make a new desk. */
-  if(signinStranded(v)){ const s=signinStrandedWords(v); return '<div class="sgn-top col"><p class="sgn-say" data-signin-stranded><b>'+esc(s[0])+'</b><span>'+esc(s[1])+'</span></p></div>'; }
   /* Machine policy has not answered: the card says the desk waits for it, and offers nothing to sign in with. */
   if(signinWaiting(v)){ const s=signinWaitingWords(); return '<div class="sgn-top col"><p class="sgn-say" data-signin-waiting><b>'+esc(s[0])+'</b><span>'+esc(s[1])+'</span></p></div>'; } /* plant:card-waiting */
+  /* The desk's key not kept by a non-persistent profile (section 12): the card says so and offers nothing that would make a new desk. */
+  if(signinStranded(v)){ const s=signinStrandedWords(v); return '<div class="sgn-top col"><p class="sgn-say" data-signin-stranded><b>'+esc(s[0])+'</b><span>'+esc(s[1])+'</span></p></div>'; }
   const p=signinParts(v), choosing=signinChoosingNow();
   if(v.signedIn && !choosing){
     const keeps=signinKeepsAccount(v);
@@ -344,13 +344,14 @@ function accountGroups(){
     +' placeholder="'+esc(t("first name"))+'" value="'+esc(agentName())+'">');
   const v=signinNow(), groups=[];
   if(signinShown(v) || signinManaged(v)) groups.push({rows:[], after:accountCardHtml(v)}); /* plant:account-managed-closed */
-  const rows=[name], buy=buyOffered() && !v.busy && !signinManaged(v) /* plant:buy-page-managed */
+  const stranded=signinStranded(v) && !signinWaiting(v);
+  const rows=[name], buy=!stranded && buyOffered() && !v.busy && !signinManaged(v) /* plant:buy-page-managed */
     && !v.licenceManaged; /* plant:account-buy-managed */
   /* A managed tenant's account: nothing to buy, and who holds the licence instead (the copywriter's placeholder words). */
-  const held=v.licenceManaged ? row("buy","forward",t("Licence for one person"),t("Your organisation holds the Etiuda licence for this account, so there is nothing to buy here."),"") : null;
+  const held=!stranded && v.licenceManaged ? row("buy","forward",t("Licence for one person"),t("Your organisation holds the Etiuda licence for this account, so there is nothing to buy here."),"") : null;
   const cause=v.cause==="own-licence" ? t("Your organisation's licence follows the roles its IT department assigns, and this account has none, so it keeps its seat on the licence bought before.")
     : v.cause==="assigned" ? t("Your organisation has given this account a role, so it uses the organisation's licence; its seat on the licence bought before is not used meanwhile.") : "";
-  if(v.signedIn && !signinChoosingNow()){
+  if(!stranded && v.signedIn && !signinChoosingNow()){ /* plant:account-stranded-rows */
     const p=signinParts(v), val=x=>'<span class="sgn-val">'+esc(x)+'</span>', join=pair=>pair[0]+" "+pair[1];
     /* A press at a door the shell refused is said on the team's row, where it was pressed. */
     const doorSaid=signinDoorRefusedNow() ? signinSay("door", v)[0] : "";
@@ -373,7 +374,7 @@ function accountGroups(){
   } else if(buy && !v.signedIn) rows.push(buyRow(v));
   else if(held && !v.signedIn) rows.push(held);
   groups.push({rows});
-  const s=v.signedIn && !signinChoosingNow() ? syncNow() : null;
+  const s=!stranded && v.signedIn && !signinChoosingNow() ? syncNow() : null; /* plant:account-stranded-sync */
   if(s && s.shown) groups.push({rows:[syncRow(s, v.signedIn)]});
   return groups;
 }

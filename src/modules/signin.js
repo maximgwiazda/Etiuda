@@ -86,9 +86,11 @@ function signinNoRoleWords(v){
 function signinStranded(v){ return !!(v && v.managed && v.managed.stranded); } /* plant:np-page */
 function signinStrandedWords(v){
   const c=v && v.managed ? v.managed.contact : "";
+  const offered=!!(v && (v.offered.length || v.signedIn)); /* plant:stranded-offered */
   return [t("This computer's profile did not keep this desk's key."),
     (c ? named(t("To ask for access: {CONTACT}."),"{CONTACT}",c) : t("The organisation's IT department can have the profile keep it."))
-      + " " + t("Everything else on this desk works as before; only signing in waits.")];
+      + " " + (offered ? t("Everything else on this desk works as before; only signing in waits.")
+        : t("Everything else on this desk works as before."))];
 }
 /* MACHINE POLICY HAS NOT ANSWERED (the shell's policyWaits): signing in waits for it, said in its own words and never as a managed
    computer. */
@@ -113,7 +115,7 @@ function signinNow(){
   return signinV;
 }
 /* Whether the door exists: a provider offered, somebody signed in, or the wait for machine policy to say. */
-function signinShown(v){ return !!(v && (v.offered.length || v.signedIn || signinWaiting(v))); } /* plant:shown-waiting */
+function signinShown(v){ return !!(v && (v.offered.length || v.signedIn || signinWaiting(v) || signinStranded(v))); } /* plant:shown-waiting */
 /* FIRST-OPENING SIGN-IN GATE AND MEMORY: shown once on a desk that offers a provider, has
    nobody signed in, has never shown the screen before, and is not pinned by policy (a policy
    desk joins its team from HKLM policy without asking first). Written when the screen opens
@@ -127,6 +129,7 @@ function firstSigninDue(v, opts){
   const seen=o && "seen" in o ? !!o.seen : firstSigninSeen();
   const policy=o && "policy" in o ? !!o.policy : eCatalogFolderPinned();
   if(policy) return false; /* plant:first-signin-gate */
+  if(signinStranded(s)) return false; /* plant:first-signin-stranded */
   return !!(s && s.offered.length && !s.signedIn && !seen);
 }
 let firstSigninPending=false, firstSigninOpen=false, firstSigninWaits=[];
@@ -373,8 +376,8 @@ function signinDoorOf(v){
   if(!signinShown(v)) return null;
   const p=signinParts(v), acct={act:"account", label:t("Account settings")};
   const ident={initial:p.initial, name:p.name, sub:p.sub, off:p.off};
-  if(signinStranded(v)) return {moment:"stranded", say:signinStrandedWords(v)};
   if(signinWaiting(v)) return {moment:"policy-waiting", say:signinWaitingWords()}; /* plant:door-waiting */
+  if(signinStranded(v)) return {moment:"stranded", say:signinStrandedWords(v)};
   if(v.busy) return {moment:"waiting", heading:t("Finish signing in in the browser"),
     line:named(t("The browser has opened {PROVIDER}'s sign-in page. Etiuda waits here and carries on by itself when you come back."),"{PROVIDER}",SIGNIN_NAMES[v.busy]),
     wait:named(t("Waiting for {PROVIDER}…"),"{PROVIDER}",SIGNIN_NAMES[v.busy]),

@@ -1515,6 +1515,7 @@ UI_STRINGS.pl={
   "This computer's profile did not keep this desk's key.":"Profil na tym komputerze nie zachował klucza tego stanowiska.",
   "The organisation's IT department can have the profile keep it.":"Dział IT organizacji może sprawić, że profil będzie go zachowywał.",
   "Everything else on this desk works as before; only signing in waits.":"Wszystko inne na tym stanowisku działa jak dotąd; czeka tylko logowanie.",
+  "Everything else on this desk works as before.":"Wszystko inne na tym stanowisku działa jak dotąd.",
   "Etiuda keeps working with the catalog it has.":"Etiuda działa dalej na katalogu, który już ma.",
   /* placeholders for the copywriter: the desk waits for machine policy to be read (review 09, finding 4) */
   "Etiuda is waiting for the organisation's settings.":"Etiuda czeka na ustawienia organizacji.",
