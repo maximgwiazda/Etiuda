@@ -7630,7 +7630,7 @@ function relayRun() {
   const team = want.team, mirror = relayMirrorOf(want.rt);
   try { fs.mkdirSync(mirror, { recursive: true }); }
   catch (e) { teamSay("the relay's mirror " + mirror + " could not be made - " + e.message); relayAt = ""; return null; }
-  relayChannel = RelayChannel().createChannel({
+  relayChannel = RelayChannel().createChannel(signinSeatWall(want.url, {
     rt: want.rt, url: want.url, mirror: mirror, stateFile: mirror + ".json", write: writeReplacing,
     pin: () => { const now = pinFor(want) || pin; return { teamId: team, rt: want.rt, lead: { keyId: now.keyId, public: now.public } }; },
     me: () => {
@@ -7791,7 +7791,7 @@ function relayRun() {
     },
     request: relayRequest, connect: relayConnect,
     say: line => teamSay("relay of team " + team + ": " + line),
-  });
+  }));
   relayChannel.start();
   return relayChannel;
 }
@@ -11223,6 +11223,20 @@ function signinSeatRenew() {
   if (signinSeatRenewAt && now >= signinSeatRenewAt && now - signinSeatRenewAt < SIGNIN_SEAT_RENEW_MS) return Promise.resolve(); /* plant:seat-renew-gap */
   signinSeatRenewAt = now;
   return signinRenewNow().then(() => {}, () => {});
+}
+/* THE SEAT'S WALL: a team's relay channel at an address an invitation may not name (knownRelayAddress) is handed no seat certificate,
+   asks no renewal and knocks at no door with one, since the certificate names the person's code and a team file may name any host.
+   Its token hellos and a door request's withdrawal, which carry no certificate, go as before. */
+function signinSeatWall(url, opts) {
+  let known = true;
+  known = knownRelayAddress(url); /* plant:seat-wall */
+  if (known) return opts;
+  const out = Object.assign({}, opts);
+  delete out.seat;
+  delete out.seatRenew;
+  delete out.onSeat;
+  if (typeof opts.invite === "function") out.invite = () => { const inv = opts.invite(); return inv && inv.door ? null : inv; }; /* plant:seat-wall-door */
+  return out;
 }
 /* What a team's relay channel is handed for its seat; null forgets the refusal of a channel let go. */
 function signinRelaySeatIo(team) {

@@ -868,6 +868,40 @@ async function main() {
     check(turned && p.shaSame, "945s24 staging's relay followed without the switch turns 945s20 red: turned=" + turned + ", shaSame=" + p.shaSame);
   }
 
+  /* THE SEAT'S WALL (945s25): a desk pinned by invitation whose lead's signed team file names another https host builds its channel
+     there through signinSeatWall, as a channel at the built-in relay is built. Judged at that hand-over, on a customer's start
+     (harnessLaunch false, under which knownRelayAddress takes only the built-in and staging relays): the other host's channel holds no
+     seat, no renewal, nothing to tell, and knocks with no certificate, its token hello and a withdrawal going as before; the built-in
+     relay's holds the seat and the door's certificate. Judged at the hand-over rather than on the traffic, so it holds whether or not
+     the desk follows the team file to that host at all. */
+  const seatWallSays = src => {
+    const sliceFn = name => { const at = src.indexOf("\nfunction " + name + "("), end = src.indexOf("\n}\n", at); return at < 0 || end < 0 ? "" : src.slice(at + 1, end + 2); };
+    const wall = new Function("const BUILTIN_RELAY_URL = " + JSON.stringify(BUILTIN_RELAY) + ", STAGING_RELAY_URL = " + JSON.stringify(STAGING_RELAY) + ";\n"
+      + "const harnessLaunch = () => false;\n" + sliceFn("knownRelayAddress") + "\n" + sliceFn("signinSeatWall") + "\nreturn signinSeatWall;")();
+    const cert = { sig: { value: "ab" } }, OTHER = "https://other.test/relay/v1";
+    const opts = invite => ({ seat: () => cert, seatRenew: async () => {}, onSeat: () => {}, invite: () => invite });
+    const built = wall(BUILTIN_RELAY, opts({ door: cert, box: "b" })), other = wall(OTHER, opts({ door: cert, box: "b" }));
+    const withdrawal = wall(OTHER, opts({ door: null, box: "b", inv: "i" })).invite(), token = wall(OTHER, opts({ inv: "i", token: "t" })).invite();
+    return { builtinSeat: typeof built.seat === "function" && built.seat() === cert && typeof built.seatRenew === "function" && built.invite().door === cert,
+      otherSeat: other.seat !== undefined || other.seatRenew !== undefined || other.onSeat !== undefined, otherDoor: other.invite() !== null,
+      withdrawalGoes: !!withdrawal && withdrawal.inv === "i", tokenGoes: !!token && token.token === "t" };
+  };
+  const mainNow = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
+  const wallOk = w => w.builtinSeat && !w.otherSeat && !w.otherDoor && w.withdrawalGoes && w.tokenGoes;
+  let sw = null;
+  try { sw = seatWallSays(mainNow); } catch (e) { sw = { threw: String(e && e.message || e) }; }
+  check(wallOk(sw), "945s25 on a customer's start a team's relay channel at a host an invitation may not name, where a pinned lead's team file"
+    + " moved it, is handed no seat certificate, renewal or seat word and knocks with no certificate, its token hello and a withdrawal going as"
+    + " before, while the built-in relay's holds the seat and the door's certificate: " + JSON.stringify(sw));
+  for (const [id, tag, what] of [["945s26", "plant:seat-wall", "the other host's channel is handed the seat"],
+    ["945s27", "plant:seat-wall-door", "the other host's channel knocks with the certificate"]]) {
+    const lines = mainNow.split(/\n/), at = lines.findIndex(l => l.includes("/* " + tag + " */"));
+    let turned = false;
+    if (at >= 0) { lines.splice(at, 1); try { turned = !wallOk(seatWallSays(lines.join("\n"))); } catch { turned = true; } }
+    const shaSame = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8") === mainNow;
+    check(wallOk(sw) && turned && shaSame, id + " lifting " + tag + " turns 945s25 red (" + what + "): turned=" + turned + ", shaSame=" + shaSame);
+  }
+
   // Clean up scenario temp dirs
   [s1, s2, s3, s4, s6, s7, s8, s9, s10, s11, s12, s13].filter(Boolean).forEach(s => {
     try { fs.rmSync(s.lab, { recursive: true, force: true }); } catch {}
