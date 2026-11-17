@@ -62,7 +62,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 524;
+const EXPECTED = 532;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -9835,6 +9835,235 @@ if (partOn("p_pg8")) {
       + metaOff.detail + ", sha " + (metaOff.back ? "restored" : "differs"));
   } catch (e) {
     check(false, "harness (the legs pg8): " + (e && e.stack ? e.stack : e));
+  }
+}
+
+/* ---- pg9: a blob header that names the right id and does not open (size wrong, or v 2) counts as no description
+   in landLater and on the ordinary page: the list entry is judged, and where the list entry does not open either, a
+   held row stays in later and nothing says it landed. ---- */
+async function scenePg9Held(mod, opts) {
+  const o = opts || {};
+  const x = pgRelay(4, false);
+  const D0 = keyPair(true), D1 = keyPair(true);
+  const tm = { rt: hex(16), id: "t-" + hex(8), key: crypto.randomBytes(32) };
+  await x.team(tm.rt, tm.id, [D0, D1]);
+  const tag = "pg9h-" + hex(4);
+  const lead = pgProgram(C, x, "pg9h-lead-" + tag, tm, LEAD, "root");
+  const d0 = pgProgram(C, x, "pg9h-d0-" + tag, tm, D0, "desk:" + D0.keyId);
+  put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, [member(D0), member(D1)]));
+  lead.ch.start();
+  await settle(lead);
+  let d1 = pgProgram(mod, x, "pg9h-d1-" + tag, tm, D1, "desk:" + D1.keyId);
+  d1.ch.start();
+  await settle(d1);
+  await d1.ch.stop();
+
+  const d0file = "desks/" + D0.keyId + "/stats.estat", d0body = "{\"counted\":9}\n";
+  put(d0.mirror, d0file, d0body);
+  d0.ch.start();
+  await settle(d0);
+  await d0.ch.stop();
+  for (let i = 0; i < 6; i++) put(lead.mirror, "pad/p" + i + ".ec", "pad " + i + "\n");
+  await settle(lead);
+  await lead.ch.stop();
+
+  const blobs = x.RL.stores.get(tm.rt).dump().map(([k, v]) => [k, JSON.parse(v)]).filter(([k]) => k.startsWith("blob:")).map(([, v]) => v);
+  const b0 = blobs.find(v => v.writer === D0.keyId && !v.del);
+  const mutateMeta = m => {
+    if (o.mode === "size") return Object.assign({}, m, { size: m.size + 1 });
+    if (o.mode === "v2") return Object.assign({}, m, { v: 2 });
+    return m;
+  };
+  let active = true;
+  const baseT = x.transport(null, (m, rel, name, value) => {
+    if (!active || name !== "etiuda-blob" || m !== "GET" || !b0 || rel !== "b/" + b0.id || !value) return value;
+    const meta = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+    return Buffer.from(JSON.stringify(mutateMeta(meta)), "utf8").toString("base64url");
+  });
+  const request = async (method, url, headers, body) => {
+    const res = await baseT.request(method, url, headers, body);
+    const rel = String(url).replace(/^https:\/\/[^/]+\/relay\/v1\/t\/[0-9a-f]{32}\//, "");
+    if (active && o.corruptList && method === "GET" && rel.startsWith("since/") && b0 && res.status === 200) {
+      const arr = JSON.parse(res.bytes.toString("utf8"));
+      const next = arr.map(e => (e && e.meta && e.meta.id === b0.id ? Object.assign({}, e, { meta: mutateMeta(e.meta) }) : e));
+      return Object.assign({}, res, { bytes: Buffer.from(JSON.stringify(next), "utf8") });
+    }
+    return res;
+  };
+  d1 = pgProgram(mod, x, "pg9h-d1-" + tag, tm, D1, "desk:" + D1.keyId, { more: { request } });
+  try {
+    d1.ch.start();
+    await d1.ch.idle();
+    const mid = {
+      d0: read(d1.mirror, d0file),
+      later: d1.prog.later().map(h => h.id),
+      seq: d1.prog.state().seq,
+      top: x.top(tm.rt),
+      said: d1.said.slice(),
+    };
+    active = false;
+    await settle(d1);
+    return {
+      b0Id: b0 ? b0.id : null,
+      d0body,
+      mid,
+      afterD0: read(d1.mirror, d0file),
+      afterLater: d1.prog.later().length,
+      afterSeq: d1.prog.state().seq,
+      top: x.top(tm.rt),
+      said: d1.said.slice(),
+    };
+  } finally {
+    await d1.ch.stop();
+    await d0.ch.stop();
+    await lead.ch.stop();
+  }
+}
+
+async function scenePg9Ordinary(mod) {
+  const x = pgRelay(0, false);
+  const D1 = keyPair(true);
+  const tm = { rt: hex(16), id: "t-" + hex(8), key: crypto.randomBytes(32) };
+  await x.team(tm.rt, tm.id, [D1]);
+  const tag = "pg9o-" + hex(4);
+  const lead = pgProgram(C, x, "pg9o-lead-" + tag, tm, LEAD, "root");
+  put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, [member(D1)]));
+  lead.ch.start();
+  await settle(lead);
+  let d1 = pgProgram(mod, x, "pg9o-d1-" + tag, tm, D1, "desk:" + D1.keyId);
+  d1.ch.start();
+  await settle(d1);
+  await d1.ch.stop();
+
+  put(lead.mirror, "pad/badsize.ec", "bad size body\n");
+  await settle(lead);
+  put(lead.mirror, "pad/badver.ec", "bad version body\n");
+  await settle(lead);
+  await lead.ch.stop();
+
+  const blobs = x.RL.stores.get(tm.rt).dump().map(([k, v]) => [k, JSON.parse(v)]).filter(([k]) => k.startsWith("blob:")).map(([, v]) => v);
+  const live = blobs.filter(v => v.writer === LEAD.keyId && !v.del).sort((a, b) => a.seq - b.seq);
+  const bSize = live[live.length - 2], bVer = live[live.length - 1];
+  const alter = (m, rel, name, value) => {
+    if (name !== "etiuda-blob" || m !== "GET" || !rel.startsWith("b/") || !value) return value;
+    const meta = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+    if (bSize && rel === "b/" + bSize.id) return Buffer.from(JSON.stringify(Object.assign(meta, { size: meta.size + 1 })), "utf8").toString("base64url");
+    if (bVer && rel === "b/" + bVer.id) return Buffer.from(JSON.stringify(Object.assign(meta, { v: 2 })), "utf8").toString("base64url");
+    return value;
+  };
+  d1 = pgProgram(mod, x, "pg9o-d1-" + tag, tm, D1, "desk:" + D1.keyId, { alter });
+  try {
+    d1.ch.start();
+    await d1.ch.idle();
+    return {
+      badSize: read(d1.mirror, "pad/badsize.ec"),
+      badVer: read(d1.mirror, "pad/badver.ec"),
+      seq: d1.prog.state().seq,
+      top: x.top(tm.rt),
+      said: d1.said.slice(),
+    };
+  } finally {
+    await d1.ch.stop();
+    await lead.ch.stop();
+  }
+}
+
+async function scenePg9PendingSig(mod) {
+  const x = pgRelay(0, false);
+  const D1 = keyPair(true);
+  const tm = { rt: hex(16), id: "t-" + hex(8), key: crypto.randomBytes(32) };
+  const key2 = crypto.randomBytes(32);
+  await x.team(tm.rt, tm.id, [D1]);
+  const tag = "pg9p-" + hex(4);
+  const keys = new Map([[1, tm.key], [2, key2]]);
+  let leadEpoch = 1;
+  const lead = pgProgram(C, x, "pg9p-lead-" + tag, tm, LEAD, "root", { more: { keyFor: e => keys.get(e) || null, sealEpoch: () => leadEpoch } });
+  const d1Keys = new Map([[1, tm.key]]);
+  let tamper = false, targetId = null;
+  const alter = (m, rel, name, value) => {
+    if (!tamper || name !== "etiuda-blob" || m !== "GET" || !targetId || rel !== "b/" + targetId || !value) return value;
+    const meta = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+    return Buffer.from(JSON.stringify(Object.assign(meta, { sig: "00".repeat(64) })), "utf8").toString("base64url");
+  };
+  const d1 = pgProgram(mod, x, "pg9p-d1-" + tag, tm, D1, "desk:" + D1.keyId, { alter, more: { keyFor: e => d1Keys.get(e) || null, sealEpoch: () => 1 } });
+  try {
+    put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, [member(D1)]));
+    lead.ch.start();
+    await settle(lead);
+    d1.ch.start();
+    await settle(d1);
+
+    leadEpoch = 2;
+    put(lead.mirror, C.TEAM_NAME, teamBody(tm, 2, 1, [member(D1)]));
+    put(lead.mirror, "pad/pend.ec", "pending sig test\n");
+    await settle(lead);
+    await settle(d1);
+    const blobs = x.RL.stores.get(tm.rt).dump().map(([k, v]) => [k, JSON.parse(v)]).filter(([k]) => k.startsWith("blob:")).map(([, v]) => v);
+    const ep2 = blobs.filter(v => v.writer === LEAD.keyId && v.epoch === 2 && !v.del).sort((a, b) => a.seq - b.seq);
+    targetId = ep2[1] ? ep2[1].id : null;
+    const beforePend = d1.prog.state().pending.length;
+
+    d1Keys.set(2, key2);
+    tamper = true;
+    d1.ch.kick();
+    await d1.ch.idle();
+    return {
+      beforePend,
+      afterPend: d1.prog.state().pending.length,
+      file: read(d1.mirror, "pad/pend.ec"),
+      said: d1.said.slice(),
+    };
+  } finally {
+    await d1.ch.stop();
+    await lead.ch.stop();
+  }
+}
+
+if (partOn("p_pg9")) {
+  try {
+    markPart("p_pg9");
+    const hSize = await scenePg9Held(C, { mode: "size" });
+    check(hSize.mid.d0 === hSize.d0body && hSize.mid.later.length === 0 && hSize.mid.seq === hSize.mid.top && hSize.mid.said.length === 0,
+      "pg9a held file answered 200 with size one more than the body is judged under its list entry and lands: "
+      + JSON.stringify({ landed: hSize.mid.d0 === hSize.d0body, later: hSize.mid.later.length, atTop: hSize.mid.seq === hSize.mid.top, said: hSize.mid.said.length }));
+    const hV2 = await scenePg9Held(C, { mode: "v2" });
+    check(hV2.mid.d0 === hV2.d0body && hV2.mid.later.length === 0 && hV2.mid.seq === hV2.mid.top && hV2.mid.said.length === 0,
+      "pg9b held file answered 200 with v 2 is judged under its list entry and lands: "
+      + JSON.stringify({ landed: hV2.mid.d0 === hV2.d0body, later: hV2.mid.later.length, atTop: hV2.mid.seq === hV2.mid.top, said: hV2.mid.said.length }));
+    const hBoth = await scenePg9Held(C, { mode: "size", corruptList: true });
+    check(hBoth.mid.d0 === null && hBoth.mid.later.indexOf(hBoth.b0Id) >= 0 && !hBoth.mid.said.some(l => l.indexOf("left out") >= 0)
+      && hBoth.afterD0 === hBoth.d0body && hBoth.afterLater === 0,
+      "pg9c held file whose header and list entry both fail envelopeOf stays in later with nothing landed or refused, and lands once normal: "
+      + JSON.stringify({ midLanded: hBoth.mid.d0 !== null, stillHeld: hBoth.mid.later.indexOf(hBoth.b0Id) >= 0, afterLanded: hBoth.afterD0 === hBoth.d0body, afterLater: hBoth.afterLater }));
+    const ord = await scenePg9Ordinary(C);
+    check(ord.badSize === "bad size body\n" && ord.badVer === "bad version body\n" && ord.seq === ord.top && ord.said.length === 0,
+      "pg9d ordinary page answered 200 with size one more than the body or v 2 falls back to its list entry and lands both: "
+      + JSON.stringify({ badSize: ord.badSize === "bad size body\n", badVer: ord.badVer === "bad version body\n", atTop: ord.seq === ord.top, said: ord.said.length }));
+    const pend = await scenePg9PendingSig(C);
+    check(pend.beforePend >= 2 && pend.afterPend === 0 && pend.file === null && pend.said.some(l => l.indexOf("signature") >= 0),
+      "pg9e control: a pending row whose header opens and whose signature then fails is refused and unpended as today: "
+      + JSON.stringify({ before: pend.beforePend, after: pend.afterPend, file: pend.file, said: pend.said }));
+    const pLaterEnv = await pgPlant(["plant:later-envelope"], 0, async mod => {
+      const a = await scenePg9Held(mod, { mode: "size" });
+      const b = await scenePg9Held(mod, { mode: "v2" });
+      return a.mid.d0 === null && b.mid.d0 === null;
+    });
+    check(pLaterEnv.turned && pLaterEnv.back, "pg9f lifting plant:later-envelope turns pg9a and pg9b red (unopenable header lets held files go): "
+      + pLaterEnv.detail + ", sha " + (pLaterEnv.back ? "restored" : "differs"));
+    const pLaterList = await pgPlant(["plant:later-listed-envelope"], 0, async mod => {
+      const c = await scenePg9Held(mod, { mode: "size", corruptList: true });
+      return c.mid.later.indexOf(c.b0Id) < 0;
+    });
+    check(pLaterList.turned && pLaterList.back, "pg9g lifting plant:later-listed-envelope turns pg9c red (unopenable list entry lets held file go): "
+      + pLaterList.detail + ", sha " + (pLaterList.back ? "restored" : "differs"));
+    const pOrdEnv = await pgPlant(["plant:listed-envelope"], 0, async mod => {
+      const d = await scenePg9Ordinary(mod);
+      return d.badSize === null || d.badVer === null;
+    });
+    check(pOrdEnv.turned && pOrdEnv.back, "pg9h lifting plant:listed-envelope turns pg9d red (unopenable header on ordinary page drops file): "
+      + pOrdEnv.detail + ", sha " + (pOrdEnv.back ? "restored" : "differs"));
+  } catch (e) {
+    check(false, "harness (the legs pg9): " + (e && e.stack ? e.stack : e));
   }
 }
 
