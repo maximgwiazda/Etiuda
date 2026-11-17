@@ -6899,9 +6899,12 @@ async function main() {
        named by its branch id, answered as before step for step. */
     const EXEMPT = { "2026-11-01-59713def.json": { at: 3, status: 403, error: "bad-signature", from: 4,
       why: "the raw-key enrol refused at step 3, so no desk is on the team after it; 2026-11-01-59713def-branch.json covers these steps" } };
-    /* AND ONE PINNED STEP: the relay has no folder arm, so a read-only team's lead moving its team file to a folder is refused
-       team-lapsed, as every write there is; the step that recorded the move is answered that refusal, pinned here. */
-    const PINNED = { "2026-11-01-59713def-branch.json": { at: 43, status: 403, error: "team-lapsed" } };
+    /* AND TWO PINNED STEPS: the relay has no folder arm, so a read-only team's lead moving its team file to a folder is refused
+       team-lapsed, as every write there is, at the step that recorded the move; the lead's next file, two steps on, then takes the
+       sequence number the move took. */
+    const PINNED = { "2026-11-01-59713def-branch.json": [{ at: 43, status: 403, error: "team-lapsed" }, { at: 45, status: 200, seq: 6 }] };
+    const pinnedAt = (file, step) => (PINNED[file] || []).find(p => p.at === step);
+    const pinHolds = (pin, got) => got.status === pin.status && !!got.json && (pin.error ? got.json.error === pin.error : got.json.seq === pin.seq);
     const fixtures = files.map(f => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8")));
     const freshEnv = () => S.relayEnv({ roots: K.ROOTS });
     const results = [];
@@ -6918,15 +6921,15 @@ async function main() {
     const pinned = [], exempt = [];
     const pinnedSteps = [];
     const differ = results.flatMap((r, i) => r.differ.filter(d => {
-      const pin = PINNED[files[i]];
-      if (pin && d.step === pin.at) { pinnedSteps.push(d.got.status === pin.status && !!d.got.json && d.got.json.error === pin.error ? files[i] : files[i] + " answered " + d.got.status); return false; }
+      const pin = pinnedAt(files[i], d.step);
+      if (pin) { pinnedSteps.push(pinHolds(pin, d.got) ? files[i] + ":" + d.step : files[i] + ":" + d.step + " answered " + d.got.status); return false; }
       const ex = EXEMPT[files[i]];
       if (ex && d.step === ex.at) { pinned.push(d.got.status === ex.status && !!d.got.json && d.got.json.error === ex.error ? files[i] : files[i] + " answered " + d.got.status); return false; }
       if (ex && d.step >= ex.from) { exempt.push(d.step); return false; }
       return true;
     }).map(d => files[i] + " step " + d.step + " (" + d.what + ")"));
     const pinnedOk = Object.keys(EXEMPT).every(f => files.indexOf(f) < 0 || pinned.indexOf(f) >= 0);
-    const folderOk = Object.keys(PINNED).every(f => files.indexOf(f) < 0 || pinnedSteps.indexOf(f) >= 0);
+    const folderOk = Object.keys(PINNED).every(f => files.indexOf(f) < 0 || PINNED[f].every(p => pinnedSteps.indexOf(f + ":" + p.at) >= 0));
     check(files.length >= 2 && steps >= 100 && differ.length === 0 && pinnedOk && folderOk && unasked.length === 0,
       "1153a the previous release's requests, " + steps + " steps over " + files.length + " frozen fixture(s) (" + files.join(", ") + "), every route of the table among them,"
       + " are answered by this relay as they were, but for the declared exemption and the pinned folder move: " + (differ.length ? "answered otherwise at " + differ.slice(0, 3).join("; ") : "all as before")
@@ -6945,7 +6948,8 @@ async function main() {
     const altered = JSON.parse(JSON.stringify(control || { steps: [] }));
     const at = altered.steps.findIndex(st => st.res && st.res.status === 410);
     if (at >= 0) altered.steps[at].res.status = 404;
-    const seen = at >= 0 ? (await PREV.replay(altered, W, freshEnv)).differ.map(d => d.step) : [];
+    const controlFile = files[fixtures.indexOf(control)];
+    const seen = at >= 0 ? (await PREV.replay(altered, W, freshEnv)).differ.filter(d => !pinnedAt(controlFile, d.step)).map(d => d.step) : [];
     check(lifted.turned && lifted.back && at >= 0 && seen.length === 1 && seen[0] === at,
       "1153b the replay sees a change: lifting plant:session-life is answered otherwise at the expired session's step, and one recorded answer altered is found at"
       + " its step alone, and the product file is never written: " + how(lifted) + ", altered step " + at + " found at " + JSON.stringify(seen));
