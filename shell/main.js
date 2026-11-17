@@ -11033,6 +11033,96 @@ function signinLapsed(held, now) {
   if (!!held && !!held.cert && signinRevokedHas(held.revoked, held.cert)) return true; /* plant:lapse-revoked */
   return !!held && !!held.cert && now >= held.cert.until; /* plant:lapse-until */
 }
+/* WHETHER THE DESK WORKS: it holds a certificate signinCertOk takes for this desk's key, under a signer the kept list does not name,
+   and the desk's own clock (signinClockObserve) stands inside it. Nothing else counts: not a provider offered, not the service's
+   words, not machine policy. Carried to the page as the view's `works`; it decides nothing on the desk, whose other judgements read
+   the system clock (signinLapsed). */
+function signinWorks(held, deskKey, deskNow) {
+  const c = held && held.cert;
+  if (!c || !signinCertOk(c, deskKey)) return false; /* plant:works-cert */
+  if (signinRevokedHas(held.revoked, c)) return false; /* plant:works-revoked */
+  if (!Number.isSafeInteger(deskNow) || deskNow < c.issued) return false; /* plant:works-issued */
+  return deskNow < c.until; /* plant:works-until */
+}
+/* THE DESK'S OWN CLOCK {desk, wall, mono, last}: `desk` the service's time as this desk reckons it, 0 until a certificate anchors it;
+   `wall` and `mono` the system clock and the run's monotonic one at the last observation (`mono` null when read from the file);
+   `last` the last certificate's end. Each observation moves `desk` on by the larger of the two differences, never back; a certificate
+   taken moves it forward to its signed `issued`, never back. So only differences of the system clock count, and none below zero. */
+function signinClockObserve(clock, wall, mono, held, deskKey) {
+  const c = clock && Number.isSafeInteger(clock.desk) && clock.desk > 0 ? clock : { desk: 0, wall: wall, mono: mono, last: 0 };
+  const byWall = Number.isFinite(c.wall) ? wall - c.wall : 0, byMono = Number.isFinite(c.mono) && Number.isFinite(mono) ? mono - c.mono : 0;
+  let desk = c.desk > 0 ? c.desk + Math.round(Math.max(0, byWall, byMono)) : 0; /* plant:clock-forward */
+  let last = Number.isSafeInteger(c.last) && c.last > 0 ? c.last : 0;
+  const cert = held && held.cert;
+  if (cert && signinCertOk(cert, deskKey)) {
+    if (desk < cert.issued) desk = cert.issued; /* plant:clock-anchor */
+    last = cert.until;
+  }
+  return { desk: desk, wall: wall, mono: Number.isFinite(mono) ? mono : null, last: last };
+}
+/* THE CLOCK KEPT IN signin.json: `clock` {desk, wall, last} beside the file's fields and `clockMark`, this desk's key over them, both
+   outside the file's own mark (signinMarkBytes), so a desk that knows no clock reads the file as it always did. A clock missing,
+   edited or marked by another key is no clock, and the next observation starts again at the held certificate's `issued`. */
+function signinClockBytes(c) { return Buffer.from("etiuda-signin-clock\n" + [c.desk, c.wall, c.last].map(String).join("\n"), "utf8"); }
+function signinClockRead(text, deskKey) {
+  let d = null;
+  try { d = JSON.parse(String(text)); } catch { d = null; }
+  const c = d && typeof d === "object" ? d.clock : null;
+  if (!c || typeof c !== "object" || Array.isArray(c) || Object.keys(c).sort().join() !== "desk,last,wall" || !Number.isSafeInteger(c.desk) || c.desk <= 0
+    || !Number.isSafeInteger(c.wall) || !Number.isSafeInteger(c.last) || c.last < 0) return null;
+  if (!/^[0-9a-f]{64}$/.test(String(deskKey || "")) || !signinVerified(String(deskKey), signinClockBytes(c), d.clockMark)) return null; /* plant:clock-mark */
+  return { desk: c.desk, wall: c.wall, mono: null, last: c.last };
+}
+/* signin.json's text with the clock and its mark beside the rest; the text as it was where the clock has no anchor or nothing signs. */
+function signinClockText(text, clock, sign) {
+  let d = null;
+  try { d = JSON.parse(String(text)); } catch { return text; }
+  if (!d || typeof d !== "object" || !clock || !Number.isSafeInteger(clock.desk) || clock.desk <= 0 || typeof sign !== "function") return text;
+  const c = { desk: clock.desk, wall: Math.round(clock.wall), last: Number.isSafeInteger(clock.last) ? clock.last : 0 };
+  const mark = String(sign(signinClockBytes(c)) || "");
+  return /^[0-9a-f]{128}$/.test(mark) ? JSON.stringify(Object.assign(d, { clock: c, clockMark: mark }), null, 1) + "\n" : text; /* plant:clock-apart */
+}
+/* What the page is told, from `held` and what signinView gathers: no token and nothing from the provider; the providers offered by id,
+   who is signed in by provider, the code, the seat ("held", "lapsed" or "none") and whether its licence is desk-only, when the service
+   last answered and whether the last try reached it; the provider's page of the sign-in that waits, and nothing once it ends; whether
+   this system keeps a sign-in (sealsForReal); and, on the desk's own clock, whether it works, that clock, the held certificate's end,
+   the last one's where it stopped, and whether the system has a network. */
+function signinViewOf(held, o) {
+  const real = o.offered, now = o.wall, preview = o.preview, busy = o.busy;
+  const offered = preview ? o.shown : real;
+  const signedIn = held && real.indexOf(held.provider) >= 0 ? held.provider : "";
+  /* The code shown and handed to Buy is the held certificate's own where one is held, as the answer took it. */
+  let code = signedIn ? held.code : "";
+  if (signedIn && held.cert && typeof held.cert.code === "string") code = held.cert.code; /* plant:view-cert-code */
+  const works = signinWorks(held, o.deskKey, o.deskNow), cert = held && held.cert;
+  const view = { offered: offered, preview: preview, signedIn: signedIn, code: code,
+    seat: !signedIn ? "" : held.cert ? (signinLapsed(held, now) ? "lapsed" : "held") : "none",
+    deskOnly: !!signedIn && !!held.cert && held.cert.deskOnly === true, /* plant:view-desk-only */
+    /* Ask your lead, and the person's own trial's end where its certificate is the one held (a team is its lead's own). */
+    askLead: !!signedIn && held.askLead === true, /* plant:view-ask-lead */
+    trialUntil: !!signedIn && held.askLead === true && !!held.cert && held.cert.deskOnly === true ? Number(held.cert.until) || 0 : 0,
+    licenceManaged: signedIn ? held.managed === true : o.licenceManaged === true, cause: signedIn && held.managed === true ? held.cause || "" : "", /* plant:view-licence-managed */
+    at: signedIn ? held.at : 0, reached: !signedIn || held.reached !== false, ask: !!signedIn && held.ask === true,
+    refused: signedIn ? held.said : "", busy: busy ? busy.provider : "", said: o.said,
+    doors: signedIn ? o.doors : [],
+    relaySeat: signedIn ? o.relaySeat : "",
+    outOwed: !signedIn && o.outOwed === true, /* plant:out-owed-view */
+    link: busy && signinPageOk(busy.url) ? busy.url : "", keeps: o.keeps, /* plant:view-link */
+    works: works, /* plant:view-works */
+    now: Number.isSafeInteger(o.deskNow) && o.deskNow > 0 ? o.deskNow : 0, /* plant:view-now */
+    until: cert && Number.isSafeInteger(cert.until) ? cert.until : 0, /* plant:view-until */
+    /* Seated before and working no longer: the held certificate's end, or the last one's where none is held. */
+    stoppedAt: !works && !!held && held.seated === true ? (cert && Number.isSafeInteger(cert.until) ? cert.until : o.last > 0 ? o.last : 0) : 0, /* plant:view-stopped */
+    online: o.online !== false }; /* plant:view-online */
+  /* Only where machine policy sets any of its six values, so an unmanaged desk's view is the same object as before. */
+  const m = o.managed;
+  if (m && m.any) view.managed = { on: m.managed, shared: m.shared, personal: m.personal, provider: m.provider, tenant: !!m.tenant, closed: m.closed, contact: m.contact, /* plant:view-managed */
+    stranded: o.stranded };
+  if (view.managed) view.managed.keeps = o.accountKept; /* plant:view-keeps */
+  /* Policy has not answered: the page says the desk waits for it, and never that the computer is managed. */
+  if (m && m.waiting === true) view.managed.waiting = true; /* plant:view-waiting */
+  return view;
+}
 /* `held` after the service's answer `ans` at `now`: a certificate replaces the last, an answer of none drops it (a wait is said as
    "waiting"), a refusal keeps it (until its own `until`) and is said; "signin", a seat freed, forgets the refresh token, since only a
    sign-in takes it again. Whatever the answer, the list it carried replaces the kept one only where it is later (signinRevokedNext). */
@@ -11189,6 +11279,9 @@ let signinStore, signinBusy = null, signinSaid = "", signinClick = null, signinT
 /* The quiet renewal's post while it is out, and the sign out's: a sign out waits for the first, so the service never takes a renewal
    after it. */
 let signinRenewing = null, signinOutFlight = null;
+/* The desk's clock in this run and the system's network as last told, with the tick that observes both (signinClockNow). */
+const SIGNIN_TICK_MS = 10 * 1000, SIGNIN_CLOCK_KEEP_MS = 60 * 60 * 1000;
+let signinClock = null, signinClockKept = 0, signinOnline = null, signinTicker = null;
 /* THE RELAY'S SEAT on a team whose licence follows Entra (decision 49, option (b)): the team whose relay last refused this desk's
    certificate, "" where none does, as the channel tells it (signinRelaySeatTold). Account says it by the last renewal: "removed" where
    the service found no Etiuda role for the account, "renew" otherwise. A run-out certificate is renewed before a session, at most
@@ -11283,8 +11376,11 @@ function signinState() {
   return signinStore;
 }
 function signinSave() {
-  try { writeReplacing(path.join(app.getPath("userData"), SIGNIN_FILE), signinFileMarkText(signinFileText(signinState()), signinSign)); } /* plant:file-mark-save */
-  catch (e) { console.error("etiuda: the sign-in could not be kept - " + e.message); }
+  const clock = signinClockNow();
+  try {
+    writeReplacing(path.join(app.getPath("userData"), SIGNIN_FILE), signinClockText(signinFileMarkText(signinFileText(signinState()), signinSign), signinClock, signinSign)); /* plant:file-mark-save */
+    signinClockKept = clock.desk;
+  } catch (e) { console.error("etiuda: the sign-in could not be kept - " + e.message); }
 }
 function signinSign(bytes) {
   const key = deskBranch ? openPrivate(deskBranch.sign.priv) : null;
@@ -11422,38 +11518,45 @@ ipcMain.handle("etiuda:signin-door", (e, n) => {
   sendJoin(theWindow);
   return r;
 });
-/* What the page is told, no token and nothing from the provider: the providers offered by id, who is signed in by provider, the
-   code, the seat ("held", "lapsed" or "none") and whether its licence is desk-only, when the service last answered and whether
-   the last try reached it; the provider's
-   page of the sign-in that waits, and nothing once it ends; and whether this system keeps a sign-in (sealsForReal). */
+/* What the page is told: signinViewOf over the held seat and the facts around it, read here. */
 function signinView() {
-  const st = signinState(), held = st.held, real = signinOffered().map(p => p.id), now = Date.now(), preview = signinPreviewing();
-  const offered = preview ? Object.keys(SIGNIN_PROVIDERS) : real;
-  const signedIn = held && real.indexOf(held.provider) >= 0 ? held.provider : "";
-  /* The code shown and handed to Buy is the held certificate's own where one is held, as the answer took it. */
-  let code = signedIn ? held.code : "";
-  if (signedIn && held.cert && typeof held.cert.code === "string") code = held.cert.code; /* plant:view-cert-code */
-  const view = { offered: offered, preview: preview, signedIn: signedIn, code: code,
-    seat: !signedIn ? "" : held.cert ? (signinLapsed(held, now) ? "lapsed" : "held") : "none",
-    deskOnly: !!signedIn && !!held.cert && held.cert.deskOnly === true, /* plant:view-desk-only */
-    /* Ask your lead, and the person's own trial's end where its certificate is the one held (a team is its lead's own). */
-    askLead: !!signedIn && held.askLead === true, /* plant:view-ask-lead */
-    trialUntil: !!signedIn && held.askLead === true && !!held.cert && held.cert.deskOnly === true ? Number(held.cert.until) || 0 : 0,
-    licenceManaged: signedIn ? held.managed === true : signinState().licenceManaged === true, cause: signedIn && held.managed === true ? held.cause || "" : "", /* plant:view-licence-managed */
-    at: signedIn ? held.at : 0, reached: !signedIn || held.reached !== false, ask: !!signedIn && held.ask === true,
-    refused: signedIn ? held.said : "", busy: signinBusy ? signinBusy.provider : "", said: signinSaid,
-    doors: signedIn ? signinDoorsShown(held, now) : [],
-    relaySeat: signedIn ? signinRelaySeat(held) : "",
-    outOwed: !signedIn && !!signinState().out && !signinOutFlight, /* plant:out-owed-view */
-    link: signinBusy && signinPageOk(signinBusy.url) ? signinBusy.url : "", keeps: sealsForReal(safeStorage, process.platform) }; /* plant:view-link */
-  /* Only where machine policy sets any of its six values, so an unmanaged desk's view is the same object as before. */
-  const m = st.managed;
-  if (m && m.any) view.managed = { on: m.managed, shared: m.shared, personal: m.personal, provider: m.provider, tenant: !!m.tenant, closed: m.closed, contact: m.contact, /* plant:view-managed */
-    stranded: deskKeyStranded(m) };
-  if (view.managed) view.managed.keeps = signinAccountKept(st); /* plant:view-keeps */
-  /* Policy has not answered: the page says the desk waits for it, and never that the computer is managed. */
-  if (m && m.waiting === true) view.managed.waiting = true; /* plant:view-waiting */
-  return view;
+  const st = signinState(), held = st.held, real = signinOffered().map(p => p.id), now = Date.now(), preview = signinPreviewing(), m = st.managed;
+  const at = signinClockNow(), signed = !!held && real.indexOf(held.provider) >= 0;
+  return signinViewOf(held, { offered: real, preview: preview, shown: preview ? Object.keys(SIGNIN_PROVIDERS) : real, wall: now,
+    busy: signinBusy, said: signinSaid, doors: signed ? signinDoorsShown(held, now) : [], relaySeat: signed ? signinRelaySeat(held) : "",
+    outOwed: !!st.out && !signinOutFlight,
+    licenceManaged: st.licenceManaged === true, keeps: sealsForReal(safeStorage, process.platform), managed: m,
+    stranded: m && m.any ? deskKeyStranded(m) : false, accountKept: m && m.any ? signinAccountKept(st) : false,
+    deskKey: at.key, deskNow: at.desk, last: at.last, online: at.online }); /* plant:view-clock */
+}
+/* THE DESK'S CLOCK IN THIS RUN (signinClockObserve): read from signin.json at the first ask, observed at every view and save and by
+   a tick, which also keeps it in the file hourly and tells the page when the system's network comes or goes. The tick is armed by
+   the first ask, on any start, and asks nothing outside the desk. */
+function signinMono() { return typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : null; }
+/* Electron's net.isOnline: false only where the system reports no network at all; anything else, or no answer, is online. */
+function signinOnlineNow() {
+  try { return !(net && typeof net.isOnline === "function" && net.isOnline() === false); } catch { return true; }
+}
+function signinClockNow() {
+  const held = signinState().held, me = branchIdentity(false), key = me ? me.key : "", wall = Date.now(), mono = signinMono();
+  if (signinClock === null) {
+    let text = "";
+    try {
+      const at = path.join(app.getPath("userData"), SIGNIN_FILE);
+      text = fs.statSync(at).size <= SIGNIN_FILE_MAX ? fs.readFileSync(at, "utf8") : "";
+    } catch { text = ""; }
+    signinClock = signinClockRead(text, key); /* plant:clock-kept-read */
+  }
+  signinClock = signinClockObserve(signinClock, wall, mono, held, key);
+  if (signinOnline === null) signinOnline = signinOnlineNow();
+  if (!signinTicker) { signinTicker = setInterval(signinTick, SIGNIN_TICK_MS); if (signinTicker && signinTicker.unref) signinTicker.unref(); }
+  return { key: key, desk: signinClock.desk, last: signinClock.last, online: signinOnline };
+}
+function signinTick() {
+  const c = signinClockNow();
+  if (c.desk > 0 && (!signinClockKept || c.desk - signinClockKept >= SIGNIN_CLOCK_KEEP_MS)) signinSave(); /* plant:clock-keep */
+  const online = signinOnlineNow();
+  if (online !== signinOnline) { signinOnline = online; tellSignin(); } /* plant:online-told */
 }
 function tellSignin() {
   const win = theWindow;

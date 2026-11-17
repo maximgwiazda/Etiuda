@@ -241,7 +241,8 @@ function wiringHolds(src) {
     && at("  SIGNIN_PROVIDERS = pinned; /* plant:pin-taken */\n  signinPinStamp = stamp;\n  signinStore.managed = managed;\n")
     && at("if (m && m.any) view.managed = {")
     && at("  if (signinAccountKept(s)) return signinView(); /* plant:out-managed */")
-    && at("  if (view.managed) view.managed.keeps = signinAccountKept(st); /* plant:view-keeps */")
+    && at("  if (view.managed) view.managed.keeps = o.accountKept; /* plant:view-keeps */")
+    && at("accountKept: m && m.any ? signinAccountKept(st) : false,")
     && at("    if (got.ok && managed && signinOtherHeld(st, got.sub)) got = { ok: false, reason: \"signin-other\" }; /* plant:managed-same */")
     && at("  if (buyManaged(v) || (v && v.licenceManaged)) return \"\"; /* plant:buy-managed */")
     && at("{ offer: !!buyAddress() }");
