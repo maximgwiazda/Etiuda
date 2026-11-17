@@ -62,7 +62,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 503;
+const EXPECTED = 524;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -9287,6 +9287,554 @@ if (partOn("p_pg4")) {
     }
   } catch (e) {
     check(false, "harness (the legs pg4): " + (e && e.stack ? e.stack : e));
+  }
+}
+
+/* ---- pg5: a relist that reconcile did not judge (the list's top below st.seq) is not stamped as done; it is asked
+   again no sooner than a day after it was last asked and no later than the first catch-up after that day, until one is
+   judged; a judged relist is stamped as today. ---- */
+async function scenePg5(mod) {
+  const x = pgRelay(0, false);
+  const D0 = keyPair(true), DA = keyPair(true);
+  const tm = { rt: hex(16), id: "t-" + hex(8), key: crypto.randomBytes(32) };
+  const RETIRED = "retracted before the month away\n", NEWEST = "a live file written once back\n";
+  const HOUR = 60 * 60 * 1000;
+  await x.team(tm.rt, tm.id, [D0, DA]);
+  const tag = "pg5-" + hex(4);
+  const lead = pgProgram(mod, x, "pg5-lead-" + tag, tm, LEAD, "root");
+  const d0 = pgProgram(mod, x, "pg5-d0-" + tag, tm, D0, "desk:" + D0.keyId);
+  const da = pgProgram(mod, x, "pg5-da-" + tag, tm, DA, "desk:" + DA.keyId);
+  const t0 = x.RL.clock.now;
+  try {
+    put(lead.mirror, mod.TEAM_NAME, teamBody(tm, 1, 1, [member(D0), member(DA)]));
+    put(lead.mirror, "lane.ec", "{\"note\":\"Lane Board edition one\"}\n");
+    put(lead.mirror, "retired.ec", RETIRED);
+    lead.ch.start(); d0.ch.start(); da.ch.start();
+    await settle(lead, d0, da);
+
+    /* Day 1: da stops, then lead retracts retired.ec (no newer live file follows it). */
+    await da.ch.stop();
+    x.jump(PG_DAY);
+    fs.unlinkSync(path.join(lead.mirror, "retired.ec"));
+    await settle(lead, d0);
+    await lead.ch.stop();
+    await d0.ch.stop();
+
+    /* Day 32 (> 29d keep, deletion > 30d expired): da returns, relists once, reconcile does not judge (top < st.seq). */
+    x.jump(31 * PG_DAY);
+    const n0 = da.t.log.length;
+    da.ch.start();
+    await settle(da);
+    const relist1 = da.t.log.slice(n0).filter(c => c === "GET since/0").length;
+    const stamp1 = da.prog.state().listed;
+    const retired1 = read(da.mirror, "retired.ec") === RETIRED;
+
+    /* Less than a day later (+12h): no relist is asked. */
+    x.jump(12 * HOUR);
+    const n1 = da.t.log.length;
+    await settle(da);
+    const relistUnderDay = da.t.log.slice(n1).filter(c => c === "GET since/0").length;
+
+    /* More than a day after the first ask (+13h, total +25h): still no live file, asks again and still does not stamp. */
+    x.jump(13 * HOUR);
+    const n2 = da.t.log.length;
+    await settle(da);
+    const relistOverDay = da.t.log.slice(n2).filter(c => c === "GET since/0").length;
+    const stamp2 = da.prog.state().listed;
+    const savedMid = read(LAB, da.name + ".json");
+
+    /* Less than a day after the second ask (+12h): no relist is asked. */
+    x.jump(12 * HOUR);
+    const n3 = da.t.log.length;
+    await settle(da);
+    const relistUnderDay2 = da.t.log.slice(n3).filter(c => c === "GET since/0").length;
+
+    /* More than a day after the second ask (+13h, total +25h), with a live file written: first catch-up judges, drops retired.ec, and stamps. */
+    x.jump(13 * HOUR);
+    lead.ch.start();
+    await settle(lead);
+    put(lead.mirror, "newest.ec", NEWEST);
+    await settle(lead);
+    await lead.ch.stop();
+    const n4 = da.t.log.length;
+    da.ch.kick();
+    await da.ch.idle();
+    const relistJudged = da.t.log.slice(n4).filter(c => c === "GET since/0").length;
+    const retiredAfter = read(da.mirror, "retired.ec");
+    const newestAfter = read(da.mirror, "newest.ec");
+    const stampJudged = da.prog.state().listed;
+
+    /* More than a day after the judged relist (+25h): stamped as done, so no relist is asked. */
+    x.jump(25 * HOUR);
+    const n5 = da.t.log.length;
+    await settle(da);
+    const relistAfterJudged = da.t.log.slice(n5).filter(c => c === "GET since/0").length;
+
+    return {
+      BASE: t0, DAYMS: PG_DAY, relist1, stamp1, retired1, relistUnderDay, relistOverDay, stamp2,
+      relistUnderDay2, relistJudged, retiredAfter, newestAfter, stampJudged, relistAfterJudged,
+      savedMid,
+    };
+  } finally {
+    await da.ch.stop();
+    await d0.ch.stop();
+    await lead.ch.stop();
+  }
+}
+
+if (partOn("p_pg5")) {
+  try {
+    markPart("p_pg5");
+    const s = await scenePg5(C);
+    const notStampedBefore = Number.isSafeInteger(s.stamp1) && s.stamp1 < s.BASE + s.DAYMS
+      && Number.isSafeInteger(s.stamp2) && s.stamp2 < s.BASE + s.DAYMS;
+    const stampedAfter = Number.isSafeInteger(s.stampJudged) && s.stampJudged >= s.BASE + 34 * s.DAYMS;
+    check(s.relist1 === 1 && s.retired1 && notStampedBefore && s.relistUnderDay === 0
+      && s.relistOverDay === 1 && s.relistUnderDay2 === 0 && s.relistJudged === 1
+      && s.retiredAfter === null && s.newestAfter === "a live file written once back\n"
+      && stampedAfter && s.relistAfterJudged === 0,
+      "pg5a an unjudged relist (list top below st.seq) is not stamped, is not asked again before a day, is asked on the first catch-up"
+      + " past a day, and once a live file lets reconcile judge, removes the retracted file and stamps: "
+      + JSON.stringify({ relist1: s.relist1, under: s.relistUnderDay, over: s.relistOverDay, under2: s.relistUnderDay2,
+        judged: s.relistJudged, afterJudged: s.relistAfterJudged, retiredAfter: s.retiredAfter,
+        stamp1Delta: s.stamp1 - s.BASE, stampJudgedDelta: s.stampJudged - s.BASE }));
+    const oldShape = { kind: "etiuda-relay-channel", v: 1, seq: 5, listed: s.BASE };
+    const inNew = C.stateOf(oldShape, s.BASE + 32 * s.DAYMS);
+    const oldClient = pg3Client(1000);
+    const midObj = s.savedMid ? JSON.parse(s.savedMid) : null;
+    const inOld = oldClient.mod && midObj ? oldClient.mod.stateOf(midObj, s.BASE + 33 * s.DAYMS) : null;
+    check(inNew.listed === s.BASE && inNew.listedAsked === null && !!inOld && inOld.seq === midObj.seq && inOld.listed === midObj.listed,
+      "pg5b a state file written before this change reads its listed stamp in the new program, and a state file with an unjudged ask reads"
+      + " its sequence and listed stamp in the old client: inNew=" + JSON.stringify({ listed: inNew.listed, listedAsked: inNew.listedAsked })
+      + ", inOld=" + (inOld ? JSON.stringify({ seq: inOld.seq, listed: inOld.listed }) : "none"));
+    const unjudgedOff = await pgPlant(["plant:relist-unjudged"], 0, async mod => {
+      const r = await scenePg5(mod);
+      return r.relistOverDay === 0 && r.retiredAfter !== null;
+    });
+    check(unjudgedOff.turned && unjudgedOff.back, "pg5c lifting plant:relist-unjudged stamps the unjudged relist as done, so no retry runs"
+      + " past a day and the retracted file stays: " + unjudgedOff.detail + ", sha " + (unjudgedOff.back ? "restored" : "differs"));
+    const dayOff = await pgPlant(["plant:relist-day"], 0, async mod => {
+      const r = await scenePg5(mod);
+      return r.relistUnderDay > 0;
+    });
+    check(dayOff.turned && dayOff.back, "pg5d lifting plant:relist-day drops the one-day wait, so a catch-up less than a day later relists"
+      + " again: " + dayOff.detail + ", sha " + (dayOff.back ? "restored" : "differs"));
+  } catch (e) {
+    check(false, "harness (the legs pg5): " + (e && e.stack ? e.stack : e));
+  }
+}
+
+/* ---- pg6: retryPending (a file that waited for its key) leaves the pending list only where it landed, the relay said
+   gone, or it was refused; a 200 without its description is judged under a description from relistHeld or stays
+   pending, and one naming another id stays pending and is said once. ---- */
+async function scenePg6(mod, opts) {
+  const o = opts || {};
+  const x = pgRelay(0, false);
+  const D1 = keyPair(true);
+  const tm = { rt: hex(16), id: "t-" + hex(8), key: crypto.randomBytes(32) };
+  const key2 = crypto.randomBytes(32);
+  await x.team(tm.rt, tm.id, [D1]);
+  const tag = "pg6-" + hex(4);
+  const keys = new Map([[1, tm.key], [2, key2]]);
+  let leadEpoch = 1;
+  const lead = pgProgram(C, x, "pg6-lead-" + tag, tm, LEAD, "root", {
+    more: { keyFor: e => keys.get(e) || null, sealEpoch: () => leadEpoch },
+  });
+  const d1Keys = new Map([[1, tm.key]]);
+  let mode = "normal", otherCount = 0, relistFailed = 0, targetId = null, relistRel = null;
+  const fail = (m, rel) => {
+    if (mode === "relistFail" && m === "GET" && relistRel && rel === relistRel && relistFailed++ === 0) return true;
+    return false;
+  };
+  const alter = (m, rel, name, value) => {
+    if (name !== "etiuda-blob" || m !== "GET" || !rel.startsWith("b/")) return value;
+    if (mode === "strip" || mode === "relistFail") return null;
+    if (mode === "other" && targetId && rel === "b/" + targetId && value && otherCount++ === 0) {
+      const meta = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+      return Buffer.from(JSON.stringify(Object.assign(meta, { id: hex(16) })), "utf8").toString("base64url");
+    }
+    return value;
+  };
+  const d1 = pgProgram(mod, x, "pg6-d1-" + tag, tm, D1, "desk:" + D1.keyId, {
+    fail, alter, more: { keyFor: e => d1Keys.get(e) || null, sealEpoch: () => 1 },
+  });
+  try {
+    put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, [member(D1)]));
+    lead.ch.start();
+    await settle(lead);
+    d1.ch.start();
+    await settle(d1);
+
+    /* Epoch 2 team file and two epoch-2 files while d1 holds only epoch 1's key: all wait in d1's pending list. */
+    leadEpoch = 2;
+    put(lead.mirror, C.TEAM_NAME, teamBody(tm, 2, 1, [member(D1)]));
+    put(lead.mirror, "pad/ep2a.ec", "epoch two file a\n");
+    put(lead.mirror, "pad/ep2b.ec", "epoch two file b\n");
+    await settle(lead);
+    await settle(d1);
+    const blobs = x.RL.stores.get(tm.rt).dump().map(([k, v]) => [k, JSON.parse(v)]).filter(([k]) => k.startsWith("blob:")).map(([, v]) => v);
+    const ep2Blobs = blobs.filter(v => v.writer === LEAD.keyId && v.epoch === 2 && !v.del).sort((a, b) => a.seq - b.seq);
+    const ep2aBlob = ep2Blobs[1] || null;
+    targetId = ep2aBlob ? ep2aBlob.id : null;
+    relistRel = ep2Blobs[0] ? "since/" + (ep2Blobs[0].seq - 1) : null;
+    const pendBefore = d1.prog.state().pending.length;
+
+    if (o.supersede) {
+      /* Supersede the first pending blob while d1 still has not retried, so GET b/<old> returns 410 gone. */
+      put(lead.mirror, "pad/ep2a.ec", "epoch two file a v2\n");
+      await settle(lead);
+    }
+
+    /* Now d1 holds key 2, and its transport strips or swaps headers during retryPending. */
+    d1Keys.set(2, key2);
+    mode = o.mode || "strip";
+    const logFrom = d1.t.log.length;
+    d1.ch.kick();
+    await d1.ch.idle();
+    const firstCalls = d1.t.log.slice(logFrom);
+    const relists = relistRel ? firstCalls.filter(l => l === "GET " + relistRel).length : 0;
+    const mid = {
+      pending: d1.prog.state().pending.length,
+      a: read(d1.mirror, "pad/ep2a.ec"),
+      b: read(d1.mirror, "pad/ep2b.ec"),
+      said: d1.said.slice(),
+    };
+
+    /* Next cycle with normal headers: anything still pending lands. */
+    mode = "normal";
+    await settle(d1);
+    return {
+      pendBefore, relists, relistFailed, otherCount, mid,
+      afterPending: d1.prog.state().pending.length,
+      afterA: read(d1.mirror, "pad/ep2a.ec"),
+      afterB: read(d1.mirror, "pad/ep2b.ec"),
+      said: d1.said.slice(),
+    };
+  } finally {
+    await d1.ch.stop();
+    await lead.ch.stop();
+  }
+}
+
+if (partOn("p_pg6")) {
+  try {
+    markPart("p_pg6");
+    const strip = await scenePg6(C, { mode: "strip" });
+    check(strip.pendBefore >= 2 && strip.mid.pending === 0 && strip.relists === 1
+      && strip.mid.a === "epoch two file a\n" && strip.mid.b === "epoch two file b\n",
+      "pg6a retryPending with every header stripped reads the list again once (" + strip.relists + ") and lands both pending files: "
+      + JSON.stringify({ before: strip.pendBefore, midPending: strip.mid.pending, a: !!strip.mid.a, b: !!strip.mid.b }));
+    const rfail = await scenePg6(C, { mode: "relistFail" });
+    check(rfail.relistFailed === 1 && rfail.mid.pending >= 2 && rfail.mid.a === null && rfail.afterPending === 0
+      && rfail.afterA === "epoch two file a\n" && rfail.afterB === "epoch two file b\n",
+      "pg6b retryPending with headers stripped and the relist answered 503 once keeps the pending rows and lands them next cycle: "
+      + JSON.stringify({ before: rfail.pendBefore, midPending: rfail.mid.pending, afterPending: rfail.afterPending, a: !!rfail.afterA }));
+    const other = await scenePg6(C, { mode: "other" });
+    const otherSaid = other.mid.said.some(l => l.indexOf("another file's description") >= 0);
+    check(other.otherCount === 1 && other.mid.pending >= 1 && other.mid.a === null && otherSaid
+      && other.afterPending === 0 && other.afterA === "epoch two file a\n",
+      "pg6c retryPending answered once with another id's header stays pending, says the fault once, and lands next cycle: "
+      + JSON.stringify({ midPending: other.mid.pending, otherSaid, afterPending: other.afterPending, a: !!other.afterA }));
+    const relistOff = await pgPlant(["plant:pending-relist"], 0, async mod => {
+      const r = await scenePg6(mod, { mode: "strip" });
+      return r.mid.a === null;
+    });
+    check(relistOff.turned && relistOff.back, "pg6d lifting plant:pending-relist turns pg6a red (headerless pending files never land): "
+      + relistOff.detail + ", sha " + (relistOff.back ? "restored" : "differs"));
+    const otherOff = await pgPlant(["plant:pending-other"], 0, async mod => {
+      const r = await scenePg6(mod, { mode: "other" });
+      return !r.mid.said.some(l => l.indexOf("another file's description") >= 0);
+    });
+    check(otherOff.turned && otherOff.back, "pg6e lifting plant:pending-other turns pg6c red (other-id answer not refused as OTHER_FILE): "
+      + otherOff.detail + ", sha " + (otherOff.back ? "restored" : "differs"));
+    const keptOff = await pgPlant(["plant:pending-kept"], 0, async mod => {
+      const r = await scenePg6(mod, { mode: "normal", supersede: true });
+      return r.afterPending > 0;
+    });
+    check(keptOff.turned && keptOff.back, "pg6f lifting plant:pending-kept leaves a superseded (410 gone) pending row stuck in pending: "
+      + keptOff.detail + ", sha " + (keptOff.back ? "restored" : "differs"));
+  } catch (e) {
+    check(false, "harness (the legs pg6): " + (e && e.stack ? e.stack : e));
+  }
+}
+
+/* ---- pg7: the ahead loop on the last page (held handovers) judges a 200 without its description under the listed
+   description or relistHeld, rather than failing catchUp; one naming another id is the OTHER_FILE fault. ---- */
+async function scenePg7(mod, opts) {
+  const o = opts || {};
+  const x = pgRelay(4, false);
+  const D0 = keyPair(true), D1 = keyPair(true), NEXT = keyPair(true);
+  const tm = { rt: hex(16), id: "t-" + hex(8), key: crypto.randomBytes(32) };
+  await x.team(tm.rt, tm.id, [D0, D1]);
+  const tag = "pg7-" + hex(4);
+  let activeLead = LEAD;
+  const lead = pgProgram(C, x, "pg7-lead-" + tag, tm, LEAD, "root", {
+    more: { me: () => ({ keyId: activeLead.keyId, public: activeLead.pub, privateKey: activeLead.privateKey, place: "root" }) },
+  });
+  const d0 = pgProgram(C, x, "pg7-d0-" + tag, tm, D0, "desk:" + D0.keyId);
+  const d1Name = "pg7-d1-" + tag;
+  let d1 = pgProgram(mod, x, d1Name, tm, D1, "desk:" + D1.keyId);
+  try {
+    put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, [member(D0), member(D1)]));
+    lead.ch.start();
+    await settle(lead);
+    d0.ch.start();
+    d1.ch.start();
+    await settle(d0, d1);
+    await d1.ch.stop();
+    /* One file before the handover so handBlob.seq - 1 is past d1's starting seq. */
+    put(d0.mirror, "desks/" + D0.keyId + "/pre.ec", "before handover\n");
+    await settle(d0);
+
+    /* Hand over the team to NEXT, then write files across more than a page of 4 so the handover is held in ahead. */
+    const t = x.RL.clock.now;
+    const moveRes = await x.admin("POST", "/relay/v1/t/" + tm.rt + "/lead", {
+      to: { keyId: NEXT.keyId, pub: NEXT.pub }, t,
+      sig: signHex(LEAD, Buffer.from("etiuda-relay-lead\n" + tm.rt + "\n" + NEXT.keyId + "\n" + NEXT.pub + "\n" + t, "utf8")),
+      grant: K.grantFor(NEXT.pub, t),
+    });
+    if (moveRes.status !== 200) throw new Error("handover failed: " + JSON.stringify(moveRes.json));
+    activeLead = NEXT;
+    const step = { format: 1, kind: "etiuda-team-handover", team: tm.id,
+      from: { keyId: LEAD.keyId, public: LEAD.pub }, to: { keyId: NEXT.keyId, public: NEXT.pub },
+      sig: { alg: "Ed25519", keyId: LEAD.keyId } };
+    step.sig.value = signHex(LEAD, Buffer.concat([Buffer.from("etiuda-team-handover\n", "utf8"), C.signedBytes(step)]));
+    const handDoc = { format: 1, kind: "etiuda-team", id: tm.id, catalogs: ["quay-board"],
+      lead: { keyId: NEXT.keyId, public: NEXT.pub }, sealed: true, exportsSealed: false, epoch: 1, rev: 2,
+      channel: { kind: "relay", rt: tm.rt, url: URLV1 },
+      ring: { format: 1, kind: "etiuda-ring", keys: [{ catalog: "quay-board", keyId: NEXT.keyId, alg: "Ed25519", public: NEXT.pub }] },
+      handover: [step], roster: [member(D0), member(D1)] };
+    handDoc.sig = { alg: "Ed25519", keyId: NEXT.keyId };
+    handDoc.sig.value = signHex(NEXT, C.signedBytes(handDoc));
+    put(lead.mirror, C.TEAM_NAME, JSON.stringify(handDoc, null, 1) + "\n");
+    await settle(lead);
+    for (let i = 0; i < 4; i++) put(d0.mirror, "desks/" + D0.keyId + "/p" + i + ".ec", "handover pad " + i + "\n");
+    await settle(d0);
+    await d0.ch.stop();
+    await lead.ch.stop();
+
+    const blobs = x.RL.stores.get(tm.rt).dump().map(([k, v]) => [k, JSON.parse(v)]).filter(([k]) => k.startsWith("blob:")).map(([, v]) => v);
+    const handBlob = blobs.find(v => v.writer === NEXT.keyId && !v.del);
+    const relistRel = handBlob ? "since/" + (handBlob.seq - 1) : null;
+
+    let mode = o.stop ? "normal" : (o.mode || "strip"), otherCount = 0, relistFailed = 0, page2Failed = 0;
+    const alter = (m, rel, name, value) => {
+      if (name !== "etiuda-blob" || m !== "GET" || !rel.startsWith("b/")) return value;
+      if (mode === "strip" || mode === "relistFail") return null;
+      if (mode === "other" && handBlob && rel === "b/" + handBlob.id && value && otherCount++ === 0) {
+        const meta = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+        return Buffer.from(JSON.stringify(Object.assign(meta, { id: hex(16) })), "utf8").toString("base64url");
+      }
+      return value;
+    };
+    const startSeq = d1.prog.state().seq;
+    const failPage2 = o.stop ? (m, rel) => m === "GET" && rel.startsWith("since/") && rel !== "since/" + startSeq && page2Failed++ === 0 : null;
+    d1 = pgProgram(mod, x, d1Name, tm, D1, "desk:" + D1.keyId, { fail: failPage2, alter });
+    d1.ch.start();
+    if (o.stop) {
+      await d1.ch.idle();
+      const pausedAhead = d1.prog.ahead().length;
+      await d1.ch.stop();
+      mode = o.mode || "strip";
+      const failAfter = mode === "relistFail" ? (m, rel) => m === "GET" && relistRel && rel === relistRel && relistFailed++ === 0 : null;
+      d1 = pgProgram(mod, x, d1Name, tm, D1, "desk:" + D1.keyId, { fail: failAfter, alter });
+      const fromAfter = d1.t.log.length;
+      d1.ch.start();
+      await d1.ch.idle();
+      const midRelists = relistRel ? d1.t.log.slice(fromAfter).filter(l => l === "GET " + relistRel).length : 0;
+      const mid = {
+        ahead: d1.prog.ahead().length,
+        pin: d1.prog.pinned() ? d1.prog.pinned().lead.keyId : "",
+        p3: read(d1.mirror, "desks/" + D0.keyId + "/p3.ec"),
+      };
+      mode = "normal";
+      await settle(d1);
+      return {
+        pausedAhead, midRelists, relistFailed, otherCount, mid,
+        pin: d1.prog.pinned() ? d1.prog.pinned().lead.keyId : "",
+        ahead: d1.prog.ahead().length,
+        p3: read(d1.mirror, "desks/" + D0.keyId + "/p3.ec"),
+        nextId: NEXT.keyId,
+        said: d1.said.slice(),
+      };
+    }
+
+    const from = d1.t.log.length;
+    await d1.ch.idle();
+    const firstRelists = relistRel ? d1.t.log.slice(from).filter(l => l === "GET " + relistRel).length : 0;
+    const mid = {
+      ahead: d1.prog.ahead().length,
+      pin: d1.prog.pinned() ? d1.prog.pinned().lead.keyId : "",
+      p3: read(d1.mirror, "desks/" + D0.keyId + "/p3.ec"),
+      said: d1.said.slice(),
+    };
+    mode = "normal";
+    await settle(d1);
+    return {
+      firstRelists, otherCount, mid,
+      pin: d1.prog.pinned() ? d1.prog.pinned().lead.keyId : "",
+      ahead: d1.prog.ahead().length,
+      p3: read(d1.mirror, "desks/" + D0.keyId + "/p3.ec"),
+      nextId: NEXT.keyId,
+      said: d1.said.slice(),
+    };
+  } finally {
+    await d1.ch.stop();
+    await d0.ch.stop();
+    await lead.ch.stop();
+  }
+}
+
+if (partOn("p_pg7")) {
+  try {
+    markPart("p_pg7");
+    const strip = await scenePg7(C, { mode: "strip" });
+    check(strip.mid.ahead === 0 && strip.mid.pin === strip.nextId && strip.mid.p3 === "handover pad 3\n" && strip.firstRelists === 0,
+      "pg7a held handover across pages with every header stripped lands under its listed description with no extra list read ("
+      + strip.firstRelists + "): " + JSON.stringify(strip.mid));
+    const restart = await scenePg7(C, { mode: "strip", stop: true });
+    check(restart.pausedAhead === 1 && restart.midRelists >= 1 && restart.mid.ahead === 0
+      && restart.mid.pin === restart.nextId && restart.mid.p3 === "handover pad 3\n",
+      "pg7b held handover across a restart with every header stripped reads the list again (" + restart.midRelists + ") and finishes the catch-up: "
+      + JSON.stringify(restart.mid));
+    const rfail = await scenePg7(C, { mode: "relistFail", stop: true });
+    check(rfail.relistFailed === 1 && rfail.mid.ahead === 1 && rfail.mid.pin !== rfail.nextId
+      && rfail.ahead === 0 && rfail.pin === rfail.nextId && rfail.p3 === "handover pad 3\n",
+      "pg7c that relist answered 503 once keeps the handover held and finishes next cycle: "
+      + JSON.stringify({ midAhead: rfail.mid.ahead, afterAhead: rfail.ahead, p3: !!rfail.p3 }));
+    const other = await scenePg7(C, { mode: "other", stop: true });
+    const otherSaid = other.said.some(l => l.indexOf("another file's description") >= 0);
+    check(other.otherCount === 1 && other.mid.ahead === 1 && other.mid.pin !== other.nextId && otherSaid
+      && other.ahead === 0 && other.pin === other.nextId && other.p3 === "handover pad 3\n",
+      "pg7d held handover answered once with another id's header faults as OTHER_FILE, keeps ahead, and finishes next cycle: "
+      + JSON.stringify({ midAhead: other.mid.ahead, otherSaid, afterAhead: other.ahead }));
+    const descOff = await pgPlant(["plant:ahead-described"], 0, async mod => {
+      const r = await scenePg7(mod, { mode: "strip" });
+      return r.firstRelists > 0;
+    });
+    check(descOff.turned && descOff.back, "pg7e lifting plant:ahead-described turns pg7a red (reads the list again instead of using listed): "
+      + descOff.detail + ", sha " + (descOff.back ? "restored" : "differs"));
+    const relistOff = await pgPlant(["plant:ahead-relist"], 0, async mod => {
+      const r = await scenePg7(mod, { mode: "strip", stop: true });
+      return r.mid.pin !== r.nextId;
+    });
+    check(relistOff.turned && relistOff.back, "pg7f lifting plant:ahead-relist turns pg7b red (headerless handover across restart never finishes): "
+      + relistOff.detail + ", sha " + (relistOff.back ? "restored" : "differs"));
+    const otherOff = await pgPlant(["plant:ahead-other"], 0, async mod => {
+      const r = await scenePg7(mod, { mode: "other", stop: true });
+      return !r.said.some(l => l.indexOf("another file's description") >= 0);
+    });
+    check(otherOff.turned && otherOff.back, "pg7g lifting plant:ahead-other turns pg7d red (other-id answer not refused as OTHER_FILE): "
+      + otherOff.detail + ", sha " + (otherOff.back ? "restored" : "differs"));
+  } catch (e) {
+    check(false, "harness (the legs pg7): " + (e && e.stack ? e.stack : e));
+  }
+}
+
+/* ---- pg8: on the ordinary path, a 200 whose description names another file is the OTHER_FILE fault (nothing judged,
+   nothing let go, said once), not a fallback to the listing; only a missing header falls back (plant:listed-meta). ---- */
+async function scenePg8(mod, opts) {
+  const o = opts || {};
+  const x = pgRelay(0, false);
+  const D1 = keyPair(true);
+  const tm = { rt: hex(16), id: "t-" + hex(8), key: crypto.randomBytes(32) };
+  await x.team(tm.rt, tm.id, [D1]);
+  const tag = "pg8-" + hex(4);
+  const lead = pgProgram(C, x, "pg8-lead-" + tag, tm, LEAD, "root");
+  let mode = "normal", otherCount = 0, targetId = null, swapId = null;
+  const alter = (m, rel, name, value) => {
+    if (name !== "etiuda-blob" || m !== "GET" || !rel.startsWith("b/")) return value;
+    if (mode === "strip") return null;
+    if (mode === "other" && targetId && rel === "b/" + targetId && value && otherCount++ === 0) {
+      const meta = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+      return Buffer.from(JSON.stringify(Object.assign(meta, { id: swapId || hex(16) })), "utf8").toString("base64url");
+    }
+    return value;
+  };
+  const d1 = pgProgram(mod, x, "pg8-d1-" + tag, tm, D1, "desk:" + D1.keyId, { alter });
+  try {
+    put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, [member(D1)]));
+    lead.ch.start();
+    await settle(lead);
+    d1.ch.start();
+    await settle(d1);
+    await d1.ch.stop();
+
+    put(lead.mirror, "pad/first.ec", "ordinary first\n");
+    await settle(lead);
+    put(lead.mirror, "pad/target.ec", "ordinary target\n");
+    await settle(lead);
+    put(lead.mirror, "pad/after.ec", "ordinary after\n");
+    await settle(lead);
+    await lead.ch.stop();
+
+    const blobs = x.RL.stores.get(tm.rt).dump().map(([k, v]) => [k, JSON.parse(v)]).filter(([k]) => k.startsWith("blob:")).map(([, v]) => v);
+    const live = blobs.filter(v => v.writer === LEAD.keyId && !v.del).sort((a, b) => a.seq - b.seq);
+    const firstBlob = live[live.length - 3], targetBlob = live[live.length - 2];
+    swapId = firstBlob ? firstBlob.id : hex(16);
+    targetId = targetBlob ? targetBlob.id : null;
+    const targetSeq = targetBlob ? targetBlob.seq : 0;
+
+    mode = o.mode || "other";
+    d1.ch.start();
+    await d1.ch.idle();
+    const mid = {
+      seq: d1.prog.state().seq,
+      first: read(d1.mirror, "pad/first.ec"),
+      target: read(d1.mirror, "pad/target.ec"),
+      after: read(d1.mirror, "pad/after.ec"),
+      said: d1.said.slice(),
+    };
+
+    mode = "normal";
+    await settle(d1);
+    return {
+      otherCount, targetSeq, mid,
+      seq: d1.prog.state().seq,
+      top: x.top(tm.rt),
+      first: read(d1.mirror, "pad/first.ec"),
+      target: read(d1.mirror, "pad/target.ec"),
+      after: read(d1.mirror, "pad/after.ec"),
+      said: d1.said.slice(),
+    };
+  } finally {
+    await d1.ch.stop();
+    await lead.ch.stop();
+  }
+}
+
+if (partOn("p_pg8")) {
+  try {
+    markPart("p_pg8");
+    const other = await scenePg8(C, { mode: "other" });
+    const otherSaid = other.mid.said.filter(l => l.indexOf("another file's description") >= 0);
+    const afterSaid = other.said.filter(l => l.indexOf("another file's description") >= 0);
+    check(other.otherCount === 1 && other.mid.first === "ordinary first\n" && other.mid.target === null
+      && other.mid.after === null && other.mid.seq < other.targetSeq && otherSaid.length === 1
+      && afterSaid.length === 1 && other.seq === other.top
+      && other.target === "ordinary target\n" && other.after === "ordinary after\n",
+      "pg8a ordinary path answered once with another id's header faults as OTHER_FILE, keeps seq before it, says the fault once, and lands next cycle: "
+      + JSON.stringify({ midSeq: other.mid.seq, targetSeq: other.targetSeq, midTarget: !!other.mid.target,
+        midAfter: !!other.mid.after, saidCount: afterSaid.length, afterTarget: !!other.target }));
+    const strip = await scenePg8(C, { mode: "strip" });
+    check(strip.mid.first === "ordinary first\n" && strip.mid.target === "ordinary target\n"
+      && strip.mid.after === "ordinary after\n" && strip.mid.said.length === 0,
+      "pg8b ordinary path with every header missing falls back to the listed description and lands all files: "
+      + JSON.stringify({ first: !!strip.mid.first, target: !!strip.mid.target, after: !!strip.mid.after, said: strip.mid.said.length }));
+    const otherOff = await pgPlant(["plant:listed-other"], 0, async mod => {
+      const r = await scenePg8(mod, { mode: "other" });
+      return r.mid.seq >= r.targetSeq && !r.mid.said.some(l => l.indexOf("another file's description") >= 0);
+    });
+    check(otherOff.turned && otherOff.back, "pg8c lifting plant:listed-other turns pg8a red (falls back to listed and lets seq past): "
+      + otherOff.detail + ", sha " + (otherOff.back ? "restored" : "differs"));
+    const metaOff = await pgPlant(["plant:listed-meta"], 0, async mod => {
+      const r = await scenePg8(mod, { mode: "strip" });
+      return r.mid.target === null;
+    });
+    check(metaOff.turned && metaOff.back, "pg8d lifting plant:listed-meta turns pg8b red (missing header on ordinary path left out): "
+      + metaOff.detail + ", sha " + (metaOff.back ? "restored" : "differs"));
+  } catch (e) {
+    check(false, "harness (the legs pg8): " + (e && e.stack ? e.stack : e));
   }
 }
 
