@@ -9569,6 +9569,9 @@ What is typed here stays in this browser.`;
     /* Claudette's words, 2026-11-11, board 989: a network that refuses the relay's push socket, on the team's row and its hover. */
     "On this network the team's updates arrive about once a minute, not live.": "W tej sieci aktualizacje zespołu docierają mniej więcej co minutę, a nie na bieżąco.",
     "This network does not let the live connection to the relay through, so Etiuda asks the relay about once a minute instead. Nothing is lost, and nothing needs doing.": "Ta sieć nie przepuszcza połączenia na żywo z przekaźnikiem, więc Etiuda pyta przekaźnik mniej więcej co minutę. Nic nie ginie i nic nie trzeba robić.",
+    /* Claudette's words, 2026-11-17, a team file naming a relay this build does not use: one sentence and the next, on the row whole. */
+    "The team file of {TEAM} names a relay this Etiuda does not use, so this desk does not follow it: it keeps its team, its catalog and its connection as they were, and sends nothing there.": "Plik zespołu {TEAM} wskazuje przekaźnik, z którego ta Etiuda nie korzysta, więc to stanowisko za nim nie podąża: zachowuje zespół, katalog i połączenie bez zmian i niczego tam nie wysyła.",
+    "If the team moves back, nothing is needed; otherwise a new invitation from the team's lead is.": "Jeśli zespół wróci na poprzedni przekaźnik, nic nie trzeba robić; w przeciwnym razie potrzebne jest nowe zaproszenie od lidera zespołu.",
     "Another catalog of the team has a newer edition.": "Inny katalog zespołu ma nowsze wydanie.",
     "Other catalogs of the team with a newer edition: {N}.": "Inne katalogi zespołu z nowszym wydaniem: {N}.",
     "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.": "Na prośbę Studia lidera zespołu przesłano zespołowi kopię katalogu używanego na tym stanowisku.",
@@ -10624,6 +10627,7 @@ What is typed here stays in this browser.`;
     eTeamFork: "#catNow",
     eTeamStranded: "#catNow",
     eTeamRemoved: "#catNow",
+    eTeamElsewhere: "#catNow",
     eMigrateWarn: "#catNow",
     eHotkeyNote: "#settingsBtn"
   };
@@ -18900,6 +18904,7 @@ What is typed here stays in this browser.`;
     paintJoin: () => paintJoin,
     pickMovedFolder: () => pickMovedFolder,
     relayDesk: () => relayDesk,
+    relayElsewhereNote: () => relayElsewhereNote,
     shareRefusedNotes: () => shareRefusedNotes,
     teamCanJoin: () => teamCanJoin,
     teamJoinEmptyHtml: () => teamJoinEmptyHtml,
@@ -19286,6 +19291,30 @@ What is typed here stays in this browser.`;
       }
     );
   }
+  function relayElsewhereWords(l) {
+    const team = l && l.lead ? t("{LEAD}'s team").split("{LEAD}").join(l.lead) : t("Team");
+    return { lead: t("The team file of {TEAM} names a relay this Etiuda does not use, so this desk does not follow it: it keeps its team, its catalog and its connection as they were, and sends nothing there.").split("{TEAM}").join(team), body: t("If the team moves back, nothing is needed; otherwise a new invitation from the team's lead is.") };
+  }
+  function relayElsewhereNote(l) {
+    const w = relayElsewhereWords(l);
+    return w.lead + " " + w.body;
+  }
+  var elsewhereUp = "";
+  var elsewhereDismissed = /* @__PURE__ */ new Set();
+  function syncRelayElsewhere() {
+    if (typeof document === "undefined" || typeof document.getElementById !== "function" || typeof document.createElement !== "function") return;
+    const l = (joinNow && joinNow.leads || []).filter((x) => x.relayElsewhere === true && !elsewhereDismissed.has(x.team))[0] || null;
+    const want = l ? l.team : "", up = document.getElementById("eTeamElsewhere");
+    if (want === elsewhereUp && (!want || up)) return;
+    if (up) dropNotice(up);
+    elsewhereUp = want;
+    if (!l) return;
+    const w = relayElsewhereWords(l);
+    eNotice("eTeamElsewhere", w.lead, w.body, () => {
+      elsewhereDismissed.add(want);
+      if (elsewhereUp === want) elsewhereUp = "";
+    });
+  }
   function joinTook(v, changed) {
     const s = v && typeof v === "object" ? v : {};
     const was = JSON.stringify(joinNow);
@@ -19310,6 +19339,7 @@ What is typed here stays in this browser.`;
         if (l.otherLead === true) row2.otherLead = true;
         if (typeof l.relay === "string" && l.relay) row2.relay = String(l.relay);
         if (l.relayRemoved === true) row2.relayRemoved = true;
+        if (l.relayElsewhere === true) row2.relayElsewhere = true;
         const head = headKept(l.head);
         if (head) row2.head = head;
         const lapse = lapseKept(l.lapse);
@@ -19332,6 +19362,7 @@ What is typed here stays in this browser.`;
     syncJoinDoor();
     syncLapseNotice();
     syncRelayRemoved();
+    syncRelayElsewhere();
     syncForkNotice();
     syncStrandedNotice();
     const refusal = s.linkRefusal;
@@ -40152,6 +40183,7 @@ What is typed here stays in this browser.`;
       text: t("On this network the team's updates arrive about once a minute, not live."),
       tip: t("This network does not let the live connection to the relay through, so Etiuda asks the relay about once a minute instead. Nothing is lost, and nothing needs doing.")
     });
+    if (l.relayElsewhere) notes.push(relayElsewhereNote(l));
     if (l.needsFolder) notes.push(t("This team now works from a shared folder. The team's lead can say which one; once it is open here with Open a folder, everything carries on as before."));
     if (l.reading) notes.push(l.reading);
     return '<div class="set-row"><div class="set-label">' + esc(l.lead ? t("{LEAD}'s team").split("{LEAD}").join(l.lead) : t("Team")) + notes.filter(Boolean).map((n) => typeof n === "object" ? '<small title="' + esc(n.tip) + '">' + esc(n.text) + "</small>" : "<small>" + esc(n) + "</small>").join("") + '</div><div class="set-ctl"><span class="e-lead-key">' + keySignHtml("studio", l.print) + "</span>" + (l.needsFolder ? '<button type="button" class="btn" data-team-pick-folder="' + esc(l.team) + '">' + esc(t("Open a folder")) + "</button>" : "") + (l.policy || l.waiting ? "" : '<button type="button" class="btn danger" data-leave-team="' + esc(l.team) + '">' + esc(t("Leave this team")) + "</button>") + "</div></div>";

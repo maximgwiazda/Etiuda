@@ -4057,6 +4057,7 @@ let teamPinFrom = {};                          // team id -> "invite", "policy" 
 let teamRingAt = null;                         // {root, relay, ring}: the channel and signed ring of the file last heeded at root; this run only
 let teamHeadT = {};                            // team id -> highest t seen in a genuine head; this run only
 let teamShown = {};                            // team id -> {lead?, folder?}: the lead's name an invitation gave, the folder its file was heeded in
+const teamElsewhere = new Set();               // team ids whose last file read names a relay this build does not use (heededChannelOf)
 const teamOpened = new Set();                  // catalog ids this desk has opened from an envelope, kept in the desk envelope
 const teamSeen = new Set();                    // teams whose pinned lead key the agent has been shown, kept in the desk envelope
 const teamBarred = new Set();                  // teams whose lead the agent forgot: no first admission but by an answered request
@@ -4127,11 +4128,15 @@ function heededChannelOf(doc) {
   known = !c || c.kind !== "relay" || knownRelayAddress(c.url); /* plant:channel-known */
   return known ? c : { kind: "elsewhere" };
 }
-/* Said once for team `team` whose heeded file names a relay this build does not use; the address is not said. */
+/* Said once for team `team` whose file names a relay this build does not use, and kept as the fact its row shows until a file
+   names a known one again; the address is not said or handed on. */
 function relayElsewhereSay(team) {
   const w = shellWords(), lead = (teamShown[team] || {}).lead;
   const name = typeof lead === "string" && lead ? w.teamOfLead.split("{LEAD}").join(lead) : w.teamUnnamed;
   teamSay(w.relayElsewhere.split("{TEAM}").join(name));
+  if (teamElsewhere.has(team)) return;
+  teamElsewhere.add(team); /* plant:elsewhere-fact */
+  sendJoin(theWindow);
 }
 /* THE LEAD'S SWITCH FOR READING A CATALOG THE TEAM DOES NOT LIST: the team file's `content`, signed with the rest of it, as
    {by, at}, or null, which is off. Read in this one shape only, so a field or a format this build does not know reads as off. */
@@ -5030,6 +5035,7 @@ function heedTeam() {
     teamSay(used + " names a rev or a channel this desk does not read, so nothing in it is used");
     return;
   }
+  if (teamElsewhere.delete(r.team || doc.id)) sendJoin(theWindow); /* plant:elsewhere-clear */
   const floors = teamRevSeen[r.team] || {}, floor = floors[doc.lead.public];
   if (teamRevRefused(floor, r.epoch, rev)) {
     const why = r.epoch < floor.epoch
@@ -7202,6 +7208,7 @@ function leadsView() {
     const lapse = lapseShown(t);
     if (lapse) row.lapse = lapse;
     if (askingShown(t)) row.asking = true; /* plant:asking-row */
+    if (teamElsewhere.has(t)) row.relayElsewhere = true; /* plant:elsewhere-row-fact */
     const fork = forkShown(t);
     if (fork) row.fork = fork; /* plant:fork-row */
     const stranded = strandedShown(t);
