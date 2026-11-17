@@ -1465,6 +1465,8 @@ UI_STRINGS.pl={
   "This team is no longer offered here, or this computer is already in a team, so nothing was sent.":"Ten zespół nie jest już tu proponowany albo ten komputer należy już do zespołu, więc nic nie wysłano.",
   "The team did not let this computer in. Its lead can send an invitation instead.":"Zespół nie wpuścił tego komputera. Jego lider może zamiast tego wysłać zaproszenie.",
   "No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself.":"Żaden zespół nie przyjął jeszcze tego konta. Gdy lider zespołu przyjmie je po kodzie poniżej, katalog przyjdzie sam.",
+  "No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself.":"Żaden zespół nie przyjął jeszcze tego konta. Gdy lider zespołu je przyjmie, katalog przyjdzie sam.",
+  "PLACEHOLDER FOR THE COPYWRITER: asklead line on a managed computer without a sign-in code":"PLACEHOLDER FOR THE COPYWRITER: asklead line on a managed computer without a sign-in code",
   "Your sign-in code":"Kod logowania",
   "Not a secret. It tells a team's lead which account is yours.":"To nie tajemnica. Po nim lider zespołu rozpoznaje, czyje to konto.",
   "Check now":"Sprawdź teraz",

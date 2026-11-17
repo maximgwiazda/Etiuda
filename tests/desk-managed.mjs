@@ -28,7 +28,7 @@ const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const SIGNIN = fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8");
 const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const CHECKS = 30, PLANTS = 42;
+const CHECKS = 32, PLANTS = 45;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -444,6 +444,36 @@ CASES.waiting = async (s, set, pg) => {
   const none = await drawn({ offered: [] }, "en", set, pg);
   return none.door === "" && none.acct.indexOf("data-signin-waiting") < 0;
 };
+/* mm-p10 (finding 7, case A): on a managed computer, the Team row's "No team yet" hint never refers to "the code below",
+   English and Polish; unmanaged still does. */
+const B3 = {
+  en: "No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself.",
+  pl: "Żaden zespół nie przyjął jeszcze tego konta. Gdy lider zespołu je przyjmie, katalog przyjdzie sam.",
+};
+CASES.noTeamManaged = async (s, set, pg) => {
+  for (const lang of ["en", "pl"]) {
+    const m = await drawn(withM(PROFILES.signed, M_ON), lang, set, pg), w = words(m.acct);
+    if (w.indexOf(B3[lang]) < 0 || /code below|kodzie poniżej/i.test(w) || m.acct.indexOf("data-row=\"code\"") >= 0) return false;
+    const u = await drawn(PROFILES.signed, lang, set, pg), uw = words(u.acct);
+    if (!/code below|kodzie poniżej/i.test(uw) || u.acct.indexOf("data-row=\"code\"") < 0) return false;
+  }
+  return true;
+};
+/* mm-p11 (finding 7, case B): on a managed computer, askLead shows neither the sign-in code nor the trial line and refers
+   to no hidden code; unmanaged still shows both. */
+CASES.askLeadManaged = async (s, set, pg) => {
+  const until = NOW + 10 * 86400e3;
+  for (const seat of ["held", "none"]) {
+    const v = Object.assign({}, PROFILES.signed, { seat, askLead: true, trialUntil: until });
+    for (const lang of ["en", "pl"]) {
+      const m = await drawn(withM(v, M_ON), lang, set, pg), w = words(m.door);
+      if (m.moment !== "asklead" || m.door.indexOf(CODE) >= 0 || m.door.indexOf("sgn-code") >= 0
+          || m.door.indexOf("sgn-own") >= 0 || /trial|próbn/i.test(w) || /this code|ten kod/i.test(w)) return false;
+    }
+  }
+  const u = await drawn(Object.assign({}, PROFILES.signed, { seat: "held", askLead: true, trialUntil: until }), "en", set, pg);
+  return u.moment === "asklead" && u.door.indexOf("sgn-code") >= 0 && u.door.indexOf("sgn-own") >= 0;
+};
 
 /* ---- the run ---------------------------------------------------------------------------------------------------------- */
 let S = null;
@@ -477,6 +507,8 @@ const LIST = [
   ["mm-p7", "noRoleWords", "no role: the copywriter's line, English and Polish, giving way to SupportContact where it is set"],
   ["mm-p6", "heldTo", "the Sign-in row in the one of three states that holds: the tenant's work accounts, any work account, or those the organisation allows"],
   ["mm-p8", "waiting", "policy not read yet: the panel and Account say the desk waits for the organisation's settings, offer nothing to sign in with, buy or copy, and never say managed"],
+  ["mm-p10", "noTeamManaged", "finding 7: on a managed computer, the Team row never refers to the hidden code below, English and Polish; unmanaged still does"],
+  ["mm-p11", "askLeadManaged", "finding 7: on a managed computer, askLead shows neither sign-in code nor trial line and names no hidden code; unmanaged still shows both"],
 ];
 const run = async (name, s, set, pg) => { try { return !!(await CASES[name](s, set, pg)); } catch (e) { return false; } };
 for (const [id, name, what] of LIST) check(!!S && await run(name, S), id + " " + what);
@@ -569,6 +601,12 @@ if (!PLANTS_OFF && S) {
     try { red = SIGNIN.split(swap[0]).length === 2 && !(await CASES.noRoleWords(S, undefined, undefined, SIGNIN.replace(swap[0], swap[1]))); } catch (e) { red = false; }
     check(red, "mmp33 plant SupportContact dropped from the no-role line turns noRoleWords red");
   }
+  await plantPage("mmp43", [": row(\"team\",\"people\",t(\"No team yet\"),doorSaid||(signinManaged(v)?t(\"No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself.\"):t(\"No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself.\")),\"\")); /* plant:no-team-managed */",
+    ": row(\"team\",\"people\",t(\"No team yet\"),doorSaid||t(\"No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself.\"),\"\"));"], "noTeamManaged", "settings");
+  await plantPage("mmp44", ["if(v.askLead) return {moment:\"asklead\", ident, say:signinSay(\"asklead\", v), code:signinManaged(v)?\"\":v.code, /* plant:asklead-code-managed */",
+    "if(v.askLead) return {moment:\"asklead\", ident, say:signinSay(\"asklead\", v), code:v.code,"], "askLeadManaged", "signin");
+  await plantPage("mmp45", ["own:signinManaged(v)?null:v.seat===\"held\" && v.trialUntil ? [t(\"This account's own trial is running.\"), /* plant:asklead-trial-managed */",
+    "own:v.seat===\"held\" && v.trialUntil ? [t(\"This account's own trial is running.\"),"], "askLeadManaged", "signin");
 }
 
 const done = asserted === EXPECTED;

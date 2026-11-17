@@ -297,7 +297,9 @@ function signinSay(reason, v, p){
         ? [named(t("{TEAM} has no free seat just now."),"{TEAM}",p.teamName), named(t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and {LEAD}, the team's lead, sees this account's sign-in code among those who have signed in."),"{LEAD}",p.team.lead)]
         : [t("No seat is free on the organisation's licence just now."), t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and the team's lead sees this account's sign-in code among those who have signed in.")];
     case "asklead":
-      return [t("The organisation's Etiuda licence seats the people its leads add."), t("Give the team's lead this code. Once added, this desk takes its seat by itself; nothing more is needed here.")];
+      return [t("The organisation's Etiuda licence seats the people its leads add."),
+        signinManaged(v) ? t("PLACEHOLDER FOR THE COPYWRITER: asklead line on a managed computer without a sign-in code")
+          : t("Give the team's lead this code. Once added, this desk takes its seat by itself; nothing more is needed here.")];
     case "nolicence":
       return [t("No Etiuda licence has a seat for this account."), t("The sign-in worked. A seat comes from a trial, a purchase, or a team's lead admitting the account; another account can be used meanwhile.")];
     case "offline":
@@ -398,9 +400,9 @@ function signinDoorOf(v){
   /* ASK YOUR LEAD: the organisation's licence seats the people its
      leads add, so the code is given to a lead; beside it, never in its place, the person's own trial where it runs, which the service
      started at the sign-in. */
-  if(v.askLead) return {moment:"asklead", ident, say:signinSay("asklead", v), code:v.code,
+  if(v.askLead) return {moment:"asklead", ident, say:signinSay("asklead", v), code:signinManaged(v)?"":v.code, /* plant:asklead-code-managed */
     acts:[{act:"check", label:t("Check now")}, acct],
-    own:v.seat==="held" && v.trialUntil ? [t("This account's own trial is running."),
+    own:signinManaged(v)?null:v.seat==="held" && v.trialUntil ? [t("This account's own trial is running."), /* plant:asklead-trial-managed */
       named(t("Fourteen days, until {DATE}, on up to three computers. A lead can add this account at any time, without waiting for the trial to end."),"{DATE}",signinDay(v.trialUntil))] : null};
   /* No certificate: the service found no licence with a seat for this account. The code still shows, since a lead admits by it, save on
      a managed computer, where nobody is admitted by code. */

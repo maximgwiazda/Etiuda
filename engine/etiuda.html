@@ -9354,6 +9354,8 @@ What is typed here stays in this browser.`;
     "This team is no longer offered here, or this computer is already in a team, so nothing was sent.": "Ten zespół nie jest już tu proponowany albo ten komputer należy już do zespołu, więc nic nie wysłano.",
     "The team did not let this computer in. Its lead can send an invitation instead.": "Zespół nie wpuścił tego komputera. Jego lider może zamiast tego wysłać zaproszenie.",
     "No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself.": "Żaden zespół nie przyjął jeszcze tego konta. Gdy lider zespołu przyjmie je po kodzie poniżej, katalog przyjdzie sam.",
+    "No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself.": "Żaden zespół nie przyjął jeszcze tego konta. Gdy lider zespołu je przyjmie, katalog przyjdzie sam.",
+    "PLACEHOLDER FOR THE COPYWRITER: asklead line on a managed computer without a sign-in code": "PLACEHOLDER FOR THE COPYWRITER: asklead line on a managed computer without a sign-in code",
     "Your sign-in code": "Kod logowania",
     "Not a secret. It tells a team's lead which account is yours.": "To nie tajemnica. Po nim lider zespołu rozpoznaje, czyje to konto.",
     "Check now": "Sprawdź teraz",
@@ -29537,7 +29539,10 @@ What is typed here stays in this browser.`;
       case "full":
         return p && p.team && p.team.lead ? [named(t("{TEAM} has no free seat just now."), "{TEAM}", p.teamName), named(t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and {LEAD}, the team's lead, sees this account's sign-in code among those who have signed in."), "{LEAD}", p.team.lead)] : [t("No seat is free on the organisation's licence just now."), t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and the team's lead sees this account's sign-in code among those who have signed in.")];
       case "asklead":
-        return [t("The organisation's Etiuda licence seats the people its leads add."), t("Give the team's lead this code. Once added, this desk takes its seat by itself; nothing more is needed here.")];
+        return [
+          t("The organisation's Etiuda licence seats the people its leads add."),
+          signinManaged(v) ? t("PLACEHOLDER FOR THE COPYWRITER: asklead line on a managed computer without a sign-in code") : t("Give the team's lead this code. Once added, this desk takes its seat by itself; nothing more is needed here.")
+        ];
       case "nolicence":
         return [t("No Etiuda licence has a seat for this account."), t("The sign-in worked. A seat comes from a trial, a purchase, or a team's lead admitting the account; another account can be used meanwhile.")];
       case "offline":
@@ -29665,10 +29670,12 @@ What is typed here stays in this browser.`;
       moment: "asklead",
       ident,
       say: signinSay("asklead", v),
-      code: v.code,
+      code: signinManaged(v) ? "" : v.code,
+      /* plant:asklead-code-managed */
       acts: [{ act: "check", label: t("Check now") }, acct],
-      own: v.seat === "held" && v.trialUntil ? [
+      own: signinManaged(v) ? null : v.seat === "held" && v.trialUntil ? [
         t("This account's own trial is running."),
+        /* plant:asklead-trial-managed */
         named(t("Fourteen days, until {DATE}, on up to three computers. A lead can add this account at any time, without waiting for the trial to end."), "{DATE}", signinDay(v.trialUntil))
       ] : null
     };
@@ -40211,7 +40218,7 @@ What is typed here stays in this browser.`;
     if (v.signedIn && !signinChoosingNow()) {
       const p = signinParts(v), val = (x) => '<span class="sgn-val">' + esc(x) + "</span>", join = (pair) => pair[0] + " " + pair[1];
       const doorSaid = signinDoorRefusedNow() ? signinSay("door", v)[0] : "";
-      rows.push(p.team ? row("team", "people", t("Team"), doorSaid || (p.team.lead ? t("Led by {LEAD}").split("{LEAD}").join(p.team.lead) : ""), val(p.teamName)) : v.doors.length && v.seat === "held" ? row("team", "people", t("A team on this licence"), doorSaid || t("This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation."), signinDoorsHtml(v.doors)) : v.deskOnly && v.seat === "held" ? row("team", "people", t("Working without a team"), doorSaid || t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed."), "") : row("team", "people", t("No team yet"), doorSaid || t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself."), ""));
+      rows.push(p.team ? row("team", "people", t("Team"), doorSaid || (p.team.lead ? t("Led by {LEAD}").split("{LEAD}").join(p.team.lead) : ""), val(p.teamName)) : v.doors.length && v.seat === "held" ? row("team", "people", t("A team on this licence"), doorSaid || t("This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation."), signinDoorsHtml(v.doors)) : v.deskOnly && v.seat === "held" ? row("team", "people", t("Working without a team"), doorSaid || t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed."), "") : row("team", "people", t("No team yet"), doorSaid || (signinManaged(v) ? t("No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself.") : t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself.")), ""));
       if (v.managed && v.managed.provider) rows.push(row("signin", "user", t("Sign-in"), "", lockedHtml(signinHeldTo(v.managed))));
       if (v.code && !signinManaged(v)) rows.push(row(
         "code",

@@ -354,7 +354,7 @@ function accountGroups(){
     rows.push(p.team ? row("team","people",t("Team"),doorSaid||(p.team.lead?t("Led by {LEAD}").split("{LEAD}").join(p.team.lead):""),val(p.teamName))
       : v.doors.length && v.seat==="held" ? row("team","people",t("A team on this licence"),doorSaid||t("This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation."),signinDoorsHtml(v.doors))
       : v.deskOnly && v.seat==="held" ? row("team","people",t("Working without a team"),doorSaid||t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed."),"") /* plant:account-desk-only */
-      : row("team","people",t("No team yet"),doorSaid||t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself."),""));
+      : row("team","people",t("No team yet"),doorSaid||(signinManaged(v)?t("No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself."):t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself.")),"")); /* plant:no-team-managed */
     /* A managed computer shows the provider it is held to in the code's place, since nobody there is admitted by code. */
     if(v.managed && v.managed.provider) rows.push(row("signin","user",t("Sign-in"),"",lockedHtml(signinHeldTo(v.managed))));
     if(v.code && !signinManaged(v)) rows.push(row("code","code",t("Your sign-in code"), /* plant:code-row-managed */t("Not a secret. It tells a team's lead which account is yours."),
