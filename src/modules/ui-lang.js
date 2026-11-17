@@ -1471,7 +1471,7 @@ UI_STRINGS.pl={
   "Buy":"Kup",
   "The sign-in service could not be reached.":"Nie udało się połączyć z usługą logowania.",
   "Nothing changed: this computer is not signed in, and Etiuda works as before.":"Nic się nie zmieniło: ten komputer nie jest zalogowany, a Etiuda działa jak dotąd.",
-  "{TEAM} has no free seat just now.":"W zespole {TEAM} nie ma teraz wolnego miejsca.",
+  "{TEAM} has no free seat just now.":"{TEAM} nie ma teraz wolnego miejsca.",
   "The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and {LEAD}, the team's lead, sees this account's sign-in code among those who have signed in.":"Logowanie się powiodło. Ten komputer sam zajmie miejsce, gdy tylko któreś się zwolni; nikt nie musi nic robić, a lider zespołu, {LEAD}, widzi kod logowania tego konta wśród osób, które się zalogowały.",
   "This account is signed in on three computers already.":"To konto jest już zalogowane na trzech komputerach.",
   "A seat holds three computers. Signing out on one of the others frees its place, and this computer checks again by itself.":"Miejsce w licencji obejmuje trzy komputery. Wylogowanie się na jednym z pozostałych zwolni jego miejsce, a ten komputer sam sprawdzi ponownie.",
@@ -1678,7 +1678,7 @@ UI_STRINGS.pl={
   "On this network the team's updates arrive about once a minute, not live.":"W tej sieci aktualizacje zespołu docierają mniej więcej co minutę, a nie na bieżąco.",
   "This network does not let the live connection to the relay through, so Etiuda asks the relay about once a minute instead. Nothing is lost, and nothing needs doing.":"Ta sieć nie przepuszcza połączenia na żywo z przekaźnikiem, więc Etiuda pyta przekaźnik mniej więcej co minutę. Nic nie ginie i nic nie trzeba robić.",
   /* Claudette's words, 2026-11-17, a team file naming a relay this build does not use: one sentence and the next, on the row whole. */
-  "The team file of {TEAM} names a relay this Etiuda does not use, so this desk does not follow it: it keeps its team, its catalog and its connection as they were, and sends nothing there.":"Plik zespołu {TEAM} wskazuje przekaźnik, z którego ta Etiuda nie korzysta, więc to stanowisko za nim nie podąża: zachowuje zespół, katalog i połączenie bez zmian i niczego tam nie wysyła.",
+  "The team file of {TEAM} names a relay this Etiuda does not use, so this desk does not follow it: it keeps its team, its catalog and its connection as they were, and sends nothing there.":"{TEAM} wskazuje w swoim pliku przekaźnik, z którego ta Etiuda nie korzysta, więc to stanowisko za nim nie podąża: zachowuje zespół, katalog i połączenie bez zmian i niczego tam nie wysyła.",
   "If the team moves back, nothing is needed; otherwise a new invitation from the team's lead is.":"Jeśli zespół wróci na poprzedni przekaźnik, nic nie trzeba robić; w przeciwnym razie potrzebne jest nowe zaproszenie od lidera zespołu.",
   "Another catalog of the team has a newer edition.":"Inny katalog zespołu ma nowsze wydanie.",
   "Other catalogs of the team with a newer edition: {N}.":"Inne katalogi zespołu z nowszym wydaniem: {N}.",
