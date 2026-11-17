@@ -454,14 +454,17 @@ async function main() {
      without seats makes it ordinary; an earlier-issued grant without seats changes nothing; a handover with seats makes it Entra. */
   /* The first grant an ordinary team was made with, as its lead's Studio still holds it. */
   const ordinaryFirst = w => w.firstGrant;
+  /* A desk's current certificate of a licence no team here names: an ordinary team takes it, a gated one refuses it, so it tells the two
+     arms apart where a desk holding none is refused by both. */
+  const elsewhere = (w, k) => certFor(k.pub, hex(16), w.R.clock.now, 7 * DAY);
   async function keptScene() {
     const w = await team({});
     const before = await session(w, w.desks.a, certFor(w.desks.a.pub, hex(16), w.R.clock.now, 7 * DAY));
     w.R.clock.now += HOUR;
     const toEntra = await renew(w, grantAt(w.lead.pub, w.R.clock.now, { licence: w.licence, live: w.R.clock.now }));
-    const asks = await session(w, w.desks.a);
+    const asks = await session(w, w.desks.a, elsewhere(w, w.desks.a));
     const stale = await renew(w, grantAt(w.lead.pub, w.R.clock.now - 30 * MIN, undefined, { fields: { until: w.R.clock.now + 31 * DAY } }));
-    const stillAsks = await session(w, w.desks.a);
+    const stillAsks = await session(w, w.desks.a, elsewhere(w, w.desks.a));
     /* An earlier-issued grant carrying another licence's seats does not take the team's place either. */
     const otherLic = hex(16);
     const staleSeats = await renew(w, grantAt(w.lead.pub, w.R.clock.now - 20 * MIN, { licence: otherLic, live: w.R.clock.now - 20 * MIN }, { fields: { until: w.R.clock.now + 31 * DAY + HOUR } }));
@@ -469,15 +472,15 @@ async function main() {
     const staleLic = await session(w, w.desks.a, certFor(w.desks.a.pub, otherLic, w.R.clock.now, 7 * DAY));
     w.R.clock.now += HOUR;
     const toPlain = await renew(w, grantAt(w.lead.pub, w.R.clock.now, undefined, { fields: { until: w.R.clock.now + 32 * DAY } }));
-    const plainAgain = await session(w, w.desks.a);
+    const plainAgain = await session(w, w.desks.a, elsewhere(w, w.desks.a));
     /* The grant the team was made with, replayed after it was gated. */
     const replay = await renew(w, ordinaryFirst(w));
-    const stillGated = await session(w, w.desks.a);
+    const stillGated = await session(w, w.desks.a, elsewhere(w, w.desks.a));
     const h = await team({});
     const next = keyPair(false), to = { keyId: next.keyId, pub: next.pub }, t = h.R.clock.now;
     const moved = await call(h.R, "POST", "/relay/v1/t/" + h.rt + "/lead", { json: { to, t, sig: signHex(h.lead, C.leadBytes(h.rt, to.keyId, to.pub, t)),
       grant: grantAt(next.pub, t, { licence: h.licence, live: t }) } });
-    const handed = await session(h, h.desks.a);
+    const handed = await session(h, h.desks.a, elsewhere(h, h.desks.a));
     const ok = opened(before) && toEntra.status === 200 && refused(asks, "seat-lapsed") && stale.status === 200 && refused(stillAsks, "seat-lapsed")
       && staleSeats.status === 200 && opened(ownLic) && refused(staleLic, "seat-lapsed") && toPlain.status === 200 && refused(plainAgain, "seat-lapsed") && !!storeOf(w).get("seats") && replay.status === 200 && refused(stillGated, "seat-lapsed") && moved.status === 200 && refused(handed, "seat-lapsed");
     return { ok, detail: brief({ ordinary: said(before), renewedWithSeats: said(asks), earlierWithout: said(stale) + "/" + said(stillAsks),
