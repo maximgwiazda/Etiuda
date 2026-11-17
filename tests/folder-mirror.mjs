@@ -35,7 +35,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 166;
+const EXPECTED = 168;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const { offWindows } = nodeRequire("./off-windows.cjs");
@@ -5281,6 +5281,87 @@ async function run() {
       return got.busy && !got.ok;
     });
     check(planted.ok, "r10b lifting plant:ask-commit-holds answers busy after the commit was posted: " + JSON.stringify(planted));
+  }
+
+  /* a3: a file of this desk's own folder that this desk deleted stays deleted when the share brings it back,
+     and a file deleted then written again itself is sent as a new file. */
+  function ownDeletedScene(mod, name) {
+    const share = folder(name + "-share");
+    const mirror = folder(name + "-mirror");
+    const dk = crypto.generateKeyPairSync("ed25519");
+    const dPub = pubHex(dk.publicKey);
+    const dId = "k-" + crypto.createHash("sha256").update(Buffer.from(dPub, "hex")).digest("hex").slice(0, 16);
+    const signOwn = (doc) => {
+      const out = JSON.parse(JSON.stringify(doc));
+      out.sig = { alg: "Ed25519", keyId: dId };
+      out.sig.value = crypto.sign(null, Buffer.concat([Buffer.from("etiuda-desk-branch\n", "utf8"), signedBytesOf(out)]), dk.privateKey).toString("hex");
+      return out;
+    };
+    const teamText = JSON.stringify(teamFile({ epoch: 1, rev: 1 }));
+    fs.writeFileSync(path.join(share, "etiuda-team.json"), teamText, "utf8");
+    fs.writeFileSync(path.join(mirror, "etiuda-team.json"), teamText, "utf8");
+    const rels = {
+      branch: "desks/" + dId + "/cat-own-7a7b7c7d.ec",
+      inUse: "desks/" + dId + "/in-use.ec",
+      answer: "desks/" + dId + "/catalog-answer.ec"
+    };
+    const bytes1 = {
+      branch: JSON.stringify(signOwn({ format: 2, kind: "etiuda-catalog", id: dId + "-7a7b7c7d", desk: { id: dId, key: dPub }, rev: 1, cards: [] })) + "\n",
+      inUse: seal(K1, 1, JSON.stringify(signOwn({ format: 1, kind: "etiuda-in-use", desk: { id: dId, key: dPub }, at: "2026-11-16T00:00:00.000Z", catalog: { id: "lamp-shop", rev: 1 }, n: 3 }))),
+      answer: seal(K1, 1, JSON.stringify({ format: 1, kind: "etiuda-catalog-answer", sha256: "sha256:" + "ab".repeat(32), catalog: catalog("lamp-shop", 1, "Lamp Shop", "2026-02-01") }))
+    };
+    const bytes2 = {
+      branch: JSON.stringify(signOwn({ format: 2, kind: "etiuda-catalog", id: dId + "-7a7b7c7d", desk: { id: dId, key: dPub }, rev: 2, cards: [] })) + "\n",
+      inUse: seal(K1, 1, JSON.stringify(signOwn({ format: 1, kind: "etiuda-in-use", desk: { id: dId, key: dPub }, at: "2026-11-16T00:01:00.000Z", catalog: { id: "lamp-shop", rev: 1 }, n: 4 }))),
+      answer: seal(K1, 1, JSON.stringify({ format: 1, kind: "etiuda-catalog-answer", sha256: "sha256:" + "cd".repeat(32), catalog: catalog("lamp-shop", 1, "Lamp Shop", "2026-02-01") }))
+    };
+    const mPath = rel => path.join(mirror, ...rel.split("/"));
+    const sPath = rel => path.join(share, ...rel.split("/"));
+    const putMirror = (rel, body) => { fs.mkdirSync(path.dirname(mPath(rel)), { recursive: true }); fs.writeFileSync(mPath(rel), body, "utf8"); };
+    let prog = mod.createFolderProgram({ team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks, own: dId, logger: () => {} });
+    try {
+      for (const k of ["branch", "inUse", "answer"]) { putMirror(rels[k], bytes1[k]); prog.owe(rels[k]); }
+      prog.syncOnce();
+      const flushed = ["branch", "inUse", "answer"].every(k => fs.existsSync(sPath(rels[k])) && fs.readFileSync(sPath(rels[k]), "utf8") === bytes1[k]) && !prog.owing();
+      for (const k of ["branch", "inUse", "answer"]) { fs.unlinkSync(mPath(rels[k])); prog.owe(rels[k]); }
+      prog.syncOnce();
+      const delFlushed = ["branch", "inUse", "answer"].every(k => !fs.existsSync(sPath(rels[k])) && !fs.existsSync(mPath(rels[k]))) && !prog.owing();
+      prog.stop();
+      /* Restart the program before the share brings the deleted files back. */
+      prog = mod.createFolderProgram({ team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks, own: dId, logger: () => {} });
+      /* The share puts the old bytes back. */
+      for (const k of ["branch", "inUse", "answer"]) { fs.writeFileSync(sPath(rels[k]), bytes1[k], "utf8"); touch(sPath(rels[k])); }
+      prog.syncOnce();
+      const keptOut1 = ["branch", "inUse", "answer"].every(k => !fs.existsSync(mPath(rels[k])));
+      prog.syncOnce();
+      const keptOut2 = ["branch", "inUse", "answer"].every(k => !fs.existsSync(mPath(rels[k])) && prog.isOwed(rels[k]));
+      prog.syncOnce();
+      const lostAgain = ["branch", "inUse", "answer"].every(k => !fs.existsSync(mPath(rels[k])) && !fs.existsSync(sPath(rels[k]))) && !prog.owing();
+      /* Rewritten by this desk itself: clears gone and goes up as a new file. */
+      for (const k of ["branch", "inUse", "answer"]) { putMirror(rels[k], bytes2[k]); prog.owe(rels[k]); }
+      prog.syncOnce();
+      const sentNew = ["branch", "inUse", "answer"].every(k => fs.existsSync(sPath(rels[k])) && fs.readFileSync(sPath(rels[k]), "utf8") === bytes2[k]) && !prog.owing();
+      let goneCleared = false;
+      try {
+        const box = JSON.parse(fs.readFileSync(path.join(mirror, ".outbox.json"), "utf8"));
+        goneCleared = !box.gone || ["branch", "inUse", "answer"].every(k => !box.gone[rels[k]]);
+      } catch { goneCleared = false; }
+      return { flushed, delFlushed, keptOut1, keptOut2, lostAgain, sentNew, goneCleared };
+    } finally { prog.stop(); }
+  }
+  {
+    const g = ownDeletedScene(syncerMod, "a3a");
+    check(g.flushed && g.delFlushed && g.keptOut1 && g.keptOut2 && g.lostAgain && g.sentNew && g.goneCleared,
+      "a3a an own working copy, in-use.ec and catalog-answer.ec deleted and flushed stay out of the mirror across a restart and leave the share again when put back, and a later own write clears gone and goes up: "
+      + JSON.stringify(g));
+  }
+  if (PLANTS_OFF) skip("a3b lifting plant:own-deleted-kept lets deleted own files put back on the share land in the mirror again: NOT RUN");
+  else {
+    const planted = await testPlant("own-deleted-kept", syncerFile, async (scratch) => {
+      const got = ownDeletedScene(nodeRequire(scratch), "a3b");
+      return got.flushed && got.delFlushed && !got.keptOut1 && !got.lostAgain;
+    });
+    check(planted.ok, "a3b lifting plant:own-deleted-kept lets deleted own files put back on the share land in the mirror again: " + JSON.stringify(planted));
   }
 
   if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") {

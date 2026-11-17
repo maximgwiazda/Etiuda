@@ -244,7 +244,8 @@ const normRel = (rel) => String(rel || "").replace(/\\/g, "/");
    kept beside the mirror's files under a dot name neither walk lists, with the rev and counter floors. A record goes once
    the share holds exactly those bytes, or no file for a deletion. The floors never go down: an edition deleted and published
    again under the same name at a lower rev would stay out. That holds while Studio always raises rev. `back` counts, per
-   file of this desk's own folder, the times the share took it back ({n, at}), written only while it holds one. */
+   file of this desk's own folder, the times the share took it back ({n, at}), written only while it holds one. `gone` holds
+   paths of this desk's own folder whose deletions reached the share, cleared if this desk writes the path again. */
 const OUTBOX_NAME = ".outbox.json";
 const OUTBOX_KIND = "etiuda-folder-outbox";
 const PRIMED_NAME = ".primed";
@@ -293,7 +294,7 @@ function readOutbox(mirror, io, rethrowBusy, track) {
     } catch (e) {
       if (e && e.code === "ENOENT") {
         clearOutboxUnread(track);
-        return { owe: {}, floors: {}, back: {} };
+        return { owe: {}, floors: {}, back: {}, gone: {} };
       }
       const code = (e && e.code) || "EIO";
       const canPass = OUTBOX_CAN_PASS.indexOf(code) >= 0;
@@ -315,7 +316,8 @@ function readOutbox(mirror, io, rethrowBusy, track) {
       return {
         owe: doc.owe,
         floors: doc.floors && typeof doc.floors === "object" && !Array.isArray(doc.floors) ? doc.floors : {},
-        back: doc.back && typeof doc.back === "object" && !Array.isArray(doc.back) ? doc.back : {}
+        back: doc.back && typeof doc.back === "object" && !Array.isArray(doc.back) ? doc.back : {},
+        gone: doc.gone && typeof doc.gone === "object" && !Array.isArray(doc.gone) ? doc.gone : {}
       };
     }
     if (!isMainThread) return null;
@@ -330,7 +332,7 @@ function readOutbox(mirror, io, rethrowBusy, track) {
     } catch (e) {
       if (e && e.code === "ENOENT") {
         clearOutboxUnread(track);
-        return { owe: {}, floors: {}, back: {} };
+        return { owe: {}, floors: {}, back: {}, gone: {} };
       }
       const code = (e && e.code) || "EIO";
       const canPass = OUTBOX_CAN_PASS.indexOf(code) >= 0;
@@ -342,7 +344,7 @@ function readOutbox(mirror, io, rethrowBusy, track) {
     const log = track ? track.logger : console.log;
     log("etiuda: " + file + " was not a valid outbox and was moved aside to " + path.basename(aside)
       + "; what this computer still owed the folder may need sending again");
-    return { owe: {}, floors: {}, back: {} };
+    return { owe: {}, floors: {}, back: {}, gone: {} };
   }
 }
 function writeOutbox(mirror, st, io) {
@@ -351,6 +353,7 @@ function writeOutbox(mirror, st, io) {
   try { io.mkdir(mirror); } catch {}
   const doc = { kind: OUTBOX_KIND, v: 1, owe: st.owe, floors: st.floors };
   if (st.back && Object.keys(st.back).length) doc.back = st.back;
+  if (st.gone && Object.keys(st.gone).length) doc.gone = st.gone;
   io.writeFile(tmp, JSON.stringify(doc));
   try { renameRetrying(tmp, file, io); } catch (e) { try { io.unlink(tmp); } catch {} throw e; }
 }
@@ -397,7 +400,7 @@ function writeOutboxRetrying(mirror, mutate, io, onDone, timerSet, keepGoing, tr
   return outboxBusyRetrying(() => {
     let st = readOutbox(mirror, io, true, track);
     if (!st) throw Object.assign(new Error("outbox unreadable"), { code: "EIO" }); /* plant:outbox-write-unread */
-    st = st || { owe: {}, floors: {}, back: {} };
+    st = st || { owe: {}, floors: {}, back: {}, gone: {} };
     mutate(st);
     writeOutbox(mirror, st, io);
   }, onDone, timerSet, keepGoing);
@@ -412,7 +415,11 @@ function noteOwed(mirror, rel, io, track) {
   io = io || defaultIO;
   const norm = normRel(rel);
   if (!isAllowedPath(norm)) return false;
-  writeOutboxRetrying(mirror, st => { st.owe[norm] = owedRecord(mirror, norm, io); }, io, null, null, true, track);
+  writeOutboxRetrying(mirror, st => {
+    const rec = owedRecord(mirror, norm, io);
+    st.owe[norm] = rec;
+    if (!rec.del && st.gone) delete st.gone[norm];
+  }, io, null, null, true, track);
   return true;
 }
 function owedList(mirror, io, track) {
@@ -1005,6 +1012,15 @@ function createFolderProgram(opts) {
               clearRels.push(r);
               if (saidWait.has(r.rel)) { saidWait.delete(r.rel); logger("etiuda: " + r.rel + " has reached the team's folder " + folder); }
               if (!r.del && r.size != null) knownMtimes.set(r.rel, { size: r.size, mtimeMs: r.mtimeMs });
+              if (r.del) {
+                const key = normRel(r.rel);
+                knownMtimes.delete(r.rel);
+                refusedMtimes.delete(r.rel);
+                heldSettled.delete(r.rel);
+                backStamp.delete(key);
+                backSeen.delete(key);
+                dropped.add(r.rel);
+              }
               const waiting = renameWait.get(r.rel);
               if (waiting) {
                 try { if (waiting.tmpPath) io.unlink(waiting.tmpPath); } catch {}
@@ -1032,7 +1048,11 @@ function createFolderProgram(opts) {
         if (!clearRels.length && !updateRels.length) return;
         for (const r of clearRels) {
           const rec = st.owe[r.rel];
-          if (rec && !!rec.del === !!r.del && (rec.del || rec.sha === r.sha)) delete st.owe[r.rel];
+          if (rec && !!rec.del === !!r.del && (rec.del || rec.sha === r.sha)) {
+            delete st.owe[r.rel];
+            if (r.ok && r.del && ownRel(r.rel)) (st.gone || (st.gone = {}))[normRel(r.rel)] = true;
+            else if (r.ok && !r.del && st.gone) delete st.gone[normRel(r.rel)];
+          }
         }
         for (const r of updateRels) {
           const rec = st.owe[r.rel];
@@ -1154,11 +1174,24 @@ function createFolderProgram(opts) {
     for (const k of ["epoch", "n", "rev"]) if (a[k] != null && b[k] != null && a[k] !== b[k]) return a[k] > b[k];
     return false;
   }
-  /* A staged copy of an own file other than the mirror's and no newer: it does not land, and is held while the share keeps it. */
-  function tookBack(item) {
+  /* A staged copy of an own file other than the mirror's and no newer, or one this desk deleted: it does not land, and is held while the share keeps it. */
+  function tookBack(item, box) {
     const key = normRel(item.relPath);
+    const deleted = !!(box && box.gone && box.gone[key]);
+    const mirrorFile = path.join(mirror, item.relPath);
+    if (!io.exists(mirrorFile)) {
+      if (!deleted) return false;
+      let keepGone = false;
+      keepGone = true; /* plant:own-deleted-kept */
+      if (!keepGone) return false;
+      takenNow.add(key);
+      backStamp.set(key, { size: item.size, mtimeMs: item.mtimeMs });
+      refuse(item);
+      try { io.unlink(item.tmpPath); } catch {}
+      return true;
+    }
     let held = null, staged = null;
-    try { held = io.readFile(path.join(mirror, item.relPath)); staged = io.readFile(item.tmpPath); } catch { return false; }
+    try { held = io.readFile(mirrorFile); staged = io.readFile(item.tmpPath); } catch { return false; }
     if (sha256hex(held) === sha256hex(staged)) { backStamp.delete(key); return false; }
     let back = false;
     back = !shareNewer(staged.toString("utf8"), held.toString("utf8")); /* plant:own-older-kept */
@@ -1170,7 +1203,7 @@ function createFolderProgram(opts) {
     return true;
   }
   /* Step 4 for an own file. True where its fault came or went, so the Library is told. */
-  function ownStays(rel, listed, stamp) {
+  function ownStays(rel, listed, stamp, gone) {
     const key = normRel(rel);
     const box = readOutbox(mirror, io, false, outboxTrack);
     let unreadHold = false;
@@ -1180,7 +1213,7 @@ function createFolderProgram(opts) {
     if (relOwed) { backSeen.delete(key); return false; }
     const had = backStamp.get(key), st = listed ? stamp(rel) : null;
     let taken = false;
-    taken = !listed || takenNow.has(key) || !!(had && st && had.size === st.size && had.mtimeMs === st.mtimeMs); /* plant:own-gone-owed */
+    taken = (gone ? false : !listed) || takenNow.has(key) || !!(had && st && had.size === st.size && had.mtimeMs === st.mtimeMs); /* plant:own-gone-owed */
     if (!taken) { backSeen.delete(key); return forgetBack(key, box); }
     const seen = (backSeen.get(key) || 0) + 1;
     backSeen.set(key, seen);
@@ -1365,6 +1398,10 @@ function createFolderProgram(opts) {
       const itemOwed = !!(box && box.owe[normRel(item.relPath)] && box.owe[normRel(item.relPath)].owe);
       if (itemOwed) {
         dropUnjudged(item);
+        try { io.unlink(path.join(pendingDir, item.relPath)); } catch {}
+        continue;
+      }
+      if (ownRel(item.relPath) && tookBack(item, box)) {
         try { io.unlink(path.join(pendingDir, item.relPath)); } catch {}
         continue;
       }
@@ -1712,7 +1749,7 @@ function createFolderProgram(opts) {
         dropUnjudged(item, forget);
         continue;
       }
-      if (ownRel(relPath) && tookBack(item)) continue;
+      if (ownRel(relPath) && tookBack(item, box)) continue;
       let text = null;
       try { text = io.readFile(tmpPath, "utf8"); } catch {
         dropUnjudged(item);
@@ -1984,6 +2021,20 @@ function createFolderProgram(opts) {
           missingCount.delete(relPath);
           applied.push(relPath);
         }
+      }
+    }
+    const mirrorSet = new Set(Array.from(currentMirrorFiles).map(normRel));
+    const step4Box = readOutbox(mirror, io, false, outboxTrack);
+    if (step4Box && step4Box.gone) {
+      for (const relPath of Object.keys(step4Box.gone)) {
+        const key = normRel(relPath);
+        if (!step4Box.gone[relPath] || mirrorSet.has(key) || !ownRel(key)) continue;
+        if (unknownAt(key)) { backSeen.delete(key); continue; }
+        if (!listingMap.has(key) && !takenNow.has(key) && !(step4Box.back && step4Box.back[key])) {
+          backSeen.delete(key);
+          continue;
+        }
+        if (ownStays(key, listingMap.has(key), stampOf, true)) faultMoved = true;
       }
     }
 
