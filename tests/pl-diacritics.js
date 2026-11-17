@@ -151,9 +151,11 @@ const ALLOWED_IN = [
     within: "Wszystko działa jak zwykle; lider zespołu może ją zastąpić wydaniem opublikowanym na licencji." },
   { fold: "zwykle", since: "2026-10-26",
     within: "Wszystko działa jak zwykle; lider zespołu może je zastąpić wydaniem objętym licencją." },
-  /* 2026-11-14. Sync's reason for a provider's refusal says "kolejna próba", the nominative, not "kolejną". */
-  { fold: "kolejna", since: "2026-11-14",
-    within: "dostawca konta odrzucił prośbę Etiudy; kolejna próba nastąpi następnego dnia" },
+  /* 2026-11-14. Sync's reason for a provider's refusal says "kolejna próba", the nominative, not "kolejną". 2026-11-17: the
+     copywriter changed how that sentence ends on 2026-11-16 ("tries again each day" was untrue of a desk closed overnight) and the
+     allowance did not follow it; it names the sentence as it now stands, the one before being nowhere in the tree. */
+  { fold: "kolejna", since: "2026-11-17",
+    within: "dostawca konta odrzucił prośbę Etiudy; kolejna próba nastąpi przy każdym uruchomieniu Etiudy i mniej więcej raz na dobę, gdy pozostaje otwarta" },
   /* 2026-11-13. A managed computer's shared line (decision 49) says "inna osoba", the nominative, not "inną". */
   { fold: "inna", since: "2026-11-13",
     within: "Wspólny komputer: może się tu zalogować inna osoba, kontem organizacji." },
