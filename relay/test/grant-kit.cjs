@@ -41,15 +41,16 @@ function delegationFor(now, o) {
 const delegatedGrantFor = (leadPub, now, o) => grantFor(leadPub, now, Object.assign({ via: delegationFor(now), signer: DELEGATE }, o || {}));
 
 /* A seat certificate as the licence service signs one, for any desk key: of `licence`, issued at `issued` and running `span`, under a
-   delegation of the test delegated key that may sign "licence". `o.pooled` and `o.deskOnly` mark it, each signed as its line; `o.fields`
-   overrides or adds fields before the signing (a mark added after it rides outside the signature); `o.signer` and `o.via` sign it under
-   another service key; `o.forger` signs it with another private key; `o.person` names the person's pseudonym, random unless given. */
+   delegation of the test delegated key that may sign "licence". `o.pooled`, `o.deskOnly` and `o.member` (a following Studio's) mark it,
+   each signed as its line; `o.fields` overrides or adds fields before the signing (a mark added after it rides outside the signature);
+   `o.signer` and `o.via` sign it under another service key; `o.forger` signs it with another private key; `o.person` names the person's pseudonym, random unless given. */
 function certFor(deskPub, licence, issued, span, o) {
   const opts = o || {};
   const signer = opts.signer || DELEGATE;
   const via = opts.via || delegationFor(issued, { fields: { may: ["licence"], key: { id: signer.id, pub: signer.pub } } });
   const c = Object.assign({ kind: "etiuda-seat-certificate", format: 1, licence, desk: deskPub, person: opts.person || crypto.randomBytes(32).toString("hex"),
-    code: "ABCDEFGHJKMNPQRS", issued, until: issued + span, via }, opts.pooled ? { pooled: true } : {}, opts.deskOnly ? { deskOnly: true } : {}, opts.fields || {});
+    code: "ABCDEFGHJKMNPQRS", issued, until: issued + span, via }, opts.pooled ? { pooled: true } : {}, opts.deskOnly ? { deskOnly: true } : {},
+    opts.member ? { member: true } : {}, opts.fields || {});
   c.sig = { alg: "Ed25519", keyId: signer.id, value: "" };
   c.sig.value = sign(opts.forger || signer, core.certBytes(c));
   return c;

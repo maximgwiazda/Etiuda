@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-seats-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 129;
+const EXPECTED = 136;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* ETIUDA_PLANT_ONLY, a comma list of plant tags or planted names: only those plants run, every other is skipped, so one plant is proved
    alone without the whole sweep. */
@@ -1223,6 +1223,57 @@ async function main() {
     return { ok, detail: brief({ working: working.status, keptRows: rowsAfter, readOnlyLead: said(lro), moveToFolder: said(toFolder), plainWrite: said(plainWrite) }) };
   }
   await leg("s24j", folderGoneScene, "the folder arm is gone: a working team's lead file naming a channel keeps no team file or move row, and a read-only team's lead moving its team file to a folder is refused team-lapsed, as its plain write is");
+  /* THE MEMBER MARK: a following Studio's certificate for its member key, signed "member" after "pooled" and "desk-only". The relay
+     cannot tell that key from a desk's at a hello, so there it is taken as a desk's would be, on both arms, at a key hello and at the
+     invitation stage, and the session's seat records the mark; this leg says so, so that a later rule changes it on purpose. */
+  async function memberTakenScene() {
+    const o = await team({}), st = await team({ seats: true }), got = {};
+    const marked = (k, lic, w) => certFor(k.pub, lic, w.R.clock.now, 7 * DAY, { member: true });
+    got.ordinaryHello = await session(o, o.desks.a, marked(o.desks.a, hex(16), o));
+    got.strictHello = await session(st, st.desks.a, marked(st.desks.a, st.licence, st));
+    got.strictOtherLicence = await session(st, st.desks.b, marked(st.desks.b, hex(16), st));
+    const oj = joiner(o, "j"), oi = await inviteOn(o), sj = joiner(st, "j"), si = await inviteOn(st);
+    got.ordinaryInvite = await helloWith(o, oj, { invite: oi.token, inv: oi.inv, seat: marked(oj, hex(16), o) });
+    got.strictInvite = await helloWith(st, sj, { invite: si.token, inv: si.inv, seat: marked(sj, hex(16), st) });
+    const kept = [[o, got.ordinaryHello], [st, got.strictHello], [o, got.ordinaryInvite], [st, got.strictInvite]].every(([w, r]) => (rowOf(w, r) || {}).seat && rowOf(w, r).seat.member === true);
+    const plainRow = rowOf(o, await session(o, o.desks.b, certFor(o.desks.b.pub, hex(16), o.R.clock.now, 7 * DAY)));
+    const ok = opened(got.ordinaryHello) && opened(got.strictHello) && refused(got.strictOtherLicence, "seat-lapsed") && opened(got.ordinaryInvite) && opened(got.strictInvite)
+      && kept && !!plainRow && plainRow.seat && plainRow.seat.member === undefined;
+    return { ok, detail: brief(Object.assign({}, ...Object.entries(got).map(([n, r]) => ({ [n]: said(r) })), { markKept: kept, unmarkedSeat: plainRow ? Object.keys(plainRow.seat || {}) : null })) };
+  }
+  /* At the door, where only a desk knocks, a marked certificate is refused: a stranger's new request and an enrolled desk's knock alike,
+     on an ordinary and an Entra team, while the same desks' unmarked certificates still ask and open. */
+  async function memberDoorScene() {
+    const rows = {};
+    for (const [kind, o] of [["ordinary", {}], ["entra", { seats: true }]]) {
+      const w = await team(o), L = w.licence, now = w.R.clock.now, k = keyPair(true);
+      await doorOf(w, [L]);
+      const strangerMarked = await knockWith(w, k, certFor(k.pub, L, now, 7 * DAY, { member: true }));
+      const enrolledMarked = await knockWith(w, w.desks.a, certFor(w.desks.a.pub, L, now, 7 * DAY, { member: true }));
+      const stranger = await knockWith(w, k, certFor(k.pub, L, now, 7 * DAY));
+      const enrolled = await knockWith(w, w.desks.a, certFor(w.desks.a.pub, L, now, 7 * DAY));
+      rows[kind] = { strangerMarked: said(strangerMarked), enrolledMarked: said(enrolledMarked), stranger: said(stranger), enrolled: said(enrolled),
+        ok: said(strangerMarked) === "not-enrolled" && said(enrolledMarked) === "not-enrolled" && stranger.status === 200 && stranger.json.invite === true && opened(enrolled) };
+    }
+    return { ok: rows.ordinary.ok && rows.entra.ok, detail: brief(rows) };
+  }
+  /* The mark is inside the signed bytes: a marked certificate stripped of the field, and an unmarked one given it after its signing, are
+     refused on both arms; the marked one as signed opens. */
+  async function memberBytesScene() {
+    const rows = {};
+    for (const [kind, o] of [["ordinary", {}], ["entra", { seats: true }]]) {
+      const w = await team(o), a = w.desks.a, now = w.R.clock.now;
+      const stripped = certFor(a.pub, w.licence, now, 7 * DAY, { member: true });
+      delete stripped.member;
+      const added = Object.assign(certFor(a.pub, w.licence, now, 7 * DAY), { member: true });
+      const r = { stripped: await session(w, a, stripped), added: await session(w, a, added), signed: await session(w, a, certFor(a.pub, w.licence, now, 7 * DAY, { member: true })) };
+      rows[kind] = { stripped: said(r.stripped), added: said(r.added), signed: said(r.signed), ok: refused(r.stripped, "seat-lapsed") && refused(r.added, "seat-lapsed") && opened(r.signed) };
+    }
+    return { ok: rows.ordinary.ok && rows.entra.ok, detail: brief(rows) };
+  }
+  await leg("s25a", memberTakenScene, "a following Studio's marked certificate is taken at a key hello and at the invitation stage on both arms as a desk's would be (any licence on the ordinary arm, the team's on the strict arm), and the session's seat records the mark, an unmarked one's not");
+  await leg("s25b", memberDoorScene, "at the door a marked certificate is refused not-enrolled, a stranger's new request and an enrolled desk's knock alike, on an ordinary and an Entra team, while the same desks' unmarked certificates ask and open");
+  await leg("s25c", memberBytesScene, "the member mark is signed: a marked certificate stripped of the field, and an unmarked one given it after its signing, are refused on both arms, and the marked one as signed opens");
   await leg("s24i", storeScene, "a person's store: a session opens on its store certificate alone, a seat certificate or none is refused, and a store session, carrying no seat, still reads twenty minutes on");
 
   /* ---- the plants: each guard lifted in a copy of relay/core.cjs turns its named leg red, and the product file is never written ---- */
@@ -1285,7 +1336,8 @@ async function main() {
     deskOnlyOutside: { name: "the desk-only mark signed as no line", edits: [[MARK_LOOP, MARK_LOOP.replace("=== true)", "=== true && m.field !== \"deskOnly\")")]] },
     doorAnyLicence: { name: "the door given the ordinary arm's any-licence entry", edits: [["const why = certWhy(b.door, b.pub, refs, clock(), roots, revokedNow());",
       "const why = seatCertWhy(b.door, b.pub, clock(), roots, revokedNow());"]] },
-    doorDeskOnly: { name: "the door taking a desk-only certificate", edits: [["licence => refs.indexOf(licence) > -1, m => m.door,", "licence => refs.indexOf(licence) > -1, () => true,"]] },
+    doorDeskOnly: { name: "the door taking a desk-only certificate", edits: [["licence => refs.indexOf(licence) > -1, m => m.strict,", "licence => refs.indexOf(licence) > -1, () => true,"]] },
+    memberOutside: { name: "the member mark signed as no line", edits: [[MARK_LOOP, MARK_LOOP.replace("=== true)", "=== true && m.field !== \"member\")")]] },
     leadAsked: { name: "the lead's key asked a seat on an ordinary team", edits: [["      if (plain(store.get(\"seats\"))) seat = seatGate(b.seat, b.pub); /* plant:seat-lead */",
       "      seat = seatGate(b.seat, b.pub);"]] },
     tokenSpentFirst: { name: "the invitation's seat judged after the token is spent", edits: [[
@@ -1346,6 +1398,10 @@ async function main() {
     ["resume-seat", "s24g", inviteStageScene, "a bound invitation's resume asks no seat"],
     ["lapse-first", "s24h", lapseFirstScene, "a lapsed team's desk is told its seat"],
     [PLANTED.folderBack, "s24j", folderGoneScene, "a read-only team's lead moves its team file to a folder"],
+    ["seat-member", "s25a", memberTakenScene, "the mark is dropped from the session's seat"],
+    [PLANTED.memberOutside, "s25a", memberTakenScene, "a marked certificate signed with its line is refused"],
+    ["door-member", "s25b", memberDoorScene, "the door takes a marked certificate"],
+    [PLANTED.memberOutside, "s25c", memberBytesScene, "a certificate given the mark after its signing is taken"],
     ["store-session", "s24i", storeScene, "a store's session is judged by the seat gate, so its store certificate is refused and a seat certificate opens it"],
   ];
   for (const [tag, id, scene, what] of PLANTS) {

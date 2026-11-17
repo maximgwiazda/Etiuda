@@ -411,11 +411,13 @@ const CODE_RE = /^[0-9A-HJKMNP-TV-Z]{16}$/;
 /* The bytes the service signs, restated from its seatCertBytes: the kind's line, then format, licence, desk, person, code,
    issued, until and the signing key's id, one a line. A change there is a change here, or no certificate opens the door. */
 /* A CERTIFICATE'S MARKS, the one place they are named: each a field present only as true and signed as its line after the key id, in
-   this order, as the service's seatCertBytes signs them; without any the bytes are as before. `door` says whether certWhy (the door and
-   the strict arm) takes the mark; the ordinary arm takes every mark here. A new mark is a row. */
+   this order, as the service's seatCertBytes signs them; without any the bytes are as before. `strict` says whether certWhy (the door
+   and the strict arm) takes the mark; the ordinary arm takes every mark here. A new mark is a row. `member` marks a following Studio's
+   certificate for its member key: taken at a hello as a desk's would be, and refused at the door (byDoor), which only desks knock at. */
 const CERT_MARKS = [
-  { field: "pooled", line: "pooled", door: true },
-  { field: "deskOnly", line: "desk-only", door: false },
+  { field: "pooled", line: "pooled", strict: true },
+  { field: "deskOnly", line: "desk-only", strict: false },
+  { field: "member", line: "member", strict: true },
 ];
 function certBytes(c) {
   const lines = [c.format, c.licence, c.desk, c.person, c.code, c.issued, c.until, c.sig.keyId];
@@ -448,7 +450,7 @@ function certWhy(cert, deskPub, refs, now, roots, revoked, runOut) {
   const rs = roots === undefined ? [ROOT_PUB] : roots;
   if (!Array.isArray(rs) || rs.length < 1 || !rs.every(r => is(HEX64, r)) || !Number.isSafeInteger(now) || !is(HEX64, deskPub)) return "setup";
   if (!Array.isArray(refs) || refs.length < 1) return "door";
-  return certJudged(cert, deskPub, licence => refs.indexOf(licence) > -1, m => m.door, now, rs, revoked, runOut === true);
+  return certJudged(cert, deskPub, licence => refs.indexOf(licence) > -1, m => m.strict, now, rs, revoked, runOut === true);
 }
 
 /* THE ORDINARY ARM's judgement of a desk key's certificate, apart from certWhy so that no argument the door passes can mean "any
@@ -810,7 +812,7 @@ function createCore(deps) {
     since = !!named && plain(cert) && Number.isSafeInteger(cert.issued) && cert.issued >= named.at; /* plant:freed-issued */
     if (named && !since) return no("seat-lapsed"); /* plant:seat-freed */
     if (cert === undefined || certWhy(cert, deskPub, [seats.licence], now, roots, revokedNow(), true) !== null) return no("seat-lapsed"); /* plant:seat-cert */
-    const seat = { pub: deskPub, licence: seats.licence, issued: cert.issued, until: cert.until, pooled: cert.pooled === true };
+    const seat = seatOf(cert, deskPub);
     if (now < cert.until) {
       const seen = store.get("seatSeen");
       const newer = !(plain(seen) && seen.licence === seats.licence && seen.issued >= cert.issued);
@@ -828,8 +830,12 @@ function createCore(deps) {
     out.end = cert.until; /* plant:seat-session-cap */
     return out;
   }
-  /* What a session keeps of the certificate its hello carried. */
-  const seatOf = (cert, deskPub) => ({ pub: deskPub, licence: cert.licence, issued: cert.issued, until: cert.until, pooled: cert.pooled === true });
+  /* What a session keeps of the certificate its hello carried, and that a following Studio's member key carried it. */
+  function seatOf(cert, deskPub) {
+    const seat = { pub: deskPub, licence: cert.licence, issued: cert.issued, until: cert.until, pooled: cert.pooled === true };
+    if (cert.member === true) seat.member = true; /* plant:seat-member */
+    return seat;
+  }
 
   /* A run-out certificate (`seat`, as seatGate keeps it) judged against the team's evidence at `now`; `mark` keeps a refusal ("pr:"),
      which only a hello does. */
@@ -1526,6 +1532,7 @@ function createCore(deps) {
      the lead removed is never let back in by it: only an invitation registered after the removal takes such a key. */
   function byDoor(team, rt, b) {
     if (entriesShut()) return later();
+    if (plain(b.door) && b.door.member === true) return no("not-enrolled"); /* plant:door-member */
     /* The key's id in its k- form alone, as every desk entry takes it (deskKeyMatches) and doorSealKey binds it. */
     let named = true;
     named = deskKeyMatches(b.key, b.pub); /* plant:door-key-form */
