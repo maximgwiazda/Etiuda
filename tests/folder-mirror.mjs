@@ -35,7 +35,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 170;
+const EXPECTED = 172;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const { offWindows } = nodeRequire("./off-windows.cjs");
@@ -5465,6 +5465,71 @@ async function run() {
       return got.delFlushed && !got.drained && got.gaveUp && !got.recovered;
     });
     check(planted.ok, "a4b lifting plant:worker-sent-clear leaves re-owed and busy-landed paths stuck in the outbox: " + JSON.stringify(planted));
+  }
+
+  /* a2: at start, the team's epoch and rev are those of the newest genuine team file the mirror holds,
+     a conflict sibling included, and of the kept floor. */
+  function siblingInitScene(mod, name) {
+    const share = folder(name + "-share");
+    const mirror = folder(name + "-mirror");
+    const forgedKey = crypto.generateKeyPairSync("ed25519");
+    const forgedPub = pubHex(forgedKey.publicKey);
+    const canon = JSON.stringify(teamFile({ epoch: 1, rev: 1 }));
+    const sibling = JSON.stringify(teamFile({ epoch: 2, rev: 1 }));
+    const forged = JSON.stringify(teamFile({ epoch: 9, rev: 9, keyId: "forged-9", public: forgedPub, signer: forgedKey.privateKey }));
+    fs.writeFileSync(path.join(mirror, "etiuda-team.json"), canon, "utf8");
+    fs.writeFileSync(path.join(mirror, "etiuda-team (1).json"), sibling, "utf8");
+    fs.writeFileSync(path.join(mirror, "etiuda-team (2).json"), forged, "utf8");
+    fs.writeFileSync(path.join(share, "etiuda-team.json"), canon, "utf8");
+    const cat2 = text(catalog("lamps-e2", 1, "Lamps E2", "2026-11-16"));
+    fs.writeFileSync(path.join(share, "lamps-e2.ec"), seal(K2, 2, cat2), "utf8");
+
+    const prog = mod.createFolderProgram({
+      team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1, 2: K2 }, checks, logger: () => {}
+    });
+    let sibEpoch = 0, sibRev = -1, sibLanded = false;
+    try {
+      const st0 = prog.state();
+      sibEpoch = st0.mirrorEpoch;
+      sibRev = st0.mirrorRev;
+      prog.syncOnce();
+      sibLanded = fs.existsSync(path.join(mirror, "lamps-e2.ec"));
+    } finally { prog.stop(); }
+
+    /* Kept floor alone, with only canonical at epoch 1 in mirror. */
+    const shareF = folder(name + "-floor-share");
+    const mirrorF = folder(name + "-floor-mirror");
+    fs.writeFileSync(path.join(mirrorF, "etiuda-team.json"), canon, "utf8");
+    fs.writeFileSync(path.join(shareF, "etiuda-team.json"), canon, "utf8");
+    fs.writeFileSync(path.join(shareF, "lamps-e2.ec"), seal(K2, 2, cat2), "utf8");
+    const progF = mod.createFolderProgram({
+      team: TEAM, folder: shareF, mirror: mirrorF, pin: LEAD, keys: { 1: K1, 2: K2 }, checks,
+      floor: (t, pub) => (t === TEAM && pub === LEAD.public ? { epoch: 2, rev: 3 } : null), logger: () => {}
+    });
+    let floorEpoch = 0, floorRev = -1, floorLanded = false;
+    try {
+      const stF = progF.state();
+      floorEpoch = stF.mirrorEpoch;
+      floorRev = stF.mirrorRev;
+      progF.syncOnce();
+      floorLanded = fs.existsSync(path.join(mirrorF, "lamps-e2.ec"));
+    } finally { progF.stop(); }
+
+    return { sibEpoch, sibRev, sibLanded, floorEpoch, floorRev, floorLanded };
+  }
+  {
+    const g = siblingInitScene(syncerMod, "a2a");
+    check(g.sibEpoch === 2 && g.sibRev === 1 && g.sibLanded && g.floorEpoch === 2 && g.floorRev === 3 && g.floorLanded,
+      "a2a start reads the newest genuine team file including a conflict sibling and the kept floor so an edition at epoch 2 lands: "
+      + JSON.stringify(g));
+  }
+  if (PLANTS_OFF) skip("a2b lifting plant:mirror-init-sibling-floor parks an edition sealed at the sibling's epoch: NOT RUN");
+  else {
+    const planted = await testPlant("mirror-init-sibling-floor", syncerFile, async (scratch) => {
+      const got = siblingInitScene(nodeRequire(scratch), "a2b");
+      return got.sibEpoch === 1 && !got.sibLanded && got.floorEpoch === 1 && !got.floorLanded;
+    });
+    check(planted.ok, "a2b lifting plant:mirror-init-sibling-floor parks an edition sealed at the sibling's epoch: " + JSON.stringify(planted));
   }
 
   if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") {

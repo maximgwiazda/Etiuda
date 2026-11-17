@@ -962,14 +962,62 @@ function createFolderProgram(opts) {
     }
   } catch {}
 
-  // Read initial mirror state if present
+  // Read initial mirror state if present: newest genuine team file (canonical or conflict sibling) and the kept floor.
   try {
-    const mirrorTeamPath = path.join(mirror, "etiuda-team.json");
-    if (io.exists(mirrorTeamPath)) {
-      const tDoc = JSON.parse(io.readFile(mirrorTeamPath, "utf8"));
-      if (tDoc && Number.isInteger(tDoc.epoch)) {
-        mirrorEpoch = tDoc.epoch;
-        mirrorRev = teamRevOf(tDoc) || 0;
+    let initAll = false;
+    initAll = true; /* plant:mirror-init-sibling-floor */
+    if (!initAll) {
+      const mirrorTeamPath = path.join(mirror, "etiuda-team.json");
+      if (io.exists(mirrorTeamPath)) {
+        const tDoc = JSON.parse(io.readFile(mirrorTeamPath, "utf8"));
+        if (tDoc && Number.isInteger(tDoc.epoch)) {
+          mirrorEpoch = tDoc.epoch;
+          mirrorRev = teamRevOf(tDoc) || 0;
+        }
+      }
+    } else {
+      const raiseInit = (ep, rv) => {
+        if (!Number.isInteger(ep)) return;
+        const r = Number.isSafeInteger(rv) && rv >= 0 ? rv : 0;
+        if (ep > mirrorEpoch || (ep === mirrorEpoch && r > mirrorRev)) {
+          mirrorEpoch = ep;
+          mirrorRev = r;
+        }
+      };
+      const initFloorFor = (pub) => {
+        try {
+          const fl = typeof opts.floor === "function" ? opts.floor(team, pub) : opts.floor;
+          if (fl && Number.isInteger(fl.epoch)) {
+            const rv = teamRevOf(fl);
+            if (rv !== null) raiseInit(fl.epoch, rv);
+          }
+        } catch {}
+      };
+      if (pin && pin.public) initFloorFor(pin.public);
+      else if (opts.floor && typeof opts.floor !== "function") initFloorFor(null);
+      let newestHandover = null;
+      const entries = io.exists(mirror) ? io.readdir(mirror) : [];
+      for (const name of entries) {
+        if (name !== "etiuda-team.json" && !isTeamConflict(name)) continue;
+        let tDoc = null;
+        try { tDoc = JSON.parse(io.readFile(path.join(mirror, name), "utf8")); } catch { tDoc = null; }
+        if (!tDoc || !Number.isInteger(tDoc.epoch) || !teamWhole(tDoc) || tDoc.id !== team) continue;
+        const revVal = teamRevOf(tDoc);
+        if (revVal === null || teamChannelOf(tDoc) === null) continue;
+        let handedMatch = false;
+        if (pin) {
+          const leadMatch = tDoc.lead && tDoc.lead.public === pin.public && tDoc.lead.keyId === pin.keyId;
+          handedMatch = !!(tDoc.lead && handedTo(tDoc, pin));
+          if (!leadMatch && !handedMatch) continue;
+        }
+        const rev = revVal || 0;
+        const higher = tDoc.epoch > mirrorEpoch || (tDoc.epoch === mirrorEpoch && rev > mirrorRev);
+        raiseInit(tDoc.epoch, rev);
+        if (tDoc.lead && tDoc.lead.public) initFloorFor(tDoc.lead.public);
+        if (higher && handedMatch) newestHandover = tDoc;
+      }
+      if (newestHandover && newestHandover.epoch === mirrorEpoch && (teamRevOf(newestHandover) || 0) === mirrorRev) {
+        follow(newestHandover);
       }
     }
   } catch {}
