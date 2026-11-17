@@ -4043,9 +4043,9 @@ async function run() {
     const p = await testPlant("syncer-gone-lands", syncerFile, async scratch => {
       fs.copyFileSync(path.join(ROOT, "shell", "folder", "syncer-worker.cjs"), path.join(path.dirname(scratch), "syncer-worker.cjs"));
       const q = await goneScene("plant-dc3b", nodeRequire(scratch));
-      return !q.landed && q.ownCopies > 1;
+      return q.scans >= 8 && !q.landed && q.ownCopies === 1;
     });
-    check(p.ok, "dc3b lifting plant:syncer-gone-lands leaves the record out of the mirror and copied again at every listing: " + JSON.stringify(p));
+    check(p.ok, "dc3b lifting plant:syncer-gone-lands leaves the record out of the mirror, copied once over eight listings and not again: " + JSON.stringify(p));
   }
 
   /* dr1a to dr1h (board 955, condition 1): a synced folder that takes this desk's write back, by dropping its own file or putting
