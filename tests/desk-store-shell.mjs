@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 223;
+const EXPECTED = 234;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -184,6 +184,7 @@ function worldOf(o) {
       if (method === "GET" && u === GRAPH) return json(200, { id: "approot" });
       if (method === "GET" && u === FILE) return w.file === null ? json(404, { error: { code: "itemNotFound" } }) : new Response(Buffer.from(w.file), { status: 200 });
       if (method === "PUT" && u.startsWith(FILE)) {
+        if (w.putStatus) return json(w.putStatus, { error: { code: "badRequest" } });
         if (/conflictBehavior=fail$/.test(u) && w.file !== null) return json(409, { error: { code: "nameAlreadyExists" } });
         /* A write held in flight (putGate), landing once the leg opens it. */
         if (w.putGate) { const g = w.putGate; w.putGate = null; if (w.onPut) w.onPut(); await g; }
@@ -894,6 +895,101 @@ async function owedScene(src) {
   const after = T.storeView(), left = JSON.parse(fs.readFileSync(path.join(r.shell.UD, "store.json"), "utf8"));
   const ok = !!rt && off.line === "ending" && !!kept.owed && text.indexOf(rt) < 0 && w.ended === rt && after.line === "off" && !left.owed;
   return { ok, detail: brief({ whileOwed: off.line, keptSealed: !!kept.owed && text.indexOf(rt) < 0, retried: w.ended === rt ? "signed, this store" : w.ended, after: after.line, left: !!left.owed }) };
+}
+
+/* (m) OFF EVERYWHERE WHERE THE ENDED MARK DOES NOT LAND (how: "token" the folder's token not to be had, "refused" a write answered not ok,
+   "throw" a write that throws): the service ends the store, the row says it is off here and not yet everywhere and why, no look and no
+   restart makes a new store or writes the old ledger anywhere, and once the folder takes the write again the next renewal lands the mark and
+   the row says off. */
+const markKey = f => { try { const j = JSON.parse(f); return j.kind === "etiuda-store-key" ? j : null; } catch { return null; } };
+const markOf = f => { try { const j = JSON.parse(f); return j.kind === "etiuda-store-ended" ? j.rt : ""; } catch { return ""; } };
+const teamsMade = w => w.relayAt.filter(u => /^POST .*\/teams$/.test(u)).length;
+const markLab = () => ({ service: STAGING, clientIds: { microsoft: MS_CLIENT }, root: rawPub(LAB_ROOT.publicKey) });
+async function lineIs(T, line) { for (let i = 0; i < 60 && T.storeView().line !== line; i++) await new Promise(a => setTimeout(a, 20)); return T.storeView().line === line; }
+function markFailing(how, w, T) {
+  return on => {
+    if (how === "token") { if (on && T.get().storeAccess) T.get().storeAccess.until = 0; w.folderDown = on ? 503 : 0; }
+    else if (how === "refused") w.putStatus = on ? 400 : 0;
+    else w.putThrow = on;
+  };
+}
+async function withFolderThrow(w, fn) {
+  const SL = nodeRequire(path.join(ROOT, "shell", "sync", "store.cjs")), real = SL.folderFor;
+  SL.folderFor = (id, o) => { const f = real(id, o); if (f) { const put = f.write; f.write = async t => { if (w.putThrow) throw new Error("stand-in folder threw"); return put.call(f, t); }; } return f; };
+  try { return await fn(); } finally { SL.folderFor = real; }
+}
+async function markFailScene(src, how) {
+  const r = await renewScene(src), w = r.world;
+  return withFolderThrow(w, async () => {
+    const T = r.shell.T, rt = w.file && markKey(w.file) ? markKey(w.file).rt : "", keyBefore = w.file, fail = markFailing(how, w, T);
+    const want = { token: "signin", refused: "refused", throw: "failed" }[how];
+    fail(true);
+    const off = await T.storeSetNow("everywhere");
+    const stores0 = w.R.stores.size, teams0 = teamsMade(w);
+    const first = { line: off.line, why: off.why, ended: w.ended === rt, keyStays: w.file === keyBefore };
+    await T.storeTurn(); await T.storeTurn();
+    await T.signinRenewNow();
+    if (T.get().storeFlight) await T.get().storeFlight;
+    const during = T.storeView(), look = T.get().storeNow;
+    const two = boot(src, { ud: r.shell.UD, world: w, lab: markLab() }), T2 = two.T;
+    const restarted = T2.storeView();
+    T2.branchIdentity(true);
+    await T2.signinRenewNow(); await T2.storeTurn(); await T2.storeTurn();
+    const after = T2.storeView();
+    const kept = JSON.parse(fs.readFileSync(path.join(r.shell.UD, "store.json"), "utf8"));
+    const noStore = w.R.stores.size === stores0 && teamsMade(w) === teams0 && w.file === keyBefore && !look;
+    fail(false);
+    await T2.signinRenewNow();
+    const landed = await lineIs(T2, "off");
+    await T2.storeTurn();
+    const done = JSON.parse(fs.readFileSync(path.join(r.shell.UD, "store.json"), "utf8"));
+    const ok = !!rt && first.line === "marking" && first.why === want && first.ended && first.keyStays && during.line === "marking" && during.why === want
+      && restarted.line === "marking" && after.line === "marking" && after.why === want && !!kept.marked && kept.markWhy === want && JSON.stringify(kept).indexOf(rt) < 0 && noStore
+      && landed && markOf(w.file) === rt && !done.marked && w.R.stores.size === stores0 && teamsMade(w) === teams0;
+    return { ok, detail: brief({ first, during: during.line + "/" + during.why, restarted: restarted.line, after: after.line + "/" + after.why, markSealed: !!kept.marked, noStoreMade: noStore, landed, markIsThisStore: markOf(w.file) === rt, stores: w.R.stores.size - stores0, teams: teamsMade(w) - teams0 }) };
+  });
+}
+/* (m4) The control: an Off everywhere whose mark lands at once says off, leaves the mark and keeps nothing owed. */
+async function markLandsScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world, rt = w.file && markKey(w.file) ? markKey(w.file).rt : "";
+  const off = await T.storeSetNow("everywhere");
+  const kept = JSON.parse(fs.readFileSync(path.join(r.shell.UD, "store.json"), "utf8"));
+  const ok = !!rt && off.line === "off" && markOf(w.file) === rt && !kept.marked && w.ended === rt;
+  return { ok, detail: brief({ line: off.line, mark: markOf(w.file) === rt, owed: !!kept.marked }) };
+}
+/* (m5) A person who turns sync On again by their own act is not stopped, and no mark owed from the earlier Off everywhere outlives it: the
+   next Off here says off, and no later renewal writes the old store's mark over the new store's key file. */
+async function markOnAgainScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world, rt = w.file && markKey(w.file) ? markKey(w.file).rt : "";
+  w.putStatus = 400;
+  await T.storeSetNow("everywhere");
+  const owedLine = T.storeView().line;
+  w.putStatus = 0;
+  await T.storeSetNow("on");
+  if (T.get().storeFlight) await T.get().storeFlight;
+  const on = T.storeView().line, fresh = markKey(w.file);
+  await T.storeSetNow("here");
+  const here = T.storeView().line;
+  const kept = JSON.parse(fs.readFileSync(path.join(r.shell.UD, "store.json"), "utf8"));
+  await T.signinRenewNow();
+  await new Promise(a => setTimeout(a, 60));
+  const still = markKey(w.file);
+  const ok = owedLine === "marking" && on === "on" && !!fresh && here === "off" && !kept.marked && !!still && still.rt === fresh.rt;
+  return { ok, detail: brief({ owed: owedLine, on, keyBack: !!fresh, here, owedKept: !!kept.marked, keyAfter: still ? "key" : "other" }) };
+}
+/* (m6) Where another store's keys stand in the folder by the time the mark is retried, the mark is not written over them and the debt is cleared. */
+async function markOtherFileScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world;
+  w.putStatus = 400;
+  await T.storeSetNow("everywhere");
+  const other = JSON.stringify({ kind: "etiuda-store-key", format: 1, k: "a".repeat(64), s: "b".repeat(64), rt: "c".repeat(32), url: "https://etiuda.dev/relay/v1/x", devices: [], rev: 0 });
+  w.file = other;
+  w.putStatus = 0;
+  await T.signinRenewNow();
+  const cleared = await lineIs(T, "off");
+  const kept = JSON.parse(fs.readFileSync(path.join(r.shell.UD, "store.json"), "utf8"));
+  const ok = cleared && w.file === other && !kept.marked;
+  return { ok, detail: brief({ cleared, foreignKeyKept: w.file === other, owed: !!kept.marked }) };
 }
 
 /* (w) ANOTHER PERSON ON THIS DESK: person A synced here; person B, whose own folder holds no key file, is seated on the same Windows
@@ -2867,6 +2963,12 @@ const LEGS = [
   ["d4k", endNeverScene, "a store/end refused as malformed (400) ends the retry: Only on this computer., nothing owed, one line in the trace, no renewal posts it again"],
   ["d4l", endSigninScene, "a store/end refused for want of a sign-in (403) stays owed and Off everywhere: posted at each renewal while signed in, never signed out, ended by the 200 that follows"],
   ["d4g", owedScene, "a store/end the service did not answer is kept sealed, the row says so, and the next renewal posts it again; answered, the line and the mark are gone"],
+  ["m1", s => markFailScene(s, "token"), "Off everywhere with no folder token to write the mark: the row says off here and not yet everywhere, the account not signed in or not reached; no look, renewal or restart makes a new store; the mark lands at the renewal once the folder answers, and the row says off"],
+  ["m2", s => markFailScene(s, "refused"), "Off everywhere with the folder's write answered not ok: the row says the folder refused it; nothing recreated across looks, renewals and a restart; the mark lands at a later renewal and the row says off"],
+  ["m3", s => markFailScene(s, "throw"), "Off everywhere with the folder's write throwing: the row says the change could not be written; nothing recreated across looks, renewals and a restart; the mark lands at a later renewal and the row says off"],
+  ["m4", markLandsScene, "an Off everywhere whose mark lands at once says off, leaves the mark and keeps nothing owed (the control)"],
+  ["m5", markOnAgainScene, "turning sync On again by the person's own act clears the mark owed: the store's key back, a later Off here says off, and no renewal writes the old mark over the key"],
+  ["m6", markOtherFileScene, "a mark owed is not written over another store's keys standing in the folder, and the debt is cleared"],
   ["d4f", switchScene, "the first look that made the store says on once; Everywhere posts store/end signed by this desk and leaves the ended mark; On makes a new store over it; This computer forgets the keys and ends nothing"],
   ["a1", scopesOnScene, "where sync may be on, Microsoft's refresh form carries Files.ReadWrite.AppFolder, its authorize address today's (the folder asked apart, f), and Google's authorize address drive.appdata, its refresh as today; a managed computer with PersonalStore unset is off, set on is on"],
   ["a2", scopesOffScene, "where sync is off (a managed computer, PersonalStore unset), each provider's authorize address and refresh form are today's, byte for byte"],
@@ -2986,6 +3088,11 @@ const PLANTS = [
   ["d4h", swap("  if (leaving) await storeLeaveNow(cert); /* plant:store-leave */\n", ""), "This computer leaves nothing"],
   ["d4h", swap("  const current = cert && Number.isSafeInteger(cert.until) && cert.until > Date.now() ? cert : null;", "  const current = null;"), "the leave asks the service for a new grant rather than using the look's certificate"],
   ["d4i", swap("  if (r.said === \"renewed\") { storeLeaveNow(null); storeTurn(); } /* plant:store-renew */", "  if (r.said === \"renewed\") { storeTurn(); } /* plant:store-renew */"), "the owed leave is never tried again"],
+  ["m1", swap("  if (mark) storeMarkOwe(keys.rt, mark); /* plant:store-mark-owe */\n", ""), "a failed mark write is not kept owed, so the row says off"],
+  ["m2", swap("  const marking = storeMarkAgain().catch(() => false); /* plant:store-mark-again */\n", "  const marking = Promise.resolve(false);\n"), "the owed mark is never written again"],
+  ["m3", swap("marked: (storeMarkOwed() || {}).why || \"\", /* plant:view-marked */", "marked: \"\", /* plant:view-marked */"), "the row is told nothing of the owed mark"],
+  ["m5", swap("    if (storeMarkOwed()) storeMarkOwe(\"\", \"\"); /* plant:store-on-clears-mark */\n", ""), "turning On leaves the mark owed"],
+  ["m6", swap("      else if (!mine) why = \"\"; /* plant:store-mark-own-file */", "      else if (false) why = \"\"; /* plant:store-mark-own-file */"), "the mark written over another store's keys"],
   ["d4f", swap("  if (keys) await storeEndEverywhere(keys).catch(() => false);\n", ""), "Everywhere ends nothing"],
   ["d4f", swap("    if (folder && !tok.why) await folder.write(L.endedText(keys.rt)).catch(() => null); /* plant:store-end-mark */\n", ""), "Everywhere leaves the key in the folder"],
   ["f0", swap("if (io.store === true && signinFolderApart(p.id)) signinFolderAfter(", "if (signinFolderApart(p.id)) signinFolderAfter("), "the folder asked after the sign-in where sync is off"],

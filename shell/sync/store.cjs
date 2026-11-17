@@ -344,7 +344,8 @@ function pausedLine(cert, now, signinRefused) {
    (a Turn off everywhere the licence service has not answered yet), seatless (the account's seat refused at its last renewal), full
    (the store's room at the relay refused a write, roomNext), again (when the look is tried again by itself, 0 where no try is set),
    looking (a look runs now), ever (a look has found sync on on this computer before), anew (a new store made here over another
-   computer's ended mark, policy holding sync on).
+   computer's ended mark, policy holding sync on), marked (why the ended mark of a Turn off everywhere was not written to the folder:
+   "signin", "refused" or "failed", "" where nothing waits; line "marking", said after "ending").
    Answers {shown, line, on, held, why, since, say, at}: line "org-off" where policy keeps sync off, "off" where the person turned it off,
    "ungiven" where the folder's consent was never given (off, the switch the person's own way to ask for it; "ungiven-held" where policy
    holds the switch, the row's own button asking instead), "unavailable" where
@@ -357,6 +358,7 @@ function storeRow(o) {
   const pol = o.pol || {}, say = typeof o.say === "string" ? o.say : "";
   if (o.ask === true && !(pol.held && !pol.on)) return { shown: true, line: "ask", on: false, held: false, why: "", since: 0, say: "", askNow: o.askNow === true }; /* plant:row-ask */
   if (!pol.on && !pol.held && o.owed === true) return { shown: true, line: "ending", on: false, held: false, why: "", since: 0, say: "" };
+  if (!pol.on && !pol.held && typeof o.marked === "string" && o.marked) return { shown: true, line: "marking", on: false, held: false, why: o.marked, since: 0, say: "" }; /* plant:row-marking */
   if (!pol.on) return { shown: true, line: pol.held ? "org-off" : "off", on: false, held: pol.held === true, why: "", since: 0, say: "" };
   const base = { shown: true, on: true, held: pol.held === true, why: "", since: 0, say };
   const look = o.look;

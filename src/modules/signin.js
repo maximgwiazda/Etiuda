@@ -649,7 +649,7 @@ function signinClicks(root){
 /* ---- sync across computers: what the shell's storeRow answers (shell/sync/store.cjs), the row's words and the one bubble ---------
    The page is told a line (SYNC_LINES), the switch, whether policy holds it, the
    reason, the pause's start and what to say once; never a key, a store or a token. */
-const SYNC_LINES=["on","off","ending","ungiven","ungiven-held","org-off","unavailable","anew","first","checking","unconnected","resuming","signin-refused","again","spent","refused","lapsed","paused","conflict","full","noseat","ask"];
+const SYNC_LINES=["on","off","ending","marking","ungiven","ungiven-held","org-off","unavailable","anew","first","checking","unconnected","resuming","signin-refused","again","spent","refused","lapsed","paused","conflict","full","noseat","ask"];
 function syncRead(v){
   const o=v && typeof v==="object" ? v : {};
   if(o.shown!==true || SYNC_LINES.indexOf(o.line)<0) return {shown:false, line:"", on:false, held:false, why:"", since:0, say:"", askNow:false, at:0};
@@ -671,6 +671,12 @@ function syncWhyWords(why, provider){
   if(why==="consent") return t("your organisation has not allowed it; its IT department decides");
   if(why==="") return t("this computer cannot keep it locked for this Windows account");
   return t("the account's provider turned down Etiuda's request; it tries again each time Etiuda opens, and about once a day while it stays open");
+}
+/* Why the ended mark of Off everywhere was not written to the person's folder (the copywriter's section 16). */
+function syncMarkWords(why, provider){
+  if(why==="refused") return t("the account's folder refused the change");
+  if(why==="failed") return t("the change could not be written to the account's folder");
+  return named(t("your {PROVIDER} account is not signed in here or could not be reached"),"{PROVIDER}",SIGNIN_NAMES[provider]||"Microsoft");
 }
 /* The row's line, beside the feature's name; "alone", the bubble's, which names it. */
 function syncUnavailable(why, provider, alone){
@@ -699,6 +705,7 @@ function syncLine(s, provider){
   if(s.line==="org-off") return t("Your organisation has not turned this on.");
   if(s.line==="off") return t("Only on this computer.");
   if(s.line==="ending") return t("Off everywhere. The synced copy is deleted as soon as this computer reaches our service.");
+  if(s.line==="marking") return named(t("Off on this computer, but not yet everywhere: {CAUSE}, so your other computers have not been told. Etiuda tries again by itself."),"{CAUSE}",syncMarkWords(s.why, provider));
   if(s.line==="ungiven") return named(t("Off. Turning it on asks {PROVIDER} to let Etiuda use its folder in this account."),"{PROVIDER}",SIGNIN_NAMES[provider]||"Microsoft");
   if(s.line==="ungiven-held") return named(t("Your organisation has turned this on, and {PROVIDER} has not yet let Etiuda use its folder in this account."),"{PROVIDER}",SIGNIN_NAMES[provider]||"Microsoft");
   if(s.line==="unavailable") return syncUnavailable(s.why, provider);
