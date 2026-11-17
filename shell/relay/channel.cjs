@@ -2514,21 +2514,32 @@ function createChannel(opts) {
       }
       /* The last page lands what the catch-up held, fetched again; at the round cap nothing held is followed, and the next
          catch-up reads on. */
-      if (whole) for (const h of prog.ahead()) {
-        const got = await authed("GET", "b/" + h.id);
-        const back = got.status === 200 && table(got.meta) && got.meta.id === h.id;
-        if (back) items.unshift({ seq: h.seq, meta: got.meta, ct: got.bytes, floor: h.floor }); /* plant:ahead-land */
-        if (!back && !gone(got)) {
+      if (whole) {
+        const ahead = prog.ahead(), asked = new Set();
+        let fault = null;
+        for (const h of ahead) {
+          const got = await authed("GET", "b/" + h.id);
+          if (got.status !== 200) { if (!gone(got)) { fault = got.refused || refusalOf(got); break; } continue; }
+          if (table(got.meta) && got.meta.id !== h.id) { fault = OTHER_FILE; break; } /* plant:ahead-other */
+          let meta = table(got.meta) ? got.meta : null;
+          if (!meta) meta = describedAs(listed, h); /* plant:ahead-described */
+          if (!meta && !asked.has(h.id)) { fault = await relistHeld(h, ahead, listed, asked); if (fault) break; meta = describedAs(listed, h); } /* plant:ahead-relist */
+          if (!meta) { fault = refusalOf(got); break; }
+          items.unshift({ seq: h.seq, meta, ct: got.bytes, floor: h.floor }); /* plant:ahead-land */
+        }
+        if (fault) {
           prog.applyBatch(items, ctx(), { whole: false });
           prog.setSeq(top);
-          return got.refused || refusalOf(got);
+          return fault;
         }
       }
       prog.applyBatch(items, ctx(), { whole });
       prog.setSeq(top);
       if (!whole) {
         const later = new Set(prog.later().map(h => h.id));
+        const ahead = new Set(prog.ahead().map(h => h.id));
         for (const x of items) {
+          if (ahead.has(x.meta.id)) listed.set(x.meta.id, x.meta);
           if (!later.has(x.meta.id)) continue;
           listed.set(x.meta.id, x.meta);
           const n = toBytes(x.ct) ? toBytes(x.ct).length : 0;
