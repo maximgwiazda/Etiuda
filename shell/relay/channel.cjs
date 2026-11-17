@@ -2497,16 +2497,18 @@ function createChannel(opts) {
         /* Not served for a reason that can pass (see gone): what came before it is applied and the next cycle asks from it.
            Where the lead has a blob listed from here on, which may be the team file a desk's file is judged under, the
            page applies only up to its first desk file and the next cycle asks from that file. */
-        if (got.status !== 200 && !gone(got)) {
+        const stopPage = why => {
           const leadId = prog.pinned() ? prog.pinned().lead.keyId : "";
           let cut = -1;
           if (r.json.some(x => table(x) && table(x.meta) && Number.isSafeInteger(x.seq) && x.seq >= e.seq && x.meta.writer === leadId))
             cut = items.findIndex(x => x.meta.writer !== leadId); /* plant:page-whole */
           prog.applyBatch(cut < 0 ? items : items.slice(0, cut), ctx(), { whole: false });
           prog.setSeq(cut < 0 ? before : items[cut].seq - 1);
-          return got.refused || refusalOf(got); /* plant:fetch-kept */
-        }
+          return why;
+        };
+        if (got.status !== 200 && !gone(got)) return stopPage(got.refused || refusalOf(got)); /* plant:fetch-kept */
         if (got.status !== 200) continue;
+        if (table(got.meta) && got.meta.id !== m.id) return stopPage(OTHER_FILE); /* plant:listed-other */
         /* An answer without its description (a proxy may drop the header) is judged under the one listed. */
         let meta = table(got.meta) && got.meta.id === m.id ? got.meta : null;
         meta = meta || m; /* plant:listed-meta */

@@ -62,7 +62,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 520;
+const EXPECTED = 524;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -9728,6 +9728,113 @@ if (partOn("p_pg7")) {
       + otherOff.detail + ", sha " + (otherOff.back ? "restored" : "differs"));
   } catch (e) {
     check(false, "harness (the legs pg7): " + (e && e.stack ? e.stack : e));
+  }
+}
+
+/* ---- pg8: on the ordinary path, a 200 whose description names another file is the OTHER_FILE fault (nothing judged,
+   nothing let go, said once), not a fallback to the listing; only a missing header falls back (plant:listed-meta). ---- */
+async function scenePg8(mod, opts) {
+  const o = opts || {};
+  const x = pgRelay(0, false);
+  const D1 = keyPair(true);
+  const tm = { rt: hex(16), id: "t-" + hex(8), key: crypto.randomBytes(32) };
+  await x.team(tm.rt, tm.id, [D1]);
+  const tag = "pg8-" + hex(4);
+  const lead = pgProgram(C, x, "pg8-lead-" + tag, tm, LEAD, "root");
+  let mode = "normal", otherCount = 0, targetId = null, swapId = null;
+  const alter = (m, rel, name, value) => {
+    if (name !== "etiuda-blob" || m !== "GET" || !rel.startsWith("b/")) return value;
+    if (mode === "strip") return null;
+    if (mode === "other" && targetId && rel === "b/" + targetId && value && otherCount++ === 0) {
+      const meta = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+      return Buffer.from(JSON.stringify(Object.assign(meta, { id: swapId || hex(16) })), "utf8").toString("base64url");
+    }
+    return value;
+  };
+  const d1 = pgProgram(mod, x, "pg8-d1-" + tag, tm, D1, "desk:" + D1.keyId, { alter });
+  try {
+    put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, [member(D1)]));
+    lead.ch.start();
+    await settle(lead);
+    d1.ch.start();
+    await settle(d1);
+    await d1.ch.stop();
+
+    put(lead.mirror, "pad/first.ec", "ordinary first\n");
+    await settle(lead);
+    put(lead.mirror, "pad/target.ec", "ordinary target\n");
+    await settle(lead);
+    put(lead.mirror, "pad/after.ec", "ordinary after\n");
+    await settle(lead);
+    await lead.ch.stop();
+
+    const blobs = x.RL.stores.get(tm.rt).dump().map(([k, v]) => [k, JSON.parse(v)]).filter(([k]) => k.startsWith("blob:")).map(([, v]) => v);
+    const live = blobs.filter(v => v.writer === LEAD.keyId && !v.del).sort((a, b) => a.seq - b.seq);
+    const firstBlob = live[live.length - 3], targetBlob = live[live.length - 2];
+    swapId = firstBlob ? firstBlob.id : hex(16);
+    targetId = targetBlob ? targetBlob.id : null;
+    const targetSeq = targetBlob ? targetBlob.seq : 0;
+
+    mode = o.mode || "other";
+    d1.ch.start();
+    await d1.ch.idle();
+    const mid = {
+      seq: d1.prog.state().seq,
+      first: read(d1.mirror, "pad/first.ec"),
+      target: read(d1.mirror, "pad/target.ec"),
+      after: read(d1.mirror, "pad/after.ec"),
+      said: d1.said.slice(),
+    };
+
+    mode = "normal";
+    await settle(d1);
+    return {
+      otherCount, targetSeq, mid,
+      seq: d1.prog.state().seq,
+      top: x.top(tm.rt),
+      first: read(d1.mirror, "pad/first.ec"),
+      target: read(d1.mirror, "pad/target.ec"),
+      after: read(d1.mirror, "pad/after.ec"),
+      said: d1.said.slice(),
+    };
+  } finally {
+    await d1.ch.stop();
+    await lead.ch.stop();
+  }
+}
+
+if (partOn("p_pg8")) {
+  try {
+    markPart("p_pg8");
+    const other = await scenePg8(C, { mode: "other" });
+    const otherSaid = other.mid.said.filter(l => l.indexOf("another file's description") >= 0);
+    const afterSaid = other.said.filter(l => l.indexOf("another file's description") >= 0);
+    check(other.otherCount === 1 && other.mid.first === "ordinary first\n" && other.mid.target === null
+      && other.mid.after === null && other.mid.seq < other.targetSeq && otherSaid.length === 1
+      && afterSaid.length === 1 && other.seq === other.top
+      && other.target === "ordinary target\n" && other.after === "ordinary after\n",
+      "pg8a ordinary path answered once with another id's header faults as OTHER_FILE, keeps seq before it, says the fault once, and lands next cycle: "
+      + JSON.stringify({ midSeq: other.mid.seq, targetSeq: other.targetSeq, midTarget: !!other.mid.target,
+        midAfter: !!other.mid.after, saidCount: afterSaid.length, afterTarget: !!other.target }));
+    const strip = await scenePg8(C, { mode: "strip" });
+    check(strip.mid.first === "ordinary first\n" && strip.mid.target === "ordinary target\n"
+      && strip.mid.after === "ordinary after\n" && strip.mid.said.length === 0,
+      "pg8b ordinary path with every header missing falls back to the listed description and lands all files: "
+      + JSON.stringify({ first: !!strip.mid.first, target: !!strip.mid.target, after: !!strip.mid.after, said: strip.mid.said.length }));
+    const otherOff = await pgPlant(["plant:listed-other"], 0, async mod => {
+      const r = await scenePg8(mod, { mode: "other" });
+      return r.mid.seq >= r.targetSeq && !r.mid.said.some(l => l.indexOf("another file's description") >= 0);
+    });
+    check(otherOff.turned && otherOff.back, "pg8c lifting plant:listed-other turns pg8a red (falls back to listed and lets seq past): "
+      + otherOff.detail + ", sha " + (otherOff.back ? "restored" : "differs"));
+    const metaOff = await pgPlant(["plant:listed-meta"], 0, async mod => {
+      const r = await scenePg8(mod, { mode: "strip" });
+      return r.mid.target === null;
+    });
+    check(metaOff.turned && metaOff.back, "pg8d lifting plant:listed-meta turns pg8b red (missing header on ordinary path left out): "
+      + metaOff.detail + ", sha " + (metaOff.back ? "restored" : "differs"));
+  } catch (e) {
+    check(false, "harness (the legs pg8): " + (e && e.stack ? e.stack : e));
   }
 }
 
