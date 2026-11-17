@@ -8508,7 +8508,7 @@ async function floorPastBound(mod) {
     desk.ch.kick();
     await desk.ch.idle();
     out.ownAfter = desk.prog.state().own;
-    out.saidBound = desk.said.some(l => l.indexOf("the relay named a counter floor past the bound, so that was not taken") >= 0);
+    out.saidBound = desk.said.some(l => l.indexOf("the relay named a counter floor beyond what this desk accepts, so it was not taken") >= 0);
     out.refused = !desk.prog.state().sent["owed.ec"] && desk.said.some(l => l.indexOf(B.REASONS["replay-counter"]) >= 0);
   } finally {
     try { await desk.ch.stop(); } catch { /* already stopped */ }

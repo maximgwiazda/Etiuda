@@ -15,7 +15,7 @@ import { hangBubble } from "./bubble.js";
 import { eDeskFlush } from "./storage.js";
 
 /* "lab" is offered only by the sign-in lab (shell/main.js signinLabRead), never by a desk installed or packaged. */
-const SIGNIN_NAMES={microsoft:"Microsoft", google:"Google", lab:"Lab"}; // placeholder: Claudette, "Lab"
+const SIGNIN_NAMES={microsoft:"Microsoft", google:"Google", lab:"Lab"};
 /* The shell's answer as the page keeps it; every field checked, so a missing host reads as nothing offered. */
 function signinRead(v){
   const o=v && typeof v==="object" ? v : {};

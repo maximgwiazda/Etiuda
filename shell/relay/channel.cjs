@@ -2081,7 +2081,7 @@ function createChannel(opts) {
     let past = false;
     past = !Number.isSafeInteger(floor) || floor < 1 || floor > clock() + COUNTER_AHEAD_MAX_MS; /* plant:floor-bound */
     if (past) {
-      sayOnce("the relay named a counter floor past the bound, so that was not taken"); /* draft words: copywriter */
+      sayOnce("the relay named a counter floor beyond what this desk accepts, so it was not taken");
       return false;
     }
     prog.raiseOwn(floor); /* plant:take-floor */

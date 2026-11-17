@@ -41,7 +41,7 @@ const ASIDE = {
   "15ep": offWindows("15ep", "15em stands aside off Windows, so lifting plant:w2-folder-not-writable has no green leg there to turn"),
 };
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 193;
+const EXPECTED = 194;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -4804,8 +4804,8 @@ try {
 
   /* 15eu: a join with a write-denied desks/ folder shows the line, and nothing half-joined remains. */
   {
-    const EN_NOWRITE_ROLE = "Content manager or Editor";
-    const PL_NOWRITE_ROLE = "Content manager lub Edytor";
+    const EN_NOWRITE_ROLE = "joining needs permission to write there";
+    const PL_NOWRITE_ROLE = "dołączenie wymaga uprawnień do zapisu";
     const FOLDER_BLAME = "This folder could not be reached";
     const nowriteYard = folder("folder-nowrite-yard");
     const KNW = crypto.randomBytes(32);
@@ -5049,6 +5049,23 @@ try {
 }
 
 check(regStand.held(), "rs1 every reg call was answered by the stand-in, the policy key's at least once and no stray key of the machine's hive (Windows; the proxy keys are answered as missing), none off it (" + regStand.said() + ")");
+/* B9: the copywriter's words for the team's folder lines and the local-changes note, held by bytes in both languages as the table
+   holds them and as the code says them (the English in a t() call). */
+{
+  const ROWS = [
+    ["src/modules/team-join.js", "This computer can only read the team's folder, and joining needs permission to write there. Once that is granted, Join again; the invitation still works.", "Ten komputer może tylko czytać z folderu zespołu, a dołączenie wymaga uprawnień do zapisu. Po ich nadaniu wystarczy ponownie dołączyć; zaproszenie nadal działa."],
+    ["src/modules/host.js", "Settings names a file where the team's folder should be, so nothing was opened. The folder can be chosen again from the Library.", "W Ustawieniach wskazano plik tam, gdzie powinien być folder zespołu, więc niczego nie otwarto. Folder można wybrać ponownie w Bibliotece."],
+    ["src/modules/host.js", "This computer did not open the team's folder just now. Clicking the link again tries again.", "Ten komputer nie otworzył teraz folderu zespołu. Można spróbować ponownie, klikając ten sam odnośnik."],
+    ["src/modules/manage.js", "These changes stay on this desk until Etiuda closes; when it opens again, the catalog is as delivered.", "Zmiany zostają na tym stanowisku do zamknięcia Etiudy; po ponownym uruchomieniu katalog jest taki, jak został dostarczony."]
+  ];
+  const table = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8");
+  const bad = [];
+  for (const [file, en, pl] of ROWS) {
+    if (table.indexOf("  " + JSON.stringify(en) + ":" + JSON.stringify(pl) + ",") < 0) bad.push("table: " + en.slice(0, 40));
+    if (fs.readFileSync(path.join(ROOT, file), "utf8").indexOf("t(" + JSON.stringify(en) + ")") < 0) bad.push("code: " + en.slice(0, 40));
+  }
+  check(bad.length === 0, "15ex the folder-not-writable, not-a-folder and could-not-open lines and the local-changes note stand as the copywriter wrote them, in both languages: " + JSON.stringify(bad));
+}
 console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + " expected=" + EXPECTED);
 if (asserted + skipped < EXPECTED) {
   console.log("SUITE DID NOT COMPLETE: " + (asserted + skipped) + " of " + EXPECTED + " checks ran");

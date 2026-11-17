@@ -188,16 +188,13 @@ UI_STRINGS.pl={
   "{FILE} is empty, so nothing was loaded.":"Plik {FILE} jest pusty, więc nic nie wczytano.",
   "{FILE} could not be read from the disk ({CODE}), so nothing was loaded. Try again once the disk answers, or pick a copy from elsewhere.":"Pliku {FILE} nie udało się odczytać z dysku ({CODE}), więc nic nie wczytano. Wystarczy spróbować ponownie, gdy dysk będzie dostępny, albo wybrać kopię z innego miejsca.",
   "The team's folder does not answer from this computer just now, so it was not opened. Open it again once it can be reached: with the network drive connected, or the program that syncs it running.":"Folder zespołu nie odpowiada teraz z tego komputera, więc go nie otwarto. Wystarczy otworzyć go ponownie, gdy będzie osiągalny: po podłączeniu dysku sieciowego albo uruchomieniu programu, który go synchronizuje.",
-  /* draft words: copywriter */
-  "Settings names a file where the team's folder should be, so nothing is opened. The Library can choose the folder again.":"W ustawieniach wskazano plik tam, gdzie powinien być folder zespołu, więc nic się nie otwiera. W Bibliotece można wybrać folder ponownie.",
-  /* draft words: copywriter */
-  "This computer did not open the team's folder just now. The same link tries again.":"Ten komputer nie otworzył teraz folderu zespołu. Ten sam odnośnik próbuje jeszcze raz.",
+  "Settings names a file where the team's folder should be, so nothing was opened. The folder can be chosen again from the Library.":"W Ustawieniach wskazano plik tam, gdzie powinien być folder zespołu, więc niczego nie otwarto. Folder można wybrać ponownie w Bibliotece.",
+  "This computer did not open the team's folder just now. Clicking the link again tries again.":"Ten komputer nie otworzył teraz folderu zespołu. Można spróbować ponownie, klikając ten sam odnośnik.",
   "{FILE} could not be saved.":"Nie udało się zapisać pliku {FILE}.",
   "Add a card to {CAT}":"Dodaj kartę do kategorii {CAT}",
   "Clear search text":"Wyczyść tekst wyszukiwania",
   "not linked to your intent":"niepowiązane z wybraną intencją",
   "also mentions your search":"zawierają też szukane słowa",
-  // placeholder: Claudette
   "Close in meaning":"Bliskie znaczeniem",
   "A search ranks the cards by relevance; clear it to order them yourself":"Wyszukiwanie porządkuje karty według trafności; po jego wyczyszczeniu kolejność można ustawić ręcznie",
   "Drag header to reorder within the same highlight group":"Przeciągnij nagłówek, aby zmienić kolejność wśród kart o tym samym wyróżnieniu",
@@ -698,10 +695,8 @@ UI_STRINGS.pl={
   "Delete this intent":"Usuń tę intencję",
   "Export…":"Eksportuj…",
   "Clear local changes":"Wyczyść zmiany lokalne",
-  // placeholder: Claudette
   "Bring back local changes":"Przywróć zmiany lokalne",
-  // placeholder: Claudette
-  "These changes stay on this desk until Etiuda closes, and a restart leaves the catalog as delivered.":"Zmiany zostają na tym stanowisku do zamknięcia Etiudy, a ponowne uruchomienie zostawia katalog w postaci dostarczonej.",
+  "These changes stay on this desk until Etiuda closes; when it opens again, the catalog is as delivered.":"Zmiany zostają na tym stanowisku do zamknięcia Etiudy; po ponownym uruchomieniu katalog jest taki, jak został dostarczony.",
   "Removes every change made to the content on this computer, so the catalog reads as delivered.":"Usuwa wszystkie zmiany treści wprowadzone na tym komputerze, więc katalog wygląda tak, jak go dostarczono.",
   "Clear local changes?":"Wyczyścić zmiany lokalne?",
   "Every change made to the content on this computer goes: your edits to cards, your own cards and intents, changes to categories, roles and variables, and stars, hidden cards and the order of cards. The catalog is left as delivered.":"Znikną wszystkie zmiany treści wprowadzone na tym komputerze: własne zmiany w kartach, własne karty i intencje, zmiany kategorii, ról i zmiennych oraz gwiazdki, ukryte karty i kolejność kart. Katalog zostanie taki, jak go dostarczono.",
@@ -1136,14 +1131,14 @@ UI_STRINGS.pl={
   "{HOST} has not answered three times in a row, so the built-in model ranks on this computer, sending nothing, and the desk asks {HOST} again in a minute.":"{HOST} nie odpowiedział trzy razy z rzędu, więc kolejność ustala model wbudowany na tym komputerze, niczego nie wysyłając, a stanowisko zapyta {HOST} ponownie za minutę.",
   "organisation's model not answering, word matches only":"model organizacji nie odpowiada, tylko dopasowanie słów",
   "{HOST} has not answered three times in a row, so the search matches words alone, and the desk asks {HOST} again in a minute.":"{HOST} nie odpowiedział trzy razy z rzędu, więc wyszukiwanie dopasowuje tylko słowa, a stanowisko zapyta {HOST} ponownie za minutę.",
-  "No key is kept for this address, so nothing was sent.":"Dla tego adresu nie zachowano klucza, więc nic nie zostało wysłane.",
-  // placeholder: Claudette, the seven lines below, which her words do not cover
-  "Until the service, the model and the key are complete, the built-in model ranks and nothing is sent.":"Dopóki usługa, model i klucz nie są uzupełnione, kolejność ustala model wbudowany i nic nie jest wysyłane.",
-  "That model name could not be kept.":"Tej nazwy modelu nie udało się zachować.",
-  "That key could not be kept.":"Tego klucza nie udało się zachować.",
+  "Until the service, its address, the model and the key are all filled in, the built-in model ranks and nothing is sent.":"Dopóki usługa, jej adres, model i klucz nie są uzupełnione, kolejność ustala model wbudowany i nic nie jest wysyłane.",
+  "That model name could not be kept, so the one before stands.":"Tej nazwy modelu nie udało się zachować, więc obowiązuje poprzednia.",
+  "That key could not be kept, so the one before stands.":"Tego klucza nie udało się zachować, więc obowiązuje poprzedni.",
   "The setting could not be saved just now.":"Tego ustawienia nie udało się teraz zapisać.",
-  "The key kept here was given for the previous service or address, so it was forgotten rather than sent to this one. A key for this one goes in the Key field.":"Zachowany klucz podano dla poprzedniej usługi lub adresu, więc został usunięty, zamiast trafić pod nowy. Klucz dla nowego wpisuje się w polu Klucz.", // placeholder: Claudette
-  "Could not reach {HOST}.":"Nie udało się połączyć z {HOST}.",
+  // placeholder: Claudette, this line, which her words do not cover
+  "No key is kept for this address, so nothing was sent.":"Dla tego adresu nie zachowano klucza, więc nic nie zostało wysłane.",
+  "The key kept here was given for the previous service or address, so it was forgotten rather than sent to this one. The key for this one goes in the Key field.":"Zachowany klucz podano dla poprzedniej usługi lub adresu, więc został usunięty, zamiast trafić pod ten adres. Klucz dla tego adresu wpisuje się w polu Klucz.",
+  "{HOST} could not be reached, so the connection is not confirmed.":"Nie udało się połączyć z {HOST}, więc połączenie nie zostało potwierdzone.",
   "{HOST} answered with an error, so the connection is not confirmed.":"{HOST} odpowiedział błędem, więc połączenie nie zostało potwierdzone.",
   "General":"Ogólne",
   "Notifications":"Powiadomienia",
@@ -1386,8 +1381,7 @@ UI_STRINGS.pl={
   "This invitation cannot be read, so nothing was changed.":"Tego zaproszenia nie da się odczytać, więc nic nie zostało zmienione.",
   "This folder is on the computer {HOST}.":"Ten folder znajduje się na komputerze {HOST}.",
   "This folder could not be reached, so nothing was written.":"Ten folder jest teraz niedostępny, więc nic nie zapisano.",
-  /* Draft for the copywriter (Claudette). */
-  "This computer can only read from the team's folder; joining needs permission to write, such as Content manager or Editor. Once that is granted, join again; the invitation still works.":"Ten komputer może tylko czytać z folderu zespołu; dołączenie wymaga uprawnień do zapisu, takich jak Content manager lub Edytor. Po ich nadaniu dołącz ponownie; zaproszenie nadal działa.",
+  "This computer can only read the team's folder, and joining needs permission to write there. Once that is granted, Join again; the invitation still works.":"Ten komputer może tylko czytać z folderu zespołu, a dołączenie wymaga uprawnień do zapisu. Po ich nadaniu wystarczy ponownie dołączyć; zaproszenie nadal działa.",
   "Etiuda could not make its own copy of the team's files on this computer, so nothing was written. Once the disk has room and Etiuda may write in its folder, Join again; the invitation still works.":"Etiuda nie mogła utworzyć na tym komputerze własnej kopii plików zespołu, więc nic nie zapisano. Gdy na dysku będzie miejsce, a Etiuda będzie mogła zapisywać w swoim folderze, wystarczy ponownie dołączyć; zaproszenie nadal działa.",
   "Teammates on other computers read this folder only if it is shared with them.":"Członkowie zespołu na innych komputerach odczytają ten folder tylko wtedy, gdy zostanie im udostępniony.",
   "OneDrive keeps this folder in sync.":"Ten folder jest synchronizowany przez OneDrive.",
@@ -1572,7 +1566,6 @@ UI_STRINGS.pl={
   "Your organisation has not turned this on.":"Organizacja nie włączyła tej funkcji.",
   "Paused since {DATE}. It resumes when this computer reaches our service.":"Wstrzymana od {DATE}. Zostanie wznowiona, gdy komputer połączy się z naszą usługą.",
   "Sync is full, so new changes stay on this computer until something is removed.":"Miejsce na synchronizację jest pełne, więc nowe zmiany zostają na tym komputerze, dopóki czegoś się nie usunie.",
-  // placeholder: Claudette
   "Waiting for a seat. Sync resumes when this account holds one again, and nothing on this computer is lost.":"Oczekiwanie na miejsce w licencji. Synchronizacja zostanie wznowiona, gdy to konto znów je otrzyma; na tym komputerze nic nie ginie.",
   "this computer cannot reach the {PROVIDER} account":"ten komputer nie może połączyć się z kontem {PROVIDER}",
   "this computer cannot reach our service":"ten komputer nie może połączyć się z naszą usługą",
@@ -1622,7 +1615,6 @@ UI_STRINGS.pl={
   "Sign out":"Wyloguj się",
   "This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account.":"To stanowisko loguje się kontem Microsoft lub Google, aby zajmować swoje miejsce w licencji, i zleca sprawdzenie logowania na etiuda.dev. Lider zespołu nie widzi imienia, nazwiska ani adresu z tego konta.",
   "Signing out ends this computer's sign-in and frees its place among the account's three; the seat stays the account's. The team's catalog and personal cards stay on the computer.":"Wylogowanie kończy logowanie na tym komputerze i zwalnia jego miejsce wśród trzech komputerów konta; miejsce w licencji zostaje przy koncie. Katalog zespołu i własne karty zostają na komputerze.",
-  // placeholder: Claudette, the eight lines below
   "today, {TIME}":"dziś, {TIME}",
   "No seat is free on the organisation's licence just now.":"W licencji organizacji nie ma teraz wolnego miejsca.",
   // the copywriter's, the four lines below

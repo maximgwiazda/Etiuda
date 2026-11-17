@@ -509,7 +509,7 @@ try {
        choice's hint, the pause's line, the too-slow line ("the built-in model's order stands"), the incomplete setting's line,
        both switches off. */
     const TRUE_WHEN_DRAWN = ["The built-in model sends nothing anywhere.", "{HOST} has not answered three times in a row, so the built-in model ranks on this computer",
-      "{HOST} usually takes more than 4 seconds to answer", "Until the service, the model and the key are complete",
+      "{HOST} usually takes more than 4 seconds to answer", "Until the service, its address, the model and the key are all filled in",
       "The organisation's model at {HOST} is set, and with both switches and Rewording off"];
     /* True while the organisation's model ranks too, so they may be drawn then: the suggestion switch's off line (off, nothing
        goes to either model for suggestions), and the connection test's hover (the test sends its fixed prompt alone). */
@@ -940,7 +940,29 @@ try {
   if (browser) await browser.close();
 }
 
-const EXPECTED = 22;
+/* B9: the copywriter's words for the AI section's lines, held by bytes in both languages as the table holds them and as the code
+   says them (the English in a t() call), so a changed word on either side fails here. */
+{
+  const ROWS = [
+    ["Until the service, its address, the model and the key are all filled in, the built-in model ranks and nothing is sent.", "Dopóki usługa, jej adres, model i klucz nie są uzupełnione, kolejność ustala model wbudowany i nic nie jest wysyłane."],
+    ["That model name could not be kept, so the one before stands.", "Tej nazwy modelu nie udało się zachować, więc obowiązuje poprzednia."],
+    ["That key could not be kept, so the one before stands.", "Tego klucza nie udało się zachować, więc obowiązuje poprzedni."],
+    ["The setting could not be saved just now.", "Tego ustawienia nie udało się teraz zapisać."],
+    ["The key kept here was given for the previous service or address, so it was forgotten rather than sent to this one. The key for this one goes in the Key field.", "Zachowany klucz podano dla poprzedniej usługi lub adresu, więc został usunięty, zamiast trafić pod ten adres. Klucz dla tego adresu wpisuje się w polu Klucz."],
+    ["{HOST} could not be reached, so the connection is not confirmed.", "Nie udało się połączyć z {HOST}, więc połączenie nie zostało potwierdzone."],
+    ["{HOST} answered with an error, so the connection is not confirmed.", "{HOST} odpowiedział błędem, więc połączenie nie zostało potwierdzone."]
+  ];
+  const table = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8");
+  const code = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"), "utf8");
+  const bad = [];
+  for (const [en, pl] of ROWS) {
+    if (table.indexOf("  " + JSON.stringify(en) + ":" + JSON.stringify(pl) + ",") < 0) bad.push("table: " + en.slice(0, 40));
+    if (code.indexOf("t(" + JSON.stringify(en) + ")") < 0) bad.push("code: " + en.slice(0, 40));
+  }
+  check(!bad.length, "db10 the AI section's seven sentences stand in the code and the Polish table as the copywriter wrote them", bad);
+}
+
+const EXPECTED = 23;
 const done = asserted + notRun === EXPECTED;
 if (!done) { failed++; console.log("  FAIL ran " + (asserted + notRun) + " checks (" + asserted + " ran, " + notRun + " not run), expected " + EXPECTED); }
 console.log((failed || !done ? "desk-own-ai: " + failed + " of " + asserted + " failed" : "desk-own-ai: all " + asserted + " passed" + (notRun ? ", " + notRun + " NOT RUN" : "")));
