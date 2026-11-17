@@ -99,6 +99,13 @@ function branchIdOf(pub) {
 const JOIN_PREFIX = "etiuda-desk-join\n";
 const JOIN_KIND = "etiuda-join";
 const JOIN_HEX_RE = /^[0-9a-f]{64}$/;
+const SEAT_MAX = 65536;
+function seatFormOk(doc, folder, text, size) {
+  if (size != null && size > SEAT_MAX) return false;
+  if (Buffer.byteLength(String(text || ""), "utf8") > SEAT_MAX) return false;
+  return /^k-[0-9a-f]{16}$/.test(String(folder || "")) && !!doc && typeof doc === "object" && !Array.isArray(doc)
+    && +doc.format === 2 && doc.desk === folder;
+}
 function joinSignedBytes(doc) { return Buffer.concat([Buffer.from(JOIN_PREFIX, "utf8"), signedBytesOf(doc)]); }
 
 function joinGenuine(doc, folder) {
@@ -1415,6 +1422,8 @@ function createFolderProgram(opts) {
     delete item._landBusy;
     delete item._landTries;
     renameSaid.delete(item.relPath);
+    refusedMtimes.delete(item.relPath);
+    heldSettled.delete(item.relPath);
     if (onLand) onLand();
     return true;
   }
@@ -2008,16 +2017,23 @@ function createFolderProgram(opts) {
           const fileName = parts[2];
           let ok = false;
           let doc = null;
-          try { doc = JSON.parse(text); } catch {}
+          if (!(fileName === "seat.json" && item.size != null && item.size > SEAT_MAX)) {
+            try { doc = JSON.parse(text); } catch {}
+          }
           if (fileName === "join.json") {
             if (doc && joinGenuine(doc, deskId)) ok = true;
           } else if (fileName === "stats.estat") {
             if (doc && +doc.format === 1 && doc.kind === "etiuda-stats-sealed" && doc.team === team) ok = true;
+          } else if (fileName === "seat.json") {
+            let seatOk = false;
+            seatOk = seatFormOk(doc, deskId, text, item.size); /* plant:syncer-seat-lands */
+            if (seatOk) ok = true;
           }
           if (ok) {
             const target = path.join(mirror, relPath);
             if (landStaged(item, target)) applied.push(relPath);
           } else {
+            if (fileName === "seat.json") refuse(item); /* plant:syncer-seat-refused */
             try { io.unlink(tmpPath); } catch {}
           }
         } else {

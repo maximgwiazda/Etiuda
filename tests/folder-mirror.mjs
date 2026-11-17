@@ -35,7 +35,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 172;
+const EXPECTED = 175;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const { offWindows } = nodeRequire("./off-windows.cjs");
@@ -5530,6 +5530,97 @@ async function run() {
       return got.sibEpoch === 1 && !got.sibLanded && got.floorEpoch === 1 && !got.floorLanded;
     });
     check(planted.ok, "a2b lifting plant:mirror-init-sibling-floor parks an edition sealed at the sibling's epoch: " + JSON.stringify(planted));
+  }
+
+  /* seat-inbound: a colleague's seat.json lands once and a changed one replaces it; a malformed or oversized one is dropped once and not copied again at the next looks. */
+  async function seatInboundScene(mod, name) {
+    const share = folder(name + "-share");
+    const mirror = folder(name + "-mirror");
+    const teamText = JSON.stringify(teamFile({ epoch: 1, rev: 1 }));
+    fs.writeFileSync(path.join(share, "etiuda-team.json"), teamText, "utf8");
+    fs.writeFileSync(path.join(mirror, "etiuda-team.json"), teamText, "utf8");
+    const peerId = "k-" + crypto.randomBytes(8).toString("hex");
+    const badId = "k-" + crypto.randomBytes(8).toString("hex");
+    const fmtId = "k-" + crypto.randomBytes(8).toString("hex");
+    const overId = "k-" + crypto.randomBytes(8).toString("hex");
+    const putAt = (rel, txt) => {
+      const dest = path.join(share, ...rel.split("/"));
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      const tmp = dest + ".tmp";
+      fs.writeFileSync(tmp, txt, "utf8");
+      fs.renameSync(tmp, dest);
+    };
+    const peerRel = "desks/" + peerId + "/seat.json";
+    const badRel = "desks/" + badId + "/seat.json";
+    const fmtRel = "desks/" + fmtId + "/seat.json";
+    const overRel = "desks/" + overId + "/seat.json";
+    const seatV1 = JSON.stringify({ format: 2, desk: peerId, certificate: { opaque: "v1" } }, null, 1) + "\n";
+    const seatV2 = JSON.stringify({ format: 2, desk: peerId, certificate: { opaque: "v2-renewed" } }, null, 1) + "\n";
+    const badText = JSON.stringify({ format: 2, desk: peerId, certificate: { opaque: "wrong-desk" } }) + "\n";
+    const fmtText = JSON.stringify({ format: 1, desk: fmtId, certificate: { opaque: "old-format" } }) + "\n";
+    const overText = JSON.stringify({ format: 2, desk: overId, certificate: { pad: "x".repeat(70000) } }) + "\n";
+    putAt(peerRel, seatV1);
+    putAt(badRel, badText);
+    putAt(fmtRel, fmtText);
+    putAt(overRel, overText);
+    const ctl = new mod.FolderSyncerController({
+      team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks, pollMs: 60000, logger: () => {}
+    });
+    let scans = 0;
+    const copies = new Map();
+    const apply = ctl.program.applyScan.bind(ctl.program);
+    ctl.program.applyScan = (msg) => {
+      for (const s of (msg && msg.staged) || []) copies.set(s.relPath, (copies.get(s.relPath) || 0) + 1);
+      scans++;
+      return apply(msg);
+    };
+    const nextScan = async (n = 1) => {
+      for (let i = 0; i < n; i++) {
+        const at = scans, until = Date.now() + 5000;
+        if (i > 0 || at > 0) ctl.kick();
+        while (scans === at && Date.now() < until) await sleep(20);
+      }
+    };
+    const readMirror = rel => { try { return fs.readFileSync(path.join(mirror, ...rel.split("/")), "utf8"); } catch { return null; } };
+    try {
+      ctl.start();
+      await nextScan(3);
+      const landedOnce = readMirror(peerRel) === seatV1;
+      const peerCopiesBefore = copies.get(peerRel) || 0;
+      const badCopies = copies.get(badRel) || 0;
+      const fmtCopies = copies.get(fmtRel) || 0;
+      const overCopies = copies.get(overRel) || 0;
+      const badDropped = readMirror(badRel) === null && readMirror(fmtRel) === null && readMirror(overRel) === null;
+      const badFixed = JSON.stringify({ format: 2, desk: badId, certificate: { opaque: "fixed" } }, null, 1) + "\n";
+      putAt(peerRel, seatV2);
+      putAt(badRel, badFixed);
+      await nextScan(2);
+      const replaced = readMirror(peerRel) === seatV2;
+      const badFixedLanded = readMirror(badRel) === badFixed;
+      return { landedOnce, badDropped, replaced, badFixedLanded, peerCopiesBefore, badCopies, fmtCopies, overCopies, scans };
+    } finally { ctl.stop(); }
+  }
+  {
+    const g = await seatInboundScene(syncerMod, "si1a");
+    check(g.landedOnce && g.badDropped && g.replaced && g.badFixedLanded
+      && g.peerCopiesBefore === 1 && g.badCopies === 1 && g.fmtCopies === 1 && g.overCopies === 1,
+      "si1a a colleague's seat.json lands once and a changed one replaces it, a malformed one is dropped once and not copied again at the next looks: "
+      + JSON.stringify(g));
+  }
+  if (PLANTS_OFF) {
+    skip("si1b lifting plant:syncer-seat-lands drops a colleague's valid seat.json: NOT RUN");
+    skip("si1c lifting plant:syncer-seat-refused copies a malformed seat.json again at every scan: NOT RUN");
+  } else {
+    const pLands = await testPlant("syncer-seat-lands", syncerFile, async (scratch) => {
+      const got = await seatInboundScene(nodeRequire(path.join(syncerCopy(scratch, "syncer.cjs"), "syncer.cjs")), "si1b");
+      return !got.landedOnce && !got.replaced;
+    });
+    check(pLands.ok, "si1b lifting plant:syncer-seat-lands drops a colleague's valid seat.json: " + JSON.stringify(pLands));
+    const pRefused = await testPlant("syncer-seat-refused", syncerFile, async (scratch) => {
+      const got = await seatInboundScene(nodeRequire(path.join(syncerCopy(scratch, "syncer.cjs"), "syncer.cjs")), "si1c");
+      return got.badCopies > 1 && got.fmtCopies > 1 && got.overCopies > 1;
+    });
+    check(pRefused.ok, "si1c lifting plant:syncer-seat-refused copies a malformed seat.json again at every scan: " + JSON.stringify(pRefused));
   }
 
   if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") {
