@@ -18,7 +18,7 @@ import { wholeThingEmpty } from "./app-state.js";
 import { placeBubble } from "./bubble.js";
 import { eHost, eCatalogFolderShort, eCatalogFiles, eFolderCatalogPick, eOnFolderPick, noteCatalogFolderHold, eHotkey, eHotkeyLabel, eOpenPicker } from "./host.js";
 import { hooks } from "./hooks.js";
-import { agentName, setAgentName, keepAgentName, keepTypedName, nameAnswered, nameFieldHtml, wireNameField } from "./agent.js";
+import { agentName, typeAgentName, keepAgentName, keepTypedName, nameAnswered, nameFieldHtml, wireNameField } from "./agent.js";
 import { esc } from "./esc.js";
 import { cutLeaves, dismissCopy, mgReduceMotion } from "./motion.js";
 import { joinStands, onJoinPainted } from "./team-join.js";
@@ -1145,7 +1145,7 @@ function tourNext(){
      left empty, the first signed copy asks, as it would without the tour. */
   if(step.name){
     const inp=$("#tourName"), v=inp ? inp.value.trim() : "";
-    if(v) keepAgentName(v); else if(agentName()) setAgentName("");
+    if(v) keepAgentName(v); else if(agentName()) typeAgentName("");
   }
   if(step.inside) shutTourWindow(step, false);
   if(step.open){

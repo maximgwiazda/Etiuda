@@ -9675,7 +9675,10 @@ What is typed here stays in this browser.`;
     "Add {CAT} as a category of this desk": "Dodaj {CAT} jako kategorię tego stanowiska",
     "Drop it on one of your categories.": "Upuść kartę na jedną ze swoich kategorii.",
     "Drop it on one of your categories, or on + to add {CAT}.": "Upuść kartę na jedną ze swoich kategorii albo na +, aby dodać kategorię {CAT}.",
-    "That teammate's cards match the team's edition.": "Karty tego członka zespołu są takie same jak w wydaniu zespołu."
+    "That teammate's cards match the team's edition.": "Karty tego członka zespołu są takie same jak w wydaniu zespołu.",
+    "The name on this desk": "Imię na tym stanowisku",
+    "{NAME} comes from your account: the first name and the first letter of the surname. It can be changed here at any time.": "{NAME} pochodzi z konta: to imię i pierwsza litera nazwiska. Można to zmienić tutaj w dowolnej chwili.",
+    "{NAME} is the name on your account. It can be changed here at any time.": "{NAME} to nazwa z konta. Można ją zmienić tutaj w dowolnej chwili."
   };
   function uiLangKnown(l) {
     return !!(l && UI_STRINGS[l]);
@@ -12876,15 +12879,18 @@ What is typed here stays in this browser.`;
   var agent_exports = {};
   __export(agent_exports, {
     agentName: () => agentName,
+    agentNameNote: () => agentNameNote,
     agentParts: () => agentParts,
     askAgentName: () => askAgentName,
     keepAgentName: () => keepAgentName,
     keepTypedName: () => keepTypedName,
+    markAgentNameNoteSeen: () => markAgentNameNoteSeen,
     nameAnswered: () => nameAnswered,
     nameFieldHtml: () => nameFieldHtml,
     renderFillsSoon: () => renderFillsSoon,
     setAgentName: () => setAgentName,
     syncRoleWheel: () => syncRoleWheel,
+    typeAgentName: () => typeAgentName,
     wantsAgentName: () => wantsAgentName,
     wireNameField: () => wireNameField,
     wirePaxFill: () => wirePaxFill,
@@ -15455,6 +15461,8 @@ What is typed here stays in this browser.`;
     };
   }
   var E_AGENT_KEY = "eAgent";
+  var E_AGENT_AUTO_KEY = "eAgentAuto";
+  var E_AGENT_NOTE_SEEN = "eAgentNoteSeen";
   function agentName() {
     const v = lsGet(E_AGENT_KEY);
     return v != null ? String(v) : "";
@@ -15462,6 +15470,29 @@ What is typed here stays in this browser.`;
   function setAgentName(v) {
     lsSet(E_AGENT_KEY, String(v || ""));
     renderFillsSoon();
+  }
+  function readAgentAuto() {
+    const raw = lsGet(E_AGENT_AUTO_KEY);
+    if (!raw || raw === "typed") return null;
+    try {
+      const o = JSON.parse(raw);
+      return o && typeof o === "object" && typeof o.name === "string" && o.name && (o.form === "initial" || o.form === "whole") ? { name: o.name, form: o.form } : null;
+    } catch (e) {
+      return null;
+    }
+  }
+  function typeAgentName(v) {
+    lsSet(E_AGENT_AUTO_KEY, "typed");
+    setAgentName(v);
+  }
+  function agentNameNote() {
+    if (lsGet(E_AGENT_NOTE_SEEN) === "1") return null;
+    const auto = readAgentAuto();
+    if (!auto || agentName().trim() !== auto.name) return null;
+    return auto;
+  }
+  function markAgentNameNoteSeen() {
+    lsSet(E_AGENT_NOTE_SEEN, "1", true);
   }
   var eFillT = 0;
   function renderFillsSoon() {
@@ -15530,7 +15561,14 @@ What is typed here stays in this browser.`;
     return inp;
   }
   function keepAgentName(v) {
-    setAgentName(String(v || "").trim());
+    const s = String(v || "").trim();
+    if (s) {
+      const auto = readAgentAuto();
+      if (!auto || auto.name !== s) lsSet(E_AGENT_AUTO_KEY, "typed");
+      setAgentName(s);
+    } else {
+      setAgentName("");
+    }
     lsSet(E_NAME_ASKED, "1");
   }
   function nameAnswered() {
@@ -15539,10 +15577,11 @@ What is typed here stays in this browser.`;
   function keepTypedName(v, answered) {
     const s = String(v || "").trim();
     if (s) {
-      keepAgentName(s);
+      typeAgentName(s);
+      lsSet(E_NAME_ASKED, "1");
       return;
     }
-    setAgentName("");
+    typeAgentName("");
     if (!answered) lsDel(E_NAME_ASKED);
   }
   function askAgentName(raw, then, anchor) {
@@ -32037,7 +32076,7 @@ What is typed here stays in this browser.`;
     if (step.name) {
       const inp = $("#tourName"), v = inp ? inp.value.trim() : "";
       if (v) keepAgentName(v);
-      else if (agentName()) setAgentName("");
+      else if (agentName()) typeAgentName("");
     }
     if (step.inside) shutTourWindow(step, false);
     if (step.open) {
@@ -40944,6 +40983,77 @@ What is typed here stays in this browser.`;
       to.focus();
     }
   }
+  var agentNoteDrop = null;
+  var agentNoteObs = null;
+  var agentNoteEsc = null;
+  function closeAgentNameBubble() {
+    if (agentNoteDrop) {
+      agentNoteDrop();
+      agentNoteDrop = null;
+    }
+    if (agentNoteObs) {
+      agentNoteObs.disconnect();
+      agentNoteObs = null;
+    }
+    if (agentNoteEsc) {
+      removeEventListener("keydown", agentNoteEsc, true);
+      agentNoteEsc = null;
+    }
+    const old = typeof document !== "undefined" ? document.getElementById("eAgentNote") : null;
+    if (old) old.remove();
+  }
+  function syncAgentNameBubble(box) {
+    if (typeof document === "undefined" || !document.body) return;
+    const field = box && box.querySelector ? box.querySelector("#setAgentName") : null;
+    if (!field) {
+      closeAgentNameBubble();
+      return;
+    }
+    const note = agentNameNote();
+    if (!note) return;
+    if (document.getElementById("eAgentNote")) return;
+    markAgentNameNoteSeen();
+    let tpl = t("{NAME} comes from your account: the first name and the first letter of the surname. It can be changed here at any time.");
+    if (note.form === "whole") tpl = t("{NAME} is the name on your account. It can be changed here at any time.");
+    const el = document.createElement("div");
+    el.className = "bub bub-ask";
+    el.id = "eAgentNote";
+    el.setAttribute("role", "dialog");
+    el.setAttribute("aria-labelledby", "eAgentNoteTitle");
+    const h3 = document.createElement("h3");
+    h3.id = "eAgentNoteTitle";
+    h3.textContent = t("The name on this desk");
+    const p = document.createElement("p");
+    p.textContent = tpl.split("{NAME}").join(note.name);
+    const acts = document.createElement("div");
+    acts.className = "tour-actions";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn primary";
+    btn.id = "eAgentNoteDone";
+    btn.textContent = t("Done");
+    btn.onclick = closeAgentNameBubble;
+    acts.appendChild(btn);
+    el.appendChild(h3);
+    el.appendChild(p);
+    el.appendChild(acts);
+    document.body.appendChild(el);
+    agentNoteEsc = (e) => {
+      if (e.key !== "Escape" || !el.isConnected) return;
+      e.preventDefault();
+      e.stopPropagation();
+      closeAgentNameBubble();
+    };
+    addEventListener("keydown", agentNoteEsc, true);
+    agentNoteDrop = hangBubble(el, () => document.getElementById("setAgentName"));
+    const sh = document.getElementById("screenHost");
+    if (sh && typeof MutationObserver === "function") {
+      agentNoteObs = new MutationObserver(() => {
+        if (sh.hidden || !document.getElementById("setAgentName")) closeAgentNameBubble();
+      });
+      agentNoteObs.observe(sh, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden"] });
+    }
+  }
   function paintSettings() {
     const host = settingsHost(), box = host && host.querySelector("#setBody");
     if (!box) return;
@@ -40953,6 +41063,7 @@ What is typed here stays in this browser.`;
     wireHotkeyRow(box);
     wirePage(box);
     translateTree(box);
+    syncAgentNameBubble(box);
     if (syncRowLine === "conflict" && box.querySelector('[data-row="sync"]')) syncOpened();
   }
   function syncDeskLook() {
@@ -41004,7 +41115,7 @@ What is typed here stays in this browser.`;
     const joinBtn = box.querySelector("#setJoinTeam");
     if (joinBtn) joinBtn.onclick = () => openJoinPaste();
     const nameBox = box.querySelector("#setAgentName");
-    if (nameBox) nameBox.oninput = () => setAgentName(nameBox.value);
+    if (nameBox) nameBox.oninput = () => typeAgentName(nameBox.value);
     const act = (id, fn) => {
       const b = box.querySelector(id);
       if (b) b.onclick = fn;

@@ -10276,6 +10276,70 @@ function signinClaims(jwt) {
     return c && typeof c === "object" && !Array.isArray(c) ? c : null;
   } catch { return null; }
 }
+/* The agent's default name from an ID token's claims: given_name and family_name where both arrive, else the display name;
+   bracketed/parenthesised suffixes stripped; scripts without spaces and comma-separated names taken whole rather than guessing a split;
+   diacritic kept on the family initial. Returns { name, form: "initial" | "whole" } or null where empty. */
+const SIGNIN_NOSPACE_SCRIPT = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}\p{Script=Tibetan}]/u;
+function signinAgentNameFirstLetter(s) {
+  const n = String(s || "").normalize("NFC").trim();
+  if (!n) return "";
+  let ch = "";
+  if (typeof Intl !== "undefined" && typeof Intl.Segmenter === "function") {
+    const it = new Intl.Segmenter("und", { granularity: "grapheme" }).segment(n)[Symbol.iterator]();
+    const next = it.next();
+    ch = next && !next.done && next.value ? next.value.segment : "";
+  } else {
+    const m = /^\P{M}\p{M}*/u.exec(n);
+    ch = m ? m[0] : Array.from(n)[0] || "";
+  }
+  return /\p{L}/u.test(ch) ? (ch === "\u00df" ? "\u00df" : ch.toUpperCase()) : "";
+}
+function signinAgentNameClean(s) {
+  let out = String(s || "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim();
+  out = out.replace(/(?:\s*(?:\([^)]*\)|\[[^\]]*\]|\uff08[^\uff09]*\uff09))+\s*$/u, "").trim(); /* plant:agent-name-brackets */
+  return out.slice(0, 120);
+}
+function signinAgentNameFromClaims(claims) {
+  if (!claims || typeof claims !== "object") return null;
+  const given = typeof claims.given_name === "string" ? signinAgentNameClean(claims.given_name) : "";
+  const family = typeof claims.family_name === "string" ? signinAgentNameClean(claims.family_name) : "";
+  const display = typeof claims.name === "string" ? signinAgentNameClean(claims.name) : "";
+  if (given && family) { /* plant:agent-name-claims */
+    if (SIGNIN_NOSPACE_SCRIPT.test(given) || SIGNIN_NOSPACE_SCRIPT.test(family)) {
+      const whole = display || (given + " " + family);
+      return whole ? { name: whole.slice(0, 120), form: "whole" } : null;
+    }
+    const init = signinAgentNameFirstLetter(family);
+    if (init) return { name: (given + " " + init + ".").slice(0, 120), form: "initial" };
+    return { name: given.slice(0, 120), form: "whole" };
+  }
+  const s = display || given || family;
+  if (!s) return null;
+  if (SIGNIN_NOSPACE_SCRIPT.test(s)) return { name: s, form: "whole" }; /* plant:agent-name-nospace */
+  if (s.indexOf(",") >= 0) return { name: s, form: "whole" }; /* plant:agent-name-comma */
+  const words = s.split(" ").filter(Boolean);
+  if (words.length < 2) return { name: s, form: "whole" };
+  const init = signinAgentNameFirstLetter(words[words.length - 1]);
+  if (!init) return { name: s, form: "whole" };
+  return { name: (words[0] + " " + init + ".").slice(0, 120), form: "initial" };
+}
+function signinAgentAutoRead(raw) {
+  if (typeof raw !== "string" || !raw || raw === "typed") return null;
+  try {
+    const o = JSON.parse(raw);
+    return o && typeof o === "object" && typeof o.name === "string" && o.name && (o.form === "initial" || o.form === "whole")
+      ? { name: o.name, form: o.form } : null;
+  } catch { return null; }
+}
+function signinCanFillAgentName(desk) {
+  if (!desk || typeof desk !== "object") return false;
+  const cur = typeof desk.eAgent === "string" ? desk.eAgent.trim() : "";
+  const rawAuto = desk.eAgentAuto;
+  if (rawAuto === "typed") return false; /* plant:agent-name-typed */
+  if (!cur) return !rawAuto; /* plant:agent-name-cleared */
+  const auto = signinAgentAutoRead(rawAuto);
+  return !!auto && auto.name === cur;
+}
 function signinIssuerOk(p, c) {
   const known = signinKnown(p.id), iss = String(c.iss || "");
   if (known.issuer.indexOf("{tenantid}") >= 0) return SIGNIN_TENANT.test(String(c.tid || "")) && iss === known.issuer.replace("{tenantid}", String(c.tid));
@@ -10979,7 +11043,7 @@ async function signinRenewHeld(io, p, deskKey, held, now) {
   if (m && m.access) { fresh.access = true; fresh.refresh = io.keep(m.got.refreshToken) || fresh.refresh; } /* plant:access-rotated */
   else if (!m && ans.reason !== "unreached" && fresh.access) delete fresh.access; /* plant:access-clear */
   const said = m ? m.ans : ans;
-  return { held: signinSettle(fresh, said, now()), said: said.ok ? "renewed" : said.reason };
+  return Object.assign({ held: signinSettle(fresh, said, now()), said: said.ok ? "renewed" : said.reason }, said.ok ? { idToken: m ? m.got.idToken : got.idToken } : {});
 }
 /* The renewal on a managed path: the refresh asks the service's scope beside today's, and the seat is asked with both tokens. An
    account the organisation has not assigned keeps what it held, said; the rest fails as the ordinary renewal does. */
@@ -10994,7 +11058,7 @@ async function signinRenewHeldAccess(io, p, deskKey, held, now, access) {
   }
   const fresh = Object.assign({}, held, { refresh: io.keep(got.refreshToken) || held.refresh, sub: held.sub || io.keep(got.sub) });
   const ans = await signinSeat(io, p.id, deskKey, got.idToken, "", now, got.accessToken); /* plant:access-renew-seat */
-  return { held: signinSettle(fresh, ans, now()), said: ans.ok ? "renewed" : ans.reason };
+  return Object.assign({ held: signinSettle(fresh, ans, now()), said: ans.ok ? "renewed" : ans.reason }, ans.ok ? { idToken: got.idToken } : {});
 }
 /* seat.json as the desk writes it for its lead: {format: 2, desk, certificate}, unsealed, since it holds pseudonyms alone. */
 const SEAT_NAME = "seat.json";
@@ -11497,6 +11561,7 @@ ipcMain.handle("etiuda:signin", async (e, provider) => {
       if (other && out === null && (ans.ok || ans.reason !== "unreached")) { signinLeave(st, me, true); signinSave(); } /* plant:switch-leaves-after */
       if (signinTake(p.id, got, ans, Date.now(), took) && folderGot) storeTokenTake(folderGot); /* plant:folder-take-after */
       signinFlush();
+      if ((ans.ok || ans.reason === "full") && typeof signinNameTake === "function") signinNameTake(got.idToken);
       if (ans.ok && ans.cert) {
         storeEndAgain().catch(() => false); storeLeaveNow(null);
         if (io.store === true && signinFolderApart(p.id)) signinFolderAfter(run, io, p, me.key, got); else storeTurn();
@@ -11634,6 +11699,7 @@ async function signinRenewNow(o) {
   signinSaid = ""; /* plant:renew-said */
   signinSave();
   signinFlush();
+  if (r.idToken && typeof signinNameTake === "function") signinNameTake(r.idToken);
   tellSignin();
   if (o && o.look === false) return r.said; /* a look's own renewal (storeSigninFresh) starts no look */
   if (r.said === "renewed") { storeLeaveNow(null); storeTurn(); } /* plant:store-renew */
@@ -11651,6 +11717,27 @@ function armSigninRenew() {
   };
   signinTimer = setTimeout(next, SIGNIN_FIRST_MS); /* plant:renew-start */
   if (signinTimer.unref) signinTimer.unref();
+}
+/* Fills desk.json's eAgent from a signed-in ID token when the agent has neither typed nor cleared a name,
+   marking eAgentAuto so later renewals or account switches know it came from the desk. */
+function signinNameTake(idToken) {
+  const picked = signinAgentNameFromClaims(signinClaims(String(idToken || "")));
+  if (!picked || !picked.name) return false;
+  if (deskKeys === undefined) deskKeys = readDesk();
+  if (!signinCanFillAgentName(deskKeys)) return false;
+  const auto = JSON.stringify({ name: picked.name, form: picked.form });
+  if (deskKeys.eAgent === picked.name && deskKeys.eAgentAuto === auto) return false;
+  const next = Object.assign({}, deskKeys, { eAgent: picked.name, eAgentAuto: auto }); /* plant:agent-name-fill */
+  try {
+    saveDeskFile(deskText(next));
+    deskKeys = next;
+    deskWritten = true;
+    deskSyncedTell({ eAgent: picked.name, eAgentAuto: auto }, { eAgent: {}, eAgentAuto: {} });
+    return true;
+  } catch (e) {
+    console.error("etiuda: the desk could not be written - " + e.message);
+    return false;
+  }
 }
 
 /* ---- the person's store on the desk (shell/sync/store.cjs) ---------------------------------------------------------------
@@ -12394,7 +12481,7 @@ async function storeConsentSignin(p, me, sub) {
     if (got.ok && !signinSame(got.sub, sub)) got = { ok: false, reason: "signin-other" }; /* plant:consent-same */
     if (got.ok) {
       const ans = await signinSeat(io, p.id, me.key, got.idToken, got.seed, Date.now);
-      if (ans.ok && ans.cert) { signinTake(p.id, got, ans, Date.now(), false); signinFlush(); if (token) storeTokenTake(token); }
+      if (ans.ok && ans.cert) { signinTake(p.id, got, ans, Date.now(), false); signinFlush(); if (token) storeTokenTake(token); if (typeof signinNameTake === "function") signinNameTake(got.idToken); }
       landing = ans.ok && ans.cert ? (token && token.token ? "folder-on" : "folder-off") : signinLanding(got, ans, managed);
     } else landing = got.reason === "signin-notallowed" ? "folder-org" : got.reason === "signin-cancelled" || got.reason === "signin-other" ? "folder-off" : signinLanding(got, undefined, managed);
   } finally {

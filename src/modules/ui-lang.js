@@ -1786,7 +1786,10 @@ UI_STRINGS.pl={
   "Add {CAT} as a category of this desk":"Dodaj {CAT} jako kategorię tego stanowiska",
   "Drop it on one of your categories.":"Upuść kartę na jedną ze swoich kategorii.",
   "Drop it on one of your categories, or on + to add {CAT}.":"Upuść kartę na jedną ze swoich kategorii albo na +, aby dodać kategorię {CAT}.",
-  "That teammate's cards match the team's edition.":"Karty tego członka zespołu są takie same jak w wydaniu zespołu."
+  "That teammate's cards match the team's edition.":"Karty tego członka zespołu są takie same jak w wydaniu zespołu.",
+  "The name on this desk":"Imię na tym stanowisku",
+  "{NAME} comes from your account: the first name and the first letter of the surname. It can be changed here at any time.":"{NAME} pochodzi z konta: to imię i pierwsza litera nazwiska. Można to zmienić tutaj w dowolnej chwili.",
+  "{NAME} is the name on your account. It can be changed here at any time.":"{NAME} to nazwa z konta. Można ją zmienić tutaj w dowolnej chwili."
 };
 // Is this a language this build carries? The table itself stays private to this file.
 function uiLangKnown(l){ return !!(l && UI_STRINGS[l]); }
