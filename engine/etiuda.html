@@ -29581,6 +29581,7 @@ What is typed here stays in this browser.`;
     const r = v.refused;
     if (!r || r === "signin" || signinNoSeat(v)) return null;
     if (r === "no-role") return { kind: "renewal", say: signinSay("no-role", v), acts: [] };
+    if (r === "signin-notassigned") return { kind: "renewal", say: signinSay("signin-notassigned", v), acts: [] };
     if (r === "desks") return {
       kind: "desks",
       say: [

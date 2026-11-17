@@ -48,7 +48,7 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 193;
+const PLANTS = 194;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
@@ -2117,13 +2117,16 @@ CASES.waitPage = async (s, page) => {
    while signed in that fails, in the door and in Account, in words that say what to do; Check now not held by a clock set back ---- */
 const SAY_DESKS = ["This account is signed in on three computers already.", "A seat holds three computers. Signing out on one of the others frees its place, and this computer checks again by itself."];
 const SAY_TOKEN = ["The sign-in service did not accept this account's sign-in.", "Signing in again settles it; until then, Etiuda keeps working with the catalog it has."];
+const SAY_NOTASSIGNED_EN = ["This account's organisation has not allowed Etiuda at its sign-in provider.", "Its IT department can allow it; another account can be used meanwhile."];
+const SAY_NOTASSIGNED_PL = ["Organizacja tego konta nie dopuściła Etiudy u swojego dostawcy logowania.", "Może to zmienić jej dział IT; do tego czasu można użyć innego konta."];
 const NEW_FAILED = "The new sign-in did not finish.", KEPT = "This computer stays signed in with the account it had.";
 const SAY_PRESSED = why => [NEW_FAILED, why ? KEPT + " " + why : KEPT];
 const sayIs = (a, b) => Array.isArray(a) && a.length === 2 && a[0] === b[0] && a[1] === b[1];
 const textOf = h => String(h).replace(/<[^>]*>/g, "\n").replace(/&#39;/g, "'").replace(/&amp;/g, "&");
 const saidIn = (h, pair) => { const x = textOf(h); return x.indexOf(pair[0]) >= 0 && x.indexOf(pair[1]) >= 0; };
-/* A renewal's refusal kept as the said reason, in the copywriter's words: "desks" with Check now; "token", or any other reason the shell
-   keeps, settled by signing in again, the providers under it; the door and Account alike, Polish too. */
+/* A renewal's refusal kept as the said reason, in the copywriter's words: "desks" with Check now; "signin-notassigned" in its own
+   words with no sign-in offered; "token", or any other reason the shell keeps, settled by signing in again, the providers under it;
+   the door and Account alike, Polish too. */
 CASES.toldRenewal = async (s, page) => {
   const pg = page || P;
   if (!pg) return false;
@@ -2131,15 +2134,21 @@ CASES.toldRenewal = async (s, page) => {
   const base = { offered: ["microsoft", "google"], signedIn: "microsoft", code: CODE, seat: "held" };
   const door = o => pg.signinDoor(pg.signinRead(Object.assign({}, base, o)));
   const desks = door({ refused: "desks" }), token = door({ refused: "token" }), other = door({ refused: "elsewhere" }), none = door({});
-  let pl = null;
+  const notassigned = door({ refused: "signin-notassigned" }), notassignedM = door({ refused: "signin-notassigned", managed: { on: true, contact: "IT" } });
+  let pl = null, plNotassigned = null;
   storage.lsSet("eUiLang", "pl");
-  try { pl = door({ refused: "desks" }).say; } finally { storage.lsSet("eUiLang", "en"); }
-  const acct = page ? null : [await acctOf(Object.assign({}, base, { refused: "desks" })), await acctOf(Object.assign({}, base, { refused: "token" }))];
+  try { pl = door({ refused: "desks" }).say; plNotassigned = door({ refused: "signin-notassigned" }).say; } finally { storage.lsSet("eUiLang", "en"); }
+  const acct = page ? null : [await acctOf(Object.assign({}, base, { refused: "desks" })), await acctOf(Object.assign({}, base, { refused: "token" })),
+    await acctOf(Object.assign({}, base, { refused: "signin-notassigned" }))];
   return sayIs(desks.say, SAY_DESKS) && desks.acts[0].act === "check" && desks.acts[0].label === "Check now" && desks.acts[0].solid === true
     && sayIs(token.say, SAY_TOKEN) && token.providers.join() === "microsoft,google" && sayIs(other.say, SAY_TOKEN) && none.moment === "noteam" && !none.say
+    && notassigned.moment === "renewal" && sayIs(notassigned.say, SAY_NOTASSIGNED_EN) && !notassigned.providers && notassigned.acts.map(a => a.act).join() === "account"
+    && notassignedM.moment === "renewal" && notassignedM.say[0] === "Your organisation has not given this account access to Etiuda." && /IT/.test(notassignedM.say[1]) && !notassignedM.providers
     && !!pl && pl[0] === "To konto jest już zalogowane na trzech komputerach." && pl[1] === "Miejsce w licencji obejmuje trzy komputery. Wylogowanie się na jednym z pozostałych zwolni jego miejsce, a ten komputer sam sprawdzi ponownie."
+    && !!plNotassigned && sayIs(plNotassigned, SAY_NOTASSIGNED_PL)
     && (page ? true : saidIn(acct[0], SAY_DESKS) && saidIn(acct[1], SAY_TOKEN)
-      && (acct[1].match(/data-e-open="signin"/g) || []).length === 2);
+      && (acct[1].match(/data-e-open="signin"/g) || []).length === 2
+      && saidIn(acct[2], SAY_NOTASSIGNED_EN) && (acct[2].match(/data-e-open="signin"/g) || []).length === 0);
 };
 /* A sign-in pressed while signed in that fails: the desk stays signed in and says so, then the reason's own heading where it has one;
    Try again choosing again; a cancel or a sign-in done says nothing; the door and Account alike, Polish too. */
@@ -4080,6 +4089,7 @@ if (!PLANTS_OFF) {
   await plantWire("dsp128", ["    if (run.loop && typeof run.loop.land === \"function\") run.loop.land(landing); /* plant:land-wired */\n", ""], "landWired");
   /* A gate on a local act, put into the desk file's write in memory, is seen. */
   await plantPage("dsp83", ["if(!r || r===\"signin\" || signinNoSeat(v)) return null; /* plant:told-renewal */", "return null;"], "toldRenewal");
+  await plantPage("dsp83b", ["  if(r===\"signin-notassigned\") return {kind:\"renewal\", say:signinSay(\"signin-notassigned\", v), acts:[]}; /* plant:told-notassigned */\n", ""], "toldRenewal");
   await plantPage("dsp84", ["  if(FAIL_FIRST.indexOf(v.said)>=0) return {kind:\"pressed\",", "  if(false) return {kind:\"pressed\","], "toldPressed");
   await plantWire("dsp85", ["if (since >= 0 && since < SIGNIN_CHECK_GAP_MS)", "if (since < SIGNIN_CHECK_GAP_MS)"], "checkGap");
   await plantWire("dsp86", ["  signinSaid = \"\"; /* plant:renew-said */\n", ""], "saidCleared");

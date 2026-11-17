@@ -337,6 +337,7 @@ function signinTold(v){
   const r=v.refused;
   if(!r || r==="signin" || signinNoSeat(v)) return null; /* plant:told-renewal */
   if(r==="no-role") return {kind:"renewal", say:signinSay("no-role", v), acts:[]}; /* plant:told-no-role */
+  if(r==="signin-notassigned") return {kind:"renewal", say:signinSay("signin-notassigned", v), acts:[]}; /* plant:told-notassigned */
   if(r==="desks") return {kind:"desks", say:[t("This account is signed in on three computers already."),
     t("A seat holds three computers. Signing out on one of the others frees its place, and this computer checks again by itself.")],
     acts:[{act:"check", label:t("Check now"), solid:true}]};
