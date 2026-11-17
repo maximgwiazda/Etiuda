@@ -10738,24 +10738,25 @@ function signinKept(storage, sealed) {
 /* THE LICENCE SERVICE'S DOOR for the desk, beside fetchNote's: one POST of JSON to signin/desk alone, the body at most 8 KiB. The
    bytes the desk key signs are the service's own (requests.mjs signinDeskBytes): its line, then the provider, the SHA-256 of the
    ID token's characters, the desk's public half and t, one a line. A first sign-in sends the seed its token's nonce was made
-   of; a renewal sends none. */
+   of, and signs it as the bytes' last line, "seed:" and its hex (requests.mjs seedLine), so a copy with the seed taken out or
+   swapped fails the signature rather than reading as a renewal; a renewal sends none and signs the lines before it alone. */
 let SIGNIN_SERVICE = "https://etiuda.dev/licence/v1/signin/desk";
 const SIGNIN_BODY_MAX = 8 * 1024, SIGNIN_SERVICE_MAX = 32 * 1024;
 const SIGNIN_DESK_LINE = "etiuda-licence-signin-desk";
 function signinTokenHash(idToken) { return crypto.createHash("sha256").update(String(idToken), "utf8").digest("hex"); }
 function signinDeskBytes(o) {
-  return Buffer.from(SIGNIN_DESK_LINE + "\n" + [o.provider, o.tokenHash, o.desk, o.t].map(String).join("\n"), "utf8");
+  return Buffer.from(SIGNIN_DESK_LINE + "\n" + [o.provider, o.tokenHash, o.desk, o.t].concat(o.seed ? ["seed:" + o.seed] : []).map(String).join("\n"), "utf8"); /* plant:desk-seed-line */
 }
 /* With the service's access token (section 11.11): the service's managed line over both tokens' hashes, requests.mjs
    signinDeskManagedBytes. */
 const SIGNIN_DESK_MANAGED_LINE = "etiuda-licence-signin-desk-managed";
 function signinDeskManagedBytes(o) {
-  return Buffer.from(SIGNIN_DESK_MANAGED_LINE + "\n" + [o.provider, o.tokenHash, o.accessHash, o.desk, o.t].map(String).join("\n"), "utf8"); /* plant:access-signed */
+  return Buffer.from(SIGNIN_DESK_MANAGED_LINE + "\n" + [o.provider, o.tokenHash, o.accessHash, o.desk, o.t].concat(o.seed ? ["seed:" + o.seed] : []).map(String).join("\n"), "utf8"); /* plant:access-signed */
 }
 /* The managed body, {provider, idToken, accessToken, desk, seed?, t, sig}; null where the access token is not its shape. */
 function signinDeskManagedBody(provider, idToken, desk, seed, t, sign, accessToken) {
   if (typeof accessToken !== "string" || !accessToken || accessToken.length > SIGNIN_ACCESS_MAX) return null;
-  const sig = String(sign(signinDeskManagedBytes({ provider: provider, tokenHash: signinTokenHash(idToken), accessHash: signinTokenHash(accessToken), desk: desk, t: t })) || "");
+  const sig = String(sign(signinDeskManagedBytes({ provider: provider, tokenHash: signinTokenHash(idToken), accessHash: signinTokenHash(accessToken), desk: desk, t: t, seed: seed || "" })) || ""); /* plant:access-seed */
   if (!/^[0-9a-f]{128}$/.test(sig)) return null;
   const body = { provider: String(provider), idToken: idToken, accessToken: accessToken, desk: String(desk) };
   if (seed) body.seed = String(seed);
@@ -10768,13 +10769,14 @@ function signinDeskManagedBody(provider, idToken, desk, seed, t, sign, accessTok
 const SIGNIN_DESK_POOLED_LINE = "etiuda-licence-signin-desk-pooled";
 const SIGNIN_DESK_MANAGED_POOLED_LINE = "etiuda-licence-signin-desk-managed-pooled";
 function signinDeskPooledBytes(o) {
-  return Buffer.from(o.accessHash === undefined ? SIGNIN_DESK_POOLED_LINE + "\n" + [o.provider, o.tokenHash, o.desk, o.t].map(String).join("\n") /* plant:pooled-line */
-    : SIGNIN_DESK_MANAGED_POOLED_LINE + "\n" + [o.provider, o.tokenHash, o.accessHash, o.desk, o.t].map(String).join("\n"), "utf8");
+  const line = o.accessHash === undefined ? SIGNIN_DESK_POOLED_LINE : SIGNIN_DESK_MANAGED_POOLED_LINE; /* plant:pooled-line */
+  const fields = o.accessHash === undefined ? [o.provider, o.tokenHash, o.desk, o.t] : [o.provider, o.tokenHash, o.accessHash, o.desk, o.t];
+  return Buffer.from(line + "\n" + fields.concat(o.seed ? ["seed:" + o.seed] : []).map(String).join("\n"), "utf8"); /* plant:pooled-seed-line */
 }
 /* The pooled body, {provider, idToken, accessToken?, desk, pooled: true, seed?, t, sig}; null where the access token is not its shape. */
 function signinDeskPooledBody(provider, idToken, desk, seed, t, sign, accessToken) {
   if (accessToken !== undefined && (typeof accessToken !== "string" || !accessToken || accessToken.length > SIGNIN_ACCESS_MAX)) return null;
-  const o = { provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t };
+  const o = { provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t, seed: seed || "" }; /* plant:pooled-seed */
   if (accessToken !== undefined) o.accessHash = signinTokenHash(accessToken);
   const sig = String(sign(signinDeskPooledBytes(o)) || "");
   if (!/^[0-9a-f]{128}$/.test(sig)) return null;
@@ -10792,7 +10794,7 @@ function signinDeskBody(provider, idToken, desk, seed, t, sign, accessToken, poo
   if (seed && !/^[0-9a-f]{64}$/.test(String(seed))) return null;
   if (pooled === true) return signinDeskPooledBody(provider, idToken, desk, seed, t, sign, accessToken); /* plant:pooled-body */
   if (accessToken !== undefined) return signinDeskManagedBody(provider, idToken, desk, seed, t, sign, accessToken); /* plant:access-body */
-  const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t })) || ""); /* plant:desk-signed */
+  const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t, seed: seed || "" })) || ""); /* plant:desk-signed */
   if (!/^[0-9a-f]{128}$/.test(sig)) return null;
   const body = { provider: String(provider), idToken: idToken, desk: String(desk) };
   if (seed) body.seed = String(seed); /* plant:seed-first */
