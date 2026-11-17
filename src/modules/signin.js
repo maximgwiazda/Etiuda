@@ -377,7 +377,7 @@ function signinDoorOf(v){
   if(v.busy) return {moment:"waiting", heading:t("Finish signing in in the browser"),
     line:named(t("The browser has opened {PROVIDER}'s sign-in page. Etiuda waits here and carries on by itself when you come back."),"{PROVIDER}",SIGNIN_NAMES[v.busy]),
     wait:named(t("Waiting for {PROVIDER}…"),"{PROVIDER}",SIGNIN_NAMES[v.busy]),
-    acts:[{act:"again", label:t("Open the browser again")}, {act:"stop", label:t("Cancel")}], link:v.link};
+    acts:(v.link ? [{act:"again", label:t("Open the browser again")}] : []).concat([{act:"stop", label:t("Cancel")}]), link:v.link}; /* plant:waiting-again */
   if(!v.signedIn){
     if(FAIL_FIRST.indexOf(v.said)>=0){
       const s=signinSay(v.said, v);

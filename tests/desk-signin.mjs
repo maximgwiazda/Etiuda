@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 197;
+const PLANTS = 199;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 167 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 168 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1599,8 +1599,8 @@ CASES.linkWait = async (s, swap) => {
     && !!state && !lines.some(l => l.indexOf(url) >= 0 || l.indexOf(state) >= 0);
 };
 /* Settings, Account drawn as settings.js draws it over a host answering `v`, with desk-first-edition's empty document. */
-async function acctOf(v, host) {
-  const SET = await import(pathToFileURL(path.join(ROOT, "src", "modules", "settings.js")).href);
+async function acctOf(v, host, setMod) {
+  const SET = setMod || await import(pathToFileURL(path.join(ROOT, "src", "modules", "settings.js")).href);
   const quiet = { contains: () => false, add() {}, remove() {}, toggle() {} };
   globalThis.window = { innerWidth: 1280, innerHeight: 800, addEventListener() {}, removeEventListener() {}, E_HOST: Object.assign({ signinState: () => v }, host || {}) };
   globalThis.document = { querySelector: () => null, getElementById: () => null, querySelectorAll: () => [], documentElement: { dataset: {}, classList: quiet },
@@ -1640,6 +1640,35 @@ CASES.linkPage = async () => {
     && none.every(h => !/data-signin-link/.test(h)) && /data-signin-act="stop">Cancel<\/button><\/span><div class="sgn-link" data-signin-link>/.test(acct)
     && acct.indexOf(field) > 0 && !/data-signin-link/.test(acctNone) && words(pl).indexOf(LINK_LINE_PL) >= 0
     && JSON.stringify(copied) === JSON.stringify([LINK_URL, CODE]);
+};
+/* Finding 9: during the folder step (busy with no link, where Open the browser again does nothing), the button is not offered in the panel or Account. */
+CASES.waitingAgain = async (s, page, setMod) => {
+  const pg = page || P;
+  if (!pg) return false;
+  const withLink = pg.signinDoor(pg.signinRead({ offered: ["microsoft"], busy: "microsoft", link: LINK_URL }));
+  const noLink = pg.signinDoor(pg.signinRead({ offered: ["microsoft"], busy: "microsoft", link: "" }));
+  const panelWith = pg.signinPanelHtml(withLink), panelNo = pg.signinPanelHtml(noLink);
+  const acctWith = page ? "" : await acctOf({ offered: ["microsoft"], busy: "microsoft", link: LINK_URL }, undefined, setMod);
+  const acctNo = page ? "" : await acctOf({ offered: ["microsoft"], busy: "microsoft", link: "" }, undefined, setMod);
+  /* Verify with the shell's own signinFolderAfter + etiuda:signin-again: during the folder step, run.url is "" and signin-again answers false. */
+  const afterFn = tryDeclText("function signinFolderAfter("), viewFn = tryDeclText("function signinView("), againIpc = ipcSlice('ipcMain.handle("etiuda:signin-again",');
+  let hold = null, handed = 0, againFn = null;
+  const run = { loop: { onward: () => new Promise(() => {}), land: () => {} }, provider: "microsoft", url: LINK_URL };
+  const sh = new Function("signinState", "signinBusy", "signinPageOk", "handOut", "fromEngine", "ipcMain", "signinFolderAsk", "storeTurn", "storeTokenTake", "tellSignin",
+    "signinOffered", "signinPreviewing", "signinLapsed", "signinDoorsShown", "signinRelaySeat", "signinOutFlight", "sealsForReal", "safeStorage", "process", "deskStranded", "signinAccountKept", "SIGNIN_PROVIDERS", "signinSaid",
+    afterFn + "\n" + viewFn + "\n" + againIpc + "\nreturn { signinFolderAfter, signinView };")(
+    () => ({ held: { provider: "microsoft", code: CODE, seed: SEED }, managed: { any: false } }), run, s.signinPageOk, () => { handed++; }, () => true,
+    { handle: (ch, fn) => { againFn = fn; } }, () => new Promise(r => { hold = r; }), () => {}, () => {}, () => {},
+    () => [MS], () => false, () => false, () => [], () => "", null, () => true, {}, { platform: "win32" }, false, () => false, s.SIGNIN_PROVIDERS, "");
+  sh.signinFolderAfter(run, { tokenAsk: async () => ({ status: 0 }) }, MS, DESK_KEY, { sub: "s-1" });
+  const duringView = sh.signinView(), againAns = await againFn({});
+  const folderDoor = pg.signinDoor(pg.signinRead(duringView));
+  if (hold) hold("");
+  return withLink.acts.map(a => a.act).join() === "again,stop" && noLink.acts.map(a => a.act).join() === "stop"
+    && /data-signin-act="again"/.test(panelWith) && !/data-signin-act="again"/.test(panelNo) && /data-signin-act="stop"/.test(panelNo)
+    && (page ? true : /data-signin-act="again"/.test(acctWith) && !/data-signin-act="again"/.test(acctNo) && /data-signin-act="stop"/.test(acctNo))
+    && duringView.busy === "microsoft" && duringView.link === "" && againAns === false && handed === 0
+    && !!folderDoor && folderDoor.acts.map(a => a.act).join() === "stop";
 };
 /* As the product designer placed it: the line in the preview line's form, the field 6 px under it taking the width left, never
    wrapping, mono at the caption's size; the panel's block after a hairline 12 px above and below, Account's 12 px under its acts
@@ -3529,6 +3558,7 @@ const LEGS = [
   ["ds13g", "secretTree", "no tracked file carries a client secret's prefix or a client secret written as a value, the search shown to find both"],
   ["ds14a", "linkWait", "with a browser call that resolves and opens nothing, the page is told the provider's page as it is handed out and the loopback waits SIGNIN_WAIT_MS as before; Cancel takes the link with the wait; no line written carries it"],
   ["ds14b", "linkPage", "the link block stands last in every waiting place, the panel after its acts and Account after Cancel, and nowhere outside a wait or in the preview's pressed state; Polish too; its Copy copies the link"],
+  ["ds14e", "waitingAgain", "review 9: during the folder step (waiting with no link, where Open the browser again returns false), Open the browser again is not offered in the panel or Account"],
   ["ds14c", "linkLook", "the link block as the designer placed it: the line in the preview line's form, the field 6 px under it, never wrapping, 12 px and a hairline in the panel, 12 px and 560 px in Account, no box; a click selects all"],
   ["ds14d", "previewSh", "tools/signin-preview.sh is outside the packaged files: the .deb's program unless an AppImage is named, --where starts nothing, one exec with the variable for that start alone"],
   ["ds14e", "keyringLine", "the view says whether the system seals for real, and Account's retired unkept line is gone"],
@@ -4127,6 +4157,19 @@ if (!PLANTS_OFF) {
   await plantPage("dsp83", ["if(!r || r===\"signin\" || signinNoSeat(v)) return null; /* plant:told-renewal */", "return null;"], "toldRenewal");
   await plantPage("dsp83b", ["  if(r===\"signin-notassigned\") return {kind:\"renewal\", say:signinSay(\"signin-notassigned\", v), acts:[]}; /* plant:told-notassigned */\n", ""], "toldRenewal");
   await plantPage("dsp84", ["  if(FAIL_FIRST.indexOf(v.said)>=0) return {kind:\"pressed\",", "  if(false) return {kind:\"pressed\","], "toldPressed");
+  await plantPage("dsp84b", ["    acts:(v.link ? [{act:\"again\", label:t(\"Open the browser again\")}] : []).concat([{act:\"stop\", label:t(\"Cancel\")}]), link:v.link}; /* plant:waiting-again */",
+    "    acts:[{act:\"again\", label:t(\"Open the browser again\")}, {act:\"stop\", label:t(\"Cancel\")}], link:v.link};"], "waitingAgain");
+  {
+    const dir = pathToFileURL(path.join(ROOT, "src", "modules")).href + "/";
+    const from = "      +(v.link ? '<button type=\"button\" class=\"btn\" data-signin-act=\"again\">'+esc(t(\"Open the browser again\"))+'</button>' : '') /* plant:card-waiting-again */";
+    const to = "      +'<button type=\"button\" class=\"btn\" data-signin-act=\"again\">'+esc(t(\"Open the browser again\"))+'</button>'";
+    const r = await plantRed(async () => {
+      if (SETTINGS.split(from).length !== 2) throw new Error("plant anchor not in settings.js once: " + from);
+      const mod = await import("data:text/javascript;base64," + Buffer.from(SETTINGS.replace(from, to).replace(/from "\.\//g, 'from "' + dir)).toString("base64"));
+      return CASES.waitingAgain(S, undefined, mod);
+    });
+    check(r.red, "dsp84c plant " + from.replace(/\s+/g, " ").trim().slice(0, 50) + " turns waitingAgain red" + said(r));
+  }
   await plantWire("dsp85", ["if (since >= 0 && since < SIGNIN_CHECK_GAP_MS)", "if (since < SIGNIN_CHECK_GAP_MS)"], "checkGap");
   await plantWire("dsp86", ["  signinSaid = \"\"; /* plant:renew-said */\n", ""], "saidCleared");
   /* The revoked keys' list (ds25): its signature, the later-list rules, where it is read, kept and settled, and each place it judges. */
