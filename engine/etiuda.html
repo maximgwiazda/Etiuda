@@ -9427,6 +9427,10 @@ What is typed here stays in this browser.`;
     "Your catalogs, edits and settings on every computer you sign in on.": "Własne katalogi, zmiany i ustawienia na każdym komputerze, na którym nastąpi zalogowanie.",
     "Only on this computer.": "Tylko na tym komputerze.",
     "Off everywhere. The synced copy is deleted as soon as this computer reaches our service.": "Wyłączona wszędzie. Zsynchronizowana kopia zostanie usunięta, gdy tylko ten komputer połączy się z naszą usługą.",
+    "Off on this computer, but not yet everywhere: {CAUSE}, so your other computers have not been told. Etiuda tries again by itself.": "Wyłączona na tym komputerze, ale jeszcze nie wszędzie: {CAUSE}, więc pozostałe komputery nie dostały tej informacji. Etiuda sama ponowi próbę.",
+    "your {PROVIDER} account is not signed in here or could not be reached": "konto {PROVIDER} nie jest tu zalogowane albo jest nieosiągalne",
+    "the account's folder refused the change": "folder na koncie odrzucił zmianę",
+    "the change could not be written to the account's folder": "nie udało się zapisać zmiany w folderze na koncie",
     "Off. Turning it on asks {PROVIDER} to let Etiuda use its folder in this account.": "Wyłączona. Po włączeniu {PROVIDER} poprosi o zgodę na użycie przez Etiudę jej folderu na tym koncie.",
     "Changed on two computers: the newer change is in use, and the older one is kept, so nothing is lost.": "Zmieniono na dwóch komputerach: obowiązuje nowsza zmiana, a starsza jest zachowana, więc nic nie zginęło.",
     "Your catalogs, edits and settings now follow you to every computer you sign in on. You can turn this off in Account.": "Własne katalogi, zmiany i ustawienia będą teraz dostępne na każdym komputerze, na którym nastąpi zalogowanie. Można to wyłączyć w Koncie.",
@@ -30059,7 +30063,7 @@ What is typed here stays in this browser.`;
       if (b.dataset.signinAct) signinAct(b.dataset.signinAct, b);
     });
   }
-  var SYNC_LINES = ["on", "off", "ending", "ungiven", "ungiven-held", "org-off", "unavailable", "anew", "first", "checking", "unconnected", "resuming", "signin-refused", "again", "spent", "refused", "lapsed", "paused", "conflict", "full", "noseat", "ask"];
+  var SYNC_LINES = ["on", "off", "ending", "marking", "ungiven", "ungiven-held", "org-off", "unavailable", "anew", "first", "checking", "unconnected", "resuming", "signin-refused", "again", "spent", "refused", "lapsed", "paused", "conflict", "full", "noseat", "ask"];
   function syncRead(v) {
     const o = v && typeof v === "object" ? v : {};
     if (o.shown !== true || SYNC_LINES.indexOf(o.line) < 0) return { shown: false, line: "", on: false, held: false, why: "", since: 0, say: "", askNow: false, at: 0 };
@@ -30091,6 +30095,11 @@ What is typed here stays in this browser.`;
     if (why === "") return t("this computer cannot keep it locked for this Windows account");
     return t("the account's provider turned down Etiuda's request; it tries again each time Etiuda opens, and about once a day while it stays open");
   }
+  function syncMarkWords(why, provider) {
+    if (why === "refused") return t("the account's folder refused the change");
+    if (why === "failed") return t("the change could not be written to the account's folder");
+    return named(t("your {PROVIDER} account is not signed in here or could not be reached"), "{PROVIDER}", SIGNIN_NAMES[provider] || "Microsoft");
+  }
   function syncUnavailable(why, provider, alone) {
     return named(alone ? t("Sync across computers is not available on this account: {REASON}. Everything works on this computer as before.") : t("Not available on this account: {REASON}. Everything works on this computer as before."), "{REASON}", syncWhyWords(why, provider));
   }
@@ -30115,6 +30124,7 @@ What is typed here stays in this browser.`;
     if (s.line === "org-off") return t("Your organisation has not turned this on.");
     if (s.line === "off") return t("Only on this computer.");
     if (s.line === "ending") return t("Off everywhere. The synced copy is deleted as soon as this computer reaches our service.");
+    if (s.line === "marking") return named(t("Off on this computer, but not yet everywhere: {CAUSE}, so your other computers have not been told. Etiuda tries again by itself."), "{CAUSE}", syncMarkWords(s.why, provider));
     if (s.line === "ungiven") return named(t("Off. Turning it on asks {PROVIDER} to let Etiuda use its folder in this account."), "{PROVIDER}", SIGNIN_NAMES[provider] || "Microsoft");
     if (s.line === "ungiven-held") return named(t("Your organisation has turned this on, and {PROVIDER} has not yet let Etiuda use its folder in this account."), "{PROVIDER}", SIGNIN_NAMES[provider] || "Microsoft");
     if (s.line === "unavailable") return syncUnavailable(s.why, provider);

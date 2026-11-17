@@ -11806,6 +11806,7 @@ function storeFileRead(text) {
   const ok = !!d && typeof d === "object" && !Array.isArray(d) && d.format === 1;
   return { keys: ok && typeof d.keys === "string" ? d.keys : "", said: ok && typeof d.said === "string" ? d.said.slice(0, 40) : "", off: ok && d.off === true,
     org: ok && d.org === true, told: ok && d.told === true, until: ok && Number.isSafeInteger(d.until) && d.until > 0 ? d.until : 0, owed: ok && typeof d.owed === "string" ? d.owed.slice(0, 400) : "",
+    marked: ok && typeof d.marked === "string" ? d.marked.slice(0, 400) : "", markWhy: ok && (d.markWhy === "signin" || d.markWhy === "refused" || d.markWhy === "failed") ? d.markWhy : "",
     leave: ok && typeof d.leave === "string" ? d.leave.slice(0, 200000) : "", who: ok && typeof d.who === "string" && /^[0-9a-f]{32}$/.test(d.who) ? d.who : "",
     made: ok && typeof d.made === "string" && /^[0-9a-f]{32}$/.test(d.made) ? d.made : "", lost: ok && typeof d.lost === "string" && /^[0-9a-f]{32}:[0-9]{1,9}$/.test(d.lost) ? d.lost : "", last: ok && typeof d.last === "string" && /^[0-9a-f]{32}$/.test(d.last) ? d.last : "",
     ask: ok && typeof d.ask === "string" && /^[0-9a-f]{32}$/.test(d.ask) ? d.ask : "",
@@ -11814,7 +11815,7 @@ function storeFileRead(text) {
 }
 function storeFileText(s) {
   return JSON.stringify(Object.assign({ format: 1, keys: s.keys || "", said: s.said || "" }, s.off === true ? { off: true } : {}, s.told === true ? { told: true } : {},
-    s.until > 0 ? { until: s.until } : {}, s.owed ? { owed: s.owed } : {}, s.leave ? { leave: s.leave } : {}, s.org === true ? { org: true } : {}, s.full === true ? { full: true } : {}, s.who ? { who: s.who } : {}, s.made ? { made: s.made } : {}, s.lost ? { lost: s.lost } : {}, s.last ? { last: s.last } : {}, s.ask ? { ask: s.ask } : {},
+    s.until > 0 ? { until: s.until } : {}, s.owed ? { owed: s.owed } : {}, s.marked ? { marked: s.marked, markWhy: s.markWhy || "failed" } : {}, s.leave ? { leave: s.leave } : {}, s.org === true ? { org: true } : {}, s.full === true ? { full: true } : {}, s.who ? { who: s.who } : {}, s.made ? { made: s.made } : {}, s.lost ? { lost: s.lost } : {}, s.last ? { last: s.last } : {}, s.ask ? { ask: s.ask } : {},
     s.aside ? { aside: s.aside } : {}), null, 1) + "\n"; /* plant:store-aside-kept */
 }
 /* WHOSE THE STORE'S STATE IS: store.json belongs to the account named by `who`, a hash of its provider and sub; the first account seated
@@ -11851,9 +11852,9 @@ function storeMine() {
   }
   if (s.last !== who) { s.last = who; storeSave(); }
   if (s.who === who) return true; /* plant:store-mine */
-  s.keys = ""; s.leave = ""; s.owed = ""; s.made = ""; s.lost = ""; s.full = false;
+  s.keys = ""; s.leave = ""; s.owed = ""; s.marked = ""; s.markWhy = ""; s.made = ""; s.lost = ""; s.full = false;
   s.who = who;
-  storeLeaveHere = null; storeOwedHere = ""; storeNow = null; storeSay = ""; storeFresh = false; storeAnew = false;
+  storeLeaveHere = null; storeOwedHere = ""; storeMarkHere = null; storeNow = null; storeSay = ""; storeFresh = false; storeAnew = false;
   if (storeAccess && storeAccess.who !== who) storeAccess = null;
   storeSyncStop(); storeSyncCalm();
   storeAgainStop();
@@ -12122,10 +12123,67 @@ function storeOwe(rt) {
   storeSave();
 }
 async function storeEndAgain() {
+  const marking = storeMarkAgain().catch(() => false); /* plant:store-mark-again */
   const rt = storeOwedRt();
-  if (!rt || !storeOffered()) return false;
-  if ((await storeEndPost(rt)) === "owed") return false;
-  if (storeOwedRt() === rt) { storeOwe(""); tellStore(); }
+  let done = false;
+  if (rt && storeOffered() && (await storeEndPost(rt)) !== "owed") {
+    if (storeOwedRt() === rt) { storeOwe(""); tellStore(); }
+    done = true;
+  }
+  await marking;
+  return done;
+}
+/* THE ENDED MARK NOT WRITTEN is owed as the end is: the store's id kept sealed in store.json with why (markWhy: "signin" no folder token,
+   "refused" a write answered not ok, "failed" a write that threw), the row saying so, and written again at each start and renewal
+   (storeEndAgain) until it lands. On, a sign out of the account and another account's seat clear it. The switch stays off meanwhile,
+   so no look makes a store. */
+let storeMarkHere = null, storeMarkFlight = null;
+function storeMarkOwed() {
+  if (!storeMine()) return null;
+  const s = storeState();
+  if (!s.marked) return storeMarkHere;
+  try { return { rt: String(safeStorage.decryptString(Buffer.from(s.marked, "base64"))), why: s.markWhy || "failed" }; } catch { return null; }
+}
+function storeMarkOwe(rt, why) {
+  const s = storeState();
+  storeMarkHere = rt ? { rt: String(rt), why: why } : null;
+  s.marked = ""; s.markWhy = "";
+  if (rt && sealsForReal(safeStorage, process.platform)) { try { s.marked = safeStorage.encryptString(String(rt)).toString("base64"); s.markWhy = why; } catch { s.marked = ""; } }
+  storeSave();
+}
+function storeMarkNoted(folder, note) {
+  const put = folder.write;
+  return async text => { try { const r = await put.call(folder, text); note(r && r.ok ? "" : "refused"); return r; } catch (e) { note("failed"); throw e; } };
+}
+function storeMarkAgain() {
+  const o = storeMarkOwed();
+  if (!o || !storeOffered()) return Promise.resolve(false);
+  if (storeMarkFlight) return storeMarkFlight;
+  const flight = storeMarkTry(o).catch(() => false).then(r => { if (storeMarkFlight === flight) storeMarkFlight = null; return r; });
+  storeMarkFlight = flight;
+  return flight;
+}
+async function storeMarkTry(o) {
+  if (harnessLaunch() && !signinLabHeld()) return false;
+  const held = signinState().held, p = held ? signinOffered().find(x => x.id === held.provider) : null;
+  if (!p) return false;
+  const L = StoreLib(), folder = L.folderFor(p.id, { ask: storeAsk, token: () => (storeAccess && storeAccess.who === storeWho(held) ? storeAccess.token : "") });
+  const same = () => { const n = storeMarkOwed(); return !!n && n.rt === o.rt; };
+  let why = "signin";
+  const tok = folder ? await storeTokenFor(p, held).catch(() => ({ why: "offline" })) : { why: "no-drive" };
+  if (!tok.why && same()) {
+    try {
+      /* Only over this store's own key file or none: a folder holding another store's keys, or the mark already, is not written over. */
+      const r = await folder.read();
+      const text = r.ok ? r.text : null, mine = text === null || (L.keyRead(text) || {}).rt === o.rt;
+      if (!r.ok) why = "failed";
+      else if (!mine) why = ""; /* plant:store-mark-own-file */
+      else { const w = await folder.write(L.endedText(o.rt)); why = w && w.ok ? "" : "refused"; }
+    } catch { why = "failed"; }
+  }
+  if (!same()) return false;
+  if (why) { if (why !== storeMarkOwed().why) { storeMarkOwe(o.rt, why); tellStore(); } return false; }
+  storeMarkOwe("", ""); tellStore();
   return true;
 }
 async function storeEndEverywhere(keys) {
@@ -12133,11 +12191,14 @@ async function storeEndEverywhere(keys) {
   const p = held ? signinOffered().find(x => x.id === held.provider) : null;
   const end = await storeEndPost(keys.rt), ended = end === "done";
   if (end === "owed") storeOwe(keys.rt); /* plant:store-end-owed */
+  let mark = "signin";
   if (p) {
     const L = StoreLib(), folder = L.folderFor(p.id, { ask: storeAsk, token: () => (storeAccess && storeAccess.who === storeWho(held) ? storeAccess.token : "") });
     const tok = folder ? await storeTokenFor(p, held).catch(() => ({ why: "offline" })) : { why: "no-drive" };
+    if (folder && !tok.why) { folder.write = storeMarkNoted(folder, w => { mark = w; }); mark = "failed"; }
     if (folder && !tok.why) await folder.write(L.endedText(keys.rt)).catch(() => null); /* plant:store-end-mark */
   }
+  if (mark) storeMarkOwe(keys.rt, mark); /* plant:store-mark-owe */
   return ended;
 }
 /* THIS COMPUTER LEAVES THE STORE when turned off here (store.cjs storeLeave), its keys kept sealed as `leave` until the relay and the
@@ -12204,7 +12265,7 @@ function storeView() {
   /* Refused at the service, its refresh token lost (ask), or its certificate revoked: in each, only a sign-in mends it. */
   const refused = !!held && (!!held.said || held.ask === true || signinRevokedHas(held.revoked, held.cert)); /* plant:view-signin-revoked */
   return StoreLib().storeRow({ provider, pol: storePolicyNow(), look: storeNow, until: s.until, now: Date.now(),
-    signinRefused: refused, conflicts: storeConflicts(), /* plant:view-signin-ask */ say: storeSay, owed: !!storeOwedRt(),
+    signinRefused: refused, conflicts: storeConflicts(), /* plant:view-signin-ask */ say: storeSay, owed: !!storeOwedRt(), marked: (storeMarkOwed() || {}).why || "", /* plant:view-marked */
     ask, askNow: ask && !storeNotNow.has(who), again: storeAgainTimer ? storeAgainAt : 0, /* plant:store-view-again */
     looking: storeLooking > 0, ever: s.told === true, /* plant:store-view-looking */
     anew: storeAnew, /* plant:store-view-anew */
@@ -12230,6 +12291,7 @@ async function storeSetNow(what) {
   const s = storeState();
   if (what === "on") {
     if (storeLeaveKeys()) storeLeaveOwe(null);
+    if (storeMarkOwed()) storeMarkOwe("", ""); /* plant:store-on-clears-mark */
     delete s.off;
     storeFresh = true;
     storeSave();
@@ -12410,6 +12472,7 @@ async function storeAnswerNow(choice) {
   }
   /* Mine by the account whose state it is (another account came and went): its own switch and owed end stand. */
   const own = choice === "mine" && s.who === who ? { off: s.off === true, owed: s.owed, here: storeOwedHere } : null; /* plant:answer-mine-own */
+  const ownMark = own ? { marked: s.marked, markWhy: s.markWhy, here: storeMarkHere } : null;
   s.who = who; s.last = who; s.ask = ""; /* plant:answer-mine-who */
   s.keys = ""; s.leave = ""; s.owed = ""; s.made = ""; /* plant:answer-mine-keys */
   s.lost = "";
@@ -12417,6 +12480,7 @@ async function storeAnswerNow(choice) {
   storeLeaveHere = null; storeOwedHere = ""; storeNow = null; storeSay = ""; storeFresh = false; storeAnew = false;
   storeNotNow.delete(who);
   if (own) { if (own.off) s.off = true; s.owed = own.owed; storeOwedHere = own.here; }
+  s.marked = ownMark ? ownMark.marked : ""; s.markWhy = ownMark ? ownMark.markWhy : ""; storeMarkHere = ownMark ? ownMark.here : null;
   if (!storeAccess || storeAccess.who !== who) { storeAccess = null; s.org = false; }
   storeSyncStop();
   storeSave();
