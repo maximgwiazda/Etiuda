@@ -95,9 +95,9 @@ function signinStrandedWords(v){
 /* MACHINE POLICY HAS NOT ANSWERED (the shell's policyWaits): signing in waits for it, said in its own words and never as a managed
    computer. */
 function signinWaiting(v){ return !!(v && v.managed && v.managed.waiting); } /* plant:waiting-page */
-function signinWaitingWords(){
-  return [t("Etiuda is waiting for the organisation's settings."), /* placeholder: the copywriter */
-    t("It could not read yet what the organisation's IT set for this computer, so signing in waits until it can, and it tries again by itself.")]; /* placeholder: the copywriter */
+function signinWaitingWords(){ /* plant:waiting-words */
+  return [t("Waiting for the organisation's settings"),
+    t("Etiuda could not yet read what the organisation's IT set for this computer, so signing in waits. It tries again by itself, every few seconds at first and then once a minute, and everything already on this computer works as before.")];
 }
 /* The reasons that sentence answers: a sign-in outside the pinned tenant always, and the organisation's refusals on a managed computer. */
 function signinRefusedHere(reason, v){
@@ -327,9 +327,11 @@ function signinSay(reason, v, p){
        signing in again works once the service answers. */
     case "signin-switch-out":
       return [t("The sign-in service could not be reached."), ""];
-    /* WORDS OWED (the copywriter): signin-other, why this computer keeps the account it has and whom to ask (the policy's contact, or
-       its IT department); until they come it says the default below. */
-    case "signin-other":
+    case "signin-other": /* plant:signin-other-words */
+      { const c=v && v.managed ? v.managed.contact : "";
+        return [t("This computer stays with the account it has."),
+          c ? named(t("Your organisation manages the accounts on this computer, so another account cannot sign in here; nothing changed. To ask about it: {CONTACT}."),"{CONTACT}",c)
+            : t("Your organisation manages the accounts on this computer, so another account cannot sign in here; nothing changed. The organisation's IT department decides which account is used here.")]; }
     default:
       return [t("The sign-in did not finish."), t("Nothing changed, and signing in can be tried again.")];
   }
@@ -342,6 +344,7 @@ const SIGNIN_REASON_SAID=["desks","no-role","signin-notallowed","unreached","sig
    signed in that failed, which leaves the desk signed in as it was; else a refusal the shell kept from a renewal or Check now. */
 function signinTold(v){
   if(!v || !v.signedIn) return null;
+  if(v.said==="signin-other") return {kind:"pressed", say:signinSay("signin-other", v), acts:[{act:"choose", label:t("Try again"), solid:true}]}; /* plant:told-other */
   if(FAIL_FIRST.indexOf(v.said)>=0) return {kind:"pressed", say:[t("The new sign-in did not finish."), named(t("This computer stays signed in with the account it had. {REASON}"),"{REASON}",
     SIGNIN_REASON_SAID.indexOf(v.said)>=0 ? signinSay(v.said, v)[0] : "").trim()],
     acts:[{act:"choose", label:ANOTHER_FOR.indexOf(v.said)>=0 && !signinRefusedHere(v.said, v) ? t("Use another account") : t("Try again"), solid:true}]}; /* plant:told-pressed */

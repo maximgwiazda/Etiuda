@@ -1136,12 +1136,12 @@ UI_STRINGS.pl={
   "{HOST} has not answered three times in a row, so the built-in model ranks on this computer, sending nothing, and the desk asks {HOST} again in a minute.":"{HOST} nie odpowiedział trzy razy z rzędu, więc kolejność ustala model wbudowany na tym komputerze, niczego nie wysyłając, a stanowisko zapyta {HOST} ponownie za minutę.",
   "organisation's model not answering, word matches only":"model organizacji nie odpowiada, tylko dopasowanie słów",
   "{HOST} has not answered three times in a row, so the search matches words alone, and the desk asks {HOST} again in a minute.":"{HOST} nie odpowiedział trzy razy z rzędu, więc wyszukiwanie dopasowuje tylko słowa, a stanowisko zapyta {HOST} ponownie za minutę.",
-  // placeholder: Claudette, the eight lines below, which her words do not cover
+  "No key is kept for this address, so nothing was sent.":"Dla tego adresu nie zachowano klucza, więc nic nie zostało wysłane.",
+  // placeholder: Claudette, the seven lines below, which her words do not cover
   "Until the service, the model and the key are complete, the built-in model ranks and nothing is sent.":"Dopóki usługa, model i klucz nie są uzupełnione, kolejność ustala model wbudowany i nic nie jest wysyłane.",
   "That model name could not be kept.":"Tej nazwy modelu nie udało się zachować.",
   "That key could not be kept.":"Tego klucza nie udało się zachować.",
   "The setting could not be saved just now.":"Tego ustawienia nie udało się teraz zapisać.",
-  "No key is kept for this address, so nothing was sent.":"Dla tego adresu nie zachowano klucza, więc nic nie zostało wysłane.",
   "The key kept here was given for the previous service or address, so it was forgotten rather than sent to this one. A key for this one goes in the Key field.":"Zachowany klucz podano dla poprzedniej usługi lub adresu, więc został usunięty, zamiast trafić pod nowy. Klucz dla nowego wpisuje się w polu Klucz.", // placeholder: Claudette
   "Could not reach {HOST}.":"Nie udało się połączyć z {HOST}.",
   "{HOST} answered with an error, so the connection is not confirmed.":"{HOST} odpowiedział błędem, więc połączenie nie zostało potwierdzone.",
@@ -1517,13 +1517,17 @@ UI_STRINGS.pl={
   "Everything else on this desk works as before; only signing in waits.":"Wszystko inne na tym stanowisku działa jak dotąd; czeka tylko logowanie.",
   "Everything else on this desk works as before.":"Wszystko inne na tym stanowisku działa jak dotąd.",
   "Etiuda keeps working with the catalog it has.":"Etiuda działa dalej na katalogu, który już ma.",
-  /* placeholders for the copywriter: the desk waits for machine policy to be read (review 09, finding 4) */
-  "Etiuda is waiting for the organisation's settings.":"Etiuda czeka na ustawienia organizacji.",
-  "It could not read yet what the organisation's IT set for this computer, so signing in waits until it can, and it tries again by itself.":"Nie mogła jeszcze odczytać, co dział IT organizacji ustawił dla tego komputera, więc logowanie czeka, aż to się uda, a Etiuda sama próbuje ponownie.",
-  "Not sent: Etiuda could not read yet what the organisation's IT set for this computer.":"Nie wysłano: Etiuda nie mogła jeszcze odczytać, co dział IT organizacji ustawił dla tego komputera.",
-  "Etiuda could not read yet what the organisation's IT set for this computer, so invitations wait until it can, and it tries again by itself.":"Etiuda nie mogła jeszcze odczytać, co dział IT organizacji ustawił dla tego komputera, więc zaproszenia czekają, aż to się uda, a Etiuda sama próbuje ponownie.",
-  /* placeholder for the copywriter: machine policy names another lead (review 09, finding 2) */
-  "The organisation's IT names another lead for this computer, so nothing this team's lead signs is used here.":"Dział IT organizacji wskazał dla tego komputera innego lidera, więc nic, co podpisuje lider tego zespołu, nie jest tu używane.",
+  /* The desk waits for machine policy to be read, or machine policy names another lead (the copywriter, B6). */
+  "Waiting for the organisation's settings":"Oczekiwanie na ustawienia organizacji",
+  "Etiuda could not yet read what the organisation's IT set for this computer, so signing in waits. It tries again by itself, every few seconds at first and then once a minute, and everything already on this computer works as before.":"Etiuda nie mogła jeszcze odczytać tego, co dział IT organizacji ustawił dla tego komputera, więc logowanie czeka. Sama ponawia próbę, najpierw co kilka sekund, potem raz na minutę, a wszystko, co już jest na tym komputerze, działa jak dotąd.",
+  "Not sent: Etiuda could not yet read what the organisation's IT set for this computer.":"Nie wysłano: Etiuda nie mogła jeszcze odczytać tego, co dział IT organizacji ustawił dla tego komputera.",
+  "This invitation waits until Etiuda can read what the organisation's IT set for this computer. Nothing is lost: it can be used again then.":"To zaproszenie czeka, aż Etiuda odczyta, co dział IT organizacji ustawił dla tego komputera. Nic nie ginie: można go wtedy użyć ponownie.",
+  "The organisation's IT names another lead for this computer, so nothing this team's lead signs is used here. To ask about it: {CONTACT}.":"Dział IT organizacji wskazał dla tego komputera innego lidera, więc nic, co podpisuje lider tego zespołu, nie jest tu używane. W tej sprawie: {CONTACT}.",
+  "The organisation's IT names another lead for this computer, so nothing this team's lead signs is used here. The organisation's IT department can say which team this computer belongs to.":"Dział IT organizacji wskazał dla tego komputera innego lidera, więc nic, co podpisuje lider tego zespołu, nie jest tu używane. Dział IT organizacji może wyjaśnić, do którego zespołu należy ten komputer.",
+  /* Another account refused on a managed computer (the copywriter, B1). */
+  "This computer stays with the account it has.":"Ten komputer zostaje przy koncie, które już ma.",
+  "Your organisation manages the accounts on this computer, so another account cannot sign in here; nothing changed. To ask about it: {CONTACT}.":"Organizacja zarządza kontami na tym komputerze, więc nie można się tu zalogować innym kontem; nic się nie zmieniło. W tej sprawie: {CONTACT}.",
+  "Your organisation manages the accounts on this computer, so another account cannot sign in here; nothing changed. The organisation's IT department decides which account is used here.":"Organizacja zarządza kontami na tym komputerze, więc nie można się tu zalogować innym kontem; nic się nie zmieniło. O tym, jakie konto jest tu używane, decyduje dział IT organizacji.",
   "Managed by your organisation.":"Zarządzane przez organizację.",
   "No sign-in is offered on this computer just now; the organisation's IT department decides it.":"Na tym komputerze nie jest teraz dostępne logowanie; decyduje o tym dział IT organizacji.",
   "No sign-in is offered on this computer just now. To ask about it: {CONTACT}.":"Na tym komputerze nie jest teraz dostępne logowanie. W tej sprawie: {CONTACT}.",

@@ -534,8 +534,7 @@ function joinInviteParts(){
       :joinWhy==="unreadable"?t("The team file in this folder could not be read, so this desk did not join and nothing was written. Let the team's lead know, so they can check the folder.")
       :joinWhy==="check"?t("This code does not match this invitation. Ask the lead again before joining.")
       :joinWhy==="policy"?t("The organisation's IT sets this desk's team, so invitations are turned off.")
-      /* placeholder: the copywriter */
-      :joinWhy==="waiting"?t("Etiuda could not read yet what the organisation's IT set for this computer, so invitations wait until it can, and it tries again by itself.")
+      :joinWhy==="waiting"?t("This invitation waits until Etiuda can read what the organisation's IT set for this computer. Nothing is lost: it can be used again then.")
       :t("This invitation cannot be read, so nothing was changed."),
     body:"", acts:[["back",t("Cancel")]]};
   return null;

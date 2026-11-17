@@ -28,7 +28,7 @@ const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const SIGNIN = fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8");
 const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const CHECKS = 35, PLANTS = 49;
+const CHECKS = 37, PLANTS = 54;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -429,10 +429,10 @@ CASES.heldTo = async (s, set, pg) => {
    organisation's settings, in their own words (the copywriter's placeholders), offer no provider, Buy or code, and never say the
    computer is managed; English and Polish. With no policy and nothing offered there is no door, as before. */
 const WAIT_ON = { on: true, shared: false, personal: false, provider: "", tenant: false, closed: true, contact: "", waiting: true };
-const WAIT_WORDS = { en: ["Etiuda is waiting for the organisation's settings.",
-  "It could not read yet what the organisation's IT set for this computer, so signing in waits until it can, and it tries again by itself."],
-  pl: ["Etiuda czeka na ustawienia organizacji.",
-  "Nie mogła jeszcze odczytać, co dział IT organizacji ustawił dla tego komputera, więc logowanie czeka, aż to się uda, a Etiuda sama próbuje ponownie."] };
+const WAIT_WORDS = { en: ["Waiting for the organisation's settings",
+  "Etiuda could not yet read what the organisation's IT set for this computer, so signing in waits. It tries again by itself, every few seconds at first and then once a minute, and everything already on this computer works as before."],
+  pl: ["Oczekiwanie na ustawienia organizacji",
+  "Etiuda nie mogła jeszcze odczytać tego, co dział IT organizacji ustawił dla tego komputera, więc logowanie czeka. Sama ponawia próbę, najpierw co kilka sekund, potem raz na minutę, a wszystko, co już jest na tym komputerze, działa jak dotąd."] };
 CASES.waiting = async (s, set, pg) => {
   for (const lang of ["en", "pl"]) {
     const W = WAIT_WORDS[lang], d = await drawn({ offered: [], managed: WAIT_ON }, lang, set, pg), all = words(d.acct + d.door);
@@ -531,6 +531,79 @@ CASES.managedClosedAccount = async (s, set, pg) => {
   const u = await drawn({ offered: [] }, "en", set, pg);
   return u.acct.indexOf("sgn-top") < 0 && u.acct.indexOf("data-signin-managed") < 0;
 };
+/* mm-p15 (section B1): signin-other uses the copywriter's heading and line (with or without SupportContact), English and Polish,
+   both in signinSay and when signed in with said: "signin-other", contact escaped as text. */
+CASES.signinOtherWords = async (s, set, pg) => {
+  const c = "Service desk <4400>", vBase = Object.assign({}, PROFILES.signed, { said: "signin-other" });
+  const want = {
+    en: { h: "This computer stays with the account it has.",
+      withC: "Your organisation manages the accounts on this computer, so another account cannot sign in here; nothing changed. To ask about it: Service desk <4400>.",
+      noC: "Your organisation manages the accounts on this computer, so another account cannot sign in here; nothing changed. The organisation's IT department decides which account is used here." },
+    pl: { h: "Ten komputer zostaje przy koncie, które już ma.",
+      withC: "Organizacja zarządza kontami na tym komputerze, więc nie można się tu zalogować innym kontem; nic się nie zmieniło. W tej sprawie: Service desk <4400>.",
+      noC: "Organizacja zarządza kontami na tym komputerze, więc nie można się tu zalogować innym kontem; nic się nie zmieniło. O tym, jakie konto jest tu używane, decyduje dział IT organizacji." },
+  };
+  for (const lang of ["en", "pl"]) {
+    const a = await drawn(withM(vBase, Object.assign({}, M_ON, { contact: c })), lang, set, pg);
+    const b = await drawn(withM(vBase, M_ON), lang, set, pg);
+    if (words(a.door).indexOf(want[lang].h) < 0 || words(a.door).indexOf(want[lang].withC) < 0 || a.door.indexOf("<4400>") >= 0) return false;
+    if (words(b.door).indexOf(want[lang].h) < 0 || words(b.door).indexOf(want[lang].noC) < 0) return false;
+    if (words(a.acct).indexOf(want[lang].h) < 0 || words(a.acct).indexOf(want[lang].withC) < 0) return false;
+  }
+  return true;
+};
+/* mm-p16 (section B6 rows 2..4 and key note): joinWhy "waiting", orgTestLine "waiting", teamRowHtml otherLead (with and without
+   SupportContact), English and Polish, and no placeholder mark on the connection test's "key" sentence. */
+CASES.managedFloorWords = async (s, set, pg, opts) => {
+  const Sset = set || SET, langMod = await import(MOD("ui-lang.js")), tjMod = await import(MOD("team-join.js")), hooksMod = await import(MOD("hooks.js"));
+  const tjText = (opts && opts.teamJoin) || fs.readFileSync(path.join(ROOT, "src", "modules", "team-join.js"), "utf8");
+  const stText = (opts && opts.settings) || SETTINGS;
+  const sliceFn = (text, start) => { const a = text.indexOf("\n" + start); return a < 0 ? "" : text.slice(a + 1, text.indexOf("\n}", a) + 2); };
+  const testLineFn = new Function("t", "uiLang", sliceFn(stText, "function orgTestLine(") + "\nreturn orgTestLine;")(langMod.t, langMod.uiLang);
+  const joinLine = (why, lang) => {
+    const a = tjText.indexOf("joinWhy===\"waiting\"");
+    if (a < 0) return "";
+    const m = /joinWhy==="waiting"\?t\(([^)]+)\)/.exec(tjText.slice(a, a + 220));
+    if (!m) return "";
+    storage.lsSet("eUiLang", lang);
+    try { return langMod.t(JSON.parse(m[1])); } finally { storage.lsSet("eUiLang", "en"); }
+  };
+  const B6 = {
+    en: { join: "This invitation waits until Etiuda can read what the organisation's IT set for this computer. Nothing is lost: it can be used again then.",
+      test: "Not sent: Etiuda could not yet read what the organisation's IT set for this computer.",
+      otherC: "The organisation's IT names another lead for this computer, so nothing this team's lead signs is used here. To ask about it: Service desk <4400>.",
+      otherN: "The organisation's IT names another lead for this computer, so nothing this team's lead signs is used here. The organisation's IT department can say which team this computer belongs to." },
+    pl: { join: "To zaproszenie czeka, aż Etiuda odczyta, co dział IT organizacji ustawił dla tego komputera. Nic nie ginie: można go wtedy użyć ponownie.",
+      test: "Nie wysłano: Etiuda nie mogła jeszcze odczytać tego, co dział IT organizacji ustawił dla tego komputera.",
+      otherC: "Dział IT organizacji wskazał dla tego komputera innego lidera, więc nic, co podpisuje lider tego zespołu, nie jest tu używane. W tej sprawie: Service desk <4400>.",
+      otherN: "Dział IT organizacji wskazał dla tego komputera innego lidera, więc nic, co podpisuje lider tego zespołu, nie jest tu używane. Dział IT organizacji może wyjaśnić, do którego zespołu należy ten komputer." },
+  };
+  for (const lang of ["en", "pl"]) {
+    if (joinLine("waiting", lang) !== B6[lang].join) return false;
+    storage.lsSet("eUiLang", lang);
+    let tl = "", rowC = "", rowN = "";
+    try {
+      tl = testLineFn({ ok: false, why: "waiting" });
+      const drawTeams = contact => {
+        let sendJoin = null;
+        const wasRender = hooksMod.hooks.render;
+        hooksMod.hooks.render = () => {};
+        hostOn(withM(PROFILES.signed, Object.assign({}, M_ON, { contact })), {
+          teamJoin: () => Promise.resolve(null),
+          onTeamJoin: fn => { sendJoin = fn; },
+        });
+        tjMod.wireTeamJoin();
+        sendJoin({ leads: [{ team: "t1", lead: "Alice", print: "0123456789abcdef", otherLead: true }] });
+        try { return Sset.settingsPageHtml("teams", ""); } finally { sendJoin({ leads: [] }); hooksMod.hooks.render = wasRender; hostOff(); }
+      };
+      rowC = drawTeams("Service desk <4400>"); rowN = drawTeams("");
+    } finally { storage.lsSet("eUiLang", "en"); }
+    if (tl !== B6[lang].test) return false;
+    if (words(rowC).indexOf(B6[lang].otherC) < 0 || rowC.indexOf("<4400>") >= 0) return false;
+    if (words(rowN).indexOf(B6[lang].otherN) < 0) return false;
+  }
+  return !/No key is kept for this address, so nothing was sent\."\)\s*\/\/\s*placeholder/.test(stText);
+};
 
 /* ---- the run ---------------------------------------------------------------------------------------------------------- */
 let S = null;
@@ -569,6 +642,8 @@ const LIST = [
   ["mm-p12", "seatRemovedContact", "finding 8: seat-removed uses SupportContact when set, English and Polish, as text; keeps IT words otherwise"],
   ["mm-p13", "unmanagedContact", "finding 8: unmanaged signin-notassigned and signin-notallowed use SupportContact when set, English and Polish"],
   ["mm-p14", "managedClosedAccount", "finding 8: under Managed with no sign-in offered, Account says it is managed and why, with SupportContact when set"],
+  ["mm-p15", "signinOtherWords", "section B1: signin-other uses the copywriter's heading and line (with or without SupportContact), English and Polish"],
+  ["mm-p16", "managedFloorWords", "section B6 rows 2..4: join waiting, connection test waiting, and otherLead with/without SupportContact, English and Polish, and key placeholder mark removed"],
 ];
 const run = async (name, s, set, pg) => { try { return !!(await CASES[name](s, set, pg)); } catch (e) { return false; } };
 for (const [id, name, what] of LIST) check(!!S && await run(name, S), id + " " + what);
@@ -626,7 +701,7 @@ if (!PLANTS_OFF && S) {
   await plantShell("mmp42", ["  if (m && m.waiting === true) return !!st.held; /* plant:kept-waits */", "  /* plant:kept-waits */"], "waits");
   await plantShell("mmp20", ["return !!was && !signinSame(was, String(sub)); /* plant:other-same */", "return !signinSame(was, String(sub));"], "keeps");
   plantText("mmp21", ["  if (signinAccountKept(s)) return signinView(); /* plant:out-managed */", ""], wiringHolds);
-  await plantPage("mmp22", ["  const rows=[name], buy=buyOffered() && !v.busy && !signinManaged(v) /* plant:buy-page-managed */", "  const rows=[name], buy=buyOffered() && !v.busy"], "m1", "settings");
+  await plantPage("mmp22", ["  const rows=[name], buy=!stranded && buyOffered() && !v.busy && !signinManaged(v) /* plant:buy-page-managed */", "  const rows=[name], buy=!stranded && buyOffered() && !v.busy"], "m1", "settings");
   await plantPage("mmp23", ["    rows.push(row(\"checked\",\"clock\",", "    if(!signinManaged(v)) rows.push(row(\"checked\",\"clock\","], "m2", "settings");
   await plantPage("mmp24", ["function signinCapHolds(v){ return !(v && v.managed && (v.managed.on || v.managed.provider || !v.managed.personal)); } /* plant:cap-holds */",
     "function signinCapHolds(v){ return true; }"], "m3", "signin");
@@ -650,8 +725,8 @@ if (!PLANTS_OFF && S) {
     "  const line=m.tenant ? t(\"{PROVIDER} · work accounts of the organisation\") : true ? t(\"{PROVIDER} · work accounts\")"], "heldTo", "settings");
   await plantPage("mmp30", ["    case \"signin-notassigned\":\n", ""], "unmanagedRefused", "signin");
   await plantPage("mmp34", ["function signinWaiting(v){ return !!(v && v.managed && v.managed.waiting); } /* plant:waiting-page */", "function signinWaiting(v){ return false; }"], "waiting", "signin");
-  await plantPage("mmp35", ["function signinShown(v){ return !!(v && (v.offered.length || v.signedIn || signinWaiting(v))); } /* plant:shown-waiting */",
-    "function signinShown(v){ return !!(v && (v.offered.length || v.signedIn)); }"], "waiting", "signin");
+  await plantPage("mmp35", ["function signinShown(v){ return !!(v && (v.offered.length || v.signedIn || signinWaiting(v) || signinStranded(v))); } /* plant:shown-waiting */",
+    "function signinShown(v){ return !!(v && (v.offered.length || v.signedIn || signinStranded(v))); }"], "waiting", "signin");
   await plantPage("mmp36", ["  if(signinWaiting(v)) return {moment:\"policy-waiting\", say:signinWaitingWords()}; /* plant:door-waiting */", ""], "waiting", "signin");
   await plantPage("mmp37", ["  if(signinWaiting(v)){ const s=signinWaitingWords(); return '<div class=\"sgn-top col\"><p class=\"sgn-say\" data-signin-waiting><b>'+esc(s[0])+'</b><span>'+esc(s[1])+'</span></p></div>'; } /* plant:card-waiting */", ""], "waiting", "settings");
   {
@@ -675,6 +750,22 @@ if (!PLANTS_OFF && S) {
     "  if(signinShown(v)) groups.push({rows:[], after:accountCardHtml(v)});"], "managedClosedAccount", "settings");
   await plantPage("mmp49", ["  const closed=!v.signedIn && !v.offered.length; /* plant:managed-closed-line */",
     "  const closed=false;"], "managedClosedAccount", "settings");
+  await plantPage("mmp50", ["  if(v.said===\"signin-other\") return {kind:\"pressed\", say:signinSay(\"signin-other\", v), acts:[{act:\"choose\", label:t(\"Try again\"), solid:true}]}; /* plant:told-other */",
+    ""], "signinOtherWords", "signin");
+  await plantPage("mmp51", ["    case \"signin-other\": /* plant:signin-other-words */\n      { const c=v && v.managed ? v.managed.contact : \"\";",
+    "    case \"signin-other\":\n      { const c=\"\";"], "signinOtherWords", "signin");
+  await plantPage("mmp52", ["function signinWaitingWords(){ /* plant:waiting-words */",
+    "function signinWaitingWords(){ return [\"Waiting\", \"Wait\"]; }\nfunction signinWaitingWordsUnused(){"], "waiting", "signin");
+  {
+    const tj = fs.readFileSync(path.join(ROOT, "src", "modules", "team-join.js"), "utf8");
+    const swap = [":joinWhy===\"waiting\"?t(\"This invitation waits until Etiuda can read what the organisation's IT set for this computer. Nothing is lost: it can be used again then.\")",
+      ":joinWhy===\"waiting\"?t(\"Waiting\")"];
+    let red = false;
+    try { red = tj.split(swap[0]).length === 2 && !(await CASES.managedFloorWords(S, undefined, undefined, { teamJoin: tj.replace(swap[0], swap[1]) })); } catch { red = false; }
+    check(red, "mmp53 plant joinWhy waiting words dropped turns managedFloorWords red");
+  }
+  await plantPage("mmp54", ["    l.otherLead?teamOtherLeadNote() /* plant:other-lead-words */",
+    "    l.otherLead?\"other\""], "managedFloorWords", "settings");
 }
 
 const done = asserted === EXPECTED;

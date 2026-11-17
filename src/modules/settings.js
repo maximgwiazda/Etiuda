@@ -184,10 +184,15 @@ function teamHeadNote(h){
    sealed keys and bars the team once its Undo has lapsed. The head, where the shell has one, is a note under the
    name: the newest edition, when it was published, how old the news is, and how many of the team's other catalogs
    have an edition newer than this desk has loaded. It never disables a control. A listed catalog with no edition yet says that this desk waits for the lead's first edition. */
+function teamOtherLeadNote(){
+  const v=signinNow(), c=v && v.managed ? v.managed.contact : "";
+  return c ? t("The organisation's IT names another lead for this computer, so nothing this team's lead signs is used here. To ask about it: {CONTACT}.").split("{CONTACT}").join(c)
+    : t("The organisation's IT names another lead for this computer, so nothing this team's lead signs is used here. The organisation's IT department can say which team this computer belongs to.");
+}
 function teamRowHtml(l,status,bar){
   const notes=[l.relay?t("Relay: {HOST}").split("{HOST}").join(l.relay):l.folder?t("Folder: {FOLDER}").split("{FOLDER}").join(l.folder):"",
     l.removed?t("This team no longer includes this desk."):status,
-    l.otherLead?t("The organisation's IT names another lead for this computer, so nothing this team's lead signs is used here.") /* placeholder: the copywriter */
+    l.otherLead?teamOtherLeadNote() /* plant:other-lead-words */
     :l.policy?t("The organisation's IT sets this desk's team."):bar?t("After leaving a team, this desk can join it again with a new invitation from its lead."):""];
   if(l.head) notes.push(teamHeadNote(l.head)); /* plant:head-show */
   if(l.awaitsEdition) notes.push(t("This desk waits for the team's lead to publish a first edition."));
@@ -677,9 +682,9 @@ function orgTestLine(r){
   return why==="provider" ? t("No AI service is set up yet. One is chosen from the Menu, under Settings, then Data and defaults.")
     : why==="endpoint" ? t("Needed for this service: the full https address the organisation gives for it.")
     : why==="model" ? t("No model is named for the AI service, so nothing was sent. The model is named from the Menu, under Settings, then Data and defaults.")
-    : why==="key" ? t("No key is kept for this address, so nothing was sent.") // placeholder: Claudette
+    : why==="key" ? t("No key is kept for this address, so nothing was sent.")
     : why==="keyNoService" ? t("Not sent: the organisation set a key without naming its service.")
-    : why==="waiting" ? t("Not sent: Etiuda could not read yet what the organisation's IT set for this computer.") // placeholder: the copywriter
+    : why==="waiting" ? t("Not sent: Etiuda could not yet read what the organisation's IT set for this computer.")
     : why==="keyAway" ? t("The organisation's Group Policy sets the AI service's key, and that key goes only to the address the policy sets or to the service's own, never to an address typed here, so nothing was sent.")
     : why==="late" ? t("The AI service did not answer in time, so the request was given up.")
     : why==="busy" ? t("The AI service is busy and asked Etiuda to wait; a later try may go through.")
