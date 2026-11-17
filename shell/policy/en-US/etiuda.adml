@@ -137,9 +137,9 @@ If you disable or do not configure this policy setting, such a desk is kept, Eti
 If you enable this policy setting, its value decides, and the person cannot change it: "off" turns sync off; "on" turns it on, in the person's own account, and the copy stays theirs whatever happens to the licence; "company" turns it on in the same folder, but ties the copy to the organisation's licence, so when the person is removed from the licence, sync ends at once and nothing on the computer is lost.
 
 If you disable or do not configure this policy setting, sync is on from sign-in and the person can turn it off, except where "Manage the accounts on this computer for the organisation" is enabled: there sync is off.</string>
-      <string id="PersonalStore_off">PLACEHOLDER FOR THE COPYWRITER: option label for PersonalStore value off</string>
-      <string id="PersonalStore_on">PLACEHOLDER FOR THE COPYWRITER: option label for PersonalStore value on</string>
-      <string id="PersonalStore_company">PLACEHOLDER FOR THE COPYWRITER: option label for PersonalStore value company</string>
+      <string id="PersonalStore_off">Off (off)</string>
+      <string id="PersonalStore_on">On, the person's own (on)</string>
+      <string id="PersonalStore_company">On, tied to the organisation's licence (company)</string>
     </stringTable>
     <presentationTable>
       <presentation id="TeamFolder">
@@ -184,7 +184,7 @@ If you disable or do not configure this policy setting, sync is on from sign-in 
         </textBox>
       </presentation>
       <presentation id="PersonalStore">
-        <dropdownList refId="PersonalStoreList" noSort="true">PLACEHOLDER FOR THE COPYWRITER: dropdown label for PersonalStore</dropdownList>
+        <dropdownList refId="PersonalStoreList" noSort="true">Sync:</dropdownList>
       </presentation>
     </presentationTable>
   </resources>

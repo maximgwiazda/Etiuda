@@ -307,7 +307,7 @@ function signinSay(reason, v, p){
         : [t("No seat is free on the organisation's licence just now."), t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and the team's lead sees this account's sign-in code among those who have signed in.")];
     case "asklead":
       return [t("The organisation's Etiuda licence seats the people its leads add."),
-        signinManaged(v) ? t("PLACEHOLDER FOR THE COPYWRITER: asklead line on a managed computer without a sign-in code")
+        signinManaged(v) ? t("This account is signed in, and no team has admitted it yet. Once a lead admits it, the catalog arrives by itself.") /* plant:asklead-line-managed */
           : t("Give the team's lead this code. Once added, this desk takes its seat by itself; nothing more is needed here.")];
     case "nolicence":
       return [t("No Etiuda licence has a seat for this account."), t("The sign-in worked. A seat comes from a trial, a purchase, or a team's lead admitting the account; another account can be used meanwhile.")];

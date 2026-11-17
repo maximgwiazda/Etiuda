@@ -783,6 +783,25 @@ let templateDocs = null;
     const mg = text("Managed_Explain");
     if (!mg.includes(B2.managedB)) problems.push(lang + " Managed_Explain missing B2(b)");
     if (!mg.includes(B2.managedC)) problems.push(lang + " Managed_Explain missing B2(c)");
+    const pres = id => { const p = shows.find(x => x.attrs.id === id); return p && p.kids.length === 1 ? p.kids[0].text.replace(/\r\n/g, "\n") : ""; };
+    const B8 = {
+      en: {
+        label: "Sync:",
+        off: "Off (off)",
+        on: "On, the person's own (on)",
+        company: "On, tied to the organisation's licence (company)",
+      },
+      pl: {
+        label: "Synchronizacja:",
+        off: "Wyłączona (off)",
+        on: "Włączona, należy do osoby (on)",
+        company: "Włączona, powiązana z licencją organizacji (company)",
+      },
+    }[lang];
+    if (pres("PersonalStore") !== B8.label) problems.push(lang + " PersonalStore dropdown label");
+    if (text("PersonalStore_off") !== B8.off) problems.push(lang + " PersonalStore_off");
+    if (text("PersonalStore_on") !== B8.on) problems.push(lang + " PersonalStore_on");
+    if (text("PersonalStore_company") !== B8.company) problems.push(lang + " PersonalStore_company");
   }
   templateDocs = doc;
   if (order.en && order.pl && order.en.join() !== order.pl.join()) problems.push("en and pl ids in another order");

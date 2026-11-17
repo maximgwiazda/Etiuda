@@ -137,9 +137,9 @@ Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane,
 Jeśli to ustawienie zasad zostanie włączone, decyduje jego wartość, a osoba korzystająca z Etiudy nie może jej zmienić: „off” wyłącza synchronizację; „on” ją włącza, na własnym koncie tej osoby, a kopia pozostaje jej niezależnie od losów licencji; „company” włącza ją w tym samym folderze, ale wiąże kopię z licencją organizacji, więc gdy osoba zostanie usunięta z licencji, synchronizacja od razu się kończy, a na komputerze nic nie ginie.
 
 Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane, synchronizacja jest włączona od zalogowania i osoba może ją wyłączyć, z wyjątkiem komputerów, na których włączone jest „Zarządzaj kontami na tym komputerze w imieniu organizacji”: tam synchronizacja jest wyłączona.</string>
-      <string id="PersonalStore_off">PLACEHOLDER FOR THE COPYWRITER: option label for PersonalStore value off</string>
-      <string id="PersonalStore_on">PLACEHOLDER FOR THE COPYWRITER: option label for PersonalStore value on</string>
-      <string id="PersonalStore_company">PLACEHOLDER FOR THE COPYWRITER: option label for PersonalStore value company</string>
+      <string id="PersonalStore_off">Wyłączona (off)</string>
+      <string id="PersonalStore_on">Włączona, należy do osoby (on)</string>
+      <string id="PersonalStore_company">Włączona, powiązana z licencją organizacji (company)</string>
     </stringTable>
     <presentationTable>
       <presentation id="TeamFolder">
@@ -184,7 +184,7 @@ Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane,
         </textBox>
       </presentation>
       <presentation id="PersonalStore">
-        <dropdownList refId="PersonalStoreList" noSort="true">PLACEHOLDER FOR THE COPYWRITER: dropdown label for PersonalStore</dropdownList>
+        <dropdownList refId="PersonalStoreList" noSort="true">Synchronizacja:</dropdownList>
       </presentation>
     </presentationTable>
   </resources>

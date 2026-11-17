@@ -28,7 +28,7 @@ const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const SIGNIN = fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8");
 const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const CHECKS = 37, PLANTS = 54;
+const CHECKS = 38, PLANTS = 55;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -474,6 +474,21 @@ CASES.askLeadManaged = async (s, set, pg) => {
   const u = await drawn(Object.assign({}, PROFILES.signed, { seat: "held", askLead: true, trialUntil: until }), "en", set, pg);
   return u.moment === "asklead" && u.door.indexOf("sgn-code") >= 0 && u.door.indexOf("sgn-own") >= 0;
 };
+/* mm-p17 (section B8 row 5): on a managed computer, askLead uses the copywriter's line, English and Polish. */
+CASES.askLeadManagedWords = async (s, set, pg) => {
+  const want = {
+    en: "This account is signed in, and no team has admitted it yet. Once a lead admits it, the catalog arrives by itself.",
+    pl: "To konto jest zalogowane, ale żaden zespół jeszcze go nie przyjął. Gdy lider zespołu je przyjmie, katalog przyjdzie sam.",
+  };
+  for (const seat of ["held", "none"]) {
+    const v = Object.assign({}, PROFILES.signed, { seat, askLead: true });
+    for (const lang of ["en", "pl"]) {
+      const m = await drawn(withM(v, M_ON), lang, set, pg), w = words(m.door);
+      if (m.moment !== "asklead" || w.indexOf(want[lang]) < 0) return false;
+    }
+  }
+  return true;
+};
 /* mm-p12 (finding 8, case A): seat-removed uses SupportContact as text when set, English and Polish; keeps IT words otherwise. */
 CASES.seatRemovedContact = async (s, set, pg) => {
   const c = "Service desk <4400>", v = Object.assign({}, PROFILES.signed, { relaySeat: "removed" });
@@ -644,6 +659,7 @@ const LIST = [
   ["mm-p14", "managedClosedAccount", "finding 8: under Managed with no sign-in offered, Account says it is managed and why, with SupportContact when set"],
   ["mm-p15", "signinOtherWords", "section B1: signin-other uses the copywriter's heading and line (with or without SupportContact), English and Polish"],
   ["mm-p16", "managedFloorWords", "section B6 rows 2..4: join waiting, connection test waiting, and otherLead with/without SupportContact, English and Polish, and key placeholder mark removed"],
+  ["mm-p17", "askLeadManagedWords", "section B8 row 5: managed askLead uses the copywriter's line, English and Polish"],
 ];
 const run = async (name, s, set, pg) => { try { return !!(await CASES[name](s, set, pg)); } catch (e) { return false; } };
 for (const [id, name, what] of LIST) check(!!S && await run(name, S), id + " " + what);
@@ -766,6 +782,8 @@ if (!PLANTS_OFF && S) {
   }
   await plantPage("mmp54", ["    l.otherLead?teamOtherLeadNote() /* plant:other-lead-words */",
     "    l.otherLead?\"other\""], "managedFloorWords", "settings");
+  await plantPage("mmp55", ["        signinManaged(v) ? t(\"This account is signed in, and no team has admitted it yet. Once a lead admits it, the catalog arrives by itself.\") /* plant:asklead-line-managed */",
+    "        false ? \"\""], "askLeadManagedWords", "signin");
 }
 
 const done = asserted === EXPECTED;
