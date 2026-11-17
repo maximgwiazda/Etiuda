@@ -910,12 +910,10 @@ function createCore(deps) {
     const paidApart = kept.paidUntil !== undefined ? { paidUntil: kept.paidUntil } : {};
     /* `made` stamps this copy of the team: kept by a repeat create, new once a sweep has emptied the store, and told at each session. */
     const made = team && typeof team.made === "string" ? team.made : random(8);
-    /* A repeat create keeps the team's state: its row (the handover's time among it), its team file and its one move. Its grant
-       is taken by renew's rule, and one not taken leaves the grant in force as it was. */
+    /* A repeat create keeps the team's state: its row, the handover's time among it. Its grant is taken by renew's rule, and one not
+       taken leaves the grant in force as it was. */
     let held = {};
     held = team || {}; /* plant:create-row */
-    let made1st = true;
-    made1st = !team; /* plant:create-keeps */
     let takes = true;
     takes = !team || advances(team, kept) || grantRefused() !== null || signerOf(b.grant) === heldSigner(); /* plant:create-older */
     store.atomic(() => {
@@ -929,7 +927,6 @@ function createCore(deps) {
       if (team) resumeHeld(team, clock());
       store.del("swept");
       store.del("sweptAt");
-      if (made1st) { store.del("moved"); store.del("teamFile"); }
       if (takes) remember(b.grant);
       if (takes) takeSeats(b.grant); /* plant:seats-create */
     });
@@ -967,8 +964,6 @@ function createCore(deps) {
     if (!moves && grantRefused() === null && signerOf(b.grant) !== heldSigner()) return no("bad-grant"); /* plant:renew-older */
     const needsMade = typeof team.made !== "string" || !team.made;
     const made = needsMade ? random(8) : team.made; /* plant:renew-made */
-    let clears = true;
-    clears = moves; /* plant:renew-moved */
     /* A store grant issued later than the one kept is taken for its issue even where it moves nothing else (storeLapseOf). */
     let issue = {};
     issue = team.store ? storeIssue(team, b.grant) : {}; /* plant:store-issue-renew */
@@ -980,7 +975,6 @@ function createCore(deps) {
         store.put("team", row);
         resumeHeld(team, clock());
       }
-      if (clears) store.del("moved");
       remember(b.grant);
       takeSeats(b.grant); /* plant:seats-renew */
     });
@@ -1024,7 +1018,6 @@ function createCore(deps) {
       store.put("team", row);
       resumeHeld(team, clock());
       for (const [k, s] of store.list("ses:")) if (s && s.key === oldLead.keyId) store.del(k); /* plant:lead-sessions-drop */
-      store.del("moved");
       /* The old key named the door's licences; the new lead names them anew. */
       store.del("door"); /* plant:door-handover */
       remember(b.grant);
@@ -1054,13 +1047,12 @@ function createCore(deps) {
 
   /* null where the team may do this now, or the refusal. A read is answered while working and read-only, a write while working.
      Each route asks after its caller has shown who it is, so the lapse is told to no one who holds only the team's id. */
-  function lapseGate(write, channel) {
+  function lapseGate(write) {
     const team = store.get("team");
     if (!team) return null;
     const state = lapseOf(team, clock()).state;
     if (state === "working") return null; /* plant:lapse-working */
     if (state === "read-only" && !write) return null; /* plant:lapse-read */
-    if (state === "read-only" && channel && channel.kind === "folder") return null; /* plant:lapse-folder */
     return no("team-lapsed");
   }
 
@@ -1925,20 +1917,11 @@ function createCore(deps) {
     if (!team) return no("not-enrolled");
     const s = sessionOf(token);
     if (!s.ok) return s; /* plant:put-session */
-    const folderMove = !s.inv && m && m.writer === team.lead.keyId && m.place === "root" && !!(m.channel && m.channel.kind === "folder");
     /* A desk taking its request back is let go whatever the lapse; admitWithdraw judges it as at any other time. */
     let goes = false;
     goes = !!s.inv && !!m && m.del === true && (store.get("inv:" + s.inv) || {}).uploaded === true; /* plant:let-go-withdraw */
-    const lapsedPut = goes ? null : lapseGate(true, folderMove ? m.channel : null);
+    const lapsedPut = goes ? null : lapseGate(true);
     if (lapsedPut) return lapsedPut; /* plant:lapse-upload */
-    const state = lapseOf(team, clock()).state;
-    /* A read-only team's one move to a folder. Admitting it writes nothing: the commit marks the move made. */
-    const lapseMove = state === "read-only" && folderMove;
-    if (lapseMove) {
-      const moved = store.get("moved");
-      const teamFile = store.get("teamFile") || team.teamFile;
-      if ((moved && moved !== m.id) || (teamFile && m.supersedes !== teamFile)) return no("team-lapsed"); /* plant:lapse-folder-once */
-    }
     if (!m || m.id !== pathId) return no("bad-signature");
     if (s.inv) return admitInvite(team, s, m);
     if (s.key !== m.writer) return no("no-hello"); /* plant:put-writer */
@@ -1951,7 +1934,7 @@ function createCore(deps) {
       return { ok: true, team, s, max: B.BLOB_MAX, pub: team.lead.pub, lead: true, invite: null };
     }
     if (m.place !== (lead ? "root" : "desk:" + dev.desk) && !(lead && INVITE_PLACE.test(m.place))) return no("outside-place"); /* plant:put-place */
-    return { ok: true, team, s, max: B.BLOB_MAX, pub: lead ? team.lead.pub : dev.pub, lead, invite: null, lapseMove };
+    return { ok: true, team, s, max: B.BLOB_MAX, pub: lead ? team.lead.pub : dev.pub, lead, invite: null };
   }
 
   /* An invitation's one upload: a writer on no list, at a desk place nobody holds, small, signed by the key its id names,
@@ -2138,8 +2121,6 @@ function createCore(deps) {
       if (j.a.door && is(HEX64, j.a.inv.box)) rec.box = j.a.inv.box;
       if (INVITE_PLACE.test(m.place) || ANSWER_PLACE.test(String(m.place))) rec.place = m.place;
       store.put("blob:" + m.id, rec);
-      if (j.a.lead && m.place === "root" && m.channel) store.put("teamFile", m.id);
-      if (j.a.lapseMove) store.put("moved", m.id); /* plant:moved-commit */
       noteBlobs(1);
       store.del("put:" + obj);
       store.put("seq:" + pad(seq), m.id);

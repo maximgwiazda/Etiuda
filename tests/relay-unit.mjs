@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 637;
+const EXPECTED = 633;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -6386,15 +6386,12 @@ async function main() {
           reads: said(reads), a2: said(a2), a3: said(a3), cut }),
       };
     }
-    /* A paid team on a root grant to T0R + 30 d, holding a team file and a move. An older grant under another key, the grant in
-       force again, and a later grant. */
+    /* A paid team on a root grant to T0R + 30 d. An older grant under another key, the grant in force again, and a later grant. */
     async function grantScene() {
       const R = relayEnv();
       R.clock.now = T0R;
       const w = await world({ R });
       const st = stOf(w);
-      st.put("teamFile", hex(16));
-      st.put("moved", hex(16));
       const before = dumpOf(w);
       const older = await call(R, "POST", "/relay/v1/t/" + w.rt + "/grant", { json: { grant: K.delegatedGrantFor(w.lead.pub, T0R, { fields: { until: T0R + 10 * DAY } }) } });
       const afterOlder = dumpOf(w), keyAfterOlder = st.get("grantKey");
@@ -6404,7 +6401,7 @@ async function main() {
       return {
         older: refused(older, "bad-grant") && afterOlder === before && keyAfterOlder === undefined,
         again: again.status === 200 && afterAgain === before,
-        later: later.status === 200 && st.get("team").until === T0R + 40 * DAY && st.get("grantKey") === K.DELEGATE.pub && st.get("moved") === undefined,
+        later: later.status === 200 && st.get("team").until === T0R + 40 * DAY && st.get("grantKey") === K.DELEGATE.pub,
         detail: JSON.stringify({ older: said(older), olderSame: afterOlder === before, grantKey: keyAfterOlder === K.DELEGATE.pub ? "delegate" : "root",
           again: said(again), againSame: afterAgain === before, later: said(later) }),
       };
@@ -6422,8 +6419,8 @@ async function main() {
       return { ok: made.status === 200 && refused(shut, "revoked") && renewed.status === 200 && open.status === 200 && R.stores.get(rt).get("grantKey") === undefined,
         detail: JSON.stringify({ made: said(made), shut: said(shut), renewed: said(renewed), open: said(open) }) };
     }
-    /* A team handed to a new lead, holding the new lead's team file and a move, made again by the new lead: once under the grant
-       in force, once under an older grant of another key. */
+    /* A team handed to a new lead, holding the new lead's team file, made again by the new lead: once under the grant in force, once
+       under an older grant of another key. */
     async function repeatScene() {
       const R = relayEnv();
       R.clock.now = T0R;
@@ -6435,42 +6432,16 @@ async function main() {
       const tf = sealAs(w, next, "etiuda-team.json", 1);
       const up = await put(w, await sessionOf(w, next), tf, { extra: { channel: { kind: "relay" } } });
       const st = stOf(w);
-      st.put("moved", hex(16));
-      const held = () => JSON.stringify([st.get("team").handoverT, st.get("teamFile"), st.get("moved"), st.get("grantKey")]);
+      const held = () => JSON.stringify([st.get("team").handoverT, st.get("grantKey")]);
       const before = held();
       const same = await create(w, next, T0R);
       const afterSame = held();
       const older = await call(R, "POST", "/relay/v1/teams", { json: createBody(w.rt, next, T0R, { grant: K.delegatedGrantFor(next.pub, T0R, { fields: { until: T0R + 10 * DAY } }) }) });
       const afterOlder = held();
       return {
-        ok: moved.status === 200 && up.status === 200 && st.get("teamFile") === tf.id && st.get("team").handoverT === t
+        ok: moved.status === 200 && up.status === 200 && st.get("team").handoverT === t
           && same.status === 200 && afterSame === before && older.status === 200 && afterOlder === before,
         detail: JSON.stringify({ handover: said(moved), teamFile: said(up), same: said(same), older: said(older), before, afterSame, afterOlder }),
-      };
-    }
-    /* A paid team read-only 31 days past its end. A move whose signature does not hold is refused; a move under a new id is then
-       taken; a second move, superseding it, is refused. */
-    async function moveScene() {
-      const R = relayEnv();
-      R.clock.now = T0R;
-      const w = { R, rt: hex(16), lead: keyPair(false), rev: 0 };
-      const made = await call(R, "POST", "/relay/v1/teams", { json: K.createBody(w.rt, w.lead, T0R, bytes => signHex(w.lead, bytes), { grantOpts: { fields: { paid: true, until: T0R + DAY } } }) });
-      R.clock.now = T0R + 32 * DAY;
-      const lead = await sessionOf(w, w.lead);
-      const folder = { channel: { kind: "folder" } };
-      const forged = sealAs(w, w.lead, "etiuda-team.json", 1);
-      const flip = forged.signature.slice(0, -1) + (forged.signature.endsWith("0") ? "1" : "0");
-      const refusedMove = await put(w, lead, forged, { extra: Object.assign({ sig: flip }, folder) });
-      const unset = stOf(w).get("moved") === undefined;
-      const genuine = sealAs(w, w.lead, "etiuda-team.json", 2);
-      const taken = await put(w, lead, genuine, { extra: folder });
-      const second = sealAs(w, w.lead, "etiuda-team.json", 3, { supersedes: genuine.id });
-      const again = await put(w, lead, second, { extra: folder });
-      return {
-        refusedLeaves: made.status === 200 && refused(refusedMove, "bad-signature") && unset,
-        retried: taken.status === 200 && stOf(w).get("moved") === genuine.id,
-        once: refused(again, "team-lapsed"),
-        detail: JSON.stringify({ made: said(made), forged: said(refusedMove), unset, genuine: said(taken), second: said(again) }),
       };
     }
 
@@ -6481,35 +6452,27 @@ async function main() {
       + (behind.detail || behind.failed));
     const grants = await guard(grantScene);
     check(grants.older === true && grants.again === true && grants.later === true, "1101b an older grant under another key is refused bad-grant and changes"
-      + " nothing, its grant key, team file and move among it; the grant in force posted again is answered and changes nothing; a later grant still moves the"
-      + " team on, its key and the move with it: " + (grants.detail || grants.failed));
+      + " nothing, its grant key among it; the grant in force posted again is answered and changes nothing; a later grant still moves the"
+      + " team on, its key with it: " + (grants.detail || grants.failed));
     const rescue = await guard(rescueScene);
     check(rescue.ok === true, "1101c a team whose grant key is revoked takes a root grant that ends sooner, and hello is answered again: " + (rescue.detail || rescue.failed));
     const repeat = await guard(repeatScene);
-    check(repeat.ok === true, "1101d a repeat create by the lead a handover named keeps the handover's time, the team file and the move, under the grant in"
+    check(repeat.ok === true, "1101d a repeat create by the lead a handover named keeps the handover's time under the grant in"
       + " force and under an older grant of another key, which leaves the grant key as it was: " + (repeat.detail || repeat.failed));
-    const move = await guard(moveScene);
-    check(move.refusedLeaves === true && move.retried === true && move.once === true, "1101e a read-only team's move refused at its signature leaves the move"
-      + " open, a move under a new id is then taken and marked, and a second move superseding it is refused team-lapsed: " + (move.detail || move.failed));
 
     const LIFTS = [
-      ["devices-behind", "1101a", "a list read from an older team file is taken", async () => (await guard(behindScene)).behind !== true],
-      ["devices-unversioned", "1101a", "a list naming no team file is taken once one was named", async () => (await guard(behindScene)).bare !== true],
-      ["devices-from-kept", "1101a", "the team file a list was read from is not kept", async () => (await guard(behindScene)).behind !== true],
-      ["renew-older", "1101b", "an older grant under another key is taken", async () => (await guard(grantScene)).older !== true],
-      ["renew-moved", "1101b", "the grant in force posted again clears the move", async () => (await guard(grantScene)).again !== true],
-      ["create-row", "1101d", "a repeat create drops the handover's time", async () => (await guard(repeatScene)).ok !== true],
-      ["create-keeps", "1101d", "a repeat create clears the team file and the move", async () => (await guard(repeatScene)).ok !== true],
-      ["create-older", "1101d", "a repeat create takes an older grant's key", async () => (await guard(repeatScene)).ok !== true],
-      ["moved-commit", "1101e", "a committed move is not marked, so a second is taken", async () => (await guard(moveScene)).once !== true],
+      ["a", "devices-behind", "1101a", "a list read from an older team file is taken", async () => (await guard(behindScene)).behind !== true],
+      ["b", "devices-unversioned", "1101a", "a list naming no team file is taken once one was named", async () => (await guard(behindScene)).bare !== true],
+      ["c", "devices-from-kept", "1101a", "the team file a list was read from is not kept", async () => (await guard(behindScene)).behind !== true],
+      ["d", "renew-older", "1101b", "an older grant under another key is taken", async () => (await guard(grantScene)).older !== true],
+      ["f", "create-row", "1101d", "a repeat create drops the handover's time", async () => (await guard(repeatScene)).ok !== true],
+      ["h", "create-older", "1101d", "a repeat create takes an older grant's key", async () => (await guard(repeatScene)).ok !== true],
     ];
     const base = { "1101a": behind.behind === true && behind.bare === true && behind.current === true,
-      "1101b": grants.older === true && grants.again === true && grants.later === true, "1101d": repeat.ok === true,
-      "1101e": move.refusedLeaves === true && move.retried === true && move.once === true };
-    let n = 0;
-    for (const [tag, leg, say, turns] of LIFTS) {
+      "1101b": grants.older === true && grants.again === true && grants.later === true, "1101d": repeat.ok === true };
+    for (const [letter, tag, leg, say, turns] of LIFTS) {
       const p = await liftCore("plant:" + tag, turns);
-      check(base[leg] && p.turned && p.back, "1102" + String.fromCharCode(97 + n++) + " lifting plant:" + tag + " turns " + leg + " red (" + say
+      check(base[leg] && p.turned && p.back, "1102" + letter + " lifting plant:" + tag + " turns " + leg + " red (" + say
         + "), and the product file is never written: " + how(p));
     }
   }
@@ -6936,6 +6899,9 @@ async function main() {
        named by its branch id, answered as before step for step. */
     const EXEMPT = { "2026-11-01-59713def.json": { at: 3, status: 403, error: "bad-signature", from: 4,
       why: "the raw-key enrol refused at step 3, so no desk is on the team after it; 2026-11-01-59713def-branch.json covers these steps" } };
+    /* AND ONE PINNED STEP: the relay has no folder arm, so a read-only team's lead moving its team file to a folder is refused
+       team-lapsed, as every write there is; the step that recorded the move is answered that refusal, pinned here. */
+    const PINNED = { "2026-11-01-59713def-branch.json": { at: 43, status: 403, error: "team-lapsed" } };
     const fixtures = files.map(f => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8")));
     const freshEnv = () => S.relayEnv({ roots: K.ROOTS });
     const results = [];
@@ -6950,17 +6916,22 @@ async function main() {
     const unasked = table.filter(r => !asked.has(r));
     const steps = results.reduce((n, r) => n + r.steps, 0);
     const pinned = [], exempt = [];
+    const pinnedSteps = [];
     const differ = results.flatMap((r, i) => r.differ.filter(d => {
+      const pin = PINNED[files[i]];
+      if (pin && d.step === pin.at) { pinnedSteps.push(d.got.status === pin.status && !!d.got.json && d.got.json.error === pin.error ? files[i] : files[i] + " answered " + d.got.status); return false; }
       const ex = EXEMPT[files[i]];
       if (ex && d.step === ex.at) { pinned.push(d.got.status === ex.status && !!d.got.json && d.got.json.error === ex.error ? files[i] : files[i] + " answered " + d.got.status); return false; }
       if (ex && d.step >= ex.from) { exempt.push(d.step); return false; }
       return true;
     }).map(d => files[i] + " step " + d.step + " (" + d.what + ")"));
     const pinnedOk = Object.keys(EXEMPT).every(f => files.indexOf(f) < 0 || pinned.indexOf(f) >= 0);
-    check(files.length >= 2 && steps >= 100 && differ.length === 0 && pinnedOk && unasked.length === 0,
+    const folderOk = Object.keys(PINNED).every(f => files.indexOf(f) < 0 || pinnedSteps.indexOf(f) >= 0);
+    check(files.length >= 2 && steps >= 100 && differ.length === 0 && pinnedOk && folderOk && unasked.length === 0,
       "1153a the previous release's requests, " + steps + " steps over " + files.length + " frozen fixture(s) (" + files.join(", ") + "), every route of the table among them,"
-      + " are answered by this relay as they were, but for the one declared exemption: " + (differ.length ? "answered otherwise at " + differ.slice(0, 3).join("; ") : "all as before")
+      + " are answered by this relay as they were, but for the declared exemption and the pinned folder move: " + (differ.length ? "answered otherwise at " + differ.slice(0, 3).join("; ") : "all as before")
       + "; the raw-key enrol answered the refusal: " + (pinnedOk ? "yes" : JSON.stringify(pinned)) + "; exempt after it, covered by the branch-id fixture: " + exempt.length + " step(s)"
+      + "; the folder move refused team-lapsed: " + (folderOk ? "yes" : JSON.stringify(pinnedSteps))
       + (unasked.length ? ", never asked: " + unasked.join(", ") : ""));
     /* The control: the replay sees a change. With plant:session-life lifted from a copy of the core, a session past its thirty
        minutes still reads, and the step that recorded its refusal is answered otherwise; one recorded answer altered in a copy of

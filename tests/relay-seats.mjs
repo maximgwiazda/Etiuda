@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-seats-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 127;
+const EXPECTED = 129;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* ETIUDA_PLANT_ONLY, a comma list of plant tags or planted names: only those plants run, every other is skipped, so one plant is proved
    alone without the whole sweep. */
@@ -1206,6 +1206,23 @@ async function main() {
   await leg("s24f", leadOrdinaryScene, "the lead's key opens with no certificate on an ordinary team, its session keeping no seat, and is refused with none on an Entra team");
   await leg("s24g", inviteStageScene, "the invitation stage on every team: an unseated token hello is refused seat-lapsed, its token unspent, no try counted and its challenge good, which then opens with a current certificate and spends the token; both resumes ask the seat again; on an Entra team another licence's certificate opens it and none is refused");
   await leg("s24h", lapseFirstScene, "lapse first: a lapsed ordinary team's desk is told team-lapsed seated or not, and so is the lead; a read-only team's desk meets the seat, refused with none and open with one");
+  /* No folder arm: a working team's lead writing its team file with a channel keeps no team file or move row, and a
+     read-only team's lead moving it to a folder is refused team-lapsed, as every write there is. */
+  async function folderGoneScene() {
+    const w = await team({}), teamKey = crypto.randomBytes(32);
+    const leadFile = (counter, extra) => B.seal(Object.assign({ relayTeamId: w.rt, epoch: 1, teamKey, writer: { keyId: w.lead.keyId, privateKey: w.lead.privateKey },
+      path: "etiuda-team.json", body: "team " + counter, counter, place: "root", kind: "file" }, extra || {}));
+    const ls = await session(w, w.lead), f1 = leadFile(1);
+    const working = await putBlob(w, ls.json && ls.json.session, f1, { channel: { kind: "relay" } });
+    const rowsAfter = storeOf(w).dump().map(([k]) => k).filter(k => k === "moved" || k === "teamFile");
+    w.R.clock.now = w.firstGrant.until + 31 * DAY;
+    const lro = await session(w, w.lead);
+    const toFolder = await putBlob(w, lro.json && lro.json.session, leadFile(2, { supersedes: f1.id }), { channel: { kind: "folder" } });
+    const plainWrite = await putBlob(w, lro.json && lro.json.session, leadFile(3, { supersedes: f1.id }));
+    const ok = working.status === 200 && rowsAfter.length === 0 && opened(lro) && refused(toFolder, "team-lapsed") && refused(plainWrite, "team-lapsed");
+    return { ok, detail: brief({ working: working.status, keptRows: rowsAfter, readOnlyLead: said(lro), moveToFolder: said(toFolder), plainWrite: said(plainWrite) }) };
+  }
+  await leg("s24j", folderGoneScene, "the folder arm is gone: a working team's lead file naming a channel keeps no team file or move row, and a read-only team's lead moving its team file to a folder is refused team-lapsed, as its plain write is");
   await leg("s24i", storeScene, "a person's store: a session opens on its store certificate alone, a seat certificate or none is refused, and a store session, carrying no seat, still reads twenty minutes on");
 
   /* ---- the plants: each guard lifted in a copy of relay/core.cjs turns its named leg red, and the product file is never written ---- */
@@ -1262,6 +1279,8 @@ async function main() {
   /* The planted faults of the ordinary arm that no plant line lifts. */
   const MARK_LOOP = "for (const m of CERT_MARKS) if (c[m.field] === true) lines.push(m.line);";
   const PLANTED = {
+    folderBack: { name: "the folder arm restored", edits: [["    const lapsedPut = goes ? null : lapseGate(true);",
+      '    const lapsedPut = goes || (lapseState() === "read-only" && !s.inv && !!m && m.writer === team.lead.keyId && m.place === "root" && !!m.channel && m.channel.kind === "folder") ? null : lapseGate(true);']] },
     pooledOutside: { name: "the pooled mark signed as no line", edits: [[MARK_LOOP, MARK_LOOP.replace("=== true)", "=== true && m.field !== \"pooled\")")]] },
     deskOnlyOutside: { name: "the desk-only mark signed as no line", edits: [[MARK_LOOP, MARK_LOOP.replace("=== true)", "=== true && m.field !== \"deskOnly\")")]] },
     doorAnyLicence: { name: "the door given the ordinary arm's any-licence entry", edits: [["const why = certWhy(b.door, b.pub, refs, clock(), roots, revokedNow());",
@@ -1326,6 +1345,7 @@ async function main() {
     [PLANTED.tokenSpentFirst, "s24g", inviteStageScene, "a token hello refused for its seat spends the token, a try and the challenge"],
     ["resume-seat", "s24g", inviteStageScene, "a bound invitation's resume asks no seat"],
     ["lapse-first", "s24h", lapseFirstScene, "a lapsed team's desk is told its seat"],
+    [PLANTED.folderBack, "s24j", folderGoneScene, "a read-only team's lead moves its team file to a folder"],
     ["store-session", "s24i", storeScene, "a store's session is judged by the seat gate, so its store certificate is refused and a seat certificate opens it"],
   ];
   for (const [tag, id, scene, what] of PLANTS) {
