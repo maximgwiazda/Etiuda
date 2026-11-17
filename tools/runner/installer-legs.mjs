@@ -25,6 +25,9 @@
  *                 the program, its keys, its shortcuts and its link whole. Green only where all three hold.
  *   ext-claimed   the other half of the extension key's rule (Claude α's yes, 2026-11-13 09:33): the all-users uninstall deletes
  *                 .<ext> where its default still names our class, and leaves it where another program's claim stands.
+ *   ts-uninstall  the ordinary build, the Test Service build over it, then the uninstall from the entry: no shortcut of either
+ *                 name is left for this account, with the registration's ShortcutName as installed and with it deleted (the
+ *                 test architect, 2026-11-17, with the mend of shell/installer.nsh's customUnInstall).
  *
  * WHAT IT REUSES. The test build and its installer as tools/runner/hkcu-uninstaller-marker.mjs makes them (the test identity
  * of tools/test-identity.cjs, built from tools/electron-builder-test.cjs with E.unsignedEnv, refused unless G.setupRefusal
@@ -57,7 +60,7 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const NO_VERDICT = 78;
-const LEG_NAMES = ["all-upgrade", "running-1618", "system-bare", "locked-1618", "all-move", "all-space-d", "system-push", "ext-claimed", "ts-cycle", "shipped-detect", "nonpersistent", "net-hosts"];
+const LEG_NAMES = ["all-upgrade", "running-1618", "system-bare", "locked-1618", "all-move", "all-space-d", "system-push", "ext-claimed", "ts-cycle", "ts-uninstall", "shipped-detect", "nonpersistent", "net-hosts"];
 let OUT = "";
 const say = (l) => { process.stdout.write(l + "\n"); if (OUT) fs.appendFileSync(path.join(OUT, "legs.txt"), l + "\n"); };
 const refuse = (why) => { say("#legs refused: " + why); process.exit(NO_VERDICT); };
@@ -917,6 +920,78 @@ async function tsCycle(rec) {
     : "back on the ordinary build, its start and the data: " + cData.why);
 }
 
+/* ---- ts-uninstall: the Test Service build over the ordinary one, then its uninstall, leaves no shortcut ------------- */
+
+/* The test architect, 2026-11-17, with the lead engineer's mend 99af1574 (shell/installer.nsh, customUnInstall removes the
+   shortcuts of its own build's name). The two builds share one registration key, and the stock uninstaller reads the shortcut's
+   name back from that key's ShortcutName, falling back to the ordinary product's where the value is absent; on Max's desk that
+   morning an uninstall of the Test Service build left "... Test Service.lnk" on the desktop and in the Start menu. Two passes,
+   each for this account, each the order of his use (the ordinary build, the Test Service build over it, then the uninstall
+   from the entry's own uninstaller):
+     plain     the registration as the installer left it;
+     no-name   the registration's ShortcutName value deleted before the uninstall, which is the case that failed.
+   A pass holds where, after the uninstall and BEFORE any sweep, neither build's shortcut stands on this account's desktop or
+   in its Start menu, the folder is gone and neither per-user key stands. A pass that never had the Test Service shortcut to
+   lose gives no verdict. Before the mend the pass no-name is the red one (the stock deletion takes the ordinary name and the
+   Test Service shortcut stays); the pass plain shows the mend costs nothing where the value is there. No copy is started, so
+   the window wall is not met. What an UPDATE keeps (its own shortcuts, after one build is installed over the other) is
+   ts-cycle's and all-upgrade's to hold. */
+async function tsUninstall(rec) {
+  if (!PLACES.desktop || !PLACES.programs) throw new NoVerdict("this account's Desktop or Programs folder cannot be named");
+  const ts = tsSetup(rec);
+  rec.after("uninstall", uninstallUser);
+  const ORD_LNK = SHORTCUT, TS_LNK = PRODUCT + TS_SUFFIX + ".lnk";
+  const there = (name) => userLinks(name).filter((f) => fs.existsSync(f));
+  const install = async (exe, tag) => {
+    const args = P.installArgs({ mode: "user" });
+    const bad = P.argsFault(args, "user");
+    if (bad) throw new Error("refusing " + args.join(" ") + ": " + bad);
+    const r = await runExe(exe, args, 600000);
+    const dir = userDir();
+    rec.f(tag + "-exit", r.timedOut ? "timeout" : r.code);
+    if (r.code !== 0 || !dir || !fs.existsSync(path.join(dir, PRODUCT + ".exe")))
+      throw new NoVerdict(tag + " did not install for this account (exit " + r.code + ", InstallLocation " + JSON.stringify(dir || null) + "), so the pass never reached its subject");
+    return dir;
+  };
+  const pass = async (tag, strip) => {
+    await install(NEWER, tag + "-ordinary");
+    const dir = await install(ts, tag + "-ts");
+    const had = there(TS_LNK), stray = there(ORD_LNK);
+    rec.f(tag + "-ts-links", had.length); rec.f(tag + "-ordinary-links-before", stray.length);
+    if (!had.length) throw new NoVerdict("pass " + tag + ": the Test Service build over the ordinary one made no shortcut of its own name, so there is none to lose");
+    const key = regKey(KU.install);
+    const named = valueOf(key, "ShortcutName");
+    rec.f(tag + "-registered-name", named);
+    if (strip) {
+      if (!named) throw new NoVerdict("pass " + tag + ": the registration carries no ShortcutName to take away");
+      const d = spawnSync("reg", ["delete", key, "/v", "ShortcutName", "/f"], { encoding: "utf8", windowsHide: true, timeout: 30000 });
+      const after = valueOf(key, "ShortcutName");
+      rec.f(tag + "-name-deleted", yes(d.status === 0 && !after));
+      if (d.status !== 0 || after) throw new NoVerdict("pass " + tag + ": the ShortcutName value could not be deleted (reg exit " + d.status + ")");
+    }
+    const un = exeOf(valueOf(regKey(KU.uninstall), "UninstallString")) || path.join(dir, UNINSTALLER);
+    if (!un || !fs.existsSync(un)) throw new NoVerdict("pass " + tag + ": the entry names no uninstaller that exists (" + JSON.stringify(un) + ")");
+    const r = await runExe(un, P.uninstallArgs("user"), 300000);
+    const gone = await goneWithin(dir, 120);
+    /* Read before anything is swept: what the uninstaller itself left. */
+    const leftTs = there(TS_LNK), leftOrd = there(ORD_LNK);
+    const keys = [KU.uninstall, KU.install].map(regKey).filter((k) => present(k));
+    rec.f(tag + "-un-exit", r.timedOut ? "timeout" : r.code); rec.f(tag + "-folder-gone-s", gone);
+    rec.f(tag + "-ts-links-left", leftTs.length ? few(leftTs) : 0); rec.f(tag + "-ordinary-links-left", leftOrd.length ? few(leftOrd) : 0);
+    rec.f(tag + "-keys-left", keys.length ? few(keys) : 0);
+    const ok = !r.timedOut && gone > 0 && !leftTs.length && !leftOrd.length && !keys.length;
+    /* The next pass starts from nothing: what this one left is taken away here, by name, and said. */
+    rec.f(tag + "-tidy", oneLine(await uninstallUser()));
+    return { ok, why: "pass " + tag + ": uninstaller exit " + (r.timedOut ? "none within 5 min" : r.code) + ", the folder " + (gone > 0 ? "gone" : "still there")
+      + ", Test Service shortcuts left " + leftTs.length + " of " + had.length + ", ordinary shortcuts left " + leftOrd.length + ", per-user keys left " + keys.length };
+  };
+  const plain = await pass("plain", false);
+  const bare = await pass("no-name", true);
+  rec.end(plain.ok && bare.ok, plain.ok && bare.ok
+    ? "the ordinary build, the Test Service build over it, then the uninstall from its entry: no shortcut of either name on the desktop or in the Start menu, the folder and both per-user keys gone, with the registration's ShortcutName as installed and with it deleted"
+    : [plain, bare].filter((p) => !p.ok).map((p) => p.why).join("; "));
+}
+
 /* ---- shipped-detect: the README's detection rule, on the shipped identity ---------------------------------------- */
 
 /* Claude α's corporate-readiness list, row 2b (2026-11-13): "the detection rule proven on the shipped identity". Every other leg
@@ -1248,7 +1323,7 @@ function record(name) {
   return rec;
 }
 const LEGS = { "all-upgrade": allUpgrade, "running-1618": running1618, "system-bare": systemBare, "locked-1618": locked1618, "all-move": allMove, "all-space-d": allSpaceD,
-  "system-push": systemPush, "ext-claimed": extClaimed, "ts-cycle": tsCycle, "shipped-detect": shippedDetect, "nonpersistent": nonPersistent, "net-hosts": netHosts };
+  "system-push": systemPush, "ext-claimed": extClaimed, "ts-cycle": tsCycle, "ts-uninstall": tsUninstall, "shipped-detect": shippedDetect, "nonpersistent": nonPersistent, "net-hosts": netHosts };
 
 /* The newer setup, built once from this tree under the test identity, as the marker builds it. */
 const early = legPreflight();
