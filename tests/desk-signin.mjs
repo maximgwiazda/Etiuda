@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 204;
+const PLANTS = 232;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 169 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 183 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -97,6 +97,7 @@ const NAMES = ["SIGNIN_PROVIDERS", "signinOffered", "signinNonce", "signinAuthor
 NAMES.push("SIGNIN_TRACE_ASKED", "signinTraceLine", "signinTraceSaid");
 NAMES.push("signinLanding", "signinLandingHtml", "signinLandingCsp", "SIGNIN_LAND_MS");
 NAMES.push("signinAccessFor", "signinClaims", "signinPinOk");
+NAMES.push("signinWorks", "signinViewOf", "signinClockObserve", "signinClockRead", "signinClockText", "signinClockBytes", "signinVerified");
 /* The section, evaluated: `swap` is [from, to], put in place of the one line that holds `from`, for a plant; `invSwap` the same in the
    invitation's slice as well. */
 function load(swap, where, invSwap, needs) {
@@ -198,6 +199,8 @@ const TEAM = "t-0123456789abcdef";
 /* An ID token of the documented shape (Microsoft's and Google's claims), unsigned: the desk reads claims and never a signature. */
 function jwt(claims) { return b64url(JSON.stringify({ alg: "RS256", kid: "k1", typ: "JWT" })) + "." + b64url(JSON.stringify(claims)) + "." + b64url(crypto.randomBytes(64)); }
 const NOW = Date.UTC(2026, 10, 12, 2, 0, 0);
+/* The desk's clock and network as signinView reads them (signinClockNow), stood in: this desk's key, its clock at NOW, online. */
+const CLOCK_STAND = () => ({ key: DESK_KEY, desk: NOW, last: 0, online: true });
 const msClaims = (nonce, at) => ({ iss: "https://login.microsoftonline.com/" + TENANT + "/v2.0", aud: MS_CLIENT, tid: TENANT, oid: "o-1", sub: "s-1",
   iat: (at || NOW) / 1000, exp: (at || NOW) / 1000 + 3600, nonce: nonce });
 const gClaims = nonce => ({ iss: "https://accounts.google.com", aud: G_CLIENT, sub: "1001", email_verified: true, iat: NOW / 1000, exp: NOW / 1000 + 3600, nonce: nonce });
@@ -1225,7 +1228,7 @@ function ipcSlice(start) {
    (which may make the desk's key), the browser and loopback (signinIo), the provider (signinRun), the service, a write, the network. */
 const PRESS_STANDS = ["ipcMain", "fromEngine", "LINK_CLICK_MS", "signinState", "signinLapsed", "signinOffered", "signinPreviewing", "signinKnown",
   "SIGNIN_PROVIDERS", "branchIdentity", "net", "signinIo", "signinRun", "signinSeat", "signinTake", "signinFlush", "signinSave", "tellSignin",
-  "signinPageOk", "sealsForReal", "safeStorage"];
+  "signinPageOk", "sealsForReal", "safeStorage", "signinViewOf", "signinClockNow"];
 function pressStand(sec, swap) {
   const st = { on: {}, handle: {}, out: 0, tells: 0 };
   const viewDecl = (() => { try { return decl(MAIN, "function signinView("); } catch { return ""; } })();
@@ -1236,7 +1239,7 @@ function pressStand(sec, swap) {
   const r = new Function(...PRESS_STANDS, body)({ on: (ch, fn) => { st.on[ch] = fn; }, handle: (ch, fn) => { st.handle[ch] = fn; } }, () => true, 2000,
     () => ({ held: null }), sec.signinLapsed, sec.signinOffered, sec.signinPreviewing, sec.signinKnown, sec.SIGNIN_PROVIDERS,
     () => { st.out++; return { id: DESK_ID, key: DESK_KEY }; }, { fetch: out }, out, out, out, out, out, out, () => { st.tells++; },
-    sec.signinPageOk, sec.sealsForReal, undefined);
+    sec.signinPageOk, sec.sealsForReal, undefined, sec.signinViewOf, CLOCK_STAND);
   st.view = r.view;
   st.press = async id => {
     const e = { returnValue: undefined };
@@ -1560,7 +1563,7 @@ function waitStand(sec, swap, storage, branchId) {
     signinRequest: out, signinServiceAsk: out, signinSign: out, signinKeep: () => "", signinKept: () => "", signinPageHtml: () => "",
     SIGNIN_TRACE_ASKED: sec.SIGNIN_TRACE_ASKED, SIGNIN_DESK_PACKED: true,
     /* signinIo's store answer, off, so the press asks today's scopes; its token hand-off never reached. */
-    storeOn: () => false, storeTokenTake: out,
+    storeOn: () => false, storeTokenTake: out, signinViewOf: sec.signinViewOf, signinClockNow: CLOCK_STAND,
   };
   const names = Object.keys(vals);
   const body = "let signinClick = null, signinBusy = null, signinSaid = \"\", signinOutFlight = null;\n" + text + "\nreturn { view: signinView };";
@@ -1658,11 +1661,11 @@ CASES.waitingAgain = async (s, page, setMod) => {
   let hold = null, handed = 0, againFn = null;
   const run = { loop: { onward: () => new Promise(() => {}), land: () => {} }, provider: "microsoft", url: LINK_URL };
   const sh = new Function("signinState", "signinBusy", "signinPageOk", "handOut", "fromEngine", "ipcMain", "signinFolderAsk", "storeTurn", "storeTokenTake", "tellSignin",
-    "signinOffered", "signinPreviewing", "signinLapsed", "signinDoorsShown", "signinRelaySeat", "signinOutFlight", "sealsForReal", "safeStorage", "process", "deskStranded", "signinAccountKept", "SIGNIN_PROVIDERS", "signinSaid",
+    "signinOffered", "signinPreviewing", "signinLapsed", "signinDoorsShown", "signinRelaySeat", "signinOutFlight", "sealsForReal", "safeStorage", "process", "deskStranded", "signinAccountKept", "SIGNIN_PROVIDERS", "signinSaid", "signinViewOf", "signinClockNow",
     afterFn + "\n" + viewFn + "\n" + againIpc + "\nreturn { signinFolderAfter, signinView };")(
     () => ({ held: { provider: "microsoft", code: CODE, seed: SEED }, managed: { any: false } }), run, s.signinPageOk, () => { handed++; }, () => true,
     { handle: (ch, fn) => { againFn = fn; } }, () => new Promise(r => { hold = r; }), () => {}, () => {}, () => {},
-    () => [MS], () => false, () => false, () => [], () => "", null, () => true, {}, { platform: "win32" }, false, () => false, s.SIGNIN_PROVIDERS, "");
+    () => [MS], () => false, () => false, () => [], () => "", null, () => true, {}, { platform: "win32" }, false, () => false, s.SIGNIN_PROVIDERS, "", s.signinViewOf, CLOCK_STAND);
   sh.signinFolderAfter(run, { tokenAsk: async () => ({ status: 0 }) }, MS, DESK_KEY, { sub: "s-1" });
   const duringView = sh.signinView(), againAns = await againFn({});
   const folderDoor = pg.signinDoor(pg.signinRead(duringView));
@@ -2872,9 +2875,9 @@ const NO_TEAM_LINE = "No team has admitted this account yet. Once a lead admits 
 function viewOver(held, relaySeat) {
   const text = decl(MAIN, "function signinView(");
   return new Function("signinOffered", "signinState", "signinPreviewing", "SIGNIN_PROVIDERS", "signinLapsed", "signinDoorsShown", "signinPageOk",
-    "sealsForReal", "safeStorage", "process", "signinRelaySeat", "let signinBusy = null, signinSaid = \"\";\n" + text + "\nreturn signinView();")(
+    "sealsForReal", "safeStorage", "process", "signinRelaySeat", "signinViewOf", "signinClockNow", "let signinBusy = null, signinSaid = \"\";\n" + text + "\nreturn signinView();")(
     () => [{ id: "microsoft" }], () => ({ held }), () => false, {}, (h, now) => !!h && !!h.cert && now >= h.cert.until, () => [], () => false,
-    () => true, {}, { platform: "win32" }, relaySeat || (() => ""));
+    () => true, {}, { platform: "win32" }, relaySeat || (() => ""), S.signinViewOf, CLOCK_STAND);
 }
 CASES.deskOnlyCert = s => {
   const ok = c => s.signinCertOk(c, DESK_KEY) === true;
@@ -2962,9 +2965,9 @@ const STRANGER_PUB = "ef".repeat(32);
 const OTHER_SERVICE_PUB = OTHER_SERVICE.publicKey.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
 /* The shell's view over `held` with the section's own signinLapsed, the rest stood in. */
 const viewWith = (s, held) => new Function("signinOffered", "signinState", "signinPreviewing", "SIGNIN_PROVIDERS", "signinLapsed", "signinDoorsShown",
-  "signinPageOk", "sealsForReal", "safeStorage", "process", "signinRelaySeat", "let signinBusy = null, signinSaid = \"\", signinOutFlight = null;\n"
+  "signinPageOk", "sealsForReal", "safeStorage", "process", "signinRelaySeat", "signinViewOf", "signinClockNow", "let signinBusy = null, signinSaid = \"\", signinOutFlight = null;\n"
   + decl(MAIN, "function signinView(") + "\nreturn signinView();")(() => [{ id: "microsoft" }], () => ({ held }), () => false, {}, s.signinLapsed,
-  () => [], () => false, () => true, {}, { platform: "win32" }, () => "");
+  () => [], () => false, () => true, {}, { platform: "win32" }, () => "", s.signinViewOf, CLOCK_STAND);
 /* Taken at a first sign-in and at the renewal, from a refusal as well, and kept in signin.json. */
 CASES.revokedTaken = async s => {
   const list = revokedList(1, [STRANGER_PUB]), later = revokedList(2, [STRANGER_PUB, "aa".repeat(32)]);
@@ -3086,13 +3089,8 @@ CASES.fileMax = (s, swap) => {
   return s.SIGNIN_FILE_MAX === 256 * 1024 && kept.length < 16 * 1024 && small.reads === 1 && small.cert && over.reads === 0 && !over.held;
 };
 /* Review 15b, finding 6: the code the page shows, and Buy hands the order page, is the held certificate's; with no certificate, the code held. */
-CASES.viewCertCodeWire = (s, swap) => {
-  const text = decl(MAIN, "function signinView("), planted = swap && text.split(swap[0]).length === 2 ? text.replace(swap[0], swap[1]) : text;
-  const v = new Function("signinOffered", "signinState", "signinPreviewing", "SIGNIN_PROVIDERS", "signinLapsed", "signinDoorsShown", "signinPageOk", "sealsForReal", "safeStorage", "process",
-    "let signinBusy = null, signinSaid = \"\", signinOutFlight = null;\n" + planted + "\nreturn signinView();")(() => [{ id: "microsoft" }], () => ({ held: heldOf({ code: "ABCDEFGHJKMNPQRS" }) }), () => false, {}, s.signinLapsed,
-    () => [], () => false, () => true, {}, { platform: "win32" });
-  return v.code === CODE;
-};
+/* The code line lives in signinViewOf, the section, so its plant is the section's. */
+CASES.viewCertCodeWire = s => viewWith(s, heldOf({ code: "ABCDEFGHJKMNPQRS" })).code === CODE;
 CASES.viewCertCode = s => {
   const split = viewWith(s, heldOf({ code: "ABCDEFGHJKMNPQRS" })), bare = viewWith(s, heldOf({ cert: null, code: "ABCDEFGHJKMNPQRS" }));
   return split.code === CODE && bare.code === "ABCDEFGHJKMNPQRS";
@@ -3365,7 +3363,7 @@ function landStand(sec, swap, serve, loopQ) {
     SIGNIN_TRACE_ASKED: false, SIGNIN_DESK_PACKED: true,
     /* The store off and its look after a seat counted, never run: tests/desk-store-shell.mjs holds them. */
     storeOn: () => false, storeTokenTake: () => {}, storeTurn: () => { st.storeTurns = (st.storeTurns || 0) + 1; }, storeLeaveNow: () => Promise.resolve(true),
-    storeEndAgain: () => Promise.resolve(false),
+    storeEndAgain: () => Promise.resolve(false), signinViewOf: sec.signinViewOf, signinClockNow: CLOCK_STAND,
   };
   const names = Object.keys(vals);
   const body = "let signinClick = null, signinBusy = null, signinSaid = \"\", signinOutFlight = null;\n" + text + "\nreturn { view: signinView };";
@@ -3547,6 +3545,292 @@ CASES.pooledCert = s => {
   return s.signinCertOk(pooled, DESK_KEY) === true && !s.signinCertOk(forged, DESK_KEY) && !s.signinCertOk(odd, DESK_KEY)
     && !!kept && kept.pooled === true && relay(pooled) && !relay(forged) && !relay(odd) && !s.signinCertOk(long, DESK_KEY) && !relay(long);
 };
+/* ---- THE DESK WORKS, ON A CLOCK OF ITS OWN (B-2a): signinWorks, the view's new fields, the desk's clock and its keeping --------
+   The main process answers whether this desk works (signinWorks) on a clock anchored on the service's signed time and moved only
+   forward (signinClockObserve), kept in signin.json beside the file's own mark (signinClockText), and the view carries it; nothing on
+   the desk or the page decides anything by it yet, and every judgement before it still reads the system clock. */
+const YEAR_MS = 365 * 86400000, HOUR_MS = 3600000;
+/* The truth table: no certificate, another desk's, a revoked signer, ended on the desk's clock, before the clock reached it, current. */
+CASES.worksTable = s => {
+  const w = (held, at) => s.signinWorks(held, DESK_KEY, at), c = cert();
+  return w(null, NOW) === false && w(heldOf({ cert: null }), NOW) === false
+    && w(heldOf({ cert: cert({ desk: OTHER_DESK_KEY }) }), NOW) === false && s.signinWorks(heldOf(), OTHER_DESK_KEY, NOW) === false
+    && w(heldOf({ revoked: revokedList(1, [SERVICE_PUB]) }), NOW) === false && w(heldOf({ revoked: revokedList(1, [STRANGER_PUB]) }), NOW) === true
+    && w(heldOf(), c.until) === false && w(heldOf(), c.until + YEAR_MS) === false && w(heldOf(), c.until - 1) === true
+    && w(heldOf(), NOW - 1) === false && w(heldOf(), 0) === false && w(heldOf(), NOW + 0.5) === false && w(heldOf(), undefined) === false
+    && w(heldOf(), NOW) === true && w(heldOf(), NOW + 86400000) === true
+    /* The system clock is no argument of it: a year fast, today's calm lapse reads lapsed while the desk works. */
+    && s.signinLapsed(heldOf(), NOW + YEAR_MS) === true;
+};
+/* signinViewOf over `held` and the facts signinView gathers, each fact overridable. */
+const viewFacts = over => Object.assign({ offered: ["microsoft"], preview: false, shown: ["microsoft"], wall: NOW, busy: null, said: "", doors: [],
+  relaySeat: "", outOwed: false, licenceManaged: false, keeps: true, stranded: false, accountKept: false, deskKey: DESK_KEY, deskNow: NOW + HOUR_MS,
+  last: 0, online: true }, over);
+/* The five new fields, [works, now, until, stoppedAt, online], in each state. */
+CASES.viewFields = s => {
+  const c = cert(), at = NOW + HOUR_MS, last = NOW - 86400000;
+  const of = (held, over) => JSON.stringify((v => [v.works, v.now, v.until, v.stoppedAt, v.online])(s.signinViewOf(held, viewFacts(over))));
+  const is = (...a) => JSON.stringify(a);
+  return of(null) === is(false, at, 0, 0, true) && of(null, { online: false, deskNow: 0 }) === is(false, 0, 0, 0, false)
+    && of(heldOf({ seated: true })) === is(true, at, c.until, 0, true)
+    && of(heldOf({ seated: true }), { offered: ["google"] }) === is(true, at, c.until, 0, true)
+    && of(heldOf({ seated: true }), { deskNow: c.until }) === is(false, c.until, c.until, c.until, true)
+    && of(heldOf({ seated: true, revoked: revokedList(1, [SERVICE_PUB]) })) === is(false, at, c.until, c.until, true)
+    && of(heldOf({ seated: true, cert: null }), { last }) === is(false, at, 0, last, true)
+    && of(heldOf({ cert: null }), { last }) === is(false, at, 0, 0, true)
+    && of(heldOf({ seated: true, cert: null }), { last: 0 }) === is(false, at, 0, 0, true)
+    && of(heldOf({ seated: true }), { online: undefined }) === is(true, at, c.until, 0, true);
+};
+/* The wiring hands signinViewOf the desk's clock, key and network as signinClockNow reads them, never the system clock. */
+CASES.viewClockWire = (s, swap) => {
+  let text = decl(MAIN, "function signinView(");
+  if (swap) {
+    if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in the wiring once: " + swap[0]);
+    text = text.replace(swap[0], swap[1]);
+  }
+  const v = (held, key) => new Function("signinOffered", "signinState", "signinPreviewing", "SIGNIN_PROVIDERS", "signinDoorsShown", "sealsForReal", "safeStorage",
+    "process", "signinRelaySeat", "signinViewOf", "signinClockNow", "let signinBusy = null, signinSaid = \"\", signinOutFlight = null;\n" + text + "\nreturn signinView();")(
+    () => [MS], () => ({ held }), () => false, {}, () => [], () => true, {}, { platform: "win32" }, () => "", s.signinViewOf,
+    () => ({ key: key || DESK_KEY, desk: NOW + 5, last: 7, online: false }));
+  const stopped = v(heldOf({ seated: true, cert: null })), on = v(heldOf()), other = v(heldOf(), OTHER_DESK_KEY);
+  return stopped.works === false && stopped.now === NOW + 5 && stopped.stoppedAt === 7 && stopped.online === false
+    && on.works === true && on.until === cert().until && on.now === NOW + 5 && other.works === false;
+};
+/* TODAY'S VIEW, BYTE FOR BYTE: signinView as it stood at engine main 158d1826, its plant tags taken out, read beside the shell's over the
+   same stand-ins in each state; the shell's carries exactly the five new fields more, and with them taken out the same JSON. */
+const ORACLE_VIEW = `function signinView() {
+  const st = signinState(), held = st.held, real = signinOffered().map(p => p.id), now = Date.now(), preview = signinPreviewing();
+  const offered = preview ? Object.keys(SIGNIN_PROVIDERS) : real;
+  const signedIn = held && real.indexOf(held.provider) >= 0 ? held.provider : "";
+  /* The code shown and handed to Buy is the held certificate's own where one is held, as the answer took it. */
+  let code = signedIn ? held.code : "";
+  if (signedIn && held.cert && typeof held.cert.code === "string") code = held.cert.code;
+  const view = { offered: offered, preview: preview, signedIn: signedIn, code: code,
+    seat: !signedIn ? "" : held.cert ? (signinLapsed(held, now) ? "lapsed" : "held") : "none",
+    deskOnly: !!signedIn && !!held.cert && held.cert.deskOnly === true,
+    /* Ask your lead, and the person's own trial's end where its certificate is the one held (a team is its lead's own). */
+    askLead: !!signedIn && held.askLead === true,
+    trialUntil: !!signedIn && held.askLead === true && !!held.cert && held.cert.deskOnly === true ? Number(held.cert.until) || 0 : 0,
+    licenceManaged: signedIn ? held.managed === true : signinState().licenceManaged === true, cause: signedIn && held.managed === true ? held.cause || "" : "",
+    at: signedIn ? held.at : 0, reached: !signedIn || held.reached !== false, ask: !!signedIn && held.ask === true,
+    refused: signedIn ? held.said : "", busy: signinBusy ? signinBusy.provider : "", said: signinSaid,
+    doors: signedIn ? signinDoorsShown(held, now) : [],
+    relaySeat: signedIn ? signinRelaySeat(held) : "",
+    outOwed: !signedIn && !!signinState().out && !signinOutFlight,
+    link: signinBusy && signinPageOk(signinBusy.url) ? signinBusy.url : "", keeps: sealsForReal(safeStorage, process.platform) };
+  /* Only where machine policy sets any of its six values, so an unmanaged desk's view is the same object as before. */
+  const m = st.managed;
+  if (m && m.any) view.managed = { on: m.managed, shared: m.shared, personal: m.personal, provider: m.provider, tenant: !!m.tenant, closed: m.closed, contact: m.contact,
+    stranded: deskKeyStranded(m) };
+  if (view.managed) view.managed.keeps = signinAccountKept(st);
+  /* Policy has not answered: the page says the desk waits for it, and never that the computer is managed. */
+  if (m && m.waiting === true) view.managed.waiting = true;
+  return view;
+}`;
+const VIEW_NEW = ["works", "now", "until", "stoppedAt", "online"];
+function viewPair(s, st, swap) {
+  let text = decl(MAIN, "function signinView(");
+  if (swap) {
+    if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in the wiring once: " + swap[0]);
+    text = text.replace(swap[0], swap[1]);
+  }
+  const store = Object.assign({ held: st.held }, st.store || {});
+  const names = ["signinOffered", "signinState", "signinPreviewing", "SIGNIN_PROVIDERS", "signinLapsed", "signinDoorsShown", "signinPageOk", "sealsForReal",
+    "safeStorage", "process", "signinRelaySeat", "deskKeyStranded", "signinAccountKept", "signinViewOf", "signinClockNow"];
+  const vals = [() => st.offered.map(id => ({ id })), () => store, () => st.preview === true, { microsoft: {}, google: {} }, s.signinLapsed,
+    () => st.doors || [], s.signinPageOk, () => st.keeps !== false, {}, { platform: "win32" }, () => st.relaySeat || "", () => st.stranded === true,
+    () => st.kept === true, s.signinViewOf, CLOCK_STAND];
+  const head = "let signinBusy = " + JSON.stringify(st.busy || null) + ", signinSaid = " + JSON.stringify(st.said || "") + ", signinOutFlight = "
+    + (st.flight ? "{}" : "null") + ";\n";
+  const run = t => new Function(...names, head + t + "\nreturn signinView();")(...vals);
+  return { now: run(text), old: run(ORACLE_VIEW) };
+}
+const VIEW_STATES = () => {
+  const policy = { any: true, managed: true, shared: false, personal: false, provider: "microsoft", tenant: true, closed: true, contact: "IT, ext. 1" };
+  return [
+    { offered: [], held: null }, { offered: ["microsoft"], held: null, store: { out: DESK_KEY } }, { offered: ["microsoft"], held: null, store: { out: DESK_KEY }, flight: true },
+    { offered: ["microsoft"], held: null, store: { licenceManaged: true } }, { offered: ["microsoft"], held: heldOf({ seated: true }) },
+    { offered: ["microsoft"], held: heldOf({ cert: cert({ issued: NOW - 29 * 86400000, until: NOW - 86400000 }) }) },
+    { offered: ["microsoft"], held: heldOf({ revoked: revokedList(1, [SERVICE_PUB]) }) },
+    { offered: ["microsoft"], held: heldOf({ cert: null, askLead: true, managed: true, cause: "own-licence", said: "waiting", reached: false, ask: true }) },
+    { offered: ["microsoft"], held: heldOf({ cert: cert({ deskOnly: true }), askLead: true }) },
+    { offered: ["microsoft"], held: heldOf({ provider: "google" }), store: { licenceManaged: true } },
+    { offered: ["microsoft"], held: null, busy: { provider: "microsoft", url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?state=1" }, said: "signin-cancelled" },
+    { offered: [], preview: true, held: null },
+    { offered: ["microsoft"], held: heldOf(), store: { managed: Object.assign({}, policy, { waiting: true }) }, stranded: true, kept: true },
+    { offered: ["microsoft"], held: null, store: { managed: policy } },
+    { offered: ["microsoft"], held: heldOf({ doors: [] }), relaySeat: "renew", doors: [{ n: 0, host: "relay.example.test", print: "0123456789abcdef" }], keeps: false },
+  ];
+};
+CASES.viewSame = (s, swap) => VIEW_STATES().every(st => {
+  const { now, old } = viewPair(s, st, swap), trimmed = Object.assign({}, now);
+  VIEW_NEW.forEach(k => { delete trimmed[k]; });
+  return JSON.stringify(trimmed) === JSON.stringify(old) && Object.keys(now).filter(k => !(k in old)).sort().join() === VIEW_NEW.slice().sort().join();
+});
+/* The clock's rules: each observation by the larger of the wall's and the monotonic difference, never below zero; a clock read from the
+   file (mono null) by the wall's alone, floored; no anchor, no time; a certificate this desk takes moves it forward to `issued`, never
+   back, never another desk's; `last` follows the held certificate's end. */
+CASES.clockRules = s => {
+  const o = (c, wall, mono) => s.signinClockObserve(c, wall, mono, null, DESK_KEY).desk;
+  const c = { desk: NOW, wall: 1e12, mono: 500, last: 0 }, file = Object.assign({}, c, { mono: null });
+  const anchor = (clock, held) => s.signinClockObserve(clock, 5, 1, held, DESK_KEY);
+  return o(c, 1e12 + 5000, 500 + 3000) === NOW + 5000 && o(c, 1e12 + 2000, 500 + 9000) === NOW + 9000
+    && o(c, 1e12 - YEAR_MS, 500 + 10000) === NOW + 10000 && o(c, 1e12 - 5, 495) === NOW
+    && o(file, 1e12 + 3 * HOUR_MS, 77) === NOW + 3 * HOUR_MS && o(file, 1e12 - YEAR_MS, 77) === NOW
+    && o(null, NOW + YEAR_MS, 1) === 0 && o({ desk: 0, wall: 1, mono: 1, last: 0 }, NOW, 2) === 0
+    && anchor(null, heldOf()).desk === NOW && anchor({ desk: NOW + 86400000, wall: 5, mono: 1, last: 0 }, heldOf()).desk === NOW + 86400000
+    && anchor({ desk: NOW - 86400000, wall: 5, mono: 1, last: 0 }, heldOf()).desk === NOW
+    && anchor(null, heldOf({ cert: cert({ desk: OTHER_DESK_KEY }) })).desk === 0
+    && anchor(null, heldOf()).last === cert().until && anchor({ desk: NOW, wall: 5, mono: 1, last: 99 }, heldOf({ cert: null })).last === 99;
+};
+/* THE CLOCK BESIDE THE FILE'S MARK: a desk of today reads a file this one wrote exactly as the file without the clock, its own mark
+   and the seat whole; the clock is the two fields beside it; with no anchor or nothing to sign, the text as it was. */
+CASES.clockApart = s => {
+  const marked = s.signinFileMarkText(s.signinFileText({ held: heldOf({ seated: true, doors: [] }) }), signWith(signKey));
+  const text = s.signinClockText(marked, { desk: NOW + 86400000, wall: NOW, mono: 5, last: cert().until }, signWith(signKey));
+  const today = t => s.signinFileHeld(s.signinFileRead(t), t, DESK_KEY);
+  const d = JSON.parse(text), bare = JSON.parse(text);
+  delete bare.clock; delete bare.clockMark;
+  return text !== marked && JSON.stringify(today(text)) === JSON.stringify(today(marked)) && !!today(text).held.cert && today(text).held.code === CODE
+    && d.mark === JSON.parse(marked).mark && JSON.stringify(bare) === JSON.stringify(JSON.parse(marked)) && Object.keys(d.clock).sort().join() === "desk,last,wall"
+    && s.signinClockText(marked, { desk: 0, wall: NOW, last: 0 }, signWith(signKey)) === marked
+    && s.signinClockText(marked, { desk: NOW, wall: NOW, last: 0 }, () => "") === marked;
+};
+/* The clock's wiring, sliced, with the shell around it stood in: the file's text in st.file, the system clock st.wall, the monotonic
+   st.mono, the network st.online; writes, ticks and tells counted. A second clockWire over the same st is the next run. */
+const CLOCK_DECLS = ["const SIGNIN_TICK_MS =", "function signinMono(", "function signinOnlineNow(", "function signinClockNow(", "function signinTick(", "function signinSave("];
+function clockWire(s, st, swap) {
+  let text = CLOCK_DECLS.map(d => decl(MAIN, d)).join("\n");
+  if (swap) {
+    if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in the wiring once: " + swap[0]);
+    text = text.replace(swap[0], swap[1]);
+  }
+  const names = ["signinState", "branchIdentity", "Date", "performance", "path", "app", "fs", "SIGNIN_FILE", "SIGNIN_FILE_MAX", "signinClockRead",
+    "signinClockObserve", "signinClockText", "setInterval", "net", "tellSignin", "writeReplacing", "signinFileMarkText", "signinFileText", "signinSign", "console"];
+  const vals = [() => ({ held: st.held }), () => ({ key: DESK_KEY }), { now: () => st.wall }, { now: () => st.mono }, path, { getPath: () => "/ud" },
+    { statSync: () => { if (st.file === null) throw new Error("ENOENT"); return { size: st.file.length }; }, readFileSync: () => st.file },
+    "signin.json", s.SIGNIN_FILE_MAX, s.signinClockRead, s.signinClockObserve, s.signinClockText,
+    (fn, ms) => { st.ticks.push({ fn, ms }); return { unref() { st.unrefs++; } }; }, { isOnline: () => st.online }, () => { st.tells++; },
+    (f, t) => { st.file = t; st.writes++; }, s.signinFileMarkText, s.signinFileText, signWith(signKey), { error: () => {}, log: () => {} }];
+  return new Function(...names, "let signinClock = null, signinClockKept = 0, signinOnline = null, signinTicker = null;\n" + text
+    + "\nreturn { signinClockNow, signinTick, signinSave, SIGNIN_TICK_MS, SIGNIN_CLOCK_KEEP_MS };")(...vals);
+}
+const clockStand = over => Object.assign({ held: null, file: null, wall: NOW, mono: 1000, online: true, ticks: [], unrefs: 0, tells: 0, writes: 0 }, over);
+const clockRun = (st, ms) => { st.wall += ms; st.mono += ms; };
+/* The system clock five minutes slow, and ten, at a fresh sign-in: the desk works from the certificate's issue, and runs on. Today's
+   calm lapse reads the certificate as lapsed (issued in the future) all the while. */
+CASES.clockSlow = (s, swap) => [5 * 60000 + 30000, 10 * 60000].every(slow => {
+  const st = clockStand({ held: heldOf(), wall: NOW - slow }), w = clockWire(s, st, swap);
+  const first = w.signinClockNow().desk, lapsed = s.signinLapsed(st.held, st.wall);
+  clockRun(st, HOUR_MS);
+  const later = w.signinClockNow().desk;
+  return first === NOW && later === NOW + HOUR_MS && s.signinWorks(st.held, DESK_KEY, first) === true && s.signinWorks(st.held, DESK_KEY, later) === true
+    && lapsed === true;
+});
+/* A year fast at the sign-in: the desk works and runs on, and the next run carries on from the kept clock. Today's calm lapse reads
+   the certificate as ended. */
+CASES.clockFast = (s, swap) => {
+  const st = clockStand({ held: heldOf(), wall: NOW + YEAR_MS }), w = clockWire(s, st, swap);
+  const first = w.signinClockNow().desk === NOW && s.signinLapsed(st.held, st.wall) === true;
+  clockRun(st, HOUR_MS);
+  w.signinSave();
+  const ran = w.signinClockNow().desk === NOW + HOUR_MS;
+  st.wall += HOUR_MS; st.mono = 5;
+  const next = clockWire(s, st, swap).signinClockNow().desk;
+  return first && ran && next === NOW + 2 * HOUR_MS && s.signinWorks(st.held, DESK_KEY, next) === true;
+};
+/* Set back a year between two runs: the desk's time stands while it was closed and never more, and it stops at the certificate's end
+   after thirty days of running. Today's calm lapse reads the set-back clock's certificate as issued in the future, lapsed. */
+CASES.clockBackClosed = (s, swap) => {
+  const st = clockStand({ held: heldOf(), wall: NOW }), w = clockWire(s, st, swap), until = cert().until;
+  w.signinClockNow();
+  clockRun(st, 2 * 86400000);
+  w.signinSave();
+  const kept = w.signinClockNow().desk === NOW + 2 * 86400000;
+  st.wall = NOW + 3 * 86400000 - YEAR_MS; st.mono = 7;
+  const w2 = clockWire(s, st, swap);
+  const stood = w2.signinClockNow().desk === NOW + 2 * 86400000 && s.signinLapsed(st.held, st.wall) === true;
+  clockRun(st, 28 * 86400000 - 1);
+  const still = s.signinWorks(st.held, DESK_KEY, w2.signinClockNow().desk) === true;
+  clockRun(st, 1);
+  const end = w2.signinClockNow().desk;
+  return kept && stood && still && end === until && s.signinWorks(st.held, DESK_KEY, end) === false;
+};
+/* Set back a year while running: the monotonic clock carries the desk on, and the next run measures from the set-back clock. */
+CASES.clockBackRunning = (s, swap) => {
+  const st = clockStand({ held: heldOf(), wall: NOW, mono: 1000 }), w = clockWire(s, st, swap);
+  w.signinClockNow();
+  st.wall = NOW - YEAR_MS; st.mono += 10000;
+  const a = w.signinClockNow().desk === NOW + 10000;
+  clockRun(st, 86400000);
+  const b = w.signinClockNow().desk === NOW + 10000 + 86400000;
+  w.signinSave();
+  st.wall += HOUR_MS; st.mono = 3;
+  return a && b && clockWire(s, st, swap).signinClockNow().desk === NOW + 10000 + 86400000 + HOUR_MS;
+};
+/* An old answer replayed: its certificate, genuine and older, rewinds nothing, in the run or the next, and stands ended on the desk's
+   clock; today's calm lapse on a clock set back to its days reads it as held. */
+CASES.clockReplay = (s, swap) => {
+  const renewed = cert({ issued: NOW + 35 * 86400000, until: NOW + 65 * 86400000 }), old = heldOf();
+  const st = clockStand({ held: heldOf({ cert: renewed }), wall: NOW + 35 * 86400000 }), w = clockWire(s, st, swap);
+  const anchored = w.signinClockNow().desk === NOW + 35 * 86400000;
+  clockRun(st, 5 * 86400000);
+  st.held = old;
+  const after = w.signinClockNow().desk;
+  w.signinSave();
+  st.wall = NOW + 86400000; st.mono = 9;
+  const next = clockWire(s, st, swap).signinClockNow().desk;
+  return anchored && after === NOW + 40 * 86400000 && next === after && s.signinWorks(old, DESK_KEY, after) === false && s.signinLapsed(old, NOW + 86400000) === false;
+};
+/* A clock missing, edited or marked by another key restarts at the held certificate's `issued`, and the seat read from the file is the
+   same as with the clock whole; another desk key reads no clock. */
+CASES.clockMark = (s, swap) => {
+  const st = clockStand({ held: heldOf({ seated: true }), wall: NOW }), w = clockWire(s, st, swap);
+  w.signinClockNow();
+  clockRun(st, 3 * 86400000);
+  w.signinSave();
+  const text = st.file, seat = t => JSON.stringify(s.signinFileHeld(s.signinFileRead(t), t, DESK_KEY));
+  const restart = t => clockWire(s, clockStand({ held: st.held, file: t, wall: st.wall, mono: 1 }), swap).signinClockNow().desk;
+  const edits = [d => { delete d.clockMark; }, d => { delete d.clock; }, d => { d.clock.desk -= 86400000; }, d => { d.clockMark = "0".repeat(128); },
+    d => { d.clock.more = 1; }, d => { d.clock.desk = "1"; }];
+  const broken = edits.every(e => { const d = JSON.parse(text); e(d); const t = JSON.stringify(d, null, 1) + "\n"; return restart(t) === NOW && seat(t) === seat(text); });
+  return restart(text) === NOW + 3 * 86400000 && broken && !!s.signinClockRead(text, DESK_KEY) && s.signinClockRead(text, OTHER_DESK_KEY) === null;
+};
+/* The tick: armed once by the first ask, every SIGNIN_TICK_MS and unref'd; it keeps the clock in the file at its first turn and then
+   hourly, writes nothing while no certificate has anchored the clock, and tells the page once each time the network comes or goes. */
+CASES.clockTick = (s, swap) => {
+  const st = clockStand({ held: heldOf() }), w = clockWire(s, st, swap);
+  w.signinClockNow(); w.signinClockNow();
+  const armed = st.ticks.length === 1 && st.ticks[0].ms === 10000 && w.SIGNIN_TICK_MS === 10000 && w.SIGNIN_CLOCK_KEEP_MS === HOUR_MS && st.unrefs === 1;
+  const tick = () => st.ticks[0].fn();
+  tick();
+  const first = st.writes === 1 && !!s.signinClockRead(st.file, DESK_KEY);
+  clockRun(st, 10000); tick();
+  const quiet = st.writes === 1 && st.tells === 0;
+  clockRun(st, HOUR_MS); tick();
+  const hourly = st.writes === 2 && s.signinClockRead(st.file, DESK_KEY).desk === NOW + HOUR_MS + 10000;
+  st.online = false; tick(); tick();
+  const off = st.tells === 1;
+  st.online = true; tick();
+  const bare = clockStand(), wb = clockWire(s, bare, swap);
+  wb.signinClockNow(); bare.ticks[0].fn(); clockRun(bare, 2 * HOUR_MS); bare.ticks[0].fn();
+  return armed && first && quiet && hourly && off && st.tells === 2 && bare.writes === 0 && bare.file === null;
+};
+/* The page keeps the five fields, typed and bounded, and nothing reads them yet: no page module names works or stoppedAt, and
+   signin.js reads none of the five from a view. */
+CASES.readFields = async (s, page) => {
+  const pg = page || P;
+  if (!pg) return false;
+  const r = o => JSON.stringify((v => [v.works, v.now, v.until, v.stoppedAt, v.online])(pg.signinRead(o)));
+  const is = (...a) => JSON.stringify(a);
+  const at = PAGE.indexOf("function signinRead(v){"), rest = at < 0 ? "" : PAGE.slice(0, at) + PAGE.slice(PAGE.indexOf("\n}\n", at));
+  const unread = at >= 0 && fs.readdirSync(path.join(ROOT, "src", "modules")).filter(n => n.endsWith(".js") && n !== "signin.js")
+    .every(n => !/\.(?:works|stoppedAt)\b/.test(fs.readFileSync(path.join(ROOT, "src", "modules", n), "utf8")))
+    && !/\.(?:works|stoppedAt)\b|\b(?:v|s|sv|view|signinV)\.(?:now|until|online)\b/.test(rest);
+  return r({ works: true, now: NOW, until: NOW + 1, stoppedAt: NOW - 1, online: false }) === is(true, NOW, NOW + 1, NOW - 1, false)
+    && r(null) === is(false, 0, 0, 0, true) && r({ works: "yes", now: "1", until: -5, stoppedAt: 1.5, online: 0 }) === is(false, 0, 0, 0, true)
+    && r({ now: 9e15, until: Infinity, stoppedAt: NaN }) === is(false, 0, 0, 0, true) && unread;
+};
 const LEGS = [
   ["ds1a", "offered", "as shipped no client id is configured and nothing is offered; a configured table offers what it configures, in order"],
   ["ds1b", "noHintStart", "an invitation naming providers carries no sign-in hint: the team's start is retired"],
@@ -3706,6 +3990,20 @@ const LEGS = [
   ["ds51h", "switchUnanswered", "review 11, Claude alpha's decision: the held account is left only once the service answers a call of the switch: its signout not taken, the desk stays the account it had, seat.json, door and store whole, nothing owed, no signin/desk sent, and the page says it stays signed in; taken and then unreached, signed out and said so; where no signout is sent, the new account's unreached signin/desk leaves the desk as it was"],
   ["ds51i", "switchOutWindow", "nothing written to signin.json while a switch's signout is still out says a signout is owed for an account the desk still holds, and a start from such a file signs nobody out, while Sign out still owes one"],
   ["ds51b", "switchShared", "review 11: Sign out and the switch share one leaving, signinLeave: Sign out is its guards, that call and its words, and the press calls it for another account only, at most once on a path, its signout decided on the same condition, before the new account is taken"],
+  ["dsw1", "worksTable", "the desk works only holding a certificate signinCertOk takes for this desk's key, its signer not revoked, the desk's own clock inside it from its issue to its end; no certificate, another desk's, a revoked signer, ended or not yet reached on the desk's clock all read not working, whatever the system clock"],
+  ["dsw2", "viewFields", "the view carries works, the desk's clock as now, the held certificate's until, stoppedAt (the held or last certificate's end where the desk was seated and works no longer) and online, in each state, whatever provider is offered"],
+  ["dsw3", "viewClockWire", "the wiring hands the view the desk's clock, key and network as signinClockNow reads them, never the system clock"],
+  ["dsw4", "viewSame", "the view is today's byte for byte, read beside signinView as it stood at engine main 158d1826 in fifteen states, with exactly the five new fields more"],
+  ["dsw5", "clockRules", "the desk's clock moves by the larger of the wall's and the monotonic difference and never below zero, by the wall's alone floored across a restart, keeps no time until a certificate anchors it, and is moved forward to a taken certificate's issue, never back and never by another desk's"],
+  ["dsw6", "clockApart", "the clock is kept beside signin.json's own mark, so today's reader takes a file this desk wrote exactly as the file without it, the seat and the mark whole; no anchor or no signature writes nothing"],
+  ["dsw7", "clockMark", "a clock missing, edited, of another shape or marked by another key restarts at the held certificate's issue and the seat read from the file stays the same; another desk key reads no clock"],
+  ["dsw8", "clockSlow", "the system clock five minutes slow, or ten, at a fresh sign-in: the desk works from the certificate's issue and runs on, where today's calm lapse reads it lapsed"],
+  ["dsw9", "clockFast", "a year fast at the sign-in: the desk works and runs on, the next run carrying on from the kept clock, where today's calm lapse reads it ended"],
+  ["dsw10", "clockBackClosed", "set back a year between two runs: the desk's time stands only while it was closed and it stops at the certificate's end after thirty days of running, where today's calm lapse reads it lapsed, issued in the future"],
+  ["dsw11", "clockBackRunning", "set back a year while running: the monotonic clock carries the desk on, and the next run measures from the set-back clock"],
+  ["dsw12", "clockReplay", "an old answer replayed rewinds the desk's clock neither in the run nor in the next, and its certificate stands ended on it"],
+  ["dsw13", "clockTick", "the tick is armed once by the first ask and unref'd, keeps the clock at its first turn and then hourly, writes nothing before an anchor, and tells the page once each time the network comes or goes"],
+  ["dsw14", "readFields", "the page keeps works, now, until, stoppedAt and online, typed and bounded, and nothing on the page reads them yet"],
 ];
 for (let [id, name, line] of LEGS) {
   let ok = false;
@@ -4080,9 +4378,10 @@ if (!PLANTS_OFF) {
     "const SIGNIN_PREVIEW_ASKED = process.env.ETIUDA_SIGNIN_PREVIEW !== undefined;"], "previewOff");
   await plant("dsp45", ["function signinSecretPart(p) { return typeof p.clientSecret === \"string\" && p.clientSecret ? { client_secret: p.clientSecret } : {}; } /* plant:secret-present */",
     "function signinSecretPart(p) { return { client_secret: String(p.clientSecret || \"\") }; }"], "secretSent");
-  await plantWire("dsp47", ["link: signinBusy && signinPageOk(signinBusy.url) ? signinBusy.url : \"\",", "link: \"\","], "linkWait");
+  await plant("dsp47", ["link: busy && signinPageOk(busy.url) ? busy.url : \"\",", "link: \"\","], "linkWait");
   await plantWire("dsp48", ["run.url = url; tellSignin(); return Promise", "run.url = url; return Promise"], "linkWait");
-  await plantWire("dsp49", ["keeps: sealsForReal(safeStorage, process.platform) }; /* plant:view-link */", "keeps: true };"], "keyringLine");
+  await plant("dsp49", ["link: busy && signinPageOk(busy.url) ? busy.url : \"\", keeps: o.keeps, /* plant:view-link */", "link: busy && signinPageOk(busy.url) ? busy.url : \"\", keeps: true,"], "keyringLine");
+  await plantWire("dsp49b", ["keeps: sealsForReal(safeStorage, process.platform),", "keeps: true,"], "keyringLine");
   await plantWire("dsp50", ["if (!INSTALLED && !app.isPackaged && process.env.ETIUDA_SIGNIN_LAB) {", "if (!INSTALLED && process.env.ETIUDA_SIGNIN_LAB) {"], "labPackaged");
   await plantWire("dsp51", ["if (!INSTALLED && !app.isPackaged && process.env.ETIUDA_SIGNIN_LAB) {", "if (!app.isPackaged && process.env.ETIUDA_SIGNIN_LAB) {"], "labPackaged");
   await plantWire("dsp52", ["return signinLabOn && !!signinState().held; /* plant:lab-held */", "return !!signinState().held;"], "labHarness");
@@ -4154,7 +4453,7 @@ if (!PLANTS_OFF) {
   await plantWire("dsp211", ["  const ok = await flight; /* plant:switch-out-await */", "  s.out = me.key;\n  const ok = await flight;\n  if (!ok && s.out === me.key) delete s.out;"], "switchOutWindow");
   await plantWire("dsp210", ["      if (other && out === null && (ans.ok || ans.reason !== \"unreached\")) { signinLeave(st, me, true); signinSave(); } /* plant:switch-leaves-after */", "      if (other && out === null) { signinLeave(st, me, true); signinSave(); } /* plant:switch-leaves-after */"], "switchUnanswered");
   await plantWire("dsp99g", ["{ cancelJoin(); sendJoin(theWindow); } /* plant:signout-door */", "{ }"], "signoutDoorJoin");
-  await plantWire("dsp99h", ["    outOwed: !signedIn && !!signinState().out && !signinOutFlight, /* plant:out-owed-view */", "    outOwed: false,"], "outOwedView");
+  await plant("dsp99h", ["    outOwed: !signedIn && o.outOwed === true, /* plant:out-owed-view */", "    outOwed: false,"], "outOwedView");
   /* The seat's signature (ds22): each check of the chain, and the file's reading of it. */
   await plant("dsp100", ["if (!signinVerified(NOTE_ROOT, viaBytes, d.sig.value) /* plant:cert-root */", "if (false /* plant:cert-root */"], "certSigned");
   await plant("dsp101", ["return signinVerified(d.key.pub, bytes, c.sig.value); /* plant:cert-sig */", "return true;"], "certSigned");
@@ -4281,10 +4580,38 @@ if (!PLANTS_OFF) {
   await plantWire("dlp1b", ["  signinStore = signinFileHeld(signinStore, text, me ? me.key : \"\"); /* plant:file-held */\n", ""], "fileMark");
   await plantWire("dlp1c", ["signinFileMarkText(signinFileText(signinState()), signinSign)", "signinFileText(signinState())"], "fileMark");
   await plant("dlp4", ["marked = !!d && /^[0-9a-f]{64}$/.test(String(deskKey || \"\")) && signinVerified(String(deskKey), signinMarkBytes(h, store.revoked), d.mark); /* plant:file-mark */", "marked = true;"], "fileOtherPerson");
-  await plantWire("dlp6", ["  if (signedIn && held.cert && typeof held.cert.code === \"string\") code = held.cert.code; /* plant:view-cert-code */\n", ""], "viewCertCodeWire");
+  await plant("dlp6", ["  if (signedIn && held.cert && typeof held.cert.code === \"string\") code = held.cert.code; /* plant:view-cert-code */\n", ""], "viewCertCodeWire");
   await plantWire("dlp7", ["within = fs.statSync(at).size <= SIGNIN_FILE_MAX; /* plant:file-max */", "within = true;"], "fileMax");
   await plant("dlp5", ["mine = !h.cert || signinCertOk(h.cert, String(deskKey || \"\")); /* plant:file-desk-key */", "mine = true;"], "fileDeskKey");
   await plantWire("dlp3", ["  if (Date.now() >= cert.until) return false; /* plant:flush-ended */\n", ""], "certEndedFlush");
+  /* B-2a: the desk works, on a clock of its own. */
+  await plant("dswp1", ["  if (!c || !signinCertOk(c, deskKey)) return false; /* plant:works-cert */", "  if (!c) return false;"], "worksTable");
+  await plant("dswp2", ["  if (signinRevokedHas(held.revoked, c)) return false; /* plant:works-revoked */\n", ""], "worksTable");
+  await plant("dswp3", ["  if (!Number.isSafeInteger(deskNow) || deskNow < c.issued) return false; /* plant:works-issued */\n", ""], "worksTable");
+  await plant("dswp4", ["  return deskNow < c.until; /* plant:works-until */", "  return true;"], "worksTable");
+  await plant("dswp5", ["    works: works, /* plant:view-works */", "    works: true,"], "viewFields");
+  await plant("dswp6", ["    now: Number.isSafeInteger(o.deskNow) && o.deskNow > 0 ? o.deskNow : 0, /* plant:view-now */", "    now: 0,"], "viewFields");
+  await plant("dswp7", ["    until: cert && Number.isSafeInteger(cert.until) ? cert.until : 0, /* plant:view-until */", "    until: 0,"], "viewFields");
+  await plant("dswp8", ["stoppedAt: !works && !!held && held.seated === true ?", "stoppedAt: !works && !!held ?"], "viewFields");
+  await plant("dswp9", ["    online: o.online !== false }; /* plant:view-online */", "    online: true };"], "viewFields");
+  await plantWire("dswp10", ["deskKey: at.key, deskNow: at.desk, last: at.last, online: at.online }); /* plant:view-clock */", "deskKey: at.key, deskNow: Date.now(), last: 0, online: true });"], "viewClockWire");
+  await plantWire("dswp11", ["shown: preview ? Object.keys(SIGNIN_PROVIDERS) : real,", "shown: real,"], "viewSame");
+  await plantWire("dswp12", ["outOwed: !!st.out && !signinOutFlight,", "outOwed: !!st.out,"], "viewSame");
+  await plant("dswp13", ["licenceManaged: signedIn ? held.managed === true : o.licenceManaged === true,", "licenceManaged: signedIn ? held.managed === true : false,"], "viewSame");
+  await plant("dswp14", ["  let desk = c.desk > 0 ? c.desk + Math.round(Math.max(0, byWall, byMono)) : 0; /* plant:clock-forward */", "  let desk = c.desk > 0 ? c.desk + Math.round(byWall) : 0;"], "clockRules");
+  await plant("dswp15", ["  let desk = c.desk > 0 ? c.desk + Math.round(Math.max(0, byWall, byMono)) : 0; /* plant:clock-forward */", "  let desk = c.desk > 0 ? c.desk + Math.round(Math.max(byWall, byMono)) : 0;"], "clockRules");
+  await plant("dswp16", ["    if (desk < cert.issued) desk = cert.issued; /* plant:clock-anchor */\n", ""], "clockSlow");
+  await plant("dswp17", ["    if (desk < cert.issued) desk = cert.issued; /* plant:clock-anchor */", "    desk = cert.issued;"], "clockReplay");
+  await plant("dswp18", ["  if (!/^[0-9a-f]{64}$/.test(String(deskKey || \"\")) || !signinVerified(String(deskKey), signinClockBytes(c), d.clockMark)) return null; /* plant:clock-mark */\n", ""], "clockMark");
+  await plant("dswp19", ["Object.assign(d, { clock: c, clockMark: mark })", "Object.assign(d, { clock: c, mark: mark })"], "clockApart");
+  await plantWire("dswp20", ["    signinClock = signinClockRead(text, key); /* plant:clock-kept-read */", "    signinClock = null;"], "clockMark");
+  await plantWire("dswp21", ["signinClockText(signinFileMarkText(signinFileText(signinState()), signinSign), signinClock, signinSign)", "signinFileMarkText(signinFileText(signinState()), signinSign)"], "clockFast");
+  await plantWire("dswp22", ["if (c.desk > 0 && (!signinClockKept || c.desk - signinClockKept >= SIGNIN_CLOCK_KEEP_MS)) signinSave(); /* plant:clock-keep */", "if (c.desk > 0 && !signinClockKept) signinSave();"], "clockTick");
+  await plantWire("dswp23", ["  if (online !== signinOnline) { signinOnline = online; tellSignin(); } /* plant:online-told */", "  if (online !== signinOnline) { signinOnline = online; }"], "clockTick");
+  await plantPage("dswp24", ["    works: o.works===true, /* plant:read-works */", "    works: !!o.works,"], "readFields");
+  await plantPage("dswp25", ["function signinTimeRead(v){ return Number.isSafeInteger(v) && v>0 && v<=8.64e15 ? v : 0; } /* plant:read-time */", "function signinTimeRead(v){ return Number(v)||0; }"], "readFields");
+  await plantPage("dswp26", ["    stoppedAt: signinTimeRead(o.stoppedAt), /* plant:read-stopped */", "    stoppedAt: 0,"], "readFields");
+  await plantPage("dswp27", ["    online: o.online!==false /* plant:read-online */", "    online: true"], "readFields");
   const gated = MAIN.replace("function writeBranch(stem, text) {\n", "function writeBranch(stem, text) {\n  if (!signinView().signedIn) return { ok: false };\n");
   check(gated !== MAIN && outsideNames(gated).slice().sort().join() !== expectOutside.slice().sort().join(),
     "dsp14 plant a sign-in gate on the desk file's write turns ds5a red");

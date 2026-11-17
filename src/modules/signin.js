@@ -51,9 +51,17 @@ function signinRead(v){
     doors: signedIn && Array.isArray(o.doors) ? o.doors.filter(d=>d && Number.isInteger(d.n) && typeof d.host==="string" && d.host.length<=256
       && /^[0-9a-f]{16}$/.test(String(d.print))).slice(0,16).map(d=>({n:d.n, host:d.host, print:String(d.print)})) : [],
     /* Machine policy (decision 49), only where it sets anything: {on, shared, personal, provider, closed, contact}. */
-    managed: signinManagedRead(o.managed)
+    managed: signinManagedRead(o.managed),
+    /* Whether the desk works, judged by the shell on its own clock: that clock, the held certificate's end, the last one's where it
+       stopped (each a time in ms, 0 for none), and whether the system has a network. Kept as the shell judged them; no moment reads them. */
+    works: o.works===true, /* plant:read-works */
+    now: signinTimeRead(o.now),
+    until: signinTimeRead(o.until),
+    stoppedAt: signinTimeRead(o.stoppedAt), /* plant:read-stopped */
+    online: o.online!==false /* plant:read-online */
   };
 }
+function signinTimeRead(v){ return Number.isSafeInteger(v) && v>0 && v<=8.64e15 ? v : 0; } /* plant:read-time */
 function signinManagedRead(m){
   if(!m || typeof m!=="object") return null;
   return {on:m.on===true, shared:m.shared===true, personal:m.personal!==false,

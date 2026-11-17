@@ -102,18 +102,21 @@ function viewShellOf(swap) {
       src.slice(once(src, "\nfunction managedStrands(") + 1, src.indexOf("\n", once(src, "\nfunction managedStrands(") + 1)),
       src.slice(once(src, "\nfunction rawPublic(") + 1, src.indexOf("\n", once(src, "\nfunction rawPublic(") + 1)),
       fnIn("function branchIdOf("), fnIn("function branchIdentity("),
-      fnIn("function deskKeyStranded("), fnIn("function signinView(")].join("\n")
+      fnIn("function deskKeyStranded("), fnIn("function signinView("), fnIn("function signinViewOf("), fnIn("function signinWorks(")].join("\n")
     + "\nreturn { branchIdentity, signinView, set: (b) => { deskBranch = b; deskBranchOld = []; deskStranded = false; deskStrandedFor = \"\"; }, get: () => ({ branch: deskBranch, stranded: deskStranded }) };";
   const st = { saved: 0, opens: new Set(), openCalls: 0, tells: 0, managed: null, held: null, said: [] };
   const api = new Function("crypto", "Buffer", "readDesk", "branchSealable", "openPrivate", "sealPrivate", "saveDeskFile", "managedPolicy",
     "signinState", "signinOffered", "signinPreviewing", "SIGNIN_PROVIDERS", "signinLapsed", "signinDoorsShown", "signinPageOk",
-    "sealsForReal", "safeStorage", "process", "signinRelaySeat", "signinAccountKept", "tellSignin", "console", body)(
+    "sealsForReal", "safeStorage", "process", "signinRelaySeat", "signinAccountKept", "tellSignin", "console",
+    "signinClockNow", "signinCertOk", "signinRevokedHas", body)(
     crypto, Buffer, () => ({}), () => true,
     sealed => { st.openCalls++; return st.opens.has(sealed) ? {} : null; },
     () => "sealed-new", () => { st.saved++; }, () => st.managed,
     () => ({ held: st.held, managed: st.managed }), () => [{ id: "microsoft" }], () => false, { microsoft: {} },
     () => false, () => [], () => false, () => true, {}, { platform: "win32" }, () => "", () => false,
-    () => { st.tells++; }, { log: l => st.said.push(l), error: l => st.said.push(l) });
+    () => { st.tells++; }, { log: l => st.said.push(l), error: l => st.said.push(l) },
+    /* The desk's clock (signinView reads it beside the view since B-2a), stood in; no certificate is held here. */
+    () => ({ key: PUB, desk: 1, last: 0, online: true }), () => false, () => false);
   return Object.assign(api, { st, setup: (b, m, held) => { api.set(b); st.managed = m; st.held = held || null; } });
 }
 
@@ -282,7 +285,7 @@ for (const [id, name, what] of [
 ]) check(!!S && await run(name, S), id + " " + what);
 check(!!S && await run("page", S), "dp5 the page says what happened and whom to ask, English and Polish, panel and Account, with no sign-in offered; nothing where the key opens");
 check(MAIN.indexOf("    if (deskBranch && managedStrands(managedPolicy())) { /* plant:np-guard */") >= 0
-  && MAIN.indexOf("    stranded: deskKeyStranded(m) };") >= 0, "dp6 the shell asks the policy only where a key will not open, and tells the page the desk is kept");
+  && MAIN.indexOf("stranded: m && m.any ? deskKeyStranded(m) : false,") >= 0 && MAIN.indexOf("    stranded: o.stranded };") >= 0, "dp6 the shell asks the policy only where a key will not open, and tells the page the desk is kept");
 check(!!S && await run("startStranded", S), "dp7 finding 6: signinView detects stranded at start under NonPersistent without replacing the key; ordinary desks and waiting policy call openPrivate 0 times; branchIdentity calls tellSignin");
 check(!!S && await run("strandedSurface", S), "dp8 finding 6: firstSigninDue stays false when stranded, Account hides sign-in/seat/buy/sync rows under the notice, and no-provider uses B5's last sentence");
 
@@ -325,7 +328,7 @@ if (!PLANTS_OFF && S) {
   }
   /* Finding 6 plants: shell and page. */
   for (const [id, swap] of [
-    ["dpp10", ["    stranded: deskKeyStranded(m) };", "    stranded: deskStranded };"]],
+    ["dpp10", ["stranded: m && m.any ? deskKeyStranded(m) : false,", "stranded: m && m.any ? deskStranded : false,"]],
     ["dpp11", ["      if (typeof tellSignin === \"function\") tellSignin(); /* plant:np-tell */", ""]],
   ]) {
     let red = false;
