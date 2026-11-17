@@ -618,6 +618,17 @@
 !define ETIUDA_REMOVE_LICENCE_WITH_DATA ; plant:uninstall-licence-goes
 
 !macro customUnInstall
+  # AN UNINSTALL REMOVES THE SHORTCUTS OF ITS OWN BUILD'S NAME in the scope it runs in, whatever the registration key says. Hardening:
+  # the stock uninstaller reads the name back from that key and falls back to the ordinary product's, so where the value cannot be read
+  # (an uninstaller started inside a packaged app's private view of the registry; a key damaged or cleaned by a tool) a build registered
+  # under another shortcut name, as the Test Service build is, would leave its own behind. Never on an update, never under
+  # --keep-shortcuts, as the stock deletion keeps them. It stands outside the own-copy guard: Studio's cut of this hook carries it.
+  ${IfNot} ${isKeepShortcuts} # plant:own-links-keep
+  ${AndIfNot} ${isUpdated} # plant:own-links-update
+    Delete "$SMPROGRAMS\${SHORTCUT_NAME}.lnk" # plant:own-links-menu
+    Delete "$DESKTOP\${SHORTCUT_NAME}.lnk" # plant:own-links-desktop
+  ${EndIf}
+
   !ifndef INSTALL_CHECKS_OWN_COPY
   ${IfNot} ${isKeepShortcuts}
     Call un.RemoveStaleLinks
