@@ -902,7 +902,9 @@ function teamTextChosen(root) {
     if (!doc || !teamWhole(doc)) continue;
     if (canonDoc && canonDoc.id && doc.id !== canonDoc.id) continue;
     if (canonDoc && !sameTeamLead(doc, canonDoc)) {
-      const pin = teamPins[doc.id];
+      /* The pin as every reading path takes it (pinTrusted): none while machine policy has not answered, and none that policy's lead
+         does not confirm, so a sibling under a merely kept pin is not chosen. */
+      const pin = pinTrusted(doc.id);
       const byPin = !!pin && (pin.keyId !== canonDoc.lead.keyId || pin.public !== canonDoc.lead.public);
       if (handedTo(doc, canonDoc.lead) && teamAhead(doc, best.doc)) best = { file: sib, text: sibText, doc: doc }; /* plant:sib-handover */
       if (byPin && ((doc.lead.keyId === pin.keyId && doc.lead.public === pin.public) || handedTo(doc, pin)) && teamAhead(doc, best.doc)) best = { file: sib, text: sibText, doc: doc }; /* plant:sib-pin */
