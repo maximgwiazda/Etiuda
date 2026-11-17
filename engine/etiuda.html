@@ -9384,9 +9384,11 @@ What is typed here stays in this browser.`;
     "This account's organisation has not allowed Etiuda at its sign-in provider.": "Organizacja tego konta nie dopuściła Etiudy u swojego dostawcy logowania.",
     "Your organisation no longer gives this account access to Etiuda.": "Organizacja nie przyznaje już temu kontu dostępu do Etiudy.",
     "This desk keeps its catalog and works with it as before, but new editions from the team no longer reach it. The organisation's IT department can give access again.": "To stanowisko zachowuje swój katalog i działa z nim jak dotąd, ale nowe wydania od zespołu już do niego nie trafiają. Dostęp może przywrócić dział IT organizacji.",
+    "This desk keeps its catalog and works with it as before, but new editions from the team no longer reach it. To ask for access: {CONTACT}.": "To stanowisko zachowuje swój katalog i działa z nim jak dotąd, ale nowe wydania od zespołu już do niego nie trafiają. W sprawie dostępu: {CONTACT}.",
     "This account's sign-in needs renewing.": "Logowanie tego konta wymaga odnowienia.",
     "This desk keeps its catalog and works with it as before. Signing in again, under Account, brings the team's new editions back.": "To stanowisko zachowuje swój katalog i działa z nim jak dotąd. Po ponownym zalogowaniu się w części Konto nowe wydania od zespołu znów zaczną docierać.",
     "Its IT department can allow it; another account can be used meanwhile.": "Może to zmienić jej dział IT; do tego czasu można użyć innego konta.",
+    "To ask for access: {CONTACT}. Another account can be used meanwhile.": "W sprawie dostępu: {CONTACT}. Do tego czasu można użyć innego konta.",
     "No Etiuda licence has a seat for this account.": "Żadna licencja Etiudy nie ma miejsca dla tego konta.",
     "The sign-in worked. A seat comes from a trial, a purchase, or a team's lead admitting the account; another account can be used meanwhile.": "Logowanie się powiodło. Miejsce daje okres próbny, zakup albo przyjęcie konta przez lidera zespołu; do tego czasu można użyć innego konta.",
     "The sign-in service cannot be reached just now.": "Usługa logowania jest teraz nieosiągalna.",
@@ -9411,6 +9413,8 @@ What is typed here stays in this browser.`;
     /* placeholder for the copywriter: machine policy names another lead (review 09, finding 2) */
     "The organisation's IT names another lead for this computer, so nothing this team's lead signs is used here.": "Dział IT organizacji wskazał dla tego komputera innego lidera, więc nic, co podpisuje lider tego zespołu, nie jest tu używane.",
     "Managed by your organisation.": "Zarządzane przez organizację.",
+    "No sign-in is offered on this computer just now; the organisation's IT department decides it.": "Na tym komputerze nie jest teraz dostępne logowanie; decyduje o tym dział IT organizacji.",
+    "No sign-in is offered on this computer just now. To ask about it: {CONTACT}.": "Na tym komputerze nie jest teraz dostępne logowanie. W tej sprawie: {CONTACT}.",
     "Your organisation gave this account its seat on this desk. Its IT department decides who uses Etiuda here, and with which account.": "Miejsce w licencji na tym stanowisku przydzieliła temu kontu organizacja. O tym, kto i jakim kontem korzysta tu z Etiudy, decyduje jej dział IT.",
     "Seat held · checked {WHEN}": "Miejsce zajęte · sprawdzono {WHEN}",
     "A shared computer: another person may sign in here, with an account of your organisation.": "Wspólny komputer: może się tu zalogować inna osoba, kontem organizacji.",
@@ -29525,12 +29529,22 @@ What is typed here stays in this browser.`;
         return [t("The sign-in service could not be reached."), t("Nothing changed: this computer is not signed in, and Etiuda works as before.")];
       /* Where Managed is not set, decision 20 (b)'s words serve an account not assigned as they serve the organisation's refusal. */
       case "signin-notassigned":
-      case "signin-notallowed":
-        return [t("This account's organisation has not allowed Etiuda at its sign-in provider."), t("Its IT department can allow it; another account can be used meanwhile.")];
+      case "signin-notallowed": {
+        const c = v && v.managed ? v.managed.contact : "";
+        return [
+          t("This account's organisation has not allowed Etiuda at its sign-in provider."),
+          c ? named(t("To ask for access: {CONTACT}. Another account can be used meanwhile."), "{CONTACT}", c) : t("Its IT department can allow it; another account can be used meanwhile.")
+        ];
+      }
       case "no-role":
         return signinNoRoleWords(v);
-      case "seat-removed":
-        return [t("Your organisation no longer gives this account access to Etiuda."), t("This desk keeps its catalog and works with it as before, but new editions from the team no longer reach it. The organisation's IT department can give access again.")];
+      case "seat-removed": {
+        const c = v && v.managed ? v.managed.contact : "";
+        return [
+          t("Your organisation no longer gives this account access to Etiuda."),
+          c ? named(t("This desk keeps its catalog and works with it as before, but new editions from the team no longer reach it. To ask for access: {CONTACT}."), "{CONTACT}", c) : t("This desk keeps its catalog and works with it as before, but new editions from the team no longer reach it. The organisation's IT department can give access again.")
+        ];
+      }
       case "seat-renew":
         return [t("This account's sign-in needs renewing."), t("This desk keeps its catalog and works with it as before. Signing in again, under Account, brings the team's new editions back.")];
       case "desks":
@@ -40130,9 +40144,11 @@ What is typed here stays in this browser.`;
   }
   function accountManagedHtml(v) {
     if (!signinManaged(v) || signinWaiting(v)) return "";
-    const held = v.signedIn && v.seat === "held", shared = v.managed.shared;
+    const held = v.signedIn && v.seat === "held", shared = v.managed.shared, c = v.managed.contact;
+    const closed = !v.signedIn && !v.offered.length;
     const line = [
       held ? t("Your organisation gave this account its seat on this desk. Its IT department decides who uses Etiuda here, and with which account.") : "",
+      closed ? c ? t("No sign-in is offered on this computer just now. To ask about it: {CONTACT}.").split("{CONTACT}").join(c) : t("No sign-in is offered on this computer just now; the organisation's IT department decides it.") : "",
       shared ? t("A shared computer: another person may sign in here, with an account of your organisation.") : ""
     ].filter(Boolean).join(" ");
     return '<p class="sgn-say" data-signin-managed><b>' + esc(t("Managed by your organisation.")) + "</b>" + (line ? "<span>" + esc(line) + "</span>" : "") + "</p>";
@@ -40182,11 +40198,11 @@ What is typed here stays in this browser.`;
     } else h += signinIdentHtml({
       initial: "",
       name: t("Not signed in"),
-      sub: t("Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.")
+      sub: v.offered.length ? t("Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.") : ""
     });
     h += accountManagedHtml(v);
     if (v.outOwed) h += '<p class="sgn-cap" data-signin-out-owed>' + esc(t("This computer is signed out. Its place among the account's three computers is freed by itself as soon as the sign-in service can be reached.")) + "</p>";
-    h += "<div>" + (v.said === "signin-preview" ? "" : signinPreviewHtml(v)) + signinProvidersHtml(v.offered, true) + (signinCapHolds(v) ? '<p class="sgn-cap">' + esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.")) + "</p>" : "") + '<p class="sgn-cap">' + esc(t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account.")) + "</p></div>";
+    if (v.offered.length) h += "<div>" + (v.said === "signin-preview" ? "" : signinPreviewHtml(v)) + signinProvidersHtml(v.offered, true) + (signinCapHolds(v) ? '<p class="sgn-cap">' + esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.")) + "</p>" : "") + '<p class="sgn-cap">' + esc(t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account.")) + "</p></div>";
     if (choosing && v.signedIn) h += '<span class="sgn-acts"><button type="button" class="btn" data-signin-act="keep">' + esc(t("Cancel")) + "</button></span>";
     return h + "</div>";
   }
@@ -40211,7 +40227,7 @@ What is typed here stays in this browser.`;
   function accountGroups() {
     const name = row("name", "user", t("Your name"), "", '<input type="text" id="setAgentName" autocomplete="off" spellcheck="false" placeholder="' + esc(t("first name")) + '" value="' + esc(agentName()) + '">');
     const v = signinNow(), groups = [];
-    if (signinShown(v)) groups.push({ rows: [], after: accountCardHtml(v) });
+    if (signinShown(v) || signinManaged(v)) groups.push({ rows: [], after: accountCardHtml(v) });
     const rows = [name], buy = buyOffered() && !v.busy && !signinManaged(v) && !v.licenceManaged;
     const held = v.licenceManaged ? row("buy", "forward", t("Licence for one person"), t("Your organisation holds the Etiuda licence for this account, so there is nothing to buy here."), "") : null;
     const cause = v.cause === "own-licence" ? t("Your organisation's licence follows the roles its IT department assigns, and this account has none, so it keeps its seat on the licence bought before.") : v.cause === "assigned" ? t("Your organisation has given this account a role, so it uses the organisation's licence; its seat on the licence bought before is not used meanwhile.") : "";

@@ -269,8 +269,11 @@ function closeHost(){
 /* A MANAGED COMPUTER'S LINE (decision 49): who decides, the seat it gave where one is held, and on a shared computer that another may sign in. */
 function accountManagedHtml(v){
   if(!signinManaged(v) || signinWaiting(v)) return "";
-  const held=v.signedIn && v.seat==="held", shared=v.managed.shared;
+  const held=v.signedIn && v.seat==="held", shared=v.managed.shared, c=v.managed.contact;
+  const closed=!v.signedIn && !v.offered.length; /* plant:managed-closed-line */
   const line=[held ? t("Your organisation gave this account its seat on this desk. Its IT department decides who uses Etiuda here, and with which account.") : "",
+    closed ? (c ? t("No sign-in is offered on this computer just now. To ask about it: {CONTACT}.").split("{CONTACT}").join(c)
+      : t("No sign-in is offered on this computer just now; the organisation's IT department decides it.")) : "",
     shared ? t("A shared computer: another person may sign in here, with an account of your organisation.") : ""].filter(Boolean).join(" ");
   return '<p class="sgn-say" data-signin-managed><b>'+esc(t("Managed by your organisation."))+'</b>'+(line?'<span>'+esc(line)+'</span>':'')+'</p>';
 }
@@ -316,10 +319,10 @@ function accountCardHtml(v){
   const failed=v.said && v.said!=="signin-done" && v.said!=="signin-cancelled" && !v.signedIn;
   if(failed){ const s=signinSay(v.said, v); h+=signinIdentHtml({initial:"", name:s[0], sub:s[1]}); }
   else h+=signinIdentHtml({initial:"", name:t("Not signed in"),
-    sub:t("Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.")});
+    sub:v.offered.length ? t("Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.") : ""});
   h+=accountManagedHtml(v);
   if(v.outOwed) h+='<p class="sgn-cap" data-signin-out-owed>'+esc(t("This computer is signed out. Its place among the account's three computers is freed by itself as soon as the sign-in service can be reached."))+'</p>';
-  h+='<div>'+(v.said==="signin-preview" ? "" : signinPreviewHtml(v))+signinProvidersHtml(v.offered, true)
+  if(v.offered.length) h+='<div>'+(v.said==="signin-preview" ? "" : signinPreviewHtml(v))+signinProvidersHtml(v.offered, true)
     +(signinCapHolds(v) ? '<p class="sgn-cap">'+esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account."))+'</p>' : '') /* plant:card-cap */
     +'<p class="sgn-cap">'+esc(t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account."))+'</p></div>';
   if(choosing && v.signedIn) h+='<span class="sgn-acts"><button type="button" class="btn" data-signin-act="keep">'+esc(t("Cancel"))+'</button></span>';
@@ -340,7 +343,7 @@ function accountGroups(){
   const name=row("name","user",t("Your name"),"",'<input type="text" id="setAgentName" autocomplete="off" spellcheck="false"'
     +' placeholder="'+esc(t("first name"))+'" value="'+esc(agentName())+'">');
   const v=signinNow(), groups=[];
-  if(signinShown(v)) groups.push({rows:[], after:accountCardHtml(v)});
+  if(signinShown(v) || signinManaged(v)) groups.push({rows:[], after:accountCardHtml(v)}); /* plant:account-managed-closed */
   const rows=[name], buy=buyOffered() && !v.busy && !signinManaged(v) /* plant:buy-page-managed */
     && !v.licenceManaged; /* plant:account-buy-managed */
   /* A managed tenant's account: nothing to buy, and who holds the licence instead (the copywriter's placeholder words). */

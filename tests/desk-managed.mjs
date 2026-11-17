@@ -28,7 +28,7 @@ const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const SIGNIN = fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8");
 const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const CHECKS = 32, PLANTS = 45;
+const CHECKS = 35, PLANTS = 49;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -474,6 +474,63 @@ CASES.askLeadManaged = async (s, set, pg) => {
   const u = await drawn(Object.assign({}, PROFILES.signed, { seat: "held", askLead: true, trialUntil: until }), "en", set, pg);
   return u.moment === "asklead" && u.door.indexOf("sgn-code") >= 0 && u.door.indexOf("sgn-own") >= 0;
 };
+/* mm-p12 (finding 8, case A): seat-removed uses SupportContact as text when set, English and Polish; keeps IT words otherwise. */
+CASES.seatRemovedContact = async (s, set, pg) => {
+  const c = "Service desk <4400>", v = Object.assign({}, PROFILES.signed, { relaySeat: "removed" });
+  const want = {
+    en: { withC: "This desk keeps its catalog and works with it as before, but new editions from the team no longer reach it. To ask for access: Service desk <4400>.",
+      noC: "The organisation's IT department can give access again." },
+    pl: { withC: "To stanowisko zachowuje swój katalog i działa z nim jak dotąd, ale nowe wydania od zespołu już do niego nie trafiają. W sprawie dostępu: Service desk <4400>.",
+      noC: "Dostęp może przywrócić dział IT organizacji." },
+  };
+  for (const lang of ["en", "pl"]) {
+    const a = await drawn(withM(v, Object.assign({}, M_ON, { contact: c })), lang, set, pg);
+    const b = await drawn(withM(v, M_ON), lang, set, pg);
+    if (words(a.door).indexOf(want[lang].withC) < 0 || a.door.indexOf("<4400>") >= 0 || /<a\b/i.test(a.door)) return false;
+    if (words(b.door).indexOf(want[lang].noC) < 0) return false;
+  }
+  return true;
+};
+/* mm-p13 (finding 8, case B): unmanaged signin-notassigned and signin-notallowed use SupportContact when set, English and Polish. */
+CASES.unmanagedContact = async (s, set, pg) => {
+  const c = "Service desk <4400>";
+  const want = {
+    en: { withC: "To ask for access: Service desk <4400>. Another account can be used meanwhile.",
+      noC: "Its IT department can allow it; another account can be used meanwhile." },
+    pl: { withC: "W sprawie dostępu: Service desk <4400>. Do tego czasu można użyć innego konta.",
+      noC: "Może to zmienić jej dział IT; do tego czasu można użyć innego konta." },
+  };
+  for (const prof of [PROFILES.refused, PROFILES.notallowed]) {
+    for (const lang of ["en", "pl"]) {
+      const a = await drawn(withM(prof, Object.assign({}, OFF, { contact: c })), lang, set, pg);
+      const b = await drawn(prof, lang, set, pg);
+      if (words(a.door).indexOf(want[lang].withC) < 0 || a.door.indexOf("<4400>") >= 0 || /<a\b/i.test(a.door)) return false;
+      if (words(b.door).indexOf(want[lang].noC) < 0) return false;
+    }
+  }
+  return true;
+};
+/* mm-p14 (finding 8, case C): under Managed with policy closed (no sign-in offered), Account says the computer is managed
+   and why, using SupportContact when set, English and Polish, without provider or sign-in copy. */
+CASES.managedClosedAccount = async (s, set, pg) => {
+  const M_CLOSED = Object.assign({}, M_ON, { provider: "", tenant: false, closed: true });
+  const want = {
+    en: { mgr: "Managed by your organisation.", noC: "No sign-in is offered on this computer just now; the organisation's IT department decides it.",
+      withC: "No sign-in is offered on this computer just now. To ask about it: Service desk <4400>." },
+    pl: { mgr: "Zarządzane przez organizację.", noC: "Na tym komputerze nie jest teraz dostępne logowanie; decyduje o tym dział IT organizacji.",
+      withC: "Na tym komputerze nie jest teraz dostępne logowanie. W tej sprawie: Service desk <4400>." },
+  };
+  for (const lang of ["en", "pl"]) {
+    const a = await drawn({ offered: [], managed: M_CLOSED }, lang, set, pg), aw = words(a.acct);
+    const b = await drawn({ offered: [], managed: Object.assign({}, M_CLOSED, { contact: "Service desk <4400>" }) }, lang, set, pg), bw = words(b.acct);
+    if (a.door !== "" || b.door !== "") return false;
+    if (aw.indexOf(want[lang].mgr) < 0 || aw.indexOf(want[lang].noC) < 0) return false;
+    if (bw.indexOf(want[lang].mgr) < 0 || bw.indexOf(want[lang].withC) < 0 || b.acct.indexOf("<4400>") >= 0 || /<a\b[^>]*>[^<]*4400/i.test(b.acct)) return false;
+    if (/Signing in brings|This desk signs in|data-e-provider/.test(a.acct + aw + b.acct + bw)) return false;
+  }
+  const u = await drawn({ offered: [] }, "en", set, pg);
+  return u.acct.indexOf("sgn-top") < 0 && u.acct.indexOf("data-signin-managed") < 0;
+};
 
 /* ---- the run ---------------------------------------------------------------------------------------------------------- */
 let S = null;
@@ -509,6 +566,9 @@ const LIST = [
   ["mm-p8", "waiting", "policy not read yet: the panel and Account say the desk waits for the organisation's settings, offer nothing to sign in with, buy or copy, and never say managed"],
   ["mm-p10", "noTeamManaged", "finding 7: on a managed computer, the Team row never refers to the hidden code below, English and Polish; unmanaged still does"],
   ["mm-p11", "askLeadManaged", "finding 7: on a managed computer, askLead shows neither sign-in code nor trial line and names no hidden code; unmanaged still shows both"],
+  ["mm-p12", "seatRemovedContact", "finding 8: seat-removed uses SupportContact when set, English and Polish, as text; keeps IT words otherwise"],
+  ["mm-p13", "unmanagedContact", "finding 8: unmanaged signin-notassigned and signin-notallowed use SupportContact when set, English and Polish"],
+  ["mm-p14", "managedClosedAccount", "finding 8: under Managed with no sign-in offered, Account says it is managed and why, with SupportContact when set"],
 ];
 const run = async (name, s, set, pg) => { try { return !!(await CASES[name](s, set, pg)); } catch (e) { return false; } };
 for (const [id, name, what] of LIST) check(!!S && await run(name, S), id + " " + what);
@@ -607,6 +667,14 @@ if (!PLANTS_OFF && S) {
     "if(v.askLead) return {moment:\"asklead\", ident, say:signinSay(\"asklead\", v), code:v.code,"], "askLeadManaged", "signin");
   await plantPage("mmp45", ["own:signinManaged(v)?null:v.seat===\"held\" && v.trialUntil ? [t(\"This account's own trial is running.\"), /* plant:asklead-trial-managed */",
     "own:v.seat===\"held\" && v.trialUntil ? [t(\"This account's own trial is running.\"),"], "askLeadManaged", "signin");
+  await plantPage("mmp46", ["    case \"seat-removed\": /* plant:seat-removed-contact */\n      { const c=v && v.managed ? v.managed.contact : \"\";",
+    "    case \"seat-removed\":\n      { const c=\"\";"], "seatRemovedContact", "signin");
+  await plantPage("mmp47", ["    case \"signin-notallowed\": /* plant:unmanaged-contact */\n      { const c=v && v.managed ? v.managed.contact : \"\";",
+    "    case \"signin-notallowed\":\n      { const c=\"\";"], "unmanagedContact", "signin");
+  await plantPage("mmp48", ["  if(signinShown(v) || signinManaged(v)) groups.push({rows:[], after:accountCardHtml(v)}); /* plant:account-managed-closed */",
+    "  if(signinShown(v)) groups.push({rows:[], after:accountCardHtml(v)});"], "managedClosedAccount", "settings");
+  await plantPage("mmp49", ["  const closed=!v.signedIn && !v.offered.length; /* plant:managed-closed-line */",
+    "  const closed=false;"], "managedClosedAccount", "settings");
 }
 
 const done = asserted === EXPECTED;

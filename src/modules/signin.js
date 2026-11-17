@@ -282,12 +282,18 @@ function signinSay(reason, v, p){
       return [t("The sign-in service could not be reached."), t("Nothing changed: this computer is not signed in, and Etiuda works as before.")];
     /* Where Managed is not set, decision 20 (b)'s words serve an account not assigned as they serve the organisation's refusal. */
     case "signin-notassigned":
-    case "signin-notallowed":
-      return [t("This account's organisation has not allowed Etiuda at its sign-in provider."), t("Its IT department can allow it; another account can be used meanwhile.")];
+    case "signin-notallowed": /* plant:unmanaged-contact */
+      { const c=v && v.managed ? v.managed.contact : "";
+        return [t("This account's organisation has not allowed Etiuda at its sign-in provider."),
+          c ? named(t("To ask for access: {CONTACT}. Another account can be used meanwhile."),"{CONTACT}",c)
+            : t("Its IT department can allow it; another account can be used meanwhile.")]; }
     case "no-role":
       return signinNoRoleWords(v);
-    case "seat-removed":
-      return [t("Your organisation no longer gives this account access to Etiuda."), t("This desk keeps its catalog and works with it as before, but new editions from the team no longer reach it. The organisation's IT department can give access again.")];
+    case "seat-removed": /* plant:seat-removed-contact */
+      { const c=v && v.managed ? v.managed.contact : "";
+        return [t("Your organisation no longer gives this account access to Etiuda."),
+          c ? named(t("This desk keeps its catalog and works with it as before, but new editions from the team no longer reach it. To ask for access: {CONTACT}."),"{CONTACT}",c)
+            : t("This desk keeps its catalog and works with it as before, but new editions from the team no longer reach it. The organisation's IT department can give access again.")]; }
     case "seat-renew":
       return [t("This account's sign-in needs renewing."), t("This desk keeps its catalog and works with it as before. Signing in again, under Account, brings the team's new editions back.")];
     case "desks":
