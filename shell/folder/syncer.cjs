@@ -906,6 +906,12 @@ function createFolderProgram(opts) {
     const ep = Number.isInteger(epoch) ? epoch : null;
     refusedMtimes.set(item.relPath, { size: item.size, mtimeMs: item.mtimeMs, at: judgedAt, epoch: ep, key: keyMark(ep) });
   }
+  function dropRefused(item, epoch) {
+    let remember = false;
+    remember = true; /* plant:syncer-drop-refused */
+    if (remember) refuse(item, epoch);
+    if (item && item.tmpPath) { try { io.unlink(item.tmpPath); } catch {} }
+  }
   function keyMark(epoch) {
     if (epoch === null) return "";
     const k = typeof keyFor === "function" ? keyFor(epoch) : null;
@@ -1780,13 +1786,13 @@ function createFolderProgram(opts) {
               applied.push(sibItem.relPath);
             }
           } else {
-            try { io.unlink(sibItem.tmpPath); } catch {}
+            dropRefused(sibItem);
           }
         } else {
-          try { io.unlink(sibItem.tmpPath); } catch {}
+          dropRefused(sibItem);
         }
       } else {
-        try { io.unlink(sibItem.tmpPath); } catch {}
+        dropRefused(sibItem);
       }
     }
 
@@ -1942,7 +1948,7 @@ function createFolderProgram(opts) {
           const target = path.join(mirror, relPath);
           if (landStaged(item, target)) applied.push(relPath);
         } else {
-          try { io.unlink(tmpPath); } catch {}
+          dropRefused(item);
         }
       } else if (/^etiuda-ring.*\.json$/i.test(relPath)) {
         let doc = null;
@@ -1953,7 +1959,7 @@ function createFolderProgram(opts) {
             applied.push(relPath);
           }
         } else {
-          try { io.unlink(tmpPath); } catch {}
+          dropRefused(item);
         }
       } else if (/^etiuda-team-pause.*\.json$/i.test(relPath)) {
         let doc = null;
@@ -1962,7 +1968,7 @@ function createFolderProgram(opts) {
           const target = path.join(mirror, relPath);
           if (landStaged(item, target)) applied.push(relPath);
         } else {
-          try { io.unlink(tmpPath); } catch {}
+          dropRefused(item);
         }
       } else if (/^etiuda-team-joins.*\.json$/i.test(relPath)) {
         let doc = null;
@@ -1971,7 +1977,7 @@ function createFolderProgram(opts) {
           const target = path.join(mirror, relPath);
           if (landStaged(item, target)) applied.push(relPath);
         } else {
-          try { io.unlink(tmpPath); } catch {}
+          dropRefused(item);
         }
       } else if (/^stats-span.*\.json$/i.test(relPath)) {
         let doc = null;
@@ -1980,7 +1986,7 @@ function createFolderProgram(opts) {
           const target = path.join(mirror, relPath);
           if (landStaged(item, target)) applied.push(relPath);
         } else {
-          try { io.unlink(tmpPath); } catch {}
+          dropRefused(item);
         }
       } else if (relPath.startsWith("invites/")) {
         let doc = null;
@@ -1995,7 +2001,7 @@ function createFolderProgram(opts) {
           const target = path.join(mirror, relPath);
           if (landStaged(item, target)) applied.push(relPath);
         } else {
-          try { io.unlink(tmpPath); } catch {}
+          dropRefused(item);
         }
       } else if (relPath.startsWith("catalog-asks/") && relPath.endsWith(".json")) {
         let doc = null;
@@ -2008,7 +2014,7 @@ function createFolderProgram(opts) {
           const target = path.join(mirror, relPath);
           if (landStaged(item, target)) applied.push(relPath);
         } else {
-          try { io.unlink(tmpPath); } catch {}
+          dropRefused(item);
         }
       } else if (relPath.startsWith("desks/")) {
         const parts = relPath.replace(/\\/g, "/").split("/");
@@ -2033,15 +2039,19 @@ function createFolderProgram(opts) {
             const target = path.join(mirror, relPath);
             if (landStaged(item, target)) applied.push(relPath);
           } else {
-            if (fileName === "seat.json") refuse(item); /* plant:syncer-seat-refused */
-            try { io.unlink(tmpPath); } catch {}
+            if (fileName === "seat.json") {
+              refuse(item); /* plant:syncer-seat-refused */
+              try { io.unlink(tmpPath); } catch {}
+            } else {
+              dropRefused(item);
+            }
           }
         } else {
-          try { io.unlink(tmpPath); } catch {}
+          dropRefused(item);
         }
       } else {
         // Drop #1: non-allowlisted / non-Etiuda files are discarded
-        try { io.unlink(tmpPath); } catch {}
+        dropRefused(item);
       }
     }
 
