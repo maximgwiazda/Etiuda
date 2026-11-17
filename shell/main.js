@@ -11106,6 +11106,12 @@ function signinRelaySeatTold(team, state) {
   else if (signinRelaySeatTeam === String(team)) signinRelaySeatTeam = "";
   if (was !== signinRelaySeatTeam) tellSignin(); /* plant:relay-seat-told */
 }
+function signinRelaySeatClear() {
+  const was = signinRelaySeatTeam;
+  signinRelaySeatTeam = "";
+  signinSeatRenewAt = 0;
+  if (was && typeof relaySoon === "function") relaySoon(); /* plant:relay-seat-clear */
+}
 function signinRelaySeat(held) {
   if (!signinRelaySeatTeam || !held) return "";
   return held.said === "no-role" ? "removed" : "renew"; /* plant:relay-seat-removed */
@@ -11415,6 +11421,7 @@ function signinTake(provider, got, ans, now, access) {
   s.held = signinSettle(base, ans, now);
   s.revoked = s.held.revoked;
   delete s.out; /* this sign-in holds the desk's place again, so a sign out still owed is no longer wanted */
+  if (ans.ok && ans.cert && typeof signinRelaySeatClear === "function") signinRelaySeatClear(); /* plant:relay-seat-signin */
   signinSave();
   return true;
 }
@@ -11557,6 +11564,7 @@ function signinLeave(s, me, sent) {
     try { unlinkOwn(path.join(sharedFolderForWrite(), "desks", me.id, SEAT_NAME)); } catch { /* not written, or the folder is away */ } /* plant:signout-unlink-own */
   }
   s.held = null;
+  if (typeof signinRelaySeatClear === "function") signinRelaySeatClear(); /* plant:relay-seat-leave */
   storeForget();
   /* Signed out, the account's organisation no longer stands in for this desk: Buy, which needs no sign-in, is offered again. */
   delete s.licenceManaged; /* plant:signout-managed */
@@ -11633,6 +11641,7 @@ async function signinRenewNow(o) {
   s.held = r.held;
   s.revoked = signinRevokedNext(s.revoked || null, r.held ? r.held.revoked : null);
   signinSaid = ""; /* plant:renew-said */
+  if (r.said === "renewed" && s.held && s.held.cert && typeof signinRelaySeatClear === "function") signinRelaySeatClear(); /* plant:relay-seat-renew */
   signinSave();
   signinFlush();
   tellSignin();
