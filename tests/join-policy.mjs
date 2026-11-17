@@ -1290,7 +1290,9 @@ function holdsRunGood(src, dir) {
    answer for the run)". The whole shell runs beside the stand-in reg; nothing here starts reg.exe or reads this machine's registry. */
 const TENANT = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
 const IT_ROWS = [["Managed", "REG_DWORD", 1], ["SigninProvider", "REG_SZ", "microsoft"], ["SigninTenant", "REG_SZ", TENANT], ["AllowPersonalAccounts", "REG_DWORD", 0]];
-const HELD_FILE = JSON.stringify({ format: 2, held: { provider: "microsoft", seed: "5".repeat(64), refresh: "", sub: "sealed-sub" } });
+/* An account that has held a seat here (`seated`): only such a one is kept by a managed, unshared computer (signinAccountKept), so the
+   answer that tightens the desk refuses its Sign out. */
+const HELD_FILE = JSON.stringify({ format: 2, held: { provider: "microsoft", seed: "5".repeat(64), refresh: "", sub: "sealed-sub", seated: true } });
 let waitDesks = 0;
 /* A desk with a sign-in held, the organisation's model chosen with a key kept for its address, and a team pinned, over `reg`. */
 function waitDesk(reg, shell) {
