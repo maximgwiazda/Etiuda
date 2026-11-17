@@ -4121,7 +4121,7 @@ function teamChannelOf(doc) {
 }
 /* THE ONE PLACE A TEAM'S RELAY ADDRESS IS ASKED: teamChannelOf's channel, where a relay at an address knownRelayAddress does not
    take (the rule an invitation keeps) is {kind: "elsewhere"}, never a relay channel. Every write of teamChannel takes it from here.
-   teamChannelOf stays the shape alone, for readers that slice it out with no neighbours (tests/desk-signin.mjs). */
+   teamChannelOf stays the shape alone, for the readers that slice it out with no neighbours. */
 function heededChannelOf(doc) {
   const c = teamChannelOf(doc);
   let known = true;
