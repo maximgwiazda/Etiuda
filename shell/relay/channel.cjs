@@ -184,6 +184,13 @@ const branchIdOf = pub => "k-" + sha256(Buffer.from(pub, "hex")).slice(0, 16);
 const toBytes = v => (Buffer.isBuffer(v) ? v : v instanceof Uint8Array ? Buffer.from(v.buffer, v.byteOffset, v.byteLength)
   : typeof v === "string" ? Buffer.from(v, "utf8") : null);
 const later = (a, b) => a.epoch > b.epoch || (a.epoch === b.epoch && a.counter > b.counter);
+/* The envelope a fetch hands over, or null where its metadata is not well formed or its size is not the ciphertext's. */
+function envelopeOf(it) {
+  const m = it && it.meta, ct = it && toBytes(it.ct);
+  if (!table(m) || m.v !== 1 || !ct || m.size !== ct.length || !HEX32.test(String(m.id))) return null;
+  return { id: m.id, epoch: m.epoch, supersedes: m.supersedes == null ? null : m.supersedes, writerKeyId: m.writer,
+    counter: m.counter, nonce: m.nonce, signature: m.sig, ciphertext: ct };
+}
 
 /* THE LAPSE. A session's reply and since's etiuda-lapse header tell where the team stands by its grants: {state, until,
    readOnly, swept}, state one of LAPSE_STATES (relay/core.cjs lapseOf). A hello's until less RELAY_CHALLENGE_MS is the
@@ -1203,14 +1210,6 @@ function createProgram(opts) {
   function teamEpoch() {
     const t = heldTeam();
     return t ? t.epoch : 0;
-  }
-
-  /* The envelope a fetch hands over, or null where its metadata is not well formed or its size is not the ciphertext's. */
-  function envelopeOf(it) {
-    const m = it && it.meta, ct = it && toBytes(it.ct);
-    if (!table(m) || m.v !== 1 || !ct || m.size !== ct.length || !HEX32.test(String(m.id))) return null;
-    return { id: m.id, epoch: m.epoch, supersedes: m.supersedes == null ? null : m.supersedes, writerKeyId: m.writer,
-      counter: m.counter, nonce: m.nonce, signature: m.sig, ciphertext: ct };
   }
 
   function floorAt(floors, writer, epoch) {
@@ -2509,8 +2508,9 @@ function createChannel(opts) {
         if (got.status !== 200 && !gone(got)) return stopPage(got.refused || refusalOf(got)); /* plant:fetch-kept */
         if (got.status !== 200) continue;
         if (table(got.meta) && got.meta.id !== m.id) return stopPage(OTHER_FILE); /* plant:listed-other */
-        /* An answer without its description (a proxy may drop the header) is judged under the one listed. */
+        /* An answer without an envelope that opens (a proxy may drop or alter the header) is judged under the one listed. */
         let meta = table(got.meta) && got.meta.id === m.id ? got.meta : null;
+        if (meta && !envelopeOf({ meta, ct: got.bytes })) meta = null; /* plant:listed-envelope */
         meta = meta || m; /* plant:listed-meta */
         if (meta) items.push({ seq: e.seq, meta, ct: got.bytes });
       }
@@ -2580,8 +2580,10 @@ function createChannel(opts) {
         }
         if (table(got.meta) && got.meta.id !== h.id) { fault = OTHER_FILE; break; } /* plant:later-other */
         let meta = table(got.meta) ? got.meta : null;
+        if (meta && !envelopeOf({ meta, ct: got.bytes })) meta = null; /* plant:later-envelope */
         if (!meta) meta = describedAs(listed, h); /* plant:later-described */
         if (!meta && !asked.has(h.id)) { fault = await relistHeld(h, held, listed, asked); if (fault) break; meta = describedAs(listed, h); } /* plant:later-relist */
+        if (meta && !envelopeOf({ meta, ct: got.bytes })) meta = null; /* plant:later-listed-envelope */
         if (!meta) { stay.add(h.id); continue; } /* plant:later-stay */
         items.push({ seq: h.seq, meta, ct: got.bytes, floor: h.floor });
         done.push(h.id);
