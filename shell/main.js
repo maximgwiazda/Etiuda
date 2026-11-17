@@ -11580,9 +11580,13 @@ function signinOutWanted(s, me) {
    service took it, false where it did not, null where none is sent; never left owed, so a switch not made signs nobody out later. */
 async function signinSwitchOut(s, me) {
   if (!signinOutWanted(s, me)) return null;
-  s.out = me.key;
-  const ok = await signinOutSend(me.key);
-  if (!ok && s.out === me.key) delete s.out; /* plant:switch-out-unowed */
+  const send = () => signoutAsk(signinIo({ loop: null }), me.key, Date.now);
+  const flight = (signinRenewing ? signinRenewing.then(send, send) : send()).then(ok => {
+    if (signinOutFlight === flight) signinOutFlight = null;
+    return ok;
+  });
+  signinOutFlight = flight; /* plant:switch-out-in-flight */
+  const ok = await flight; /* plant:switch-out-await */
   return ok;
 }
 /* One signout/desk for `key`, at once or after the renewal still out, and the owed mark taken off once the service has it. Resolves

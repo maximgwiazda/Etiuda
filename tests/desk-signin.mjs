@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 199;
+const PLANTS = 200;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 168 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 169 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2660,6 +2660,34 @@ CASES.switchUnanswered = async (s, swap) => {
     && !!firstTaken.st.store.held && firstTaken.st.store.held.sub === "sealed:s-2" && firstTaken.st.forgets === 1 && firstTaken.st.unlinked.length === 1;
   return whole && told && lateOk && lateTold && firstOk;
 };
+/* Nothing written to signin.json while a switch's signout is still out says a signout is owed for an account the desk still holds; a
+   start from such a file signs nobody out, while Sign out still keeps its owed mark. */
+CASES.switchOutWindow = async (s, swap) => {
+  let release = null;
+  const st = switchStand(s), w = loadSwitch(st, swap);
+  st.outGate = new Promise(r => { release = r; });
+  const pressing = w.press();
+  await tick(5);
+  const inFlight = st.order.indexOf("signout/desk s-1") >= 0 && st.order.indexOf("signout/desk s-1 answered") < 0 && !!st.store.held;
+  const text = s.signinFileText(st.store), back = s.signinFileRead(text);
+  const noOwed = JSON.parse(text).out === undefined && st.store.out === undefined && back.out === undefined && !!back.held;
+  const rst = outStand(s, () => answer({ ok: true }));
+  rst.store = back;
+  rst.signinRenewHeld = async (io, p, key, held) => ({ held, said: "renewed" });
+  await loadWire(rst).signinRenewNow();
+  const rstOut = outStand(s, () => answer({ ok: true }));
+  rstOut.store = Object.assign({}, back, { held: null });
+  await loadWire(rstOut).signinRenewNow();
+  release();
+  const v = await pressing;
+  await tick(5);
+  const done = !!st.store.held && st.store.held.sub === "sealed:s-2" && st.store.out === undefined && v.said === "signin-done";
+  const ost = outStand(s, () => { throw new Error("offline"); });
+  loadWire(ost).signinOutNow();
+  await tick(5);
+  return inFlight && noOwed && rst.sent.length === 0 && rstOut.sent.length === 0 && done
+    && ost.sent.length === 1 && ost.store.held === null && ost.store.out === DESK_KEY;
+};
 /* Sign out and the switch share one leaving (signinLeave): Sign out is its guards, that call, and its words; the press calls it for
    another account only, its signout already decided by signinSwitchOut on the same condition (signinOutWanted), at most once on any
    path and before the new account is taken. A step added to Sign out outside signinLeave turns this red. */
@@ -3652,6 +3680,7 @@ const LEGS = [
   ["ds51f", "seatedKept", "review 2: that an account has held a seat here is kept from its first certificate, through an answer of none, signin.json and a restart; an account never given one is not, and on a managed, unshared computer it is replaced by another account's sign-in and signed out of, where one that held a seat is kept from both"],
   ["ds51g", "orgKept", "review 09 finding 1: the account's organisation as its provider named it is kept with the sign-in and in signin.json, so a policy set later is held to it"],
   ["ds51h", "switchUnanswered", "review 11, Claude alpha's decision: the held account is left only once the service answers a call of the switch: its signout not taken, the desk stays the account it had, seat.json, door and store whole, nothing owed, no signin/desk sent, and the page says it stays signed in; taken and then unreached, signed out and said so; where no signout is sent, the new account's unreached signin/desk leaves the desk as it was"],
+  ["ds51i", "switchOutWindow", "nothing written to signin.json while a switch's signout is still out says a signout is owed for an account the desk still holds, and a start from such a file signs nobody out, while Sign out still owes one"],
   ["ds51b", "switchShared", "review 11: Sign out and the switch share one leaving, signinLeave: Sign out is its guards, that call and its words, and the press calls it for another account only, at most once on a path, its signout decided on the same condition, before the new account is taken"],
 ];
 for (let [id, name, line] of LEGS) {
@@ -4084,13 +4113,14 @@ if (!PLANTS_OFF) {
   await plantWire("dsp99e", ["  if (!held && s.out) { await signinOutAgain(); return \"\"; } /* plant:renew-out */\n", ""], "signoutOwed");
   await plantWire("dsp99f", ["  return signinOutSend(s.out); /* plant:out-again */", "  return Promise.resolve(false);"], "signoutOwed");
   await plantWire("dsp200", ["    if (out === true) { signinLeave(st, me, true); signinSave(); tellSignin(); } /* plant:switch-leaves */\n", ""], "switchLeaves");
-  await plantWire("dsp201", ["  const ok = await signinOutSend(me.key);", "  const ok = (signinOutSend(me.key), true);"], "switchUnanswered");
+  await plantWire("dsp201", ["  const ok = await flight; /* plant:switch-out-await */", "  const ok = true;"], "switchUnanswered");
   await plantWire("dsp204", ["    const access = signinAccessFor(p, managed, null); /* plant:access-not-held */", "    const access = managed || (st.held && st.held.provider === p.id) ? signinAccessFor(p, managed, st.held) : \"\";"], "accessNotHeld");
   await plant("dsp205", ["  if (settled.cert) settled.seated = true; /* plant:seated-settle */", "  /* plant:seated-settle */"], "seatedKept");
   await plant("dsp206", ["  if (out.held && (h.seated === true || out.held.cert)) out.held.seated = true; /* plant:seated-file */", "  if (out.held && out.held.cert) out.held.seated = true; /* plant:seated-file */"], "seatedKept");
   await plantWire("dsp207", ["  if (claims) base.org = {", "  if (false) base.org = {"], "orgKept");
   await plantWire("dsp208", ["    if (out === false) got = { ok: false, reason: \"unreached\" }; /* plant:switch-unanswered */\n", ""], "switchUnanswered");
-  await plantWire("dsp209", ["  if (!ok && s.out === me.key) delete s.out; /* plant:switch-out-unowed */", "  /* plant:switch-out-unowed */"], "switchUnanswered");
+  await plantWire("dsp209", ["  signinOutFlight = flight; /* plant:switch-out-in-flight */", "  s.out = me.key; signinOutFlight = flight;"], "switchUnanswered");
+  await plantWire("dsp211", ["  const ok = await flight; /* plant:switch-out-await */", "  s.out = me.key;\n  const ok = await flight;\n  if (!ok && s.out === me.key) delete s.out;"], "switchOutWindow");
   await plantWire("dsp210", ["      if (other && out === null && (ans.ok || ans.reason !== \"unreached\")) { signinLeave(st, me, true); signinSave(); } /* plant:switch-leaves-after */", "      if (other && out === null) { signinLeave(st, me, true); signinSave(); } /* plant:switch-leaves-after */"], "switchUnanswered");
   await plantWire("dsp99g", ["{ cancelJoin(); sendJoin(theWindow); } /* plant:signout-door */", "{ }"], "signoutDoorJoin");
   await plantWire("dsp99h", ["    outOwed: !signedIn && !!signinState().out && !signinOutFlight, /* plant:out-owed-view */", "    outOwed: false,"], "outOwedView");
