@@ -29,7 +29,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const CHECKS = 8, PLANTS = 10;
+const CHECKS = 8, PLANTS = 12;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -100,7 +100,7 @@ function tableOn(s, service) {
 }
 const MS = { id: "microsoft", clientId: MS_ID, clientSecret: "" }, G = { id: "google", clientId: G_ID, clientSecret: "" };
 const today = { desk: (provider, idToken, desk, t, seed) => Buffer.from("etiuda-licence-signin-desk\n" + [provider, sha(idToken), desk, t].concat(seed ? ["seed:" + seed] : []).join("\n"), "utf8"),
-  managed: (provider, idToken, access, desk, t) => Buffer.from("etiuda-licence-signin-desk-managed\n" + [provider, sha(idToken), sha(access), desk, t].join("\n"), "utf8") };
+  managed: (provider, idToken, access, desk, t, seed) => Buffer.from("etiuda-licence-signin-desk-managed\n" + [provider, sha(idToken), sha(access), desk, t].concat(seed ? ["seed:" + seed] : []).join("\n"), "utf8") };
 const scopeOf = url => new URL(url).searchParams.get("scope");
 const formOf = buf => new URLSearchParams(Buffer.from(buf).toString("utf8"));
 
@@ -149,7 +149,8 @@ CASES.silent = async s => {
   return first.ok === false && first.reason === "access-token" && m.ans.ok === true && m.access === true && st.opened === 0
     && st.tokens.length === 1 && st.tokens[0].form.get("grant_type") === "refresh_token" && st.tokens[0].form.get("refresh_token") === "r1"
     && String(st.tokens[0].form.get("scope")).split(" ").indexOf(SCOPE) >= 0 && st.asked.length === 2 && second.accessToken === ACCESS
-    && verifies(today.managed("microsoft", second.idToken, ACCESS, DESK, NOW), second.sig) && !verifies(today.desk("microsoft", second.idToken, DESK, NOW), second.sig);
+    && verifies(today.managed("microsoft", second.idToken, ACCESS, DESK, NOW, SEED), second.sig) && !verifies(today.managed("microsoft", second.idToken, ACCESS, DESK, NOW), second.sig)
+    && !verifies(today.desk("microsoft", second.idToken, DESK, NOW, SEED), second.sig);
 };
 CASES.managed = s => {
   tableOn(s, SERVICE_ID);
@@ -157,9 +158,12 @@ CASES.managed = s => {
   const url = s.signinAuthorize(MS, 50000, DESK, n => Buffer.alloc(n, 7), path).url;
   const form = formOf(s.signinRefreshForm(MS, "r", path));
   const body = s.signinDeskBody("microsoft", "id.tok.en", DESK, SEED, NOW, sign, ACCESS);
+  const renew = s.signinDeskBody("microsoft", "id.tok.en", DESK, "", NOW, sign, ACCESS);
   const none = (tableOn(s, ""), s.signinAccessFor(MS, true, null));
   return path === SCOPE && remembered === SCOPE && scopeOf(url) === "openid profile offline_access " + SCOPE && form.get("scope") === "openid profile offline_access " + SCOPE
-    && Object.keys(body).join() === "provider,idToken,accessToken,desk,seed,t,sig" && verifies(today.managed("microsoft", "id.tok.en", ACCESS, DESK, NOW), body.sig)
+    && Object.keys(body).join() === "provider,idToken,accessToken,desk,seed,t,sig" && verifies(today.managed("microsoft", "id.tok.en", ACCESS, DESK, NOW, SEED), body.sig)
+    && !verifies(today.managed("microsoft", "id.tok.en", ACCESS, DESK, NOW), body.sig)
+    && Object.keys(renew).join() === "provider,idToken,accessToken,desk,t,sig" && verifies(today.managed("microsoft", "id.tok.en", ACCESS, DESK, NOW), renew.sig)
     && none === "";
 };
 CASES.kept = s => {
@@ -232,8 +236,8 @@ if (!PLANTS_OFF && S) {
   await plant("dap2", ["return managed === true || (!!held && held.access === true) ? signinServiceScope(p) : \"\"; /* plant:access-path */", "return signinServiceScope(p);"], "personal");
   await plant("dap3", ["  const r = await signinRenew(io, p, deskKey, got.refreshToken, got.seed || seed || \"0\".repeat(64), got.sub, now, scope); /* plant:access-silent */",
     "  io.openPage(\"https://login.microsoftonline.com/common/oauth2/v2.0/authorize?prompt=consent\"); const r = await signinRenew(io, p, deskKey, got.refreshToken, got.seed || seed || \"0\".repeat(64), got.sub, now, scope);"], "silent");
-  await plant("dap4", ["[o.provider, o.tokenHash, o.accessHash, o.desk, o.t].map(String).join(\"\\n\"), \"utf8\"); /* plant:access-signed */",
-    "[o.provider, o.tokenHash, o.desk, o.t].map(String).join(\"\\n\"), \"utf8\");"], "managed");
+  await plant("dap4", ["[o.provider, o.tokenHash, o.accessHash, o.desk, o.t].concat(o.seed ? [\"seed:\" + o.seed] : []).map(String).join(\"\\n\"), \"utf8\"); /* plant:access-signed */",
+    "[o.provider, o.tokenHash, o.desk, o.t].concat(o.seed ? [\"seed:\" + o.seed] : []).map(String).join(\"\\n\"), \"utf8\");"], "managed");
   await plant("dap5", ["  if (access) out.accessToken = typeof json.access_token === \"string\" && json.access_token.length <= SIGNIN_ACCESS_MAX ? json.access_token : \"\"; /* plant:access-kept */",
     "  if (access) out.accessToken = typeof json.access_token === \"string\" ? json.access_token : \"\";"], "kept");
   await plant("dap6", ["  if (!got.ok && access && /\\bAADSTS50105\\b/.test(signinTraceSaid(res, hide).error_description || \"\")) return { ok: false, reason: \"signin-notassigned\" }; /* plant:access-50105 */",
@@ -244,6 +248,10 @@ if (!PLANTS_OFF && S) {
   await plant("dap9", ["  if (m && m.access) { fresh.access = true; fresh.refresh = io.keep(m.got.refreshToken) || fresh.refresh; } /* plant:access-rotated */",
     "  if (m && m.access) { fresh.access = true; }"], "renewal");
   await plant("dap10", ["  else if (!m && ans.reason !== \"unreached\" && fresh.access) delete fresh.access; /* plant:access-clear */", ""], "renewal");
+  await plant("dap11", ["const sig = String(sign(signinDeskManagedBytes({ provider: provider, tokenHash: signinTokenHash(idToken), accessHash: signinTokenHash(accessToken), desk: desk, t: t, seed: seed || \"\" })) || \"\"); /* plant:access-seed */",
+    "const sig = String(sign(signinDeskManagedBytes({ provider: provider, tokenHash: signinTokenHash(idToken), accessHash: signinTokenHash(accessToken), desk: desk, t: t })) || \"\");"], "managed");
+  await plant("dap12", ["[o.provider, o.tokenHash, o.accessHash, o.desk, o.t].concat(o.seed ? [\"seed:\" + o.seed] : []).map(String).join(\"\\n\"), \"utf8\"); /* plant:access-signed */",
+    "[o.provider, o.tokenHash, o.accessHash, o.desk, o.t].map(String).join(\"\\n\"), \"utf8\");"], "managed");
 }
 
 const done = asserted === EXPECTED;

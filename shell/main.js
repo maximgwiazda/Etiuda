@@ -10751,12 +10751,12 @@ function signinDeskBytes(o) {
    signinDeskManagedBytes. */
 const SIGNIN_DESK_MANAGED_LINE = "etiuda-licence-signin-desk-managed";
 function signinDeskManagedBytes(o) {
-  return Buffer.from(SIGNIN_DESK_MANAGED_LINE + "\n" + [o.provider, o.tokenHash, o.accessHash, o.desk, o.t].map(String).join("\n"), "utf8"); /* plant:access-signed */
+  return Buffer.from(SIGNIN_DESK_MANAGED_LINE + "\n" + [o.provider, o.tokenHash, o.accessHash, o.desk, o.t].concat(o.seed ? ["seed:" + o.seed] : []).map(String).join("\n"), "utf8"); /* plant:access-signed */
 }
 /* The managed body, {provider, idToken, accessToken, desk, seed?, t, sig}; null where the access token is not its shape. */
 function signinDeskManagedBody(provider, idToken, desk, seed, t, sign, accessToken) {
   if (typeof accessToken !== "string" || !accessToken || accessToken.length > SIGNIN_ACCESS_MAX) return null;
-  const sig = String(sign(signinDeskManagedBytes({ provider: provider, tokenHash: signinTokenHash(idToken), accessHash: signinTokenHash(accessToken), desk: desk, t: t })) || "");
+  const sig = String(sign(signinDeskManagedBytes({ provider: provider, tokenHash: signinTokenHash(idToken), accessHash: signinTokenHash(accessToken), desk: desk, t: t, seed: seed || "" })) || ""); /* plant:access-seed */
   if (!/^[0-9a-f]{128}$/.test(sig)) return null;
   const body = { provider: String(provider), idToken: idToken, accessToken: accessToken, desk: String(desk) };
   if (seed) body.seed = String(seed);
@@ -10769,13 +10769,14 @@ function signinDeskManagedBody(provider, idToken, desk, seed, t, sign, accessTok
 const SIGNIN_DESK_POOLED_LINE = "etiuda-licence-signin-desk-pooled";
 const SIGNIN_DESK_MANAGED_POOLED_LINE = "etiuda-licence-signin-desk-managed-pooled";
 function signinDeskPooledBytes(o) {
-  return Buffer.from(o.accessHash === undefined ? SIGNIN_DESK_POOLED_LINE + "\n" + [o.provider, o.tokenHash, o.desk, o.t].map(String).join("\n") /* plant:pooled-line */
-    : SIGNIN_DESK_MANAGED_POOLED_LINE + "\n" + [o.provider, o.tokenHash, o.accessHash, o.desk, o.t].map(String).join("\n"), "utf8");
+  const line = o.accessHash === undefined ? SIGNIN_DESK_POOLED_LINE : SIGNIN_DESK_MANAGED_POOLED_LINE; /* plant:pooled-line */
+  const fields = o.accessHash === undefined ? [o.provider, o.tokenHash, o.desk, o.t] : [o.provider, o.tokenHash, o.accessHash, o.desk, o.t];
+  return Buffer.from(line + "\n" + fields.concat(o.seed ? ["seed:" + o.seed] : []).map(String).join("\n"), "utf8"); /* plant:pooled-seed-line */
 }
 /* The pooled body, {provider, idToken, accessToken?, desk, pooled: true, seed?, t, sig}; null where the access token is not its shape. */
 function signinDeskPooledBody(provider, idToken, desk, seed, t, sign, accessToken) {
   if (accessToken !== undefined && (typeof accessToken !== "string" || !accessToken || accessToken.length > SIGNIN_ACCESS_MAX)) return null;
-  const o = { provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t };
+  const o = { provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t, seed: seed || "" }; /* plant:pooled-seed */
   if (accessToken !== undefined) o.accessHash = signinTokenHash(accessToken);
   const sig = String(sign(signinDeskPooledBytes(o)) || "");
   if (!/^[0-9a-f]{128}$/.test(sig)) return null;

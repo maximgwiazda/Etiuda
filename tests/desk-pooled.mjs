@@ -31,7 +31,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const SIGNIN = fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const CHECKS = 8, PLANTS = 16;
+const CHECKS = 8, PLANTS = 19;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -162,10 +162,19 @@ const lines = (d, xs) => Buffer.from(d + "\n" + xs.join("\n"), "utf8");
 const T = 1_800_000_000_000, SEED = "5".repeat(64), ID = "id.tok.en", ACC = "access.tok.en";
 CASES.pooled = s => {
   const p = s.signinDeskBody("microsoft", ID, DESK, SEED, T, sign, undefined, true);
+  const pRenew = s.signinDeskBody("microsoft", ID, DESK, "", T, sign, undefined, true);
+  const pmFirst = s.signinDeskBody("microsoft", ID, DESK, SEED, T, sign, ACC, true);
   const pm = s.signinDeskBody("microsoft", ID, DESK, "", T, sign, ACC, true);
   const plain = s.signinDeskBody("microsoft", ID, DESK, SEED, T, sign), notPooled = s.signinDeskBody("microsoft", ID, DESK, SEED, T, sign, undefined, false);
   return !!p && Object.keys(p).join() === "provider,idToken,desk,pooled,seed,t,sig" && p.pooled === true
-    && verifies(lines("etiuda-licence-signin-desk-pooled", ["microsoft", sha(ID), DESK, T]), p.sig) && !verifies(lines("etiuda-licence-signin-desk", ["microsoft", sha(ID), DESK, T, "seed:" + SEED]), p.sig)
+    && verifies(lines("etiuda-licence-signin-desk-pooled", ["microsoft", sha(ID), DESK, T, "seed:" + SEED]), p.sig)
+    && !verifies(lines("etiuda-licence-signin-desk-pooled", ["microsoft", sha(ID), DESK, T]), p.sig)
+    && !verifies(lines("etiuda-licence-signin-desk", ["microsoft", sha(ID), DESK, T, "seed:" + SEED]), p.sig)
+    && !!pRenew && Object.keys(pRenew).join() === "provider,idToken,desk,pooled,t,sig" && pRenew.pooled === true
+    && verifies(lines("etiuda-licence-signin-desk-pooled", ["microsoft", sha(ID), DESK, T]), pRenew.sig)
+    && !!pmFirst && Object.keys(pmFirst).join() === "provider,idToken,accessToken,desk,pooled,seed,t,sig" && pmFirst.pooled === true
+    && verifies(lines("etiuda-licence-signin-desk-managed-pooled", ["microsoft", sha(ID), sha(ACC), DESK, T, "seed:" + SEED]), pmFirst.sig)
+    && !verifies(lines("etiuda-licence-signin-desk-managed-pooled", ["microsoft", sha(ID), sha(ACC), DESK, T]), pmFirst.sig)
     && !!pm && Object.keys(pm).join() === "provider,idToken,accessToken,desk,pooled,t,sig"
     && verifies(lines("etiuda-licence-signin-desk-managed-pooled", ["microsoft", sha(ID), sha(ACC), DESK, T]), pm.sig)
     && !!plain && !("pooled" in plain) && verifies(lines("etiuda-licence-signin-desk", ["microsoft", sha(ID), DESK, T, "seed:" + SEED]), plain.sig)
@@ -289,9 +298,15 @@ if (!PLANTS_OFF && S) {
   await plant("dpp3", ["function managedStrands(pol) { return !!pol && pol.nonPersistent === true && pol.nonPersistentNewDesk !== true; } /* plant:np-strands */",
     "function managedStrands(pol) { return !!pol && pol.nonPersistent === true; }"], "guard");
   await plant("dpp4", ["  out.nonPersistent = sw(own(\"nonpersistent\")) === true; /* plant:np-read */", "  out.nonPersistent = false;"], "today");
-  await plant("dpp5", ["  return Buffer.from(o.accessHash === undefined ? SIGNIN_DESK_POOLED_LINE + \"\\n\" + [o.provider, o.tokenHash, o.desk, o.t].map(String).join(\"\\n\") /* plant:pooled-line */",
-    "  return Buffer.from(o.accessHash === undefined ? SIGNIN_DESK_LINE + \"\\n\" + [o.provider, o.tokenHash, o.desk, o.t].map(String).join(\"\\n\")"], "pooled");
+  await plant("dpp5", ["  const line = o.accessHash === undefined ? SIGNIN_DESK_POOLED_LINE : SIGNIN_DESK_MANAGED_POOLED_LINE; /* plant:pooled-line */",
+    "  const line = o.accessHash === undefined ? SIGNIN_DESK_LINE : SIGNIN_DESK_MANAGED_POOLED_LINE;"], "pooled");
   await plant("dpp6", ["  if (pooled === true) return signinDeskPooledBody(provider, idToken, desk, seed, t, sign, accessToken); /* plant:pooled-body */", ""], "pooled");
+  await plant("dpp17", ["  return Buffer.from(line + \"\\n\" + fields.concat(o.seed ? [\"seed:\" + o.seed] : []).map(String).join(\"\\n\"), \"utf8\"); /* plant:pooled-seed-line */",
+    "  return Buffer.from(line + \"\\n\" + fields.concat(o.accessHash !== undefined && o.seed ? [\"seed:\" + o.seed] : []).map(String).join(\"\\n\"), \"utf8\");"], "pooled");
+  await plant("dpp18", ["  return Buffer.from(line + \"\\n\" + fields.concat(o.seed ? [\"seed:\" + o.seed] : []).map(String).join(\"\\n\"), \"utf8\"); /* plant:pooled-seed-line */",
+    "  return Buffer.from(line + \"\\n\" + fields.concat(o.accessHash === undefined && o.seed ? [\"seed:\" + o.seed] : []).map(String).join(\"\\n\"), \"utf8\");"], "pooled");
+  await plant("dpp19", ["  const o = { provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t, seed: seed || \"\" }; /* plant:pooled-seed */",
+    "  const o = { provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t };"], "pooled");
   /* N1's plant: the identity read from a host-local path. */
   {
     const swapped = MAIN.replace("\nfunction deskFile() { return path.join(app.getPath(\"userData\"), \"desk.json\"); }", "\nfunction deskFile() { return path.join(os.tmpdir(), \"desk.json\"); }");
