@@ -35,7 +35,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 172;
+const EXPECTED = 177;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const { offWindows } = nodeRequire("./off-windows.cjs");
@@ -4043,9 +4043,9 @@ async function run() {
     const p = await testPlant("syncer-gone-lands", syncerFile, async scratch => {
       fs.copyFileSync(path.join(ROOT, "shell", "folder", "syncer-worker.cjs"), path.join(path.dirname(scratch), "syncer-worker.cjs"));
       const q = await goneScene("plant-dc3b", nodeRequire(scratch));
-      return !q.landed && q.ownCopies > 1;
+      return q.scans >= 8 && !q.landed && q.ownCopies === 1;
     });
-    check(p.ok, "dc3b lifting plant:syncer-gone-lands leaves the record out of the mirror and copied again at every listing: " + JSON.stringify(p));
+    check(p.ok, "dc3b lifting plant:syncer-gone-lands leaves the record out of the mirror, copied once over eight listings and not again: " + JSON.stringify(p));
   }
 
   /* dr1a to dr1h (board 955, condition 1): a synced folder that takes this desk's write back, by dropping its own file or putting
@@ -5530,6 +5530,218 @@ async function run() {
       return got.sibEpoch === 1 && !got.sibLanded && got.floorEpoch === 1 && !got.floorLanded;
     });
     check(planted.ok, "a2b lifting plant:mirror-init-sibling-floor parks an edition sealed at the sibling's epoch: " + JSON.stringify(planted));
+  }
+
+  /* seat-inbound: a colleague's seat.json lands once and a changed one replaces it; a malformed or oversized one is dropped once and not copied again at the next looks. */
+  async function seatInboundScene(mod, name) {
+    const share = folder(name + "-share");
+    const mirror = folder(name + "-mirror");
+    const teamText = JSON.stringify(teamFile({ epoch: 1, rev: 1 }));
+    fs.writeFileSync(path.join(share, "etiuda-team.json"), teamText, "utf8");
+    fs.writeFileSync(path.join(mirror, "etiuda-team.json"), teamText, "utf8");
+    const peerId = "k-" + crypto.randomBytes(8).toString("hex");
+    const badId = "k-" + crypto.randomBytes(8).toString("hex");
+    const fmtId = "k-" + crypto.randomBytes(8).toString("hex");
+    const overId = "k-" + crypto.randomBytes(8).toString("hex");
+    const putAt = (rel, txt) => {
+      const dest = path.join(share, ...rel.split("/"));
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      const tmp = dest + ".tmp";
+      fs.writeFileSync(tmp, txt, "utf8");
+      fs.renameSync(tmp, dest);
+    };
+    const peerRel = "desks/" + peerId + "/seat.json";
+    const badRel = "desks/" + badId + "/seat.json";
+    const fmtRel = "desks/" + fmtId + "/seat.json";
+    const overRel = "desks/" + overId + "/seat.json";
+    const seatV1 = JSON.stringify({ format: 2, desk: peerId, certificate: { opaque: "v1" } }, null, 1) + "\n";
+    const seatV2 = JSON.stringify({ format: 2, desk: peerId, certificate: { opaque: "v2-renewed" } }, null, 1) + "\n";
+    const badText = JSON.stringify({ format: 2, desk: peerId, certificate: { opaque: "wrong-desk" } }) + "\n";
+    const fmtText = JSON.stringify({ format: 1, desk: fmtId, certificate: { opaque: "old-format" } }) + "\n";
+    const overText = JSON.stringify({ format: 2, desk: overId, certificate: { pad: "x".repeat(70000) } }) + "\n";
+    putAt(peerRel, seatV1);
+    putAt(badRel, badText);
+    putAt(fmtRel, fmtText);
+    putAt(overRel, overText);
+    const ctl = new mod.FolderSyncerController({
+      team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks, pollMs: 60000, logger: () => {}
+    });
+    let scans = 0;
+    const copies = new Map();
+    const apply = ctl.program.applyScan.bind(ctl.program);
+    ctl.program.applyScan = (msg) => {
+      for (const s of (msg && msg.staged) || []) copies.set(s.relPath, (copies.get(s.relPath) || 0) + 1);
+      scans++;
+      return apply(msg);
+    };
+    const nextScan = async (n = 1) => {
+      for (let i = 0; i < n; i++) {
+        const at = scans, until = Date.now() + 5000;
+        if (i > 0 || at > 0) ctl.kick();
+        while (scans === at && Date.now() < until) await sleep(20);
+      }
+    };
+    const readMirror = rel => { try { return fs.readFileSync(path.join(mirror, ...rel.split("/")), "utf8"); } catch { return null; } };
+    try {
+      ctl.start();
+      await nextScan(3);
+      const landedOnce = readMirror(peerRel) === seatV1;
+      const peerCopiesBefore = copies.get(peerRel) || 0;
+      const badCopies = copies.get(badRel) || 0;
+      const fmtCopies = copies.get(fmtRel) || 0;
+      const overCopies = copies.get(overRel) || 0;
+      const badDropped = readMirror(badRel) === null && readMirror(fmtRel) === null && readMirror(overRel) === null;
+      const badFixed = JSON.stringify({ format: 2, desk: badId, certificate: { opaque: "fixed" } }, null, 1) + "\n";
+      putAt(peerRel, seatV2);
+      putAt(badRel, badFixed);
+      await nextScan(2);
+      const replaced = readMirror(peerRel) === seatV2;
+      const badFixedLanded = readMirror(badRel) === badFixed;
+      return { landedOnce, badDropped, replaced, badFixedLanded, peerCopiesBefore, badCopies, fmtCopies, overCopies, scans };
+    } finally { ctl.stop(); }
+  }
+  {
+    const g = await seatInboundScene(syncerMod, "si1a");
+    check(g.landedOnce && g.badDropped && g.replaced && g.badFixedLanded
+      && g.peerCopiesBefore === 1 && g.badCopies === 1 && g.fmtCopies === 1 && g.overCopies === 1,
+      "si1a a colleague's seat.json lands once and a changed one replaces it, a malformed one is dropped once and not copied again at the next looks: "
+      + JSON.stringify(g));
+  }
+  if (PLANTS_OFF) {
+    skip("si1b lifting plant:syncer-seat-lands drops a colleague's valid seat.json: NOT RUN");
+    skip("si1c lifting plant:syncer-seat-refused copies a malformed seat.json again at every scan: NOT RUN");
+  } else {
+    const pLands = await testPlant("syncer-seat-lands", syncerFile, async (scratch) => {
+      const got = await seatInboundScene(nodeRequire(path.join(syncerCopy(scratch, "syncer.cjs"), "syncer.cjs")), "si1b");
+      return !got.landedOnce && !got.replaced;
+    });
+    check(pLands.ok, "si1b lifting plant:syncer-seat-lands drops a colleague's valid seat.json: " + JSON.stringify(pLands));
+    const pRefused = await testPlant("syncer-seat-refused", syncerFile, async (scratch) => {
+      const got = await seatInboundScene(nodeRequire(path.join(syncerCopy(scratch, "syncer.cjs"), "syncer.cjs")), "si1c");
+      return got.badCopies > 1 && got.fmtCopies > 1 && got.overCopies > 1;
+    });
+    check(pRefused.ok, "si1c lifting plant:syncer-seat-refused copies a malformed seat.json again at every scan: " + JSON.stringify(pRefused));
+  }
+
+  /* b2: a copy any inbound branch drops is remembered as dropped until the share's file changes (three looks, one staging copy at most). */
+  async function droppedHeldScene(mod, name) {
+    const share = folder(name + "-share");
+    const mirror = folder(name + "-mirror");
+    const teamText = JSON.stringify(teamFile({ epoch: 1, rev: 1 }));
+    fs.writeFileSync(path.join(share, "etiuda-team.json"), teamText, "utf8");
+    fs.writeFileSync(path.join(mirror, "etiuda-team.json"), teamText, "utf8");
+    const peerId = "k-" + crypto.randomBytes(8).toString("hex");
+    const badSeatId = "k-" + crypto.randomBytes(8).toString("hex");
+    const putAt = (rel, txt) => {
+      const dest = path.join(share, ...rel.split("/"));
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      const tmp = dest + ".tmp";
+      fs.writeFileSync(tmp, txt, "utf8");
+      fs.renameSync(tmp, dest);
+    };
+    const statsRel = "desks/" + peerId + "/stats.estat";
+    const wrapRel = "invites/bad.wrap.json";
+    const ringRel = "etiuda-ring.json";
+    const askRel = "catalog-asks/bad.json";
+    const badSeatRel = "desks/" + badSeatId + "/seat.json";
+    const extraRel = "desks/" + peerId + "/extra.json";
+    putAt(statsRel, JSON.stringify({ format: 1, kind: "wrong" }));
+    putAt(wrapRel, JSON.stringify({ bad: true }));
+    putAt(ringRel, JSON.stringify({ bad: true }));
+    putAt(askRel, JSON.stringify({ bad: true }));
+    putAt(badSeatRel, JSON.stringify({ format: 2, desk: peerId }));
+    putAt(extraRel, JSON.stringify({ note: "neither-three" }));
+
+    const ctl = new mod.FolderSyncerController({
+      team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks, pollMs: 60000, logger: () => {}
+    });
+    let scans = 0;
+    const copies = new Map();
+    const apply = ctl.program.applyScan.bind(ctl.program);
+    ctl.program.applyScan = (msg) => {
+      for (const s of (msg && msg.staged) || []) copies.set(s.relPath, (copies.get(s.relPath) || 0) + 1);
+      scans++;
+      return apply(msg);
+    };
+    const nextScan = async (n = 1) => {
+      for (let i = 0; i < n; i++) {
+        const at = scans, until = Date.now() + 5000;
+        if (i > 0 || at > 0) ctl.kick();
+        while (scans === at && Date.now() < until) await sleep(20);
+      }
+    };
+    let res = {};
+    try {
+      ctl.start();
+      await nextScan(3);
+      res = {
+        scans,
+        statsCopies: copies.get(statsRel) || 0,
+        wrapCopies: copies.get(wrapRel) || 0,
+        ringCopies: copies.get(ringRel) || 0,
+        askCopies: copies.get(askRel) || 0,
+        badSeatCopies: copies.get(badSeatRel) || 0,
+        extraCopies: copies.get(extraRel) || 0,
+      };
+      const goodStats = JSON.stringify({ format: 1, kind: "etiuda-stats-sealed", team: TEAM });
+      putAt(statsRel, goodStats);
+      await nextScan(1);
+      res.statsLandedAfterChange = fs.existsSync(path.join(mirror, ...statsRel.split("/")))
+        && fs.readFileSync(path.join(mirror, ...statsRel.split("/")), "utf8") === goodStats;
+    } finally { ctl.stop(); }
+
+    /* Also exercise branches unreachable through isAllowedPath: a file under desks/<id>/ that is neither of the three names,
+       a deeper desks/ path, and an un-allowlisted root name, plus a bad team conflict sibling. */
+    const share2 = folder(name + "-direct-share");
+    const mirror2 = folder(name + "-direct-mirror");
+    fs.writeFileSync(path.join(mirror2, "etiuda-team.json"), teamText, "utf8");
+    const prog = mod.createFolderProgram({
+      team: TEAM, folder: share2, mirror: mirror2, pin: LEAD, keys: { 1: K1 }, checks, logger: () => {}
+    });
+    try {
+      const stageDir = path.join(mirror2, ".staging");
+      fs.mkdirSync(stageDir, { recursive: true });
+      const stageItem = (rel, body, mtimeMs) => {
+        const tmp = path.join(stageDir, crypto.randomBytes(6).toString("hex") + ".tmp");
+        fs.writeFileSync(tmp, body, "utf8");
+        return { relPath: rel, tmpPath: tmp, size: Buffer.byteLength(body, "utf8"), mtimeMs };
+      };
+      const sibRel = "etiuda-team (1).json";
+      const badSib = JSON.stringify(teamFile({ epoch: 1, rev: 1 }));
+      const items = [
+        stageItem(extraRel, JSON.stringify({ note: "neither-three" }), 1001),
+        stageItem("desks/" + peerId + "/a/extra.json", JSON.stringify({ note: "deep" }), 1002),
+        stageItem("other.txt", "ignored", 1003),
+        stageItem(sibRel, badSib, 1004)
+      ];
+      prog.applyScan({
+        answers: true,
+        listing: items.map(it => [it.relPath, { size: it.size, mtimeMs: it.mtimeMs }]),
+        staged: items
+      });
+      const heldRels = new Set(prog.held().held.map(h => h.rel));
+      res.extraHeld = heldRels.has(extraRel);
+      res.deepHeld = heldRels.has("desks/" + peerId + "/a/extra.json");
+      res.drop1Held = heldRels.has("other.txt");
+      res.sibHeld = heldRels.has(sibRel);
+      res.extraDropped = !fs.existsSync(path.join(mirror2, ...extraRel.split("/")));
+    } finally { prog.stop(); }
+    return res;
+  }
+  {
+    const g = await droppedHeldScene(syncerMod, "b2a");
+    check(g.statsCopies === 1 && g.wrapCopies === 1 && g.ringCopies === 1 && g.askCopies === 1
+      && g.badSeatCopies === 1 && g.extraCopies === 0 && g.statsLandedAfterChange
+      && g.extraHeld && g.deepHeld && g.drop1Held && g.sibHeld && g.extraDropped,
+      "b2a a copy dropped by any inbound branch is remembered as dropped until the share's file changes: " + JSON.stringify(g));
+  }
+  if (PLANTS_OFF) skip("b2b lifting plant:syncer-drop-refused copies dropped files again at every scan: NOT RUN");
+  else {
+    const planted = await testPlant("syncer-drop-refused", syncerFile, async (scratch) => {
+      const got = await droppedHeldScene(nodeRequire(path.join(syncerCopy(scratch, "syncer.cjs"), "syncer.cjs")), "b2b");
+      return got.statsCopies > 1 && got.wrapCopies > 1 && !got.extraHeld;
+    });
+    check(planted.ok, "b2b lifting plant:syncer-drop-refused copies dropped files again at every scan: " + JSON.stringify(planted));
   }
 
   if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") {
