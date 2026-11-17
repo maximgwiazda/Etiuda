@@ -317,7 +317,8 @@ function accountCardHtml(v){
     const prov=SIGNIN_NAMES[v.busy]||"Microsoft";
     h+=signinIdentHtml({initial:"", name:t("Finish signing in in the browser"),
       sub:t("The browser has opened {PROVIDER}'s sign-in page. Etiuda waits here and carries on by itself when you come back.").split("{PROVIDER}").join(prov)})
-      +'<span class="sgn-acts"><button type="button" class="btn" data-signin-act="again">'+esc(t("Open the browser again"))+'</button>'
+      +'<span class="sgn-acts">'
+      +(v.link ? '<button type="button" class="btn" data-signin-act="again">'+esc(t("Open the browser again"))+'</button>' : '') /* plant:card-waiting-again */
       +'<button type="button" class="btn" data-signin-act="stop">'+esc(t("Cancel"))+'</button></span>'+signinPreviewHtml(v)+signinLinkHtml(v.link);
     return h+'</div>';
   }

@@ -185,7 +185,9 @@ function paintFirstSignin(){
       +'<h2 class="fs-rh">'+esc(t("Signing in"))+'</h2>'
       +rightBody
     +'</div></div></div>';
-  if(d && d.moment==="refused"){
+  let showSkip=d && d.moment==="refused";
+  if(d && d.moment==="managed-refused") showSkip=true; /* plant:first-signin-managed-skip */
+  if(showSkip){
     const acts=el.querySelector(".sgn-acts");
     if(acts){
       acts.insertAdjacentHTML("beforeend", skipBtn);
@@ -194,6 +196,9 @@ function paintFirstSignin(){
       const rin=el.querySelector(".fs-right-in");
       if(rin) rin.insertAdjacentHTML("beforeend", '<div class="fs-skip">'+skipBtn+skipLine+'</div>');
     }
+  }else if(d && d.moment==="stranded"){
+    const rin=el.querySelector(".fs-right-in");
+    if(rin) rin.insertAdjacentHTML("beforeend", '<div class="fs-skip"><button type="button" class="btn primary fs-skip-btn" id="firstSigninSkip">'+esc(t("Continue"))+'</button></div>'); /* plant:first-signin-stranded-btn */
   }
   if(hadFocus){
     const first=el.querySelector("button:not(:disabled), input");
@@ -323,10 +328,10 @@ function signinSay(reason, v, p){
       return [t("This team is no longer offered here, or this computer is already in a team, so nothing was sent."), ""];
     case "signin-keyring":
       return [t("Signing in needs a keyring, and none is open on this computer."), t("Installing or unlocking GNOME Keyring or KDE Wallet, then reopening Etiuda, lets this computer sign in.")];
-    /* WORDS OWED (the copywriter): signin-switch-out, the line under it: this computer is now signed out of the account it had, and
-       signing in again works once the service answers. */
     case "signin-switch-out":
-      return [t("The sign-in service could not be reached."), ""];
+      return [t("The sign-in service could not be reached."), t("This computer is now signed out of the account it had. Signing in, with either account, works once the sign-in service answers, and nothing on this desk is lost meanwhile.")]; /* plant:switch-out-words */
+    case "signin-switch-unmade":
+      return [t("The sign-in service did not confirm the change of account."), ""];
     case "signin-other": /* plant:signin-other-words */
       { const c=v && v.managed ? v.managed.contact : "";
         return [t("This computer stays with the account it has."),
@@ -339,7 +344,7 @@ function signinSay(reason, v, p){
 /* No free seat: the service's wait, "waiting", or its refusal, "full"; either way the shell renews quietly until a seat frees. */
 function signinNoSeat(v){ return v.refused==="waiting" || v.refused==="full"; } /* plant:no-seat */
 /* Refusals whose own heading names the reason a sign-in pressed while signed in failed for. */
-const SIGNIN_REASON_SAID=["desks","no-role","signin-notallowed","unreached","signin-unreached","signin-timeout","signin-browser","signin-notassigned","signin-tenant"];
+const SIGNIN_REASON_SAID=["desks","no-role","signin-notallowed","unreached","signin-unreached","signin-timeout","signin-browser","signin-notassigned","signin-tenant","signin-switch-unmade"];
 /* What a signed-in desk is told over its moment, or null: {kind, say, acts, providers}. "pressed", a sign-in the person pressed while
    signed in that failed, which leaves the desk signed in as it was; else a refusal the shell kept from a renewal or Check now. */
 function signinTold(v){
@@ -351,6 +356,7 @@ function signinTold(v){
   const r=v.refused;
   if(!r || r==="signin" || signinNoSeat(v)) return null; /* plant:told-renewal */
   if(r==="no-role") return {kind:"renewal", say:signinSay("no-role", v), acts:[]}; /* plant:told-no-role */
+  if(r==="signin-notassigned") return {kind:"renewal", say:signinSay("signin-notassigned", v), acts:[]}; /* plant:told-notassigned */
   if(r==="desks") return {kind:"desks", say:[t("This account is signed in on three computers already."),
     t("A seat holds three computers. Signing out on one of the others frees its place, and this computer checks again by itself.")],
     acts:[{act:"check", label:t("Check now"), solid:true}]};
@@ -360,8 +366,8 @@ function signinTold(v){
 const FAIL_FIRST=["unreached","signin-unreached","signin-timeout","signin-browser","signin-notallowed","desks","no-role","token","signin","signin-refused","signin-token","signin-unbound","signin-state","signin-none","signin-preview","signin-keyring"];
 /* Decision 49's own: an account not assigned, a sign-in outside the pinned tenant, and another account on a managed computer. */
 FAIL_FIRST.push("signin-notassigned","signin-tenant","signin-other");
-/* A switch whose held account was signed out at the service, the service then unreached for the new one (shell/main.js, the press). */
-FAIL_FIRST.push("signin-switch-out");
+/* A switch whose held account was signed out at the service, the service then unreached for the new one, or whose switch signout was not confirmed (shell/main.js, the press). */
+FAIL_FIRST.push("signin-switch-out","signin-switch-unmade"); /* plant:switch-unmade-first */
 /* The refusals whose way on is another account, where the computer offers one. */
 const ANOTHER_FOR=["signin-notallowed","signin-notassigned"];
 /* THE DOOR'S CONTENT for the view `v`, whatever form draws it: {moment, ident, heading, line, say, calm, code, providers, cap, privacy, foot,
@@ -384,7 +390,7 @@ function signinDoorOf(v){
   if(v.busy) return {moment:"waiting", heading:t("Finish signing in in the browser"),
     line:named(t("The browser has opened {PROVIDER}'s sign-in page. Etiuda waits here and carries on by itself when you come back."),"{PROVIDER}",SIGNIN_NAMES[v.busy]),
     wait:named(t("Waiting for {PROVIDER}…"),"{PROVIDER}",SIGNIN_NAMES[v.busy]),
-    acts:[{act:"again", label:t("Open the browser again")}, {act:"stop", label:t("Cancel")}], link:v.link};
+    acts:(v.link ? [{act:"again", label:t("Open the browser again")}] : []).concat([{act:"stop", label:t("Cancel")}]), link:v.link}; /* plant:waiting-again */
   if(!v.signedIn){
     if(FAIL_FIRST.indexOf(v.said)>=0){
       const s=signinSay(v.said, v);

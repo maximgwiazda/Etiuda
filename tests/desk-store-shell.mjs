@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 222;
+const EXPECTED = 223;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -2095,7 +2095,7 @@ async function keepRefreshScene(src) {
 async function googleSwitchScene(src) {
   const r = await signinFlow(src, { provider: "google", untick: true });
   const first = r.qs[0] || new URLSearchParams();
-  const ungiven = !!r.now && r.now.why === "ungiven" && !!r.held && !!r.held.cert;
+  const ungiven = !!r.now && r.now.why === "ungiven" && !!r.held && !!r.held.cert && folderPage(r.page, "off");
   r.mode.untick = false;
   const on = await pressOn(r, true);
   const q = on.opened.length === 1 ? new URL(on.opened[0]).searchParams : new URLSearchParams();
@@ -3000,6 +3000,8 @@ const PLANTS = [
   ["g1", swap("    await handOut(pending.url); /* plant:consent-open */", "    await handOut(pending.url); handOut(pending.url); /* plant:consent-open */"), "the switch opens the request twice"],
   ["gn", swap(" renew: async (k, g) => (ours() ? storeRelayRenew(k, g) : { ok: false, why: \"relay\" }),", ""), "the look hands the relay no renewal, so the store lapses from its making"],
   ["g2", swap("const token = !lacks && ", "const token = "), "Google's answer without the folder's scope taken as the folder's token"],
+  ["g2", swap("  const took = signinFolderTake(io, same.ok ? res : { status: 0 }, p.id, now()); /* plant:folder-same */\n  return same.ok && took ? \"folder-on\" : \"folder-off\";",
+    "  signinFolderTake(io, same.ok ? res : { status: 0 }, p.id, now()); /* plant:folder-same */\n  return same.ok ? \"folder-on\" : \"folder-off\";"), "Google's answer without the folder's scope lands on Sync is on"],
   ["g2", swap("  const folder = L.folderFor(p.id, {", "  const folder = L.folderFor(\"microsoft\", {"), "the store's folder asked of Microsoft whatever the sign-in, so the store never opens in Google Drive"],
   ["f3", swap("    loop.land(folder || kind || \"back\"); /* plant:folder-land */", "    loop.land(kind || \"back\"); /* plant:folder-land */"), "the second step lands the sign-in's page, not the folder's"],
   ["h", swap("Nothing changed. It can be turned on in Account at any time. This tab can be closed.", "Nothing changed. It can be turned on in Account at any time. You can close this tab."), "a folder page closing in other words than the sign-in's"],
@@ -3052,7 +3054,7 @@ const PLANTS = [
   ["x1", swap("  if (!storeSyncing || storeHeld()) return; /* plant:store-held-merge */", "  if (!storeSyncing) return; /* plant:store-held-merge */"), "a change on the desk sets the merge going while another account is seated"],
   ["x4", swap("    if (s.keys || s.leave || s.ask !== who || s.last !== who) { s.keys = \"\"; s.leave = \"\"; s.ask = who; s.last = who; storeSave(); } /* plant:store-ask */", "    if (s.keys || s.leave) { s.keys = \"\"; s.leave = \"\"; storeSave(); } /* plant:store-ask */"), "the account owing the answer, and the one last seated, are not kept"],
   ["x5", swap("  held = !!last && (last !== who || s.ask === who); /* plant:store-held */", "  held = !!s.who && s.who !== who; /* plant:store-held */"), "the hold keyed on whose the state is, so A's return merges B's edit"],
-  ["x1n", swap("    if (out === false) got = { ok: false, reason: \"unreached\" }; /* plant:switch-unanswered */", "    /* plant:switch-unanswered */"), "the switch made though the service never answered"],
+  ["x1n", swap("    if (out === false) got = { ok: false, reason: \"signin-switch-unmade\" }; /* plant:switch-unanswered */", "    /* plant:switch-unanswered */"), "the switch made though the service never answered"],
   ["x1d", swap("  held = !!last && (last !== who || s.ask === who); /* plant:store-held */", "  held = false; /* plant:store-held */"), "another account seated straight over takes the store as its own"],
   ["x1u", swap("    if (out === true) { signinLeave(st, me, true); signinSave(); tellSignin(); } /* plant:switch-leaves */\n", ""), "the sign-in as another account leaves the account it replaces as it was"],
   ["x3", swap("  held = !!last && (last !== who || s.ask === who); /* plant:store-held */", "  held = false; /* plant:store-held */"), "B's seat takes the state, so B's turn leaves its store in the desk's sync state before A is back"],

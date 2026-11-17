@@ -20,7 +20,7 @@ E.ensureOutputs(); /* the outputs are this source's first (tests/engine.js ensur
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ENGINE_URL = "file:///" + path.join(ROOT, "engine", "etiuda.html").replace(/\\/g, "/");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 33;
+const EXPECTED = 39;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -86,6 +86,8 @@ if (typeof P.firstSigninDue === "function") {
     "fs1g not due when already shown on this desk");
   check(P.firstSigninDue(due, { seen: false, policy: true }) === false,
     "fs1h not due on a policy desk");
+  check(P.firstSigninDue({ offered: ["microsoft"], managed: { on: true, stranded: true } }, { seen: false, policy: false }) === false,
+    "fs1l not due when stranded");
 
   if (typeof P.firstSigninSeen === "function" && typeof P.markFirstSigninSeen === "function" && typeof P.FIRST_SIGNIN_KEY === "string") {
     check(P.firstSigninSeen() === false && P.firstSigninDue(due, { policy: false }) === true,
@@ -466,6 +468,65 @@ try {
     await ctx.close();
   }
 
+  /* fs3g: managed-refused on first-opening screen offers Not now beside Try again and dismisses */
+  {
+    const m = { on: true, shared: false, personal: false, provider: "microsoft", tenant: true, closed: false, contact: "IT" };
+    const { ctx, page } = await launchDeskPage(browser, {
+      signin: { offered: ["microsoft"], signedIn: "", managed: m }
+    });
+    await sleep(300);
+    await page.evaluate(managed => {
+      window.__signinState = { offered: ["microsoft"], signedIn: "", busy: "", said: "signin-notassigned", managed };
+      window.__signinCbs.forEach(fn => fn(window.__signinState));
+    }, m);
+    await sleep(200);
+    const mr = await page.evaluate(() => {
+      const scr = document.getElementById("firstSignin");
+      const act = scr && scr.querySelector("[data-signin-act='choose']");
+      const skip = document.getElementById("firstSigninSkip");
+      return {
+        moment: scr && scr.querySelector(".sgn-say") ? scr.innerText : "",
+        hasAct: !!act,
+        hasSkip: !!skip,
+        skipLabel: skip ? skip.textContent : ""
+      };
+    });
+    if (mr.hasSkip) await page.click("#firstSigninSkip");
+    await sleep(150);
+    const closed = await page.evaluate(() => !document.body.classList.contains("e-first-signin"));
+    check(mr.moment.includes("Your organisation has not given this account access to Etiuda.") && mr.hasAct && mr.hasSkip && mr.skipLabel === "Not now" && closed,
+      "fs3g managed-refused shows Not now beside Try again and dismisses the screen");
+    await ctx.close();
+  }
+
+  /* fs3h: stranded arriving while first-opening screen is open offers a button out */
+  {
+    const { ctx, page } = await launchDeskPage(browser, {
+      signin: { offered: ["microsoft"], signedIn: "" }
+    });
+    await sleep(300);
+    await page.evaluate(() => {
+      window.__signinState = { offered: ["microsoft"], signedIn: "", managed: { on: true, stranded: true } };
+      window.__signinCbs.forEach(fn => fn(window.__signinState));
+    });
+    await sleep(200);
+    const st = await page.evaluate(() => {
+      const scr = document.getElementById("firstSignin");
+      const skip = document.getElementById("firstSigninSkip");
+      return {
+        txt: scr ? scr.innerText : "",
+        hasSkip: !!skip,
+        skipLabel: skip ? skip.textContent : ""
+      };
+    });
+    if (st.hasSkip) await page.click("#firstSigninSkip");
+    await sleep(150);
+    const closed = await page.evaluate(() => !document.body.classList.contains("e-first-signin"));
+    check(st.txt.includes("This computer's profile did not keep this desk's key.") && st.hasSkip && st.skipLabel === "Continue" && closed,
+      "fs3h stranded on first-opening screen offers Continue and dismisses the screen");
+    await ctx.close();
+  }
+
   /* fs3f: sign-in success closes screen, starts tour, leaves tour name field empty */
   {
     const { ctx, page } = await launchDeskPage(browser, {
@@ -551,6 +612,56 @@ try {
       const reopened = await page2.evaluate(() => document.body.classList.contains("e-first-signin"));
       await ctx2.close();
       return reopened === true;
+    }],
+    ["fs4d lifting plant:first-signin-stranded causes stranded boot to open the screen", "first-signin-stranded", async lab => {
+      const htmlPath = path.join(lab, "stranded-gate.html");
+      const plantAt = await buildLiftedHtml("src/modules/signin.js", "first-signin-stranded", htmlPath);
+      if (plantAt < 0) return false;
+      const { ctx, page } = await launchDeskPage(browser, {
+        url: "file:///" + htmlPath.replace(/\\/g, "/"),
+        signin: { offered: ["microsoft"], signedIn: "", managed: { on: true, stranded: true } }
+      });
+      await sleep(500);
+      const opened = await page.evaluate(() => document.body.classList.contains("e-first-signin"));
+      await ctx.close();
+      return opened === true;
+    }],
+    ["fs4e lifting plant:first-signin-managed-skip drops Not now from managed-refused", "first-signin-managed-skip", async lab => {
+      const htmlPath = path.join(lab, "managed-skip.html");
+      const plantAt = await buildLiftedHtml("src/modules/signin.js", "first-signin-managed-skip", htmlPath);
+      if (plantAt < 0) return false;
+      const m = { on: true, shared: false, personal: false, provider: "microsoft", tenant: true, closed: false };
+      const { ctx, page } = await launchDeskPage(browser, {
+        url: "file:///" + htmlPath.replace(/\\/g, "/"),
+        signin: { offered: ["microsoft"], signedIn: "", managed: m }
+      });
+      await sleep(300);
+      await page.evaluate(managed => {
+        window.__signinState = { offered: ["microsoft"], signedIn: "", busy: "", said: "signin-notassigned", managed };
+        window.__signinCbs.forEach(fn => fn(window.__signinState));
+      }, m);
+      await sleep(200);
+      const noSkip = await page.evaluate(() => !document.getElementById("firstSigninSkip"));
+      await ctx.close();
+      return noSkip === true;
+    }],
+    ["fs4f lifting plant:first-signin-stranded-btn drops Continue from stranded screen", "first-signin-stranded-btn", async lab => {
+      const htmlPath = path.join(lab, "stranded-btn.html");
+      const plantAt = await buildLiftedHtml("src/modules/signin.js", "first-signin-stranded-btn", htmlPath);
+      if (plantAt < 0) return false;
+      const { ctx, page } = await launchDeskPage(browser, {
+        url: "file:///" + htmlPath.replace(/\\/g, "/"),
+        signin: { offered: ["microsoft"], signedIn: "" }
+      });
+      await sleep(300);
+      await page.evaluate(() => {
+        window.__signinState = { offered: ["microsoft"], signedIn: "", managed: { on: true, stranded: true } };
+        window.__signinCbs.forEach(fn => fn(window.__signinState));
+      });
+      await sleep(200);
+      const noSkip = await page.evaluate(() => !document.getElementById("firstSigninSkip"));
+      await ctx.close();
+      return noSkip === true;
     }]
   ];
 

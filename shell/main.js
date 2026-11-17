@@ -10294,6 +10294,7 @@ function signinFolderTake(io, res, provider, now) {
   const token = !lacks && !!res && res.status === 200 && !!j && typeof j.access_token === "string" && j.access_token.length <= SIGNIN_FOLDER_TOKEN_MAX ? j.access_token : "";
   const secs = j && Number(j.expires_in) > 0 ? Number(j.expires_in) : 3600;
   io.folderToken({ provider: String(provider), token: token, until: now + secs * 1000 });
+  return !!token;
 }
 /* A JWT's claims, unverified: the licence service verifies the signature; the desk reads only what says the answer is its own. */
 function signinClaims(jwt) {
@@ -10657,8 +10658,8 @@ async function signinFolderBack(io, p, pending, query, got, now) {
   try { res = await io.tokenAsk(at, signinCodeForm(p, pending, back.code)); }
   catch (e) { signinTrace(io, p.id, "folder", "signin-unreached", { detail: e && e.message }, [back.code, pending.verifier, p.clientSecret]); return "folder-off"; }
   const same = signinTokens(res, p, pending.nonce, now(), String(got.sub));
-  signinFolderTake(io, same.ok ? res : { status: 0 }, p.id, now()); /* plant:folder-same */
-  return same.ok ? "folder-on" : "folder-off";
+  const took = signinFolderTake(io, same.ok ? res : { status: 0 }, p.id, now()); /* plant:folder-same */
+  return same.ok && took ? "folder-on" : "folder-off";
 }
 /* The refresh token sealed by the system's store, as base64, or "" where the store seals nothing for real (sealsForReal: no
    keyring, or Linux's basic_text): no refresh token is kept there, and the next renewal asks the person to sign in again. */
@@ -11055,6 +11056,7 @@ function signinFileRead(text, packed) {
       seed: String(h.seed), code: SIGNIN_CODE.test(String(h.code)) ? String(h.code) : "",
       cert: h.cert && typeof h.cert === "object" && signinCertOk(h.cert, h.cert.desk) ? h.cert : null, /* plant:file-cert */
       at: num(h.at), checked: num(h.checked), reached: h.reached !== false, said: typeof h.said === "string" ? h.said : "", ask: h.ask === true,
+      askLead: h.askLead === true, /* plant:file-ask-lead */
       doors: [], doorsSig: "", revoked: null, managed: h.managed === true, cause: h.cause === "own-licence" || h.cause === "assigned" ? h.cause : "", storeOffer: h.storeOffer === true };
   /* The list is beside `held`, and the held seat judges by it. */
   out.revoked = signinRevokedOk(d.revoked) ? d.revoked : null; /* plant:revoked-file */
@@ -11132,6 +11134,12 @@ function signinRelaySeatTold(team, state) {
   if (state === "refused") signinRelaySeatTeam = String(team);
   else if (signinRelaySeatTeam === String(team)) signinRelaySeatTeam = "";
   if (was !== signinRelaySeatTeam) tellSignin(); /* plant:relay-seat-told */
+}
+function signinRelaySeatClear() {
+  const was = signinRelaySeatTeam;
+  signinRelaySeatTeam = "";
+  signinSeatRenewAt = 0;
+  if (was && typeof relaySoon === "function") relaySoon(); /* plant:relay-seat-clear */
 }
 function signinRelaySeat(held) {
   if (!signinRelaySeatTeam || !held) return "";
@@ -11442,6 +11450,7 @@ function signinTake(provider, got, ans, now, access) {
   s.held = signinSettle(base, ans, now);
   s.revoked = s.held.revoked;
   delete s.out; /* this sign-in holds the desk's place again, so a sign out still owed is no longer wanted */
+  if (ans.ok && ans.cert && typeof signinRelaySeatClear === "function") signinRelaySeatClear(); /* plant:relay-seat-signin */
   signinSave();
   return true;
 }
@@ -11514,7 +11523,7 @@ ipcMain.handle("etiuda:signin", async (e, provider) => {
        answered, the switch is not made and the desk stays with the account it had, nothing owed. */
     const other = got.ok && !!st.held && !signinHeldIs(st.held, p.id, got.sub);
     const out = other ? await signinSwitchOut(st, me) : null;
-    if (out === false) got = { ok: false, reason: "unreached" }; /* plant:switch-unanswered */
+    if (out === false) got = { ok: false, reason: "signin-switch-unmade" }; /* plant:switch-unanswered */
     if (out === true) { signinLeave(st, me, true); signinSave(); tellSignin(); } /* plant:switch-leaves */
     /* signout/desk frees this desk key's place whoever held it, so one still out is taken before this sign-in's signin/desk. */
     if (got.ok && signinOutFlight) await signinOutFlight; /* plant:out-before-signin */
@@ -11584,6 +11593,7 @@ function signinLeave(s, me, sent) {
     try { unlinkOwn(path.join(sharedFolderForWrite(), "desks", me.id, SEAT_NAME)); } catch { /* not written, or the folder is away */ } /* plant:signout-unlink-own */
   }
   s.held = null;
+  if (typeof signinRelaySeatClear === "function") signinRelaySeatClear(); /* plant:relay-seat-leave */
   storeForget();
   /* Signed out, the account's organisation no longer stands in for this desk: Buy, which needs no sign-in, is offered again. */
   delete s.licenceManaged; /* plant:signout-managed */
@@ -11598,9 +11608,13 @@ function signinOutWanted(s, me) {
    service took it, false where it did not, null where none is sent; never left owed, so a switch not made signs nobody out later. */
 async function signinSwitchOut(s, me) {
   if (!signinOutWanted(s, me)) return null;
-  s.out = me.key;
-  const ok = await signinOutSend(me.key);
-  if (!ok && s.out === me.key) delete s.out; /* plant:switch-out-unowed */
+  const send = () => signoutAsk(signinIo({ loop: null }), me.key, Date.now);
+  const flight = (signinRenewing ? signinRenewing.then(send, send) : send()).then(ok => {
+    if (signinOutFlight === flight) signinOutFlight = null;
+    return ok;
+  });
+  signinOutFlight = flight; /* plant:switch-out-in-flight */
+  const ok = await flight; /* plant:switch-out-await */
   return ok;
 }
 /* One signout/desk for `key`, at once or after the renewal still out, and the owed mark taken off once the service has it. Resolves
@@ -11660,6 +11674,7 @@ async function signinRenewNow(o) {
   s.held = r.held;
   s.revoked = signinRevokedNext(s.revoked || null, r.held ? r.held.revoked : null);
   signinSaid = ""; /* plant:renew-said */
+  if (r.said === "renewed" && s.held && s.held.cert && typeof signinRelaySeatClear === "function") signinRelaySeatClear(); /* plant:relay-seat-renew */
   signinSave();
   signinFlush();
   tellSignin();
