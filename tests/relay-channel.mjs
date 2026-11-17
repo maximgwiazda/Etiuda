@@ -8954,7 +8954,8 @@ async function pgAway(mod, page, cut, o) {
   await settle(lead);
   const blobs = x.RL.stores.get(tm.rt).dump().map(([k, v]) => [k, JSON.parse(v)]).filter(([k]) => k.startsWith("blob:")).map(([, v]) => v);
   const of = w => blobs.filter(v => v.writer === w && !v.del).sort((a, b) => b.seq - a.seq)[0] || null;
-  const b0 = of(D0.keyId), b2 = of(D2.keyId), teamNow = blobs.find(v => v.id === x.RL.stores.get(tm.rt).get("teamFile")) || null;
+  /* The team file is the lead's newest file here: rev 3, written after the eight pads. */
+  const b0 = of(D0.keyId), b2 = of(D2.keyId), teamNow = of(LEAD.keyId);
   const out = { order: !!(b0 && b2 && teamNow && b0.seq < b2.seq && b2.seq < teamNow.seq) };
   let failed = 0;
   const fail = opts.stop ? (m, rel) => m === "GET" && teamNow && rel === "b/" + teamNow.id && failed++ === 0 : null;
