@@ -383,6 +383,28 @@ if(!targets.length){
   process.exit(1);
 }
 let bad=0;
+/* A STRING BEGINNING "PLACEHOLDER" NEVER SHIPS (the test architect, 2026-11-17). A builder marks words the copywriter still owes
+   with "PLACEHOLDER FOR THE COPYWRITER: ..." so that a build can be read before the words exist; twice in one night such a marker
+   was one fold from main, once behind t() and once in the Group Policy template an administrator reads. Refused here: any string
+   a sink would show (the scan's own list, every rule above), and any text or attribute of shell/policy's template files, that
+   begins with the word. A comment that mentions the word is neither. */
+{
+  const fs=require("node:fs"), path=require("node:path");
+  const shown=all.filter(x=>/^\s*PLACEHOLDER\b/.test(x));
+  const template=[];
+  const walk=d=>{ for(const e of fs.readdirSync(d,{withFileTypes:true})){ const p=path.join(d,e.name);
+    if(e.isDirectory()) walk(p);
+    else if(/\.(adml|admx)$/i.test(e.name)) fs.readFileSync(p,"utf8").split(/\r?\n/).forEach((line,i)=>{
+      if(/[>"]\s*PLACEHOLDER\b/.test(line)) template.push(path.relative(path.join(__dirname,".."),p).replace(/\\/g,"/")+":"+(i+1)); }); } };
+  const policy=path.join(__dirname,"..","shell","policy");
+  if(fs.existsSync(policy)) walk(policy);
+  if(shown.length||template.length){
+    bad++;
+    console.log("FAIL "+(shown.length+template.length)+" string(s) begin PLACEHOLDER and would be read by a person: the copywriter's words are owed there");
+    shown.forEach(x=>console.log('    "'+x.slice(0,90)+'"'));
+    template.forEach(x=>console.log("    "+x));
+  } else console.log("no string begins PLACEHOLDER: "+all.length+" shown string(s) and shell/policy's template read");
+}
 targets.forEach(l=>{
   const tab=table(l);
   if(!tab){ console.log(l+": no UI_STRINGS."+l+" table"); bad++; return; }
