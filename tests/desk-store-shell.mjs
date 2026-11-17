@@ -176,7 +176,7 @@ function worldOf(o) {
       if (w.relayDown) return json(503, { error: "unavailable" });
       R.clock.now = Date.now();
       const res = await W.fetch(new Request("https://relay.test/relay/v1/" + u.slice("https://etiuda.dev/relay/v1/".length), { method, headers, body: raw && raw.length ? raw : undefined, duplex: "half" }), R.env);
-      return new Response(Buffer.from(await res.arrayBuffer()), { status: res.status });
+      return new Response(Buffer.from(await res.arrayBuffer()), { status: res.status, headers: res.headers });
     }
     if (u.startsWith(GRAPH)) {
       w.graph.push(method + " " + u.slice(GRAPH.length) + " " + String(headers.authorization || ""));

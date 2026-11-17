@@ -24,7 +24,7 @@
    record from the path's writer (E3), and a blob the
    relay stops serving deletes nothing. A blob it could not serve for a reason that can pass is fetched again, the catch-up
    resuming from it at the next cycle; only an answer that the blob is gone lets it go. A catch-up applies the team file
-   first, then the other root files, then the desks', so nothing is judged against a roster older than the batch. The
+   first, then the other root files, then the desks', so nothing is judged against a roster older than the catch-up's. The
    floors (each writer's counter per epoch, the team file's rev per team, lead key and epoch) and the place in the relay's
    sequence survive a restart.
 
@@ -123,7 +123,12 @@ const WAITING_SAID = "Waiting for the team's lead to let this desk in. Nothing m
 const INVITE_UPLOAD_MAX = 64 * 1024;
 const SINCE_MAX = 1000;
 const PENDING_MAX = 1000;
-/* A catch-up's handovers held until it reads a short page, and the handover steps its team files showed (applyBatch). */
+/* What a catch-up holds for its last page (holdLater): more than the relay lists (relay/core.cjs BLOBS_MAX), past which a file is
+   judged as it arrives; and the bytes of those already fetched it keeps that long. */
+const LATER_MAX = 8192, LATER_BYTES_MAX = 64 * 1024 * 1024;
+/* A held file asked for and answered with another file's description: a fault, so it and the rest stay held. */
+const OTHER_FILE = Object.freeze({ ok: false, reason: "other-file", said: "The relay answered a file asked for with another file's description, so that file waits for the next catch-up.", served: false });
+/* A catch-up's handovers held until its last page, and the handover steps its team files showed (applyBatch). */
 const AHEAD_MAX = 16, AHEAD_STEPS_MAX = 64;
 const aheadStep = s => table(s) && s.kind === B.HANDOVER_KIND && JSON.stringify(s).length <= 4096;
 const heldOf = a => a.filter(p => table(p) && Number.isSafeInteger(p.seq) && p.seq >= 0 && HEX32.test(String(p.id)) && isCount(p.epoch)
@@ -164,6 +169,9 @@ const HALTS = ["epoch", "not-enrolled", "removed", "token-spent"];
 /* A fetch answered 404 or 410 says the blob is gone (missing, superseded, expired), and it is let go. Any other answer, a
    fault, a limit or a session refused among them, can pass: the blob stays owed and is fetched again. */
 const gone = r => r.status === 404 || r.status === 410;
+/* THE LAST PAGE OF SINCE, decided here alone: a page that lists nothing past where it was asked from. A short page is not the end,
+   since a relay that leaves a row out of a page and does not read on serves one with more behind it. */
+const pageEnds = (list, from) => !list.some(e => table(e) && Number.isSafeInteger(e.seq) && e.seq > from && table(e.meta));
 
 const R = B.refusal;
 const isCount = v => Number.isSafeInteger(v) && v >= 1;
@@ -430,7 +438,7 @@ function freshState() {
   return { kind: STATE_KIND, v: 1, seq: 0, counters: {}, revs: {}, trust: {}, applied: {}, taken: {}, sent: {}, sentInv: {},
     refused: {}, own: 0, bytes: 0, leadEpoch: 0, pending: [], gone: {}, tokenUsed: false, invited: false,
     tokenUsedIds: {}, invitedIds: {}, replyLostIds: {}, lostBlobs: {}, unkeptIds: {}, headT: null, heldHead: null, heldItem: null, lapse: null, skew: 0, made: null, suspect: false,
-    pin: null, chain: null, was: [], forks: {}, fork: null, behind: {}, stranded: null, listed: null, ahead: { held: [], steps: [] } };
+    pin: null, chain: null, was: [], forks: {}, fork: null, behind: {}, stranded: null, listed: null, ahead: { held: [], steps: [] }, later: [] };
 }
 
 /* A state read back, field by field: what is not its shape is dropped, so a damaged file costs that field and no more. */
@@ -536,6 +544,9 @@ function stateOf(x, now) {
   if (Array.isArray(x.pending)) s.pending = x.pending.filter(p => table(p) && count(p.seq) && HEX32.test(String(p.id))
     && isCount(p.epoch) && B.isId(p.writer) && count(p.floor)).slice(-PENDING_MAX)
     .map(p => ({ seq: p.seq, id: p.id, epoch: p.epoch, writer: p.writer, floor: p.floor }));
+  const laterRows = Array.isArray(x.later) ? x.later.filter(p => table(p) && count(p.seq) && HEX32.test(String(p.id)) && isCount(p.epoch) && B.isId(p.writer)
+    && count(p.floor)).slice(-LATER_MAX).map(p => ({ seq: p.seq, id: p.id, epoch: p.epoch, writer: p.writer, floor: p.floor })) : [];
+  s.later = laterRows; /* plant:later-kept */
   if (table(x.ahead)) {
     if (Array.isArray(x.ahead.held)) s.ahead.held = heldOf(x.ahead.held); /* plant:ahead-kept */
     if (Array.isArray(x.ahead.steps)) s.ahead.steps = x.ahead.steps.filter(aheadStep).slice(-AHEAD_STEPS_MAX);
@@ -1220,6 +1231,14 @@ function createProgram(opts) {
     }
   }
   const unpend = id => { st.pending = st.pending.filter(p => p.id !== id); };
+  /* A blob a catch-up page holds for its last page, with the floor it is judged against then; false where the list is full. */
+  function holdLater(it, floors) {
+    const m = it.meta;
+    if (st.later.some(h => h.id === m.id)) return true;
+    if (st.later.length >= LATER_MAX || !Number.isSafeInteger(it.seq) || !HEX32.test(String(m.id)) || !isCount(m.epoch) || !B.isId(m.writer)) return false;
+    st.later.push({ seq: it.seq, id: m.id, epoch: m.epoch, writer: m.writer, floor: it.floor !== undefined ? it.floor : floorAt(floors, m.writer, m.epoch) });
+    return true;
+  }
 
   /* The public key of a writer this program trusts: the pinned lead, any key on its handover chain, or a desk one roster it already holds names, and
      only where that key id is a single public key. A public key the blob itself carries is not trust. */
@@ -1488,6 +1507,8 @@ function createProgram(opts) {
        lead wrote is the lead's. */
     const handed = [];
     for (const it of rest) { const x = handedOne(it, floors0, ctx); if (x) handed.push(x); } /* plant:handed-first */
+    /* What a catch-up held for its last page follows no handover: a lead key moves only in the look of the pages that showed it. */
+    if (page && page.later === true) handed.length = 0;
     landTop(opened.concat(handed));
     const after = [], others = [];
     for (const it of rest) {
@@ -1508,6 +1529,9 @@ function createProgram(opts) {
       if (st.ahead.held.some(h => h.id === it.meta.id)) continue;
       if (headAhead(it, ctx)) { holdItem(it, floors0); continue; } /* plant:item-held */
       if (look && !look.whole && heldLeads.has(it.meta.writer)) { pend(it, floors0); continue; } /* plant:ahead-park */
+      /* Judged on the last page, under the newest team file the catch-up holds: a later page may name its writer, or drop it. A team
+         file handed on is the look's above, never held. */
+      if (look && !look.whole && !handed.some(x => x.it === it) && holdLater(it, floors0)) continue; /* plant:later-hold */
       const x = openOne(it, floors0, ctx);
       if (x) desks.push(x);
     }
@@ -1924,8 +1948,17 @@ function createProgram(opts) {
       if (far) persist();
     },
     pending: () => st.pending.slice(),
-    /* The handovers a catch-up holds until it reads a short page. */
+    /* The handovers a catch-up holds until its last page. */
     ahead: () => st.ahead.held.map(h => Object.assign({}, h)),
+    /* A listed blob held for the last page unfetched: a file whose writer a roster held here names, so it is no team file handed on
+       and no next lead's head (handedOne, headAhead), judged against the floor that stands now. */
+    holdListed(seq, m) {
+      if (!table(m) || !pin || isLeadKey(m.writer) || typeof m.pub === "string" || (m.place !== undefined && m.place !== null)) return false;
+      const named = Object.keys(st.trust).some(e => (st.trust[e].desks || []).concat(st.trust[e].prior || []).some(d => d.keyId === m.writer));
+      return named && holdLater({ seq, meta: m }, st.counters);
+    },
+    later: () => st.later.map(h => Object.assign({}, h)),
+    unhold(ids) { const out = new Set(ids); st.later = st.later.filter(h => !out.has(h.id)); persist(); },
     unpend(id) { unpend(id); persist(); },
     /* The relay's copy of the team made again under the same id, after a sweep: its sequence starts over and it holds none of
        this program's uploads. The place in the sequence goes back to the start, and every file this program last sent is owed
@@ -1993,6 +2026,9 @@ function createProgram(opts) {
        a file of this program's own place whose bytes are an edit not yet sent. A sent record dropped with its file is owed no
        more, so no deletion goes back. The paths dropped. */
     reconcile(items) {
+      /* A list that stops below this program's place in the sequence is not the whole, and removes nothing. */
+      const top = (Array.isArray(items) ? items : []).reduce((n, e) => (table(e) && Number.isSafeInteger(e.seq) && e.seq > n ? e.seq : n), 0);
+      if (top < st.seq) return []; /* plant:reconcile-top */
       const listed = new Set();
       for (const e of Array.isArray(items) ? items : []) if (table(e) && table(e.meta) && HEX32.test(String(e.meta.id))) listed.add(e.meta.id);
       const here = new Map();
@@ -2406,6 +2442,9 @@ function createChannel(opts) {
   async function catchUp() {
     const who = me();
     const began = relayNow(), behind = prog.listedBefore(began);
+    /* What it holds for the last page: bytes and description where the bytes fit, the description as listed for every held row. */
+    const kept = new Map(), listed = new Map();
+    let keptBytes = 0;
     for (let round = 0; round < 1000; round++) {
       const st = prog.state();
       const wrote = prog.wroteIds();
@@ -2421,6 +2460,8 @@ function createChannel(opts) {
         return why;
       }
       told(r.lapse); /* plant:lapse-since-told */
+      let whole = r.json.length < SINCE_MAX;
+      whole = pageEnds(r.json, st.seq); /* plant:page-ends */
       const items = [];
       let top = st.seq;
       for (const e of r.json) {
@@ -2434,6 +2475,7 @@ function createChannel(opts) {
         if (own) continue; /* plant:own-skip */
         if (!Number.isSafeInteger(m.size) || m.size < 0 || !HEX32.test(String(m.id))) { sayOnce("a file the relay listed was left out: " + B.REASONS["bad-signature"]); continue; }
         if (m.size > B.BLOB_MAX) { say("a file from " + m.writer + " was left out: " + B.REASONS["blob-size"]); continue; } /* plant:in-size-listed */
+        if (!whole && prog.holdListed(e.seq, m)) { listed.set(m.id, m); continue; } /* plant:later-listed */
         const got = await authed("GET", "b/" + m.id);
         /* Not served for a reason that can pass (see gone): what came before it is applied and the next cycle asks from it.
            Where the lead has a blob listed from here on, which may be the team file a desk's file is judged under, the
@@ -2448,11 +2490,13 @@ function createChannel(opts) {
           return got.refused || refusalOf(got); /* plant:fetch-kept */
         }
         if (got.status !== 200) continue;
-        items.push({ seq: e.seq, meta: table(got.meta) && got.meta.id === m.id ? got.meta : m, ct: got.bytes });
+        /* An answer without its description (a proxy may drop the header) is judged under the one listed. */
+        let meta = table(got.meta) && got.meta.id === m.id ? got.meta : null;
+        meta = meta || m; /* plant:listed-meta */
+        if (meta) items.push({ seq: e.seq, meta, ct: got.bytes });
       }
-      /* The short page lands what the catch-up held, fetched again; at the round cap nothing held is followed, and the next
+      /* The last page lands what the catch-up held, fetched again; at the round cap nothing held is followed, and the next
          catch-up reads on. */
-      const whole = r.json.length < SINCE_MAX;
       if (whole) for (const h of prog.ahead()) {
         const got = await authed("GET", "b/" + h.id);
         const back = got.status === 200 && table(got.meta) && got.meta.id === h.id;
@@ -2465,13 +2509,69 @@ function createChannel(opts) {
       }
       prog.applyBatch(items, ctx(), { whole });
       prog.setSeq(top);
-      /* Judged on the short page alone: a catch-up that ran out at the round cap read part of the list, and the next cycle reads on. */
+      if (!whole) {
+        const later = new Set(prog.later().map(h => h.id));
+        for (const x of items) {
+          if (!later.has(x.meta.id)) continue;
+          listed.set(x.meta.id, x.meta);
+          const n = toBytes(x.ct) ? toBytes(x.ct).length : 0;
+          if (keptBytes + n <= LATER_BYTES_MAX) { kept.set(x.meta.id, x); keptBytes += n; }
+        }
+      }
+      /* Judged on the last page alone: a catch-up that ran out at the round cap read part of the list, and the next cycle reads on. */
       if (whole) {
+        const held = await landLater(kept, listed);
+        if (!held.ok) return held;
         judgeStranded(); /* plant:stranded-whole */
         return caughtUp(began, behind);
       }
     }
     return { ok: true };
+  }
+
+  /* What the catch-up held for its last page, taken from what it kept or fetched again, then judged in the relay's order: each
+     against the floor that stood when it was listed, so the order of the pages changes nothing. A fetch that fails keeps the rest.
+     A held file is let go only once it lands, is refused, or the relay says it is gone: a 200 without its description is judged
+     under the one listed, from this catch-up or the relay's list read again, and otherwise stays held for the next catch-up. */
+  async function landLater(kept, listed) {
+    const stay = new Set(), asked = new Set();
+    for (;;) {
+      const held = prog.later().filter(h => !stay.has(h.id)).sort((a, b) => a.seq - b.seq).slice(0, SINCE_MAX);
+      if (!held.length) break;
+      const items = [], done = [];
+      let fault = null;
+      for (const h of held) {
+        const k = kept.get(h.id);
+        const got = k ? { status: 200, meta: k.meta, bytes: k.ct } : await authed("GET", "b/" + h.id);
+        if (got.status !== 200) {
+          if (!gone(got)) { fault = got.refused || refusalOf(got); break; }
+          done.push(h.id);
+          continue;
+        }
+        if (table(got.meta) && got.meta.id !== h.id) { fault = OTHER_FILE; break; } /* plant:later-other */
+        let meta = table(got.meta) ? got.meta : null;
+        if (!meta) meta = describedAs(listed, h); /* plant:later-described */
+        if (!meta && !asked.has(h.id)) { fault = await relistHeld(h, held, listed, asked); if (fault) break; meta = describedAs(listed, h); } /* plant:later-relist */
+        if (!meta) { stay.add(h.id); continue; } /* plant:later-stay */
+        items.push({ seq: h.seq, meta, ct: got.bytes, floor: h.floor });
+        done.push(h.id);
+      }
+      if (items.length) prog.applyBatch(items, ctx(), { later: true });
+      prog.unhold(done);
+      if (fault) return fault;
+    }
+    if (stay.size) sayOnce("a file the relay sent without its description is held, and asked for again at the next catch-up");
+    return { ok: true };
+  }
+  const describedAs = (listed, h) => { const m = listed.get(h.id); return table(m) && m.id === h.id ? m : null; };
+  /* The relay's list read again from just before a held row, each held row of `held` it names at its own place taken into `listed`. */
+  async function relistHeld(h, held, listed, asked) {
+    const r = await authed("GET", "since/" + Math.max(0, h.seq - 1));
+    if (r.status !== 200 || !Array.isArray(r.json)) return r.refused || refusalOf(r);
+    const at = new Map(held.map(x => [x.id, x.seq]));
+    for (const e of r.json) if (table(e) && table(e.meta) && at.get(e.meta.id) === e.seq) { listed.set(e.meta.id, e.meta); asked.add(e.meta.id); }
+    asked.add(h.id);
+    return null;
   }
 
   /* The top reached on this computer's own key: past the deletion keep, the whole list first, and what it no longer names
@@ -2501,7 +2601,9 @@ function createChannel(opts) {
       if (r.status !== 200 || !Array.isArray(r.json)) return null;
       let top = after;
       for (const e of r.json) if (table(e) && Number.isSafeInteger(e.seq) && e.seq > top && table(e.meta)) { top = e.seq; out.push(e); }
-      if (r.json.length < SINCE_MAX) return out;
+      let ends = r.json.length < SINCE_MAX;
+      ends = pageEnds(r.json, after); /* plant:listed-ends */
+      if (ends) return out;
       if (top === after) return null;
       after = top;
     }
