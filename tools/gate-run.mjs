@@ -59,6 +59,46 @@ export function getRealProfileSnapshotFolders() {
   ];
 }
 
+/* WHICH AppData THIS PROCESS SEES (the test architect, 2026-11-17, after Claude alpha's measurement of that morning). A process
+   started from inside a Windows packaged app whose manifest virtualises file writes reads AppData\Roaming as a merged view: the
+   package's private store (LOCALAPPDATA\Packages\<family>\LocalCache\Roaming) lies over the real folders, and a folder the
+   store holds is the one this process reads and writes, never the person's own. The real-profile snapshot below is taken
+   through that view, so its "unchanged" speaks of the view; a record made so must say so. Read only, by the file system's own
+   identity: an entry of a package's store that is the same object as the entry of that name under `roaming` is seen through the
+   view. {view: "plain"} or {view: "merged", family, over: [names]}; `o.roaming` and `o.packages` stand in for the two folders. */
+export function appDataView(o) {
+  const opt = o || {};
+  if (process.platform !== "win32" && !opt.packages) return { view: "plain" };
+  const roaming = opt.roaming || path.dirname(getRealProfileSnapshotFolders()[0]);
+  const packages = opt.packages || process.env.ETIUDA_VIEW_PACKAGES
+    || path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local"), "Packages");
+  const same = (a, b) => {
+    try {
+      const x = fs.statSync(a, { bigint: true }), y = fs.statSync(b, { bigint: true });
+      let one = false;
+      one = x.ino === y.ino && x.dev === y.dev && x.ino !== 0n; /* plant:view-same-object */
+      return one;
+    } catch { return false; }
+  };
+  let families = [];
+  try { families = fs.readdirSync(packages); } catch { return { view: "plain" }; }
+  for (const family of families) {
+    const store = path.join(packages, family, "LocalCache", "Roaming");
+    let names = [];
+    try { names = fs.readdirSync(store); } catch { continue; }
+    const over = names.filter(n => same(path.join(store, n), path.join(roaming, n)));
+    if (over.length) return { view: "merged", family, over: over.sort() };
+  }
+  return { view: "plain" };
+}
+/* The run's one line on it, said before any gate. */
+export function appDataViewLine(v, roots) {
+  if (!v || v.view !== "merged") return "gate-run: AppData is read directly, so the real profile below is the person's own";
+  const shadowed = (roots || []).map(r => path.basename(r)).filter(n => v.over.indexOf(n) >= 0);
+  return "gate-run: AppData is read through the app package " + v.family + "'s private store (" + v.over.length + " of its folder(s) lie over the real ones"
+    + (shadowed.length ? ", " + shadowed.join(" and ") + " among them" : ", none of the profile's") + "), so the real profile below is that view, not the person's own folder where one lies over it";
+}
+
 export function isInstalledAppRunning() {
   const hook = process.env.ETIUDA_INSTALLED_APP_RUNNING !== undefined ? process.env.ETIUDA_INSTALLED_APP_RUNNING
     : process.env.ETIUDA_APP_RUNNING_HOOK !== undefined ? process.env.ETIUDA_APP_RUNNING_HOOK
@@ -1880,6 +1920,7 @@ async function main() {
   if (checkRealProfile) {
     appRunningBefore = isInstalledAppRunning();
     realProfileSnapBefore = takeRealProfileSnapshot();
+    console.log(appDataViewLine(appDataView(), getRealProfileSnapshotFolders())); /* plant:view-said */
   }
 
   if (!asked.includes("--dry-run") && !asked.includes("--list")) builtBeforeGates(); /* plant:gate-run-builds */

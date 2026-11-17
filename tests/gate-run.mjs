@@ -27,7 +27,7 @@ import os from "node:os";
 import tls from "node:tls";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -35,7 +35,7 @@ const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const E = createRequire(import.meta.url)("./engine.js");
 
 /* The floor: every leg below runs or is skipped by name, or the tally says so rather than reading as a short green. */
-const EXPECTED = 24;  /* 14, +2 each step's own scratch (15a, 15b), +2 a customer's roots (15c, 15d), +4 the gate wall and the area lane (16a to 16d), +1 a walled gate's node arm (16e), +1 a zombie read as gone (16f) */
+const EXPECTED = 28;  /* 14, +2 each step's own scratch (15a, 15b), +2 a customer's roots (15c, 15d), +4 the gate wall and the area lane (16a to 16d), +1 a walled gate's node arm (16e), +1 a zombie read as gone (16f), +4 which AppData the run sees (17a to 17d) */
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
   asserted++;
@@ -65,6 +65,8 @@ function runTool(lab, args, customEnv = {}) {
     /* The real-profile sentinel snapshots a stand-in, never this machine's profile, unless a leg names another (the test architect's
        real-profile measurement, 2026-11-15: 2795 reads of the real desk profile came from runs here that named none). */
     ETIUDA_REAL_PROFILE_OVERRIDE: path.join(lab.root, "real-profile-stand-in"),
+    /* Which AppData the run sees is asked of a stand-in Packages folder, never this machine's own (leg 17). */
+    ETIUDA_VIEW_PACKAGES: path.join(lab.root, "packages-stand-in"),
   }, customEnv);
   const r = spawnSync(process.execPath, [path.join(lab.lab, "tools", "gate-run.mjs"), ...args], {
     cwd: lab.lab,
@@ -619,6 +621,68 @@ function main() {
         + "itself stays walled, and no window gate runs whole: " + JSON.stringify(cmds.filter(c => /desk/.test(c))) + " whole window "
         + JSON.stringify(wholeWindow));
     }
+    /* 17. WHICH AppData THE RUN SEES (the test architect, 2026-11-17): a run started from inside a packaged app reads AppData through
+       that package's private store, and its record must say so, since "the real profile is unchanged" then speaks of the view. The
+       lab: a stand-in Roaming and a stand-in Packages folder; "merged" is made as Windows makes it seen, one object under two
+       names (a junction from the Roaming entry to the store's). Off Windows a junction is a symbolic link to a folder, the same
+       one object. Nothing of this machine's own AppData is listed: the tool is handed both folders. */
+    {
+      const gr = ARM_PLAN.gr;
+      const view = path.join(lab.root, "view-lab"), roaming = path.join(view, "Roaming"), packages = path.join(view, "Packages");
+      const store = path.join(packages, "Lab_family0000", "LocalCache", "Roaming");
+      fs.mkdirSync(path.join(roaming, "etiuda"), { recursive: true });
+      fs.mkdirSync(path.join(roaming, "other"), { recursive: true });
+      fs.mkdirSync(path.join(store, "other-app"), { recursive: true });
+      fs.mkdirSync(path.join(packages, "Empty_family1111"), { recursive: true });
+      /* A folder of the same NAME in the store and in Roaming, two objects: a real folder beside a store that never shadowed it. */
+      fs.mkdirSync(path.join(store, "other"), { recursive: true });
+      const plain = gr.appDataView({ roaming, packages });
+      check(plain.view === "plain" && gr.appDataViewLine(plain, [path.join(roaming, "etiuda")]).indexOf("read directly") >= 0,
+        "17a AppData that no package's store lies over is read as plain, a same-named folder that is another object included: " + JSON.stringify(plain));
+      const links = [];
+      const lie = name => {
+        fs.mkdirSync(path.join(store, name), { recursive: true });
+        fs.rmSync(path.join(roaming, name), { recursive: true, force: true });
+        fs.symlinkSync(path.join(store, name), path.join(roaming, name), "junction");
+        links.push(path.join(roaming, name));
+      };
+      try {
+        lie("etiuda"); lie("probe");
+        const merged = gr.appDataView({ roaming, packages });
+        const line = gr.appDataViewLine(merged, [path.join(roaming, "etiuda"), path.join(roaming, "Etiuda Studio")]);
+        check(merged.view === "merged" && merged.family === "Lab_family0000" && JSON.stringify(merged.over) === JSON.stringify(["etiuda", "probe"])
+          && line.indexOf("through the app package Lab_family0000's private store") >= 0 && line.indexOf("2 of its folder(s)") >= 0
+          && line.indexOf("etiuda among them") >= 0 && line.indexOf("Etiuda Studio") < 0,
+          "17b a package's store lying over two Roaming folders is read as merged, naming the package, the two folders and the profile folder among them: "
+          + JSON.stringify(merged) + " | " + line);
+        if (PLANTS_OFF) skip("17c lifting plant:view-same-object reads the merged lab as plain (ETIUDA_PLANTS=off)");
+        else {
+          const toolFile = path.join(lab.lab, "tools", "gate-run.mjs");
+          const src = fs.readFileSync(path.join(ROOT, "tools", "gate-run.mjs"), "utf8");
+          const planted = src.replace(/^[^\n]*\/\*\s*plant:view-same-object\s*\*\/[^\n]*$/m, "      /* plant:view-same-object removed */");
+          const plantFile = path.join(lab.lab, "tools", "gate-run-view-plant.mjs");
+          fs.writeFileSync(plantFile, planted);
+          /* main is synchronous, so the planted copy answers from a child. */
+          const pr = spawnSync(process.execPath, ["--input-type=module", "-e",
+            "const m = await import(" + JSON.stringify(pathToFileURL(plantFile).href) + "); process.stdout.write(JSON.stringify(m.appDataView({ roaming: "
+            + JSON.stringify(roaming) + ", packages: " + JSON.stringify(packages) + " })));"], { encoding: "utf8", windowsHide: true, timeout: 60000 });
+          let got = null;
+          try { got = JSON.parse(String(pr.stdout || "")); } catch { got = { view: "unread: " + String(pr.stderr || "").slice(0, 200) }; }
+          fs.rmSync(plantFile, { force: true });
+          check(planted !== src && got.view === "plain" && fs.existsSync(toolFile),
+            "17c lifting plant:view-same-object reads the merged lab as plain: the plant " + (planted !== src ? "found" : "MISSING") + ", " + JSON.stringify(got));
+        }
+        /* The run says it, before any gate: the same narrow area run as 16d, its stand-in profile's folder lying under a store. */
+        const said = runTool(lab, ["area", "HEAD~1...HEAD"], { ETIUDA_LOCK_TIMEOUT_MS: "1500", ETIUDA_REAL_PROFILE_OVERRIDE: roaming, ETIUDA_VIEW_PACKAGES: packages });
+        const plainRun = runTool(lab, ["area", "HEAD~1...HEAD"], { ETIUDA_LOCK_TIMEOUT_MS: "1500" });
+        check(said.out.indexOf("gate-run: AppData is read through the app package Lab_family0000's private store") >= 0 && said.out.indexOf("etiuda among them") >= 0
+          && plainRun.out.indexOf("gate-run: AppData is read directly") >= 0,
+          "17d an area run says which AppData it sees before its gates: through the lab's package where its store lies over the profile (exit " + said.exit
+          + "), directly where none does (exit " + plainRun.exit + ")");
+      } finally {
+        for (const l of links) { try { fs.rmdirSync(l); } catch { try { fs.unlinkSync(l); } catch {} } }
+      }
+    }
   } finally {
     cleanLab(lab);
   }
@@ -637,7 +701,7 @@ const ARM_PLAN = await (async () => {
   const gr = await import(new URL("../tools/gate-run.mjs", import.meta.url).href);
   const gfa = await import(new URL("../tools/gates-for.mjs", import.meta.url).href);
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
-  return { gfa, plan: await gr.planAreaRun(ROOT, ["tools/desk-input.js"], pkg) };
+  return { gr, gfa, plan: await gr.planAreaRun(ROOT, ["tools/desk-input.js"], pkg) };
 })();
 
 main();
