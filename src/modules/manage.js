@@ -2077,7 +2077,7 @@ function libraryActionsHtml(){
       '<button type="button" class="btn" id="mgHistory">'+esc(t("Saved copies…"))+'</button>'):'')
     +(clearedHeld()
       ? libraryActRow("clear","delete",t("Bring back local changes"),
-        t("These changes stay on this desk until Etiuda closes, and a restart leaves the catalog as delivered."),
+        t("These changes stay on this desk until Etiuda closes; when it opens again, the catalog is as delivered."),
         '<button type="button" class="btn" id="mgBring">'+esc(t("Bring back local changes"))+'</button>')
       : libraryActRow("clear","delete",t("Clear local changes"),t("Removes every change made to the content on this computer, so the catalog reads as delivered."),
         '<button type="button" class="btn danger" id="mgWipe">'+esc(t("Clear local changes"))+'</button>'))

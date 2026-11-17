@@ -613,7 +613,7 @@ function orgModelRows(){
   const lines=[];
   if(!org) lines.push(t("The built-in model sends nothing anywhere."));
   else if(orgRanks(st)) lines.push(orgModelSentLine(st));
-  else if(!st.keyNoService) lines.push(t("Until the service, the model and the key are complete, the built-in model ranks and nothing is sent.")); // placeholder: Claudette
+  else if(!st.keyNoService) lines.push(t("Until the service, its address, the model and the key are all filled in, the built-in model ranks and nothing is sent."));
   if(st.keyNoService) lines.push(t("Your organisation has set a key for an AI service without naming the service, so nothing is sent. Its IT department can name it."));
   if(m.choice) lines.push(set, t("Whoever manages Etiuda for the organisation can change this."));
   (st.ignored||[]).forEach(n=>lines.push(t("Group Policy names an AI service setting Etiuda cannot use, so it is ignored: {NAME}").split("{NAME}").join(String(n))));
@@ -655,9 +655,9 @@ function orgModelWhy(why, fields){
     : why==="provider" ? t("The AI service named in the settings is not one Etiuda knows, so nothing was sent: {NAME}").split("{NAME}").join(String(f.provider||""))
     : why==="endpoint" ? t("The AI service's address must be a full https address with no user name, query or fragment, so nothing was sent: {URL}").split("{URL}").join(String(f.endpoint||""))
     : why==="unsealed" ? t("This computer cannot keep the AI service's key for this account: no keyring is open to seal it, so the key was not kept.")
-    : why==="model" ? t("That model name could not be kept.") // placeholder: Claudette
-    : why==="key" ? t("That key could not be kept.") // placeholder: Claudette
-    : t("The setting could not be saved just now."); // placeholder: Claudette
+    : why==="model" ? t("That model name could not be kept, so the one before stands.")
+    : why==="key" ? t("That key could not be kept, so the one before stands.")
+    : t("The setting could not be saved just now.");
 }
 /* What the connection test came back with, in words: what is missing before anything was sent, or what the service said. */
 function orgTestLine(r){
@@ -675,8 +675,8 @@ function orgTestLine(r){
     : why==="keyAway" ? t("The organisation's Group Policy sets the AI service's key, and that key goes only to the address the policy sets or to the service's own, never to an address typed here, so nothing was sent.")
     : why==="late" ? t("The AI service did not answer in time, so the request was given up.")
     : why==="busy" ? t("The AI service is busy and asked Etiuda to wait; a later try may go through.")
-    : why==="unreached" ? at(t("Could not reach {HOST}.")) // placeholder: Claudette
-    : at(t("{HOST} answered with an error, so the connection is not confirmed.")); // placeholder: Claudette
+    : why==="unreached" ? at(t("{HOST} could not be reached, so the connection is not confirmed."))
+    : at(t("{HOST} answered with an error, so the connection is not confirmed."));
 }
 function orgModelHostCall(){
   const h=eHost();
@@ -690,7 +690,7 @@ function orgModelSave(fields){
   Promise.resolve().then(()=>h.deskAiSave(fields)).then(r=>{
     if(!r || r.ok!==true) toastRefusal(orgModelWhy(r && r.why, fields));
     /* A key never follows a changed address: the shell forgot the one kept for the old one, so the key is asked for again. */
-    else if(r.keyDropped===true) toast(t("The key kept here was given for the previous service or address, so it was forgotten rather than sent to this one. A key for this one goes in the Key field."));
+    else if(r.keyDropped===true) toast(t("The key kept here was given for the previous service or address, so it was forgotten rather than sent to this one. The key for this one goes in the Key field."));
     paintSettings();
     syncOrgMark();
     const host=settingsHost(), back=was && host && host.querySelector("#"+was);
