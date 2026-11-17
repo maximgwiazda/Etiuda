@@ -4108,7 +4108,8 @@ function teamRevOf(doc) {
   return Number.isSafeInteger(doc.rev) && doc.rev >= 0 ? doc.rev : null;
 }
 /* A whole team file's channel: absent is the folder; null where it is neither the folder nor a relay named by its relay
-   team id and an https address, which nothing heeds. */
+   team id and an https address, which nothing heeds. A relay at an address knownRelayAddress does not take, the rule an
+   invitation keeps, is {kind: "elsewhere"}: never a relay channel, so no path that keeps or follows a channel reaches it. */
 function teamChannelOf(doc) {
   const c = doc.channel;
   if (c === undefined) return { kind: "folder" };
@@ -4116,7 +4117,16 @@ function teamChannelOf(doc) {
   if (c.kind === "folder") return { kind: "folder" };
   if (c.kind !== "relay" || typeof c.rt !== "string" || !/^[0-9a-f]{32}$/.test(c.rt) || typeof c.url !== "string"
     || c.url.length > 512 || !/^https:\/\/[a-z0-9.-]+(?::[0-9]{1,5})?(?:\/[A-Za-z0-9._~-]+)*\/?$/.test(c.url)) return null;
+  let known = true;
+  known = knownRelayAddress(c.url); /* plant:channel-known */
+  if (!known) return { kind: "elsewhere" };
   return { kind: "relay", rt: c.rt, url: c.url };
+}
+/* Said once for team `team` whose heeded file names a relay this build does not use; the address is not said. */
+function relayElsewhereSay(team) {
+  const w = shellWords(), lead = (teamShown[team] || {}).lead;
+  const name = typeof lead === "string" && lead ? w.teamOfLead.split("{LEAD}").join(lead) : w.teamUnnamed;
+  teamSay(w.relayElsewhere.split("{TEAM}").join(name));
 }
 /* THE LEAD'S SWITCH FOR READING A CATALOG THE TEAM DOES NOT LIST: the team file's `content`, signed with the rest of it, as
    {by, at}, or null, which is off. Read in this one shape only, so a field or a format this build does not know reads as off. */
@@ -5009,6 +5019,8 @@ function heedTeam() {
   /* A whole file is heeded only where its rev and channel read, and where it is not an older epoch than the floor kept
      for its team and lead key, nor a lower rev at that epoch. */
   const rev = teamRevOf(doc), channel = teamChannelOf(doc);
+  /* Nothing in such a file is used, as with a channel this desk does not read: the team, its catalog and its channel stay. */
+  if (channel && channel.kind === "elsewhere") { relayElsewhereSay(r.team || doc.id); return; } /* plant:elsewhere-heed */
   if (rev === null || channel === null) {
     teamSay(used + " names a rev or a channel this desk does not read, so nothing in it is used");
     return;
@@ -7306,7 +7318,7 @@ const STAGING_RELAY_URL = "https://etiuda.dev/relay-staging/v1";
 function knownRelayAddress(u) {
   if (typeof u !== "string") return false;
   const at = u.trim().replace(/\/+$/, "");
-  if (at === BUILTIN_RELAY_URL || at === STAGING_RELAY_URL) return true;
+  if (at === BUILTIN_RELAY_URL || at === STAGING_RELAY_URL) return true; /* plant:builtin-relay-known */
   if (!harnessLaunch()) return false; /* plant:relay-known */
   return /^https:\/\/[a-z0-9.-]+(?::[0-9]{1,5})?(?:\/[A-Za-z0-9._~-]+)*\/?$/.test(at);
 }
@@ -13203,6 +13215,8 @@ const SHELL_WORDS = {
         folderRefusedWrongTeam: "That folder holds no files of this team, so nothing was changed. The team's lead can say which folder it is.",
         folderRefusedWrongLead: "The team file in that folder is not signed by this team's lead, so nothing was changed. Tell the team's lead about it.",
         folderRefusedLowerRev: "The team file in that folder is older than the one this desk holds, so nothing was changed. The team's lead can say which folder is the current one.",
+        relayElsewhere: "The team file of {TEAM} names a relay this Etiuda does not use, so this desk does not follow it: it keeps its team, its catalog and its connection as they were, and sends nothing there. If the team moves back, nothing is needed; otherwise a new invitation from the team's lead is.",
+        teamOfLead: "{LEAD}'s team", teamUnnamed: "Team",
         pickTeamFolder: "Choose the team's shared folder",
         stillReading: "Etiuda is still reading the team's shared folder, so the catalog is not open yet. Once that is done, Etiuda offers the catalog in a window of its own, and loading it from there opens it.",
         trayOpen: "Open Etiuda",
@@ -13227,6 +13241,8 @@ const SHELL_WORDS = {
         folderRefusedWrongTeam: "W tym folderze nie ma plików tego zespołu, więc nic nie zmieniono. Lider zespołu może wskazać właściwy folder.",
         folderRefusedWrongLead: "Plik zespołu w tym folderze nie jest podpisany przez lidera tego zespołu, więc nic nie zmieniono. Proszę powiedzieć o tym liderowi zespołu.",
         folderRefusedLowerRev: "Plik zespołu w tym folderze jest starszy niż ten, który ma to stanowisko, więc nic nie zmieniono. Lider zespołu może wskazać aktualny folder.",
+        relayElsewhere: "Plik zespołu {TEAM} wskazuje przekaźnik, z którego ta Etiuda nie korzysta, więc to stanowisko za nim nie podąża: zachowuje zespół, katalog i połączenie bez zmian i niczego tam nie wysyła. Jeśli zespół wróci na poprzedni przekaźnik, nic nie trzeba robić; w przeciwnym razie potrzebne jest nowe zaproszenie od lidera zespołu.",
+        teamOfLead: "Zespół osoby {LEAD}", teamUnnamed: "Zespół",
         pickTeamFolder: "Wybierz wspólny folder zespołu",
         stillReading: "Etiuda jeszcze wczytuje wspólny folder zespołu, więc katalog nie jest na razie otwarty. Gdy wczytywanie dobiegnie końca, Etiuda zaproponuje katalog w osobnym oknie; wystarczy go stamtąd wczytać, aby się otworzył.",
         trayOpen: "Otwórz Etiudę",
