@@ -38,6 +38,7 @@ export const HELPERS = {
   "tests/reg-stand.cjs": "a stand-in module tests/relay-channel.mjs requires, not a gate",
   "tests/reg-stand-preload.cjs": "reg-stand preloaded into a harness-launched shell by tests/engine.js shellLaunch, not a gate",
   "tests/storage-keys.js": "a report, as deadcode.js; its scanner is held by tests/text-scan-selftest.js",
+  "tests/syncer-invariants.mjs": "the oracle of the folder syncer's invariants piece: red on main on purpose until that piece lands, then it joins the node chain and leaves this list",
   "tests/tour-walk.js": "the tour's walk tests/smoke.js requires and runs",
   "tests/update-install.js": "a machine-window gate, not in either chain",
   "tests/silent-update-desk.js": "a machine-window gate, not in either chain",

@@ -1749,6 +1749,7 @@ Module.prototype._compile = function (content, filename) {
     "css-dead.js": "a report, as deadcode.js; its scanner is held by tests/text-scan-selftest.js",
     "ghosts.js": "a report, as deadcode.js; its scanner is held by tests/text-scan-selftest.js",
     "storage-keys.js": "a report, as deadcode.js; its scanner is held by tests/text-scan-selftest.js",
+    "syncer-invariants.mjs": "the oracle of the folder syncer's invariants piece: red on main on purpose and run by hand until that piece lands, when it joins the node chain and leaves this list",
     "motion.js": "legs tests/smoke.js requires and runs; alone it is the quick run of one leg",
     "badge-room.js": "the badge's room, a sweep tests/smoke.js requires and runs; alone it is the quick run of that sweep",
     "tour-walk.js": "the tour's walk tests/smoke.js requires and runs; its plan is held to the step table by tests/test.js",
