@@ -7954,11 +7954,12 @@ async function main() {
     const between = (text, from, to) => { const a = text.indexOf(from), b = a < 0 ? -1 : text.indexOf(to, a); return a < 0 || b < 0 ? "ABSENT " + from : text.slice(a, b + to.length); };
     const forms = [...coreText.matchAll(/^function \w*Bytes\([\s\S]*?^}$/gm)].map(m => m[0]).concat(coreText.split("\n").filter(l => /^const \w*Bytes = /.test(l))).join("\n");
     const wire = [between(teamText, "const STATUS = {", "};"), between(teamText, "const CLOSE = {", "};"), between(teamText, "const ROUTE_TAIL = ", ";"),
-      between(teamText, "const METHODS = {", "};"), JSON.stringify(B.REASONS), forms].join("\n");
+      between(teamText, "const METHODS = {", "};"), JSON.stringify(B.REASONS), forms, between(coreText, "const CERT_MARKS = [", "];")].join("\n");
     /* Where this half met the relay seats (integration, Held for decision 49), the digest is the relay seats branch's wire: its seats grant
        and its status; this half changes neither. A person's store moved it: the notice route, and the store grant, store certificate,
-       notice and store computer list byte forms. */
-    const WIRE_SHA = "33466c59c88cb5af5d7676b68a2c75ca873df6e9da1d534c6b321a3bec30dced";
+       notice and store computer list byte forms. A seat certificate's signed marks moved it: the "desk-only" and "member" lines, signed
+       from CERT_MARKS, whose rows the digest reads beside the byte forms. */
+    const WIRE_SHA = "29c30cc5ca8c00862960b2dd12ad33558e2cb48368ef9bcbb22853c8c5a2ce26";
     check(sha(wire) === WIRE_SHA && forms.length > 200,
       "1013w the relay's wire is as it was: its routes, methods, refusals and their words, socket closes and signed byte forms digest to "
       + WIRE_SHA.slice(0, 12) + ": " + sha(wire).slice(0, 12));
