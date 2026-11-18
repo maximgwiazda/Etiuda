@@ -11540,6 +11540,9 @@ function signinDoorInvite(team, rt) {
      the session the desk's key resumes. */
   if (inv.withdrawing === true) return inv.rt === rt && /^[0-9a-f]{64}$/.test(String(inv.box)) && /^[0-9a-f]{32}$/.test(String(inv.inv)) ? { door: null, box: inv.box, inv: inv.inv } : null; /* plant:door-withdraw-invite */
   const held = signinState().held, cert = held && held.cert, me = branchIdentity(false);
+  /* Signed in with no certificate this desk may knock with (none yet, or one its revocation list covers), it asks for one at the
+     renewal's own pace (signinSeatRenew), since no hello is refused for it before a knock. */
+  if (held && (!cert || signinRevokedHas(held.revoked, cert)) && typeof signinSeatRenew === "function") signinSeatRenew(); /* plant:door-asks-seat */
   if (inv.rt !== rt || !me || !/^[0-9a-f]{64}$/.test(String(inv.box)) || !signinCertOk(cert, me.key) || !(cert.until > Date.now())) return null; /* plant:door-invite-cert */
   if (signinCertEarly(cert, Date.now())) return null; /* plant:door-invite-early */
   if (signinRevokedHas(held.revoked, cert)) return null; /* plant:revoked-knock */

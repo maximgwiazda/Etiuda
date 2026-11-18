@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 232;
+const PLANTS = 233;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 183 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 184 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -726,7 +726,7 @@ CASES.doorRequest = s => {
 };
 const DOOR_DECLS = ["function signinDoorInvite(", "function signinDoorKept("];
 const DOOR_STANDS = ["teamJoin", "signinState", "branchIdentity", "signinCertOk", "signinDoorRequest", "persistDeskEnvelope", "memberRequestDoc",
-  "writeJoin", "fs", "path", "Date", "console", "signinDoorAddressOk", "SIGNIN_DESK_PACKED", "signinRevokedHas", "signinCertEarly"];
+  "writeJoin", "fs", "path", "Date", "console", "signinDoorAddressOk", "SIGNIN_DESK_PACKED", "signinRevokedHas", "signinCertEarly", "signinSeatRenew"];
 /* `st`: {join, held, files (a Map of path to text), writes, persists}; the door's two wiring functions with stand-ins, the request
    signed by this desk's key as writeJoin signs it. */
 function loadDoor(s, st, swap) {
@@ -748,7 +748,7 @@ function loadDoor(s, st, swap) {
     },
     fs: { readFileSync: p => { if (!st.files.has(p)) throw new Error("ENOENT"); return st.files.get(p); } }, path,
     Date: { now: () => NOW }, console: { error() {} }, signinDoorAddressOk: st.addressOk || s.signinDoorAddressOk, signinRevokedHas: s.signinRevokedHas,
-    signinCertEarly: s.signinCertEarly, SIGNIN_DESK_PACKED: st.packed === undefined ? true : st.packed };
+    signinCertEarly: s.signinCertEarly, SIGNIN_DESK_PACKED: st.packed === undefined ? true : st.packed, signinSeatRenew: st.renew };
   return new Function(...DOOR_STANDS, text + "\nreturn { signinDoorInvite, signinDoorKept };")(...DOOR_STANDS.map(n => vals[n]));
 }
 const doorJoin = over => ({ team: TEAM, nonce: "4".repeat(64), commit: "1".repeat(64), asked: NOW, held: 0, name: "Desk",
@@ -767,6 +767,19 @@ CASES.doorInvite = (s, swap) => {
     && ask(doorJoin(), Object.assign(heldOf(), { cert: cert({ until: NOW }) })) === null
     && ask(doorJoin({ box: "short" })) === null && ask(doorJoin(), undefined, TEAM, "9".repeat(32)) === null
     && ask(invitation) === undefined && ask(doorJoin(), undefined, "t-fedcba9876543210") === undefined && ask(null) === undefined;
+};
+/* Signed in with no certificate to knock with (none yet, or one its revocation list covers), the door's invite() asks a renewal and knocks
+   with nothing; signed out, or holding a standing certificate, it asks none. */
+CASES.doorAsksSeat = (s, swap) => {
+  const asks = held => {
+    const st = doorStand(doorJoin(), held);
+    st.asked = 0;
+    st.renew = () => { st.asked++; return Promise.resolve(); };
+    return { knocks: loadDoor(s, st, swap).signinDoorInvite(TEAM, RT) !== null, asked: st.asked };
+  };
+  const none = asks(Object.assign(heldOf(), { cert: null })), revoked = asks(heldOf({ revoked: revokedList(1, [heldOf().cert.via.key.pub]) }));
+  const standing = asks(heldOf()), out = asks(null);
+  return !none.knocks && none.asked === 1 && !revoked.knocks && revoked.asked === 1 && standing.knocks && standing.asked === 0 && !out.knocks && out.asked === 0;
 };
 /* The relay named the id: kept with the join, and the request written once into the mirror, with the seat and that id, signed by
    this desk as the engine's own rules (and Studio's, through its pin) take it; the same id again writes nothing, a request being
@@ -3884,6 +3897,7 @@ const LEGS = [
   ["ds10c", "flushJoinReach", "a folder invitation taken and an admission heeded both reach the folder change, and so the seat's write"],
   ["ds11a", "doorRequest", "a request at the relay's door carries the seat as seat.json has it and the relay's id, and names no invitation"],
   ["ds11b", "doorInvite", "the channel knocks at the door with this desk's standing certificate and the lead's box, and with nothing else"],
+  ["ds11e", "doorAsksSeat", "signed in with no certificate to knock with, none yet or one its own revocation list covers, the door asks a renewal and knocks with nothing; signed out, or holding a standing certificate, it asks none"],
   ["ds11c", "doorKept", "the id the relay names is kept and the request written once, with the seat and that id, signed as the desk's own"],
   ["ds11d", "doorChannel", "the desk's relay channel is given the door's invite() ahead of the invitation's, and onDoor"],
   ["ds12a", "previewOff", "the sign-in preview is off by default: ETIUDA_SIGNIN_PREVIEW absent, \"0\", \"yes\" or \" 1\" offers nothing; \"1\" alone offers both as a preview"],
@@ -4418,6 +4432,7 @@ if (!PLANTS_OFF) {
   await plantWire("dsp62", ["|| !(held.cert.until > now) || pinnedLead() || teamJoin) return []; /* plant:door-shown */", ") return [];"], "doorJoin");
   await plantWire("dsp63", ["if (!d || !me) return Object.assign({}, joinView(), { refused: \"door\" }); /* plant:door-join-offered */", "if (!me) return joinView();"], "doorJoin");
   await plantWire("dsp64", ["relay: { rt: d.rt, url: d.url, door: true, box: d.box } } }; /* plant:door-join-box */", "relay: { rt: d.rt, url: d.url, door: true, box: d.lead } } };"], "doorJoin");
+  await plantWire("dsp214", ["  if (held && (!cert || signinRevokedHas(held.revoked, cert)) && typeof signinSeatRenew === \"function\") signinSeatRenew(); /* plant:door-asks-seat */\n", ""], "doorAsksSeat");
   await plantWire("dsp65", ["return !!c && c.kind === \"relay\" && r.door === true && /^[0-9a-f]{64}$/.test(String(r.box)) /* plant:door-kept-box */", "return !!c && c.kind === \"relay\" && r.door === true"], "doorEnvelope");
   await plantWire("dsp66", ["&& inv.id === undefined && inv.proof === undefined; /* plant:door-envelope */", "&& false;"], "doorEnvelope");
   await plantWire("dsp67", ["if (inv.end !== undefined) return null; /* plant:door-ended-quiet */", ""], "doorEnded");

@@ -2270,25 +2270,30 @@ function createChannel(opts) {
   /* THE SEAT: every hello that opens a session for this desk's own key carries its certificate where it holds one, from the first
      hello on every team, any relay being free to ask: the key hello, which also resumes a bound invitation, and the invitation's.
      The certificate names pseudonyms only and goes only to a relay this desk already opens sessions with. A run-out one is renewed
-     first; one the relay refuses (a revoked service key, a licence moved) is renewed and sent again on the same challenge, which a
-     refusal leaves unspent, only where the renewal changed it. Tells the shell when the refusal starts or ends. */
+     first; one the relay refuses (a revoked service key, a licence moved), or a hello refused for carrying none, asks the renewal and goes
+     again on the same challenge, which a refusal leaves unspent, only where the renewal changed it. Tells the shell when the refusal starts
+     or ends. Still refused, a desk owing its request's withdrawal asks on that challenge for the session that takes it back alone. */
   async function seatHello(challenge, who) {
     const sig = crypto.sign(null, helloBytes(o.rt, challenge, who.keyId), who.privateKey).toString("hex");
-    return seated(seat => call("POST", "session", { json: Object.assign({ challenge, key: who.keyId, pub: who.public, sig }, seat ? { seat } : {}) }));
+    const body = seat => Object.assign({ challenge, key: who.keyId, pub: who.public, sig }, seat ? { seat } : {});
+    const r = await seated(seat => call("POST", "session", { json: body(seat) }));
+    if (refusalOf(r).reason !== "seat-lapsed" || !owedWithdrawal()) return r;
+    return call("POST", "session", { json: Object.assign(body(null), { withdraw: true }) }); /* plant:withdraw-ask */
   }
+  const sameSeat = (x, y) => !!x && !!y && table(x.sig) && table(y.sig) && x.sig.value === y.sig.value;
   /* send(seat) posts one hello on one challenge, carrying `seat` where it is not null; answers the relay's last answer. */
   async function seated(send) {
     let sent = null;
     sent = await seatNow(false); /* plant:seat-first */
     let r = await send(sent);
-    const same = (x, y) => !!x && !!y && table(x.sig) && table(y.sig) && x.sig.value === y.sig.value;
     let tries = 0;
     tries = 2; /* plant:seat-retry */
     for (let i = 0; i < tries && refusalOf(r).reason === "seat-lapsed"; i++) {
       let force = false;
       force = !!sent; /* plant:seat-renew-refused */
+      if (!sent) force = true; /* plant:seat-none-renew */
       const next = await seatNow(force);
-      if (!next || same(next, sent)) break;
+      if (!next || sameSeat(next, sent)) break;
       sent = next;
       r = await send(next);
     }
@@ -2299,7 +2304,7 @@ function createChannel(opts) {
   }
   async function seatNow(force) {
     let c = typeof o.seat === "function" ? o.seat() : null;
-    if (c && (force || (Number.isSafeInteger(c.until) && c.until <= clock())) && typeof o.seatRenew === "function") { /* plant:seat-renew-first */
+    if ((force || (c && Number.isSafeInteger(c.until) && c.until <= clock())) && typeof o.seatRenew === "function") { /* plant:seat-renew-first */
       let timer = null;
       try {
         const asked = Promise.resolve(o.seatRenew());
@@ -2309,7 +2314,7 @@ function createChannel(opts) {
         await waited;
       } catch { /* the certificate in hand goes */ }
       if (timer) clearTimeout(timer);
-      c = o.seat();
+      c = typeof o.seat === "function" ? o.seat() : null;
     }
     return table(c) ? c : null;
   }
@@ -2322,7 +2327,7 @@ function createChannel(opts) {
     if (ch.status !== 200 || !ch.json || !HEX32.test(String(ch.json.challenge))) return refusalOf(ch);
     const who = me();
     let why = R("not-enrolled");
-    const inv = typeof o.invite === "function" ? o.invite() : null;
+    let inv = typeof o.invite === "function" ? o.invite() : null;
     const freshInvite = !!(inv && HEX32.test(String(inv.inv)) && prog.tokenSpent(inv.inv) === false);
     if (who && who.privateKey) {
       const r = await seatHello(ch.json.challenge, who);
@@ -2350,6 +2355,8 @@ function createChannel(opts) {
         if (ch.status !== 200 || !ch.json || !HEX32.test(String(ch.json.challenge))) return refusalOf(ch);
       }
     }
+    /* Read again after the key hello, whose renewal may have replaced the certificate a door request knocks with. */
+    inv = typeof o.invite === "function" ? o.invite() : null; /* plant:invite-reread */
     if (why.reason === "removed" && freshInvite) why = R("not-enrolled"); /* plant:removed-token */
     if (why.reason !== "not-enrolled") return why;
     if (inv && inv.door !== undefined) return doorSession(ch, who, inv, why); /* plant:door-session */
@@ -2388,9 +2395,21 @@ function createChannel(opts) {
      join as it ends an invitation's. */
   async function doorSession(ch, who, inv, why) {
     if (!who || !who.privateKey || !HEX64.test(String(who.public)) || !HEX64.test(String(who.box)) || !table(inv.door)) return why;
-    const sig = crypto.sign(null, doorHelloBytes(o.rt, ch.json.challenge, who.keyId, who.box), who.privateKey).toString("hex");
-    const r = await call("POST", "session", { json: { challenge: ch.json.challenge, door: inv.door, key: who.keyId, pub: who.public, box: who.box, sig } });
-    if (r.status !== 200 || !r.json || !HEX64.test(String(r.json.session)) || !HEX32.test(String(r.json.door))) {
+    const knock = (c, door) => call("POST", "session", { json: { challenge: c, door, key: who.keyId, pub: who.public, box: who.box,
+      sig: crypto.sign(null, doorHelloBytes(o.rt, c, who.keyId, who.box), who.privateKey).toString("hex") } });
+    const taken = x => x.status === 200 && !!x.json && HEX64.test(String(x.json.session)) && HEX32.test(String(x.json.door));
+    let r = await knock(ch.json.challenge, inv.door);
+    /* A knock refused not-enrolled may be refused for its certificate: renewed once, as a refused seat is (seated), and knocked again on a
+       fresh challenge (a refused knock spends its own) only where the renewal changed it. */
+    let renew = false;
+    renew = !taken(r) && refusalOf(r).reason === "not-enrolled"; /* plant:door-renew */
+    if (renew) {
+      await seatNow(true);
+      const again = typeof o.invite === "function" ? o.invite() : null;
+      const next = again && again.door !== undefined && table(again.door) && !sameSeat(again.door, inv.door) ? await hello() : null;
+      if (next && next.status === 200 && next.json && HEX32.test(String(next.json.challenge))) r = await knock(next.json.challenge, again.door);
+    }
+    if (!taken(r)) {
       const t = refusalOf(r);
       if (t.reason === "removed") inviteEnd("removed");
       /* The relay answers a door shut to this licence, a certificate it does not take and a request the lead dropped alike: turned
@@ -2456,12 +2475,15 @@ function createChannel(opts) {
     return openSession();
   }
 
-  /* A call under the session; a 401 re-opens it once, since a session lapses after 30 minutes. */
+  /* A call under the session; a 401 re-opens it once, since a session lapses after 30 minutes, and so does a seat the relay no longer
+     takes on it (403 seat-lapsed), so the new hello carries the certificate in hand or tells the shell it is refused. */
   async function authed(method, rel, c) {
     const s = await ensureSession();
     if (!s.ok) return { status: 0, refused: s };
     let r = await call(method, rel, Object.assign({ auth: true }, c));
-    if (r.status === 401) {
+    let reopen = r.status === 401;
+    if (r.status === 403 && refusalOf(r).reason === "seat-lapsed") reopen = true; /* plant:seat-lapsed-reopen */
+    if (reopen) {
       const again = await openSession();
       if (!again.ok) return { status: 0, refused: again };
       r = await call(method, rel, Object.assign({ auth: true }, c));
@@ -2957,6 +2979,10 @@ function createChannel(opts) {
     const invId = inv && HEX32.test(String(inv.inv)) ? String(inv.inv) : "";
     if (!invId || !session || answerHeld) return { ok: true };
     const r = await call("GET", "b/" + invId, { auth: true });
+    /* A session the relay no longer takes is no wait: it is let go, and the next cycle's hello says where the seat stands. */
+    let lost = false;
+    lost = r.status === 401 || (r.status === 403 && refusalOf(r).reason === "seat-lapsed"); /* plant:answer-session-gone */
+    if (lost) { session = null; return { ok: true }; }
     const answer = r.status === 200 ? openAnswer(r, inv, invId) : null;
     if (!answer) sayOnce(WAITING_SAID); /* plant:S3-wait */
     if (!answer) return { ok: true };
@@ -3011,9 +3037,7 @@ function createChannel(opts) {
   async function withdrawOwed() {
     const who = me(), c = ctx();
     if (c.inviteId && prog.unkept(c.inviteId)) return { ok: true };
-    if (!who || !who.privateKey || !c.inviteSeal || typeof who.place !== "string") return null;
-    const mine = ("desks/" + who.place.slice(5) + "/join.json").toLowerCase();
-    const op = prog.owed(who, c).find(x => x.kind === "delete" && x.rel.toLowerCase() === mine);
+    const op = owedWithdrawal();
     if (!op) return null;
     const u = await upload(op, who, { epoch: Math.max(1, prog.state().leadEpoch), key: c.inviteSeal });
     if (!u.ok) {
@@ -3036,8 +3060,18 @@ function createChannel(opts) {
     }
     prog.unmarkInvited(c.inviteId);
     answerHeld = null;
+    /* Its session served the withdrawal alone, so the next ask (Ask again) says hello afresh with the seat in hand. */
+    session = null; /* plant:withdrawn-session */
     if (typeof o.onWithdrawn === "function") o.onWithdrawn();
     return { ok: true };
+  }
+  /* This desk's request's withdrawal, owed after its one upload and sealable under the invitation's key, or null. */
+  function owedWithdrawal() {
+    const who = me(), c = ctx();
+    if (!invitedNow() || (c.inviteId && prog.unkept(c.inviteId))) return null;
+    if (!who || !who.privateKey || !c.inviteSeal || typeof who.place !== "string") return null;
+    const mine = ("desks/" + who.place.slice(5) + "/join.json").toLowerCase();
+    return prog.owed(who, c).find(x => x.kind === "delete" && x.rel.toLowerCase() === mine) || null;
   }
 
   async function cycle() {
