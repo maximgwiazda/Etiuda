@@ -4087,7 +4087,11 @@ if (deskOn()) try {
         const running = D.api.relayRun();
         const wasOnline = !!(running && running.online());
         await D.ask("etiuda:team-join", "cancel");
-        const stopped = await until(() => !!(running && running.online() === false), 1500);
+        await until(() => !!(running && running.online() === false), 1500);
+        /* Kept is still the desk's channel, and kicked it says hello again: a withdrawal lets its session go (the seat's life on the
+           channel), so offline for a moment is not stopped. */
+        let stopped = !running || D.api.relayRun() !== running;
+        if (!stopped) { running.kick(); stopped = !(await until(() => running.online() === true, 3000)); }
         const here = D.api.relayHere();
         const folder = D.api.catalogFolder();
         let after = {};
