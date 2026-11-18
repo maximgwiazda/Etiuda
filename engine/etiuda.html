@@ -3913,6 +3913,19 @@ body.e-first-signin .stage>.dotfield{content-visibility:hidden}
 .fs-right-in .sgn-acts{margin-top:16px}
 .fs-skip{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
 .fs-skip-line{margin:10px 0 0;font:12.5px/1.45 var(--sans);color:var(--dim)}
+/* The desk's door (B-3b): the band under the header, the dot, the offline box and the way out. */
+.door-band{display:flex;align-items:center;gap:8px;box-sizing:border-box;width:100%;height:30px;padding:0 16px;background:color-mix(in srgb,#d98a1f 14%,var(--panel));border-bottom:1px solid color-mix(in srgb,#d98a1f 32%,transparent);color:var(--ink);font:13px/1.3 var(--sans)}
+.door-band[hidden]{display:none}
+.door-band-dot{width:8px;height:8px;border-radius:50%;background:#d98a1f;flex:none}
+.signin-wrap .sgn-btn{position:relative}
+.door-btn-dot{position:absolute;right:-2px;top:-2px;width:8px;height:8px;border-radius:50%;background:#d98a1f;box-shadow:0 0 0 2px var(--header-bg)}
+.door-seat-dot{position:absolute;left:-14px;top:7px;width:8px;height:8px;border-radius:50%;background:#d98a1f}
+.set-label:has(.door-seat-dot){position:relative}
+.door-off{border:1px dashed var(--line);border-radius:8px;font:14px/1.45 var(--sans);padding:12px 14px;color:var(--ink)}
+.door-acts{margin-top:18px}
+.door-quiet{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:12px}
+.door-text{background:none;border:0;padding:0;cursor:pointer;font:13px/1.4 var(--sans);color:var(--accent)}
+.door-out{margin-top:18px;padding-top:18px;border-top:1px solid var(--line)}
 @media (max-width:780px){
   .fs-grid{grid-template-columns:1fr;grid-template-rows:auto 1fr}
   .fs-left{padding:26px 22px 18px}
@@ -5191,6 +5204,7 @@ body.e-host .row .win-btn:focus-visible{outline-offset:-2px}
   </div>
   <div class="pills-probe" id="pillsProbe" aria-hidden="true"></div>
 </header>
+<div id="doorBand" class="door-band" hidden aria-hidden="true" data-i18n-skip></div>
 
 <div id="railHit" title="Hover here or hold Ctrl to show the intent panel" aria-hidden="true"></div>
 <div class="stage" id="main">
@@ -9505,11 +9519,11 @@ What is typed here stays in this browser.`;
     "Led by {LEAD}": "Prowadzi {LEAD}",
     "No team yet": "Jeszcze bez zespołu",
     "Seat": "Miejsce w licencji",
-    "Held by this account": "Przypisane do tego konta",
     "On up to three computers; this is one of them.": "Na najwyżej trzech komputerach; to jeden z nich.",
     "Last checked": "Ostatnie sprawdzenie",
     "Sign out": "Wyloguj się",
-    "This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account.": "To stanowisko loguje się kontem Microsoft lub Google, aby zajmować swoje miejsce w licencji, i zleca sprawdzenie logowania na etiuda.dev. Lider zespołu nie widzi imienia, nazwiska ani adresu z tego konta.",
+    "This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name, address and picture, and shows them only to the leads and administrator of the licence it asks to join.": "To stanowisko loguje się kontem Microsoft lub Google, aby zajmować swoje miejsce w licencji, i zleca sprawdzenie logowania na etiuda.dev. Usługa licencji przechowuje imię i nazwisko, adres e-mail i zdjęcie z tego konta i pokazuje je tylko liderom i administratorowi licencji, do której konto prosi o dołączenie.",
+    "This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The leads and administrator of the licence it joins see the account's name, address and picture.": "To stanowisko loguje się kontem Microsoft lub Google, aby zajmować swoje miejsce w licencji, i zleca sprawdzenie logowania na etiuda.dev. Liderzy i administrator licencji, do której dołącza, widzą imię i nazwisko, adres e-mail i zdjęcie z tego konta.",
     "Signing out ends this computer's sign-in and frees its place among the account's three; the seat stays the account's. The team's catalog and personal cards stay on the computer.": "Wylogowanie kończy logowanie na tym komputerze i zwalnia jego miejsce wśród trzech komputerów konta; miejsce w licencji zostaje przy koncie. Katalog zespołu i własne karty zostają na komputerze.",
     "today, {TIME}": "dziś, {TIME}",
     "No seat is free on the organisation's licence just now.": "W licencji organizacji nie ma teraz wolnego miejsca.",
@@ -9690,7 +9704,45 @@ What is typed here stays in this browser.`;
     "That teammate's cards match the team's edition.": "Karty tego członka zespołu są takie same jak w wydaniu zespołu.",
     "The name on this desk": "Imię na tym stanowisku",
     "{NAME} comes from your account: the first name and the first letter of the surname. Replies that sign with your name use it, and the team's lead sees this desk by it. It can be changed here at any time.": "{NAME} pochodzi z konta: to imię i pierwsza litera nazwiska. Ta nazwa trafia do odpowiedzi podpisywanych imieniem, a lider zespołu widzi pod nią to stanowisko. Można ją zmienić tutaj w dowolnej chwili.",
-    "{NAME} is the name on your account. Replies that sign with your name use it, and the team's lead sees this desk by it. It can be changed here at any time.": "{NAME} to nazwa z konta. Ta nazwa trafia do odpowiedzi podpisywanych imieniem, a lider zespołu widzi pod nią to stanowisko. Można ją zmienić tutaj w dowolnej chwili."
+    "{NAME} is the name on your account. Replies that sign with your name use it, and the team's lead sees this desk by it. It can be changed here at any time.": "{NAME} to nazwa z konta. Ta nazwa trafia do odpowiedzi podpisywanych imieniem, a lider zespołu widzi pod nią to stanowisko. Można ją zmienić tutaj w dowolnej chwili.",
+    "Ask {LEAD}": "Poproś: {LEAD}",
+    "Etiuda starts with a sign-in.": "Etiuda zaczyna się od zalogowania.",
+    "Signing in with Microsoft or Google gives this computer a seat: the team's, where its lead has admitted this account, or else a trial of fourteen days. Catalogs open once the seat is here.": "Zalogowanie kontem Microsoft lub Google daje temu komputerowi miejsce w licencji: w zespole, jeśli lider przyjął to konto, a w przeciwnym razie czternastodniowy okres próbny. Katalogi otwierają się, gdy miejsce już jest.",
+    "Signing in needs an internet connection. The buttons appear here by themselves once this computer is online.": "Logowanie wymaga połączenia z internetem. Przyciski pojawią się tu same, gdy komputer będzie online.",
+    "The request to join is waiting.": "Prośba o dołączenie czeka.",
+    "Catalogs open here again once {LEAD}, the team's lead, accepts it. Etiuda's own fourteen days ended on {DESK_END}.": "Katalogi znów otworzą się tutaj, gdy {LEAD}, lider zespołu, ją przyjmie. Własne czternaście dni Etiudy skończyły się {DESK_END}.",
+    "Etiuda's trial has ended.": "Okres próbny Etiudy się skończył.",
+    "It ended on {DESK_END}. This account's organisation holds an Etiuda licence, so a team's lead can admit this account; buying a licence opens the catalogs again too.": "Skończył się {DESK_END}. Organizacja tego konta ma licencję Etiudy, więc lider zespołu może przyjąć to konto; katalogi otworzy też zakup licencji.",
+    "It ended on {DESK_END}. Buying a licence opens the catalogs again.": "Skończył się {DESK_END}. Katalogi otworzy ponownie zakup licencji.",
+    "This account's seat ended on {ENDED}.": "Miejsce tego konta w licencji wygasło {ENDED}.",
+    "Etiuda keeps working on this computer until {DATE}, when its last confirmation runs out, and then stops. A purchase, or a team's lead admitting this account, brings the seat back.": "Etiuda działa na tym komputerze do {DATE}, kiedy wygasa jej ostatnie potwierdzenie, a potem się zatrzyma. Miejsce przywróci zakup albo przyjęcie tego konta przez lidera zespołu.",
+    "Seat ended {ENDED} · Etiuda stops {DATE}": "Miejsce wygasło {ENDED} · Etiuda zatrzyma się {DATE}",
+    "This account's seat has ended; Etiuda stops on {DATE}.": "Miejsce tego konta wygasło; Etiuda zatrzyma się {DATE}.",
+    "Etiuda has stopped on this computer.": "Etiuda zatrzymała się na tym komputerze.",
+    "It stopped on {DATE}: {WHY}. Signing in with an account that has a seat, a purchase, or a team's lead admitting this account starts it again.": "Zatrzymała się {DATE}: {WHY}. Etiudę uruchomi ponownie zalogowanie się kontem, które ma miejsce w licencji, zakup albo przyjęcie tego konta przez lidera zespołu.",
+    "its trial ended": "skończył się jej okres próbny",
+    "the Etiuda Studio trial that covered it ended": "skończył się okres próbny Etiudy Studio, który ją obejmował",
+    "the licence ended": "wygasła licencja",
+    "the seat on the team {LEAD} leads ended": "wygasło miejsce w zespole, który prowadzi {LEAD}",
+    "the organisation's licence no longer gives this account a seat": "licencja organizacji nie daje już temu kontu miejsca",
+    "Etiuda's own trial is running.": "Trwa własny okres próbny Etiudy.",
+    "Day {N} of 14, until {DATE}, on up to three computers.": "Dzień {N} z 14, do {DATE}, najwyżej na trzech komputerach.",
+    "Day {N} of 14, until {DESK_END}. The request to join waits for {LEAD}, and Etiuda works meanwhile.": "Dzień {N} z 14, do {DESK_END}. Prośba o dołączenie czeka na odpowiedź, której udzieli {LEAD}, a Etiuda w tym czasie działa.",
+    "Etiuda now runs on the Etiuda Studio trial.": "Etiuda działa teraz w okresie próbnym Etiudy Studio.",
+    "Etiuda's own fourteen days ended on {DESK_END}. The Etiuda Studio trial on this account began later and covers Etiuda too, until {STUDIO_END}.": "Własne czternaście dni Etiudy skończyły się {DESK_END}. Okres próbny Etiudy Studio na tym koncie zaczął się później i obejmuje także Etiudę, do {STUDIO_END}.",
+    "This account holds an Etiuda licence.": "To konto ma licencję Etiudy.",
+    "Paid until {ENDS}, on up to three computers.": "Opłacona do {ENDS}, najwyżej na trzech komputerach.",
+    "This account has a seat on the team {LEAD} leads.": "To konto ma miejsce w zespole, który prowadzi {LEAD}.",
+    "It renews by itself; the team's licence runs until {ENDS}.": "Odnawia się samo; licencja zespołu obowiązuje do {ENDS}.",
+    "This account has a seat on its organisation's licence.": "To konto ma miejsce w licencji swojej organizacji.",
+    "It renews by itself; the licence runs until {ENDS}.": "Odnawia się samo; licencja obowiązuje do {ENDS}.",
+    "Save your own work as files…": "Zapisz własną pracę jako pliki…",
+    "What this account made here can still be saved as files, in a folder of your choice: its own cards, its edits to a catalog's cards, and the flags it raised. Catalogs themselves are not saved.": "To, co powstało tu na tym koncie, można jeszcze zapisać jako pliki w wybranym folderze: własne karty, zmiany w kartach katalogu i zgłoszenia. Same katalogi nie są zapisywane.",
+    "This build of Etiuda cannot sign in.": "Ta wersja Etiudy nie umożliwia logowania.",
+    "It was made without a way to sign in, so no catalog opens here.": "Zbudowano ją bez możliwości logowania, więc żaden katalog się tu nie otwiera.",
+    "Etiuda works in its desktop app.": "Etiuda działa w aplikacji na komputer.",
+    "In a browser, no catalog opens.": "W przeglądarce żaden katalog się nie otwiera.",
+    "This computer cannot keep a sign-in, so Etiuda asks for one again when the seat renews, at most every thirty days.": "Ten komputer nie może przechować logowania, więc Etiuda poprosi o nie ponownie przy odnowieniu miejsca, najwyżej co trzydzieści dni."
   };
   function uiLangKnown(l) {
     return !!(l && UI_STRINGS[l]);
@@ -18889,6 +18941,7 @@ What is typed here stays in this browser.`;
     inviteHeld: () => inviteHeld,
     joinDoorButton: () => joinDoorButton,
     joinStands: () => joinStands,
+    joinTook: () => joinTook,
     keySignHtml: () => keySignHtml,
     keyTipHtml: () => keyTipHtml,
     lapseNote: () => lapseNote,
@@ -29478,29 +29531,34 @@ What is typed here stays in this browser.`;
     if (!el) return;
     const hadFocus = el.contains(document.activeElement);
     const d = signinDoor(signinV);
-    const skipBtn = '<button type="button" class="btn fs-skip-btn" id="firstSigninSkip">' + esc(t("Not now")) + "</button>";
-    const skipLine = '<p class="fs-skip-line">' + esc(t("The desk opens as it is, and Sign in stays in the bar at the top for later.")) + "</p>";
-    let rightBody = "";
-    if (d && d.moment === "before") {
-      rightBody = signinPanelHtml(Object.assign({}, d, { heading: "", line: "", privacy: "", foot: "" })) + '<p class="sgn-lede fs-right-note">' + esc(t("Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.")) + "</p>" + (d.privacy ? '<p class="sgn-cap fs-privacy">' + esc(d.privacy) + "</p>" : "") + '<div class="fs-skip">' + skipBtn + skipLine + "</div>";
-    } else if (d) {
-      rightBody = signinPanelHtml(Object.assign({}, d, { foot: "" }));
-    }
-    el.innerHTML = '<div class="fs-grid"><div class="fs-left"><div class="fs-left-in"><div class="fs-body">' + firstSigninMarkHtml() + '<h1 id="fsHeading">' + esc(t("Sign in to Etiuda")) + '</h1><p class="fs-lede">' + esc(t("Your seat belongs to your account, so it comes with you to any computer you sign in on, up to three.")) + '</p><h2 class="fs-steps-h">' + esc(t("What happens")) + '</h2><ol class="fs-steps"><li><span class="fs-step-n" aria-hidden="true">1</span><span>' + esc(t("The browser opens the sign-in page")) + '</span></li><li><span class="fs-step-n" aria-hidden="true">2</span><span>' + esc(t("You choose your account there")) + '</span></li><li><span class="fs-step-n" aria-hidden="true">3</span><span>' + esc(t("Etiuda carries on here by itself")) + '</span></li></ol></div><p class="fs-foot">' + esc(t("No licence key to keep")) + '</p></div></div><div class="fs-right"><div class="fs-right-in"><h2 class="fs-rh">' + esc(t("Signing in")) + "</h2>" + rightBody + "</div></div></div>";
-    let showSkip = d && d.moment === "refused";
-    if (d && d.moment === "managed-refused") showSkip = true;
-    if (showSkip) {
-      const acts = el.querySelector(".sgn-acts");
-      if (acts) {
-        acts.insertAdjacentHTML("beforeend", skipBtn);
-        acts.insertAdjacentHTML("afterend", skipLine);
-      } else {
-        const rin = el.querySelector(".fs-right-in");
-        if (rin) rin.insertAdjacentHTML("beforeend", '<div class="fs-skip">' + skipBtn + skipLine + "</div>");
+    const ds = deskDoorState(signinV);
+    const doorish = ds.state === "waiting" || ds.state === "trial-over-org" || ds.state === "trial-over" || ds.state === "stopped" || ds.state === "first" || ds.state === "first-offline";
+    const opening = !doorish && d && d.moment === "before";
+    if (doorish || opening) {
+      el.innerHTML = firstSigninHtml(signinV, { forceFirst: opening });
+    } else {
+      const skipBtn = '<button type="button" class="btn fs-skip-btn" id="firstSigninSkip">' + esc(t("Not now")) + "</button>";
+      const skipLine = '<p class="fs-skip-line">' + esc(t("The desk opens as it is, and Sign in stays in the bar at the top for later.")) + "</p>";
+      let rightBody = "";
+      if (d) {
+        rightBody = signinPanelHtml(Object.assign({}, d, { foot: "" }));
       }
-    } else if (d && d.moment === "stranded") {
-      const rin = el.querySelector(".fs-right-in");
-      if (rin) rin.insertAdjacentHTML("beforeend", '<div class="fs-skip"><button type="button" class="btn primary fs-skip-btn" id="firstSigninSkip">' + esc(t("Continue")) + "</button></div>");
+      el.innerHTML = '<div class="fs-grid"><div class="fs-left"><div class="fs-left-in"><div class="fs-body">' + firstSigninMarkHtml() + '<h1 id="fsHeading">' + esc(t("Sign in to Etiuda")) + '</h1><p class="fs-lede">' + esc(t("Your seat belongs to your account, so it comes with you to any computer you sign in on, up to three.")) + "</p>" + doorStepsHtml() + '</div><p class="fs-foot">' + esc(t("No licence key to keep")) + '</p></div></div><div class="fs-right"><div class="fs-right-in"><h2 class="fs-rh">' + esc(t("Signing in")) + "</h2>" + rightBody + "</div></div></div>";
+      let showSkip = d && d.moment === "refused";
+      if (d && d.moment === "managed-refused") showSkip = true;
+      if (showSkip) {
+        const acts = el.querySelector(".sgn-acts");
+        if (acts) {
+          acts.insertAdjacentHTML("beforeend", skipBtn);
+          acts.insertAdjacentHTML("afterend", skipLine);
+        } else {
+          const rin = el.querySelector(".fs-right-in");
+          if (rin) rin.insertAdjacentHTML("beforeend", '<div class="fs-skip">' + skipBtn + skipLine + "</div>");
+        }
+      } else if (d && d.moment === "stranded") {
+        const rin = el.querySelector(".fs-right-in");
+        if (rin) rin.insertAdjacentHTML("beforeend", '<div class="fs-skip"><button type="button" class="btn primary fs-skip-btn" id="firstSigninSkip">' + esc(t("Continue")) + "</button></div>");
+      }
     }
     if (hadFocus) {
       const first = el.querySelector("button:not(:disabled), input");
@@ -29710,6 +29768,207 @@ What is typed here stays in this browser.`;
   FAIL_FIRST.push("signin-notassigned", "signin-tenant", "signin-other");
   FAIL_FIRST.push("signin-switch-out", "signin-switch-unmade");
   var ANOTHER_FOR = ["signin-notallowed", "signin-notassigned"];
+  function deskDoorState(v) {
+    if (!v || !Array.isArray(v.offered)) v = signinRead(v);
+    const seat = v.holding, seatOn = seat ? seat.on : "";
+    const deskEnd = v.trials && v.trials.desk || seatOn === "trial" && seat && seat.ends || 0;
+    const studioEnd = v.trials && v.trials.studio || 0;
+    const ends = seat && seat.ends ? seat.ends : 0;
+    const team = signinTeam();
+    const lead = seat && seat.lead || team && team.lead || "";
+    const waitingOnLead = !!v.askLead;
+    const orgLicence = !!v.licenceManaged;
+    let day = 0;
+    if (seatOn === "trial" && deskEnd && v.now) {
+      const left = Math.round((deskEnd - v.now) / 864e5);
+      day = Math.max(1, Math.min(14, 14 - left));
+    }
+    let state = "none";
+    if (v.works && v.ended > 0) state = "ended";
+    else if (!v.works && v.signedIn && (v.ended > 0 || v.stoppedAt > 0 && seatOn !== "trial" || seatOn && seatOn !== "trial")) state = "stopped";
+    else if (!v.works && v.signedIn && (seatOn === "trial" || !seatOn && deskEnd > 0) && waitingOnLead) state = "waiting";
+    else if (!v.works && v.signedIn && seatOn === "trial" && orgLicence) state = "trial-over-org";
+    else if (!v.works && v.signedIn && seatOn === "trial") state = "trial-over";
+    else if (v.works && v.signedIn && seatOn) state = "working";
+    else if (!v.signedIn && v.offered.length && !v.online && !signinWaiting(v) && !signinStranded(v)) state = "first-offline";
+    else if (!v.signedIn && v.offered.length && v.registered && v.online && !signinWaiting(v) && !signinStranded(v)) state = "first";
+    return {
+      state,
+      lead,
+      deskEnd,
+      studioEnd,
+      ended: v.ended || 0,
+      until: v.until || 0,
+      stoppedAt: v.stoppedAt || 0,
+      why: seatOn,
+      seatOn,
+      ends,
+      day,
+      waitingOnLead,
+      orgLicence
+    };
+  }
+  function deskWhySentence(on, lead) {
+    if (on === "trial") return t("its trial ended");
+    if (on === "studio-trial") return t("the Etiuda Studio trial that covered it ended");
+    if (on === "own") return t("the licence ended");
+    if (on === "team") return named(t("the seat on the team {LEAD} leads ended"), "{LEAD}", lead);
+    if (on === "org") return t("the organisation's licence no longer gives this account a seat");
+    return "";
+  }
+  function deskDoorLines(ds) {
+    const lead = ds.lead || "", n = String(ds.day || 0), desk = ds.deskEnd ? signinDay(ds.deskEnd) : "", studio = ds.studioEnd ? signinDay(ds.studioEnd) : "";
+    const ends = ds.ends ? signinDay(ds.ends) : "", ended = ds.ended ? signinDay(ds.ended) : "", until = ds.until ? signinDay(ds.until) : "";
+    const stopped = ds.stoppedAt ? signinDay(ds.stoppedAt) : "";
+    const fill2 = (s, map) => Object.keys(map).reduce((a, k) => a.split(k).join(map[k]), s);
+    if (ds.state === "first" || ds.state === "first-offline") return [
+      t("Etiuda starts with a sign-in."),
+      t("Signing in with Microsoft or Google gives this computer a seat: the team's, where its lead has admitted this account, or else a trial of fourteen days. Catalogs open once the seat is here.")
+    ];
+    if (ds.state === "waiting") return [
+      t("The request to join is waiting."),
+      fill2(t("Catalogs open here again once {LEAD}, the team's lead, accepts it. Etiuda's own fourteen days ended on {DESK_END}."), { "{LEAD}": lead, "{DESK_END}": desk })
+    ];
+    if (ds.state === "trial-over-org") return [
+      t("Etiuda's trial has ended."),
+      fill2(t("It ended on {DESK_END}. This account's organisation holds an Etiuda licence, so a team's lead can admit this account; buying a licence opens the catalogs again too."), { "{DESK_END}": desk })
+    ];
+    if (ds.state === "trial-over") return [
+      t("Etiuda's trial has ended."),
+      fill2(t("It ended on {DESK_END}. Buying a licence opens the catalogs again."), { "{DESK_END}": desk })
+    ];
+    if (ds.state === "ended") return [
+      fill2(t("This account's seat ended on {ENDED}."), { "{ENDED}": ended }),
+      fill2(t("Etiuda keeps working on this computer until {DATE}, when its last confirmation runs out, and then stops. A purchase, or a team's lead admitting this account, brings the seat back."), { "{DATE}": until })
+    ];
+    if (ds.state === "stopped") return [
+      t("Etiuda has stopped on this computer."),
+      fill2(
+        t("It stopped on {DATE}: {WHY}. Signing in with an account that has a seat, a purchase, or a team's lead admitting this account starts it again."),
+        { "{DATE}": stopped, "{WHY}": deskWhySentence(ds.why, lead) }
+      )
+    ];
+    if (ds.state === "working" && ds.seatOn === "studio-trial") return [
+      t("Etiuda now runs on the Etiuda Studio trial."),
+      fill2(t("Etiuda's own fourteen days ended on {DESK_END}. The Etiuda Studio trial on this account began later and covers Etiuda too, until {STUDIO_END}."), { "{DESK_END}": desk, "{STUDIO_END}": studio })
+    ];
+    if (ds.state === "working" && ds.seatOn === "own") return [
+      t("This account holds an Etiuda licence."),
+      fill2(t("Paid until {ENDS}, on up to three computers."), { "{ENDS}": ends })
+    ];
+    if (ds.state === "working" && ds.seatOn === "team") return [
+      fill2(t("This account has a seat on the team {LEAD} leads."), { "{LEAD}": lead }),
+      fill2(t("It renews by itself; the team's licence runs until {ENDS}."), { "{ENDS}": ends })
+    ];
+    if (ds.state === "working" && ds.seatOn === "org") return [
+      t("This account has a seat on its organisation's licence."),
+      fill2(t("It renews by itself; the licence runs until {ENDS}."), { "{ENDS}": ends })
+    ];
+    if (ds.state === "working" && ds.waitingOnLead) return [
+      t("Etiuda's own trial is running."),
+      fill2(t("Day {N} of 14, until {DESK_END}. The request to join waits for {LEAD}, and Etiuda works meanwhile."), { "{N}": n, "{DESK_END}": desk, "{LEAD}": lead })
+    ];
+    if (ds.state === "working") return [
+      t("Etiuda's own trial is running."),
+      fill2(t("Day {N} of 14, until {DATE}, on up to three computers."), { "{N}": n, "{DATE}": desk })
+    ];
+    return ["", ""];
+  }
+  function doorBandState(v) {
+    const ds = deskDoorState(v);
+    if (ds.state !== "ended") return { shown: false, dot: false, text: "", tip: "" };
+    const ended = signinDay(ds.ended), until = signinDay(ds.until);
+    return {
+      shown: true,
+      dot: true,
+      text: named(named(t("Seat ended {ENDED} · Etiuda stops {DATE}"), "{ENDED}", ended), "{DATE}", until),
+      tip: named(t("This account's seat has ended; Etiuda stops on {DATE}."), "{DATE}", until)
+    };
+  }
+  function doorPress(label2, solid, act) {
+    const buy = act === "buy" ? ' data-e-open="buy"' : "";
+    return '<button type="button" class="btn' + (solid ? " primary" : "") + '" data-signin-act="' + esc(act) + '"' + buy + ">" + esc(label2) + "</button>";
+  }
+  function doorTextPress(label2, act) {
+    return '<button type="button" class="door-text" data-signin-act="' + esc(act) + '">' + esc(label2) + "</button>";
+  }
+  function doorScreen(leftBody, rightInner, foot) {
+    return '<div class="fs-grid"><div class="fs-left"><div class="fs-left-in"><div class="fs-body">' + firstSigninMarkHtml() + leftBody + "</div>" + (foot || "") + '</div></div><div class="fs-right"><div class="fs-right-in">' + rightInner + "</div></div></div>";
+  }
+  function doorBare(heading, line) {
+    return doorScreen('<h1 id="fsHeading">' + esc(heading) + '</h1><p class="fs-lede">' + esc(line) + "</p>", "", "");
+  }
+  function doorStepsHtml() {
+    return '<h2 class="fs-steps-h">' + esc(t("What happens")) + '</h2><ol class="fs-steps"><li><span class="fs-step-n" aria-hidden="true">1</span><span>' + esc(t("The browser opens the sign-in page")) + '</span></li><li><span class="fs-step-n" aria-hidden="true">2</span><span>' + esc(t("You choose your account there")) + '</span></li><li><span class="fs-step-n" aria-hidden="true">3</span><span>' + esc(t("Etiuda carries on here by itself")) + "</span></li></ol>";
+  }
+  function firstSigninHtml(v, opts) {
+    const o = opts && typeof opts === "object" ? opts : {};
+    if (o.doorKind === "no-signin") return doorBare(
+      t("This build of Etiuda cannot sign in."),
+      t("It was made without a way to sign in, so no catalog opens here.")
+    );
+    if (o.doorKind === "browser") return doorBare(t("Etiuda works in its desktop app."), t("In a browser, no catalog opens."));
+    if (!v) return "";
+    const ds = deskDoorState(v);
+    if (ds.state === "waiting" || ds.state === "trial-over-org" || ds.state === "trial-over" || ds.state === "stopped") return doorLaterHtml(v, ds);
+    if (ds.state === "first" || ds.state === "first-offline" || o.forceFirst) return doorFirstHtml(v, ds);
+    return "";
+  }
+  function doorFirstHtml(v, ds) {
+    const drawn = ds.state === "first" || ds.state === "first-offline" ? ds : Object.assign({}, ds, { state: v.online ? "first" : "first-offline" });
+    const pair = deskDoorLines(drawn.state === "first" || drawn.state === "first-offline" ? drawn : Object.assign({}, drawn, { state: "first" }));
+    const door = signinDoor(v) || { moment: "" };
+    const d = { state: ds.state, moment: door.moment || "" };
+    const showSkip = d.state === "none" && (d.moment === "refused" || d.moment === "managed-refused");
+    const offline = drawn.state === "first-offline" || ds.state === "first-offline" || !v.online;
+    const priv = t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The leads and administrator of the licence it joins see the account's name, address and picture.");
+    let right = '<h2 class="fs-rh">' + esc(t("Signing in")) + "</h2>";
+    if (offline) right += '<div class="door-off"><span>' + esc(t("Signing in needs an internet connection. The buttons appear here by themselves once this computer is online.")) + "</span></div>";
+    else if (v.offered && v.offered.length) right += signinProvidersHtml(v.offered, false);
+    if (signinCapHolds(v)) right += '<p class="sgn-cap">' + esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.")) + "</p>";
+    right += '<p class="sgn-cap fs-privacy">' + esc(priv) + "</p>";
+    if (v.keeps === false) right += '<p class="sgn-cap">' + esc(t("This computer cannot keep a sign-in, so Etiuda asks for one again when the seat renews, at most every thirty days.")) + "</p>";
+    if (showSkip) right += '<div class="fs-skip"><button type="button" class="btn fs-skip-btn" id="firstSigninSkip">' + esc(t("Not now")) + '</button><p class="fs-skip-line">' + esc(t("The desk opens as it is, and Sign in stays in the bar at the top for later.")) + "</p></div>";
+    const left = '<h1 id="fsHeading">' + esc(pair[0]) + '</h1><p class="fs-lede">' + esc(pair[1]) + "</p>" + doorStepsHtml();
+    const foot = '<p class="fs-foot">' + esc(t("No licence key to keep")) + "</p>";
+    return doorScreen(left, right, foot);
+  }
+  function doorLaterHtml(v, ds) {
+    const pair = deskDoorLines(ds);
+    const askable = ds.state === "trial-over-org" || ds.state === "stopped" && (ds.orgLicence || ds.seatOn === "team");
+    const checkFilled = ds.state === "waiting";
+    let acts = "";
+    if (checkFilled) acts += doorPress(t("Check now"), true, "check");
+    else if (askable) acts += doorPress(named(t("Ask {LEAD}"), "{LEAD}", ds.lead), true, "ask");
+    else acts += doorPress(t("Buy"), true, "buy");
+    if (checkFilled || askable) acts += doorPress(t("Buy"), false, "buy");
+    const quiet = [];
+    if (!checkFilled) quiet.push(doorTextPress(t("Check now"), "check"));
+    quiet.push(doorTextPress(t("Use another account"), "another"));
+    quiet.push(doorTextPress(t("Sign out"), "out"));
+    const out = ds.state !== "waiting";
+    const wayOut = out ? '<div class="door-out"><button type="button" class="btn" data-door-save>' + esc(t("Save your own work as files…")) + '</button><p class="sgn-cap">' + esc(t("What this account made here can still be saved as files, in a folder of your choice: its own cards, its edits to a catalog's cards, and the flags it raised. Catalogs themselves are not saved.")) + "</p></div>" : "";
+    const p = signinParts(v);
+    const right = signinIdentHtml({ initial: p.initial, name: p.name, sub: p.sub, off: p.off }) + '<div class="sgn-acts door-acts">' + acts + '</div><div class="door-quiet">' + quiet.join("") + "</div>" + wayOut;
+    const left = '<h1 id="fsHeading">' + esc(pair[0]) + '</h1><p class="fs-lede">' + esc(pair[1]) + "</p>";
+    return doorScreen(left, right, "");
+  }
+  function paintDoorBand() {
+    const band = doorBandState(signinV);
+    const el = $("#doorBand");
+    if (el) {
+      el.hidden = !band.shown;
+      el.setAttribute("aria-hidden", band.shown ? "false" : "true");
+      el.innerHTML = band.shown ? '<span class="door-band-dot" aria-hidden="true"></span><span>' + esc(band.text) + "</span>" : "";
+    }
+    const btn = $("#signinBtn");
+    if (!btn) return;
+    let dot = btn.querySelector(".door-btn-dot");
+    if (band.dot) {
+      if (!dot) btn.insertAdjacentHTML("beforeend", '<span class="door-btn-dot" aria-hidden="true"></span>');
+      btn.title = band.tip;
+    } else if (dot) dot.remove();
+  }
   function signinDoor(v) {
     const d = signinDoorOf(v);
     if (d && v.signedIn && signinDoorRefused) {
@@ -29756,8 +30015,8 @@ What is typed here stays in this browser.`;
         line: t("Your seat belongs to your account, so it comes with you to any computer you sign in on, up to three."),
         providers: v.offered,
         cap: signinCapHolds(v) ? t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.") : "",
-        privacy: t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account."),
-        foot: t("Etiuda for personal use, outside work, needs no sign-in.")
+        privacy: t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name, address and picture, and shows them only to the leads and administrator of the licence it asks to join."),
+        foot: ""
       };
     }
     const told = signinTold(v), toldDoor = () => ({ moment: told.kind, ident, say: told.say, providers: told.providers ? v.offered : void 0, acts: told.acts.concat([acct]) });
@@ -29773,6 +30032,20 @@ What is typed here stays in this browser.`;
     if (v.ask) return { moment: "ask", ident, say: signinSay("ask", v), providers: v.offered, acts: [acct] };
     if (told) return toldDoor();
     if (signinNoSeat(v)) return { moment: "noseat", ident, say: signinSay(v.refused, v, p), acts: [{ act: "check", label: t("Check now"), solid: true }, acct] };
+    const ds = deskDoorState(v);
+    if (ds.state === "ended") {
+      const endedPair = deskDoorLines(ds);
+      const ask2 = !!(ds.orgLicence || ds.seatOn === "team");
+      const acts = [];
+      if (ask2) acts.push({ act: "ask", label: named(t("Ask {LEAD}"), "{LEAD}", ds.lead), solid: true });
+      else acts.push({ act: "check", label: t("Check now"), solid: true });
+      acts.push({ act: "buy", label: t("Buy") });
+      if (ask2) acts.push({ act: "check", label: t("Check now") });
+      acts.push(acct);
+      return { moment: "ended", ident, heading: endedPair[0], line: endedPair[1], acts };
+    }
+    const pair = deskDoorLines(ds);
+    if (ds.state === "working") return { moment: "working", ident, heading: pair[0], line: pair[1], acts: [{ act: "check", label: t("Check now") }, acct] };
     if (v.askLead) return {
       moment: "asklead",
       ident,
@@ -29920,6 +30193,7 @@ What is typed here stays in this browser.`;
       btn.setAttribute("aria-label", word);
       btn.title = word;
     }
+    paintDoorBand();
   }
   function paintSigninPanel() {
     const panel = $("#signinPanel");
@@ -40232,7 +40506,7 @@ What is typed here stays in this browser.`;
   }
   function rowHtml(r) {
     if (r.html != null) return r.html;
-    return '<div class="set-row" data-row="' + esc(r.key) + '">' + sxIcon(r.icon) + '<div class="set-label">' + esc(r.title) + (r.hint ? "<small>" + esc(r.hint) + "</small>" : "") + '</div><div class="set-ctl">' + r.ctl + "</div></div>";
+    return '<div class="set-row" data-row="' + esc(r.key) + '">' + sxIcon(r.icon) + '<div class="set-label">' + (r.dot ? '<span class="door-seat-dot" aria-hidden="true"></span>' : "") + esc(r.title) + (r.hint ? "<small>" + esc(r.hint) + "</small>" : "") + '</div><div class="set-ctl">' + r.ctl + "</div></div>";
   }
   function rowWords(r) {
     if (r.html != null) return String(r.html).replace(/<[^>]*>/g, " ").replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
@@ -40298,14 +40572,10 @@ What is typed here stays in this browser.`;
     if (failed) {
       const s = signinSay(v.said, v);
       h += signinIdentHtml({ initial: "", name: s[0], sub: s[1] });
-    } else h += signinIdentHtml({
-      initial: "",
-      name: t("Not signed in"),
-      sub: v.offered.length ? t("Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.") : ""
-    });
+    } else h += signinIdentHtml({ initial: "", name: t("Not signed in"), sub: "" });
     h += accountManagedHtml(v);
     if (v.outOwed) h += '<p class="sgn-cap" data-signin-out-owed>' + esc(t("This computer is signed out. Its place among the account's three computers is freed by itself as soon as the sign-in service can be reached.")) + "</p>";
-    if (v.offered.length) h += "<div>" + (v.said === "signin-preview" ? "" : signinPreviewHtml(v)) + signinProvidersHtml(v.offered, true) + (signinCapHolds(v) ? '<p class="sgn-cap">' + esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.")) + "</p>" : "") + '<p class="sgn-cap">' + esc(t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account.")) + "</p></div>";
+    if (v.offered.length) h += "<div>" + (v.said === "signin-preview" ? "" : signinPreviewHtml(v)) + signinProvidersHtml(v.offered, true) + (signinCapHolds(v) ? '<p class="sgn-cap">' + esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.")) + "</p>" : "") + '<p class="sgn-cap">' + esc(t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name, address and picture, and shows them only to the leads and administrator of the licence it asks to join.")) + "</p></div>";
     if (choosing && v.signedIn) h += '<span class="sgn-acts"><button type="button" class="btn" data-signin-act="keep">' + esc(t("Cancel")) + "</button></span>";
     return h + "</div>";
   }
@@ -40338,7 +40608,8 @@ What is typed here stays in this browser.`;
     if (!stranded && v.signedIn && !signinChoosingNow()) {
       const p = signinParts(v), val = (x) => '<span class="sgn-val">' + esc(x) + "</span>", join = (pair) => pair[0] + " " + pair[1];
       const doorSaid = signinDoorRefusedNow() ? signinSay("door", v)[0] : "";
-      rows.push(p.team ? row("team", "people", t("Team"), doorSaid || (p.team.lead ? t("Led by {LEAD}").split("{LEAD}").join(p.team.lead) : ""), val(p.teamName)) : v.doors.length && v.seat === "held" ? row("team", "people", t("A team on this licence"), doorSaid || t("This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation."), signinDoorsHtml(v.doors)) : v.deskOnly && v.seat === "held" ? row("team", "people", t("Working without a team"), doorSaid || t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed."), "") : row("team", "people", t("No team yet"), doorSaid || (signinManaged(v) ? t("No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself.") : t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself.")), ""));
+      const teamNamed = teamLeads().find((x) => x && !x.removed && x.team) || {};
+      rows.push(p.team ? row("team", "people", t("Team"), doorSaid || (p.team.lead ? t("Led by {LEAD}").split("{LEAD}").join(p.team.lead) : ""), val(teamNamed.team || p.teamName)) : v.doors.length && v.seat === "held" ? row("team", "people", t("A team on this licence"), doorSaid || t("This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation."), signinDoorsHtml(v.doors)) : v.deskOnly && v.seat === "held" ? row("team", "people", t("Working without a team"), doorSaid || t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed."), "") : row("team", "people", t("No team yet"), doorSaid || (signinManaged(v) ? t("No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself.") : t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself.")), ""));
       if (v.managed && v.managed.provider) rows.push(row("signin", "user", t("Sign-in"), "", lockedHtml(signinHeldTo(v.managed))));
       if (v.code && !signinManaged(v)) rows.push(row(
         "code",
@@ -40348,9 +40619,21 @@ What is typed here stays in this browser.`;
         t("Not a secret. It tells a team's lead which account is yours."),
         '<code class="sgn-mono">' + esc(signinCodeText(v.code)) + "</code>" + signinCopyHtml("copy")
       ));
-      if (signinNoSeat(v)) rows.push(row("seat", "check", t("Seat"), join(signinSay(v.refused, v, p)), ""));
+      const ds = deskDoorState(v);
+      if (ds.state === "ended" || ds.state === "working") {
+        const seatPair = deskDoorLines(ds);
+        rows.push({
+          key: "seat",
+          icon: "check",
+          dot: ds.state === "ended",
+          /* plant:account-seat-dot */
+          title: seatPair[0],
+          hint: seatPair[1],
+          ctl: ""
+        });
+      } else if (signinNoSeat(v)) rows.push(row("seat", "check", t("Seat"), join(signinSay(v.refused, v, p)), ""));
       else if (v.seat === "none") rows.push(row("seat", "check", t("Seat"), join(signinSay("nolicence", v)), ""));
-      else rows.push(row("seat", "check", t("Seat"), v.seat === "lapsed" ? join(signinSay("lapsed", v)) : t("On up to three computers; this is one of them."), val(t("Held by this account"))));
+      else rows.push(row("seat", "check", t("Seat"), v.seat === "lapsed" ? join(signinSay("lapsed", v)) : t("On up to three computers; this is one of them."), ""));
       if (cause) rows.push(row("cause", "check", t("Licence"), cause, ""));
       if (buy) rows.push(buyRow(v));
       else if (held) rows.push(held);
