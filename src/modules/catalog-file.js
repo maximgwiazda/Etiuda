@@ -1007,11 +1007,14 @@ function inferOwnLangs(cardsList, p, activeCat){
   if(activeCat && Array.isArray(activeCat.langs) && activeCat.langs.length){
     activeCat.langs.forEach(l=>{ if(l&&l.code) add(l.code); });
   }
+  const hasEn=(p && ((p.catLabels && Object.keys(p.catLabels).length)
+    || (Array.isArray(p.intentCustom) && p.intentCustom.some(x=>x&&(x.en||x.cmt||x.topic)))))
+    || cardsList.some(c=>c&&(c.en||c.t||c.note||c.addressEn));
   const hasPl=(p && ((p.catLabelsPl && Object.keys(p.catLabelsPl).length)
     || (Array.isArray(p.intentCustom) && p.intentCustom.some(x=>x&&(x.pl||x.cmtPl||x.topicPl)))))
     || cardsList.some(c=>c&&(c.pl||c.tPl||c.notePl||c.addressPl));
   if(!codes.length){
-    add("en");
+    if(hasEn) add("en");
     if(hasPl) add("pl");
   }
   cardsList.forEach(c=>{
@@ -1034,6 +1037,7 @@ function collectLayerCards(p, isLoose, baseById){
       const ov=(ovMap[id] && typeof ovMap[id]==="object") ? ovMap[id] : null;
       if(!ov) return; /* plant:way-out-no-unedited */
       if(ov && ov.removed) return;
+      if(!Object.keys(ov).some(k=>k!=="changedAt" && k.charAt(0)!=="_")) return;
       let card=Object.assign({}, cleanOwnCard(ov), { id:String(id) });
       if(base) card=Object.assign({}, cleanOwnCard(base), card); /* plant:way-out-merge-base */
       seen.add(id); out.push(card);
@@ -1100,11 +1104,12 @@ function buildLayerOwnDoc(ns, p, isLoose, activeCat, baseById, ownId){
   ensurePrimaryText(cardsOut, codes);
 
   const cats={}, activeCats=(activeCat && activeCat.categories) || {};
+  const removedCats=new Set(Array.isArray(p&&p.removedCats) ? p.removedCats : []);
   if(isLoose && p && p.customCats && typeof p.customCats==="object"){
-    Object.keys(p.customCats).forEach(k=>{ cats[k]=String(p.customCats[k]||k); });
+    Object.keys(p.customCats).forEach(k=>{ if(!removedCats.has(k) && k!=="fav") cats[k]=String(p.customCats[k]||k); });
   }
   if(p && p.customCats && typeof p.customCats==="object"){
-    Object.keys(p.customCats).forEach(k=>{ if(p.customCats[k]) cats[k]=String(p.customCats[k]); });
+    Object.keys(p.customCats).forEach(k=>{ if(p.customCats[k] && k!=="fav" && (!isLoose || !removedCats.has(k))) cats[k]=String(p.customCats[k]); });
   }
   cardsOut.forEach(c=>{
     if(!cats[c.c]) cats[c.c]=(p && p.catLabels && p.catLabels[c.c]) || activeCats[c.c] || STARTER_CATS[c.c] || c.c;
@@ -1138,15 +1143,18 @@ function buildLayerOwnDoc(ns, p, isLoose, activeCat, baseById, ownId){
     if(Array.isArray(p.intentCustom) && p.intentCustom.length){
       const idToIdx=new Map();
       const customIds=[];
+      const removedIntents=new Set(Array.isArray(p.intentRemoved) ? p.intentRemoved : []);
       ["clause","cmt","topic"].forEach(f=>codes.forEach(code=>{
         const col=intentFieldKey(f, code);
         if(col) runtime.intents[col]=[];
       }));
-      const pClause=intentFieldKey("clause", primary);
       p.intentCustom.forEach((ic, idx)=>{
         if(!ic || typeof ic!=="object") return;
         const icId=String(ic.id||("ci-"+idx));
-        idToIdx.set(icId, idx);
+        if(removedIntents.has(icId)) return;
+        const keptIdx=customIds.length;
+        idToIdx.set(icId, keptIdx);
+        if(!idToIdx.has("ui:"+idx)) idToIdx.set("ui:"+idx, keptIdx);
         customIds.push(icId);
         ["clause","cmt","topic"].forEach(f=>codes.forEach(code=>{
           const col=intentFieldKey(f, code);

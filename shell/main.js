@@ -9895,18 +9895,17 @@ ipcMain.handle("etiuda:write-catalog-save", async (e, text, from) => {
 let ownSavePending = null;
 ipcMain.handle("etiuda:choose-own-save", async (e, title) => {
   if (!fromEngine(e)) return null; /* plant:way-out-from-engine */
-  if (TEST_DOOR && process.env.ETIUDA_TEST_SAVE_AS) {
-    const dir = String(process.env.ETIUDA_TEST_SAVE_AS);
-    ownSavePending = { id: e.sender.id, dir };
-    return { dir };
-  }
+  ownSavePending = null;
   const win = BrowserWindow.fromWebContents(e.sender);
-  const res = await dialog.showOpenDialog(win || undefined, {
-    title: String(title || "Save your own work as files"),
+  const opts = {
+    title: String(title || "Save your own work as files").slice(0, 120),
     defaultPath: app.getPath("documents"),
     properties: ["openDirectory", "createDirectory"],
-  });
-  if (!res || res.canceled || !res.filePaths || !res.filePaths[0]) { ownSavePending = null; return null; }
+  };
+  const res = TEST_DOOR && process.env.ETIUDA_TEST_SAVE_AS
+    ? { canceled: false, filePaths: [String(process.env.ETIUDA_TEST_SAVE_AS)] }
+    : win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+  if (!res || res.canceled || !res.filePaths || !res.filePaths[0]) return null;
   const dir = res.filePaths[0];
   ownSavePending = { id: e.sender.id, dir };
   return { dir };
@@ -9915,7 +9914,7 @@ ipcMain.handle("etiuda:choose-own-save", async (e, title) => {
 function uniqueOwnParts(dir, rawName) {
   const s = String(rawName || "");
   if (!s || /[\\/]/.test(s) || s === "." || s === "..") return null;
-  const clean = s.replace(/[*?"<>|\x00-\x1f]/g, "_");
+  const clean = s.replace(/[*?"<>|:\x00-\x1f]/g, "_");
   const ext = path.extname(clean);
   if (ext !== ".ec" && ext !== ".txt") return null;
   const stem = clean.slice(0, clean.length - ext.length) || "work";
@@ -9947,7 +9946,7 @@ ipcMain.handle("etiuda:write-own-save", async (e, name, text) => {
 });
 ipcMain.handle("etiuda:end-own-save", async (e) => {
   if (!fromEngine(e)) return null;
-  ownSavePending = null;
+  if (ownSavePending && ownSavePending.id === e.sender.id) ownSavePending = null;
   return true;
 });
 
