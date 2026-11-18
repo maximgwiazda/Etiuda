@@ -302,8 +302,8 @@ try {
     check(ui.markHasSvg && ui.markSize && ui.markSize.w === 52 && ui.markSize.h === 52 && ui.noWave && ui.markOwnMask,
       "fs3a 52px mark present with no wavy underline, cut through a mask id of its own while the header's id stands once in the document");
     const hasAllEn = [
-      "Sign in to Etiuda",
-      "Your seat belongs to your account, so it comes with you to any computer you sign in on, up to three.",
+      "Etiuda starts with a sign-in.",
+      "Signing in with Microsoft or Google gives this computer a seat: the team's, where its lead has admitted this account, or else a trial of fourteen days. Catalogs open once the seat is here.",
       "The browser opens the sign-in page",
       "You choose your account there",
       "Etiuda carries on here by itself",
@@ -311,10 +311,14 @@ try {
       "Signing in",
       "Sign in with Microsoft",
       "Sign in with Google",
-      "Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.",
-      "Not now",
-      "The desk opens as it is, and Sign in stays in the bar at the top for later."
-    ].every(s => ui.txt.includes(s)) && ui.rawTxt.includes("What happens") && !ui.txt.includes("HELD");
+      "This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The leads and administrator of the licence it joins see the account's name, address and picture."
+    ].every(s => ui.txt.includes(s)) && ui.rawTxt.includes("What happens") && !ui.txt.includes("HELD")
+      && ["Sign in to Etiuda",
+        "Your seat belongs to your account, so it comes with you to any computer you sign in on, up to three.",
+        "Etiuda for personal use, outside work, needs no sign-in.",
+        "Not now",
+        "The desk opens as it is, and Sign in stays in the bar at the top for later.",
+        "The team's lead sees no name or address from the account."].every(s => !ui.txt.includes(s));
     check(hasAllEn && ui.steps.length === 3,
       "fs3a exact English copy and three numbered steps present");
     await ctx.close();
@@ -347,12 +351,17 @@ try {
     });
     const isPl = cfg.desk.eUiLang === "pl";
     const copyOk = isPl
-      ? ["Logowanie do Etiudy", "W przeglądarce otwiera się strona logowania",
+      ? ["Etiuda zaczyna się od zalogowania.", "W przeglądarce otwiera się strona logowania",
          "Tam wybiera się konto", "Etiuda sama przechodzi dalej", "Bez klucza licencji do pilnowania",
-         "Logowanie", "Nie teraz", "Stanowisko otworzy się bez zmian, a przycisk Zaloguj się zostaje na pasku u góry na później."].every(s => res.txt.includes(s))
+         "Logowanie",
+         "To stanowisko loguje się kontem Microsoft lub Google, aby zajmować swoje miejsce w licencji, i zleca sprawdzenie logowania na etiuda.dev. Liderzy i administrator licencji, do której dołącza, widzą imię i nazwisko, adres e-mail i zdjęcie z tego konta."].every(s => res.txt.includes(s))
          && res.rawTxt.includes("Co się stanie")
-      : res.txt.includes("Sign in to Etiuda") && res.txt.includes("Not now");
-    check(copyOk && res.theme === cfg.desk.eTheme && !res.overflowX && res.skipVisible && res.h1C !== res.bgC,
+         && ["Logowanie do Etiudy", "Nie teraz",
+           "Stanowisko otworzy się bez zmian, a przycisk Zaloguj się zostaje na pasku u góry na później.",
+           "Etiuda do użytku prywatnego, poza pracą, nie wymaga logowania."].every(s => !res.txt.includes(s))
+      : res.txt.includes("Etiuda starts with a sign-in.") && !res.txt.includes("Not now")
+        && !res.txt.includes("Etiuda for personal use, outside work, needs no sign-in.");
+    check(copyOk && res.theme === cfg.desk.eTheme && !res.overflowX && !res.skipVisible && res.h1C !== res.bgC,
       "fs3b theme/lang/viewport clean (" + label + ")");
     await ctx.close();
   }
