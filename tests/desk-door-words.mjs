@@ -32,6 +32,7 @@ const storage = await import(MOD_DIR + "storage.js");
 const P = await import(MOD_DIR + "signin.js");
 const SET = await import(MOD_DIR + "settings.js");
 const TJ = await import(MOD_DIR + "team-join.js");
+const { hooks } = await import(MOD_DIR + "hooks.js");
 
 const CODE = "M2HXC7RK9BTE5VQD";
 const LEAD = "Jan Kowalski";
@@ -56,9 +57,8 @@ const textOf = html => String(html || "")
 
 function hostOn(signinObj, opts) {
   const o = opts || {};
-  const leads = o.noTeam ? [] : [{ id: "t-1", team: TEAM_NAME, lead: LEAD, removed: false }];
-  storage.lsSet("eTeamJoin", JSON.stringify(leads));
-  storage.lsSet("eAgentName", o.name === undefined ? "Ada Lis" : o.name);
+  const leads = o.noTeam ? [] : [{ team: TEAM_NAME, lead: LEAD, removed: false }];
+  storage.lsSet("eAgent", o.name === undefined ? "Ada Lis" : o.name);
   globalThis.window = {
     E_HOST: o.plainBrowser ? undefined : {
       signinState: () => signinObj,
@@ -67,11 +67,13 @@ function hostOn(signinObj, opts) {
     }
   };
   if (o.plainBrowser) delete globalThis.window.E_HOST;
+  if (typeof hooks.render !== "function") hooks.render = () => {};
+  TJ.joinTook({ leads: leads });
 }
 function hostOff() {
+  try { TJ.joinTook({ leads: [] }); } catch (e) { /* the team is already clear */ }
   delete globalThis.window;
-  storage.lsDel("eTeamJoin");
-  storage.lsDel("eAgentName");
+  storage.lsDel("eAgent");
   storage.lsSet("eUiLang", "en");
 }
 
@@ -258,9 +260,18 @@ function bandInfo(pg, v, lang, opts) {
 function acctHtml(set, v, lang, opts) {
   storage.lsSet("eUiLang", lang);
   hostOn(v, opts);
+  /* settingsPageHtml builds every section. Appearance reads document.body, and the column floor reads getComputedStyle. A node leg has neither. */
+  const hadDoc = "document" in globalThis, prevDoc = globalThis.document;
+  const hadStyle = "getComputedStyle" in globalThis, prevStyle = globalThis.getComputedStyle;
+  if (!hadDoc) globalThis.document = { body: { classList: { contains: () => false } }, documentElement: {} };
+  if (!hadStyle) globalThis.getComputedStyle = () => ({ fontSize: "16px", getPropertyValue: () => "" });
   try {
     return set.settingsPageHtml("account", "");
-  } finally { hostOff(); }
+  } finally {
+    if (!hadDoc) delete globalThis.document; else globalThis.document = prevDoc;
+    if (!hadStyle) delete globalThis.getComputedStyle; else globalThis.getComputedStyle = prevStyle;
+    hostOff();
+  }
 }
 
 /* 2. State 1 ("first"): left keeps steps & foot, heading/line = row 1; right keeps providers, cap, short privacy; gone words absent; sentence (d) when !keeps. */
