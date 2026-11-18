@@ -34,7 +34,7 @@ const nodeRequire = createRequire(import.meta.url);
    open now asks machine policy whether to keep the desk (section 12), and 77z drives exactly that. Before the shell loads. */
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 157;
+const EXPECTED = 159;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const ASIDE_D6_LOGIN = nodeRequire("./off-windows.cjs").offWindows("D6-login",
   "the shell sets no login item off Windows, so Reset's turn-off has nothing to reach");
@@ -3051,6 +3051,74 @@ try {
         && testEnvDialogs === 0 && !!testEnvRes && testEnvRes.dir === out83f,
       "83f refuses stranger frames, rejects non-.ec/.txt, contains paths inside chosen folder, closes write session after endOwnSave, and honours ETIUDA_TEST_SAVE_AS under TEST_DOOR");
 
+    // 83f2: Windows device names (CON, PRN, AUX, NUL, COM1-9, LPT1-9) are prefixed and saved; ordinary names stay unchanged
+    const out83f2 = path.join(out83Root, "pick-win-dev");
+    fs.mkdirSync(out83f2, { recursive: true });
+    dialogOpen = async () => ({ canceled: false, filePaths: [out83f2] });
+    await REAL_HOST.chooseOwnSave("Test");
+    const winDevRe = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i;
+    const isDevStem = fname => {
+      const ext = path.extname(fname);
+      const stem = fname.slice(0, fname.length - ext.length);
+      return winDevRe.test(stem.split(".")[0].replace(/[. ]+$/, ""));
+    };
+    const allDevs = ["CON", "PRN", "AUX", "NUL",
+      ...Array.from({ length: 9 }, (_, i) => "COM" + (i + 1)),
+      ...Array.from({ length: 9 }, (_, i) => "LPT" + (i + 1))];
+    const devCases = [
+      ...allDevs.map(d => ({ raw: d + ".ec", expect: "_" + d + ".ec", body: "dev:" + d })),
+      { raw: "con.txt", expect: "_con.txt", body: "lower-con" },
+      { raw: "NUL..ec", expect: "_NUL..ec", body: "dot-nul" },
+      { raw: "PRN .ec", expect: "_PRN .ec", body: "space-prn" },
+      { raw: "AUX.sub.ec", expect: "_AUX.sub.ec", body: "sub-aux" },
+      { raw: "LPT1. .txt", expect: "_LPT1. .txt", body: "dotspace-lpt1" },
+      { raw: "NUL.ec", expect: "_NUL (2).ec", body: "second-nul" },
+    ];
+    const ordCases = [
+      { raw: "normal.ec", body: "ord:normal" },
+      { raw: "nul-own.ec", body: "ord:nul-own" },
+      { raw: "con_flags.txt", body: "ord:con-flags" },
+      { raw: "COM10.ec", body: "ord:com10" },
+      { raw: "COM0.ec", body: "ord:com0" },
+      { raw: "LPT0.ec", body: "ord:lpt0" },
+    ];
+    const devFails = [];
+    for (const c of devCases) {
+      const r = await REAL_HOST.writeOwnSave(c.raw, c.body);
+      const diskOk = !!r && r.ok === true && r.name === c.expect && !isDevStem(r.name)
+        && fs.existsSync(path.join(out83f2, r.name))
+        && fs.readFileSync(path.join(out83f2, r.name), "utf8") === c.body;
+      if (!diskOk) devFails.push(c.raw + "->" + JSON.stringify(r));
+    }
+    const ordFails = [];
+    for (const c of ordCases) {
+      const r = await REAL_HOST.writeOwnSave(c.raw, c.body);
+      const diskOk = !!r && r.ok === true && r.name === c.raw
+        && fs.existsSync(path.join(out83f2, r.name))
+        && fs.readFileSync(path.join(out83f2, r.name), "utf8") === c.body;
+      if (!diskOk) ordFails.push(c.raw + "->" + JSON.stringify(r));
+    }
+    if (typeof REAL_HOST.endOwnSave === "function") await REAL_HOST.endOwnSave();
+    const out83f2b = path.join(out83Root, "pick-win-dev-lower");
+    fs.mkdirSync(out83f2b, { recursive: true });
+    dialogOpen = async () => ({ canceled: false, filePaths: [out83f2b] });
+    await REAL_HOST.chooseOwnSave("Test");
+    for (const c of [
+      { raw: "nul.ec", expect: "_nul.ec", body: "lower-nul" },
+      { raw: "com1.ec", expect: "_com1.ec", body: "lower-com1" },
+      { raw: "lpt9.txt", expect: "_lpt9.txt", body: "lower-lpt9" },
+    ]) {
+      const r = await REAL_HOST.writeOwnSave(c.raw, c.body);
+      const diskOk = !!r && r.ok === true && r.name === c.expect && !isDevStem(r.name)
+        && fs.existsSync(path.join(out83f2b, r.name))
+        && fs.readFileSync(path.join(out83f2b, r.name), "utf8") === c.body;
+      if (!diskOk) devFails.push(c.raw + "->" + JSON.stringify(r));
+    }
+    if (typeof REAL_HOST.endOwnSave === "function") await REAL_HOST.endOwnSave();
+    check(devFails.length === 0 && ordFails.length === 0,
+      "83f2 Windows device names (CON/PRN/AUX/NUL/COM1-9/LPT1-9, lower-case, trailing dot/space) write safely prefixed and ordinary names stay unchanged (devFails "
+      + JSON.stringify(devFails) + ", ordFails " + JSON.stringify(ordFails) + ")");
+
     // 83g: EN & PL UI strings
     const langWas83 = ST.lsGet("eUiLang");
     ST.lsSet("eUiLang", "pl");
@@ -3112,6 +3180,7 @@ try {
       skip("83h5 lifting plant:way-out-flags-facts drops the flags .txt file");
       skip("83h6 lifting plant:way-out-no-overwrite silently overwrites existing file");
       skip("83h7 lifting plant:way-out-from-engine lets stranger frame choose own save folder");
+      skip("83h8 lifting plant:way-out-win-device writes a Windows device name unprefixed");
     } else {
       const p1 = await runModulePlant("way-out-no-unedited");
       check(!p1.err && Array.isArray(p1.files) && p1.files.some(f => f.text.indexOf("\"Card b ") >= 0),
@@ -3155,6 +3224,18 @@ try {
       });
       check(!!p7 && !p7.err && p7.dir === out83Root,
         "83h7 lifting plant:way-out-from-engine lets stranger frame choose folder (" + JSON.stringify(p7) + ")");
+
+      const p8 = await runMainPlant("way-out-win-device", async inv => {
+        const d8 = path.join(out83Root, "plant-win-device");
+        fs.mkdirSync(d8, { recursive: true });
+        dialogOpen = async () => ({ canceled: false, filePaths: [d8] });
+        await inv["etiuda:choose-own-save"](eventFor(ENGINE_FRAME), "Test");
+        const w = await inv["etiuda:write-own-save"](eventFor(ENGINE_FRAME), "NUL.ec", "DEV-BODY");
+        if (inv["etiuda:end-own-save"]) await inv["etiuda:end-own-save"](eventFor(ENGINE_FRAME));
+        return { w, prefixedExists: fs.existsSync(path.join(d8, "_NUL.ec")) };
+      });
+      check(!!p8 && !p8.err && !!p8.w && p8.w.name === "NUL.ec" && !p8.prefixedExists,
+        "83h8 lifting plant:way-out-win-device writes Windows device name unprefixed (" + JSON.stringify(p8) + ")");
     }
   } finally {
     dialogOpen = dialogWas83;

@@ -9910,6 +9910,7 @@ ipcMain.handle("etiuda:choose-own-save", async (e, title) => {
   ownSavePending = { id: e.sender.id, dir };
   return { dir };
 });
+const WIN_DEVICE_RE = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i;
 /* Each file for Save own work is written inside the chosen folder and never overwrites an existing file. */
 function uniqueOwnParts(dir, rawName) {
   const s = String(rawName || "");
@@ -9917,7 +9918,8 @@ function uniqueOwnParts(dir, rawName) {
   const clean = s.replace(/[*?"<>|:\x00-\x1f]/g, "_");
   const ext = path.extname(clean);
   if (ext !== ".ec" && ext !== ".txt") return null;
-  const stem = clean.slice(0, clean.length - ext.length) || "work";
+  let stem = clean.slice(0, clean.length - ext.length) || "work";
+  if (WIN_DEVICE_RE.test(stem.split(".")[0].replace(/[. ]+$/, ""))) stem = "_" + stem; /* plant:way-out-win-device */
   return { dir, stem, ext };
 }
 ipcMain.handle("etiuda:write-own-save", async (e, name, text) => {
