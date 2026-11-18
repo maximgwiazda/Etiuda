@@ -9940,7 +9940,16 @@ ipcMain.handle("etiuda:choose-own-save", async (e, title) => {
   ownSavePending.set(e.sender.id, { id: e.sender.id, dir });
   return { dir };
 });
-const WIN_DEVICE_RE = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i;
+const WIN_DEVICE_RE = /^(CONIN\$|CONOUT\$|CLOCK\$|COM[1-9\u00b9\u00b2\u00b3]|LPT[1-9\u00b9\u00b2\u00b3]|CON|PRN|AUX|NUL)$/i;
+/* A stem of only dots and spaces becomes work. A leading space that hides a device is prefixed here; a trailing dot stays for the line below. */
+function closeOwnStemGaps(stem) {
+  const judged = stem.replace(/^[. ]+|[. ]+$/g, "");
+  if (!judged) return "work";
+  const head = judged.split(".")[0];
+  const oldHead = stem.split(".")[0].replace(/[. ]+$/, "");
+  if (WIN_DEVICE_RE.test(head) && !WIN_DEVICE_RE.test(oldHead)) return "_" + stem;
+  return stem;
+}
 /* Each file for Save own work is written inside the chosen folder and never overwrites an existing file. */
 function uniqueOwnParts(dir, rawName) {
   const s = String(rawName || "");
@@ -9949,6 +9958,7 @@ function uniqueOwnParts(dir, rawName) {
   const ext = path.extname(clean);
   if (ext !== ".ec" && ext !== ".txt") return null;
   let stem = clean.slice(0, clean.length - ext.length) || "work";
+  stem = closeOwnStemGaps(stem); /* plant:way-out-stem-gaps */
   if (WIN_DEVICE_RE.test(stem.split(".")[0].replace(/[. ]+$/, ""))) stem = "_" + stem; /* plant:way-out-win-device */
   return { dir, stem, ext };
 }
