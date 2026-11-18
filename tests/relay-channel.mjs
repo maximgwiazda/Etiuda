@@ -321,6 +321,7 @@ const entries = () => store().dump().map(([k, v]) => [k, JSON.parse(v)]);
 const relayText = () => store().dump().map(([k, v]) => k + "=" + v).join("\n")
   + [...R.bucket.objects.values()].map(b => b.toString("latin1")).join("\n");
 
+const seatFor = (who, now) => K.certFor(who.pub, hex(16), Math.max(1, now != null ? now : R.clock.now), core.CERT_SPAN_MS);
 /* A program over the relay: the lead's (place root) or a desk's (place desk:<id>), its mirror and record in the lab. */
 function program(name, who, place, o) {
   const x = o || {};
@@ -334,7 +335,7 @@ function program(name, who, place, o) {
     request: t.request, connect: t.connect, pollMs: 1e9,
     write: (f, text) => { if (!f.endsWith(".json") || f.startsWith(mirror + path.sep)) written.push(path.relative(mirror, f).split(path.sep).join("/")); C.writeWhole(f, text); },
     say: l => said.push(l),
-  }, x));
+  }, who && who.keyId !== LEAD.keyId ? { seat: () => seatFor(who) } : {}, x));
   return { name, ch, t, said, written, mirror, prog: ch.program };
 }
 async function settle(...ps) { for (let i = 0; i < 3; i++) for (const p of ps) { p.ch.kick(); await p.ch.idle(); } }
@@ -460,7 +461,7 @@ if (partOn("p940")) {
       const ch = JSON.parse(s.bytes.toString()).challenge;
       const who = prog === other ? OTHER : STRAY;
       const ses = await prog.t.request("POST", URLV1 + "/t/" + RT + "/session", { "content-type": "application/json" },
-        Buffer.from(JSON.stringify({ challenge: ch, key: who.keyId, pub: who.pub, sig: signHex(who, C.helloBytes(RT, ch, who.keyId)) })));
+        Buffer.from(JSON.stringify({ challenge: ch, key: who.keyId, pub: who.pub, sig: signHex(who, C.helloBytes(RT, ch, who.keyId)), seat: seatFor(who) })));
       const token = JSON.parse(ses.bytes.toString()).session;
       const r = await prog.t.request("PUT", URLV1 + "/t/" + RT + "/b/" + b.id,
         { authorization: "Bearer " + token, "etiuda-blob": Buffer.from(JSON.stringify(metaOf(b))).toString("base64url") }, b.ciphertext);
@@ -1501,12 +1502,12 @@ async function relayRefusal(mod, tag) {
       const said = [];
       const mirror = path.join(LAB, tag + "-" + label + "-" + slot);
       const stateFile = path.join(LAB, tag + "-" + label + "-" + slot + ".json");
-      const ch = mod.createChannel({
+      const ch = mod.createChannel(Object.assign({
         rt, url: URLV1, mirror, stateFile, watch: false, pollMs: 1e9, pin: () => pin,
         me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place }),
         keyFor: e => (e === 1 ? key : null), sealEpoch: () => 1,
         request, connect: () => null, say: l => said.push(l),
-      });
+      }, who.keyId !== LEAD.keyId ? { seat: () => seatFor(who) } : {}));
       running.push(ch);
       return { ch, said, tally, mirror, stateFile };
     };
@@ -1747,10 +1748,77 @@ if (deskOn()) try {
     send() {}
     close() { if (this.h) this.h.close(); }
   };
+  const sealTest = s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)).toString("base64");
+  const openTest = b64 => Buffer.from(Buffer.from(String(b64), "base64").map(x => x ^ 0x5a)).toString("utf8");
+  const signinLabPath = path.join(LAB, "signin-lab.json");
+  origWriteFileSync(signinLabPath, JSON.stringify({
+    service: "http://127.0.0.1:1/",
+    root: K.ROOT.pub,
+    provider: { id: "lab", clientId: "lab-client", scope: "openid", authorize: "http://127.0.0.1:1/auth", token: "http://127.0.0.1:1/token", issuer: "http://127.0.0.1:1" },
+  }), "utf8");
+  function ensureDeskSignin(ud, clockNow) {
+    const deskPath = path.join(ud, "desk.json");
+    let doc = null;
+    try { doc = JSON.parse(fs.readFileSync(deskPath, "utf8")); } catch { return; }
+    if (!doc || typeof doc !== "object") return;
+    let signPriv = null;
+    if (!doc.branch || !doc.branch.sign || !doc.branch.sign.pub || !doc.branch.sign.priv) {
+      const s = crypto.generateKeyPairSync("ed25519"), b = crypto.generateKeyPairSync("x25519");
+      const sealKey = k => sealTest(k.export({ type: "pkcs8", format: "der" }).toString("base64"));
+      doc.branch = {
+        sign: { pub: s.publicKey.export({ type: "spki", format: "der" }).subarray(SPKI.length).toString("hex"), priv: sealKey(s.privateKey) },
+        box: { pub: b.publicKey.export({ type: "spki", format: "der" }).subarray(-32).toString("hex"), priv: sealKey(b.privateKey) },
+      };
+      origWriteFileSync(deskPath, JSON.stringify(doc), "utf8");
+      signPriv = s.privateKey;
+    } else {
+      signPriv = crypto.createPrivateKey({ key: Buffer.from(openTest(doc.branch.sign.priv), "base64"), format: "der", type: "pkcs8" });
+    }
+    const signinPath = path.join(ud, "signin.json");
+    let sameDesk = false;
+    try {
+      const cur = JSON.parse(fs.readFileSync(signinPath, "utf8"));
+      sameDesk = !!(cur && cur.held && cur.held.cert && cur.held.cert.desk === doc.branch.sign.pub);
+    } catch { sameDesk = false; }
+    if (!sameDesk) {
+      const cert = K.certFor(doc.branch.sign.pub, hex(16), Math.max(1, clockNow), core.CERT_SPAN_MS);
+      const held = {
+        provider: "lab", refresh: sealTest("rt-1"), sub: sealTest("sub-1"), seed: "0".repeat(64),
+        code: "ABCDEFGHJKMNPQRS", cert, at: 1, checked: 1, reached: true, said: "", ask: false, doors: [], doorsSig: "",
+      };
+      const markBytes = Buffer.from("etiuda-signin-kept\n" + cert.sig.value + "\n" + held.code + "\n0\n", "utf8");
+      const mark = crypto.sign(null, markBytes, signPriv).toString("hex");
+      origWriteFileSync(signinPath, JSON.stringify({ format: 2, held, mark }, null, 1) + "\n", "utf8");
+    }
+  }
+  function labFetch(url, init, clockNow) {
+    const uStr = String(url);
+    if (!uStr.startsWith("http://127.0.0.1:1/")) return null;
+    const jsonRes = o => Promise.resolve(new Response(JSON.stringify(o), { status: 200, headers: { "content-type": "application/json" } }));
+    if (uStr.endsWith("/token")) {
+      const jwt = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url") + "."
+        + Buffer.from(JSON.stringify({ iss: "http://127.0.0.1:1", aud: "lab-client", sub: "sub-1", exp: Math.floor(Date.now() / 1000) + 3600 })).toString("base64url") + ".sig";
+      return jsonRes({ token_type: "Bearer", expires_in: 3600, id_token: jwt, refresh_token: "rt-1" });
+    }
+    if (uStr.endsWith("/signin/desk")) {
+      const req = JSON.parse(Buffer.from(init.body).toString("utf8"));
+      const cert = K.certFor(req.desk, hex(16), Math.max(1, clockNow), core.CERT_SPAN_MS);
+      return jsonRes({ ok: true, code: "ABCDEFGHJKMNPQRS", certificate: cert });
+    }
+    return null;
+  }
+  function withSigninLab(fn) {
+    const wasLab = process.env.ETIUDA_SIGNIN_LAB;
+    process.env.ETIUDA_SIGNIN_LAB = signinLabPath;
+    try { return fn(); }
+    finally { if (wasLab === undefined) delete process.env.ETIUDA_SIGNIN_LAB; else process.env.ETIUDA_SIGNIN_LAB = wasLab; }
+  }
   /* The second argument is either the shell source to load in place of SRC (a plant) or hooks (a fetch stand-in, or `app`:
      a copy of shell/ to load from, as a planted channel needs). */
   function loadDesk(ud, arg) {
     const hooks = arg && typeof arg === "object" ? arg : null;
+    const clockNow = () => (hooks && typeof hooks.clock === "function" ? hooks.clock() : R.clock.now);
+    ensureDeskSignin(ud, clockNow());
     const source = typeof arg === "string" ? arg : hooks && typeof hooks.source === "string" ? hooks.source : SRC;
     const shellDir = hooks && typeof hooks.app === "string" ? hooks.app : path.join(APP, "shell");
     const said = [], on = {}, invoke = {};
@@ -1761,6 +1829,8 @@ if (deskOn()) try {
       decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
     };
     const net = { fetch: (url, init) => {
+      const lab = labFetch(url, init, clockNow());
+      if (lab) return lab;
       deskTransport.log.push((init && init.method) + " " + url);
       noteInit(url, init);
       if (deskTransport.down) return Promise.reject(new Error("down"));
@@ -1775,10 +1845,10 @@ if (deskOn()) try {
       screen: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" }, safeStorage, powerMonitor: inert,
     };
     process.env.XDG_CURRENT_DESKTOP = "GNOME";
-    const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
+    const api = withSigninLab(() => new Function("require", "__dirname", "__filename", "module", "exports", "console",
       source + "\nreturn { " + EXPOSE.join(", ") + " };")(
       n => (n === "electron" ? electron : nodeRequire(n)),
-      shellDir, path.join(shellDir, "main.js"), { exports: {} }, {}, quiet);
+      shellDir, path.join(shellDir, "main.js"), { exports: {} }, {}, quiet));
     const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
     const sync = (ch, ...args) => { const ev = eventFor(); if (on[ch]) on[ch](ev, ...args); return ev.returnValue; };
     const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
@@ -3784,6 +3854,7 @@ if (deskOn()) try {
   try {
       /* The shell `src` loaded over the desk folder `ud` and the envelope already in it, as a restarted desk loads. */
       function deskLoad(ud, src, serve) {
+        ensureDeskSignin(ud, R.clock.now);
         const said = [];
         const sent = [];
         const on = {}, invoke = {};
@@ -3793,7 +3864,7 @@ if (deskOn()) try {
           encryptString: s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)),
           decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
         };
-        const net = { fetch: (url, init) => { deskTransport.log.push(init.method + " " + url); if (deskTransport.down) return Promise.reject(new Error("down")); return (serve && serve(url, init)) || relayFetch(url, init); } };
+        const net = { fetch: (url, init) => { const lab = labFetch(url, init, R.clock.now); if (lab) return lab; deskTransport.log.push(init.method + " " + url); if (deskTransport.down) return Promise.reject(new Error("down")); return (serve && serve(url, init)) || relayFetch(url, init); } };
         /* A person's desk has a window, and the folder syncer starts only then (catalogFolderChanged returns while
            theWindow is unset). This window is never shown: it records what the page is sent. */
         function DeskWindow() {
@@ -3840,10 +3911,10 @@ if (deskOn()) try {
           screen, systemPreferences: inert, nativeTheme: { themeSource: "system" }, safeStorage, powerMonitor: inert,
         };
         process.env.XDG_CURRENT_DESKTOP = "GNOME";
-        const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
+        const api = withSigninLab(() => new Function("require", "__dirname", "__filename", "module", "exports", "console",
           src + "\nreturn { " + EXPOSE.join(", ") + " };")(
           n => (n === "electron" ? electron : nodeRequire(n)),
-          path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
+          path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet));
         const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
         const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
         return { api, ask, said, sent, ud, envelope };
@@ -5390,7 +5461,7 @@ if (deskOn()) try {
           fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eUiLang: "en" },
             teamPins: { [team]: { keyId: LEAD.keyId, public: LEAD.pub } }, teamPinFrom: { [team]: "invite" },
             teamChannel: { [team]: { kind: "relay", rt, url: URLV1 } }, teamShown: { [team]: { lead: "Ada Quay" } } }), "utf8");
-          const desk = loadDesk(ud, { fetch: lfetch });
+          const desk = loadDesk(ud, { fetch: lfetch, clock: () => RL.clock.now });
           const me = await desk.ask("etiuda:branch-identity", true);
           const t = RL.clock.now, keys = [{ id: me.id, pub: me.key, desk: me.id }];
           const en = await ladmin("POST", "/relay/v1/t/" + rt + "/devices", { keys, rev: 1, t, sig: signHex(LEAD, core.devicesBytes(rt, 1, t, keys)) });
@@ -5569,7 +5640,7 @@ if (deskOn()) try {
           teamPins: { [unmadeTeam]: { keyId: LEAD.keyId, public: LEAD.pub } }, teamPinFrom: { [unmadeTeam]: "invite" },
           teamChannel: { [unmadeTeam]: { kind: "relay", rt: unmadeRt, url: URLV1 } }, teamShown: { [unmadeTeam]: { lead: "Ada Quay" } } }), "utf8");
         let blockSince = false;
-        const unmadeDesk = loadDesk(unmadeUd, { fetch: (url, init) => {
+        const unmadeDesk = loadDesk(unmadeUd, { clock: () => RL.clock.now, fetch: (url, init) => {
           if (blockSince && url.indexOf("/since/") >= 0) {
             return Promise.resolve(new Response(JSON.stringify({ error: "temporary" }), { status: 503, headers: { "content-type": "application/json" } }));
           }
@@ -5920,7 +5991,8 @@ if (deskOn()) try {
     const h = await t.request("POST", URLV1 + "/t/" + rt + "/hello", {}, Buffer.from("{}"));
     const challenge = JSON.parse(h.bytes.toString()).challenge;
     const ses = await t.request("POST", URLV1 + "/t/" + rt + "/session", { "content-type": "application/json" },
-      Buffer.from(JSON.stringify({ challenge, key: who.keyId, pub: who.pub, sig: signHex(who, C.helloBytes(rt, challenge, who.keyId)) })));
+      Buffer.from(JSON.stringify(Object.assign({ challenge, key: who.keyId, pub: who.pub, sig: signHex(who, C.helloBytes(rt, challenge, who.keyId)) },
+        who.keyId !== LEAD.keyId ? { seat: seatFor(who) } : {}))));
     const token = JSON.parse(ses.bytes.toString()).session;
     const meta = { v: 1, id: b.id, supersedes: b.supersedes, epoch: b.epoch, writer: b.writerKeyId, counter: b.counter, del: b.deletion,
       sig: b.signature, nonce: b.nonce, place: b.place };
@@ -7706,7 +7778,7 @@ function opened(mod, name, tm, who, place, o) {
     me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place }),
     request: t.request, connect: t.connect, pollMs: 1e9, watch: false,
     say: l => said.push(l),
-  }, x));
+  }, who && who.keyId !== LEAD.keyId ? { seat: () => seatFor(who) } : {}, x));
   return { name, ch, t, said, mirror, prog: ch.program };
 }
 /* The lead seals guide.ec at epoch 1, that blob is held back, the desk catches up the epoch-2 edition, and the held
@@ -7786,7 +7858,8 @@ async function rawUpload(rt, who, b) {
   const h = await t.request("POST", URLV1 + "/t/" + rt + "/hello", {}, Buffer.from("{}"));
   const challenge = JSON.parse(h.bytes.toString()).challenge;
   const ses = await t.request("POST", URLV1 + "/t/" + rt + "/session", { "content-type": "application/json" },
-    Buffer.from(JSON.stringify({ challenge, key: who.keyId, pub: who.pub, sig: signHex(who, C.helloBytes(rt, challenge, who.keyId)) })));
+    Buffer.from(JSON.stringify(Object.assign({ challenge, key: who.keyId, pub: who.pub, sig: signHex(who, C.helloBytes(rt, challenge, who.keyId)) },
+      who.keyId !== LEAD.keyId ? { seat: seatFor(who) } : {}))));
   const token = JSON.parse(ses.bytes.toString()).session;
   const meta = { v: 1, id: b.id, supersedes: b.supersedes, epoch: b.epoch, writer: b.writerKeyId, counter: b.counter, del: b.deletion,
     sig: b.signature, nonce: b.nonce, place: b.place };
@@ -8682,6 +8755,7 @@ async function lostWithdraw(mod, label, losses) {
     pin: () => ({ teamId: "t-" + rt.slice(0, 8), rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
     me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place: "desk:" + who.keyId }),
     invite: () => ({ inv, token, seal: mod.inviteSealKey(secret) }),
+    seat: () => seatFor(who),
     keyFor: () => null, sealEpoch: () => null, request, connect: null,
   });
   try {
@@ -8861,14 +8935,26 @@ function pgRelay(page, cut) {
 function pgProgram(mod, x, name, tm, who, place, o) {
   const t = x.transport(o && o.fail, o && o.alter), said = [];
   const mirror = path.join(LAB, name);
+  const request = (method, url, headers, body) => {
+    if (who && who.keyId !== LEAD.keyId && method === "POST" && String(url).endsWith("/session") && body) {
+      try {
+        const parsed = JSON.parse(Buffer.from(body).toString("utf8"));
+        if (parsed && parsed.pub && parsed.seat === undefined) {
+          parsed.seat = seatFor(who, x.RL.clock.now);
+          body = Buffer.from(JSON.stringify(parsed), "utf8");
+        }
+      } catch { /* pass through as given */ }
+    }
+    return t.request(method, url, headers, body);
+  };
   const ch = mod.createChannel(Object.assign({
     rt: tm.rt, url: URLV1, mirror, stateFile: path.join(LAB, name + ".json"),
     pin: () => ({ teamId: tm.id, rt: tm.rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
     me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place }),
     keyFor: e => (e === 1 ? tm.key : null), sealEpoch: () => 1,
-    request: t.request, connect: null, pollMs: 1e9, watch: false, clock: () => Date.now() + x.shift,
+    request, connect: null, pollMs: 1e9, watch: false, clock: () => Date.now() + x.shift,
     say: l => said.push(l),
-  }, o && o.more));
+  }, who && who.keyId !== LEAD.keyId ? { seat: () => seatFor(who, x.RL.clock.now) } : {}, o && o.more));
   return { name, ch, t, said, mirror, prog: ch.program };
 }
 /* The mirror as path and sha256, the team file's rev, the pending count, the held count, and whether the place reached the top. */
@@ -11521,7 +11607,7 @@ if (partOn("p963")) {
         return { status: res.status, header: n => res.headers.get(n), bytes, socket: res.headers.get("x-stand-in-socket") };
       };
       const desk = opened(C, "981-" + rt.slice(0, 8), { rt, id: "t-" + hex(8) }, who, "desk:" + who.keyId, {
-        request, connect: () => ({ send() {}, close() {} }),
+        request, connect: () => ({ send() {}, close() {} }), seat: () => seatFor(who, RL.clock.now),
       });
       let said = [];
       try { desk.ch.start(); await desk.ch.idle(); said = desk.said.slice(); }
@@ -11634,6 +11720,7 @@ function relay9() {
       return res;
     };
     const p = program(name, d.k, "desk:" + d.k.keyId, Object.assign({ mod, rt: tm.rt, pin: pin9, request, connect: () => null, watch: false,
+      seat: () => seatFor(d.k, RS.clock.now),
       me: () => ({ keyId: d.k.keyId, public: d.k.pub, privateKey: d.k.privateKey, place: "desk:" + d.k.keyId, box: d.box.pub }),
       keyFor: e => held.get(e) || null, sealEpoch: () => Math.max(...held.keys()), agree: agreeWith(d.box),
       onTeam: () => {
@@ -11957,7 +12044,7 @@ async function sceneA4(mod, atDoor) {
   const desk = mod.createChannel({ rt, url: URLV1, mirror: deskMirror, stateFile: deskMirror + ".json", pin: pinOf,
     me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place: "desk:" + who.keyId, box: deskBox.pub }),
     agree: peer => xAgree(deskBox, peer), keyFor: () => null, sealEpoch: () => null,
-    invite: () => door, onAnswer: a => answers.push(a),
+    invite: () => door, seat: () => door.door, onAnswer: a => answers.push(a),
     onDoor: id => {
       door.inv = id;
       if (atDoor && !doorJoin) { doorJoin = JSON.stringify(Object.assign({ door: id }, JSON.parse(JOIN))) + "\n"; put(deskMirror, "desks/" + who.keyId + "/join.json", doorJoin); }
@@ -12150,6 +12237,7 @@ if (partOn("p993")) {
       pin: () => ({ teamId: pinTeam, rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
       me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place: "desk:" + who.keyId }),
       invite: () => ({ inv, token, seal: C.inviteSealKey(secret) }),
+      seat: () => seatFor(who),
       request: tport.request, connect: tport.connect, pollMs: 1e9, watch: false, say: l => said.push(String(l)),
     });
     ch.start();
@@ -12193,6 +12281,7 @@ if (partOn("p993")) {
       rt, url: URLV1, mirror: path.join(LAB, "h35-hush"), stateFile: path.join(LAB, "h35-hush.json"),
       pin: () => ({ teamId: pinTeam, rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
       me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place: "desk:" + who.keyId }),
+      seat: () => seatFor(who),
       onRemoved() {},
       request: tport.request, connect: tport.connect, pollMs: 1e9, watch: false,
     });
@@ -12252,6 +12341,7 @@ if (partOn("p993")) {
       pin: () => ({ teamId: pinTeam, rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
       me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place: "desk:" + who.keyId }),
       invite: () => ({ inv, token, seal: mod.inviteSealKey(secret) }),
+      seat: () => seatFor(who),
       onInviteEnd(k) { kind = String(k); },
       onRemoved() {},
       request: tport.request, connect: tport.connect, pollMs: 1e9, watch: false,
@@ -12289,6 +12379,7 @@ if (partOn("p993")) {
       pin: () => ({ teamId: pinTeam, rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
       me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place: "desk:" + who.keyId }),
       invite: () => ({ inv, token, seal: mod.inviteSealKey(secret) }),
+      seat: () => seatFor(who),
       request: tport.request, connect: tport.connect, pollMs: 1e9, watch: false,
     });
     ch.start();
