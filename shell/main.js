@@ -9892,6 +9892,66 @@ ipcMain.handle("etiuda:write-catalog-save", async (e, text, from) => {
   }
 });
 
+let ownSavePending = null;
+ipcMain.handle("etiuda:choose-own-save", async (e, title) => {
+  if (!fromEngine(e)) return null; /* plant:way-out-from-engine */
+  ownSavePending = null;
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const opts = {
+    title: String(title || "Save your own work as files").slice(0, 120),
+    defaultPath: app.getPath("documents"),
+    properties: ["openDirectory", "createDirectory"],
+  };
+  const res = TEST_DOOR && process.env.ETIUDA_TEST_SAVE_AS
+    ? { canceled: false, filePaths: [String(process.env.ETIUDA_TEST_SAVE_AS)] }
+    : win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+  if (!res || res.canceled || !res.filePaths || !res.filePaths[0]) return null;
+  const dir = res.filePaths[0];
+  ownSavePending = { id: e.sender.id, dir };
+  return { dir };
+});
+const WIN_DEVICE_RE = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i;
+/* Each file for Save own work is written inside the chosen folder and never overwrites an existing file. */
+function uniqueOwnParts(dir, rawName) {
+  const s = String(rawName || "");
+  if (!s || /[\\/]/.test(s) || s === "." || s === "..") return null;
+  const clean = s.replace(/[*?"<>|:\x00-\x1f]/g, "_");
+  const ext = path.extname(clean);
+  if (ext !== ".ec" && ext !== ".txt") return null;
+  let stem = clean.slice(0, clean.length - ext.length) || "work";
+  if (WIN_DEVICE_RE.test(stem.split(".")[0].replace(/[. ]+$/, ""))) stem = "_" + stem; /* plant:way-out-win-device */
+  return { dir, stem, ext };
+}
+ipcMain.handle("etiuda:write-own-save", async (e, name, text) => {
+  if (!fromEngine(e)) return null;
+  const p = ownSavePending;
+  if (!p || p.id !== e.sender.id) return null;
+  const parts = uniqueOwnParts(p.dir, name);
+  if (!parts) return { name: String(name || ""), ok: false };
+  const payload = String(text || "");
+  const baseDir = path.resolve(parts.dir);
+  for (let i = 1; i <= 99; i++) {
+    const candidateName = i === 1 ? parts.stem + parts.ext : parts.stem + " (" + i + ")" + parts.ext;
+    const dest = path.resolve(baseDir, candidateName);
+    if (path.dirname(dest) !== baseDir) return { name: candidateName, ok: false };
+    try {
+      let writeFlag = "w";
+      writeFlag = "wx"; /* plant:way-out-no-overwrite */
+      await fs.promises.writeFile(dest, payload, { encoding: "utf8", flag: writeFlag });
+      return { name: candidateName, ok: true };
+    } catch (err) {
+      if (err && err.code === "EEXIST") continue;
+      return { name: candidateName, ok: false };
+    }
+  }
+  return { name: parts.stem + parts.ext, ok: false };
+});
+ipcMain.handle("etiuda:end-own-save", async (e) => {
+  if (!fromEngine(e)) return null;
+  if (ownSavePending && ownSavePending.id === e.sender.id) ownSavePending = null;
+  return true;
+});
+
 /* A .ec DROPPED ON THE WINDOW: the renderer names a path, and this answers only an existing file
    with the extension the installer registers, through the double-click's own route. */
 ipcMain.on("etiuda:offer-dropped", (e, file) => {

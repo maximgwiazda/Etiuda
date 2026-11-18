@@ -284,6 +284,7 @@ function boot(){
     restartDesk: restart.restartDesk,
     takeSyncedDesk: restart.takeSyncedDesk,
     runShortcut: runShortcut.runShortcut,
+    saveOwnWork: catalogFile.saveOwnWork,
   });
   // A 1.16.7 desk's keys, copied under this version's names before the first line reads one
   storage.eCarryOldKeys();
