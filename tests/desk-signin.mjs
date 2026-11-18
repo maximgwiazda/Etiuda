@@ -48,7 +48,7 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 235;
+const PLANTS = 236;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
@@ -759,7 +759,7 @@ const doorStand = (join, held) => ({ join: join, held: held === undefined ? held
 CASES.doorInvite = (s, swap) => {
   const ask = (join, held, team, rt) => loadDoor(s, doorStand(join, held), swap).signinDoorInvite(team || TEAM, rt || RT);
   const first = ask(doorJoin()), named = ask(doorJoin({ inv: DOOR_ID })), c = heldOf().cert;
-  const noKnock = x => x === null || (!!x && x.door === undefined);
+  const noKnock = x => x === null || (!!x && !(x.door && typeof x.door === "object"));
   const invitation = { team: TEAM, invite: { id: "2".repeat(16), relay: { rt: RT, inv: "5".repeat(32), token: "x", seal: "y" } } };
   return !!first && JSON.stringify(first.door) === JSON.stringify(c) && first.box === LEAD_BOX && first.inv === undefined && Object.keys(first).join() === "door,box"
     && !!named && named.inv === DOOR_ID
@@ -2244,8 +2244,8 @@ function loadCheck(swap) {
   const st = { at: 1e12, renews: 0, handler: null };
   const ipc = { handle: (ch, fn) => { st.handler = fn; } };
   const clock = { now: () => st.at };
-  new Function("ipcMain", "fromEngine", "signinRenewNow", "signinView", "SIGNIN_CHECK_GAP_MS", "Date", "let signinCheckAt = 0;\n" + text)(
-    ipc, () => true, async () => { st.renews++; return "renewed"; }, () => ({}), 10 * 1000, clock);
+  new Function("ipcMain", "fromEngine", "signinRenewNow", "signinPressNow", "signinView", "SIGNIN_CHECK_GAP_MS", "Date", "let signinCheckAt = 0;\n" + text)(
+    ipc, () => true, async () => { st.renews++; return "renewed"; }, async () => { st.renews++; return true; }, () => ({}), 10 * 1000, clock);
   return st;
 }
 CASES.checkGap = async (s, swap) => {
@@ -3049,7 +3049,7 @@ CASES.revokedLapse = (s, swap) => {
   const flushed = held => { const st = { held, lead: { team: TEAM }, join: null, root: "/share/a", files: new Set(), writes: [] }; return loadFlush(s, st, swapIn(["signinFlush"]))(); };
   const knocked = held => { const st = doorStand(doorJoin(), held); return loadDoor(s, st, swapIn(["signinDoorInvite", "signinDoorKept"])).signinDoorInvite(TEAM, RT); };
   const wrote = held => { const st = doorStand(doorJoin(), held); return loadDoor(s, st, swapIn(["signinDoorInvite", "signinDoorKept"])).signinDoorKept(TEAM, path.join("/relay", RT), DOOR_ID); };
-  const noDoor = x => x === null || (!!x && x.door === undefined);
+  const noDoor = x => x === null || (!!x && !(x.door && typeof x.door === "object"));
   return lapsed && view && page && offered(h) === 0 && offered(free) === 2 && flushed(h) === false && flushed(free) === true
     && noDoor(knocked(h)) && !!knocked(free) && !!knocked(free).door && wrote(h) === false && wrote(free) === true;
 };
@@ -3065,7 +3065,7 @@ CASES.certEarly = (s, swap) => {
   const flushed = held => { const st = { held, lead: { team: TEAM }, join: null, root: "/share/a", files: new Set(), writes: [] }; return loadFlush(s, st, swapIn(["signinFlush"]))(); };
   const knocked = held => { const st = doorStand(doorJoin(), held); return loadDoor(s, st, swapIn(["signinDoorInvite", "signinDoorKept"])).signinDoorInvite(TEAM, RT); };
   return s.signinCertOk(early, DESK_KEY) === true && lapsed && asked(early) === null && !!asked(near) && offered(he) === 0 && offered(hn) === 2
-    && flushed(he) === false && flushed(hn) === true && (knocked(he) === null || knocked(he).door === undefined) && !!knocked(hn) && !!knocked(hn).door;
+    && flushed(he) === false && flushed(hn) === true && (knocked(he) === null || !(knocked(he).door && typeof knocked(he).door === "object")) && !!knocked(hn) && !!knocked(hn).door;
 };
 /* Review 15b, finding 1: the list that judges a held seat cannot be taken back by editing signin.json. The file as the desk writes it
    carries this desk's mark; the list deleted, or replaced by an older genuine one, leaves no seat, and nothing to flush or knock with,
@@ -3455,11 +3455,11 @@ CASES.relaySeatAnswer = s => {
 /* The shell's own declarations of the relay's seat, evaluated with stand-ins; swap is a plant's. */
 function relaySeatWire(swap, stand) {
   const names = ["function signinRelaySeatTold(", "function signinRelaySeat(", "function signinSeatCert(", "function signinSeatRenew(", "function signinRelaySeatIo("];
-  let text = decl(MAIN, "const SIGNIN_SEAT_RENEW_MS") + "\n" + names.map(n => decl(MAIN, n)).join("\n");
+  let text = decl(MAIN, "const SIGNIN_SEAT_RENEW_MS") + "\n" + decl(MAIN, "const SIGNIN_PRESS_GAP_MS") + "\n" + names.map(n => decl(MAIN, n)).join("\n");
   if (swap) { if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in the slice once: " + swap[0]); text = text.replace(swap[0], swap[1]); }
   const st = stand || {};
   return new Function("st", "let signinRelaySeatTeam = \"\", signinSeatRenewAt = 0, signinRenewing = null;\n"
-    + "const tellSignin = () => { st.told = (st.told || 0) + 1; }, signinRenewNow = () => { st.renewed = (st.renewed || 0) + 1; return Promise.resolve(\"\"); };\n"
+    + "const tellSignin = () => { st.told = (st.told || 0) + 1; }, signinRenewNow = () => { st.renewed = (st.renewed || 0) + 1; return Promise.resolve(st.said || \"renewed\"); };\n"
     + "const signinState = () => ({ held: st.held }), branchIdentity = () => st.me, signinCertOk = (c, k) => !!c && c.desk === k, signinRevokedHas = (l, c) => !!l && l.indexOf(c.sig.value) >= 0;\n"
     + "const Date = { now: () => st.now };\n"
     + text + "\nreturn { signinRelaySeatTold, signinRelaySeat, signinSeatCert, signinSeatRenew, signinRelaySeatIo, team: () => signinRelaySeatTeam, pending: p => { signinRenewing = p; } };")(st);
@@ -3505,7 +3505,14 @@ CASES.seatRenewGap = async (s, swap) => {
   const whilePending = st.renewed;
   w.pending(null);
   await w.signinSeatRenew();
-  return own && other && revoked && withinHour === 1 && whilePending === 1 && st.renewed === 2;
+  const reached = st.renewed;
+  st.now += 2 * 60 * 60 * 1000;
+  st.said = "unreached";
+  await w.signinSeatRenew();
+  st.now += 6 * 60 * 1000;
+  await w.signinSeatRenew();
+  const unreached = st.renewed;
+  return own && other && revoked && withinHour === 1 && whilePending === 1 && reached === 2 && unreached === 4;
 };
 /* Account and the door say the relay's refusal as what it is to the person, never a fault of the team or its lead: no longer given
    access, or the sign-in to renew (with the providers under it); nothing while signed out; the service's no-role at a first sign-in and at
@@ -3533,14 +3540,14 @@ CASES.relaySeatCleared = async (s, swap) => {
   st.sub = "s-1";
   st.relaySoon = () => { st.relaySoons = (st.relaySoons || 0) + 1; };
   st.signinRenewHeld = async (io, p, key, held) => ({ held: Object.assign({}, held, { cert: cert({ issued: NOW + 2 }), said: "" }), said: "renewed" });
-  const decls = ["const SIGNIN_SEAT_RENEW_MS", "function signinRelaySeatTold(", "function signinRelaySeatClear(", "function signinRelaySeat(", ...SWITCH_DECLS];
+  const decls = ["const SIGNIN_SEAT_RENEW_MS", "const SIGNIN_PRESS_GAP_MS", "function signinRelaySeatTold(", "function signinRelaySeatClear(", "function signinRelaySeat(", "async function signinPressNow(", ...SWITCH_DECLS];
   let text = decls.map(d => tryDeclText(d)).filter(Boolean).concat([ipcSlice('ipcMain.on("etiuda:signin-click"'), ipcSlice('ipcMain.handle("etiuda:signin",')]).join("\n");
   if (swap) {
     if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in relaySeatCleared once: " + swap[0]);
     text = text.replace(swap[0], swap[1]);
   }
   const names = [...SWITCH_STANDS, "relaySoon"];
-  const body = "let signinRelaySeatTeam = \"\", signinSeatRenewAt = 0, signinBusy = null, signinClick = null, signinSaid = \"\", signinWrote = \"kept\", signinRenewing = null, signinOutFlight = null, signinTimer = null;\n"
+  const body = "let signinRelaySeatTeam = \"\", signinSeatRenewAt = 0, signinBusy = null, signinClick = null, signinSaid = \"\", signinWrote = \"kept\", signinRenewing = null, signinOutFlight = null, signinTimer = null, signinPressAt = 0, relayPressOwed = false;\n"
     + "function signinView() { const h = signinState().held; return { signedIn: h ? h.provider : \"\", relaySeat: h ? signinRelaySeat(h) : \"\", said: signinSaid }; }\n"
     + text + "\nreturn { signinRelaySeatTold, signinView, signinOutNow, signinRenewNow, team: () => signinRelaySeatTeam, renewAt: () => signinSeatRenewAt, setRenewAt: n => { signinSeatRenewAt = n; } };";
   const w = new Function(...names, body)(...names.map(n => st[n]));
@@ -3551,20 +3558,21 @@ CASES.relaySeatCleared = async (s, swap) => {
   const pageBefore = P ? P.signinDoor(P.signinRead({ offered: ["microsoft"], signedIn: "microsoft", code: CODE, seat: "held", relaySeat: before })) : null;
   st.answer = { ok: true, code: CODE, cert: cert({ issued: NOW + 1 }), doors: [] };
   const afterSignin = await press();
-  const keptBySignin = w.team() === "t-1" && w.renewAt() === 0 && afterSignin.relaySeat === "renew" && st.relaySoons === 1;
+  await new Promise(r => setTimeout(r, 5));
+  const keptBySignin = w.team() === "t-1" && w.renewAt() > 0 && w.renewAt() !== NOW && afterSignin.relaySeat === "renew" && st.relaySoons === 1;
   w.setRenewAt(NOW + 1);
   await w.signinRenewNow();
   const keptByQuiet = w.team() === "t-1" && w.renewAt() === NOW + 1 && w.signinView().relaySeat === "renew" && st.relaySoons === 2;
   await w.signinRenewNow({ relay: true });
   const keptByRelay = w.team() === "t-1" && w.renewAt() === NOW + 1 && st.relaySoons === 2;
   await w.signinRenewNow({ person: true });
-  const keptByCheck = w.team() === "t-1" && w.renewAt() === 0 && st.relaySoons === 3;
+  const keptByCheck = w.team() === "t-1" && w.renewAt() === NOW + 1 && st.relaySoons === 2;
   w.signinRelaySeatTold("t-1", "open");
   const clearedByOpen = w.team() === "" && w.signinView().relaySeat === "";
   w.signinRelaySeatTold("t-1", "refused");
   w.setRenewAt(NOW + 2);
   w.signinOutNow();
-  const clearedByOut = w.team() === "" && w.renewAt() === 0 && st.relaySoons === 4;
+  const clearedByOut = w.team() === "" && w.renewAt() === 0 && st.relaySoons === 3;
   return before === "renew" && !!pageBefore && pageBefore.say[0] === SEAT_RENEW_EN[0] && keptBySignin && keptByQuiet && keptByRelay && keptByCheck && clearedByOpen && clearedByOut;
 };
 /* A POOLED DESK'S CERTIFICATE (Claude alpha's ruling of 2026-11-14 01:07; the relay's grace reads the mark): the desk takes it exactly where
@@ -4012,7 +4020,7 @@ const LEGS = [
   ["ds49b", "relaySeatWire", "the team whose relay refused this desk's seat is kept and told once, said removed where the service found no role and renew otherwise, cleared by its own open or the channel let go"],
   ["ds49c", "seatRenewGap", "a relay session carries the desk's own standing certificate or none, and a run-out one is renewed first at most once an hour, a renewal already out waited on"],
   ["ds49d", "relaySeatPage", "Account says the relay's refusal as what it is to the person, in the copywriter's English and Polish: no longer given access, or the sign-in to renew with the providers under it; nothing signed out; no-role at a first sign-in and a renewal"],
-  ["ds49e", "relaySeatCleared", "review 7 as review 49 (finding 7) amends it: Sign out clears the relay seat's \"needs renewing\" mark, and so does the relay taking the seat (open); a sign-in, a Check now or a quiet renewal that succeeds keeps it and wakes the relay; the person's sign-in and Check now reset the hour's throttle, a quiet renewal and the relay's own keep it, and the relay's own wakes nothing"],
+  ["ds49e", "relaySeatCleared", "review 7 as reviews 49 and 50 amend it: Sign out clears the relay seat's \"needs renewing\" mark and wakes the relay, and the relay taking the seat (open) clears it too; a sign-in, a press, keeps it, stamps the hour's throttle with its own renewal and wakes the relay once; a quiet renewal keeps it and the throttle and wakes the relay; the relay's own renewal and a press's own keep both and wake nothing themselves"],
   ["ds50a", "pooledCert", "a pooled desk's certificate (pooled: true, signed as the line \"pooled\") is a seat on the desk, kept by signin.json, and the relay's certWhy takes it alike; the mark outside the signature, or of another value, is no certificate, nor is one running past a day"],
   ["ds22g", "doorsShownSigned", "doors held without the signature are offered nowhere and a press on one joins nothing; signed ones are offered"],
   ["ds51a", "switchLeaves", "review 11: a sign-in as another account does for the account left all Sign out does, by the same count (its signout/desk, before the new signin/desk; its seat.json; its door's join; the store forgotten; its organisation's licence forgotten), whatever the new account's answer: a certificate, none, full, a refusal, the service unreached; a sign-in as the same account leaves nothing"],
@@ -4234,9 +4242,9 @@ const outside = outsideNames(MAIN);
    of which gates anything; and to hand a team's relay its seat on a licence that follows Entra, which the relay judges and nothing
    on the desk waits on (tests/relay-seats.mjs d1a to d3a). */
 const expectOutside = ["signinListen", "armSigninRenew", "signinFlush", "signinFlush", "signinDoorInvite", "signinDoorKept", "signinView",
-  "signinRelaySeatIo", "signinRelaySeatIo"];
+  "signinRelaySeatIo", "signinRelaySeatIo", "signinPressNow"];
 check(outside.slice().sort().join() === expectOutside.slice().sort().join(),
-  "ds5a nothing local is gated: outside its section the shell names the sign-in only to require its loopback, to arm the renewal and to write the seat after a join: " + outside.join(" "));
+  "ds5a nothing local is gated: outside its section the shell names the sign-in only to require its loopback, to arm the renewal, to write the seat after a join and to press on Ask again: " + outside.join(" "));
 const modules = fs.readdirSync(path.join(ROOT, "src", "modules")).filter(n => n.endsWith(".js"));
 const readers = modules.filter(n => /\bsignin(State|Stop|Out|Check|Again)\b|\bsignIn\(|onSignin/.test(fs.readFileSync(path.join(ROOT, "src", "modules", n), "utf8")));
 check(readers.join() === "signin.js" && /function signinShown\(v\)\{ return !!\(v && \(v\.offered\.length \|\| v\.signedIn \|\| signinWaiting\(v\) \|\| signinStranded\(v\)\)\); \}/.test(PAGE)
@@ -4610,11 +4618,12 @@ if (!PLANTS_OFF) {
   await plantWire("dsp162", ["  if (was !== signinRelaySeatTeam) tellSignin(); /* plant:relay-seat-told */\n", ""], "relaySeatWire");
   await plantWire("dsp163", ["return held.said === \"no-role\" ? \"removed\" : \"renew\"; /* plant:relay-seat-removed */", "return \"renew\";"], "relaySeatWire");
   await plantWire("dsp164", ["if (signinSeatRenewAt && now >= signinSeatRenewAt && now - signinSeatRenewAt < SIGNIN_SEAT_RENEW_MS) return Promise.resolve(); /* plant:seat-renew-gap */", ""], "seatRenewGap");
-  await plantWire("dsp164a", ["  if (ans.ok && ans.cert && typeof signinRelaySeatClear === \"function\") signinRelaySeatClear(\"person\"); /* plant:relay-seat-signin */\n", ""], "relaySeatCleared");
+  await plantWire("dsp164a", ["  if (ans.ok && typeof signinPressNow === \"function\") signinPressNow(false).catch(() => false); /* plant:relay-seat-signin */\n", ""], "relaySeatCleared");
   await plantWire("dsp164b", ["  if (r.said === \"renewed\" && s.held && s.held.cert && typeof signinRelaySeatClear === \"function\") signinRelaySeatClear(o && o.relay ? \"relay\" : o && o.person ? \"person\" : \"\"); /* plant:relay-seat-renew */\n", ""], "relaySeatCleared");
   await plantWire("dsp164c", ["  if (typeof signinRelaySeatClear === \"function\") signinRelaySeatClear(\"out\"); /* plant:relay-seat-leave */\n", ""], "relaySeatCleared");
   await plantWire("dsp215", ["  ends = how === \"out\"; /* plant:relay-seat-notice-kept */\n", ""], "relaySeatCleared");
-  await plantWire("dsp216", ["  resets = how === \"out\" || how === \"person\"; /* plant:relay-seat-throttle-kept */\n", ""], "relaySeatCleared");
+  await plantWire("dsp216", ["  resets = how === \"out\"; /* plant:relay-seat-throttle-kept */\n", ""], "relaySeatCleared");
+  await plantWire("dsp217", ["  wakes = how === \"out\" || (!!was && how !== \"relay\" && how !== \"person\"); /* plant:relay-seat-clear */\n", ""], "relaySeatCleared");
   await plantPage("dsp157", ["  if(v.relaySeat) return {moment:\"relayseat\",", "  if(false) return {moment:\"relayseat\","], "relaySeatPage");
   await plantPage("dsp158", ["  if(r===\"no-role\") return {kind:\"renewal\", say:signinSay(\"no-role\", v), acts:[]}; /* plant:told-no-role */", ""], "relaySeatPage");
   /* Review 15b, finding 2: the early certificate's helper and each judge that asks it. */

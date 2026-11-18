@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-seats-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 188;
+const EXPECTED = 199;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* ETIUDA_PLANT_ONLY, a comma list of plant tags or planted names: only those plants run, every other is skipped, so one plant is proved
    alone without the whole sweep. */
@@ -2253,15 +2253,16 @@ async function main() {
       const c = holder.c = deskChannel(w, "a", { renewMs: 200 }, mod, { shell: glue });
       const polls = [];
       for (let i = 0; i < 3; i++) { if (i === 0) await cycleOf(c); else await kickOf(c); await nap(10); await c.ch.idle(); polls.push({ renewals: glue.st.renewCalls, notice: glue.notice() === tm }); w.R.clock.now += MIN; }
-      await glue.signinRenewNow({ person: true });
-      const reset = glue.throttle();
+      const beforeCheck = glue.st.renewCalls;
+      await glue.signinPressNow(true);
+      const reset = glue.throttle(), checkRenewed = glue.st.renewCalls - beforeCheck;
       await nap(10); await c.ch.idle();
-      const check = { notice: glue.notice() === tm, throttle: reset, relaySoon: glue.st.relaySoon };
+      const check = { notice: glue.notice() === tm, throttle: reset, renewed: checkRenewed, relaySoon: glue.st.relaySoon };
       glue.signinRelaySeatClear("out");
       const out = { notice: glue.notice() };
       await c.ch.stop();
       rows.entra = { polls, check, out };
-      rows.entra.ok = polls.every(p => p.renewals === 1 && p.notice) && check.notice && check.throttle === 0 && check.relaySoon >= 1 && out.notice === "";
+      rows.entra.ok = polls.every(p => p.renewals === 1 && p.notice) && check.notice && check.throttle > 0 && check.renewed === 1 && check.relaySoon >= 1 && out.notice === "";
     }
     {
       const w = await team({}), d = named(w, "j"), r = revokedVia(w), at = w.R.clock.now, tm = "t-" + w.rt.slice(0, 8), holder = {};
@@ -2458,7 +2459,7 @@ async function main() {
   }
   await leg("d17a", () => firstLeftScene(), "the first review's two left: W5, a session ending at its certificate's end renews on the 401 in the same cycle; L4, a lapsed team's joining desk whose certificate ended takes its request back through the channel");
   await leg("d18a", () => doorGlueScene(), "finding 2 with 12: a signed-in desk whose door join holds no certificate it may knock with (none yet, another desk key's, one its list revokes) asks the renewal through the channel, awaited, and knocks in that cycle when one comes; the shell's invite() asks none, so a still-revoked renewal is asked once in two polls; signed out, none; a wrong relay team id refused before anything is asked");
-  await leg("d19a", () => noticeScene(), "finding 7: a renewal bringing a certificate the relay still refuses keeps the refusal notice and the hour's throttle (an Entra desk given another licence's certificate asks one renewal in three polls; a waiting desk whose service key is revoked asks one in two polls, and its renewals start no cycle); the person's Check now resets the throttle and keeps the notice; a sign out ends it");
+  await leg("d19a", () => noticeScene(), "finding 7: a renewal bringing a certificate the relay still refuses keeps the refusal notice and the hour's throttle (an Entra desk given another licence's certificate asks one renewal in three polls; a waiting desk whose service key is revoked asks one in two polls, and its renewals start no cycle); the person's Check now, a press, renews once, stamps the throttle with that renewal and keeps the notice; a sign out ends it");
   await leg("d20a", () => doorTransientScene(), "finding 1: a knock refused for its certificate never ends the join on a renewal slower than the bound, one that fails, or a 503 or 429 at the retry's hello; the next cycle knocks with the certificate that came and the request opens");
   await leg("d21a", () => rereadScene(), "findings 3 and 11: a door request whose first reply was lost resumes by the key's hello after the certificate ran out, is kept and sent up in that cycle; a removed desk whose new invitation arrives while its key hello is out spends it");
   await leg("d22a", () => socketScene(), "finding 5: a session the relay stops taking lets its socket go: a failed reopen closes it, a reopen that opens closes it and opens one under the new session, one hello each");
@@ -2565,6 +2566,19 @@ async function main() {
       rows[kind] = row;
     }
     {
+      const w = await team({}), a = w.desks.a, tm = "t-" + w.rt.slice(0, 8), holder = {}, cert = certFor(a.pub, w.licence, w.R.clock.now, 7 * DAY);
+      const g = holder.g = shellGlue(w, a, { held: { provider: "microsoft", cert, revoked: null }, service: async () => ({ said: "renewed", cert }), team: tm, onRelaySoon: pressRun(holder) }, src);
+      const c = holder.c = deskChannel(w, "a", { renewMs: 200 }, mod, { shell: g });
+      await cycleOf(c);
+      w.R.clock.now += 2 * MIN;
+      const mark = c.log.length;
+      await g.signinPressNow(true);
+      await settle(c);
+      rows.seated = { hellos: c.log.slice(mark).filter(l => l === "POST hello 200").length, online: c.ch.online() };
+      rows.seated.ok = rows.seated.hellos === 1 && rows.seated.online;
+      await c.ch.stop();
+    }
+    {
       const w = await team({}), d = named(w, "k"), tm = "t-" + w.rt.slice(0, 8), holder = {};
       await doorOf(w, [hex(16)]);
       const cert = certFor(d.pub, w.licence, w.R.clock.now, 7 * DAY);
@@ -2632,6 +2646,14 @@ async function main() {
   await leg("d27a", () => pressSignoutScene(), "finding 1: after a refusal a sign out ends the notice and wakes the relay, and the next Sign in, a press, brings the notice back at once where its certificate is still refused and opens at once where it is current");
   await leg("d28a", () => pressBlipScene(), "finding 2: a door join's renewal that does not reach the service holds no hour, so the knock follows within minutes; the person's Check now at the door wakes the relay and knocks in that press");
   await leg("d29a", () => pressOnceScene(), "finding 5: one press, one renewal: Check now on a still-refused certificate renews once, Sign in renews none, one hello each; a press at a door knocks once with the certificate already refused there; a second press inside thirty seconds is an ordinary wake");
+  /* The press's wiring in shell/main.js, read as text: relayRun hands a press it owes to the channel it keeps, and Ask again presses. */
+  const pressWiring = src => {
+    const run = mainSlice(src, "relayRun"), ask = mainSlice(src, "askAgain");
+    return { reaches: /pressing = relayPressOwed && typeof relayChannel\.press === "function";/.test(run) && /if \(pressing\) relayChannel\.press\(\);/.test(run),
+      askPresses: /signinPressNow\(true\)/.test(ask) && !/\n  relaySoon\(\);\n/.test(ask) };
+  };
+  await leg("d31a", async () => { const p = pressWiring(MAIN_NOW); return { ok: p.reaches && p.askPresses, detail: brief(p) }; },
+    "the press's wiring: relayRun hands a press it owes to the channel it keeps, and Ask again is a press (its renewal, then the channel's press)");
   await leg("d30a", () => seatlessDoorScene(), "finding 7: the door's seatless request carries the request's id and marks a door, so a waiting door join whose certificate this desk's clock holds run out reads the lead's answer, and a door request whose first reply was lost is kept and sent up");
   const PRODUCT_CH = path.join(ROOT, "shell", "relay", "channel.cjs");
   /* `tag` a plant line to lift, or {name, edits: [[from, to]]}, a planted fault whose `from` is found once in the channel. */
@@ -2683,6 +2705,9 @@ async function main() {
     ["fresh-reread", "d21a", rereadScene, "an invitation arriving during the key hello is judged by the invitation before it, so a removed desk is told removed"],
     ["reopen-socket", "d22a", socketScene, "the socket outlives its session"],
     ["start-kicks", "d23a", startScene, "a running channel started again does nothing"],
+    ["press-hello", "d29a", pressOnceScene, "a press on a desk holding a session says no hello"],
+    ["press-retells", "d27a", pressSignoutScene, "a press's refusal is not told, so the notice a sign out ended stays away"],
+    ["door-press", "d29a", pressOnceScene, "a press at the door knocks with nothing the door refused before"],
     ["answer-session-gone", "d16a", answerGoneScene, "a session the relay no longer takes at the answer's fetch is said as the wait and kept"],
   ]) {
     const line = "p " + id + (typeof tag === "object" ? " planting " + tag.name : " lifting plant:" + tag) + " in a copy of shell/relay/channel.cjs turns " + id + " red (" + what + "), and the product file is never written";
@@ -2695,6 +2720,11 @@ async function main() {
     ["door-seatless", "d18a", doorGlueScene, "a door join with no certificate hands the channel nothing, so nothing asks for one"],
     ["relay-seat-notice-kept", "d19a", noticeScene, "a renewal that still meets a refusal clears the notice"],
     ["relay-seat-throttle-kept", "d19a", noticeScene, "a renewal resets the hour's throttle, so every poll asks the service"],
+    ["press-owed", "d29a", pressOnceScene, "a press owes the channel nothing, so it passes no refusal by"],
+    ["press-stamps", "d29a", pressOnceScene, "a press leaves the throttle open, so the cycle it wakes renews again"],
+    ["press-gap", "d29a", pressOnceScene, "a second press inside thirty seconds is a press again"],
+    ["seat-renew-unreached", "d28a", pressBlipScene, "an unreached renewal holds the whole hour"],
+    ["seatless-inv", "d30a", seatlessDoorScene, "the seatless request carries no id and marks no door"],
   ]) {
     const line = "p " + id + " lifting plant:" + tag + " in a copy of shell/main.js turns " + id + " red (" + what + "), and the product file is never written";
     if (plantSkipped(tag)) { skip(line); continue; }
@@ -2703,6 +2733,14 @@ async function main() {
     if (at >= 0) { lines.splice(at, 1); const r = await safe(() => scene(undefined, lines.join("\n"))); turned = r.ok !== true; detail = turned ? "the check lifted" : "the check still held"; }
     const back = fs.readFileSync(MAIN_FILE, "utf8") === MAIN_NOW;
     check(results[id] && results[id].ok === true && turned && back, line + ": " + detail + ", sha " + (back ? "unchanged" : "CHANGED"));
+  }
+  for (const [tag, what] of [["press-reaches", "relayRun kicks or starts the channel and never presses it"], ["ask-again-press", "Ask again wakes the relay without a press"]]) {
+    const line = "p d31a lifting plant:" + tag + " in a copy of shell/main.js turns d31a red (" + what + "), and the product file is never written";
+    if (plantSkipped(tag)) { skip(line); continue; }
+    const lines = MAIN_NOW.split(/\n/), at = lines.findIndex(l => l.indexOf("/* plant:" + tag + " */") >= 0);
+    let turned = false;
+    if (at >= 0) { lines.splice(at, 1); try { const p = pressWiring(lines.join("\n")); turned = !(p.reaches && p.askPresses); } catch { turned = true; } }
+    check(results.d31a && results.d31a.ok === true && turned && fs.readFileSync(MAIN_FILE, "utf8") === MAIN_NOW, line + ": turned=" + turned);
   }
   /* The relay's half of finding 2, judged at the desk: a resume asking no withdrawal opens the withdrawal's session again. */
   {

@@ -2124,6 +2124,8 @@ function createChannel(opts) {
   let seatState = "";
   /* The certificate the relay last refused at the door (doorSession), until a knock is taken. */
   let doorRefused = null;
+  /* A person's press (press(), the shell's signinPressNow): owed until a cycle takes it, and that cycle's (pressNow). */
+  let pressed = false, pressNow = false;
   /* need: not fetched. held: fetched, waiting for the team file. opened: the team key was handed on. none: this relay
      keeps no wrap (a 404), said as nothing. bad: the wrap did not open, said once. */
   let wrapPhase = "need", wrapHeld = null;
@@ -2300,7 +2302,7 @@ function createChannel(opts) {
       r = await send(next);
     }
     const state = r.status === 200 ? "open" : refusalOf(r).reason === "seat-lapsed" ? "refused" : seatState;
-    if (state !== seatState && (state === "refused" || seatState === "refused") && typeof o.onSeat === "function") o.onSeat(state); /* plant:seat-told */
+    if (state !== seatState && (state === "refused" || seatState === "refused" || seatState === "press") && typeof o.onSeat === "function") o.onSeat(state); /* plant:seat-told */
     seatState = state;
     return r;
   }
@@ -2368,7 +2370,7 @@ function createChannel(opts) {
     /* A door join with no certificate it may knock with (the shell's seatless request) waits here for the renewal it asks, then is read
        again: no hello is refused for its seat before a knock, so nothing else asks. */
     let awaits = false;
-    awaits = !!(inv && inv.seatless === true && inv.door === undefined); /* plant:door-seat-awaited */
+    awaits = !!(inv && inv.seatless === true); /* plant:door-seat-awaited */
     if (awaits) { await seatNow(true); inv = typeof o.invite === "function" ? o.invite() : null; }
     if (inv && inv.door !== undefined) return doorSession(ch, who, inv, why); /* plant:door-session */
     let spent = prog.state().tokenUsed === true;
@@ -2430,6 +2432,7 @@ function createChannel(opts) {
     let door = inv.door, r = null;
     let fresh = true;
     fresh = !sameSeat(door, doorRefused); /* plant:door-refused-kept */
+    if (pressNow) fresh = true; /* plant:door-press */
     if (fresh) {
       r = await knock(ch.json.challenge, door);
       if (!taken(r)) { const t = judged(r); if (t) return t; }
@@ -3103,6 +3106,9 @@ function createChannel(opts) {
   }
 
   async function cycle() {
+    /* A press's cycle says hello afresh with the certificate that stands, and tells the shell where the seat then stands, open or refused. */
+    if (pressNow) session = null; /* plant:press-hello */
+    if (pressNow) seatState = "press"; /* plant:press-retells */
     const s = await ensureSession();
     if (!s.ok) { refusedLapse(s); return s; }
     if (session && session.by === "invite" && invitedNow()) {
@@ -3156,6 +3162,8 @@ function createChannel(opts) {
     busy = (async () => {
       do {
         again = false;
+        pressNow = pressed;
+        pressed = false;
         try {
           const r = await cycle();
           if (r && r.ok) {
@@ -3194,7 +3202,7 @@ function createChannel(opts) {
           backoff = Math.min(backoff * 2, RETRY_MAX_MS);
         }
       } while (again && running);
-    })().finally(() => { busy = null; noteSocket(); });
+    })().finally(() => { busy = null; pressNow = false; noteSocket(); });
   }
 
   /* The mirror's watch: recursive where the platform has it (Windows; Linux on Node 20 and later), else one watch per
@@ -3254,6 +3262,12 @@ function createChannel(opts) {
     kick();
   }
 
+  /* A person's press: the next cycle passes by what the channel remembers of a refusal, once (THE PRESS RULE, shell/main.js). */
+  function press() {
+    pressed = true;
+    if (running) kick(); else start();
+  }
+
   async function stop() {
     running = false;
     clearTimeout(settle); clearTimeout(retryTimer); clearCounterRetry(); clearInterval(pollTimer); clearInterval(pingTimer);
@@ -3267,7 +3281,7 @@ function createChannel(opts) {
   }
 
   return {
-    start, stop, kick,
+    start, stop, kick, press,
     idle: async () => { while (busy) await busy; },
     program: prog, mirror, rt: o.rt,
     watchMode: () => watchMode,
