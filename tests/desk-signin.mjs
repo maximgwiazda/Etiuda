@@ -2631,8 +2631,11 @@ CASES.seatedKept = async (s, swap) => {
   const once = s.signinSettle(heldOf({ cert: null }), { ok: true, code: CODE, cert: cert(), doors: [] }, NOW);
   const lost = s.signinSettle(once, { ok: true, code: CODE, cert: null }, NOW);
   const back = s.signinFileRead(s.signinFileText({ held: lost })).held, never = s.signinFileRead(s.signinFileText({ held: heldOf({ cert: null }) })).held;
+  /* Since B-2b an answer of none keeps the certificate, so that the file carries `seated` alone is shown by a seat whose certificate it no longer holds. */
+  const voided = s.signinFileRead(s.signinFileText({ held: Object.assign({}, lost, { cert: null }) })).held;
   const older = s.signinFileRead(s.signinFileText({ held: Object.assign(heldOf(), { seated: undefined }) })).held;
   return once.seated === true && lost.seated === true && lost.cert === once.cert && lost.ended === NOW && !!back && back.seated === true && !!never && never.seated !== true
+    && !!voided && voided.seated === true && voided.cert === null
     && !!older && older.seated === true && s.signinSettle(heldOf({ cert: null }), { ok: true, code: CODE, cert: null }, NOW).seated !== true;
 };
 /* (09/1) The account's organisation as its provider named it is kept with the sign-in (`org`), so a policy set later is held to it:
@@ -4790,8 +4793,8 @@ if (!PLANTS_OFF) {
   await plant("dsp53", ["/^http:\\/\\/127\\.0\\.0\\.1:([0-9]{1,5})", "/^http:\\/\\/[a-z0-9.]+:([0-9]{1,5})"], "labRead");
   await plant("dsp54", ["|| !(d.root === undefined || /^[0-9a-f]{64}$/.test(String(d.root)))) return null; /* plant:lab-shape */", ") return null;"], "labRead");
   await plant("dsp59", ["if (d.keyId !== \"studio-\" + crypto.createHash(\"sha256\").update(Buffer.from(d.lead, \"hex\")).digest(\"hex\").slice(0, 16)) return []; /* plant:door-key-id */", ""], "doorsRead");
-  await plant("dsp60", ["return Object.assign({ ok: true, code: String(j.code), cert: j.certificate, doors: signed ? doors : [], doorsSig: signed ? String(j.doorsSig) : \"\", askLead, storeOffer }, signinManagedOf(j)); /* plant:door-read */",
-    "return Object.assign({ ok: true, code: String(j.code), cert: j.certificate, doors: [], doorsSig: \"\", askLead, storeOffer }, signinManagedOf(j));"], "doorsRead");
+  await plant("dsp60", ["return Object.assign({ ok: true, code: String(j.code), cert: j.certificate, doors: signed ? doors : [], doorsSig: signed ? String(j.doorsSig) : \"\", askLead, storeOffer }, signinManagedOf(j), words); /* plant:door-read */",
+    "return Object.assign({ ok: true, code: String(j.code), cert: j.certificate, doors: [], doorsSig: \"\", askLead, storeOffer }, signinManagedOf(j), words);"], "doorsRead");
   await plant("dsp61", ["doors: ans.cert ? (ans.doors || []) : [],", "doors: ans.doors || [],"], "doorsKept");
   await plantWire("dsp62", ["|| !(held.cert.until > now) || pinnedLead() || teamJoin) return []; /* plant:door-shown */", ") return [];"], "doorJoin");
   await plantWire("dsp63", ["if (!d || !me) return Object.assign({}, joinView(), { refused: \"door\" }); /* plant:door-join-offered */", "if (!me) return joinView();"], "doorJoin");
@@ -4821,8 +4824,8 @@ if (!PLANTS_OFF) {
   await plantWire("dtp5", ["trace: SIGNIN_TRACE_ASKED ? line => console.error(line) : null, /* plant:trace-wired */", "trace: line => console.error(line),"], "traceDefault");
   await plantWire("dtp6", ["if (!io || typeof io.trace !== \"function\") return; /* plant:trace-off */",
     "if (!io || typeof io.trace !== \"function\") { console.error(signinTraceLine(provider, step, shown, said, hide)); return; }"], "traceDefault");
-  await plant("dsp79", ["if (j.certificate === null) return Object.assign({ ok: true, code: String(j.code), cert: null, doors: [], waiting: j.reason === \"waiting\", askLead, storeOffer }, signinManagedOf(j)); /* plant:wait-read */",
-    "if (j.certificate === null) return Object.assign({ ok: true, code: String(j.code), cert: null, doors: [], askLead, storeOffer }, signinManagedOf(j));"], "waitRead");
+  await plant("dsp79", ["if (j.certificate === null) return Object.assign({ ok: true, code: String(j.code), cert: null, doors: [], waiting: j.reason === \"waiting\", askLead, storeOffer }, signinManagedOf(j), words); /* plant:wait-read */",
+    "if (j.certificate === null) return Object.assign({ ok: true, code: String(j.code), cert: null, doors: [], askLead, storeOffer }, signinManagedOf(j), words);"], "waitRead");
   await plant("dsp80", ["said: ans.waiting === true ? \"waiting\" : \"\", ask: false, askLead: ans.askLead === true, managed: ans.managed === true, cause: ans.managed === true ? ans.cause || \"\" : \"\",",
     "said: \"\", ask: false, askLead: ans.askLead === true, managed: ans.managed === true, cause: ans.managed === true ? ans.cause || \"\" : \"\","], "waitRead");
   await plant("dsp80b", ["askLead: h.askLead === true, /* plant:file-ask-lead */", "askLead: false,"], "askLeadFile");
@@ -4990,7 +4993,7 @@ if (!PLANTS_OFF) {
   await plant("dswp6", ["    now: Number.isSafeInteger(o.deskNow) && o.deskNow > 0 ? o.deskNow : 0, /* plant:view-now */", "    now: 0,"], "viewFields");
   await plant("dswp7", ["    until: cert && Number.isSafeInteger(cert.until) ? cert.until : 0, /* plant:view-until */", "    until: 0,"], "viewFields");
   await plant("dswp8", ["stoppedAt: !works && !!held && held.seated === true ?", "stoppedAt: !works && !!held ?"], "viewFields");
-  await plant("dswp9", ["    online: o.online !== false }; /* plant:view-online */", "    online: true };"], "viewFields");
+  await plant("dswp9", ["    online: o.online !== false, /* plant:view-online */", "    online: true,"], "viewFields");
   await plantWire("dswp10", ["deskKey: at.key, deskNow: at.desk, last: at.last, online: at.online, registered: st.registered === true }); /* plant:view-clock */","deskKey: at.key, deskNow: Date.now(), last: 0, online: true, registered: st.registered === true });"], "viewClockWire");
   await plantWire("dswp11", ["shown: preview ? Object.keys(SIGNIN_PROVIDERS) : real,", "shown: real,"], "viewSame");
   await plantWire("dswp12", ["outOwed: !!st.out && !signinOutFlight,", "outOwed: !!st.out,"], "viewSame");
@@ -5008,7 +5011,7 @@ if (!PLANTS_OFF) {
   await plantPage("dswp24", ["    works: o.works===true, /* plant:read-works */", "    works: !!o.works,"], "readFields");
   await plantPage("dswp25", ["function signinTimeRead(v){ return Number.isSafeInteger(v) && v>0 && v<=8.64e15 ? v : 0; } /* plant:read-time */", "function signinTimeRead(v){ return Number(v)||0; }"], "readFields");
   await plantPage("dswp26", ["    stoppedAt: signinTimeRead(o.stoppedAt), /* plant:read-stopped */", "    stoppedAt: 0,"], "readFields");
-  await plantPage("dswp27", ["    online: o.online!==false /* plant:read-online */", "    online: true"], "readFields");
+  await plantPage("dswp27", ["    online: o.online!==false, /* plant:read-online */", "    online: true,"], "readFields");
   /* B-2b: the desk keeps its certificate to its end, knows what its seat is, and stops at the end. */
   await plant("dskp1", ["  if (!v || typeof v !== \"object\" || Array.isArray(v) || SIGNIN_HOLDING_ON.indexOf(v.on) < 0) return null; /* plant:holding-on */","  if (!v || typeof v !== \"object\" || Array.isArray(v)) return null;"], "answerWords");
   await plant("dskp2", ["  if (lead && lead.length <= SIGNIN_LEAD_MAX && !/[\\u0000-\\u001f\\u007f-\\u009f<>\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]/.test(lead)) out.lead = lead; /* plant:holding-lead */","  if (typeof v.lead === \"string\") out.lead = v.lead;"], "answerWords");
