@@ -6892,29 +6892,82 @@ async function main() {
       + " held id is taken and the lead is served it in place of the held file), and the product file is never written: " + how(heldId));
   }
 
-  /* ---- 1153: the previous release's requests, kept frozen in relay/test/previous/, answered as before (the version policy's point
-     2, adopted 2026-11-01). Every fixture there is sent again over fresh stand-ins; the set covers every route of the table. ---- */
+  /* ---- 1153: the previous release's requests, kept frozen in relay/test/previous/, cut off at the seat rule (the version policy's
+     point 2, re-seated for the seat certificate rule). Every step before the hello and every later non-session/lead step answers as
+     recorded (with the declared raw-key exemption at step 3 of 2026-11-01-59713def.json); recorded desk/invite hellos are refused
+     403 seat-lapsed with nothing stored; and session-needing steps do not run. ---- */
   {
     const DIR = path.join(ROOT, "relay", "test", "previous");
     const PREV = await import(pathToFileURL(path.join(DIR, "replay.mjs")).href);
     const files = fs.readdirSync(DIR).filter(f => /^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9a-f]{8}(-[a-z]+)?\.json$/.test(f)).sort();
-    /* THE ONE DECLARED EXEMPTION (the test architect's ruling on one spelling for a desk): 59713def's recorder enrolled one desk by
-       its raw public half at step 3, which this relay refuses, and the list is taken whole or not at all, so that team has no desk
-       from there. Every step before it is answered as before; step 3 is answered the refusal, pinned here; the steps after it
-       are covered instead by 2026-11-01-59713def-branch.json, the same release's requests recorded on its own tree with that desk
-       named by its branch id, answered as before step for step. */
+    /* THE ONE DECLARED EXEMPTION: 59713def's recorder enrolled one desk by its raw public half at step 3 (before the first hello),
+       which this relay refuses, and the list is taken whole or not at all, so that team has no desk from there. Every step before
+       it answers as recorded; step 3 is refused bad-signature; 2026-11-01-59713def-branch.json covers the enrolled-desk steps. */
     const EXEMPT = { "2026-11-01-59713def.json": { at: 3, status: 403, error: "bad-signature", from: 4,
       why: "the raw-key enrol refused at step 3, so no desk is on the team after it; 2026-11-01-59713def-branch.json covers these steps" } };
-    /* AND TWO PINNED STEPS: the relay has no folder arm, so a read-only team's lead moving its team file to a folder is refused
-       team-lapsed, as every write there is, at the step that recorded the move; the lead's next file, two steps on, then takes the
-       sequence number the move took. */
-    const PINNED = { "2026-11-01-59713def-branch.json": [{ at: 43, status: 403, error: "team-lapsed" }, { at: 45, status: 200, seq: 6 }] };
-    const pinnedAt = (file, step) => (PINNED[file] || []).find(p => p.at === step);
-    const pinHolds = (pin, got) => got.status === pin.status && !!got.json && (pin.error ? got.json.error === pin.error : got.json.seq === pin.seq);
     const fixtures = files.map(f => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8")));
     const freshEnv = () => S.relayEnv({ roots: K.ROOTS });
+    const snapStores = R => JSON.stringify([...R.stores.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([k, st]) => [k, st.dump()]));
+    const isSessionStep = st => !!(st.req && st.req.headers && typeof st.req.headers.authorization === "string" && /\$session\d+\$/.test(st.req.headers.authorization));
+    const isHelloStep = st => !!(st.req && st.req.method === "POST" && /\/session$/.test(st.req.path));
+    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const sameLeadHello = (got, want) => {
+      if (!got || !want || got.status !== 200 || want.status !== 200) return false;
+      if (!got.json || !want.json || typeof got.json.session !== "string" || !/^\$session\d+\$$/.test(got.json.session)) return false;
+      const g = Object.assign({}, got, { json: Object.assign({}, got.json, { session: want.json.session }) });
+      return same(g, want);
+    };
+    const WANT_CUTOFF = { error: "seat-lapsed", said: B.REASONS["seat-lapsed"] };
+    async function replayCutoff(fx, file) {
+      const R = freshEnv(), ph = PREV.placeholders(), seen = new Map();
+      const leadIds = new Set([fx.keys && fx.keys.lead && fx.keys.lead.keyId, fx.keys && fx.keys.next && fx.keys.next.keyId].filter(Boolean));
+      const firstHello = fx.steps.findIndex(st => isHelloStep(st) && st.res && st.res.status === 200 && st.req.body && st.req.body.json && !leadIds.has(st.req.body.json.key));
+      const ex = EXEMPT[file];
+      const differ = [], refused = [], refusedDiffer = [], notRun = [], beforeMatched = [], afterMatched = [];
+      let exemptAtOk = !ex, exemptAfterCount = 0;
+      for (let i = 0; i < fx.steps.length; i++) {
+        const step = fx.steps[i];
+        if (isSessionStep(step)) { notRun.push(i); continue; }
+        R.clock.now = step.at;
+        const req = ph.into(step.req);
+        if (step.sign) req.body.json[step.sign.field] = PREV.signText(fx.keys[step.sign.key].seed, ph.into(step.sign.text));
+        const storeBefore = snapStores(R);
+        let res;
+        try { res = await PREV.send(W, R, req); } catch (e) { differ.push({ step: i, what: step.what, got: "threw " + e.message }); continue; }
+        const storeAfter = snapStores(R);
+        ph.bindFrom(res);
+        const got = ph.out(res);
+        const said = {};
+        for (const [id, msgs] of Object.entries(PREV.socketsSaid(R, seen))) said[ph.out(id)] = ph.out(msgs);
+        const exemptAt = ex && i === ex.at;
+        const exemptFrom = ex && i >= ex.from;
+        const cutOffHello = isHelloStep(step) && step.res && step.res.status === 200 && step.req.body && step.req.body.json && !leadIds.has(step.req.body.json.key);
+        if (exemptAt) {
+          exemptAtOk = got.status === ex.status && !!got.json && got.json.error === ex.error && same(said, {});
+          if (!exemptAtOk) differ.push({ step: i, what: step.what, got: got.status });
+          continue;
+        }
+        if (cutOffHello && (!exemptFrom || (got.json && got.json.error === "seat-lapsed"))) {
+          const okCut = got.status === 403 && same(got.json, WANT_CUTOFF) && got.meta === null && got.lapse === null && got.socket === null && same(said, {}) && storeBefore === storeAfter;
+          if (okCut) refused.push(i);
+          else { refusedDiffer.push(i); differ.push({ step: i, what: step.what, got: got.status + " " + JSON.stringify(got.json) }); }
+          continue;
+        }
+        if (exemptFrom) { exemptAfterCount++; continue; }
+        const leadHello = isHelloStep(step) && step.res && step.res.status === 200 && step.req.body && step.req.body.json && leadIds.has(step.req.body.json.key);
+        const okAnswer = (leadHello ? sameLeadHello(got, step.res) : same(got, step.res)) && same(said, step.sent || {});
+        if (!okAnswer) differ.push({ step: i, what: step.what, want: step.res, got });
+        else if (i < firstHello) beforeMatched.push(i);
+        else afterMatched.push(i);
+      }
+      return {
+        ok: differ.length === 0 && refusedDiffer.length === 0 && exemptAtOk && refused.length >= 1 && notRun.length === fx.steps.filter(isSessionStep).length,
+        steps: fx.steps.length, firstHello, beforeMatched, afterMatched, refused, refusedDiffer, notRun,
+        exemptAtOk, exemptAfterCount, differ,
+      };
+    }
     const results = [];
-    for (const fx of fixtures) results.push(await PREV.replay(fx, W, freshEnv));
+    for (let i = 0; i < fixtures.length; i++) results.push(await replayCutoff(fixtures[i], files[i]));
     const asked = new Set();
     for (const fx of fixtures) for (const st of fx.steps) {
       const hit = /^\/relay\/v1\//.test(st.req.path) ? require(path.join(ROOT, "relay", "team.cjs")).routeOf(st.req.method, st.req.path) : null;
@@ -6924,41 +6977,37 @@ async function main() {
       "states GET", "since GET", "b GET", "b PUT"];
     const unasked = table.filter(r => !asked.has(r));
     const steps = results.reduce((n, r) => n + r.steps, 0);
-    const pinned = [], exempt = [];
-    const pinnedSteps = [];
-    const differ = results.flatMap((r, i) => r.differ.filter(d => {
-      const pin = pinnedAt(files[i], d.step);
-      if (pin) { pinnedSteps.push(pinHolds(pin, d.got) ? files[i] + ":" + d.step : files[i] + ":" + d.step + " answered " + d.got.status); return false; }
-      const ex = EXEMPT[files[i]];
-      if (ex && d.step === ex.at) { pinned.push(d.got.status === ex.status && !!d.got.json && d.got.json.error === ex.error ? files[i] : files[i] + " answered " + d.got.status); return false; }
-      if (ex && d.step >= ex.from) { exempt.push(d.step); return false; }
-      return true;
-    }).map(d => files[i] + " step " + d.step + " (" + d.what + ")"));
-    const pinnedOk = Object.keys(EXEMPT).every(f => files.indexOf(f) < 0 || pinned.indexOf(f) >= 0);
-    const folderOk = Object.keys(PINNED).every(f => files.indexOf(f) < 0 || PINNED[f].every(p => pinnedSteps.indexOf(f + ":" + p.at) >= 0));
-    check(files.length >= 2 && steps >= 100 && differ.length === 0 && pinnedOk && folderOk && unasked.length === 0,
-      "1153a the previous release's requests, " + steps + " steps over " + files.length + " frozen fixture(s) (" + files.join(", ") + "), every route of the table among them,"
-      + " are answered by this relay as they were, but for the declared exemption and the pinned folder move: " + (differ.length ? "answered otherwise at " + differ.slice(0, 3).join("; ") : "all as before")
-      + "; the raw-key enrol answered the refusal: " + (pinnedOk ? "yes" : JSON.stringify(pinned)) + "; exempt after it, covered by the branch-id fixture: " + exempt.length + " step(s)"
-      + "; the folder move refused team-lapsed: " + (folderOk ? "yes" : JSON.stringify(pinnedSteps))
+    const allOk = results.every(r => r.ok);
+    const perFx = results.map((r, i) => files[i] + ": before-hello " + r.beforeMatched.length
+      + (EXEMPT[files[i]] ? " (+exempt step " + EXEMPT[files[i]].at + " 403 bad-signature, " + r.exemptAfterCount + " exempt after)" : "")
+      + " as recorded, later non-session/lead " + r.afterMatched.length + " as recorded, hellos " + JSON.stringify(r.refused)
+      + " refused 403 " + JSON.stringify(WANT_CUTOFF) + " with R.stores dump unchanged, " + r.notRun.length + " session steps not run"
+      + (r.differ.length ? ", differ: " + r.differ.slice(0, 3).map(d => "step " + d.step + " (" + d.what + ")").join("; ") : ""));
+    check(files.length >= 2 && steps >= 100 && allOk && unasked.length === 0,
+      "1153a the previous release's requests, " + steps + " steps over " + files.length + " frozen fixture(s) (" + files.join(", ") + "), answer as recorded before the hello"
+      + " (with the declared raw-key exemption at step 3 of 2026-11-01-59713def.json), refuse recorded desk/invite hellos with 403 seat-lapsed and nothing stored"
+      + " (R.stores dump identical before/after), answer later non-session/lead steps as recorded, and run no session-needing steps: " + perFx.join("; ")
       + (unasked.length ? ", never asked: " + unasked.join(", ") : ""));
-    /* The control: the replay sees a change. With plant:session-life lifted from a copy of the core, a session past its thirty
-       minutes still reads, and the step that recorded its refusal is answered otherwise; one recorded answer altered in a copy of
-       the fixture is found at its step. */
+    /* The control: the replay sees a change. With plant:seat-ordinary lifted from a copy of the core, a desk hello with no certificate
+       opens instead of refusing seat-lapsed and turns 1153a red; one recorded answer altered before the hello is found at its step alone. */
     const how = p => p.detail.split("\n")[0] + ", sha " + (p.back ? "unchanged" : "CHANGED");
-    const control = fixtures[files.indexOf("2026-11-01-59713def-branch.json")] || fixtures[0];
-    const lifted = await liftCore("plant:session-life", async () => {
-      const r = await PREV.replay(control, W, freshEnv);
-      return r.differ.some(d => /past its thirty minutes/.test(d.what));
+    const controlIdx = files.indexOf("2026-11-01-59713def-branch.json") >= 0 ? files.indexOf("2026-11-01-59713def-branch.json") : 0;
+    const control = fixtures[controlIdx], controlFile = files[controlIdx];
+    let liftedRedAt = [];
+    const lifted = await liftCore("/* plant:seat-ordinary */", async () => {
+      const r = await replayCutoff(control, controlFile);
+      liftedRedAt = r.refusedDiffer;
+      return !r.ok && r.refusedDiffer.length > 0;
     });
     const altered = JSON.parse(JSON.stringify(control || { steps: [] }));
-    const at = altered.steps.findIndex(st => st.res && st.res.status === 410);
+    const firstHelloCtrl = results[controlIdx] ? results[controlIdx].firstHello : 0;
+    const at = altered.steps.findIndex((st, i) => i < firstHelloCtrl && st.res && st.res.status === 409);
     if (at >= 0) altered.steps[at].res.status = 404;
-    const controlFile = files[fixtures.indexOf(control)];
-    const seen = at >= 0 ? (await PREV.replay(altered, W, freshEnv)).differ.filter(d => !pinnedAt(controlFile, d.step)).map(d => d.step) : [];
+    const seen = at >= 0 ? (await replayCutoff(altered, controlFile)).differ.map(d => d.step) : [];
     check(lifted.turned && lifted.back && at >= 0 && seen.length === 1 && seen[0] === at,
-      "1153b the replay sees a change: lifting plant:session-life is answered otherwise at the expired session's step, and one recorded answer altered is found at"
-      + " its step alone, and the product file is never written: " + how(lifted) + ", altered step " + at + " found at " + JSON.stringify(seen));
+      "1153b the replay sees a change: lifting plant:seat-ordinary lets desk hellos open and turns 1153a red at steps " + JSON.stringify(liftedRedAt)
+      + ", and one recorded answer altered before the hello is found at its step alone, and the product file is never written: " + how(lifted)
+      + ", altered step " + at + " found at " + JSON.stringify(seen));
   }
 
   /* ---- 1168: an upload reserves its room before the bucket's write, and a fault gives it back and leaves no object (relay triage
