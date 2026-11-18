@@ -188,6 +188,9 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
     String(title || ""), String(name || ""), String(label || "")),
   writeCatalogSave: (text, from) => ipcRenderer.invoke("etiuda:write-catalog-save", String(text || ""),
     from && typeof from === "object" ? { id: String(from.id || ""), sha: String(from.sha || "") } : null),
+  chooseOwnSave: (title) => ipcRenderer.invoke("etiuda:choose-own-save", String(title || "")),
+  writeOwnSave: (name, text) => ipcRenderer.invoke("etiuda:write-own-save", String(name || ""), String(text || "")),
+  endOwnSave: () => ipcRenderer.invoke("etiuda:end-own-save"),
   /* The watched file, spec 11.5. Text, like the desk and for the same reason, and parsed by the
      engine's own reader: the shell has already refused anything that is not a format 2 catalog,
      and two parsers agreeing is what keeps a file the shell accepts a file the engine accepts. */

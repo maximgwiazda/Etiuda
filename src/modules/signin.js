@@ -617,6 +617,7 @@ function signinCopied(btn){
 function signinAct(act, btn){
   signinDoorRefused=false;
   if(act==="account"){ closeSigninPanel(); if(typeof hooks.openSettings==="function") hooks.openSettings("account"); return; }
+  if(act==="save-own"){ return typeof hooks.saveOwnWork==="function" ? hooks.saveOwnWork() : Promise.resolve(null); }
   if(act==="copy" || act==="copylink"){
     return signinCopy(act==="copy" ? signinV.code : signinV.busy ? signinV.link : "").then(ok=>{ if(ok) signinCopied(btn); return ok; });
   }

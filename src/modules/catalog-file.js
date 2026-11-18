@@ -7,18 +7,18 @@ import { catalogLoaded } from "./catalog-boot.js";
 import { agentName } from "./agent.js";
 import { catalogToV2, v2SignedBytes, v2Problems, v2ContentHash, v2CatKey } from "./catalog-v2.js";
 import { directWrite } from "./catalog-merge.js";
-import { CATS, intentArr, intentFieldKey, intentCount, catalogLangs, CONTENT_LANGS, tagChangedAt } from "./content-model.js";
-import { eHost, eCatalogTaken, eHasCatalogPicker, ePickCatalogFile, eHasCatalogSaver, eSaveCatalogFile, eLoadedCatalogFile, eHasBranch, eBranchIdentity, eWriteBranch, eHasShared, eSharedRead, eSharedWrite } from "./host.js";
+import { STARTER_CATS, CATS, intentArr, intentFieldKey, intentCount, catalogLangs, CONTENT_LANGS, tagChangedAt } from "./content-model.js";
+import { eHost, eCatalogTaken, eHasCatalogPicker, ePickCatalogFile, eHasCatalogSaver, eSaveCatalogFile, eHasOwnSaver, eSaveOwnFiles, eLoadedCatalogFile, eHasBranch, eBranchIdentity, eWriteBranch, eHasShared, eSharedRead, eSharedWrite } from "./host.js";
 import { CAT_LABELS_PL, CAT_LABELS_BY_LANG } from "./icons.js";
 import { fill } from "./intent-text.js";
 import { cardToExportPlain } from "./macros-json.js";
 import { FACTS, normWhoList } from "./stock.js";
-import { lsGet, ssGet, ssSet, ssDel, nsGet, nsSet, nsDel, LAYER_KEYS, layerNsOf, eLayer, lyGet, lySet, lyDel } from "./storage.js";
+import { E_NS, lsGet, ssGet, ssSet, ssDel, nsGet, nsSet, nsDel, LAYER_KEYS, layerNsOf, eLayer, eLayers, lyGet, lySet, lyDel, eDeskHome, eHomeless } from "./storage.js";
 import { cutLeaves, dismissNode } from "./motion.js";
 import { esc } from "./esc.js";
 import { newCatalogId } from "./ids.js";
 import { TAB_KEY, tabSaveTimer, saveTabSession, tabs } from "./tabs.js";
-import { t, catalogCountsLine, toast, toastRefusal } from "./ui-lang.js";
+import { t, counted, catalogCountsLine, toast, toastRefusal } from "./ui-lang.js";
 import { placeBubble, hangBubble } from "./bubble.js";
 import { originOf } from "./dom.js";
 import { BASE_CATS, BASE_M, pack, whoOptions, savePack, flushStats, retiredCards } from "./pack.js";
@@ -979,6 +979,276 @@ function importCatalogPicked(){
   });
 }
 
+/* ---- way out: collect only the person's own work from this desk, side-effect-free ------------- */
+const OWN_LANG_RE=/^[a-z]{2,8}(?:-[a-z0-9]{1,8}){0,8}$/;
+function readLayerJson(ns, suffix){
+  try{
+    const raw=lsGet(ns+suffix);
+    return raw ? JSON.parse(raw) : null;
+  }catch(e){ return null; }
+}
+function cleanOwnCard(src){
+  const out={};
+  if(!src || typeof src!=="object") return out;
+  Object.keys(src).forEach(k=>{
+    if(k==="id" || k==="removed" || k.charAt(0)==="_" || src[k]===undefined) return;
+    out[k]=src[k];
+  });
+  return out;
+}
+function inferOwnLangs(cardsList, p, activeCat){
+  const codes=[];
+  const seen=new Set();
+  const add=code=>{
+    const s=String(code||"");
+    if(!s || !OWN_LANG_RE.test(s) || seen.has(s)) return;
+    seen.add(s); codes.push({ code:s, label:s.toUpperCase() });
+  };
+  if(activeCat && Array.isArray(activeCat.langs) && activeCat.langs.length){
+    activeCat.langs.forEach(l=>{ if(l&&l.code) add(l.code); });
+  }
+  const hasPl=(p && ((p.catLabelsPl && Object.keys(p.catLabelsPl).length)
+    || (Array.isArray(p.intentCustom) && p.intentCustom.some(x=>x&&(x.pl||x.cmtPl||x.topicPl)))))
+    || cardsList.some(c=>c&&(c.pl||c.tPl||c.notePl||c.addressPl));
+  if(!codes.length){
+    add("en");
+    if(hasPl) add("pl");
+  }
+  cardsList.forEach(c=>{
+    if(!c || typeof c!=="object") return;
+    Object.keys(c).forEach(k=>{
+      if(k==="pl" || k==="tPl" || k==="notePl" || k==="addressPl") add("pl");
+      const m=/^(?:t|body|note):([a-z0-9-]+)$/.exec(k);
+      if(m) add(m[1]);
+    });
+  });
+  return codes.length ? codes : [{ code:"en", label:"EN" }];
+}
+function collectLayerCards(p, isLoose, baseById){
+  const removed=new Set(Array.isArray(p&&p.removed) ? p.removed : []);
+  const out=[], seen=new Set();
+  const ovMap=(p&&p.overrides&&typeof p.overrides==="object"&&!Array.isArray(p.overrides)) ? p.overrides : {};
+  if(!isLoose){
+    baseById.forEach((base, id)=>{
+      if(removed.has(id)) return;
+      const ov=(ovMap[id] && typeof ovMap[id]==="object") ? ovMap[id] : null;
+      if(!ov) return; /* plant:way-out-no-unedited */
+      if(ov && ov.removed) return;
+      let card=Object.assign({}, cleanOwnCard(ov), { id:String(id) });
+      if(base) card=Object.assign({}, cleanOwnCard(base), card); /* plant:way-out-merge-base */
+      seen.add(id); out.push(card);
+    });
+    Object.keys(ovMap).forEach(id=>{
+      if(seen.has(id) || removed.has(id)) return;
+      const ov=ovMap[id];
+      if(!ov || typeof ov!=="object" || ov.removed) return;
+      if(!Object.keys(ov).some(k=>k!=="changedAt" && k.charAt(0)!== "_")) return;
+      const card=Object.assign({}, cleanOwnCard(ov), { id:String(id) });
+      seen.add(id); out.push(card);
+    });
+  }
+  (Array.isArray(p&&p.custom) ? p.custom : []).forEach(m=>{
+    if(!m || !m.id || removed.has(m.id) || m.removed || seen.has(m.id)) return;
+    const card=Object.assign({}, cleanOwnCard(m), { id:String(m.id) });
+    seen.add(card.id); out.push(card);
+  });
+  return out;
+}
+function ownCatalogId(raw){
+  const slug=String(raw||"").toLowerCase().replace(/[^a-z0-9-]+/g,"-").replace(/^-+|-+$/g,"").slice(0,48);
+  const id=("own-"+(slug||"work")).slice(0,63);
+  return /^[a-z0-9][a-z0-9-]{2,63}$/.test(id) ? id : "own-work";
+}
+function ensurePrimaryText(cardsList, codes){
+  const primary=codes[0] || "en";
+  const tKey=cardFieldKey("title", primary), bKey=cardFieldKey("body", primary);
+  cardsList.forEach(c=>{
+    if(!c.c) c.c="gen";
+    if(!String(c[tKey]||"").trim()){
+      const altTitle=codes.map(k=>String(c[cardFieldKey("title",k)]||"").trim()).find(Boolean);
+      c[tKey]=altTitle || String(c.t || c.tPl || c.id || "Card");
+    }
+    if(!String(c[bKey]||"").trim()){
+      const altBody=codes.map(k=>String(c[cardFieldKey("body",k)]||"").trim()).find(Boolean);
+      c[bKey]=altBody || String(c.en || c.pl || c[tKey]);
+    }
+  });
+}
+function formatOwnFlagsFile(ns, cardsLookup){
+  const list=readLayerJson(ns, "Flags");
+  if(!Array.isArray(list) || !list.length) return "";
+  const lines=[];
+  list.forEach(fl=>{
+    if(!fl || typeof fl!=="object" || !fl.card) return;
+    const card=cardsLookup.get(fl.card) || null;
+    const langCode=String(fl.lang||"en");
+    const tKey=cardFieldKey("title", langCode);
+    const title=(card && (card[tKey] || card.t || card.tPl || (card.title && (card.title[langCode] || card.title.en)))) || fl.card;
+    const words=(fl.note && String(fl.note).trim()) ? String(fl.note).trim() : "(no note)";
+    const block=["Card: "+title+" ("+fl.card+")", "Language: "+langCode, "Flag: "+words];
+    if(fl.at || fl.date) block.push("Date: "+String(fl.at || fl.date));
+    lines.push(block.join("\n"));
+  });
+  return lines.length ? lines.join("\n\n")+"\n" : "";
+}
+function buildLayerOwnDoc(ns, p, isLoose, activeCat, baseById, ownId){
+  const cardsOut=collectLayerCards(p, isLoose, baseById);
+  if(!cardsOut.length) return null; /* plant:way-out-skip-empty */
+  const langs=inferOwnLangs(cardsOut, p, activeCat);
+  const codes=langs.map(x=>x.code);
+  const primary=codes[0] || "en";
+  ensurePrimaryText(cardsOut, codes);
+
+  const cats={}, activeCats=(activeCat && activeCat.categories) || {};
+  if(isLoose && p && p.customCats && typeof p.customCats==="object"){
+    Object.keys(p.customCats).forEach(k=>{ cats[k]=String(p.customCats[k]||k); });
+  }
+  if(p && p.customCats && typeof p.customCats==="object"){
+    Object.keys(p.customCats).forEach(k=>{ if(p.customCats[k]) cats[k]=String(p.customCats[k]); });
+  }
+  cardsOut.forEach(c=>{
+    if(!cats[c.c]) cats[c.c]=(p && p.catLabels && p.catLabels[c.c]) || activeCats[c.c] || STARTER_CATS[c.c] || c.c;
+  });
+
+  const runtime={ id:ownId, rev:1, langs, categories:cats, cards:cardsOut, icons:{}, colors:{}, roles:{ always:[] }, intents:{} };
+  if(isLoose && p){
+    codes.slice(1).forEach(code=>{
+      const packBag=catPackKey(code, primary), catBag=v2CatKey(code, primary);
+      const src=p[packBag];
+      if(src && typeof src==="object"){
+        const kept={};
+        Object.keys(src).forEach(k=>{ if(cats[k] && src[k]) kept[k]=String(src[k]); });
+        if(Object.keys(kept).length) runtime[catBag]=kept;
+      }
+    });
+    if(p.catLabels && typeof p.catLabels==="object"){
+      Object.keys(p.catLabels).forEach(k=>{ if(cats[k] && p.catLabels[k]) cats[k]=String(p.catLabels[k]); });
+    }
+    if(p.catIcons && typeof p.catIcons==="object"){
+      Object.keys(p.catIcons).forEach(k=>{ if(cats[k] && p.catIcons[k]) runtime.icons[k]=String(p.catIcons[k]); });
+    }
+    if(p.catColors && typeof p.catColors==="object"){
+      Object.keys(p.catColors).forEach(k=>{ if(cats[k] && p.catColors[k]!=null) runtime.colors[k]=p.catColors[k]; });
+    }
+    if(p.catRoles && Array.isArray(p.catRoles.always)){
+      runtime.roles.always=p.catRoles.always.filter(k=>!!cats[k]);
+    }
+    if(typeof p.facts==="string") runtime.facts=p.facts;
+    if(Array.isArray(p.who) && p.who.length) runtime.who=p.who.map(v=>String(v));
+    if(Array.isArray(p.intentCustom) && p.intentCustom.length){
+      const idToIdx=new Map();
+      const customIds=[];
+      ["clause","cmt","topic"].forEach(f=>codes.forEach(code=>{
+        const col=intentFieldKey(f, code);
+        if(col) runtime.intents[col]=[];
+      }));
+      const pClause=intentFieldKey("clause", primary);
+      p.intentCustom.forEach((ic, idx)=>{
+        if(!ic || typeof ic!=="object") return;
+        const icId=String(ic.id||("ci-"+idx));
+        idToIdx.set(icId, idx);
+        customIds.push(icId);
+        ["clause","cmt","topic"].forEach(f=>codes.forEach(code=>{
+          const col=intentFieldKey(f, code);
+          if(!col) return;
+          let val=String(ic[col]||"");
+          if(f==="clause" && code===primary && !val.trim()){
+            val=codes.map(c=>String(ic[intentFieldKey("clause",c)]||"")).find(Boolean) || ic.en || ic.pl || icId;
+          }
+          runtime.intents[col].push(val);
+        }));
+      });
+      if(customIds.length) runtime.intentIds=customIds;
+      const baseN=0;
+      cardsOut.forEach(c=>{
+        if(Array.isArray(c.intents)){
+          c.intents=c.intents.map(ref=>{
+            if(typeof ref==="number") return (ref>=baseN && ref<customIds.length) ? ref : -1;
+            const s=String(ref||"");
+            return idToIdx.has(s) ? idToIdx.get(s) : -1;
+          }).filter(i=>i>=0);
+        }
+      });
+    }
+  } else {
+    cardsOut.forEach(c=>{
+      if(Array.isArray(c.intents)) delete c.intents;
+    });
+  }
+
+  const outDoc=catalogToV2(runtime, { id:ownId, rev:1 });
+  let keepOnlyOwn=false;
+  keepOnlyOwn=true; /* plant:way-out-no-meta */
+  if(!keepOnlyOwn && p){
+    const meta={};
+    ["favourites","hidden","cardOrder","useCounts"].forEach(k=>{ if(p[k]!=null) meta[k]=p[k]; });
+    if(Object.keys(meta).length) outDoc.deskMeta=meta;
+  }
+  return JSON.stringify(outDoc, null, 2)+"\n";
+}
+function ownWorkFiles(){
+  const active=storedCatalog();
+  const activeNs=active && active.id ? layerNsOf(active) : "";
+  const seenNames=new Set();
+  const uniqueName=(stem, ext)=>{
+    let candidate=stem+ext, n=2;
+    while(seenNames.has(candidate)){ candidate=stem+"-"+(n++)+ext; }
+    seenNames.add(candidate);
+    return candidate;
+  };
+  const files=[];
+  const layers=[E_NS].concat(eLayers().filter(ns=>ns!==E_NS));
+  layers.forEach(ns=>{
+    const isLoose=ns===E_NS;
+    const isActive=!isLoose && !!activeNs && ns===activeNs;
+    const p=readLayerJson(ns, "Pack");
+    const baseById=new Map();
+    if(isActive && active && Array.isArray(active.cards)){
+      active.cards.forEach(c=>{ if(c && c.id) baseById.set(c.id, c); });
+    } else if(!isLoose && p && p.editBases && typeof p.editBases==="object"){
+      Object.keys(p.editBases).forEach(id=>{
+        const b=p.editBases[id];
+        if(b && typeof b==="object") baseById.set(id, Object.assign({}, b, { id }));
+      });
+    }
+    const stemRaw=isLoose ? "loose"
+      : isActive ? (catalogNameOfFile(catalogFileName()) || active.id || "catalog")
+      : (catalogNameOfFile(lsGet(ns+"SharedFile")) || ("catalog-"+ns.slice(1,-1)));
+    const stem=catalogFileStem(stemRaw);
+    if(p){
+      const ecText=buildLayerOwnDoc(ns, p, isLoose, isActive ? active : null, baseById, ownCatalogId(stem+"-"+(isLoose?"loose":ns.slice(1,-1))));
+      if(ecText) files.push({ name:uniqueName(stem+"-own", ".ec"), text:ecText });
+    }
+    const lookup=new Map(baseById);
+    (Array.isArray(p&&p.custom) ? p.custom : []).forEach(c=>{ if(c&&c.id && !lookup.has(c.id)) lookup.set(c.id, c); });
+    let flagsText="";
+    flagsText=formatOwnFlagsFile(ns, lookup); /* plant:way-out-flags-facts */
+    if(flagsText) files.push({ name:uniqueName(stem+"-flags", ".txt"), text:flagsText });
+  });
+  return files;
+}
+async function saveOwnWork(){
+  const files=ownWorkFiles();
+  if(!files.length){
+    toast(t("Nothing here is yours to save."));
+    return { ok:true, count:0, files:[] };
+  }
+  if(!eHasOwnSaver()){
+    toastRefusal(t("This build cannot save your own work as files."));
+    return { ok:false, unsupported:true, count:0 };
+  }
+  const res=await eSaveOwnFiles(t("Save your own work as files…"), files);
+  if(!res || res.canceled) return { ok:false, canceled:true };
+  if(!res.ok){
+    toastRefusal(t("{FILE} could not be saved.").split("{FILE}").join(res.name || ""));
+    return { ok:false, name:res.name||"", saved:res.saved||[] };
+  }
+  const count=(res.saved||[]).length;
+  const folderShown=eHomeless(res.dir, eDeskHome()) || res.dir || "";
+  toast(counted(count, "Saved {N} file to {FOLDER}.", "Saved {N} files to {FOLDER}.").split("{FOLDER}").join(folderShown));
+  return { ok:true, count, files:res.saved||[], dir:res.dir||"" };
+}
+
 export {
   wireCatalogDrop,
   catalogMacroCount,
@@ -1008,5 +1278,7 @@ export {
   writeDeskBranch,
   scheduleDeskBranch,
   sharedOwnPin,
-  sharedOwnWrite
+  sharedOwnWrite,
+  ownWorkFiles,
+  saveOwnWork
 };

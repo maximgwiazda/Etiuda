@@ -345,6 +345,30 @@ function eSaveCatalogFile(title,name,label,build,from){
       .catch(()=>failed());
   }catch(e){ return Promise.resolve(failed()); }
 }
+/* Own work's folder picker, then each personal file written into that folder with no silent overwrite. */
+function eHasOwnSaver(){
+  const h=eHost();
+  return !!h && typeof h.chooseOwnSave==="function" && typeof h.writeOwnSave==="function";
+}
+async function eSaveOwnFiles(title, files){
+  const h=eHost();
+  if(!h || typeof h.chooseOwnSave!=="function" || typeof h.writeOwnSave!=="function") return null;
+  const chosen=await Promise.resolve(h.chooseOwnSave(String(title||"")));
+  if(!chosen || !chosen.dir) return { canceled: true };
+  const saved=[];
+  try{
+    for(const f of (files||[])){
+      const w=await Promise.resolve(h.writeOwnSave(String((f&&f.name)||""), String((f&&f.text)||"")));
+      if(!w || w.ok!==true) return { canceled: false, ok: false, name: String((w&&w.name)||(f&&f.name)||""), saved };
+      saved.push(String(w.name||(f&&f.name)||""));
+    }
+    return { canceled: false, ok: true, dir: String(chosen.dir||""), saved };
+  }catch(e){
+    return { canceled: false, ok: false, name: "", saved };
+  }finally{
+    if(typeof h.endOwnSave==="function"){ try{ await Promise.resolve(h.endOwnSave()); }catch(e){} }
+  }
+}
 /* The desk's branch, both halves through the host and neither in a browser. The identity is the
    public halves {id,key,box} or null where no key can be kept safely; the write answers {ok}, and an
    empty text takes the desk's own file for that stem away. Asked with false, the identity makes nothing. */
@@ -617,6 +641,8 @@ export {
   eCatalogMtime,
   eHasCatalogPicker,
   eHasCatalogSaver,
+  eHasOwnSaver,
+  eSaveOwnFiles,
   eHost,
   eHotkey,
   eHotkeyLabel,

@@ -34,7 +34,7 @@ const nodeRequire = createRequire(import.meta.url);
    open now asks machine policy whether to keep the desk (section 12), and 77z drives exactly that. Before the shell loads. */
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 140;
+const EXPECTED = 157;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const ASIDE_D6_LOGIN = nodeRequire("./off-windows.cjs").offWindows("D6-login",
   "the shell sets no login item off Windows, so Reset's turn-off has nothing to reach");
@@ -103,14 +103,16 @@ RecWin.prototype.setBounds = function (b) { if (b) Object.assign(this.bounds, b)
 RecWin.fromWebContents = () => inert;
 RecWin.getAllWindows = () => madeWins;
 const onHandlers = {}, invokeHandlers = {}, appOn = {};
-let appQuits = 0, loginApplied = null;
+let appQuits = 0, loginApplied = null, dialogOpen = null;
 const madeNotes = [], madeTrays = [];
 const electron = {
   app: { getPath: () => UD, setPath: noop, requestSingleInstanceLock: () => false, quit: () => { appQuits++; }, on: (k, fn) => { appOn[k] = fn; }, getVersion: () => "0.0.0",
          getLocale: () => "en", getPreferredSystemLanguages: () => ["en"],
          whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop, hasSwitch: () => false } },
   ipcMain: { on: (ch, fn) => { onHandlers[ch] = fn; }, handle: (ch, fn) => { invokeHandlers[ch] = fn; } },
-  BrowserWindow: RecWin, Menu: inert, dialog: inert, net: inert, protocol: inert, session: inert,
+  BrowserWindow: RecWin, Menu: inert,
+  dialog: { showOpenDialog: (...a) => (dialogOpen ? dialogOpen(...a) : Promise.resolve({ canceled: true, filePaths: [] })), showSaveDialog: () => Promise.resolve({ canceled: true }) },
+  net: inert, protocol: inert, session: inert,
   screen: inert, shell: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" },
 };
 /* safeStorage as far as main.js asks of it: a reversible sealing that shows nothing of what it holds. */
@@ -2807,6 +2809,349 @@ try {
       "952g lifting plant:theme-choice-saved loses the choice at the restart (" + JSON.stringify(L952) + ")");
   }
   try { fs.rmSync(themeLab, { recursive: true, force: true }); } catch { /* a temp folder */ }
+
+  /* ---- 83: the way out — save only what is yours, leaving the desk untouched ---------------- */
+  const UL83 = await import(PLAIN("ui-lang.js"));
+  const FL83 = await import(PLAIN("card-flag.js"));
+  const SI83 = await import(PLAIN("signin.js"));
+  const out83Root = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-way-out-"));
+  const dialogWas83 = dialogOpen, hookWas83 = HK.hooks.saveOwnWork, hostWas83 = window.E_HOST;
+  const toasts83 = [];
+  const docCreateWas83 = globalThis.document;
+  try {
+    const ownFn = typeof CF.ownWorkFiles === "function" ? CF.ownWorkFiles : null;
+    const saveFn = typeof CF.saveOwnWork === "function" ? CF.saveOwnWork : null;
+    HK.hooks.saveOwnWork = saveFn || noop;
+
+    // 83a: empty / meta-only desk + unnoted neighbour e1zz~ layer -> 0 files, no dialog opened
+    ST.lsDel(CT.E_CATALOG_STORE);
+    (ST.eLayers() || []).forEach(ns => {
+      ["Pack", "Flags", "FlagEnds", "SharedFile"].forEach(k => ST.lsDel(ns + k));
+    });
+    ST.lsDel(ST.E_LAYERS);
+    [ST.E_NS + "Pack", ST.E_NS + "Flags"].forEach(k => ST.lsDel(k));
+    ST.lsSet("e1zz~Pack", JSON.stringify({ v: 1, custom: [{ id: "u:foreign", c: "gen", t: "Foreign", en: "Neighbour body" }] }));
+    ST.lsSet(ST.E_NS + "Pack", JSON.stringify({
+      v: 1, favourites: ["c-1"], hidden: ["c-2"], cardOrder: ["c-1"],
+      useCounts: { "c-1": 4 }, custom: [], overrides: {}
+    }));
+    CB.applyBootCatalog(); PK.resetPack(); PK.pack.baseCards = null; RB.rebuildCards();
+    await tick(20);
+    let dialogs83a = 0;
+    dialogOpen = async () => { dialogs83a++; return { canceled: true, filePaths: [] }; };
+    const files83a = ownFn ? ownFn() : null;
+    const res83a = saveFn ? await saveFn() : null;
+    check(Array.isArray(files83a) && files83a.length === 0 && dialogs83a === 0 && !!res83a && res83a.count === 0,
+      "83a THE CONTROL: empty or meta-only desk produces 0 files without opening folder dialog (files "
+      + JSON.stringify(files83a && files83a.length) + ", dialogs " + dialogs83a + ")");
+
+    // Build all three layers:
+    // (1) Inactive empty layer (meta-only) + inactive catalog layer with editBases, override, custom card & flag
+    const catInactive = {
+      format: 2, kind: "etiuda-catalog", id: "lamp-inactive", rev: 2,
+      langs: [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }],
+      tags: [{ id: "t-old", kind: "shelf", label: { en: "Old shelf", pl: "Stara polka" } }],
+      cards: [{ id: "c-inc-1", shelf: "t-old", bodyShape: "plain",
+        title: { en: "Inactive original title", pl: "Stary tytul" },
+        body: { en: "Kept inactive body words.", pl: "Zachowana tresc." } }]
+    };
+    CF.activateCatalog(CT.parseCatalogFile(JSON.stringify(catInactive)), { file: "inactive-one.ec" });
+    CB.applyBootCatalog(); PK.resetPack(); PK.pack.baseCards = null; RB.rebuildCards();
+    PK.pack.overrides = { "c-inc-1": { t: "Edited inactive card", changedAt: "2026-11-15T10:00:00.000Z" } };
+    PK.pack.custom = [{ id: "u:inc-2", c: "t-old", t: "My inactive custom card", en: "Custom inactive body." }];
+    PK.savePack(); RB.rebuildCards();
+
+    const catEmpty = {
+      format: 2, kind: "etiuda-catalog", id: "lamp-empty", rev: 1,
+      langs: [{ code: "en", label: "EN" }],
+      tags: [{ id: "t-em", kind: "shelf", label: { en: "Empty shelf" } }],
+      cards: [{ id: "c-e1", shelf: "t-em", bodyShape: "plain", title: { en: "Untouched empty" }, body: { en: "Nothing changed." } }]
+    };
+    CF.activateCatalog(CT.parseCatalogFile(JSON.stringify(catEmpty)), { file: "empty-one.ec" });
+    CB.applyBootCatalog(); PK.resetPack(); PK.pack.baseCards = null; RB.rebuildCards();
+    PK.pack.favourites = ["c-e1"]; PK.pack.hidden = ["c-e1"]; PK.pack.cardOrder = ["c-e1"]; PK.pack.useCounts = { "c-e1": 9 };
+    PK.savePack(); RB.rebuildCards();
+
+    // (2) Active catalog (lamp-shop) with unedited cards, edited card, custom card, meta, and flag
+    const catActive = {
+      format: 2, kind: "etiuda-catalog", id: "lamp-shop", rev: 4,
+      langs: [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }],
+      tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers", pl: "Otwieracze" } }],
+      cards: ["a", "b", "c"].map(x => ({
+        id: "c-" + x, shelf: "t-op", bodyShape: "plain",
+        title: { en: "Card " + x + " za\u017c\u00f3\u0142\u0107", pl: "Karta " + x },
+        body: { en: "Kept body " + x + ".", pl: "Tresc " + x + "." }
+      }))
+    };
+    CF.activateCatalog(CT.parseCatalogFile(JSON.stringify(catActive)), { file: "lamps.ec" });
+    CB.applyBootCatalog(); PK.resetPack(); PK.pack.baseCards = null; RB.rebuildCards();
+    PK.pack.overrides = { "c-a": { t: "My edited A" } };
+    PK.pack.custom = [{ id: "u:act-1", c: "t-op", t: "My active card", en: "Active custom body.", pl: "Moja aktywna tresc." }];
+    PK.pack.favourites = ["c-b"]; PK.pack.hidden = ["c-c"]; PK.pack.cardOrder = ["c-c", "c-a"];
+    PK.pack.useCounts = { "c-b": 5 }; PK.pack.useAt = { "c-b": "2026-11-10" };
+    PK.savePack(); RB.rebuildCards();
+    ST.lsSet(ST.layerNsOf({ id: "lamp-shop" }) + "Flags", JSON.stringify([
+      { card: "c-b", lang: "en", seen: "a".repeat(64), r: "2".repeat(32), note: "Typo in card B" }
+    ]));
+    ST.lsSet(ST.layerNsOf({ id: "lamp-inactive" }) + "Flags", JSON.stringify([
+      { card: "c-inc-1", lang: "pl", seen: "0".repeat(64), r: "1".repeat(32), note: "Check old wording" }
+    ]));
+
+    // (3) Loose layer populated directly in ST (cards + customCats + catLabelsPl + icons + colors + roles + intents + facts + who)
+    ST.lsSet(ST.E_NS + "Pack", JSON.stringify({
+      v: 1,
+      custom: [{ id: "u:loose-1", c: "mycat", t: "Loose greeting", en: "Hello from loose card.", pl: "Czesc z luźnej karty.", intents: [0] }],
+      overrides: {},
+      customCats: { mycat: "Personal shelf" },
+      catLabels: { mycat: "Personal shelf" },
+      catLabelsPl: { mycat: "Polka wlasna" },
+      catIcons: { mycat: "star" },
+      catColors: { mycat: 2 },
+      catRoles: { always: ["mycat"] },
+      intentCustom: [{ id: "ci-1", en: "Ask status", pl: "Zapytaj o status", cmt: "Checked status", topic: "status" }],
+      facts: "Desk quick facts here",
+      who: ["Support team"],
+      favourites: ["u:loose-1"], hidden: [], cardOrder: ["u:loose-1"], useCounts: { "u:loose-1": 4 }
+    }));
+
+    await tick(30);
+    const deskBytesBefore = fs.readFileSync(DESK);
+    const baksBefore = listing(UD).filter(n => /bak/i.test(n)).join();
+    const folderBefore = walk(FOLDER).map(f => f + ":" + fs.statSync(f).size).sort().join();
+    const historyFile = path.join(UD, "catalog-history.json");
+    const histBefore = fs.existsSync(historyFile) ? fs.readFileSync(historyFile, "utf8") : null;
+
+    const pure1 = ownFn ? ownFn() : [];
+    const pure2 = ownFn ? ownFn() : [];
+    const out83b = path.join(out83Root, "pick-one");
+    fs.mkdirSync(out83b, { recursive: true });
+    let dialogs83b = 0;
+    dialogOpen = async () => { dialogs83b++; return { canceled: false, filePaths: [out83b] }; };
+    const res83b = saveFn ? await saveFn() : null;
+    const savedNames = listing(out83b).sort();
+    const ecNames = savedNames.filter(n => n.endsWith(".ec"));
+    const txtNames = savedNames.filter(n => n.endsWith(".txt"));
+
+    check(!!res83b && res83b.ok && dialogs83b === 1 && JSON.stringify(pure1) === JSON.stringify(pure2)
+        && savedNames.length === 5 && ecNames.length === 3 && txtNames.length === 2
+        && !savedNames.some(n => n.includes("empty") || n.includes("foreign") || n.includes("1zz")),
+      "83b saves loose, active and inactive own files plus flags .txt on one folder pick, skipping empty and foreign layers (files "
+      + JSON.stringify(savedNames) + ", dialogs " + dialogs83b + ")");
+
+    let parseAllOk = ecNames.length === 3, contentOk = ecNames.length === 3, parsedWhy = "";
+    const parsedDocs = {};
+    for (const n of ecNames) {
+      try {
+        const raw = fs.readFileSync(path.join(out83b, n), "utf8");
+        const j = JSON.parse(raw);
+        parsedDocs[n] = j;
+        const probs = V2.v2Problems(j);
+        const pc = CT.parseCatalogFile(raw);
+        if (probs.length || !pc || !pc.cards.length) { parseAllOk = false; parsedWhy += n + ":" + (probs[0] || "parse"); }
+        const forbiddenTop = ["favourites", "hidden", "cardOrder", "useCounts", "useAt", "days", "Stats", "deskMeta", "sample", "sig", "grew", "desk"];
+        if (forbiddenTop.some(k => k in j)) { contentOk = false; parsedWhy += n + ":forbidden "; }
+      } catch (ex) { parseAllOk = false; parsedWhy += n + ":" + (ex && ex.message); }
+    }
+    const allTexts = Object.values(parsedDocs).map(j => JSON.stringify(j)).join("\n");
+    const activeDoc = Object.values(parsedDocs).find(j => (j.cards || []).some(c => c.id === "c-a"));
+    const inactiveDoc = Object.values(parsedDocs).find(j => (j.cards || []).some(c => c.id === "c-inc-1"));
+    const looseDoc = Object.values(parsedDocs).find(j => (j.cards || []).some(c => c.id === "u:loose-1"));
+    const actEditCard = activeDoc && (activeDoc.cards || []).find(c => c.id === "c-a");
+    const incEditCard = inactiveDoc && (inactiveDoc.cards || []).find(c => c.id === "c-inc-1");
+    const looseShelf = looseDoc && (looseDoc.tags || []).find(t => t.id === "mycat");
+    const looseReq = looseDoc && (looseDoc.tags || []).find(t => t.kind === "request");
+    check(parseAllOk && contentOk
+        && allTexts.indexOf("\"Card b ") < 0 && allTexts.indexOf("\"Card c ") < 0 && allTexts.indexOf("Untouched empty") < 0
+        && !!actEditCard && (actEditCard.title || {}).en === "My edited A" && (actEditCard.body || {}).en === "Kept body a."
+        && !!incEditCard && (incEditCard.title || {}).en === "Edited inactive card" && (incEditCard.body || {}).en === "Kept inactive body words."
+        && !!looseShelf && (looseShelf.label || {}).pl === "Polka wlasna" && looseShelf.icon === "star" && looseShelf.hue === 2 && looseShelf.supporting === true
+        && !!looseReq && (looseReq.clause || {}).en === "Ask status"
+        && looseDoc.facts === "Desk quick facts here" && Array.isArray(looseDoc.role) && looseDoc.role[0] === "Support team",
+      "83b2 every .ec passes parseCatalogFile & v2Problems; unedited cards and meta omitted; overrides merged with kept base; loose keeps shelf/intent/facts/who (" + parsedWhy + ")");
+
+    const flagsTexts = txtNames.map(n => fs.readFileSync(path.join(out83b, n), "utf8")).join("\n---\n");
+    check(txtNames.length === 2
+        && flagsTexts.indexOf("Typo in card B") >= 0 && flagsTexts.indexOf("Card b") >= 0 && flagsTexts.indexOf("en") >= 0
+        && flagsTexts.indexOf("Check old wording") >= 0 && flagsTexts.indexOf("Inactive original title") >= 0 && flagsTexts.indexOf("pl") >= 0,
+      "83b3 each flags .txt carries UTF-8 card title, language and flag note");
+
+    const baksAfter = listing(UD).filter(n => /bak/i.test(n)).join();
+    const folderAfter = walk(FOLDER).map(f => f + ":" + fs.statSync(f).size).sort().join();
+    const histAfter = fs.existsSync(historyFile) ? fs.readFileSync(historyFile, "utf8") : null;
+    check(Buffer.compare(fs.readFileSync(DESK), deskBytesBefore) === 0 && baksAfter === baksBefore
+        && folderAfter === folderBefore && histAfter === histBefore,
+      "83b4 desk.json byte-for-byte identical, no backups written, catalog folder and catalog history untouched");
+
+    // 83c: never silently overwrite an existing file of the same name
+    const sentinels = {};
+    for (const n of savedNames) {
+      fs.writeFileSync(path.join(out83b, n), "SENTINEL-" + n, "utf8");
+      sentinels[n] = Buffer.from("SENTINEL-" + n, "utf8");
+    }
+    const res83c = saveFn ? await saveFn() : null;
+    const afterCol = listing(out83b).sort();
+    const keptSentinels = savedNames.every(n => Buffer.compare(fs.readFileSync(path.join(out83b, n)), sentinels[n]) === 0);
+    const hasSuffixed = savedNames.every(n => {
+      const ext = path.extname(n), stem = n.slice(0, n.length - ext.length);
+      return afterCol.includes(stem + " (2)" + ext);
+    });
+    check(!!res83c && res83c.ok && keptSentinels && hasSuffixed,
+      "83c existing files are never overwritten; numbered copies (2) are written beside them (" + JSON.stringify(afterCol) + ")");
+
+    // 83d: dialog cancel + plain browser
+    const out83d = path.join(out83Root, "pick-cancel");
+    fs.mkdirSync(out83d, { recursive: true });
+    dialogOpen = async () => ({ canceled: true, filePaths: [] });
+    const resCancel = saveFn ? await saveFn() : null;
+    window.E_HOST = undefined;
+    const resBrowser = saveFn ? await saveFn() : null;
+    window.E_HOST = hostWas83;
+    check(!!resCancel && resCancel.canceled === true && listing(out83d).length === 0
+        && !!resBrowser && resBrowser.unsupported === true && listing(out83d).length === 0,
+      "83d cancel writes nothing silently; plain browser (no E_HOST) does nothing harmful and reports unsupported");
+
+    // 83e: works when desk is stopped + reachable via signin.signinAct("save-own")
+    const out83e = path.join(out83Root, "pick-stopped");
+    fs.mkdirSync(out83e, { recursive: true });
+    dialogOpen = async () => ({ canceled: false, filePaths: [out83e] });
+    const prevWorks = ST.lsGet("eWorks");
+    ST.lsSet("eWorks", JSON.stringify({ works: false, stoppedAt: "2026-11-18T00:00:00.000Z" }));
+    const res83e = await SI83.signinAct("save-own");
+    if (prevWorks == null) ST.lsDel("eWorks"); else ST.lsSet("eWorks", prevWorks);
+    check(!!res83e && res83e.ok && listing(out83e).length === 5,
+      "83e works when desk is stopped via signinAct(\"save-own\") (" + JSON.stringify(listing(out83e)) + ")");
+
+    // 83f: IPC stranger frame, path traversal / bad extension, stale session without choose
+    const strangerFrame = { parent: null, url: "https://stranger.example/x.html" };
+    const strangerChoose = invokeHandlers["etiuda:choose-own-save"]
+      ? await invokeHandlers["etiuda:choose-own-save"](eventFor(strangerFrame), "Test") : "missing";
+    const out83f = path.join(out83Root, "pick-sec");
+    fs.mkdirSync(out83f, { recursive: true });
+    dialogOpen = async () => ({ canceled: false, filePaths: [out83f] });
+    const chosen83f = await REAL_HOST.chooseOwnSave("Test");
+    const travRes = await REAL_HOST.writeOwnSave("../escape.ec", "{}");
+    const exeRes = await REAL_HOST.writeOwnSave("evil.exe", "bad");
+    const strangerWrite = invokeHandlers["etiuda:write-own-save"]
+      ? await invokeHandlers["etiuda:write-own-save"](eventFor(strangerFrame), "ok.ec", "{}") : "missing";
+    if (typeof REAL_HOST.endOwnSave === "function") await REAL_HOST.endOwnSave();
+    const afterEndWrite = await REAL_HOST.writeOwnSave("late.ec", "{}");
+    check(strangerChoose === null && !!chosen83f && !fs.existsSync(path.join(out83Root, "escape.ec"))
+        && !!exeRes && exeRes.ok === false && strangerWrite === null && afterEndWrite === null,
+      "83f refuses stranger frames, rejects non-.ec/.txt, contains paths inside chosen folder, and closes write session after endOwnSave");
+
+    // 83g: EN & PL UI strings
+    const langWas83 = ST.lsGet("eUiLang");
+    ST.lsSet("eUiLang", "pl");
+    const plStrings = [
+      UL83.t("Save your own work as files…"),
+      UL83.t("Nothing here is yours to save."),
+      UL83.t("This build cannot save your own work as files."),
+      UL83.counted(1, "Saved {N} file to {FOLDER}.", "Saved {N} files to {FOLDER}."),
+      UL83.counted(2, "Saved {N} file to {FOLDER}.", "Saved {N} files to {FOLDER}."),
+      UL83.counted(5, "Saved {N} file to {FOLDER}.", "Saved {N} files to {FOLDER}."),
+    ];
+    if (langWas83 == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas83);
+    const stringsOk = plStrings.every((s, idx) => typeof s === "string" && s.length > 0
+        && !/^PLACEHOLDER/i.test(s) && !/[\u2013\u2014]/.test(s)
+        && (idx > 2 || s !== ["Save your own work as files…", "Nothing here is yours to save.", "This build cannot save your own work as files."][idx]))
+      && plStrings[3] === "Zapisano 1 plik do folderu {FOLDER}."
+      && plStrings[4] === "Zapisano 2 pliki do folderu {FOLDER}."
+      && plStrings[5] === "Zapisano 5 plik\u00f3w do folderu {FOLDER}.";
+    check(stringsOk, "83g EN & PL strings present without PLACEHOLDER or em/en dashes, and singular/plural forms resolve (" + JSON.stringify(plStrings) + ")");
+
+    // 83h: 7 planted-fault checks (scratch copies)
+    const runModulePlant = async mark => {
+      const sc = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-wo-plant-"));
+      try {
+        fs.cpSync(path.join(ROOT, "src", "modules"), sc, { recursive: true });
+        const at = path.join(sc, "catalog-file.js"), lines = fs.readFileSync(at, "utf8").split("\n");
+        const i = lines.findIndex(l => l.includes("/* plant:" + mark + " */"));
+        if (i < 0) return { err: "absent:" + mark };
+        lines.splice(i, 1);
+        fs.writeFileSync(at, lines.join("\n"), "utf8");
+        await tick(20);
+        const mod = await import(pathToFileURL(at).href + "?p=" + Math.random());
+        return { files: mod.ownWorkFiles() };
+      } catch (ex) { return { err: String(ex && ex.message || ex) }; }
+      finally { fs.rmSync(sc, { recursive: true, force: true }); }
+    };
+    const runMainPlant = async (mark, fn) => {
+      let src = shellSrc("main.js");
+      const lines = src.split("\n"), i = lines.findIndex(l => l.includes("/* plant:" + mark + " */"));
+      if (i < 0) return { err: "absent:" + mark };
+      lines.splice(i, 1);
+      src = lines.join("\n");
+      const inv = {};
+      const isoEl = Object.assign({}, electron, {
+        app: Object.assign({}, electron.app, { on: noop, whenReady: () => new Promise(noop) }),
+        ipcMain: { on: noop, handle: (ch, h) => { inv[ch] = h; } },
+      });
+      new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test", src)(
+        n => (n === "electron" ? isoEl : nodeRequire(n)),
+        path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet, {});
+      return fn(inv);
+    };
+
+    if (PLANTS_OFF) {
+      skip("83h1 lifting plant:way-out-no-unedited leaks unedited catalog cards");
+      skip("83h2 lifting plant:way-out-no-meta leaks desk meta (favourites/hidden/order/counts)");
+      skip("83h3 lifting plant:way-out-merge-base loses kept base words on overrides");
+      skip("83h4 lifting plant:way-out-skip-empty emits empty catalog files");
+      skip("83h5 lifting plant:way-out-flags-facts drops the flags .txt file");
+      skip("83h6 lifting plant:way-out-no-overwrite silently overwrites existing file");
+      skip("83h7 lifting plant:way-out-from-engine lets stranger frame choose own save folder");
+    } else {
+      const p1 = await runModulePlant("way-out-no-unedited");
+      check(!p1.err && Array.isArray(p1.files) && p1.files.some(f => f.text.indexOf("\"Card b ") >= 0),
+        "83h1 lifting plant:way-out-no-unedited leaks unedited catalog card (" + JSON.stringify(p1.err || "checked") + ")");
+
+      const p2 = await runModulePlant("way-out-no-meta");
+      check(!p2.err && Array.isArray(p2.files) && p2.files.some(f => f.text.indexOf("deskMeta") >= 0 && f.text.indexOf("favourites") >= 0),
+        "83h2 lifting plant:way-out-no-meta leaks favourites/hidden/order/counts (" + JSON.stringify(p2.err || "checked") + ")");
+
+      const p3 = await runModulePlant("way-out-merge-base");
+      const p3Card = (!p3.err && Array.isArray(p3.files))
+        ? p3.files.filter(f => f.name.endsWith(".ec")).map(f => JSON.parse(f.text)).flatMap(d => d.cards || []).find(c => c.id === "c-a")
+        : null;
+      check(!p3.err && (!p3Card || !(p3Card.body && p3Card.body.en === "Kept body a.")),
+        "83h3 lifting plant:way-out-merge-base drops kept base words on override (" + JSON.stringify(p3.err || (p3Card && p3Card.body)) + ")");
+
+      const p4 = await runModulePlant("way-out-skip-empty");
+      check(!p4.err && Array.isArray(p4.files) && p4.files.some(f => f.text.indexOf("\"cards\":[]") >= 0 || f.text.indexOf("\"cards\": []") >= 0),
+        "83h4 lifting plant:way-out-skip-empty emits an empty cards array file (" + JSON.stringify(p4.err || (p4.files && p4.files.length)) + ")");
+
+      const p5 = await runModulePlant("way-out-flags-facts");
+      check(!p5.err && Array.isArray(p5.files) && p5.files.every(f => !f.name.endsWith(".txt")),
+        "83h5 lifting plant:way-out-flags-facts omits the flags .txt file (" + JSON.stringify(p5.err || (p5.files && p5.files.map(f => f.name))) + ")");
+
+      const p6 = await runMainPlant("way-out-no-overwrite", async inv => {
+        const d6 = path.join(out83Root, "plant-overwrite");
+        fs.mkdirSync(d6, { recursive: true });
+        fs.writeFileSync(path.join(d6, "same.ec"), "KEEP", "utf8");
+        dialogOpen = async () => ({ canceled: false, filePaths: [d6] });
+        await inv["etiuda:choose-own-save"](eventFor(ENGINE_FRAME), "Test");
+        const w = await inv["etiuda:write-own-save"](eventFor(ENGINE_FRAME), "same.ec", "OVERWRITTEN");
+        if (inv["etiuda:end-own-save"]) await inv["etiuda:end-own-save"](eventFor(ENGINE_FRAME));
+        return { w, body: fs.readFileSync(path.join(d6, "same.ec"), "utf8") };
+      });
+      check(!p6.err && p6.body === "OVERWRITTEN",
+        "83h6 lifting plant:way-out-no-overwrite silently overwrites existing file (" + JSON.stringify(p6) + ")");
+
+      const p7 = await runMainPlant("way-out-from-engine", async inv => {
+        dialogOpen = async () => ({ canceled: false, filePaths: [out83Root] });
+        return inv["etiuda:choose-own-save"](eventFor(strangerFrame), "Evil");
+      });
+      check(!!p7 && !p7.err && p7.dir === out83Root,
+        "83h7 lifting plant:way-out-from-engine lets stranger frame choose folder (" + JSON.stringify(p7) + ")");
+    }
+  } finally {
+    dialogOpen = dialogWas83;
+    HK.hooks.saveOwnWork = hookWas83;
+    window.E_HOST = hostWas83;
+    globalThis.document = docCreateWas83;
+    ST.lsDel("e1zz~Pack");
+    try { fs.rmSync(out83Root, { recursive: true, force: true }); } catch { /* temp */ }
+  }
 } catch (e) {
   failed++;
   console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));

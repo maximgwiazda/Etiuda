@@ -160,6 +160,7 @@ export {
   commentLang,
   setIntentIds,
   resetContent,
+  STARTER_CATS,
   CATS,
   SW_IDS,
   setTagDates,

@@ -65,6 +65,7 @@ const SLOTS = [
   "restartDesk",
   "takeSyncedDesk",
   "scheduleDeskBranch",
+  "saveOwnWork",
 ];
 
 const hooks = Object.create(null);
