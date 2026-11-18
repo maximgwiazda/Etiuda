@@ -4057,6 +4057,7 @@ let teamPinFrom = {};                          // team id -> "invite", "policy" 
 let teamRingAt = null;                         // {root, relay, ring}: the channel and signed ring of the file last heeded at root; this run only
 let teamHeadT = {};                            // team id -> highest t seen in a genuine head; this run only
 let teamShown = {};                            // team id -> {lead?, folder?}: the lead's name an invitation gave, the folder its file was heeded in
+const teamElsewhere = new Set();               // team ids whose last file read names a relay this build does not use (heededChannelOf)
 const teamOpened = new Set();                  // catalog ids this desk has opened from an envelope, kept in the desk envelope
 const teamSeen = new Set();                    // teams whose pinned lead key the agent has been shown, kept in the desk envelope
 const teamBarred = new Set();                  // teams whose lead the agent forgot: no first admission but by an answered request
@@ -4117,6 +4118,25 @@ function teamChannelOf(doc) {
   if (c.kind !== "relay" || typeof c.rt !== "string" || !/^[0-9a-f]{32}$/.test(c.rt) || typeof c.url !== "string"
     || c.url.length > 512 || !/^https:\/\/[a-z0-9.-]+(?::[0-9]{1,5})?(?:\/[A-Za-z0-9._~-]+)*\/?$/.test(c.url)) return null;
   return { kind: "relay", rt: c.rt, url: c.url };
+}
+/* THE ONE PLACE A TEAM'S RELAY ADDRESS IS ASKED: teamChannelOf's channel, where a relay at an address knownRelayAddress does not
+   take (the rule an invitation keeps) is {kind: "elsewhere"}, never a relay channel. Every write of teamChannel takes it from here.
+   teamChannelOf stays the shape alone, for the readers that slice it out with no neighbours. */
+function heededChannelOf(doc) {
+  const c = teamChannelOf(doc);
+  let known = true;
+  known = !c || c.kind !== "relay" || knownRelayAddress(c.url); /* plant:channel-known */
+  return known ? c : { kind: "elsewhere" };
+}
+/* Said once for team `team` whose file names a relay this build does not use, and kept as the fact its row shows until a file
+   names a known one again; the address is not said or handed on. */
+function relayElsewhereSay(team) {
+  const w = shellWords(), lead = (teamShown[team] || {}).lead;
+  const name = typeof lead === "string" && lead ? w.teamOfLead.split("{LEAD}").join(lead) : w.teamUnnamed;
+  teamSay(w.relayElsewhere.split("{TEAM}").join(name));
+  if (teamElsewhere.has(team)) return;
+  teamElsewhere.add(team); /* plant:elsewhere-fact */
+  sendJoin(theWindow);
 }
 /* THE LEAD'S SWITCH FOR READING A CATALOG THE TEAM DOES NOT LIST: the team file's `content`, signed with the rest of it, as
    {by, at}, or null, which is off. Read in this one shape only, so a field or a format this build does not know reads as off. */
@@ -5008,11 +5028,14 @@ function heedTeam() {
   if (r.stop || r.needKey) return;
   /* A whole file is heeded only where its rev and channel read, and where it is not an older epoch than the floor kept
      for its team and lead key, nor a lower rev at that epoch. */
-  const rev = teamRevOf(doc), channel = teamChannelOf(doc);
+  const rev = teamRevOf(doc), channel = heededChannelOf(doc);
+  /* Nothing in such a file is used, as with a channel this desk does not read: the team, its catalog and its channel stay. */
+  if (channel && channel.kind === "elsewhere") { relayElsewhereSay(r.team || doc.id); return; } /* plant:elsewhere-heed */
   if (rev === null || channel === null) {
     teamSay(used + " names a rev or a channel this desk does not read, so nothing in it is used");
     return;
   }
+  if (teamElsewhere.delete(r.team || doc.id)) sendJoin(theWindow); /* plant:elsewhere-clear */
   const floors = teamRevSeen[r.team] || {}, floor = floors[doc.lead.public];
   if (teamRevRefused(floor, r.epoch, rev)) {
     const why = r.epoch < floor.epoch
@@ -6262,7 +6285,8 @@ function undoInvite(team, b, inv) {
   if (b.pin) teamPins[team] = b.pin; else delete teamPins[team];
   if (b.from) teamPinFrom[team] = b.from; else delete teamPinFrom[team];
   if (b.shown) teamShown[team] = b.shown; else delete teamShown[team];
-  if (b.channel) teamChannel[team] = b.channel; else delete teamChannel[team];
+  const kept = b.channel ? heededChannelOf({ channel: b.channel }) : null;
+  if (kept && kept.kind === "relay") teamChannel[team] = kept; else delete teamChannel[team];
   if (b.left) teamLeft[team] = b.left; else delete teamLeft[team];
   if (b.barred) teamBarred.add(team); else teamBarred.delete(team);
   if (typeof inv.folder === "string" && deskKeys[CATALOG_FOLDER_KEY] === inv.folder) deskSetOwn(CATALOG_FOLDER_KEY, typeof inv.was === "string" && inv.was ? inv.was : undefined); /* plant:c8-own */
@@ -7184,6 +7208,7 @@ function leadsView() {
     const lapse = lapseShown(t);
     if (lapse) row.lapse = lapse;
     if (askingShown(t)) row.asking = true; /* plant:asking-row */
+    if (teamElsewhere.has(t)) row.relayElsewhere = true; /* plant:elsewhere-row-fact */
     const fork = forkShown(t);
     if (fork) row.fork = fork; /* plant:fork-row */
     const stranded = strandedShown(t);
@@ -7306,7 +7331,7 @@ const STAGING_RELAY_URL = "https://etiuda.dev/relay-staging/v1";
 function knownRelayAddress(u) {
   if (typeof u !== "string") return false;
   const at = u.trim().replace(/\/+$/, "");
-  if (at === BUILTIN_RELAY_URL || at === STAGING_RELAY_URL) return true;
+  if (at === BUILTIN_RELAY_URL || at === STAGING_RELAY_URL) return true; /* plant:builtin-relay-known */
   if (!harnessLaunch()) return false; /* plant:relay-known */
   return /^https:\/\/[a-z0-9.-]+(?::[0-9]{1,5})?(?:\/[A-Za-z0-9._~-]+)*\/?$/.test(at);
 }
@@ -7666,7 +7691,7 @@ function relayRun() {
     },
     /* The relay named this desk's request at the standing door: kept, and the request written with its seat and that id. */
     onDoor: id => { signinDoorKept(team, mirror, id); }, /* plant:door-on */
-    /* A team whose licence follows Entra asks each session for this desk's seat certificate. */
+    /* Every hello for this desk's own key carries its seat certificate (seatHello in shell/relay/channel.cjs). */
     ...signinRelaySeatIo(team),
     onTeam: () => {
       const j = teamJoin;
@@ -8383,7 +8408,7 @@ function readDesk() {
       });
     });
     if (doc && table(doc.teamChannel)) Object.keys(doc.teamChannel).forEach(t => {
-      const c = SEALED_TEAM_RE.test(t) && table(doc.teamChannel[t]) ? teamChannelOf({ channel: doc.teamChannel[t] }) : null;
+      const c = SEALED_TEAM_RE.test(t) && table(doc.teamChannel[t]) ? heededChannelOf({ channel: doc.teamChannel[t] }) : null;
       if (c && c.kind === "relay") teamChannel[t] = c;
     });
     if (doc && table(doc.teamPinFrom)) Object.keys(doc.teamPinFrom).forEach(t => {
@@ -13366,6 +13391,8 @@ const SHELL_WORDS = {
         folderRefusedWrongTeam: "That folder holds no files of this team, so nothing was changed. The team's lead can say which folder it is.",
         folderRefusedWrongLead: "The team file in that folder is not signed by this team's lead, so nothing was changed. Tell the team's lead about it.",
         folderRefusedLowerRev: "The team file in that folder is older than the one this desk holds, so nothing was changed. The team's lead can say which folder is the current one.",
+        relayElsewhere: "The team file of {TEAM} names a relay this Etiuda does not use, so this desk does not follow it: it keeps its team, its catalog and its connection as they were, and sends nothing there. If the team moves back, nothing is needed; otherwise a new invitation from the team's lead is.",
+        teamOfLead: "{LEAD}'s team", teamUnnamed: "Team",
         pickTeamFolder: "Choose the team's shared folder",
         stillReading: "Etiuda is still reading the team's shared folder, so the catalog is not open yet. Once that is done, Etiuda offers the catalog in a window of its own, and loading it from there opens it.",
         trayOpen: "Open Etiuda",
@@ -13390,6 +13417,8 @@ const SHELL_WORDS = {
         folderRefusedWrongTeam: "W tym folderze nie ma plików tego zespołu, więc nic nie zmieniono. Lider zespołu może wskazać właściwy folder.",
         folderRefusedWrongLead: "Plik zespołu w tym folderze nie jest podpisany przez lidera tego zespołu, więc nic nie zmieniono. Proszę powiedzieć o tym liderowi zespołu.",
         folderRefusedLowerRev: "Plik zespołu w tym folderze jest starszy niż ten, który ma to stanowisko, więc nic nie zmieniono. Lider zespołu może wskazać aktualny folder.",
+        relayElsewhere: "{TEAM} wskazuje w swoim pliku przekaźnik, z którego ta Etiuda nie korzysta, więc to stanowisko za nim nie podąża: zachowuje zespół, katalog i połączenie bez zmian i niczego tam nie wysyła. Jeśli zespół wróci na poprzedni przekaźnik, nic nie trzeba robić; w przeciwnym razie potrzebne jest nowe zaproszenie od lidera zespołu.",
+        teamOfLead: "Zespół osoby {LEAD}", teamUnnamed: "Zespół",
         pickTeamFolder: "Wybierz wspólny folder zespołu",
         stillReading: "Etiuda jeszcze wczytuje wspólny folder zespołu, więc katalog nie jest na razie otwarty. Gdy wczytywanie dobiegnie końca, Etiuda zaproponuje katalog w osobnym oknie; wystarczy go stamtąd wczytać, aby się otworzył.",
         trayOpen: "Otwórz Etiudę",

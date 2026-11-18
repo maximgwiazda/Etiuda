@@ -14,7 +14,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const SELF = fileURLToPath(import.meta.url);
 const ROOT = path.resolve(path.dirname(SELF), "..");
@@ -105,7 +105,7 @@ async function launch(plan) {
   const whenReadyPromise = new Promise(r => { whenReadyResolve = r; });
   const onHandlers = {}, invokeHandlers = {};
   const openedDirs = [];
-  const said = [];
+  const said = [], fetched = [];
 
   const pageWin = {
     isDestroyed: () => false,
@@ -149,7 +149,7 @@ async function launch(plan) {
       getVersion: () => "0.0.0",
       whenReady: () => whenReadyPromise,
       isPackaged: false,
-      commandLine: { appendSwitch: noop },
+      commandLine: { appendSwitch: noop, hasSwitch: () => false },
     },
     ipcMain: {
       on: (ch, fn) => { onHandlers[ch] = fn; },
@@ -170,7 +170,7 @@ async function launch(plan) {
       showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
       showSaveDialog: async () => ({ canceled: true }),
     },
-    net: inert,
+    net: plan.recordNet ? new Proxy(inert, { get: (o, k) => (k === "fetch" ? (u => { fetched.push(String(u && u.url || u)); return Promise.reject(new Error("no network in this leg")); }) : inert) }) : inert,
     protocol: inert,
     session: inert,
     screen: inert,
@@ -326,6 +326,20 @@ async function launch(plan) {
     contentViews = { before, shown };
   }
 
+  /* The team's row as the page is handed it (leadsView): whether it carries the fact of a relay this build does not use, and
+     whether any address reached it; then, where the plan writes a later team file into the folder, the same once that is read. */
+  const rowsNow = async () => {
+    const v = invokeHandlers["etiuda:team-join"] ? await invokeHandlers["etiuda:team-join"](ev, "leads") : null;
+    const leads = (v && v.leads) || [];
+    return { elsewhere: leads.filter(l => l && l.relayElsewhere === true).length, rows: leads.length, text: JSON.stringify(leads) };
+  };
+  const rowFirst = await rowsNow();
+  let rowLater = null;
+  if (plan.teamLater) {
+    fs.writeFileSync(path.join(SHARED, "etiuda-team.json"), plan.teamLater);
+    await new Promise(r => setTimeout(r, 1500));
+    rowLater = await rowsNow();
+  }
   const normShared = path.resolve(SHARED);
   const normMirror = path.resolve(MIRROR);
   const mirrorDeskDir = path.join(MIRROR, "desks", ownId);
@@ -341,6 +355,11 @@ async function launch(plan) {
     channelCreated: !!createdChannel,
     channelStarted: !!(createdChannel && createdChannel.started),
     channelMirror: createdChannel && createdChannel.opts ? createdChannel.opts.mirror : "",
+    channelUrl: createdChannel && createdChannel.opts ? String(createdChannel.opts.url || "") : "",
+    channelSeat: !!(createdChannel && createdChannel.opts && ["seat", "seatRenew", "onSeat"].every(k => typeof createdChannel.opts[k] === "function")),
+    fetched,
+    rowFirst,
+    rowLater,
     mirrorFiles,
     mirrorMarks: mirrorFiles.reduce((o, f) => {
       try { const d = JSON.parse(fs.readFileSync(path.join(mirrorDeskDir, f), "utf8")); o[f] = { rev: d.rev, from: d.from }; } catch {}
@@ -457,6 +476,8 @@ function makeScenario(kind, extra = {}) {
     teamPins: {
       [teamId]: { keyId: lead.keyId, public: lead.public },
     },
+    ...(extra.pinFrom ? { teamPinFrom: { [teamId]: extra.pinFrom } } : {}),
+    ...(extra.keptChannel ? { teamChannel: { [teamId]: { kind: "relay", rt, url: extra.keptChannel } } } : {}),
     teamKeys: {
       [teamId]: { 1: safeStorage.encryptString(teamKey.toString("base64")).toString("base64") },
     },
@@ -526,11 +547,18 @@ function makeScenario(kind, extra = {}) {
   };
 }
 
+/* A customer's start: none of the variables harnessLaunch() reads. */
+function customerEnv() {
+  const env = Object.assign({}, process.env);
+  for (const k of ["ETIUDA_TEST_OFFSCREEN", "ETIUDA_TEST_DOCUMENTS", "ETIUDA_TEST_DEVTOOLS"]) delete env[k];
+  return env;
+}
+
 function runScenario(plan) {
   const res = spawnSync(process.execPath, [SELF, "--launch"], {
     input: JSON.stringify(plan),
     encoding: "utf8",
-    env: Object.assign({}, process.env, { ETIUDA_TEST_DEVTOOLS: "1" }),
+    env: plan.customer ? customerEnv() : Object.assign({}, process.env, { ETIUDA_TEST_DEVTOOLS: "1" }),
     maxBuffer: 32 * 1024 * 1024,
   });
   if (res.status !== 0) {
@@ -867,6 +895,196 @@ async function main() {
     const turned = p.found && p.res.testService === false && p.res.channelCreated && p.res.openedDir === p.plan.mirrorFolder;
     check(turned && p.shaSame, "945s24 staging's relay followed without the switch turns 945s20 red: turned=" + turned + ", shaSame=" + p.shaSame);
   }
+
+  /* Scenario 11: a team file's relay address is heeded only where it is a known relay address, the rule an invitation keeps
+     (knownRelayAddress): a desk whose lead was pinned by an invitation, machine policy or an answered request follows its signed
+     team file to the built-in relay and never to another host on a customer's start; a harness start still follows a leg's
+     stand-in (ks1 to ks16). */
+  const ELSEWHERE = "https://elsewhere.example/relay/v1", ELSEWHERE_HOST = "elsewhere.example", STAND_IN = "https://stand-in.test/relay/v1";
+  const SAID_ELSEWHERE = "names a relay this Etiuda does not use";
+  const knownPlan = (kind, extra, customer) => Object.assign(movedPlan(kind, extra), customer ? { customer: true, recordNet: true } : { recordNet: true });
+  /* Not followed: no channel, nothing fetched from the host, the host said nowhere, the folder kept, and the reason said once. */
+  const heldBack = r => !r.channelCreated && r.openedDir !== "" && !r.channelUrl.includes(ELSEWHERE_HOST)
+    && !r.fetched.some(u => u.includes(ELSEWHERE_HOST)) && !r.said.some(l => l.includes(ELSEWHERE_HOST))
+    && r.said.filter(l => l.includes(SAID_ELSEWHERE)).length === 1 && r.said.some(l => l.includes("The team file of Team " + SAID_ELSEWHERE));
+  const heldBrief = (r, p) => JSON.stringify({ created: r.channelCreated, url: r.channelUrl, folderKept: r.openedDir === p.sharedFolder,
+    fetchedThere: r.fetched.filter(u => u.includes(ELSEWHERE_HOST)).length, saidHost: r.said.some(l => l.includes(ELSEWHERE_HOST)),
+    saidWhy: r.said.filter(l => l.includes(SAID_ELSEWHERE)).length });
+  const followed = (r, url) => r.channelCreated && r.channelStarted && r.channelUrl === url;
+  const known = {};
+  for (const from of ["invite", "policy", "answer"]) {
+    const p = knownPlan("known-" + from, { url: ELSEWHERE, pinFrom: from }, true);
+    const r = runScenario(p);
+    known[from] = { p, r };
+    check(heldBack(r) && r.openedDir === p.sharedFolder,
+      (from === "invite" ? "ks1" : from === "policy" ? "ks2" : "ks3") + " a desk whose lead was pinned by "
+      + (from === "invite" ? "an invitation" : from === "policy" ? "machine policy" : "an answered request")
+      + ", its lead's signed team file naming another https host, on a customer's start: the file's channel is not heeded, no"
+      + " request of any kind goes to that host, the folder is kept, and the desk says why once, naming no address: " + heldBrief(r, p));
+  }
+  const kb = knownPlan("known-builtin", { pinFrom: "invite" }, true);
+  const rb = runScenario(kb);
+  check(followed(rb, BUILTIN_RELAY) && rb.channelSeat && !rb.said.some(l => l.includes(SAID_ELSEWHERE)),
+    "ks4 the control: the same desk and file naming the built-in relay, on a customer's start, follows it, its channel wired to the"
+    + " desk's seat certificate (which relay-seats d1a and d5a show each hello carries), and says nothing of another relay: "
+    + JSON.stringify({ created: rb.channelCreated, url: rb.channelUrl, seatWired: rb.channelSeat }));
+  const kh = knownPlan("known-harness", { url: STAND_IN, pinFrom: "invite" }, false);
+  const rh = runScenario(kh);
+  check(followed(rh, STAND_IN), "ks5 a harness start still follows the team file to a leg's stand-in host: "
+    + JSON.stringify({ created: rh.channelCreated, url: rh.channelUrl }));
+  const ks = knownPlan("known-ts-staging", { testService: true, url: STAGING_RELAY, pinFrom: "invite" }, true);
+  const rs = runScenario(ks);
+  check(rs.testService === true && followed(rs, STAGING_RELAY) && !rs.said.some(l => l.includes(SAID_ELSEWHERE)),
+    "ks6 nothing changes for a test service desk whose team file names staging's relay, on a customer's start: it follows it: "
+    + JSON.stringify({ testService: rs.testService, created: rs.channelCreated, url: rs.channelUrl }));
+  const kk = knownPlan("known-kept", { pinFrom: "invite", keptChannel: BUILTIN_RELAY }, true);
+  const rk = runScenario(kk);
+  check(followed(rk, BUILTIN_RELAY) && !rk.said.some(l => l.includes(SAID_ELSEWHERE)),
+    "ks7 nothing changes for a desk already on a team whose file names the built-in relay, its channel kept, on a customer's start: "
+    + JSON.stringify({ created: rk.channelCreated, url: rk.channelUrl }));
+  /* Each guard lifted in a scratch copy of shell/main.js turns its check red. */
+  const knownLift = (id, tag, mutate, plan, red, what) => {
+    const p = testPlant(tag, mutate, plan);
+    const turned = p.found && red(p.res, p.plan);
+    check(turned && p.shaSame, id + " " + what + ": turned=" + turned + ", shaSame=" + p.shaSame);
+  };
+  const toComment = tag => (lines, at) => { lines[at] = "  /* " + tag + " */"; };
+  for (const [id, from, of] of [["ks8", "invite", "ks1"], ["ks9", "policy", "ks2"], ["ks10", "answer", "ks3"]])
+    knownLift(id, "plant:channel-known", toComment("plant:channel-known"), knownPlan("known-lift-" + from, { url: ELSEWHERE, pinFrom: from }, true),
+      r => r.channelCreated && r.channelUrl === ELSEWHERE, "lifting plant:channel-known turns " + of + " red: the desk opens a channel to the other host");
+  knownLift("ks11", "plant:elsewhere-heed", toComment("plant:elsewhere-heed"), knownPlan("known-lift-said", { url: ELSEWHERE, pinFrom: "invite" }, true),
+    r => !heldBack(r), "lifting plant:elsewhere-heed turns ks1 red: the file is heeded as a folder's and the desk never says why");
+  knownLift("ks12", "plant:relay-known", toComment("plant:relay-known"), knownPlan("known-lift-harness", { url: ELSEWHERE, pinFrom: "invite" }, true),
+    r => r.channelCreated && r.channelUrl === ELSEWHERE, "lifting the harness exception's guard (plant:relay-known) turns ks1 red: a customer's start follows any https host");
+  knownLift("ks13", "plant:relay-known", (lines, at) => { lines[at] = "  return false; /* plant:relay-known */"; }, knownPlan("known-lift-stand-in", { url: STAND_IN, pinFrom: "invite" }, false),
+    r => !r.channelCreated, "the harness exception taken away turns ks5 red: a harness start no longer follows the stand-in");
+  knownLift("ks14", "plant:builtin-relay-known", toComment("plant:builtin-relay-known"), knownPlan("known-lift-builtin", { pinFrom: "invite" }, true),
+    r => !r.channelCreated, "lifting plant:builtin-relay-known turns ks4 red: the built-in relay is not followed");
+  knownLift("ks15", "plant:builtin-relay-known", toComment("plant:builtin-relay-known"), knownPlan("known-lift-staging", { testService: true, url: STAGING_RELAY, pinFrom: "invite" }, true),
+    r => !r.channelCreated, "lifting plant:builtin-relay-known turns ks6 red: staging's relay is not followed by a test service desk");
+  knownLift("ks16", "plant:builtin-relay-known", toComment("plant:builtin-relay-known"), knownPlan("known-lift-kept", { pinFrom: "invite", keptChannel: BUILTIN_RELAY }, true),
+    r => !r.channelCreated, "lifting plant:builtin-relay-known turns ks7 red: a desk already on the built-in relay loses it");
+  /* The fact the page words, on the team's row as the shell hands it: set where the file names another host, never with the
+     address, and absent where the file names a relay this build uses; it goes once a later file names the built-in relay. */
+  const factSet = r => !!r.rowFirst && r.rowFirst.elsewhere === 1 && !r.rowFirst.text.includes(ELSEWHERE_HOST);
+  const factAbsent = r => !!r.rowFirst && r.rowFirst.rows >= 1 && r.rowFirst.elsewhere === 0;
+  check(["invite", "policy", "answer"].every(k => factSet(known[k].r)),
+    "ks17 the team's row the page is handed carries the fact of a relay this build does not use, and no address, in ks1 to ks3: "
+    + JSON.stringify(["invite", "policy", "answer"].map(k => known[k].r.rowFirst && known[k].r.rowFirst.elsewhere)));
+  check([rb, rs, rk].every(factAbsent), "ks18 and does not carry it in ks4, ks6 and ks7: "
+    + JSON.stringify([rb, rs, rk].map(r => r.rowFirst && [r.rowFirst.rows, r.rowFirst.elsewhere])));
+  const laterPlan = (kind, url) => {
+    const p = knownPlan(kind, { url: ELSEWHERE, pinFrom: "invite" }, true);
+    const back = JSON.parse(JSON.stringify(p.movedTeamDoc));
+    back.rev = 3;
+    back.channel = { kind: "relay", rt: back.channel.rt, url };
+    p.teamLater = JSON.stringify(signTeamDoc(back, p.lead), null, 2);
+    return p;
+  };
+  const kl = laterPlan("known-later", BUILTIN_RELAY);
+  const rl = runScenario(kl);
+  check(factSet(rl) && !!rl.rowLater && rl.rowLater.rows >= 1 && rl.rowLater.elsewhere === 0,
+    "ks19 the fact goes once a later team file names the built-in relay again: "
+    + JSON.stringify({ first: rl.rowFirst && rl.rowFirst.elsewhere, later: rl.rowLater && rl.rowLater.elsewhere }));
+  knownLift("ks20", "plant:elsewhere-fact", toComment("plant:elsewhere-fact"), knownPlan("known-lift-fact", { url: ELSEWHERE, pinFrom: "invite" }, true),
+    r => !factSet(r), "lifting plant:elsewhere-fact turns ks17 red: the row never carries the fact");
+  knownLift("ks21", "plant:elsewhere-row-fact", toComment("plant:elsewhere-row-fact"), knownPlan("known-lift-row", { url: ELSEWHERE, pinFrom: "invite" }, true),
+    r => !factSet(r), "lifting plant:elsewhere-row-fact turns ks17 red: the fact is kept but never handed to the page");
+  for (const [id, of, plan] of [["ks22", "ks4", () => knownPlan("known-lift-on-b", { pinFrom: "invite" }, true)],
+    ["ks23", "ks6", () => knownPlan("known-lift-on-s", { testService: true, url: STAGING_RELAY, pinFrom: "invite" }, true)],
+    ["ks24", "ks7", () => knownPlan("known-lift-on-k", { pinFrom: "invite", keptChannel: BUILTIN_RELAY }, true)]])
+    knownLift(id, "plant:elsewhere-row-fact", (lines, at) => { lines[at] = "    row.relayElsewhere = true; /* plant:elsewhere-row-fact */"; }, plan(),
+      r => !factAbsent(r), "the fact handed on every row turns " + of + "'s half of ks18 red");
+  knownLift("ks25", "plant:elsewhere-clear", toComment("plant:elsewhere-clear"), laterPlan("known-lift-clear", BUILTIN_RELAY),
+    r => !(r.rowLater && r.rowLater.elsewhere === 0), "lifting plant:elsewhere-clear turns ks19 red: the fact outlives a file naming the built-in relay");
+  try { fs.rmSync(kl.lab, { recursive: true, force: true }); } catch {}
+
+  /* THE PAGE: the row's fact worded on the team's row in Settings and in a notice once, in English and Polish, with the
+     copywriter's sentence exactly, {TEAM} as the row names the team; Dismiss holds for the run, the row still says it, and a row
+     without the fact says nothing of it. Over src/modules in this process, its DOM a stand-in that keeps what is appended. */
+  const PAGE_EN = "The team file of Ada's team names a relay this Etiuda does not use, so this desk does not follow it: it keeps its team, its catalog and its connection as they were, and sends nothing there. If the team moves back, nothing is needed; otherwise a new invitation from the team's lead is.";
+  const PAGE_PL = "Zespół osoby Ada wskazuje w swoim pliku przekaźnik, z którego ta Etiuda nie korzysta, więc to stanowisko za nim nie podąża: zachowuje zespół, katalog i połączenie bez zmian i niczego tam nie wysyła. Jeśli zespół wróci na poprzedni przekaźnik, nic nie trzeba robić; w przeciwnym razie potrzebne jest nowe zaproszenie od lidera zespołu.";
+  const MODS = path.join(ROOT, "src", "modules"), MOD_DIR = pathToFileURL(MODS).href + "/";
+  const pageWords = h => String(h).replace(/<[^>]*>/g, " ").replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/\s+/g, " ");
+  /* A module's text with one line swapped, imported fresh; its own imports reach the real modules. */
+  const plantedMod = (name, tag, swap) => {
+    const text = fs.readFileSync(path.join(MODS, name), "utf8"), lines = text.split("\n"), at = lines.findIndex(l => l.includes(tag));
+    if (at < 0) return null;
+    lines[at] = swap(lines[at]);
+    return import("data:text/javascript;base64," + Buffer.from(lines.join("\n").replace(/from "\.\//g, 'from "' + MOD_DIR)).toString("base64"));
+  };
+  async function pageScene(tj, set) {
+    const storage = await import(pathToFileURL(path.join(MODS, "storage.js")).href);
+    const hooksMod = await import(pathToFileURL(path.join(MODS, "hooks.js")).href);
+    const TJ = tj || await import(pathToFileURL(path.join(MODS, "team-join.js")).href);
+    const SET = set || await import(pathToFileURL(path.join(MODS, "settings.js")).href);
+    const quietList = { contains: () => false, add() {}, remove() {}, toggle() {} };
+    const body = { children: [], classList: quietList };
+    const el = tag => ({ tag, children: [], style: {}, classList: quietList, textContent: "", attrs: {},
+      appendChild(c) { this.children.push(c); return c; }, setAttribute(k, v) { this.attrs[k] = v; },
+      remove() { const i = body.children.indexOf(this); if (i >= 0) body.children.splice(i, 1); } });
+    body.appendChild = c => { body.children.push(c); return c; };
+    let send = null;
+    globalThis.window = { innerWidth: 1280, innerHeight: 800, addEventListener() {}, removeEventListener() {},
+      E_HOST: { teamJoin: () => Promise.resolve(null), onTeamJoin: fn => { send = fn; } } };
+    globalThis.document = { body, documentElement: { dataset: {}, classList: quietList, style: {} }, createElement: el, createTextNode: s => ({ textContent: String(s) }),
+      getElementById: id => body.children.find(c => c.id === id) || null, querySelector: () => null, querySelectorAll: () => [], addEventListener() {}, removeEventListener() {} };
+    globalThis.getComputedStyle = () => ({ getPropertyValue: () => "", fontSize: "16px" });
+    const wasRender = hooksMod.hooks.render;
+    hooksMod.hooks.render = () => {};
+    const noticeOf = () => body.children.find(c => c.id === "eTeamElsewhere") || null;
+    const noticeText = () => { const n = noticeOf(); return n ? n.children[0].children.map(c => c.textContent).join("") : null; };
+    const dismiss = () => { const n = noticeOf(), row = n && n.children[1], x = row && row.children[row.children.length - 1]; if (x && x.onclick) x.onclick(); };
+    const out = {};
+    try {
+      TJ.wireTeamJoin();
+      for (const [lang, team, want] of [["en", "t-elsewhere-en", PAGE_EN], ["pl", "t-elsewhere-pl", PAGE_PL]]) {
+        storage.lsSet("eUiLang", lang);
+        const fact = { team, lead: "Ada", print: "0123456789abcdef", relayElsewhere: true };
+        send({ leads: [fact] });
+        const row = pageWords(SET.settingsPageHtml("teams", ""));
+        const shown = noticeText();
+        send({ leads: [Object.assign({}, fact)] });
+        const notices = body.children.filter(c => c.id === "eTeamElsewhere").length;
+        dismiss();
+        send({ leads: [Object.assign({}, fact, { print: "fedcba9876543210" })] });
+        const afterDismiss = noticeText(), rowStill = pageWords(SET.settingsPageHtml("teams", "")).includes(want);
+        send({ leads: [{ team, lead: "Ada", print: "0123456789abcdef" }] });
+        const rowGone = !pageWords(SET.settingsPageHtml("teams", "")).includes(want.slice(0, 40));
+        out[lang] = { row: row.includes(want), notice: shown === want, notices, afterDismiss: afterDismiss === null, rowStill, rowGone };
+      }
+    } finally {
+      if (send) send({ leads: [] });
+      hooksMod.hooks.render = wasRender;
+      storage.lsSet("eUiLang", "en");
+      delete globalThis.window; delete globalThis.document; delete globalThis.getComputedStyle;
+    }
+    out.ok = ["en", "pl"].every(l => { const o = out[l]; return o.row && o.notice && o.notices === 1 && o.afterDismiss && o.rowStill && o.rowGone; });
+    return out;
+  }
+  let page = null;
+  try { page = await pageScene(); } catch (e) { page = { ok: false, error: String(e && e.stack ? e.stack.split("\n")[0] : e) }; }
+  check(page.ok, "ks26 the page words the row's fact with the copywriter's sentence exactly, {TEAM} as the row names the team, on the"
+    + " team's row in Settings and once in a notice, in English and Polish; Dismiss holds for the run while the row still says it, and"
+    + " a row without the fact says nothing of it: " + JSON.stringify(page));
+  for (const [id, name, tag, line, what] of [
+    ["ks27", "settings.js", "plant:elsewhere-row", "  /* plant:elsewhere-row */", "the team's row never says it"],
+    ["ks28", "team-join.js", "plant:elsewhere-notice", "  /* plant:elsewhere-notice */", "no notice is shown"],
+    ["ks29", "team-join.js", "plant:elsewhere-kept", "             /* plant:elsewhere-kept */", "the page drops the row's fact"]]) {
+    let turned = false, detail = "plant line absent";
+    try {
+      const mod = await plantedMod(name, tag, () => line);
+      if (mod) {
+        const r = await pageScene(name === "team-join.js" ? mod : null, name === "settings.js" ? mod : null);
+        /* A copy of team-join.js is wired alone, so its notice is what it is judged by; the row reads the real module. */
+        turned = name === "settings.js" ? !(r.en && r.en.row && r.pl && r.pl.row) : !(r.en && r.en.notice && r.pl && r.pl.notice);
+        detail = turned ? "the check lifted" : "the check still held";
+      }
+    } catch (e) { detail = "threw " + (e && e.message); }
+    check(page.ok && turned, id + " lifting plant:" + tag.slice(6) + " in a copy of src/modules/" + name + " turns ks26 red (" + what + "): " + detail);
+  }
+  [known.invite, known.policy, known.answer].forEach(k => { try { fs.rmSync(k.p.lab, { recursive: true, force: true }); } catch {} });
+  [kb, kh, ks, kk].forEach(s => { try { fs.rmSync(s.lab, { recursive: true, force: true }); } catch {} });
 
   // Clean up scenario temp dirs
   [s1, s2, s3, s4, s6, s7, s8, s9, s10, s11, s12, s13].filter(Boolean).forEach(s => {

@@ -338,6 +338,30 @@ function syncRelayRemoved(){
       if(relayGoneUp===want) relayGoneUp="";
     });
 }
+/* The team's file names a relay this build does not use: the copywriter's two sentences, {TEAM} as the row names the team. */
+function relayElsewhereWords(l){
+  const team=l&&l.lead?t("{LEAD}'s team").split("{LEAD}").join(l.lead):t("Team");
+  return {lead:t("The team file of {TEAM} names a relay this Etiuda does not use, so this desk does not follow it: it keeps its team, its catalog and its connection as they were, and sends nothing there.").split("{TEAM}").join(team), body:t("If the team moves back, nothing is needed; otherwise a new invitation from the team's lead is.")};
+}
+/* The team's row in Settings says both, for as long as the file names that relay. */
+function relayElsewhereNote(l){ const w=relayElsewhereWords(l); return w.lead+" "+w.body; }
+/* And a notice, once a run for each such team: Dismiss takes it down for that run; the row still says it. */
+let elsewhereUp="";
+const elsewhereDismissed=new Set();
+function syncRelayElsewhere(){
+  if(typeof document==="undefined" || typeof document.getElementById!=="function" || typeof document.createElement!=="function") return;
+  const l=((joinNow&&joinNow.leads)||[]).filter(x=>x.relayElsewhere===true && !elsewhereDismissed.has(x.team))[0]||null;
+  const want=l?l.team:"", up=document.getElementById("eTeamElsewhere");
+  if(want===elsewhereUp && (!want || up)) return;
+  if(up) dropNotice(up);
+  elsewhereUp=want;
+  if(!l) return;
+  const w=relayElsewhereWords(l);
+  eNotice("eTeamElsewhere", w.lead, w.body, ()=>{
+      elsewhereDismissed.add(want);
+      if(elsewhereUp===want) elsewhereUp="";
+    });
+}
 function joinTook(v,changed){
   const s=v&&typeof v==="object"?v:{};
   const was=JSON.stringify(joinNow);
@@ -354,6 +378,7 @@ function joinTook(v,changed){
              if(l.otherLead===true) row.otherLead=true;
              if(typeof l.relay==="string" && l.relay) row.relay=String(l.relay);
              if(l.relayRemoved===true) row.relayRemoved=true;
+             if(l.relayElsewhere===true) row.relayElsewhere=true; /* plant:elsewhere-kept */
              const head=headKept(l.head);
              if(head) row.head=head;
              const lapse=lapseKept(l.lapse);
@@ -379,6 +404,7 @@ function joinTook(v,changed){
   syncJoinDoor();
   syncLapseNotice();
   syncRelayRemoved();
+  syncRelayElsewhere(); /* plant:elsewhere-notice */
   syncForkNotice();
   syncStrandedNotice();
   const refusal=s.linkRefusal;
@@ -803,4 +829,4 @@ function pickMovedFolder(team,then){
   });
 }
 
-export { lapseNote, shareRefusedNotes, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, teamPolicySaid, relayDesk, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, openJoinPaste, joinDoorButton, teamCanJoin, inviteHeld, noteCatalogCopy };
+export { lapseNote, shareRefusedNotes, relayElsewhereNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, teamPolicySaid, relayDesk, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, openJoinPaste, joinDoorButton, teamCanJoin, inviteHeld, noteCatalogCopy };

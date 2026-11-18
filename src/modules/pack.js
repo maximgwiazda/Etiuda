@@ -83,7 +83,7 @@ function showPackMigrationWarning(){
    the catalog's name for a catalog's matter, the Menu where Settings hold its equal, else Etiuda's name at the band's
    left. Two from one control hang one from the other. Built from text nodes, so a path is never read as markup. */
 const NOTICE_FROM={
-  eTeamLapse:"#catNow", eTeamFork:"#catNow", eTeamStranded:"#catNow", eTeamRemoved:"#catNow", eMigrateWarn:"#catNow",
+  eTeamLapse:"#catNow", eTeamFork:"#catNow", eTeamStranded:"#catNow", eTeamRemoved:"#catNow", eTeamElsewhere:"#catNow", eMigrateWarn:"#catNow",
   eHotkeyNote:"#settingsBtn"
 };
 const NOTICE_ETIUDA=".row .brand";

@@ -2091,7 +2091,7 @@ function createProgram(opts) {
    headers, {message, close}) a socket or null; write(abs, text) the shell's atomic write; say(line); onTeam() after a team
    file lands; onRemoved() once, when the relay refuses this desk as removed and the shell is listening, after which
    the channel stops asking; seat() this desk's seat certificate or null, seatRenew() a promise that renews it, and
-   onSeat(state), "refused" or "open", for a team whose licence follows Entra (seatHello); room(reason) after each upload, "" where it
+   onSeat(state), "refused" or "open", as the relay refuses or takes it (seatHello); room(reason) after each upload, "" where it
    was taken and the refusal's reason where it was not; clock. */
 function createChannel(opts) {
   const o = opts || {};
@@ -2116,9 +2116,8 @@ function createChannel(opts) {
   /* How long a join keeps asking after the relay says the team is not there yet, from the first such answer. */
   const ENROL_WAIT_MS = 5 * 60 * 1000;
   let enrolWaitFrom = 0, removedTold = false;
-  /* Whether the relay has asked this desk's sessions for a seat certificate, and what it last answered: learnt from a refusal, so a
-     team whose licence does not follow Entra is never sent one. */
-  let seatAsked = false, seatState = "";
+  /* What the relay last answered this desk's seat: "refused", "open", or "" before any answer. */
+  let seatState = "";
   /* need: not fetched. held: fetched, waiting for the team file. opened: the team key was handed on. none: this relay
      keeps no wrap (a 404), said as nothing. bad: the wrap did not open, said once. */
   let wrapPhase = "need", wrapHeld = null;
@@ -2264,20 +2263,24 @@ function createChannel(opts) {
     return { status: res.status, json, bytes, meta, lapse };
   }
 
-  /* THE SEAT ON A TEAM WHOSE LICENCE FOLLOWS ENTRA: a key's session there carries this desk's certificate. Sent once the relay has
-     refused one without it, on the same challenge, which a refusal leaves unspent; a run-out certificate is renewed first, and so is
-     one the relay refused (a revoked service key, a licence moved), sent again only where the renewal changed it. Answers the relay's
-     last answer, and tells the shell when the refusal starts or ends. */
+  /* THE SEAT: every hello that opens a session for this desk's own key carries its certificate where it holds one, from the first
+     hello on every team, any relay being free to ask: the key hello, which also resumes a bound invitation, and the invitation's.
+     The certificate names pseudonyms only and goes only to a relay this desk already opens sessions with. A run-out one is renewed
+     first; one the relay refuses (a revoked service key, a licence moved) is renewed and sent again on the same challenge, which a
+     refusal leaves unspent, only where the renewal changed it. Tells the shell when the refusal starts or ends. */
   async function seatHello(challenge, who) {
     const sig = crypto.sign(null, helloBytes(o.rt, challenge, who.keyId), who.privateKey).toString("hex");
-    const send = seat => call("POST", "session", { json: Object.assign({ challenge, key: who.keyId, pub: who.public, sig }, seat ? { seat } : {}) });
-    let sent = seatAsked ? await seatNow(false) : null;
+    return seated(seat => call("POST", "session", { json: Object.assign({ challenge, key: who.keyId, pub: who.public, sig }, seat ? { seat } : {}) }));
+  }
+  /* send(seat) posts one hello on one challenge, carrying `seat` where it is not null; answers the relay's last answer. */
+  async function seated(send) {
+    let sent = null;
+    sent = await seatNow(false); /* plant:seat-first */
     let r = await send(sent);
     const same = (x, y) => !!x && !!y && table(x.sig) && table(y.sig) && x.sig.value === y.sig.value;
     let tries = 0;
-    tries = 2; /* plant:seat-learn */
+    tries = 2; /* plant:seat-retry */
     for (let i = 0; i < tries && refusalOf(r).reason === "seat-lapsed"; i++) {
-      seatAsked = true;
       let force = false;
       force = !!sent; /* plant:seat-renew-refused */
       const next = await seatNow(force);
@@ -2346,7 +2349,9 @@ function createChannel(opts) {
     const canBind = who && who.privateKey && HEX64.test(String(who.public));
     if (canBind) bind = { key: who.keyId, pub: who.public, sig: crypto.sign(null, helloBytes(o.rt, ch.json.challenge, who.keyId), who.privateKey).toString("hex") };
     else return why; /* plant:invite-bind */
-    const r = await call("POST", "session", { json: Object.assign({ challenge: ch.json.challenge, invite: inv.token, inv: inv.inv }, bind) });
+    let carry = () => ({});
+    carry = seat => (seat ? { seat } : {}); /* plant:invite-seat */
+    const r = await seated(seat => call("POST", "session", { json: Object.assign({ challenge: ch.json.challenge, invite: inv.token, inv: inv.inv }, bind, carry(seat)) }));
     if (r.status === 200 && r.json && HEX64.test(String(r.json.session))) {
       prog.markTokenUsed(inv.inv);
       session = { token: r.json.session, at: clock(), by: "invite", inv: String(inv.inv) };

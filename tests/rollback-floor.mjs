@@ -1767,7 +1767,9 @@ try {
   const rosterNow = (D, team) => (((D.envelope().teamRoster || {})[team] || {}).desks || []).join(",") || "-";
   const floorNow = (D, team) => JSON.stringify(((D.envelope().teamRevSeen || {})[team] || {})[LEAD.public] || null);
   const RT = "0123456789abcdef0123456789abcdef";
-  const RELAY = { kind: "relay", rt: RT, url: "https://relay.quay.test/relay/v1" };
+  /* The built-in relay's address: a team file's relay is heeded only at an address the desk knows (heededChannelOf), so
+     these scenes, which judge the floor, the kept channel and the signed ring, name that one. Nothing here opens a channel. */
+  const RELAY = { kind: "relay", rt: RT, url: "https://etiuda.dev/relay/v1" };
   const ringIntr = { format: 1, kind: "etiuda-ring",
     keys: [{ catalog: "quay-board", keyId: INTR.keyId, alg: "Ed25519", public: INTR.public }] };
   const saidSince = (D, from, ...parts) => D.said.slice(from).some(l => parts.every(p => l.indexOf(p) >= 0));
@@ -1836,7 +1838,7 @@ try {
     const f3 = rosterNow(D2, TEAM);
     heed(D2, revTeam(TEAM, 2, [member(3)], { rev: 5, channel: { kind: "pigeon" } }));
     const f4 = rosterNow(D2, TEAM);
-    heed(D2, revTeam(TEAM, 2, [member(3)], { rev: 6, channel: { kind: "relay", rt: RT, url: "http://relay.quay.test/relay/v1" } }));
+    heed(D2, revTeam(TEAM, 2, [member(3)], { rev: 6, channel: { kind: "relay", rt: RT, url: "http://etiuda.dev/relay/v1" } }));
     const f5 = rosterNow(D2, TEAM);
     const saidF = D2.said.slice(fromF).filter(l => l.indexOf(at) >= 0 && l.indexOf("does not read") >= 0).length;
     check(f3 === ids(2) && f4 === ids(2) && f5 === ids(2) && saidF >= 1,
