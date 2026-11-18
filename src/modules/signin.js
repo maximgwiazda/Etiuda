@@ -522,6 +522,7 @@ function firstSigninHtml(v, opts){
   if(ds.state==="first" || ds.state==="first-offline" || o.forceFirst) return doorFirstHtml(v, ds);
   return "";
 }
+const DOOR_OFF_GLYPH='<svg class="door-off-glyph" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true" focusable="false"><path d="M2 8.8a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M8.5 16.1a5 5 0 0 1 7 0"/><circle cx="12" cy="19.5" r="1" fill="currentColor" stroke="none"/><path d="M3 3l18 18"/></svg>';
 function doorFirstHtml(v, ds){
   const drawn=ds.state==="first" || ds.state==="first-offline" ? ds : Object.assign({}, ds, {state:ds.online?"first":"first-offline"});
   const pair=deskDoorLines(drawn.state==="first" || drawn.state==="first-offline" ? drawn : Object.assign({}, drawn, {state:"first"}));
@@ -531,7 +532,7 @@ function doorFirstHtml(v, ds){
   const offline=drawn.state==="first-offline" || ds.state==="first-offline";
   const priv=t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The leads and administrator of the licence it joins see the account's name, address and picture."); /* plant:door-privacy-short */
   let right='<h2 class="fs-rh">'+esc(t("Signing in"))+'</h2>';
-  if(offline) right+='<div class="door-off"><span>'+esc(t("Signing in needs an internet connection. The buttons appear here by themselves once this computer is online."))+'</span></div>';
+  if(offline) right+='<div class="door-off">'+DOOR_OFF_GLYPH+'<span>'+esc(t("Signing in needs an internet connection. The buttons appear here by themselves once this computer is online."))+'</span></div>'; /* plant:door-off-glyph */
   else if(v.offered && v.offered.length) right+=signinProvidersHtml(v.offered, false);
   if(signinCapHolds(v)) right+='<p class="sgn-cap">'+esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account."))+'</p>';
   right+='<p class="sgn-cap fs-privacy">'+esc(priv)+'</p>';

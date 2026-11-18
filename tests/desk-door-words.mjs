@@ -18,7 +18,7 @@ const SETTINGS_PATH = path.join(ROOT, "src", "modules", "settings.js");
 const TEMPLATE_PATH = path.join(ROOT, "src", "template.html");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
-const CHECKS = 31, PLANTS = 17;
+const CHECKS = 32, PLANTS = 18;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -470,6 +470,18 @@ CASES.css = (src) => {
     && /\.door-out\{[^}]*margin-top:18px;padding-top:18px;border-top:1px solid var\(--line\)/.test(tpl);
 };
 
+/* The offline box leads with the sheet's 18px crossed-signal glyph at 70% opacity. */
+CASES.offlineGlyph = (pg = P) => {
+  const html = doorHtml(pg, VIEWS.firstOffline, "en");
+  const online = doorHtml(pg, VIEWS.first, "en");
+  const tpl = cssText();
+  return html.includes('class="door-off-glyph"') && html.includes('width="18"') && html.includes('height="18"')
+    && html.includes('viewBox="0 0 24 24"') && html.includes('stroke-width="1.8"') && html.includes('d="M3 3l18 18"')
+    && tpl.includes(".door-off-glyph{flex:none;margin-top:1px;opacity:.7}")
+    && tpl.includes(".door-off{display:flex;gap:10px;align-items:flex-start;")
+    && online.indexOf("door-off-glyph") < 0;
+};
+
 /* State 4's panel: the way on and Buy on one row, Check now and Account settings on the next. */
 CASES.panelRows = (pg = P) => {
   const split = (html) => {
@@ -586,6 +598,7 @@ const RUN_LIST = [
   ["dd29", "doorDates", "door lines use a long month, and a date in another year keeps the year"],
   ["dd30", "noName", "an unknown lead uses the words file's no-name forms, in English and Polish, and draws no blank"],
   ["dd31", "panelRows", "state 4 puts the way on and Buy on one row, then Check now and Account settings on the next"],
+  ["dd32", "offlineGlyph", "the offline box leads with an 18px crossed-signal glyph at 70% opacity"],
 ];
 
 /* Verify CHECKS matches the 21 named entries (plus 5 extra state-1..6 parity checks? Keep CHECKS exact). */
@@ -670,6 +683,9 @@ if (!PLANTS_OFF) {
   await plant("ddp12", SETTINGS_PATH,
     ["+'<p class=\"sgn-cap\">'+esc(t(\"This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name, address and picture, and shows them only to the leads and administrator of the licence it asks to join.\"))+'</p></div>'; /* plant:account-privacy-full */", "+'<p class=\"sgn-cap\">'+esc(t(\"This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev.\"))+'</p></div>';"],
     "account_en");
+  await plant("ddp18", SIGNIN_PATH,
+    ["'<div class=\"door-off\">'+DOOR_OFF_GLYPH+'<span>'", "'<div class=\"door-off\"><span>'"],
+    "offlineGlyph");
   await plant("ddp17", SIGNIN_PATH,
     ["if(d.moment===\"ended\") h+=signinEndedActsHtml(d.acts); /* plant:door-panel-rows */", "if(false) h+=signinEndedActsHtml(d.acts); /* plant:door-panel-rows */"],
     "panelRows");
