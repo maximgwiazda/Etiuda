@@ -13,7 +13,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-store-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 62;
+const EXPECTED = 63;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -561,15 +561,21 @@ async function main() {
     const p = await lifted(file, tag, scenes[id]);
     check(base && p.turned && p.back, line + ": " + p.detail + ", sha " + (p.back ? "unchanged" : "CHANGED"));
   }
-  check(PLANTS.length + LEGS.length + 4 === EXPECTED, "0c the floor counts every leg and plant: " + (PLANTS.length + LEGS.length + 4) + " of " + EXPECTED);
-  /* The ordinary team's paths stay as they were: a grant that is not a store's still makes, renews and opens as before. */
-  const o = await safe(async () => {
+  check(PLANTS.length + LEGS.length + 5 === EXPECTED, "0c the floor counts every leg and plant: " + (PLANTS.length + LEGS.length + 5) + " of " + EXPECTED);
+  /* The ordinary team's paths: a desk without a certificate is refused seat-lapsed, and one holding a current certificate opens and renews. */
+  const oNo = await safe(async () => {
     const w = await ordinaryTeam();
     const s = await hello(w, w.desks.a);
+    return { ok: refused(s, "seat-lapsed"), detail: brief({ session: said(s) }) };
+  });
+  check(oNo.ok === true, "o1a an ordinary team made by a relay grant refuses a desk's session with no certificate seat-lapsed: " + oNo.detail);
+  const o = await safe(async () => {
+    const w = await ordinaryTeam();
+    const s = await hello(w, w.desks.a, K.certFor(w.desks.a.pub, hex(16), T0, C.CERT_SPAN_MS));
     const r = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/grant", { json: { grant: K.delegatedGrantFor(w.lead.pub, T0, { via: viaAt(T0), fields: { until: T0 + 40 * DAY } }) } });
     return { ok: opened(s) && r.status === 200, detail: brief({ session: said(s), renew: r.status }) };
   });
-  check(o.ok === true, "o1 an ordinary team made by a relay grant opens a desk's session with no certificate and renews: " + o.detail);
+  check(o.ok === true, "o1b an ordinary team made by a relay grant opens a desk's session with a current certificate and renews: " + o.detail);
   const lead = await safe(async () => {
     const w = await ordinaryTeam();
     const s = await hello(w, w.lead);
