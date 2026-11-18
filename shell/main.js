@@ -9917,10 +9917,15 @@ ipcMain.handle("etiuda:write-catalog-save", async (e, text, from) => {
   }
 });
 
-let ownSavePending = null;
+/* One pending save per window. Another window's dialog, kept or cancelled, leaves this window's. */
+const ownSavePending = new Map();
 ipcMain.handle("etiuda:choose-own-save", async (e, title) => {
   if (!fromEngine(e)) return null; /* plant:way-out-from-engine */
-  ownSavePending = null;
+  const kept = new Map();
+  for (const [id, slot] of ownSavePending) if (id !== e.sender.id) kept.set(id, slot); /* plant:way-out-per-window */
+  ownSavePending.clear();
+  for (const [id, slot] of kept) ownSavePending.set(id, slot);
+  ownSavePending.delete(e.sender.id);
   const win = BrowserWindow.fromWebContents(e.sender);
   const opts = {
     title: String(title || "Save your own work as files").slice(0, 120),
@@ -9932,7 +9937,7 @@ ipcMain.handle("etiuda:choose-own-save", async (e, title) => {
     : win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
   if (!res || res.canceled || !res.filePaths || !res.filePaths[0]) return null;
   const dir = res.filePaths[0];
-  ownSavePending = { id: e.sender.id, dir };
+  ownSavePending.set(e.sender.id, { id: e.sender.id, dir });
   return { dir };
 });
 const WIN_DEVICE_RE = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i;
@@ -9949,7 +9954,7 @@ function uniqueOwnParts(dir, rawName) {
 }
 ipcMain.handle("etiuda:write-own-save", async (e, name, text) => {
   if (!fromEngine(e)) return null;
-  const p = ownSavePending;
+  const p = ownSavePending.get(e.sender.id) || null;
   if (!p || p.id !== e.sender.id) return null;
   const parts = uniqueOwnParts(p.dir, name);
   if (!parts) return { name: String(name || ""), ok: false };
@@ -9973,7 +9978,8 @@ ipcMain.handle("etiuda:write-own-save", async (e, name, text) => {
 });
 ipcMain.handle("etiuda:end-own-save", async (e) => {
   if (!fromEngine(e)) return null;
-  if (ownSavePending && ownSavePending.id === e.sender.id) ownSavePending = null;
+  const p = ownSavePending.get(e.sender.id);
+  if (p && p.id === e.sender.id) ownSavePending.delete(e.sender.id);
   return true;
 });
 
