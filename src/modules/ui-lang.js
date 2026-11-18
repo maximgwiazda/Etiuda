@@ -1800,12 +1800,9 @@ UI_STRINGS.pl={
   "{NAME} comes from your account: the first name and the first letter of the surname. Replies that sign with your name use it, and the team's lead sees this desk by it. It can be changed here at any time.":"{NAME} pochodzi z konta: to imię i pierwsza litera nazwiska. Ta nazwa trafia do odpowiedzi podpisywanych imieniem, a lider zespołu widzi pod nią to stanowisko. Można ją zmienić tutaj w dowolnej chwili.",
   "{NAME} is the name on your account. Replies that sign with your name use it, and the team's lead sees this desk by it. It can be changed here at any time.":"{NAME} to nazwa z konta. Ta nazwa trafia do odpowiedzi podpisywanych imieniem, a lider zespołu widzi pod nią to stanowisko. Można ją zmienić tutaj w dowolnej chwili.",
   "Save your own work as files…":"Zapisz własną pracę jako pliki…",
-  "Nothing here is yours to save.":"Nie ma tu nic własnego do zapisania.",
-  "This build cannot save your own work as files.":"Ta wersja nie potrafi zapisać własnej pracy jako plików.",
-  "Saved {N} file to {FOLDER}.":"Zapisano {N} plik do folderu {FOLDER}.",
-  "Saved {N} files to {FOLDER}.":"Zapisano {N} plików do folderu {FOLDER}.",
-  "few␟Saved {N} files to {FOLDER}.":"Zapisano {N} pliki do folderu {FOLDER}.",
-  "many␟Saved {N} files to {FOLDER}.":"Zapisano {N} plików do folderu {FOLDER}."
+  "There is nothing of yours here to save: no cards of your own, no edits and no flags.":"Nie ma tu nic do zapisania: żadnych własnych kart, zmian ani zgłoszeń.",
+  "Saving to files works only in the desktop app.":"Zapis do plików działa tylko w aplikacji na komputer.",
+  "Files saved in {FOLDER}: {N}.":"Pliki zapisane w folderze {FOLDER}: {N}."
 };
 // Is this a language this build carries? The table itself stays private to this file.
 function uiLangKnown(l){ return !!(l && UI_STRINGS[l]); }

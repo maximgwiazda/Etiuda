@@ -3120,24 +3120,26 @@ try {
       + JSON.stringify(devFails) + ", ordFails " + JSON.stringify(ordFails) + ")");
 
     // 83g: EN & PL UI strings
+    const enStrings = [
+      "Save your own work as files\u2026",
+      "There is nothing of yours here to save: no cards of your own, no edits and no flags.",
+      "Saving to files works only in the desktop app.",
+      "Files saved in {FOLDER}: {N}.",
+    ];
+    const expectPl = [
+      "Zapisz w\u0142asn\u0105 prac\u0119 jako pliki\u2026",
+      "Nie ma tu nic do zapisania: \u017cadnych w\u0142asnych kart, zmian ani zg\u0142osze\u0144.",
+      "Zapis do plik\u00f3w dzia\u0142a tylko w aplikacji na komputer.",
+      "Pliki zapisane w folderze {FOLDER}: {N}.",
+    ];
     const langWas83 = ST.lsGet("eUiLang");
     ST.lsSet("eUiLang", "pl");
-    const plStrings = [
-      UL83.t("Save your own work as files…"),
-      UL83.t("Nothing here is yours to save."),
-      UL83.t("This build cannot save your own work as files."),
-      UL83.counted(1, "Saved {N} file to {FOLDER}.", "Saved {N} files to {FOLDER}."),
-      UL83.counted(2, "Saved {N} file to {FOLDER}.", "Saved {N} files to {FOLDER}."),
-      UL83.counted(5, "Saved {N} file to {FOLDER}.", "Saved {N} files to {FOLDER}."),
-    ];
+    const plStrings = enStrings.map(k => UL83.t(k));
     if (langWas83 == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas83);
     const stringsOk = plStrings.every((s, idx) => typeof s === "string" && s.length > 0
         && !/^PLACEHOLDER/i.test(s) && !/[\u2013\u2014]/.test(s)
-        && (idx > 2 || s !== ["Save your own work as files…", "Nothing here is yours to save.", "This build cannot save your own work as files."][idx]))
-      && plStrings[3] === "Zapisano 1 plik do folderu {FOLDER}."
-      && plStrings[4] === "Zapisano 2 pliki do folderu {FOLDER}."
-      && plStrings[5] === "Zapisano 5 plik\u00f3w do folderu {FOLDER}.";
-    check(stringsOk, "83g EN & PL strings present without PLACEHOLDER or em/en dashes, and singular/plural forms resolve (" + JSON.stringify(plStrings) + ")");
+        && s !== enStrings[idx] && s === expectPl[idx]);
+    check(stringsOk, "83g EN & PL strings present without PLACEHOLDER or em/en dashes, matching copywriter wording (" + JSON.stringify(plStrings) + ")");
 
     // 83h: 7 planted-fault checks (scratch copies)
     const runModulePlant = async mark => {

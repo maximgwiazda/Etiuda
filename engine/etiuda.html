@@ -9694,12 +9694,9 @@ What is typed here stays in this browser.`;
     "{NAME} comes from your account: the first name and the first letter of the surname. Replies that sign with your name use it, and the team's lead sees this desk by it. It can be changed here at any time.": "{NAME} pochodzi z konta: to imię i pierwsza litera nazwiska. Ta nazwa trafia do odpowiedzi podpisywanych imieniem, a lider zespołu widzi pod nią to stanowisko. Można ją zmienić tutaj w dowolnej chwili.",
     "{NAME} is the name on your account. Replies that sign with your name use it, and the team's lead sees this desk by it. It can be changed here at any time.": "{NAME} to nazwa z konta. Ta nazwa trafia do odpowiedzi podpisywanych imieniem, a lider zespołu widzi pod nią to stanowisko. Można ją zmienić tutaj w dowolnej chwili.",
     "Save your own work as files…": "Zapisz własną pracę jako pliki…",
-    "Nothing here is yours to save.": "Nie ma tu nic własnego do zapisania.",
-    "This build cannot save your own work as files.": "Ta wersja nie potrafi zapisać własnej pracy jako plików.",
-    "Saved {N} file to {FOLDER}.": "Zapisano {N} plik do folderu {FOLDER}.",
-    "Saved {N} files to {FOLDER}.": "Zapisano {N} plików do folderu {FOLDER}.",
-    "few␟Saved {N} files to {FOLDER}.": "Zapisano {N} pliki do folderu {FOLDER}.",
-    "many␟Saved {N} files to {FOLDER}.": "Zapisano {N} plików do folderu {FOLDER}."
+    "There is nothing of yours here to save: no cards of your own, no edits and no flags.": "Nie ma tu nic do zapisania: żadnych własnych kart, zmian ani zgłoszeń.",
+    "Saving to files works only in the desktop app.": "Zapis do plików działa tylko w aplikacji na komputer.",
+    "Files saved in {FOLDER}: {N}.": "Pliki zapisane w folderze {FOLDER}: {N}."
   };
   function uiLangKnown(l) {
     return !!(l && UI_STRINGS[l]);
@@ -34214,11 +34211,11 @@ What is typed here stays in this browser.`;
   async function saveOwnWork() {
     const files = ownWorkFiles();
     if (!files.length) {
-      toast(t("Nothing here is yours to save."));
+      toast(t("There is nothing of yours here to save: no cards of your own, no edits and no flags."));
       return { ok: true, count: 0, files: [] };
     }
     if (!eHasOwnSaver()) {
-      toastRefusal(t("This build cannot save your own work as files."));
+      toastRefusal(t("Saving to files works only in the desktop app."));
       return { ok: false, unsupported: true, count: 0 };
     }
     const res = await eSaveOwnFiles(t("Save your own work as files…"), files);
@@ -34229,7 +34226,7 @@ What is typed here stays in this browser.`;
     }
     const count = (res.saved || []).length;
     const folderShown = eHomeless(res.dir, eDeskHome()) || res.dir || "";
-    toast(counted(count, "Saved {N} file to {FOLDER}.", "Saved {N} files to {FOLDER}.").split("{FOLDER}").join(folderShown));
+    toast(t("Files saved in {FOLDER}: {N}.").split("{FOLDER}").join(folderShown).split("{N}").join(String(count)));
     return { ok: true, count, files: res.saved || [], dir: res.dir || "" };
   }
 

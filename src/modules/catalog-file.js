@@ -18,7 +18,7 @@ import { cutLeaves, dismissNode } from "./motion.js";
 import { esc } from "./esc.js";
 import { newCatalogId } from "./ids.js";
 import { TAB_KEY, tabSaveTimer, saveTabSession, tabs } from "./tabs.js";
-import { t, counted, catalogCountsLine, toast, toastRefusal } from "./ui-lang.js";
+import { t, catalogCountsLine, toast, toastRefusal } from "./ui-lang.js";
 import { placeBubble, hangBubble } from "./bubble.js";
 import { originOf } from "./dom.js";
 import { BASE_CATS, BASE_M, pack, whoOptions, savePack, flushStats, retiredCards } from "./pack.js";
@@ -1238,11 +1238,11 @@ function ownWorkFiles(){
 async function saveOwnWork(){
   const files=ownWorkFiles();
   if(!files.length){
-    toast(t("Nothing here is yours to save."));
+    toast(t("There is nothing of yours here to save: no cards of your own, no edits and no flags."));
     return { ok:true, count:0, files:[] };
   }
   if(!eHasOwnSaver()){
-    toastRefusal(t("This build cannot save your own work as files."));
+    toastRefusal(t("Saving to files works only in the desktop app."));
     return { ok:false, unsupported:true, count:0 };
   }
   const res=await eSaveOwnFiles(t("Save your own work as files…"), files);
@@ -1253,7 +1253,7 @@ async function saveOwnWork(){
   }
   const count=(res.saved||[]).length;
   const folderShown=eHomeless(res.dir, eDeskHome()) || res.dir || "";
-  toast(counted(count, "Saved {N} file to {FOLDER}.", "Saved {N} files to {FOLDER}.").split("{FOLDER}").join(folderShown));
+  toast(t("Files saved in {FOLDER}: {N}.").split("{FOLDER}").join(folderShown).split("{N}").join(String(count)));
   return { ok:true, count, files:res.saved||[], dir:res.dir||"" };
 }
 
