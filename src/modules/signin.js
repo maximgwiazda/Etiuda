@@ -53,14 +53,14 @@ function signinRead(v){
     /* Machine policy (decision 49), only where it sets anything: {on, shared, personal, provider, closed, contact}. */
     managed: signinManagedRead(o.managed),
     /* Whether the desk works, judged by the shell on its own clock: that clock, the held certificate's end, the last one's where it
-       stopped (each a time in ms, 0 for none), and whether the system has a network. Kept as the shell judged them; no moment reads them. */
+       stopped (each a time in ms, 0 for none), and whether the system has a network. Kept as the shell judged them. deskDoorState reads them. */
     works: o.works===true, /* plant:read-works */
     now: signinTimeRead(o.now),
     until: signinTimeRead(o.until),
     stoppedAt: signinTimeRead(o.stoppedAt), /* plant:read-stopped */
     online: o.online!==false, /* plant:read-online */
     /* When the service first said none while a certificate ran, the seat and trials it last named, and whether this build can sign in
-       at all; kept as the shell said them, words for the page that no moment reads yet. */
+       at all; kept as the shell said them. deskDoorState reads them. */
     ended: signedIn ? signinTimeRead(o.ended) : 0, /* plant:read-ended */
     holding: signedIn ? signinHoldingRead(o.holding) : null,
     trials: signedIn ? signinTrialsRead(o.trials) : null,
@@ -422,7 +422,8 @@ function deskDoorState(v){
   else if(!v.signedIn && v.offered.length && !v.online && !signinWaiting(v) && !signinStranded(v)) state="first-offline"; /* plant:door-first-offline */
   else if(!v.signedIn && v.offered.length && v.registered && v.online && !signinWaiting(v) && !signinStranded(v)) state="first";
   return {state:state, lead:lead, deskEnd:deskEnd, studioEnd:studioEnd, ended:v.ended||0, until:v.until||0,
-    stoppedAt:v.stoppedAt||0, why:seatOn, seatOn:seatOn, ends:ends, day:day, waitingOnLead:waitingOnLead, orgLicence:orgLicence};
+    stoppedAt:v.stoppedAt||0, why:seatOn, seatOn:seatOn, ends:ends, day:day, waitingOnLead:waitingOnLead,
+    orgLicence:orgLicence, online:v.online!==false};
 }
 function deskWhySentence(on, lead){
   if(on==="trial") return t("its trial ended");
@@ -508,12 +509,12 @@ function firstSigninHtml(v, opts){
   return "";
 }
 function doorFirstHtml(v, ds){
-  const drawn=ds.state==="first" || ds.state==="first-offline" ? ds : Object.assign({}, ds, {state:v.online?"first":"first-offline"});
+  const drawn=ds.state==="first" || ds.state==="first-offline" ? ds : Object.assign({}, ds, {state:ds.online?"first":"first-offline"});
   const pair=deskDoorLines(drawn.state==="first" || drawn.state==="first-offline" ? drawn : Object.assign({}, drawn, {state:"first"}));
   const door=signinDoor(v)||{moment:""};
   const d={state:ds.state, moment:door.moment||""};
   const showSkip=(d.state==="none") && (d.moment==="refused" || d.moment==="managed-refused"); /* plant:door-no-skip */
-  const offline=drawn.state==="first-offline" || ds.state==="first-offline" || !v.online;
+  const offline=drawn.state==="first-offline" || ds.state==="first-offline";
   const priv=t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The leads and administrator of the licence it joins see the account's name, address and picture."); /* plant:door-privacy-short */
   let right='<h2 class="fs-rh">'+esc(t("Signing in"))+'</h2>';
   if(offline) right+='<div class="door-off"><span>'+esc(t("Signing in needs an internet connection. The buttons appear here by themselves once this computer is online."))+'</span></div>';
@@ -557,7 +558,7 @@ function paintDoorBand(){
     el.innerHTML=band.shown ? '<span class="door-band-dot" aria-hidden="true"></span><span>'+esc(band.text)+'</span>' : "";
   }
   const btn=$("#signinBtn");
-  if(!btn) return;
+  if(!btn || typeof btn.querySelector!=="function") return; /* plant:door-band-dot */
   let dot=btn.querySelector(".door-btn-dot");
   if(band.dot){
     if(!dot) btn.insertAdjacentHTML("beforeend", '<span class="door-btn-dot" aria-hidden="true"></span>');

@@ -48,7 +48,7 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 268;
+const PLANTS = 269;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
@@ -1740,8 +1740,9 @@ CASES.keyringLine = async (s, swap) => {
 };
 /* A provider pressed in Settings, Account is answered there alone: the header's panel stays shut; pressed in the panel, the answer
    opens it as before. */
-CASES.accountPress = async () => {
-  if (!P) return false;
+CASES.accountPress = async (s, page) => {
+  const pg = page || P;
+  if (!pg) return false;
   const el = () => ({ hidden: true, dataset: {}, innerHTML: "", title: "", classList: { toggle() {} }, setAttribute() {}, focus() {}, contains: () => false });
   const dom = { "#signinWrap": el(), "#signinBtn": el(), "#signinPanel": el() };
   const answer = { offered: ["microsoft", "google"], preview: true, said: "signin-preview" };
@@ -1749,11 +1750,11 @@ CASES.accountPress = async () => {
   globalThis.document = { querySelector: q => dom[q] || null };
   let fromAccount = null, fromPanel = null;
   try {
-    P.signinChanged({ offered: ["microsoft", "google"], preview: true }, false);
-    P.signinStart("microsoft", "account");
+    pg.signinChanged({ offered: ["microsoft", "google"], preview: true }, false);
+    pg.signinStart("microsoft", "account");
     await tick(5);
     fromAccount = dom["#signinPanel"].hidden;
-    P.signinStart("google");
+    pg.signinStart("google");
     await tick(5);
     fromPanel = dom["#signinPanel"].hidden;
   } finally { delete globalThis.window; delete globalThis.document; }
@@ -3840,20 +3841,25 @@ CASES.clockTick = (s, swap) => {
   wb.signinClockNow(); bare.ticks[0].fn(); clockRun(bare, 2 * HOUR_MS); bare.ticks[0].fn();
   return armed && first && quiet && hourly && off && st.tells === 2 && bare.writes === 0 && bare.file === null;
 };
-/* The page keeps the five fields, typed and bounded, and nothing reads them yet: no page module names works or stoppedAt, and
-   signin.js reads none of the five from a view. */
+/* The page keeps the five fields, typed and bounded. deskDoorState is the one read of them outside signinRead: no other page
+   module names works or stoppedAt, and the rest of signin.js names none of the five on a view. */
 CASES.readFields = async (s, page) => {
   const pg = page || P;
   if (!pg) return false;
   const r = o => JSON.stringify((v => [v.works, v.now, v.until, v.stoppedAt, v.online])(pg.signinRead(o)));
   const is = (...a) => JSON.stringify(a);
-  const at = PAGE.indexOf("function signinRead(v){"), rest = at < 0 ? "" : PAGE.slice(0, at) + PAGE.slice(PAGE.indexOf("\n}\n", at));
-  const unread = at >= 0 && fs.readdirSync(path.join(ROOT, "src", "modules")).filter(n => n.endsWith(".js") && n !== "signin.js")
+  const readAt = PAGE.indexOf("function signinRead(v){"), readEnd = readAt < 0 ? -1 : PAGE.indexOf("\n}\n", readAt);
+  const seamAt = PAGE.indexOf("function deskDoorState(v){"), seamEnd = seamAt < 0 ? -1 : PAGE.indexOf("\n}\n", seamAt);
+  const seam = seamAt < 0 || seamEnd < 0 ? "" : PAGE.slice(seamAt, seamEnd);
+  const outside = readAt < 0 || seamAt < 0 ? PAGE : PAGE.slice(0, readAt) + PAGE.slice(readEnd, seamAt) + PAGE.slice(seamEnd);
+  const seamReads = /\bv\.works\b/.test(seam) && /\bv\.now\b/.test(seam) && /\bv\.until\b/.test(seam)
+    && /\bv\.stoppedAt\b/.test(seam) && /\bv\.online\b/.test(seam);
+  const quiet = seamReads && fs.readdirSync(path.join(ROOT, "src", "modules")).filter(n => n.endsWith(".js") && n !== "signin.js")
     .every(n => !/\.(?:works|stoppedAt)\b/.test(fs.readFileSync(path.join(ROOT, "src", "modules", n), "utf8")))
-    && !/\.(?:works|stoppedAt)\b|\b(?:v|s|sv|view|signinV)\.(?:now|until|online)\b/.test(rest);
+    && !/\b(?:v|o|s|sv|view|signinV)\.(?:works|now|until|stoppedAt|online)\b/.test(outside);
   return r({ works: true, now: NOW, until: NOW + 1, stoppedAt: NOW - 1, online: false }) === is(true, NOW, NOW + 1, NOW - 1, false)
     && r(null) === is(false, 0, 0, 0, true) && r({ works: "yes", now: "1", until: -5, stoppedAt: 1.5, online: 0 }) === is(false, 0, 0, 0, true)
-    && r({ now: 9e15, until: Infinity, stoppedAt: NaN }) === is(false, 0, 0, 0, true) && unread;
+    && r({ now: 9e15, until: Infinity, stoppedAt: NaN }) === is(false, 0, 0, 0, true) && quiet;
 };
 /* ---- THE DESK KEEPS ITS CERTIFICATE TO ITS END, KNOWS WHAT ITS SEAT IS, AND STOPS AT THE END (B-2b) ----------------------------
    The answer's seat and trials read and kept (holding, trials); a certificate kept through an answer of none, `ended` stamped on the
@@ -4184,8 +4190,8 @@ CASES.noProvider = (s, swap) => {
     && s.signinWorksOf(held, [MS], DESK_KEY, NOW + 1) === true && !timers.some(ms => ms > 0) && nst.renews === 0 && nst.held === held && !!held.cert
     && registered(configured(s), {}) === true && registered(s.SIGNIN_PROVIDERS, s.SIGNIN_PROVIDERS) === false;
 };
-/* The page keeps \`ended\`, \`holding\`, \`trials\` and \`registered\`, typed and bounded, the first three for a signed-in desk alone; no
-   other page module names any of them and signin.js reads none of them from a view. */
+/* The page keeps \`ended\`, \`holding\`, \`trials\` and \`registered\`, typed and bounded, the first three for a signed-in desk alone.
+   deskDoorState is what reads them. No other page module names holding or registered, and the rest of signin.js reads none of the four from a view. */
 CASES.pageWords = async (s, page) => {
   const pg = page || P;
   if (!pg) return false;
@@ -4195,15 +4201,18 @@ CASES.pageWords = async (s, page) => {
   const odd = r({ ended: "1", holding: { on: "gift", ends: 1 }, trials: { desk: -1 }, registered: "yes" });
   const lead = v => (r({ holding: { on: "team", ends: 1, lead: v } }).holding || {}).lead;
   const out = pg.signinRead({ offered: ["microsoft"], ended: NOW, holding: { on: "own", ends: 1 }, trials: { desk: NOW }, registered: true });
-  const at = PAGE.indexOf("function signinRead(v){"), rest = at < 0 ? "" : PAGE.slice(0, at) + PAGE.slice(PAGE.indexOf("\n}\n", at));
-  const unread = at >= 0 && fs.readdirSync(path.join(ROOT, "src", "modules")).filter(n => n.endsWith(".js") && n !== "signin.js")
+  const seamAt = PAGE.indexOf("function deskDoorState(v){"), seamEnd = seamAt < 0 ? -1 : PAGE.indexOf("\n}\n", seamAt);
+  const seam = seamAt < 0 || seamEnd < 0 ? "" : PAGE.slice(seamAt, seamEnd);
+  const outside = seamAt < 0 ? PAGE : PAGE.slice(0, seamAt) + PAGE.slice(seamEnd);
+  const seamReads = /\bv\.ended\b/.test(seam) && /\bv\.holding\b/.test(seam) && /\bv\.trials\b/.test(seam) && /\bv\.registered\b/.test(seam);
+  const quiet = seamReads && fs.readdirSync(path.join(ROOT, "src", "modules")).filter(n => n.endsWith(".js") && n !== "signin.js")
     .every(n => !/\.(?:holding|registered)\b/.test(fs.readFileSync(path.join(ROOT, "src", "modules", n), "utf8")))
-    && !/\b(?:v|s|sv|view|signinV)\.(?:ended|holding|trials|registered)\b/.test(rest);
+    && !/\b(?:v|s|sv|view|signinV)\.(?:ended|holding|trials|registered)\b/.test(outside);
   return full.ended === NOW && JSON.stringify(full.holding) === JSON.stringify({ on: "team", ends: NOW + 1, lead: B2B_LEAD })
     && JSON.stringify(full.trials) === JSON.stringify({ desk: NOW, studio: NOW + 1 }) && full.registered === true
     && odd.ended === 0 && odd.holding === null && odd.trials === null && odd.registered === false
     && lead("<b>x</b>") === undefined && lead("x" + ch(1)) === undefined && lead("L".repeat(121)) === undefined && lead(B2B_LEAD) === B2B_LEAD
-    && out.ended === 0 && out.holding === null && out.trials === null && out.registered === true && pg.signinRead(null).registered === false && unread;
+    && out.ended === 0 && out.holding === null && out.trials === null && out.registered === true && pg.signinRead(null).registered === false && quiet;
 };
 const LEGS = [
   ["ds1a", "offered", "as shipped no client id is configured and nothing is offered; a configured table offers what it configures, in order"],
@@ -4390,8 +4399,8 @@ const LEGS = [
   ["dsk11","clockKeyLate","B-2b, the test architect's candidate: a start whose first ask comes before the desk's key still reads the kept clock once the key answers"],
   ["dsk12","pickRefused","B-2b: the quick replies' key and tray open nothing on a desk that does not work and bring its window forward; on one that works they open as before, and a second press still closes one that stands"],
   ["dsk13","noProvider","B-2b: a build offering no provider works with no certificate, a genuine one held, arms no stop, asks no renewal and tells the page registered false; machine policy pinning the providers away leaves registered as the build is; nothing held is dropped"],
-  ["dsk14","pageWords","B-2b: the page keeps ended, holding, trials and registered, typed and bounded, the first three for a signed-in desk alone, and nothing on the page reads them yet"],
-  ["dsw14", "readFields", "the page keeps works, now, until, stoppedAt and online, typed and bounded, and nothing on the page reads them yet"],
+  ["dsk14","pageWords","the page keeps ended, holding, trials and registered, typed and bounded, the first three for a signed-in desk alone, and deskDoorState is what reads them"],
+  ["dsw14", "readFields", "the page keeps works, now, until, stoppedAt and online, typed and bounded, and deskDoorState is what reads them"],
 ];
 for (let [id, name, line] of LEGS) {
   let ok = false;
@@ -5012,6 +5021,7 @@ if (!PLANTS_OFF) {
   await plantPage("dswp25", ["function signinTimeRead(v){ return Number.isSafeInteger(v) && v>0 && v<=8.64e15 ? v : 0; } /* plant:read-time */", "function signinTimeRead(v){ return Number(v)||0; }"], "readFields");
   await plantPage("dswp26", ["    stoppedAt: signinTimeRead(o.stoppedAt), /* plant:read-stopped */", "    stoppedAt: 0,"], "readFields");
   await plantPage("dswp27", ["    online: o.online!==false, /* plant:read-online */", "    online: true,"], "readFields");
+  await plantPage("dspBand", ["if(!btn || typeof btn.querySelector!==\"function\") return; /* plant:door-band-dot */", "if(!btn) return;"], "accountPress");
   /* B-2b: the desk keeps its certificate to its end, knows what its seat is, and stops at the end. */
   await plant("dskp1", ["  if (!v || typeof v !== \"object\" || Array.isArray(v) || SIGNIN_HOLDING_ON.indexOf(v.on) < 0) return null; /* plant:holding-on */","  if (!v || typeof v !== \"object\" || Array.isArray(v)) return null;"], "answerWords");
   await plant("dskp2", ["  if (lead && lead.length <= SIGNIN_LEAD_MAX && !/[\\u0000-\\u001f\\u007f-\\u009f<>\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]/.test(lead)) out.lead = lead; /* plant:holding-lead */","  if (typeof v.lead === \"string\") out.lead = v.lead;"], "answerWords");
