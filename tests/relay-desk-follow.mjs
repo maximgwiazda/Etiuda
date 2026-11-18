@@ -88,7 +88,8 @@ function makePolicyExport(folder, leadHex) {
 
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 
-/* =========================================================================================   ONE LAUNCH: shell/main.js loaded with stubbed electron, watched fs and mock relay channel,
+/* ================================================================================================
+   ONE LAUNCH: shell/main.js loaded with stubbed electron, watched fs and mock relay channel,
    started through app.whenReady().
    ================================================================================================ */
 async function launch(plan) {
@@ -1084,7 +1085,6 @@ async function main() {
   }
   [known.invite, known.policy, known.answer].forEach(k => { try { fs.rmSync(k.p.lab, { recursive: true, force: true }); } catch {} });
   [kb, kh, ks, kk].forEach(s => { try { fs.rmSync(s.lab, { recursive: true, force: true }); } catch {} });
-=======
   /* THE SEAT'S WALL (945s25): a desk pinned by invitation whose lead's signed team file names another https host builds its channel
      there through signinSeatWall, as a channel at the built-in relay is built. Judged at that hand-over, on a customer's start
      (harnessLaunch false, under which knownRelayAddress takes only the built-in and staging relays): the other host's channel holds no
