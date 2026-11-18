@@ -2810,13 +2810,12 @@ try {
   }
   try { fs.rmSync(themeLab, { recursive: true, force: true }); } catch { /* a temp folder */ }
 
-  /* ---- 83: the way out — save only what is yours, leaving the desk untouched ---------------- */
+  /* ---- 83: the way out - save only what is yours, leaving the desk untouched ---------------- */
   const UL83 = await import(PLAIN("ui-lang.js"));
   const FL83 = await import(PLAIN("card-flag.js"));
   const SI83 = await import(PLAIN("signin.js"));
   const out83Root = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-way-out-"));
   const dialogWas83 = dialogOpen, hookWas83 = HK.hooks.saveOwnWork, hostWas83 = window.E_HOST;
-  const toasts83 = [];
   const docCreateWas83 = globalThis.document;
   try {
     const ownFn = typeof CF.ownWorkFiles === "function" ? CF.ownWorkFiles : null;
@@ -3030,14 +3029,27 @@ try {
     dialogOpen = async () => ({ canceled: false, filePaths: [out83f] });
     const chosen83f = await REAL_HOST.chooseOwnSave("Test");
     const travRes = await REAL_HOST.writeOwnSave("../escape.ec", "{}");
+    const adsRes = await REAL_HOST.writeOwnSave("c:ads.ec", "{}");
     const exeRes = await REAL_HOST.writeOwnSave("evil.exe", "bad");
     const strangerWrite = invokeHandlers["etiuda:write-own-save"]
       ? await invokeHandlers["etiuda:write-own-save"](eventFor(strangerFrame), "ok.ec", "{}") : "missing";
     if (typeof REAL_HOST.endOwnSave === "function") await REAL_HOST.endOwnSave();
     const afterEndWrite = await REAL_HOST.writeOwnSave("late.ec", "{}");
-    check(strangerChoose === null && !!chosen83f && !fs.existsSync(path.join(out83Root, "escape.ec"))
-        && !!exeRes && exeRes.ok === false && strangerWrite === null && afterEndWrite === null,
-      "83f refuses stranger frames, rejects non-.ec/.txt, contains paths inside chosen folder, and closes write session after endOwnSave");
+    let testEnvDialogs = 0, testEnvRes = null;
+    const prevSaveAs = process.env.ETIUDA_TEST_SAVE_AS;
+    process.env.ETIUDA_TEST_SAVE_AS = out83f;
+    dialogOpen = async () => { testEnvDialogs++; return { canceled: true, filePaths: [] }; };
+    try { testEnvRes = await REAL_HOST.chooseOwnSave("Test"); }
+    finally {
+      if (prevSaveAs === undefined) delete process.env.ETIUDA_TEST_SAVE_AS; else process.env.ETIUDA_TEST_SAVE_AS = prevSaveAs;
+      if (typeof REAL_HOST.endOwnSave === "function") await REAL_HOST.endOwnSave();
+    }
+    check(strangerChoose === null && !!chosen83f && !!travRes && travRes.ok === false
+        && !fs.existsSync(path.join(out83Root, "escape.ec"))
+        && !!adsRes && adsRes.ok === true && adsRes.name === "c_ads.ec"
+        && !!exeRes && exeRes.ok === false && strangerWrite === null && afterEndWrite === null
+        && testEnvDialogs === 0 && !!testEnvRes && testEnvRes.dir === out83f,
+      "83f refuses stranger frames, rejects non-.ec/.txt, contains paths inside chosen folder, closes write session after endOwnSave, and honours ETIUDA_TEST_SAVE_AS under TEST_DOOR");
 
     // 83g: EN & PL UI strings
     const langWas83 = ST.lsGet("eUiLang");
