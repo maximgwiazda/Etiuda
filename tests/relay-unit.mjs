@@ -8125,7 +8125,10 @@ async function main() {
   {
     const now = productShas(), paths = Object.keys(PRODUCT_AT_START);
     const changed = paths.filter(p => now[p] !== PRODUCT_AT_START[p]).concat(Object.keys(now).filter(p => !(p in PRODUCT_AT_START)));
-    const outside = path.relative(ROOT, WORK).split(path.sep)[0] === ".." && !path.isAbsolute(path.relative(ROOT, WORK));
+    /* Outside the repository: a relative path that climbs out of it, or, where the scratch folder is on another drive, no relative
+       path at all (path.relative then answers the absolute one; a hosted machine's checkout and temp folder are on two drives). */
+    const rel = path.relative(ROOT, WORK);
+    const outside = path.isAbsolute(rel) || rel.split(path.sep)[0] === "..";
     check(paths.length > 10 && changed.length === 0 && copies > 0 && outside,
       "969a no plant wrote a product file: all " + paths.length + " files under relay/ and shell/relay/ have the sha256 they had before the first leg,"
       + " after " + copies + " copies made for the plants under " + (outside ? "a folder outside the repository" : "THE REPOSITORY") + (changed.length ? ", changed: " + changed.join(" ") : ""));

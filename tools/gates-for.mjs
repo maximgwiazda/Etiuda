@@ -107,9 +107,10 @@ export const SHARED = [
    and the floor at merge, and the next nightly is its whole run. A diff that mixes one of them with any other file fails closed
    as before. */
 /* tests/gate-run.mjs is one of them since 2026-11-12 (the test architect): it spawns tools/gate-run.mjs in labs rather than importing it,
-   so no import edge reaches it, and fold 45's change to the tool, confined to the gate tools, never ran it (an escaped red). */
+   so no import edge reaches it, and fold 45's change to the tool, confined to the gate tools, never ran it (an escaped red). So is
+   tests/area-shard.mjs since 2026-11-18 (the test architect), which spawns the tool's area listing for its shards. */
 export const GATE_TOOLS = ["tools/gate-run.mjs", "tools/gates-for.mjs", "tools/child-cap.mjs", "tests/result-line.mjs",
-  "tests/gates-for.mjs", "tests/gate-run.mjs"];
+  "tests/gates-for.mjs", "tests/gate-run.mjs", "tests/area-shard.mjs"];
 
 /* A leg whose trace follows a whole directory. A merge runs it only when the diff reaches one of
    these files, or the leg itself. The trace still records the wide reads; this list is a ceiling. */
