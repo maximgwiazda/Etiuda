@@ -11244,7 +11244,10 @@ function signinSeatWall(url, opts) {
 function signinRelaySeatIo(team, url, opts) {
   if (team === null) { signinRelaySeatTold(signinRelaySeatTeam, "open"); return null; }
   const io = { seat: () => signinSeatCert(), seatRenew: () => signinSeatRenew(), onSeat: state => signinRelaySeatTold(team, state) };
-  return opts === undefined ? io : signinSeatWall(url, Object.assign({}, opts, io));
+  if (opts === undefined) return io;
+  let out = Object.assign({}, opts, io);
+  out = signinSeatWall(url, out); /* plant:seat-wall-hand */
+  return out;
 }
 /* Google's client secret, where the package step put one beside the asar: read here once, at start, installed only. */
 if (INSTALLED) { try { signinPacked = signinSecretRead(fs.readFileSync(path.join(String(process.resourcesPath || ""), SIGNIN_SECRET_FILE), "utf8")); } catch { /* none packaged: every byte as before */ } }
