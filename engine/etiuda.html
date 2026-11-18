@@ -3914,18 +3914,22 @@ body.e-first-signin .stage>.dotfield{content-visibility:hidden}
 .fs-skip{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
 .fs-skip-line{margin:10px 0 0;font:12.5px/1.45 var(--sans);color:var(--dim)}
 /* The desk's door (B-3b): the band under the header, the dot, the offline box and the way out. */
-.door-band{display:flex;align-items:center;gap:8px;box-sizing:border-box;width:100%;height:30px;padding:0 16px;background:color-mix(in srgb,#d98a1f 14%,var(--panel));border-bottom:1px solid color-mix(in srgb,#d98a1f 32%,transparent);color:var(--ink);font:13px/1.3 var(--sans)}
+.door-band{display:flex;align-items:center;gap:8px;box-sizing:border-box;width:100%;flex:0 0 30px;min-height:30px;height:30px;/* plant:door-band-fixed */padding:0 16px;background:color-mix(in srgb,#d98a1f 14%,var(--panel));border-bottom:1px solid color-mix(in srgb,#d98a1f 32%,transparent);color:var(--ink);font:13px/1.3 var(--sans)}
 .door-band[hidden]{display:none}
 .door-band-dot{width:8px;height:8px;border-radius:50%;background:#d98a1f;flex:none}
 .signin-wrap .sgn-btn{position:relative}
 .door-btn-dot{position:absolute;right:-2px;top:-2px;width:8px;height:8px;border-radius:50%;background:#d98a1f;box-shadow:0 0 0 2px var(--header-bg)}
 .door-seat-dot{position:absolute;left:-14px;top:7px;width:8px;height:8px;border-radius:50%;background:#d98a1f}
 .set-label:has(.door-seat-dot){position:relative}
-.door-off{border:1px dashed var(--line);border-radius:8px;font:14px/1.45 var(--sans);padding:12px 14px;color:var(--ink)}
+.door-off{display:flex;gap:10px;align-items:flex-start;border:1px dashed var(--line);border-radius:8px;font:14px/1.45 var(--sans);padding:12px 14px;color:var(--ink)}
+.door-off-glyph{flex:none;margin-top:1px;opacity:.7}
 .door-acts{margin-top:18px}
+.door-on-row{display:flex;gap:8px;flex-wrap:nowrap;margin-top:14px}
+/* The way on stays filled. Hover and focus restate the fill; the page's focus ring stays outside the press. */
+.door-acts .btn.primary,.sgn-panel[data-moment="ended"] .btn.primary,.door-acts .btn.primary:focus-visible,.door-acts .btn.primary:hover,.sgn-panel[data-moment="ended"] .btn.primary:hover,.sgn-panel[data-moment="ended"] .btn.primary:focus-visible{background:var(--accent);color:#fff;border-color:var(--accent)} /* plant:door-on-fill */
 .door-quiet{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:12px}
 .door-text{background:none;border:0;padding:0;cursor:pointer;font:13px/1.4 var(--sans);color:var(--accent)}
-.door-out{margin-top:18px;padding-top:18px;border-top:1px solid var(--line)}
+.door-out{margin-top:22px;padding-top:18px;border-top:1px solid var(--line)} /* plant:door-out-gap */
 @media (max-width:780px){
   .fs-grid{grid-template-columns:1fr;grid-template-rows:auto 1fr}
   .fs-left{padding:26px 22px 18px}
@@ -9706,11 +9710,13 @@ What is typed here stays in this browser.`;
     "{NAME} comes from your account: the first name and the first letter of the surname. Replies that sign with your name use it, and the team's lead sees this desk by it. It can be changed here at any time.": "{NAME} pochodzi z konta: to imię i pierwsza litera nazwiska. Ta nazwa trafia do odpowiedzi podpisywanych imieniem, a lider zespołu widzi pod nią to stanowisko. Można ją zmienić tutaj w dowolnej chwili.",
     "{NAME} is the name on your account. Replies that sign with your name use it, and the team's lead sees this desk by it. It can be changed here at any time.": "{NAME} to nazwa z konta. Ta nazwa trafia do odpowiedzi podpisywanych imieniem, a lider zespołu widzi pod nią to stanowisko. Można ją zmienić tutaj w dowolnej chwili.",
     "Ask {LEAD}": "Poproś: {LEAD}",
+    "Ask a team's lead…": "Poproś lidera zespołu…",
     "Etiuda starts with a sign-in.": "Etiuda zaczyna się od zalogowania.",
     "Signing in with Microsoft or Google gives this computer a seat: the team's, where its lead has admitted this account, or else a trial of fourteen days. Catalogs open once the seat is here.": "Zalogowanie kontem Microsoft lub Google daje temu komputerowi miejsce w licencji: w zespole, jeśli lider przyjął to konto, a w przeciwnym razie czternastodniowy okres próbny. Katalogi otwierają się, gdy miejsce już jest.",
     "Signing in needs an internet connection. The buttons appear here by themselves once this computer is online.": "Logowanie wymaga połączenia z internetem. Przyciski pojawią się tu same, gdy komputer będzie online.",
     "The request to join is waiting.": "Prośba o dołączenie czeka.",
     "Catalogs open here again once {LEAD}, the team's lead, accepts it. Etiuda's own fourteen days ended on {DESK_END}.": "Katalogi znów otworzą się tutaj, gdy {LEAD}, lider zespołu, ją przyjmie. Własne czternaście dni Etiudy skończyły się {DESK_END}.",
+    "Catalogs open here again once the team's lead accepts it. Etiuda's own fourteen days ended on {DESK_END}.": "Katalogi znów otworzą się tutaj, gdy lider zespołu ją przyjmie. Własne czternaście dni Etiudy skończyły się {DESK_END}.",
     "Etiuda's trial has ended.": "Okres próbny Etiudy się skończył.",
     "It ended on {DESK_END}. This account's organisation holds an Etiuda licence, so a team's lead can admit this account; buying a licence opens the catalogs again too.": "Skończył się {DESK_END}. Organizacja tego konta ma licencję Etiudy, więc lider zespołu może przyjąć to konto; katalogi otworzy też zakup licencji.",
     "It ended on {DESK_END}. Buying a licence opens the catalogs again.": "Skończył się {DESK_END}. Katalogi otworzy ponownie zakup licencji.",
@@ -9724,15 +9730,18 @@ What is typed here stays in this browser.`;
     "the Etiuda Studio trial that covered it ended": "skończył się okres próbny Etiudy Studio, który ją obejmował",
     "the licence ended": "wygasła licencja",
     "the seat on the team {LEAD} leads ended": "wygasło miejsce w zespole, który prowadzi {LEAD}",
+    "the seat on the team ended": "wygasło miejsce w zespole",
     "the organisation's licence no longer gives this account a seat": "licencja organizacji nie daje już temu kontu miejsca",
     "Etiuda's own trial is running.": "Trwa własny okres próbny Etiudy.",
     "Day {N} of 14, until {DATE}, on up to three computers.": "Dzień {N} z 14, do {DATE}, najwyżej na trzech komputerach.",
     "Day {N} of 14, until {DESK_END}. The request to join waits for {LEAD}, and Etiuda works meanwhile.": "Dzień {N} z 14, do {DESK_END}. Prośba o dołączenie czeka na odpowiedź, której udzieli {LEAD}, a Etiuda w tym czasie działa.",
+    "Day {N} of 14, until {DESK_END}. The request to join waits for the team's lead, and Etiuda works meanwhile.": "Dzień {N} z 14, do {DESK_END}. Prośba o dołączenie czeka na odpowiedź lidera zespołu, a Etiuda w tym czasie działa.",
     "Etiuda now runs on the Etiuda Studio trial.": "Etiuda działa teraz w okresie próbnym Etiudy Studio.",
     "Etiuda's own fourteen days ended on {DESK_END}. The Etiuda Studio trial on this account began later and covers Etiuda too, until {STUDIO_END}.": "Własne czternaście dni Etiudy skończyły się {DESK_END}. Okres próbny Etiudy Studio na tym koncie zaczął się później i obejmuje także Etiudę, do {STUDIO_END}.",
     "This account holds an Etiuda licence.": "To konto ma licencję Etiudy.",
     "Paid until {ENDS}, on up to three computers.": "Opłacona do {ENDS}, najwyżej na trzech komputerach.",
     "This account has a seat on the team {LEAD} leads.": "To konto ma miejsce w zespole, który prowadzi {LEAD}.",
+    "This account has a seat on a team.": "To konto ma miejsce w zespole.",
     "It renews by itself; the team's licence runs until {ENDS}.": "Odnawia się samo; licencja zespołu obowiązuje do {ENDS}.",
     "This account has a seat on its organisation's licence.": "To konto ma miejsce w licencji swojej organizacji.",
     "It renews by itself; the licence runs until {ENDS}.": "Odnawia się samo; licencja obowiązuje do {ENDS}.",
@@ -12690,7 +12699,7 @@ What is typed here stays in this browser.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-11-18";
+  var E_BUILT = "2026-11-19";
 
   // src/modules/affinity.js
   var affinity_exports = {};
@@ -29635,6 +29644,12 @@ What is typed here stays in this browser.`;
   function signinDay(at) {
     return new Date(at).toLocaleDateString(uiLang() === "pl" ? "pl-PL" : "en-GB", { day: "numeric", month: "short" });
   }
+  function doorDay(at, now) {
+    const d = new Date(at), lang2 = uiLang() === "pl" ? "pl-PL" : "en-GB";
+    const opt = { day: "numeric", month: "long" };
+    if (d.getFullYear() !== new Date(now > 0 ? now : Date.now()).getFullYear()) opt.year = "numeric";
+    return d.toLocaleDateString(lang2, opt);
+  }
   function signinWhen(at) {
     if (!at) return "";
     const d = new Date(at), now = /* @__PURE__ */ new Date(), lang2 = uiLang() === "pl" ? "pl-PL" : "en-GB";
@@ -29806,21 +29821,23 @@ What is typed here stays in this browser.`;
       day,
       waitingOnLead,
       orgLicence,
-      online: v.online !== false
+      online: v.online !== false,
+      now: v.now || 0
     };
   }
   function deskWhySentence(on, lead) {
     if (on === "trial") return t("its trial ended");
     if (on === "studio-trial") return t("the Etiuda Studio trial that covered it ended");
     if (on === "own") return t("the licence ended");
-    if (on === "team") return named(t("the seat on the team {LEAD} leads ended"), "{LEAD}", lead);
+    if (on === "team") return lead ? named(t("the seat on the team {LEAD} leads ended"), "{LEAD}", lead) : t("the seat on the team ended");
     if (on === "org") return t("the organisation's licence no longer gives this account a seat");
     return "";
   }
   function deskDoorLines(ds) {
-    const lead = ds.lead || "", n = String(ds.day || 0), desk = ds.deskEnd ? signinDay(ds.deskEnd) : "", studio = ds.studioEnd ? signinDay(ds.studioEnd) : "";
-    const ends = ds.ends ? signinDay(ds.ends) : "", ended = ds.ended ? signinDay(ds.ended) : "", until = ds.until ? signinDay(ds.until) : "";
-    const stopped = ds.stoppedAt ? signinDay(ds.stoppedAt) : "";
+    const lead = ds.lead || "", n = String(ds.day || 0), dayAt = (at) => at ? doorDay(at, ds.now) : "";
+    const desk = dayAt(ds.deskEnd), studio = dayAt(ds.studioEnd);
+    const ends = dayAt(ds.ends), ended = dayAt(ds.ended), until = dayAt(ds.until);
+    const stopped = dayAt(ds.stoppedAt);
     const fill2 = (s, map) => Object.keys(map).reduce((a, k) => a.split(k).join(map[k]), s);
     if (ds.state === "first" || ds.state === "first-offline") return [
       t("Etiuda starts with a sign-in."),
@@ -29828,7 +29845,7 @@ What is typed here stays in this browser.`;
     ];
     if (ds.state === "waiting") return [
       t("The request to join is waiting."),
-      fill2(t("Catalogs open here again once {LEAD}, the team's lead, accepts it. Etiuda's own fourteen days ended on {DESK_END}."), { "{LEAD}": lead, "{DESK_END}": desk })
+      lead ? fill2(t("Catalogs open here again once {LEAD}, the team's lead, accepts it. Etiuda's own fourteen days ended on {DESK_END}."), { "{LEAD}": lead, "{DESK_END}": desk }) : fill2(t("Catalogs open here again once the team's lead accepts it. Etiuda's own fourteen days ended on {DESK_END}."), { "{DESK_END}": desk })
     ];
     if (ds.state === "trial-over-org") return [
       t("Etiuda's trial has ended."),
@@ -29858,7 +29875,7 @@ What is typed here stays in this browser.`;
       fill2(t("Paid until {ENDS}, on up to three computers."), { "{ENDS}": ends })
     ];
     if (ds.state === "working" && ds.seatOn === "team") return [
-      fill2(t("This account has a seat on the team {LEAD} leads."), { "{LEAD}": lead }),
+      lead ? fill2(t("This account has a seat on the team {LEAD} leads."), { "{LEAD}": lead }) : t("This account has a seat on a team."),
       fill2(t("It renews by itself; the team's licence runs until {ENDS}."), { "{ENDS}": ends })
     ];
     if (ds.state === "working" && ds.seatOn === "org") return [
@@ -29867,7 +29884,7 @@ What is typed here stays in this browser.`;
     ];
     if (ds.state === "working" && ds.waitingOnLead) return [
       t("Etiuda's own trial is running."),
-      fill2(t("Day {N} of 14, until {DESK_END}. The request to join waits for {LEAD}, and Etiuda works meanwhile."), { "{N}": n, "{DESK_END}": desk, "{LEAD}": lead })
+      lead ? fill2(t("Day {N} of 14, until {DESK_END}. The request to join waits for {LEAD}, and Etiuda works meanwhile."), { "{N}": n, "{DESK_END}": desk, "{LEAD}": lead }) : fill2(t("Day {N} of 14, until {DESK_END}. The request to join waits for the team's lead, and Etiuda works meanwhile."), { "{N}": n, "{DESK_END}": desk })
     ];
     if (ds.state === "working") return [
       t("Etiuda's own trial is running."),
@@ -29878,13 +29895,17 @@ What is typed here stays in this browser.`;
   function doorBandState(v) {
     const ds = deskDoorState(v);
     if (ds.state !== "ended") return { shown: false, dot: false, text: "", tip: "" };
-    const ended = signinDay(ds.ended), until = signinDay(ds.until);
+    const ended = doorDay(ds.ended, ds.now), until = doorDay(ds.until, ds.now);
     return {
       shown: true,
       dot: true,
       text: named(named(t("Seat ended {ENDED} · Etiuda stops {DATE}"), "{ENDED}", ended), "{DATE}", until),
       tip: named(t("This account's seat has ended; Etiuda stops on {DATE}."), "{DATE}", until)
     };
+  }
+  function doorAskLabel(lead) {
+    if (!lead) return t("Ask a team's lead…");
+    return named(t("Ask {LEAD}"), "{LEAD}", lead);
   }
   function doorPress(label2, solid, act) {
     const buy = act === "buy" ? ' data-e-open="buy"' : "";
@@ -29915,6 +29936,7 @@ What is typed here stays in this browser.`;
     if (ds.state === "first" || ds.state === "first-offline" || o.forceFirst) return doorFirstHtml(v, ds);
     return "";
   }
+  var DOOR_OFF_GLYPH = '<svg class="door-off-glyph" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true" focusable="false"><path d="M2 8.8a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M8.5 16.1a5 5 0 0 1 7 0"/><circle cx="12" cy="19.5" r="1" fill="currentColor" stroke="none"/><path d="M3 3l18 18"/></svg>';
   function doorFirstHtml(v, ds) {
     const drawn = ds.state === "first" || ds.state === "first-offline" ? ds : Object.assign({}, ds, { state: ds.online ? "first" : "first-offline" });
     const pair = deskDoorLines(drawn.state === "first" || drawn.state === "first-offline" ? drawn : Object.assign({}, drawn, { state: "first" }));
@@ -29924,7 +29946,7 @@ What is typed here stays in this browser.`;
     const offline = drawn.state === "first-offline" || ds.state === "first-offline";
     const priv = t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The leads and administrator of the licence it joins see the account's name, address and picture.");
     let right = '<h2 class="fs-rh">' + esc(t("Signing in")) + "</h2>";
-    if (offline) right += '<div class="door-off"><span>' + esc(t("Signing in needs an internet connection. The buttons appear here by themselves once this computer is online.")) + "</span></div>";
+    if (offline) right += '<div class="door-off">' + DOOR_OFF_GLYPH + "<span>" + esc(t("Signing in needs an internet connection. The buttons appear here by themselves once this computer is online.")) + "</span></div>";
     else if (v.offered && v.offered.length) right += signinProvidersHtml(v.offered, false);
     if (signinCapHolds(v)) right += '<p class="sgn-cap">' + esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.")) + "</p>";
     right += '<p class="sgn-cap fs-privacy">' + esc(priv) + "</p>";
@@ -29940,7 +29962,7 @@ What is typed here stays in this browser.`;
     const checkFilled = ds.state === "waiting";
     let acts = "";
     if (checkFilled) acts += doorPress(t("Check now"), true, "check");
-    else if (askable) acts += doorPress(named(t("Ask {LEAD}"), "{LEAD}", ds.lead), true, "ask");
+    else if (askable) acts += doorPress(doorAskLabel(ds.lead), true, "ask");
     else acts += doorPress(t("Buy"), true, "buy");
     if (checkFilled || askable) acts += doorPress(t("Buy"), false, "buy");
     const quiet = [];
@@ -30038,7 +30060,7 @@ What is typed here stays in this browser.`;
       const endedPair = deskDoorLines(ds);
       const ask2 = !!(ds.orgLicence || ds.seatOn === "team");
       const acts = [];
-      if (ask2) acts.push({ act: "ask", label: named(t("Ask {LEAD}"), "{LEAD}", ds.lead), solid: true });
+      if (ask2) acts.push({ act: "ask", label: doorAskLabel(ds.lead), solid: true });
       else acts.push({ act: "check", label: t("Check now"), solid: true });
       acts.push({ act: "buy", label: t("Buy") });
       if (ask2) acts.push({ act: "check", label: t("Check now") });
@@ -30132,6 +30154,11 @@ What is typed here stays in this browser.`;
   function signinActsHtml(acts) {
     return '<div class="sgn-acts">' + acts.map((a) => '<button type="button" class="btn' + (a.solid ? " primary" : "") + '" data-signin-act="' + esc(a.act) + '">' + esc(a.label) + "</button>").join("") + "</div>";
   }
+  function signinEndedActsHtml(acts) {
+    const on = acts.filter((a) => a.solid || a.act === "buy"), rest = acts.filter((a) => !(a.solid || a.act === "buy"));
+    const btn = (a) => '<button type="button" class="btn' + (a.solid ? " primary" : "") + '" data-signin-act="' + esc(a.act) + '">' + esc(a.label) + "</button>";
+    return '<div class="door-on-row">' + on.map(btn).join("") + '</div><div class="sgn-acts">' + rest.map(btn).join("") + "</div>";
+  }
   function signinPreviewHtml(v) {
     return v && v.preview ? '<p class="sgn-cap sgn-preview" data-signin-preview><b>' + esc(t("Preview only.")) + "</b> <span>" + esc(t("Sign-in is not set up yet, so nothing here is sent.")) + "</span></p>" : "";
   }
@@ -30153,7 +30180,10 @@ What is typed here stays in this browser.`;
     if (d.providers && d.providers.length) h += signinProvidersHtml(d.providers, false);
     if (d.cap) h += '<p class="sgn-cap">' + esc(d.cap) + "</p>";
     if (d.privacy) h += '<p class="sgn-cap">' + esc(d.privacy) + "</p>";
-    if (d.acts && d.acts.length) h += signinActsHtml(d.acts);
+    if (d.acts && d.acts.length) {
+      if (d.moment === "ended") h += signinEndedActsHtml(d.acts);
+      else h += signinActsHtml(d.acts);
+    }
     if (d.own) h += '<p class="sgn-say sgn-own"><b>' + esc(d.own[0]) + "</b><span>" + esc(d.own[1]) + "</span></p>";
     if (d.link) h += signinLinkHtml(d.link);
     if (d.foot) h += '<p class="sgn-ft">' + esc(d.foot) + "</p>";
