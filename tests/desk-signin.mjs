@@ -889,14 +889,17 @@ CASES.doorJoin = (s, swap) => {
 };
 /* The envelope keeps a join at the door, which names no invitation: its relay part with door true, the lead's box and the relay's
    id once named, and no token, seal or wrap; without the box, or carrying a token, it is no join kept. */
-const KEPT_DECLS = ["function relayKept(", "function joinKept(", "function beforeKept(", "function teamChannelOf("];
+const KEPT_DECLS = ["function relayKept(", "function joinKept(", "function beforeKept(", "function teamChannelOf(", "function knownRelayAddress("];
+/* What knownRelayAddress reads, as a harness start: relay.example.test is a leg's stand-in, which only a harness start keeps. */
+const KEPT_STANDS = "const BUILTIN_RELAY_URL = \"https://etiuda.dev/relay/v1\", STAGING_RELAY_URL = \"https://etiuda.dev/relay-staging/v1\";\n"
+  + "const harnessLaunch = () => true, testServiceOn = false;\n";
 CASES.doorEnvelope = (s, swap) => {
   let text = KEPT_DECLS.map(d => tryDeclText(d)).filter(Boolean).join("\n");
   if (swap) {
     if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in the envelope's readers once: " + swap[0]);
     text = text.replace(swap[0], swap[1]);
   }
-  const lib = new Function("SEALED_TEAM_RE", "JOIN_HEX_RE", text + "\nreturn { relayKept, joinKept };")(/^t-[0-9a-f]{16}$/, /^[0-9a-f]{64}$/);
+  const lib = new Function("SEALED_TEAM_RE", "JOIN_HEX_RE", KEPT_STANDS + text + "\nreturn { relayKept, joinKept };")(/^t-[0-9a-f]{16}$/, /^[0-9a-f]{64}$/);
   const join = relay => ({ team: TEAM, file: "", nonce: "4".repeat(64), commit: "1".repeat(64), asked: NOW, held: 0, name: "",
     invite: { lead: { keyId: DOOR_KEY_ID, public: DOOR_LEAD, name: "" }, pinned: true, before: { barred: false, epoch: 0 }, relay } });
   const door = over => Object.assign({ rt: RT, url: "https://relay.example.test", door: true, box: LEAD_BOX }, over);
@@ -988,7 +991,7 @@ CASES.doorEnded = (s, swap) => {
   };
   const invitation = { team: TEAM, invite: { id: "2".repeat(16), relay: { rt: RT, inv: "5".repeat(32), token: "x", seal: "y" } } };
   const kept = endOf(doorJoin({ inv: DOOR_ID })) === "turned" && tells.join() === "kept,told" && endOf(invitation) === undefined && tells.length === 2;
-  const lib = new Function("SEALED_TEAM_RE", "JOIN_HEX_RE", KEPT_DECLS.map(d => lift(main, d)).filter(Boolean).join("\n") + "\nreturn { relayKept };")(/^t-[0-9a-f]{16}$/, /^[0-9a-f]{64}$/);
+  const lib = new Function("SEALED_TEAM_RE", "JOIN_HEX_RE", KEPT_STANDS + KEPT_DECLS.map(d => lift(main, d)).filter(Boolean).join("\n") + "\nreturn { relayKept };")(/^t-[0-9a-f]{16}$/, /^[0-9a-f]{64}$/);
   const door = { rt: RT, url: "https://relay.example.test", door: true, box: LEAD_BOX, inv: DOOR_ID };
   const envelope = lib.relayKept(Object.assign({}, door, { end: "turned" })) === true && lib.relayKept(Object.assign({}, door, { end: "gone" })) === false
     && lib.relayKept({ rt: RT, url: "https://relay.example.test", inv: DOOR_ID, token: "x", seal: "y", end: "turned" }) === false;

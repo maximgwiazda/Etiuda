@@ -1185,6 +1185,52 @@ async function main() {
     check(wiringOk(wiring) && turned && shaSame, "945s31 the bare options put back at the team's relay channel's createChannel( turn 945s30 red: turned=" + turned + ", shaSame=" + shaSame);
   }
 
+  /* FINDING 10 (Argon 45), on Claude alpha's rule of 2026-11-18 02:02: staging's relay is known only to a test service build; an ordinary
+     build knows the live relay alone, and a harness start keeps its stand-in. 945s32 follows the team file on a customer's start of the
+     ordinary build: a lead's signed file naming staging's relay is not heeded, as another host's is not (ks1). 945s34 judges the two
+     readers that ask it as text: knownRelayAddress, and relayKept, the envelope's reader of a kept invitation or door join, which kept any
+     https host before. */
+  const kps = knownPlan("known-plain-staging", { url: STAGING_RELAY, pinFrom: "invite" }, true);
+  const rps = runScenario(kps);
+  const stagingHeld = (r, p) => r.testService === false && !r.channelCreated && r.openedDir === p.sharedFolder && !r.channelUrl.includes("relay-staging")
+    && !r.fetched.some(u => u.includes("relay-staging")) && r.said.filter(l => l.includes(SAID_ELSEWHERE)).length === 1;
+  check(stagingHeld(rps, kps), "945s32 an ordinary build, on a customer's start, whose pinned lead's signed team file names staging's relay does not heed it:"
+    + " no channel, nothing fetched there, the folder kept, and the desk says once that the file names a relay this Etiuda does not use: "
+    + JSON.stringify({ testService: rps.testService, created: rps.channelCreated, url: rps.channelUrl, folderKept: rps.openedDir === kps.sharedFolder,
+      fetchedThere: rps.fetched.filter(u => u.includes("relay-staging")).length, saidWhy: rps.said.filter(l => l.includes(SAID_ELSEWHERE)).length }));
+  knownLift("945s33", "plant:staging-known", toComment("plant:staging-known"), knownPlan("known-lift-plain-staging", { url: STAGING_RELAY, pinFrom: "invite" }, true),
+    r => r.channelCreated && r.channelUrl === STAGING_RELAY, "lifting plant:staging-known turns 945s32 red: an ordinary build follows its team to staging's relay");
+  try { fs.rmSync(kps.lab, { recursive: true, force: true }); } catch {}
+  const keptSays = src => {
+    const sliceFn = name => { const at = src.indexOf("\nfunction " + name + "("), end = src.indexOf("\n}\n", at); return at < 0 || end < 0 ? "" : src.slice(at + 1, end + 2); };
+    const lib = (harness, ts) => new Function("const BUILTIN_RELAY_URL = " + JSON.stringify(BUILTIN_RELAY) + ", STAGING_RELAY_URL = " + JSON.stringify(STAGING_RELAY) + ";\n"
+      + "const harnessLaunch = () => " + harness + ", testServiceOn = " + ts + ";\n"
+      + ["teamChannelOf", "knownRelayAddress", "relayKept"].map(sliceFn).join("\n") + "\nreturn { knownRelayAddress, relayKept };")();
+    const rt = "a".repeat(32), box = "b".repeat(64), OTHER = "https://other.test/relay/v1";
+    const invite = url => ({ rt, url, inv: "c".repeat(32), token: "t", seal: "s" }), door = url => ({ rt, url, door: true, box });
+    const both = (l, url) => [l.relayKept(invite(url)), l.relayKept(door(url))];
+    const plain = lib(false, false), ts = lib(false, true), harness = lib(true, false);
+    return {
+      plainStaging: [plain.knownRelayAddress(STAGING_RELAY)].concat(both(plain, STAGING_RELAY)), plainOther: both(plain, OTHER), plainBuiltin: both(plain, BUILTIN_RELAY),
+      tsStaging: [ts.knownRelayAddress(STAGING_RELAY)].concat(both(ts, STAGING_RELAY)), tsOther: both(ts, OTHER),
+      harnessStandIn: [harness.knownRelayAddress(STAND_IN)].concat(both(harness, STAND_IN)),
+    };
+  };
+  const keptOk = k => !!k && !k.threw && k.plainStaging.every(x => x === false) && k.plainOther.every(x => x === false) && k.plainBuiltin.every(x => x === true)
+    && k.tsStaging.every(x => x === true) && k.tsOther.every(x => x === false) && k.harnessStandIn.every(x => x === true);
+  let kk2 = null;
+  try { kk2 = keptSays(mainNow); } catch (e) { kk2 = { threw: String(e && e.message || e) }; }
+  check(keptOk(kk2), "945s34 knownRelayAddress and relayKept: on a customer's start of the ordinary build staging's relay is not known and an invitation or a door join"
+    + " kept at it or at another host is not kept, one at the live relay is; a test service build knows staging's and keeps a join there, never another host's;"
+    + " a harness start knows a leg's stand-in and keeps a join there: " + JSON.stringify(kk2));
+  for (const [id, tag, what] of [["945s35", "plant:relay-kept-known", "a join kept at another host is kept"], ["945s36", "plant:staging-known", "an ordinary build knows staging's relay and keeps a join there"]]) {
+    const lines = mainNow.split(/\n/), at = lines.findIndex(l => l.includes("/* " + tag + " */"));
+    let turned = false;
+    if (at >= 0) { lines.splice(at, 1); try { turned = !keptOk(keptSays(lines.join("\n"))); } catch { turned = true; } }
+    const shaSame = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8") === mainNow;
+    check(keptOk(kk2) && turned && shaSame, id + " lifting " + tag + " turns 945s34 red (" + what + "): turned=" + turned + ", shaSame=" + shaSame);
+  }
+
   // Clean up scenario temp dirs
   [s1, s2, s3, s4, s6, s7, s8, s9, s10, s11, s12, s13].filter(Boolean).forEach(s => {
     try { fs.rmSync(s.lab, { recursive: true, force: true }); } catch {}

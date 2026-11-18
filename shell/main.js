@@ -6511,7 +6511,9 @@ function beforeKept(b) {
    token and the seal key sealed by safeStorage, and `wrapped`, the epochs the invitation's wrap gave a key for (whole numbers
    from 1), which Cancel forgets. */
 function relayKept(r) {
-  const c = r && typeof r === "object" && !Array.isArray(r) ? teamChannelOf({ channel: { kind: "relay", rt: r.rt, url: r.url } }) : null;
+  let c = r && typeof r === "object" && !Array.isArray(r) ? teamChannelOf({ channel: { kind: "relay", rt: r.rt, url: r.url } }) : null;
+  /* Kept only at an address an invitation may name now (knownRelayAddress), the rule every other way in keeps. */
+  if (c && c.kind === "relay" && !knownRelayAddress(c.url)) c = null; /* plant:relay-kept-known */
   /* A join at a team's standing door (the door-finding) holds no invitation's token, seal or wrap: its address, the lead's box from
      the door, and the relay's id for its request once named. Without the box it is no door join. */
   if (r && r.door !== undefined) {
@@ -7326,12 +7328,14 @@ function forgetLead(team, left) {
 const BUILTIN_RELAY_URL = "https://etiuda.dev/relay/v1";
 /* A test service build's second built-in relay, fixed here as the first is and never read from a file or the environment. */
 const STAGING_RELAY_URL = "https://etiuda.dev/relay-staging/v1";
-/* An invitation may name only this build's relay or the staging relay. A harness start may also name
+/* An invitation may name only this build's relay, or staging's in a test service build. A harness start may also name
    the https address a leg points at a stand-in. A customer's start may not, so a page cannot choose a host. */
 function knownRelayAddress(u) {
   if (typeof u !== "string") return false;
   const at = u.trim().replace(/\/+$/, "");
-  if (at === BUILTIN_RELAY_URL || at === STAGING_RELAY_URL) return true; /* plant:builtin-relay-known */
+  let staging = at === STAGING_RELAY_URL;
+  staging = staging && testServiceOn; /* plant:staging-known */
+  if (at === BUILTIN_RELAY_URL || staging) return true; /* plant:builtin-relay-known */
   if (!harnessLaunch()) return false; /* plant:relay-known */
   return /^https:\/\/[a-z0-9.-]+(?::[0-9]{1,5})?(?:\/[A-Za-z0-9._~-]+)*\/?$/.test(at);
 }
