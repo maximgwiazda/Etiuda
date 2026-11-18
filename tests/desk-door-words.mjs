@@ -18,7 +18,7 @@ const SETTINGS_PATH = path.join(ROOT, "src", "modules", "settings.js");
 const TEMPLATE_PATH = path.join(ROOT, "src", "template.html");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
-const CHECKS = 28, PLANTS = 14;
+const CHECKS = 29, PLANTS = 15;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -44,7 +44,12 @@ const T_STUDIO_END = Date.UTC(2026, 11, 9, 12, 0, 0);
 const T_UNTIL = Date.UTC(2026, 11, 17, 12, 0, 0);
 const T_ENDS = Date.UTC(2027, 10, 17, 12, 0, 0);
 
-const dayOf = (at, lang) => new Date(at).toLocaleDateString(lang === "pl" ? "pl-PL" : "en-GB", { day: "numeric", month: "short" });
+const dayOf = (at, lang) => {
+  const d = new Date(at);
+  const opt = { day: "numeric", month: "long" };
+  if (d.getFullYear() !== new Date(T_NOW).getFullYear()) opt.year = "numeric";
+  return d.toLocaleDateString(lang === "pl" ? "pl-PL" : "en-GB", opt);
+};
 const textOf = html => String(html || "")
   .replace(/<[^>]*>/g, " ")
   .replace(/&#39;/g, "'")
@@ -183,12 +188,12 @@ const VIEWS = {
   none: { offered: ["microsoft", "google"], signedIn: "", registered: false },
   first: { offered: ["microsoft", "google"], signedIn: "", online: true, registered: true },
   firstOffline: { offered: ["microsoft", "google"], signedIn: "", online: false, registered: true },
-  waiting: { offered: ["microsoft", "google"], signedIn: "microsoft", code: CODE, works: false, askLead: true, holding: { on: "trial", ends: T_DESK_END }, trials: { desk: T_DESK_END } },
-  trialOverOrg: { offered: ["microsoft", "google"], signedIn: "microsoft", code: CODE, works: false, licenceManaged: true, holding: { on: "trial", ends: T_DESK_END }, trials: { desk: T_DESK_END } },
-  trialOver: { offered: ["microsoft", "google"], signedIn: "microsoft", code: CODE, works: false, holding: { on: "trial", ends: T_DESK_END }, trials: { desk: T_DESK_END } },
-  ended: { offered: ["microsoft", "google"], signedIn: "microsoft", code: CODE, works: true, ended: T_ENDED, until: T_UNTIL, holding: { on: "team", ends: T_ENDS, lead: LEAD } },
+  waiting: { offered: ["microsoft", "google"], signedIn: "microsoft", code: CODE, works: false, askLead: true, now: T_NOW, holding: { on: "trial", ends: T_DESK_END }, trials: { desk: T_DESK_END } },
+  trialOverOrg: { offered: ["microsoft", "google"], signedIn: "microsoft", code: CODE, works: false, licenceManaged: true, now: T_NOW, holding: { on: "trial", ends: T_DESK_END }, trials: { desk: T_DESK_END } },
+  trialOver: { offered: ["microsoft", "google"], signedIn: "microsoft", code: CODE, works: false, now: T_NOW, holding: { on: "trial", ends: T_DESK_END }, trials: { desk: T_DESK_END } },
+  ended: { offered: ["microsoft", "google"], signedIn: "microsoft", code: CODE, works: true, now: T_NOW, ended: T_ENDED, until: T_UNTIL, holding: { on: "team", ends: T_ENDS, lead: LEAD } },
   stopped: (on) => ({
-    offered: ["microsoft", "google"], signedIn: "microsoft", code: CODE, works: false,
+    offered: ["microsoft", "google"], signedIn: "microsoft", code: CODE, works: false, now: T_NOW,
     stoppedAt: T_UNTIL, ended: on === "trial" ? T_ENDED : 0,
     licenceManaged: on === "org",
     holding: Object.assign({ on, ends: on === "trial" ? T_DESK_END : on === "studio-trial" ? T_STUDIO_END : T_ENDS }, on === "team" ? { lead: LEAD } : {})
@@ -465,6 +470,22 @@ CASES.css = (src) => {
     && /\.door-out\{[^}]*margin-top:18px;padding-top:18px;border-top:1px solid var\(--line\)/.test(tpl);
 };
 
+/* Door lines say the month in full, and a date in another year keeps the year. The panel's own short day is unchanged. */
+CASES.doorDates = (pg = P) => {
+  const en2 = textOf(doorHtml(pg, VIEWS.waiting, "en"));
+  const pl2 = textOf(doorHtml(pg, VIEWS.waiting, "pl"));
+  const en6 = textOf(panelHtml(pg, VIEWS.working("own"), "en"));
+  const pl6 = textOf(panelHtml(pg, VIEWS.working("own"), "pl"));
+  const band = bandInfo(pg, VIEWS.ended, "en");
+  const short = (s, token) => new RegExp("\\b" + token + "\\b").test(s);
+  return en2.includes("1 December") && !short(en2, "1 Dec")
+    && pl2.includes("1 grudnia") && !short(pl2, "1 gru")
+    && en6.includes("17 November 2027") && !short(en6, "17 Nov")
+    && pl6.includes("17 listopada 2027")
+    && !!band && band.text.includes("17 November") && band.text.includes("17 December")
+    && band.text.indexOf("2026") < 0 && band.text.indexOf("2027") < 0;
+};
+
 /* The band keeps the sheet's 30px. A flex child otherwise shrinks to its text, which measured 18px. */
 CASES.bandFixed = (src) => {
   const tpl = cssText(src);
@@ -507,6 +528,7 @@ const RUN_LIST = [
   ["dd21", "css", "template.html holds exact band, dot, offline box and way-out CSS measures"],
   ["dd27", "wayOn", "the way on is filled var(--accent) with white text and an accent border, and the fill is restated on hover and focus"],
   ["dd28", "bandFixed", "the band is flex 0 0 30px with a 30px minimum, so it cannot shrink to its text"],
+  ["dd29", "doorDates", "door lines use a long month, and a date in another year keeps the year"],
 ];
 
 /* Verify CHECKS matches the 21 named entries (plus 5 extra state-1..6 parity checks? Keep CHECKS exact). */
@@ -591,6 +613,9 @@ if (!PLANTS_OFF) {
   await plant("ddp12", SETTINGS_PATH,
     ["+'<p class=\"sgn-cap\">'+esc(t(\"This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name, address and picture, and shows them only to the leads and administrator of the licence it asks to join.\"))+'</p></div>'; /* plant:account-privacy-full */", "+'<p class=\"sgn-cap\">'+esc(t(\"This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev.\"))+'</p></div>';"],
     "account_en");
+  await plant("ddp15", SIGNIN_PATH,
+    ["if(d.getFullYear()!==new Date(now>0?now:Date.now()).getFullYear()) opt.year=\"numeric\"; /* plant:door-day-year */", "if(false) opt.year=\"numeric\"; /* plant:door-day-year */"],
+    "doorDates");
   plantText("ddp14", TEMPLATE_PATH,
     ["flex:0 0 30px;min-height:30px;height:30px;/* plant:door-band-fixed */", "height:30px;/* plant:door-band-fixed */"],
     "bandFixed");

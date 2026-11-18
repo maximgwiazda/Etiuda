@@ -277,6 +277,13 @@ function signinCodeText(code){ return String(code||"").replace(/(.{4})(?=.)/g,"$
 function signinDay(at){
   return new Date(at).toLocaleDateString(uiLang()==="pl" ? "pl-PL" : "en-GB",{day:"numeric", month:"short"});
 }
+/* A day as the door's lines say one: "1 December", with the year when the date is in another year. */
+function doorDay(at, now){
+  const d=new Date(at), lang=uiLang()==="pl" ? "pl-PL" : "en-GB";
+  const opt={day:"numeric", month:"long"};
+  if(d.getFullYear()!==new Date(now>0?now:Date.now()).getFullYear()) opt.year="numeric"; /* plant:door-day-year */
+  return d.toLocaleDateString(lang, opt);
+}
 function signinWhen(at){
   if(!at) return "";
   const d=new Date(at), now=new Date(), lang=uiLang()==="pl" ? "pl-PL" : "en-GB";
@@ -423,7 +430,7 @@ function deskDoorState(v){
   else if(!v.signedIn && v.offered.length && v.registered && v.online && !signinWaiting(v) && !signinStranded(v)) state="first";
   return {state:state, lead:lead, deskEnd:deskEnd, studioEnd:studioEnd, ended:v.ended||0, until:v.until||0,
     stoppedAt:v.stoppedAt||0, why:seatOn, seatOn:seatOn, ends:ends, day:day, waitingOnLead:waitingOnLead,
-    orgLicence:orgLicence, online:v.online!==false};
+    orgLicence:orgLicence, online:v.online!==false, now:v.now||0};
 }
 function deskWhySentence(on, lead){
   if(on==="trial") return t("its trial ended");
@@ -435,9 +442,10 @@ function deskWhySentence(on, lead){
 }
 /* Heading and line for the state the door, the panel and the Seat row all read. */
 function deskDoorLines(ds){
-  const lead=ds.lead||"", n=String(ds.day||0), desk=ds.deskEnd?signinDay(ds.deskEnd):"", studio=ds.studioEnd?signinDay(ds.studioEnd):"";
-  const ends=ds.ends?signinDay(ds.ends):"", ended=ds.ended?signinDay(ds.ended):"", until=ds.until?signinDay(ds.until):"";
-  const stopped=ds.stoppedAt?signinDay(ds.stoppedAt):"";
+  const lead=ds.lead||"", n=String(ds.day||0), dayAt=(at)=>at?doorDay(at, ds.now):"";
+  const desk=dayAt(ds.deskEnd), studio=dayAt(ds.studioEnd);
+  const ends=dayAt(ds.ends), ended=dayAt(ds.ended), until=dayAt(ds.until);
+  const stopped=dayAt(ds.stoppedAt);
   const fill=(s, map)=>Object.keys(map).reduce((a,k)=>a.split(k).join(map[k]), s);
   if(ds.state==="first" || ds.state==="first-offline") return [t("Etiuda starts with a sign-in."),
     t("Signing in with Microsoft or Google gives this computer a seat: the team's, where its lead has admitted this account, or else a trial of fourteen days. Catalogs open once the seat is here.")];
@@ -469,7 +477,7 @@ function deskDoorLines(ds){
 function doorBandState(v){
   const ds=deskDoorState(v);
   if(ds.state!=="ended") return {shown:false, dot:false, text:"", tip:""}; /* plant:door-band-ended */
-  const ended=signinDay(ds.ended), until=signinDay(ds.until);
+  const ended=doorDay(ds.ended, ds.now), until=doorDay(ds.until, ds.now);
   return {shown:true, dot:true,
     text:named(named(t("Seat ended {ENDED} · Etiuda stops {DATE}"),"{ENDED}",ended),"{DATE}",until),
     tip:named(t("This account's seat has ended; Etiuda stops on {DATE}."),"{DATE}",until)};
