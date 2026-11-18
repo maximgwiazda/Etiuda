@@ -2122,6 +2122,8 @@ function createChannel(opts) {
   let enrolWaitFrom = 0, removedTold = false;
   /* What the relay last answered this desk's seat: "refused", "open", or "" before any answer. */
   let seatState = "";
+  /* The certificate the relay last refused at the door (doorSession), until a knock is taken. */
+  let doorRefused = null;
   /* need: not fetched. held: fetched, waiting for the team file. opened: the team key was handed on. none: this relay
      keeps no wrap (a 404), said as nothing. bad: the wrap did not open, said once. */
   let wrapPhase = "need", wrapHeld = null;
@@ -2323,14 +2325,20 @@ function createChannel(opts) {
      the relay spends at its first use. */
   async function openSession() {
     session = null;
+    /* The socket is the session's: a new session listens on a socket of its own, and none holds the poll off meanwhile. */
+    dropSocket(); /* plant:reopen-socket */
     let ch = await hello();
     if (ch.status !== 200 || !ch.json || !HEX32.test(String(ch.json.challenge))) return refusalOf(ch);
     const who = me();
     let why = R("not-enrolled");
     let inv = typeof o.invite === "function" ? o.invite() : null;
-    const freshInvite = !!(inv && HEX32.test(String(inv.inv)) && prog.tokenSpent(inv.inv) === false);
+    let freshInvite = !!(inv && HEX32.test(String(inv.inv)) && prog.tokenSpent(inv.inv) === false);
     if (who && who.privateKey) {
       const r = await seatHello(ch.json.challenge, who);
+      /* Read again at once: the hello's renewal may have replaced the certificate a door request knocks with, and an invitation may have
+         come while it was out. Everything below, the resumed session's door included, reads this one. */
+      inv = typeof o.invite === "function" ? o.invite() : null; /* plant:invite-reread */
+      freshInvite = !!(inv && HEX32.test(String(inv.inv)) && prog.tokenSpent(inv.inv) === false); /* plant:fresh-reread */
       /* An invitation's session for this key is an earlier invitation's where a fresh one waits unspent and this program
          has used one before: since slice 3 the relay answers a bound key with its invitation's session after the upload too
          (for the lead's answer alone), so taking it would hold the desk there and never spend the fresh token, and the fresh
@@ -2355,10 +2363,13 @@ function createChannel(opts) {
         if (ch.status !== 200 || !ch.json || !HEX32.test(String(ch.json.challenge))) return refusalOf(ch);
       }
     }
-    /* Read again after the key hello, whose renewal may have replaced the certificate a door request knocks with. */
-    inv = typeof o.invite === "function" ? o.invite() : null; /* plant:invite-reread */
     if (why.reason === "removed" && freshInvite) why = R("not-enrolled"); /* plant:removed-token */
     if (why.reason !== "not-enrolled") return why;
+    /* A door join with no certificate it may knock with (the shell's seatless request) waits here for the renewal it asks, then is read
+       again: no hello is refused for its seat before a knock, so nothing else asks. */
+    let awaits = false;
+    awaits = !!(inv && inv.seatless === true && inv.door === undefined); /* plant:door-seat-awaited */
+    if (awaits) { await seatNow(true); inv = typeof o.invite === "function" ? o.invite() : null; }
     if (inv && inv.door !== undefined) return doorSession(ch, who, inv, why); /* plant:door-session */
     let spent = prog.state().tokenUsed === true;
     if (inv && prog.tokenSpent(inv.inv) === false && HEX32.test(String(inv.inv))) spent = false; /* plant:token-by-id */
@@ -2398,25 +2409,42 @@ function createChannel(opts) {
     const knock = (c, door) => call("POST", "session", { json: { challenge: c, door, key: who.keyId, pub: who.public, box: who.box,
       sig: crypto.sign(null, doorHelloBytes(o.rt, c, who.keyId, who.box), who.privateKey).toString("hex") } });
     const taken = x => x.status === 200 && !!x.json && HEX64.test(String(x.json.session)) && HEX32.test(String(x.json.door));
-    let r = await knock(ch.json.challenge, inv.door);
-    /* A knock refused not-enrolled may be refused for its certificate: renewed once, as a refused seat is (seated), and knocked again on a
-       fresh challenge (a refused knock spends its own) only where the renewal changed it. */
-    let renew = false;
-    renew = !taken(r) && refusalOf(r).reason === "not-enrolled"; /* plant:door-renew */
-    if (renew) {
+    /* The relay answers a door shut to this licence, a certificate it does not take and a request the lead dropped alike, and the desk
+       cannot tell which. So the join is turned away only once a second certificate of this desk's is refused here, the first renewed:
+       never on a renewal that did not change it (slow, failed, or the same) nor on a hello that failed. A certificate already refused here
+       is not knocked with again (doorRefused); the renewal is asked instead. */
+    const refusedHere = d => {
+      let second = true;
+      second = !!doorRefused && !sameSeat(d, doorRefused); /* plant:door-second */
+      doorRefused = d;
+      return second;
+    };
+    /* A refused knock: its answer where the join ends or the refusal is not the door's, null where its certificate may be the cause. */
+    const judged = x => {
+      const t = refusalOf(x);
+      if (t.reason === "removed") { inviteEnd("removed"); return t; }
+      if (t.reason !== "not-enrolled") return t;
+      if (refusedHere(door)) { inviteEnd("turned"); return t; } /* plant:door-turned */
+      return null;
+    };
+    let door = inv.door, r = null;
+    let fresh = true;
+    fresh = !sameSeat(door, doorRefused); /* plant:door-refused-kept */
+    if (fresh) {
+      r = await knock(ch.json.challenge, door);
+      if (!taken(r)) { const t = judged(r); if (t) return t; }
+    }
+    if (!r || !taken(r)) {
       await seatNow(true);
       const again = typeof o.invite === "function" ? o.invite() : null;
-      const next = again && again.door !== undefined && table(again.door) && !sameSeat(again.door, inv.door) ? await hello() : null;
-      if (next && next.status === 200 && next.json && HEX32.test(String(next.json.challenge))) r = await knock(next.json.challenge, again.door);
+      if (!(again && again.door !== undefined && table(again.door) && !sameSeat(again.door, door))) return r ? refusalOf(r) : why;
+      const next = await hello();
+      if (next.status !== 200 || !next.json || !HEX32.test(String(next.json.challenge))) return refusalOf(next);
+      door = again.door;
+      r = await knock(next.json.challenge, door);
+      if (!taken(r)) return judged(r) || refusalOf(r);
     }
-    if (!taken(r)) {
-      const t = refusalOf(r);
-      if (t.reason === "removed") inviteEnd("removed");
-      /* The relay answers a door shut to this licence, a certificate it does not take and a request the lead dropped alike: turned
-         away, by the relay or the lead, and the desk cannot tell which. */
-      else if (t.reason === "not-enrolled") inviteEnd("turned"); /* plant:door-turned */
-      return t;
-    }
+    doorRefused = null;
     session = { token: r.json.session, at: clock(), by: "invite", inv: String(r.json.door) };
     doorKept(r.json.door);
     sessionOpened(r.json);
@@ -3213,6 +3241,10 @@ function createChannel(opts) {
   }
 
   function start() {
+    /* Started again while running (the shell's relayRun after Sign in, Check now or Ask again, on a channel holding no session): a cycle. */
+    let cycles = false;
+    cycles = running; /* plant:start-kicks */
+    if (cycles) { kick(); return; }
     if (running) return;
     fs.mkdirSync(mirror, { recursive: true });
     running = true;

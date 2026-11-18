@@ -48,7 +48,7 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 233;
+const PLANTS = 235;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
@@ -3048,8 +3048,9 @@ CASES.revokedLapse = (s, swap) => {
   const flushed = held => { const st = { held, lead: { team: TEAM }, join: null, root: "/share/a", files: new Set(), writes: [] }; return loadFlush(s, st, swapIn(["signinFlush"]))(); };
   const knocked = held => { const st = doorStand(doorJoin(), held); return loadDoor(s, st, swapIn(["signinDoorInvite", "signinDoorKept"])).signinDoorInvite(TEAM, RT); };
   const wrote = held => { const st = doorStand(doorJoin(), held); return loadDoor(s, st, swapIn(["signinDoorInvite", "signinDoorKept"])).signinDoorKept(TEAM, path.join("/relay", RT), DOOR_ID); };
+  const noDoor = x => x === null || (!!x && x.door === undefined);
   return lapsed && view && page && offered(h) === 0 && offered(free) === 2 && flushed(h) === false && flushed(free) === true
-    && knocked(h) === null && !!knocked(free) && wrote(h) === false && wrote(free) === true;
+    && noDoor(knocked(h)) && !!knocked(free) && !!knocked(free).door && wrote(h) === false && wrote(free) === true;
 };
 /* Review 15b, finding 2: a certificate issued past now and the five minutes is live nowhere yet, read as the calm lapse; one inside
    the five minutes stands as any other. */
@@ -3063,7 +3064,7 @@ CASES.certEarly = (s, swap) => {
   const flushed = held => { const st = { held, lead: { team: TEAM }, join: null, root: "/share/a", files: new Set(), writes: [] }; return loadFlush(s, st, swapIn(["signinFlush"]))(); };
   const knocked = held => { const st = doorStand(doorJoin(), held); return loadDoor(s, st, swapIn(["signinDoorInvite", "signinDoorKept"])).signinDoorInvite(TEAM, RT); };
   return s.signinCertOk(early, DESK_KEY) === true && lapsed && asked(early) === null && !!asked(near) && offered(he) === 0 && offered(hn) === 2
-    && flushed(he) === false && flushed(hn) === true && knocked(he) === null && !!knocked(hn);
+    && flushed(he) === false && flushed(hn) === true && (knocked(he) === null || knocked(he).door === undefined) && !!knocked(hn) && !!knocked(hn).door;
 };
 /* Review 15b, finding 1: the list that judges a held seat cannot be taken back by editing signin.json. The file as the desk writes it
    carries this desk's mark; the list deleted, or replaced by an older genuine one, leaves no seat, and nothing to flush or knock with,
@@ -3549,16 +3550,21 @@ CASES.relaySeatCleared = async (s, swap) => {
   const pageBefore = P ? P.signinDoor(P.signinRead({ offered: ["microsoft"], signedIn: "microsoft", code: CODE, seat: "held", relaySeat: before })) : null;
   st.answer = { ok: true, code: CODE, cert: cert({ issued: NOW + 1 }), doors: [] };
   const afterSignin = await press();
-  const clearedBySignin = w.team() === "" && w.renewAt() === 0 && afterSignin.relaySeat === "" && w.signinView().relaySeat === "" && st.relaySoons === 1;
-  w.signinRelaySeatTold("t-1", "refused");
+  const keptBySignin = w.team() === "t-1" && w.renewAt() === 0 && afterSignin.relaySeat === "renew" && st.relaySoons === 1;
   w.setRenewAt(NOW + 1);
   await w.signinRenewNow();
-  const clearedByRenew = w.team() === "" && w.renewAt() === 0 && w.signinView().relaySeat === "" && st.relaySoons === 2;
+  const keptByQuiet = w.team() === "t-1" && w.renewAt() === NOW + 1 && w.signinView().relaySeat === "renew" && st.relaySoons === 2;
+  await w.signinRenewNow({ relay: true });
+  const keptByRelay = w.team() === "t-1" && w.renewAt() === NOW + 1 && st.relaySoons === 2;
+  await w.signinRenewNow({ person: true });
+  const keptByCheck = w.team() === "t-1" && w.renewAt() === 0 && st.relaySoons === 3;
+  w.signinRelaySeatTold("t-1", "open");
+  const clearedByOpen = w.team() === "" && w.signinView().relaySeat === "";
   w.signinRelaySeatTold("t-1", "refused");
   w.setRenewAt(NOW + 2);
   w.signinOutNow();
-  const clearedByOut = w.team() === "" && w.renewAt() === 0 && st.relaySoons === 3;
-  return before === "renew" && !!pageBefore && pageBefore.say[0] === SEAT_RENEW_EN[0] && clearedBySignin && clearedByRenew && clearedByOut;
+  const clearedByOut = w.team() === "" && w.renewAt() === 0 && st.relaySoons === 4;
+  return before === "renew" && !!pageBefore && pageBefore.say[0] === SEAT_RENEW_EN[0] && keptBySignin && keptByQuiet && keptByRelay && keptByCheck && clearedByOpen && clearedByOut;
 };
 /* A POOLED DESK'S CERTIFICATE (Claude alpha's ruling of 2026-11-14 01:07; the relay's grace reads the mark): the desk takes it exactly where
    the relay does, signed or not. */
@@ -4005,7 +4011,7 @@ const LEGS = [
   ["ds49b", "relaySeatWire", "the team whose relay refused this desk's seat is kept and told once, said removed where the service found no role and renew otherwise, cleared by its own open or the channel let go"],
   ["ds49c", "seatRenewGap", "a relay session carries the desk's own standing certificate or none, and a run-out one is renewed first at most once an hour, a renewal already out waited on"],
   ["ds49d", "relaySeatPage", "Account says the relay's refusal as what it is to the person, in the copywriter's English and Polish: no longer given access, or the sign-in to renew with the providers under it; nothing signed out; no-role at a first sign-in and a renewal"],
-  ["ds49e", "relaySeatCleared", "review 7: a sign-in that succeeds, a renewal that succeeds, and Sign out clear the relay seat's \"needs renewing\" mark at once and wake the relay"],
+  ["ds49e", "relaySeatCleared", "review 7 as review 49 (finding 7) amends it: Sign out clears the relay seat's \"needs renewing\" mark, and so does the relay taking the seat (open); a sign-in, a Check now or a quiet renewal that succeeds keeps it and wakes the relay; the person's sign-in and Check now reset the hour's throttle, a quiet renewal and the relay's own keep it, and the relay's own wakes nothing"],
   ["ds50a", "pooledCert", "a pooled desk's certificate (pooled: true, signed as the line \"pooled\") is a seat on the desk, kept by signin.json, and the relay's certWhy takes it alike; the mark outside the signature, or of another value, is no certificate, nor is one running past a day"],
   ["ds22g", "doorsShownSigned", "doors held without the signature are offered nowhere and a press on one joins nothing; signed ones are offered"],
   ["ds51a", "switchLeaves", "review 11: a sign-in as another account does for the account left all Sign out does, by the same count (its signout/desk, before the new signin/desk; its seat.json; its door's join; the store forgotten; its organisation's licence forgotten), whatever the new account's answer: a certificate, none, full, a refusal, the service unreached; a sign-in as the same account leaves nothing"],
@@ -4404,7 +4410,7 @@ if (!PLANTS_OFF) {
   await plant("dsp35", ["if (!signinCertOk(cert, deskKey) || !(cert.until > now)) return null; /* plant:door-cert */", "if (!signinCertOk(cert, deskKey)) return null;"], "doorRequest");
   await plant("dsp36", ["return Object.assign({}, doc, { seat: JSON.parse(seatFileText(deskId, cert)), door: String(door) }); /* plant:door-fields */",
     "return Object.assign({}, doc, { seat: JSON.parse(seatFileText(deskId, cert)) });"], "doorRequest");
-  await plantWire("dsp37", ["|| !signinCertOk(cert, me.key) || !(cert.until > Date.now())) return null; /* plant:door-invite-cert */", ") return null;"], "doorInvite");
+  await plantWire("dsp37", ["  if (!signinCertOk(cert, me.key) || !(cert.until > Date.now())) return none; /* plant:door-invite-cert */\n", ""], "doorInvite");
   await plantWire("dsp38", ["if (inv.inv !== id) { inv.inv = id; persistDeskEnvelope(); } /* plant:door-kept */", ""], "doorKept");
   await plantWire("dsp39", ["if (had && had.door === id) return false; /* plant:door-once */", ""], "doorKept");
   await plantWire("dsp40", ["      const door = signinDoorInvite(team, want.rt); /* plant:door-invite */\n      if (door !== undefined) return door;\n", ""], "doorChannel");
@@ -4437,7 +4443,7 @@ if (!PLANTS_OFF) {
   await plantWire("dsp62", ["|| !(held.cert.until > now) || pinnedLead() || teamJoin) return []; /* plant:door-shown */", ") return [];"], "doorJoin");
   await plantWire("dsp63", ["if (!d || !me) return Object.assign({}, joinView(), { refused: \"door\" }); /* plant:door-join-offered */", "if (!me) return joinView();"], "doorJoin");
   await plantWire("dsp64", ["relay: { rt: d.rt, url: d.url, door: true, box: d.box } } }; /* plant:door-join-box */", "relay: { rt: d.rt, url: d.url, door: true, box: d.lead } } };"], "doorJoin");
-  await plantWire("dsp214", ["  if (held && (!cert || signinRevokedHas(held.revoked, cert)) && typeof signinSeatRenew === \"function\") signinSeatRenew(); /* plant:door-asks-seat */\n", ""], "doorAsksSeat");
+  await plantWire("dsp214", ["  none = held ? { seatless: true, box: inv.box } : null; /* plant:door-seatless */\n", ""], "doorAsksSeat");
   await plantWire("dsp65", ["return !!c && c.kind === \"relay\" && r.door === true && /^[0-9a-f]{64}$/.test(String(r.box)) /* plant:door-kept-box */", "return !!c && c.kind === \"relay\" && r.door === true"], "doorEnvelope");
   await plantWire("dsp66", ["&& inv.id === undefined && inv.proof === undefined; /* plant:door-envelope */", "&& false;"], "doorEnvelope");
   await plantWire("dsp67", ["if (inv.end !== undefined) return null; /* plant:door-ended-quiet */", ""], "doorEnded");
@@ -4586,7 +4592,7 @@ if (!PLANTS_OFF) {
   await plantWire("dsp147", ["  if (signinRevokedHas(held.revoked, held.cert)) return []; /* plant:revoked-offer */\n", ""], "revokedLapse");
   await plantWire("dsp148", ["  if (signinRevokedHas(held.revoked, cert)) return false; /* plant:revoked-flush */\n", ""], "revokedLapse");
   await plantWire("dsp166", ["  if (!signinCertOk(cert, me.key)) return false; /* plant:flush-own-key */", "  /* plant:flush-own-key */"], "flushOwnKey");
-  await plantWire("dsp149", ["  if (signinRevokedHas(held.revoked, cert)) return null; /* plant:revoked-knock */\n", ""], "revokedLapse");
+  await plantWire("dsp149", ["  if (signinRevokedHas(held.revoked, cert)) return none; /* plant:revoked-knock */\n", ""], "revokedLapse");
   await plantWire("dsp150", ["  if (held && signinRevokedHas(held.revoked, held.cert)) return false; /* plant:revoked-request */\n", ""], "revokedLapse");
   await plantWire("dsp152", ["  base.revoked = s.revoked || null; /* plant:revoked-survives */\n", ""], "revokedSurvives");
   await plant("dsp155", ["  return { managed: true, cause: j.cause === \"own-licence\" || j.cause === \"assigned\" ? j.cause : \"\" }; /* plant:managed-read */", "  return {};"], "managedRead");
@@ -4603,16 +4609,18 @@ if (!PLANTS_OFF) {
   await plantWire("dsp162", ["  if (was !== signinRelaySeatTeam) tellSignin(); /* plant:relay-seat-told */\n", ""], "relaySeatWire");
   await plantWire("dsp163", ["return held.said === \"no-role\" ? \"removed\" : \"renew\"; /* plant:relay-seat-removed */", "return \"renew\";"], "relaySeatWire");
   await plantWire("dsp164", ["if (signinSeatRenewAt && now >= signinSeatRenewAt && now - signinSeatRenewAt < SIGNIN_SEAT_RENEW_MS) return Promise.resolve(); /* plant:seat-renew-gap */", ""], "seatRenewGap");
-  await plantWire("dsp164a", ["  if (ans.ok && ans.cert && typeof signinRelaySeatClear === \"function\") signinRelaySeatClear(); /* plant:relay-seat-signin */\n", ""], "relaySeatCleared");
-  await plantWire("dsp164b", ["  if (r.said === \"renewed\" && s.held && s.held.cert && typeof signinRelaySeatClear === \"function\") signinRelaySeatClear(); /* plant:relay-seat-renew */\n", ""], "relaySeatCleared");
-  await plantWire("dsp164c", ["  if (typeof signinRelaySeatClear === \"function\") signinRelaySeatClear(); /* plant:relay-seat-leave */\n", ""], "relaySeatCleared");
+  await plantWire("dsp164a", ["  if (ans.ok && ans.cert && typeof signinRelaySeatClear === \"function\") signinRelaySeatClear(\"person\"); /* plant:relay-seat-signin */\n", ""], "relaySeatCleared");
+  await plantWire("dsp164b", ["  if (r.said === \"renewed\" && s.held && s.held.cert && typeof signinRelaySeatClear === \"function\") signinRelaySeatClear(o && o.relay ? \"relay\" : o && o.person ? \"person\" : \"\"); /* plant:relay-seat-renew */\n", ""], "relaySeatCleared");
+  await plantWire("dsp164c", ["  if (typeof signinRelaySeatClear === \"function\") signinRelaySeatClear(\"out\"); /* plant:relay-seat-leave */\n", ""], "relaySeatCleared");
+  await plantWire("dsp215", ["  ends = how === \"out\"; /* plant:relay-seat-notice-kept */\n", ""], "relaySeatCleared");
+  await plantWire("dsp216", ["  resets = how === \"out\" || how === \"person\"; /* plant:relay-seat-throttle-kept */\n", ""], "relaySeatCleared");
   await plantPage("dsp157", ["  if(v.relaySeat) return {moment:\"relayseat\",", "  if(false) return {moment:\"relayseat\","], "relaySeatPage");
   await plantPage("dsp158", ["  if(r===\"no-role\") return {kind:\"renewal\", say:signinSay(\"no-role\", v), acts:[]}; /* plant:told-no-role */", ""], "relaySeatPage");
   /* Review 15b, finding 2: the early certificate's helper and each judge that asks it. */
   await plant("dlp2a", ["return !!cert && Number.isSafeInteger(cert.issued) && cert.issued > now + SIGNIN_SKEW_MS; /* plant:cert-early */", "return false;"], "certEarly");
   await plant("dlp2b", ["if (!!held && !!held.cert && signinCertEarly(held.cert, now)) return true; /* plant:lapse-early */", ""], "certEarly");
   await plant("dlp2c", ["if (signinCertEarly(cert, now)) return null; /* plant:door-early */", ""], "certEarly");
-  await plantWire("dlp2d", ["  if (signinCertEarly(cert, Date.now())) return null; /* plant:door-invite-early */\n", ""], "certEarly");
+  await plantWire("dlp2d", ["  if (signinCertEarly(cert, Date.now())) return none; /* plant:door-invite-early */\n", ""], "certEarly");
   await plantWire("dlp2e", ["  if (signinCertEarly(held.cert, now)) return []; /* plant:door-shown-early */\n", ""], "certEarly");
   await plantWire("dlp2f", ["  if (signinCertEarly(cert, Date.now())) return false; /* plant:flush-early */\n", ""], "certEarly");
   await plant("dlp1a", ["marked = !!d && /^[0-9a-f]{64}$/.test(String(deskKey || \"\")) && signinVerified(String(deskKey), signinMarkBytes(h, store.revoked), d.mark); /* plant:file-mark */", "marked = true;"], "fileMark");

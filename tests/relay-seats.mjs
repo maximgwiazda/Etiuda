@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-seats-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 173;
+const EXPECTED = 184;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* ETIUDA_PLANT_ONLY, a comma list of plant tags or planted names: only those plants run, every other is skipped, so one plant is proved
    alone without the whole sweep. */
@@ -2250,8 +2250,9 @@ async function main() {
       const polls = [];
       for (let i = 0; i < 3; i++) { if (i === 0) await cycleOf(c); else await kickOf(c); await nap(10); await c.ch.idle(); polls.push({ renewals: glue.st.renewCalls, notice: glue.notice() === tm }); w.R.clock.now += MIN; }
       await glue.signinRenewNow({ person: true });
+      const reset = glue.throttle();
       await nap(10); await c.ch.idle();
-      const check = { notice: glue.notice() === tm, throttle: glue.throttle(), relaySoon: glue.st.relaySoon };
+      const check = { notice: glue.notice() === tm, throttle: reset, relaySoon: glue.st.relaySoon };
       glue.signinRelaySeatClear("out");
       const out = { notice: glue.notice() };
       await c.ch.stop();
@@ -2503,13 +2504,35 @@ async function main() {
     ["seat-lapsed-reopen", "d13a", reopenScene, "a session refused for its seat is kept to its keep, and the desk reads nothing and is told nothing meanwhile"],
     ["seat-none-renew", "d14a", noneSeatScene, "a hello refused for carrying no certificate asks no renewal"],
     ["invite-reread", "d15a", doorSeatScene, "the knock carries the invitation read before the hello, whose certificate the hello's renewal replaced"],
-    ["door-renew", "d15a", doorSeatScene, "a knock refused for its certificate turns the join away with no renewal"],
+    ["door-second", "d15a", doorSeatScene, "a knock refused for its certificate turns the join away with no renewal"],
+    ["door-second", "d20a", doorTransientScene, "a knock refused once turns the join away, the renewal slow, failed or its hello refused"],
+    ["door-refused-kept", "d15a", doorSeatScene, "a certificate the door refused is knocked with again at every cycle"],
+    ["door-turned", "d15a", doorSeatScene, "a stranger whose renewed certificate is refused too is never turned away"],
+    ["door-seat-awaited", "d18a", doorGlueScene, "a door join with no certificate is never waited for, so it knocks a poll late or never"],
+    ["invite-reread", "d21a", rereadScene, "a resumed door request is read from the invitation before the hello, so it is never kept or sent"],
+    ["fresh-reread", "d21a", rereadScene, "an invitation arriving during the key hello is judged by the invitation before it, so a removed desk is told removed"],
+    ["reopen-socket", "d22a", socketScene, "the socket outlives its session"],
+    ["start-kicks", "d23a", startScene, "a running channel started again does nothing"],
     ["answer-session-gone", "d16a", answerGoneScene, "a session the relay no longer takes at the answer's fetch is said as the wait and kept"],
   ]) {
     const line = "p " + id + (typeof tag === "object" ? " planting " + tag.name : " lifting plant:" + tag) + " in a copy of shell/relay/channel.cjs turns " + id + " red (" + what + "), and the product file is never written";
     if (plantSkipped(tag)) { skip(line); continue; }
     const p = await liftedChannel(tag, scene);
     check(results[id] && results[id].ok === true && p.turned && p.back, line + ": " + p.detail + ", sha " + (p.back ? "unchanged" : "CHANGED"));
+  }
+  /* The shell's glue lifted line by line in a copy of shell/main.js's text, handed to the scene (findings 2 and 7). */
+  for (const [tag, id, scene, what] of [
+    ["door-seatless", "d18a", doorGlueScene, "a door join with no certificate hands the channel nothing, so nothing asks for one"],
+    ["relay-seat-notice-kept", "d19a", noticeScene, "a renewal that still meets a refusal clears the notice"],
+    ["relay-seat-throttle-kept", "d19a", noticeScene, "a renewal resets the hour's throttle, so every poll asks the service"],
+  ]) {
+    const line = "p " + id + " lifting plant:" + tag + " in a copy of shell/main.js turns " + id + " red (" + what + "), and the product file is never written";
+    if (plantSkipped(tag)) { skip(line); continue; }
+    const lines = MAIN_NOW.split(/\n/), at = lines.findIndex(l => l.indexOf("/* plant:" + tag + " */") >= 0);
+    let turned = false, detail = "plant line absent";
+    if (at >= 0) { lines.splice(at, 1); const r = await safe(() => scene(undefined, lines.join("\n"))); turned = r.ok !== true; detail = turned ? "the check lifted" : "the check still held"; }
+    const back = fs.readFileSync(MAIN_FILE, "utf8") === MAIN_NOW;
+    check(results[id] && results[id].ok === true && turned && back, line + ": " + detail + ", sha " + (back ? "unchanged" : "CHANGED"));
   }
   /* The relay's half of finding 2, judged at the desk: a resume asking no withdrawal opens the withdrawal's session again. */
   {
