@@ -18,7 +18,7 @@ const SETTINGS_PATH = path.join(ROOT, "src", "modules", "settings.js");
 const TEMPLATE_PATH = path.join(ROOT, "src", "template.html");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
-const CHECKS = 26, PLANTS = 12;
+const CHECKS = 27, PLANTS = 13;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -450,15 +450,30 @@ for (const lang of ["en", "pl"]) {
   };
 }
 
+function cssText(src) {
+  return typeof src === "string" ? src : fs.readFileSync(TEMPLATE_PATH, "utf8");
+}
+
 /* 11. Template CSS: exact band, dot, dashed offline box, and way-out measures from the sheet & harness. */
-CASES.css = () => {
-  const tpl = fs.readFileSync(TEMPLATE_PATH, "utf8");
+CASES.css = (src) => {
+  const tpl = cssText(src);
   return /\.door-band\{[^}]*height:30px[^}]*padding:0 16px[^}]*#d98a1f 14%[^}]*#d98a1f 32%/.test(tpl)
     && /\.door-band-dot\{[^}]*width:8px;height:8px;[^}]*#d98a1f/.test(tpl)
     && /\.door-btn-dot\{[^}]*right:-2px;top:-2px;width:8px;height:8px;[^}]*#d98a1f;box-shadow:0 0 0 2px/.test(tpl)
     && /\.door-seat-dot\{[^}]*left:-14px;top:7px;width:8px;height:8px;[^}]*#d98a1f/.test(tpl)
     && /\.door-off\{[^}]*border:1px dashed var\(--line\);border-radius:8px;font:14px/.test(tpl)
     && /\.door-out\{[^}]*margin-top:18px;padding-top:18px;border-top:1px solid var\(--line\)/.test(tpl);
+};
+
+/* The way on is filled accent, and stays filled when focused: the ring is the page's own outline, outside the press. */
+CASES.wayOn = (src) => {
+  const tpl = cssText(src);
+  const i = tpl.indexOf(".door-acts .btn.primary:focus-visible,");
+  if (i < 0) return false;
+  const block = tpl.slice(i, i + 460);
+  return block.includes('.sgn-panel[data-moment="ended"] .btn.primary:focus-visible{background:var(--accent);color:#fff;border-color:var(--accent)}')
+    && block.includes(".door-acts .btn.primary:hover")
+    && block.indexOf("outline") < 0;
 };
 
 /* Run all checks. */
@@ -484,6 +499,7 @@ const RUN_LIST = [
   ["dd19", "account_en", "Settings Account (EN): full before-signin privacy, state 4 Seat row + dot, state 6 Seat rows, no Held by this account"],
   ["dd20", "account_pl", "Settings Account (PL): full before-signin privacy, state 4 Seat row + dot, state 6 Seat rows, no Held by this account"],
   ["dd21", "css", "template.html holds exact band, dot, offline box and way-out CSS measures"],
+  ["dd27", "wayOn", "the way on is filled var(--accent) with white text and an accent border, and the fill is restated on hover and focus"],
 ];
 
 /* Verify CHECKS matches the 21 named entries (plus 5 extra state-1..6 parity checks? Keep CHECKS exact). */
@@ -517,6 +533,16 @@ async function plant(id, filePath, swap, caseName, extraArg) {
   try {
     const mod = await plantedMod(filePath, swap);
     red = !(await CASES[caseName](mod, extraArg));
+  } catch (e) { why = e.message; }
+  check(red, id + " plant " + swap[0].trim().slice(0, 56) + " turns " + caseName + " red" + (why ? " (" + why + ")" : ""));
+}
+
+function plantText(id, filePath, swap, caseName) {
+  let red = false, why = "";
+  try {
+    const src = fs.readFileSync(filePath, "utf8");
+    if (src.split(swap[0]).length !== 2) throw new Error("plant anchor not unique");
+    red = !CASES[caseName](src.replace(swap[0], swap[1]));
   } catch (e) { why = e.message; }
   check(red, id + " plant " + swap[0].trim().slice(0, 56) + " turns " + caseName + " red" + (why ? " (" + why + ")" : ""));
 }
@@ -558,6 +584,9 @@ if (!PLANTS_OFF) {
   await plant("ddp12", SETTINGS_PATH,
     ["+'<p class=\"sgn-cap\">'+esc(t(\"This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name, address and picture, and shows them only to the leads and administrator of the licence it asks to join.\"))+'</p></div>'; /* plant:account-privacy-full */", "+'<p class=\"sgn-cap\">'+esc(t(\"This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev.\"))+'</p></div>';"],
     "account_en");
+  plantText("ddp13", TEMPLATE_PATH,
+    ["{background:var(--accent);color:#fff;border-color:var(--accent)} /* plant:door-on-fill */", "{background:var(--btn-rest)} /* plant:door-on-fill */"],
+    "wayOn");
 }
 
 console.log("#counts checks=" + asserted + " skipped=0 failed=" + failed + " expected=" + EXPECTED);

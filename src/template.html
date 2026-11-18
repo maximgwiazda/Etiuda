@@ -3923,6 +3923,8 @@ body.e-first-signin .stage>.dotfield{content-visibility:hidden}
 .set-label:has(.door-seat-dot){position:relative}
 .door-off{border:1px dashed var(--line);border-radius:8px;font:14px/1.45 var(--sans);padding:12px 14px;color:var(--ink)}
 .door-acts{margin-top:18px}
+/* The way on stays filled. Hover and focus restate the fill; the page's focus ring stays outside the press. */
+.door-acts .btn.primary,.sgn-panel[data-moment="ended"] .btn.primary,.door-acts .btn.primary:focus-visible,.door-acts .btn.primary:hover,.sgn-panel[data-moment="ended"] .btn.primary:hover,.sgn-panel[data-moment="ended"] .btn.primary:focus-visible{background:var(--accent);color:#fff;border-color:var(--accent)} /* plant:door-on-fill */
 .door-quiet{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:12px}
 .door-text{background:none;border:0;padding:0;cursor:pointer;font:13px/1.4 var(--sans);color:var(--accent)}
 .door-out{margin-top:18px;padding-top:18px;border-top:1px solid var(--line)}
