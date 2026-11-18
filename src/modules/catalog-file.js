@@ -1037,7 +1037,7 @@ function collectLayerCards(p, isLoose, baseById){
       const ov=(ovMap[id] && typeof ovMap[id]==="object") ? ovMap[id] : null;
       if(!ov) return; /* plant:way-out-no-unedited */
       if(ov && ov.removed) return;
-      if(!Object.keys(ov).some(k=>k!=="changedAt" && k.charAt(0)!=="_")) return;
+      if(ov && !Object.keys(ov).some(k=>k!=="changedAt" && k.charAt(0)!=="_")) return;
       let card=Object.assign({}, cleanOwnCard(ov), { id:String(id) });
       if(base) card=Object.assign({}, cleanOwnCard(base), card); /* plant:way-out-merge-base */
       seen.add(id); out.push(card);
