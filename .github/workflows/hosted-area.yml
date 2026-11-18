@@ -1,0 +1,148 @@
+# A tree's area, run on hosted Windows machines instead of the desk, cut into shards.
+#
+# WHY. The desk takes two heavy runs at a time while its owner works at it, and a built piece then
+# waits for a lane. A hosted machine runs the same command the desk runs, `node tools/gate-run.mjs
+# area <base>`, on the same tree, and the desk stays free. An area is long because its gates run one
+# after another; here its plan is cut into SHARDS machines, each given every SHARDS-th gate
+# (ETIUDA_AREA_SHARD, tools/gate-run.mjs), so the wall-clock is the slowest shard's and not the sum.
+#
+# WHEN IT RUNS. Only on a push to a branch whose name begins `hosted-test-`. Such a branch exists
+# only to be tested: the tree under test with this file on top, pushed through the same guard and
+# scan as any push, read, and deleted. Nothing here runs on main, on a pull request or on a tag.
+#
+# WHAT IT RUNS. The node gates the area names for the diff against where the branch left main. A
+# window gate is left out by gate-run itself (walled: ETIUDA_WINDOWS is never set here), and no
+# installer runs. No fixture, no name list and no secret reaches a runner: ETIUDA_FIXTURES is unset,
+# so the catalog halves say NOT RUN, as in gates.yml.
+#
+# WHAT IS LEFT TO THE DESK, by name, and said in every shard's log and in the joined summary: a gate
+# that needs the name list in .git, which no runner is ever handed (see gates.yml, THE NAME SCAN).
+# The list is DESK_ONLY below; an entry is added only with its reason beside it.
+#
+# WHAT A GREEN HERE IS NOT. A shard is not an area: nothing on the desk inherits a green from it, and
+# its records stay on the runner. And it is not the desk's run until the two have been read side by
+# side: a gate red here and green there, or the other way, is named before this is trusted.
+name: hosted-area
+
+on:
+  push:
+    branches: ['hosted-test-**']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hosted-area-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SHARDS: 8
+  # Each entry with its reason, read off a run:
+  #   tests/build-readers.mjs: its release leg stops at "NOT RUN: .git/etiuda-names is absent" (run 44176389525).
+  #   tests/desk-one-line.mjs, tests/glass-rim.js, tests/rail-side.mjs, tests/smoke.js, tests/theme-continuity.mjs,
+  #   tests/tour-ring.js: each needs ETIUDA_FIXTURES, a catalog, which is never put on a runner; each refused, exit 78 (run 44177625970).
+  #   tests/plant-compare.mjs: reads the plant record of an area's own bracket, and a shard has none (run 44177625970).
+  #   tests/opening-legs.mjs: six checks of drawn frames red on a runner's display (run 44177625970); a visual leg, not yet looked into.
+  #   tests/folder-mirror.mjs: r5b and n1b need a directory that does not list, and a runner's account lists everything (run 44177625970).
+  #   tests/card-reword.mjs: cr2 (the menu's box above its button) red in three runs of four and at its one rerun (44187378215); not looked into.
+  #   tests/catalog-trust-desk.mjs: red in two runs of four, a different check each time (76o; 72b and 74s), red at its rerun; not looked into.
+  DESK_ONLY: tests/card-reword.mjs,tests/catalog-trust-desk.mjs,tests/build-readers.mjs,tests/desk-one-line.mjs,tests/glass-rim.js,tests/rail-side.mjs,tests/smoke.js,tests/theme-continuity.mjs,tests/tour-ring.js,tests/plant-compare.mjs,tests/opening-legs.mjs,tests/folder-mirror.mjs
+
+jobs:
+  area:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      # Gates that commit in a scratch repository need an identity; a runner has none (run 44176389525).
+      - name: an identity for scratch commits
+        shell: bash
+        run: |
+          git config --global user.name "hosted test"
+          git config --global user.email "hosted-test@users.noreply.github.com"
+
+      - name: npm ci
+        shell: bash
+        run: |
+          s=$(date +%s)
+          npm ci
+          echo "#hosted shard=${{ matrix.shard }} npm-ci-s=$(( $(date +%s) - s ))"
+
+      # The base is where this branch left main, so the plan is the tree's own diff plus this branch's harness files.
+      - name: the shard
+        shell: bash
+        env:
+          ETIUDA_LOCK_PATH: ${{ runner.temp }}\machine.lock
+          ETIUDA_RUNS: ${{ runner.temp }}\etiuda-runs
+          ETIUDA_AREA_SHARD: ${{ matrix.shard }}/${{ env.SHARDS }}
+          ETIUDA_AREA_DESK_ONLY: ${{ env.DESK_ONLY }}
+        run: |
+          base=$(git merge-base origin/main HEAD)
+          echo "#hosted shard=${{ matrix.shard }} base=$base head=$(git rev-parse HEAD) tree=$(git rev-parse 'HEAD^{tree}') cores=$(nproc)" | tee shard.log
+          mkdir -p "$ETIUDA_RUNS"
+          s=$(date +%s)
+          set +e
+          node tools/gate-run.mjs area "$base" 2>&1 | tee -a shard.log
+          code=${PIPESTATUS[0]}
+          set -e
+          echo "#hosted shard=${{ matrix.shard }} exit=$code s=$(( $(date +%s) - s ))" | tee -a shard.log
+          exit $code
+
+      - name: the shard's records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hosted-shard-${{ matrix.shard }}
+          path: |
+            shard.log
+            ${{ runner.temp }}\etiuda-runs
+          if-no-files-found: warn
+          retention-days: 3
+
+  # The shards read as one: each shard's line, what was left to the desk, every gate's own result
+  # line and every FAIL line, in the job summary and the log. Red where any shard was.
+  joined:
+    needs: area
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: shards
+
+      - name: the area, joined
+        shell: bash
+        run: |
+          {
+            echo "## hosted area, ${{ env.SHARDS }} shards: ${{ needs.area.result }}"
+            echo '```'
+            find shards -name shard.log | sort > logs.txt
+            while read -r f; do
+              grep -h '^#hosted' "$f" || echo "#hosted NO LINES in $f"
+            done < logs.txt
+            echo "--- left to the desk"
+            xargs -a logs.txt cat | grep -h 'LEFT TO THE DESK' | sort -u || true
+            echo "--- gates"
+            xargs -a logs.txt cat | grep -h '^  gate-run: .*exit [0-9]* in [0-9]* ms' | sed 's/, tree .*//' | sort || true
+            echo "--- flakes (red, then green at the one rerun; each is named, none is counted)"
+            xargs -a logs.txt cat | grep -h 'gate-run: FLAKE ' || echo "none"
+            echo "--- reds"
+            xargs -a logs.txt cat | grep -hE '^  FAIL |^RESULT: FAIL|goes on after' || echo "none"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          n=$(wc -l < logs.txt)
+          if [ "$n" != "${{ env.SHARDS }}" ]; then echo "::error::$n of ${{ env.SHARDS }} shard logs arrived"; exit 1; fi
+          [ "${{ needs.area.result }}" = "success" ]

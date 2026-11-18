@@ -1631,6 +1631,9 @@ function runStep(step, customEnv = {}) {
     const own = scratch ? { TEMP: scratch, TMP: scratch, TMPDIR: scratch } : {};
     const listed = listedEnv(scratch);
     const env = Object.assign(inheritedEnv(step), own, listed.env, customEnv, step.env || {});
+    /* A shard's cut is this run's own: a gate that starts an area run of its own (tests/gate-run.mjs) must get the whole plan. */
+    delete env.ETIUDA_AREA_SHARD;
+    delete env.ETIUDA_AREA_DESK_ONLY;
     const child = spawn(process.execPath, [step.file].concat(step.args),
       /* Off Windows its own process group, so the wall stops it with its children (stopTree). */
       { cwd: ROOT, env, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" });
@@ -1699,6 +1702,11 @@ async function main() {
 
   const mode = asked[0];
   const inProfile = mode === "release" || mode === "nightly";
+  /* A shard's value is judged before any plan is made, so a wrong one costs nothing (ONE SHARD OF AN AREA, below). */
+  if (mode === "area" && process.env.ETIUDA_AREA_SHARD) {
+    const m = /^([1-9][0-9]?)\/([1-9][0-9]?)$/.exec(String(process.env.ETIUDA_AREA_SHARD));
+    if (!m || +m[1] > +m[2] || +m[2] > 64) refuse("ETIUDA_AREA_SHARD is " + JSON.stringify(process.env.ETIUDA_AREA_SHARD) + ", want i/n with 1 <= i <= n <= 64");
+  }
 
   if (mode === "wait-lock") {
     console.log("gate-run: waiting for machine lock...");
@@ -1960,6 +1968,32 @@ async function main() {
     } else if (!plan.base) console.log("gate-run area: the whole plan: " + plan.reason);
   }
 
+  /* ONE SHARD OF AN AREA (the hosted machines, 2026-11-17): ETIUDA_AREA_SHARD=i/n, on an area run only, keeps every nth gate of
+     the plan from the ith, the plan taken in the order of its commands so that n machines given 1/n to n/n run each gate exactly
+     once between them. A shard is not an area: its record names the shard, and nothing inherits a green from it. A value that is
+     not i/n with 1 <= i <= n <= 64 is refused, never read as the whole area. */
+  let shard = "";
+  if (mode === "area" && process.env.ETIUDA_AREA_SHARD) {
+    const m = /^([1-9][0-9]?)\/([1-9][0-9]?)$/.exec(String(process.env.ETIUDA_AREA_SHARD));
+    const i = m ? +m[1] : 0, n = m ? +m[2] : 0;
+    if (!m || i > n || n > 64) refuse("ETIUDA_AREA_SHARD is " + JSON.stringify(process.env.ETIUDA_AREA_SHARD) + ", want i/n with 1 <= i <= n <= 64");
+    /* ETIUDA_AREA_DESK_ONLY, with a shard only: gate files, comma-separated, that need what only the desk has (the name list in
+       .git, which no runner is ever handed). Each is left out and SAID, one line a gate, so a green shard still names what it did
+       not look at; a file the plan does not hold is said too, so a stale entry is seen. */
+    const deskOnly = String(process.env.ETIUDA_AREA_DESK_ONLY || "").split(",").map(x => x.trim().replace(/\\/g, "/")).filter(Boolean);
+    for (const f of deskOnly) {
+      const held = steps.some(s => String(stepFile(s) || "").replace(/\\/g, "/") === f);
+      console.log("gate-run area: LEFT TO THE DESK " + f + (held ? "" : " (not in this plan)"));
+    }
+    steps = steps.filter(s => !deskOnly.includes(String(stepFile(s) || "").replace(/\\/g, "/")));
+    const order = steps.map(s => s.cmd).sort();
+    const mine = new Set(order.filter((_, k) => k % n === i - 1));
+    const whole = steps.length;
+    steps = steps.filter(s => mine.has(s.cmd));
+    shard = i + "/" + n;
+    console.log("gate-run area: shard " + shard + ": " + steps.length + " of " + whole + " gate(s); not an area run, and no green is inherited from it");
+  }
+
   if (asked.includes("--dry-run") || asked.includes("--list")) {
     console.log("gate-run " + mode + " dry run: " + steps.length + " gate(s) to run:");
     for (const s of steps) console.log("  " + s.cmd + (s.note ? " (" + s.note + ")" : ""));
@@ -2157,6 +2191,17 @@ async function main() {
     }
     before = after;
     if (res.exit !== 0 && isWarn) { console.log("  gate-run: " + line.gate + " is a HYGIENE leg and red in the " + gateLabel + " profile: a warn, the run goes on"); continue; }
+    /* A shard reads every red of its own gates: it goes on after one, and its exit is the first red's. */
+    /* A red gate of a shard is run once more, alone, there and then (the regimen: a flake reruns the one failed gate, never the
+       chain). Green at its rerun it is a FLAKE, said by name with both exits and not counted; red again it is a red. A gate that
+       refused (no verdict) is not rerun: it said why. */
+    if (res.exit !== 0 && shard && res.exit !== NO_VERDICT) {
+      console.log("  gate-run: shard " + shard + " reruns " + line.gate + " once, alone (red, exit " + res.exit + ")");
+      const again = await runStep(step, customEnv);
+      if (again.exit === 0) { console.log("  gate-run: FLAKE " + line.gate + ": red (exit " + res.exit + ") then green at its one rerun; named, not counted"); continue; }
+      console.log("  gate-run: " + line.gate + " is red again at its rerun (exit " + again.exit + ")");
+    }
+    if (res.exit !== 0 && shard) { if (!worst) { worst = res.exit; if (refused) refusedAt = line; } console.log("  gate-run: shard " + shard + " goes on after " + line.gate + " exiting " + res.exit); continue; }
     if (res.exit !== 0) { worst = res.exit; if (refused) refusedAt = line; break; }
   }
 
