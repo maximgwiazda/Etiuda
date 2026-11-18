@@ -18,7 +18,7 @@ const SETTINGS_PATH = path.join(ROOT, "src", "modules", "settings.js");
 const TEMPLATE_PATH = path.join(ROOT, "src", "template.html");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
-const CHECKS = 32, PLANTS = 18;
+const CHECKS = 32, PLANTS = 19;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -467,7 +467,7 @@ CASES.css = (src) => {
     && /\.door-btn-dot\{[^}]*right:-2px;top:-2px;width:8px;height:8px;[^}]*#d98a1f;box-shadow:0 0 0 2px/.test(tpl)
     && /\.door-seat-dot\{[^}]*left:-14px;top:7px;width:8px;height:8px;[^}]*#d98a1f/.test(tpl)
     && /\.door-off\{[^}]*border:1px dashed var\(--line\);border-radius:8px;font:14px/.test(tpl)
-    && /\.door-out\{[^}]*margin-top:18px;padding-top:18px;border-top:1px solid var\(--line\)/.test(tpl);
+    && /\.door-out\{[^}]*margin-top:22px;padding-top:18px;border-top:1px solid var\(--line\)/.test(tpl);
 };
 
 /* The offline box leads with the sheet's 18px crossed-signal glyph at 70% opacity. */
@@ -695,6 +695,9 @@ if (!PLANTS_OFF) {
   await plant("ddp15", SIGNIN_PATH,
     ["if(d.getFullYear()!==new Date(now>0?now:Date.now()).getFullYear()) opt.year=\"numeric\"; /* plant:door-day-year */", "if(false) opt.year=\"numeric\"; /* plant:door-day-year */"],
     "doorDates");
+  plantText("ddp19", TEMPLATE_PATH,
+    [".door-out{margin-top:22px;padding-top:18px;border-top:1px solid var(--line)} /* plant:door-out-gap */", ".door-out{margin-top:18px;padding-top:18px;border-top:1px solid var(--line)} /* plant:door-out-gap */"],
+    "css");
   plantText("ddp14", TEMPLATE_PATH,
     ["flex:0 0 30px;min-height:30px;height:30px;/* plant:door-band-fixed */", "height:30px;/* plant:door-band-fixed */"],
     "bandFixed");
