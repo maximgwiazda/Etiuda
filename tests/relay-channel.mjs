@@ -4996,7 +4996,8 @@ if (deskOn()) try {
         if (kind === "spent") {
           R.clock.now = t0 + core.KEEP_MS - 2 * MIN;
           /* The person checks the seat a month on: the shell holds its renewals to an hour of this computer's clock, which the relay's
-             month did not move. */
+             month did not move, and a press to thirty seconds after the last (the sign-in's own), so the leg waits those out. */
+          await new Promise(r => setTimeout(r, 31 * 1000));
           await D.ask("etiuda:signin-check");
           await both();
           R.clock.now = t0 + core.KEEP_MS + MIN;
