@@ -759,27 +759,32 @@ const doorStand = (join, held) => ({ join: join, held: held === undefined ? held
 CASES.doorInvite = (s, swap) => {
   const ask = (join, held, team, rt) => loadDoor(s, doorStand(join, held), swap).signinDoorInvite(team || TEAM, rt || RT);
   const first = ask(doorJoin()), named = ask(doorJoin({ inv: DOOR_ID })), c = heldOf().cert;
+  const noKnock = x => x === null || (!!x && x.door === undefined);
   const invitation = { team: TEAM, invite: { id: "2".repeat(16), relay: { rt: RT, inv: "5".repeat(32), token: "x", seal: "y" } } };
   return !!first && JSON.stringify(first.door) === JSON.stringify(c) && first.box === LEAD_BOX && first.inv === undefined && Object.keys(first).join() === "door,box"
     && !!named && named.inv === DOOR_ID
-    && ask(doorJoin(), null) === null && ask(doorJoin(), Object.assign(heldOf(), { cert: null })) === null
-    && ask(doorJoin(), Object.assign(heldOf(), { cert: cert({ desk: OTHER_DESK_KEY }) })) === null
-    && ask(doorJoin(), Object.assign(heldOf(), { cert: cert({ until: NOW }) })) === null
+    && ask(doorJoin(), null) === null && noKnock(ask(doorJoin(), Object.assign(heldOf(), { cert: null })))
+    && noKnock(ask(doorJoin(), Object.assign(heldOf(), { cert: cert({ desk: OTHER_DESK_KEY }) })))
+    && noKnock(ask(doorJoin(), Object.assign(heldOf(), { cert: cert({ until: NOW }) })))
     && ask(doorJoin({ box: "short" })) === null && ask(doorJoin(), undefined, TEAM, "9".repeat(32)) === null
     && ask(invitation) === undefined && ask(doorJoin(), undefined, "t-fedcba9876543210") === undefined && ask(null) === undefined;
 };
-/* Signed in with no certificate to knock with (none yet, or one its revocation list covers), the door's invite() asks a renewal and knocks
-   with nothing; signed out, or holding a standing certificate, it asks none. */
+/* Signed in with no certificate it may knock with (none yet, another desk key's, one run out, one its own revocation list covers), the door's
+   invite() hands the channel a seatless request, the lead's box and no certificate, so the channel asks the renewal and waits for it; it
+   asks none itself. Signed out it hands nothing, a wrong relay team id nothing, and a standing certificate knocks. */
 CASES.doorAsksSeat = (s, swap) => {
-  const asks = held => {
+  const asks = (held, rt) => {
     const st = doorStand(doorJoin(), held);
     st.asked = 0;
     st.renew = () => { st.asked++; return Promise.resolve(); };
-    return { knocks: loadDoor(s, st, swap).signinDoorInvite(TEAM, RT) !== null, asked: st.asked };
+    return { got: loadDoor(s, st, swap).signinDoorInvite(TEAM, rt || RT), asked: st.asked };
   };
+  const seatless = x => !!x.got && x.got.seatless === true && x.got.box === LEAD_BOX && x.got.door === undefined && x.asked === 0;
   const none = asks(Object.assign(heldOf(), { cert: null })), revoked = asks(heldOf({ revoked: revokedList(1, [heldOf().cert.via.key.pub]) }));
-  const standing = asks(heldOf()), out = asks(null);
-  return !none.knocks && none.asked === 1 && !revoked.knocks && revoked.asked === 1 && standing.knocks && standing.asked === 0 && !out.knocks && out.asked === 0;
+  const other = asks(Object.assign(heldOf(), { cert: cert({ desk: OTHER_DESK_KEY }) })), ended = asks(Object.assign(heldOf(), { cert: cert({ until: NOW }) }));
+  const standing = asks(heldOf()), out = asks(null), wrongRt = asks(Object.assign(heldOf(), { cert: null }), "9".repeat(32));
+  return seatless(none) && seatless(revoked) && seatless(other) && seatless(ended) && !!standing.got && !!standing.got.door && standing.asked === 0
+    && out.got === null && out.asked === 0 && wrongRt.got === null && wrongRt.asked === 0;
 };
 /* The relay named the id: kept with the join, and the request written once into the mirror, with the seat and that id, signed by
    this desk as the engine's own rules (and Studio's, through its pin) take it; the same id again writes nothing, a request being
@@ -3897,7 +3902,7 @@ const LEGS = [
   ["ds10c", "flushJoinReach", "a folder invitation taken and an admission heeded both reach the folder change, and so the seat's write"],
   ["ds11a", "doorRequest", "a request at the relay's door carries the seat as seat.json has it and the relay's id, and names no invitation"],
   ["ds11b", "doorInvite", "the channel knocks at the door with this desk's standing certificate and the lead's box, and with nothing else"],
-  ["ds11e", "doorAsksSeat", "signed in with no certificate to knock with, none yet or one its own revocation list covers, the door asks a renewal and knocks with nothing; signed out, or holding a standing certificate, it asks none"],
+  ["ds11e", "doorAsksSeat", "signed in with no certificate it may knock with (none yet, another desk key's, one run out, one its own revocation list covers), the door hands the channel a seatless request with the lead's box and no certificate, and asks no renewal itself; signed out, or for another relay team, it hands nothing; a standing certificate knocks"],
   ["ds11c", "doorKept", "the id the relay names is kept and the request written once, with the seat and that id, signed as the desk's own"],
   ["ds11d", "doorChannel", "the desk's relay channel is given the door's invite() ahead of the invitation's, and onDoor"],
   ["ds12a", "previewOff", "the sign-in preview is off by default: ETIUDA_SIGNIN_PREVIEW absent, \"0\", \"yes\" or \" 1\" offers nothing; \"1\" alone offers both as a preview"],
