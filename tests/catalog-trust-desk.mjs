@@ -1319,7 +1319,7 @@ async function parent() {
     env75w2.branch = { sign: { pub: ownDeskRelay.raw.toString("hex"), priv: sealPriv(ownPair.privateKey) }, box: { pub: "ef".repeat(32), priv: "sealed" } };
     env75w2.teamPins = { [RELAY_TEAM]: RELAY_LEAD };
     env75w2.teamPinFrom = { [RELAY_TEAM]: "invite" };
-    env75w2.teamChannel = { [RELAY_TEAM]: { kind: "relay", rt: RELAY_RT, url: "https://relay.test/relay/v1" } };
+    env75w2.teamChannel = { [RELAY_TEAM]: { kind: "relay", rt: RELAY_RT, url: "https://etiuda.dev/relay/v1" } };
     fs.writeFileSync(envAt75w2, JSON.stringify(env75w2), "utf8");
     // Place team mirror and desk branch file in userData/relay/<RELAY_RT>/desks/...
     const mirrorRt = path.join(lab75w2, "userdata", "relay", RELAY_RT);
