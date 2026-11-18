@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-seats-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 184;
+const EXPECTED = 188;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* ETIUDA_PLANT_ONLY, a comma list of plant tags or planted names: only those plants run, every other is skipped, so one plant is proved
    alone without the whole sweep. */
@@ -2138,12 +2138,13 @@ async function main() {
   function shellGlue(w, d, o, src) {
     const st = { held: o.held, relaySoon: 0, renewCalls: 0 };
     const stands = {
-      Date: { now: () => w.R.clock.now }, harnessLaunch: () => false, signinLabHeld: () => false, signinFlush: () => {},
+      Date: { now: () => w.R.clock.now + (o.skew ? o.skew.ms : 0) }, harnessLaunch: () => false, signinLabHeld: () => false, signinFlush: () => {},
       signinState: () => st, signinOutAgain: async () => {}, storeEndAgain: () => Promise.resolve(false),
       signinOffered: () => [{ id: "microsoft" }], branchIdentity: () => ({ id: d.keyId, key: d.pub }),
       signinRenewHeld: async (io, p, key, held) => {
         const a = await o.service(++st.renewCalls);
-        return { said: a.said, held: a.cert ? Object.assign({}, held, { cert: a.cert }) : a.said === "no-role" ? Object.assign({}, held, { cert: null, said: "no-role" }) : held };
+        return { said: a.said, held: a.cert ? Object.assign({}, held, { cert: a.cert }) : a.said === "no-role" ? Object.assign({}, held, { cert: null, said: "no-role" })
+          : a.reached === false ? Object.assign({}, held, { reached: false }) : held };
       },
       signinIo: () => ({}), signinRevokedNext: (a, b) => b || a, signinSave: () => {}, tellSignin: () => {}, storeLeaveNow: () => {}, storeTurn: () => {},
       relaySoon: () => { st.relaySoon++; if (o.onRelaySoon) o.onRelaySoon(); },
@@ -2151,9 +2152,12 @@ async function main() {
       signinDoorAddressOk: () => true, SIGNIN_DESK_PACKED: true, getJoin: () => (o.join ? { team: o.team, invite: { relay: o.join } } : null),
     };
     const names = Object.keys(stands);
-    const text = "const SIGNIN_SEAT_RENEW_MS = 60 * 60 * 1000;\nlet signinRelaySeatTeam = '', signinSeatRenewAt = 0, signinRenewing = null, signinBusy = false, signinSaid = '';\n"
-      + GLUE.map(n => mainSlice(src || MAIN_NOW, n)).join("\n").replace("const j = teamJoin,", "const j = getJoin(),")
-      + "\nreturn { " + GLUE.join(", ") + ", notice: () => signinRelaySeatTeam, throttle: () => signinSeatRenewAt };";
+    const from = src || MAIN_NOW, glue = GLUE.concat(from.indexOf("\nasync function signinPressNow(") >= 0 ? ["signinPressNow"] : []);
+    const text = "const SIGNIN_SEAT_RENEW_MS = 60 * 60 * 1000, SIGNIN_SEAT_RETRY_MS = 5 * 60 * 1000, SIGNIN_PRESS_GAP_MS = 30 * 1000;\n"
+      + "let signinRelaySeatTeam = '', signinSeatRenewAt = 0, signinRenewing = null, signinBusy = false, signinSaid = '', relayPressOwed = false, signinPressAt = 0;\n"
+      + glue.map(n => mainSlice(from, n)).join("\n").replace("const j = teamJoin,", "const j = getJoin(),")
+      + "\nreturn { " + glue.join(", ") + ", notice: () => signinRelaySeatTeam, throttle: () => signinSeatRenewAt,"
+      + " pressOwed: () => { const v = relayPressOwed; relayPressOwed = false; return v; } };";
     return Object.assign(new Function(...names, text)(...names.map(n => stands[n])), { st });
   }
   /* What relayRun does with a channel it keeps (shell/main.js): kicked where it is online, started where it is not. */
@@ -2463,6 +2467,172 @@ async function main() {
   await leg("d25a", () => withdrawCountScene(), "boarded 9: one withdrawal on a run-out certificate asks at most two renewals and one withdrawal session");
   await leg("s27a", () => challengeShareScene(), "boarded 8: one seatless desk's withdrawal hellos cannot fill the team's challenge table, so the lead still opens");
   await leg("d26a", () => releasedReadsScene(), "boarded 10: an unpackaged start takes staging's door exactly where it takes staging's address");
+
+  /* ---- THE THIRD ROUND (review 50 on 1e5269b9), the press rule: a person's own press (Ask again, Check now, Sign in) makes one real
+     attempt, one renewal outside the hour's throttle and then one knock or hello with the certificate that then stands, whatever the
+     channel remembers of an earlier refusal; presses are at least thirty seconds apart. The shell's press (signinPressNow) and the
+     channel's (press) are judged here beside the glue; what relayRun does with a press it owes is stood in as relayRun does it. ---- */
+  const pressRun = holder => () => setTimeout(() => {
+    const c = holder.c, g = holder.g;
+    if (!c) return;
+    if (g && g.pressOwed()) { if (typeof c.ch.press === "function") c.ch.press(); else c.ch.kick(); return; }
+    if (c.ch.online()) c.ch.kick(); else c.ch.start();
+  }, 0);
+  const settle = async c => { await nap(15); await c.ch.idle(); await nap(5); await c.ch.idle(); };
+  /* Finding 1: after a refusal, a sign out ends the notice and wakes the relay; the next Sign in is a press, so a certificate still refused
+     brings the notice back at once, and a current one opens at once. */
+  async function pressSignoutScene(mod, src) {
+    const rows = {};
+    for (const kind of ["still-refused", "current"]) {
+      const w = await team({ seats: true }), a = w.desks.a, at = w.R.clock.now, tm = "t-" + w.rt.slice(0, 8), holder = {};
+      const wrong = n => certFor(a.pub, hex(16), at + n, 7 * DAY);
+      const g = holder.g = shellGlue(w, a, { held: { provider: "microsoft", cert: wrong(0), revoked: null }, service: async n => ({ said: "renewed", cert: wrong(n) }),
+        team: tm, onRelaySoon: pressRun(holder) }, src);
+      const c = holder.c = deskChannel(w, "a", { renewMs: 200 }, mod, { shell: g });
+      await cycleOf(c);
+      const refused = g.notice() === tm;
+      const soonBefore = g.st.relaySoon;
+      g.signinRelaySeatClear("out");
+      g.st.held = null;
+      await settle(c);
+      const out = { notice: g.notice(), woke: g.st.relaySoon > soonBefore };
+      w.R.clock.now += MIN;
+      g.st.held = { provider: "microsoft", cert: kind === "current" ? certFor(a.pub, w.licence, w.R.clock.now, 7 * DAY) : wrong(99), revoked: null };
+      const soon = g.st.relaySoon;
+      await g.signinPressNow(false);
+      await settle(c);
+      const row = { refused, out, signinWoke: g.st.relaySoon > soon, notice: g.notice(), online: c.ch.online() };
+      row.ok = refused && out.notice === "" && out.woke && row.signinWoke && (kind === "current" ? row.online && row.notice === "" : row.notice === tm && !row.online);
+      await c.ch.stop();
+      rows[kind] = row;
+    }
+    return { ok: Object.values(rows).every(r => r.ok), detail: brief(rows) };
+  }
+  /* Finding 2: a door join's renewal that does not reach the service does not hold the hour: the next renewal goes within minutes and the
+     knock follows; and the person's Check now at the door wakes the relay and knocks in that press. */
+  async function pressBlipScene(mod, src) {
+    const rows = {};
+    for (const kind of ["blip-then-poll", "check-now"]) {
+      const w = await team({}), d = named(w, "k"), tm = "t-" + w.rt.slice(0, 8), holder = {};
+      await doorOf(w, [w.licence]);
+      let up = false;
+      const join = { rt: w.rt, url: "https://etiuda.dev/relay/v1", door: true, box: w.leadBox.pub };
+      const g = holder.g = shellGlue(w, d, { held: { provider: "microsoft", cert: null, revoked: null }, team: tm, join, onRelaySoon: pressRun(holder),
+        service: async () => (up ? { said: "renewed", cert: certFor(d.pub, w.licence, w.R.clock.now, 7 * DAY) } : { said: "unreached", cert: null, reached: false }) }, src);
+      const c = holder.c = deskChannel(w, "k", { renewMs: 200 }, mod, { shell: g, invite: () => g.signinDoorInvite(tm, w.rt), onDoor: id => { join.inv = id; } });
+      await cycleOf(c);
+      const c1 = { doors: c.doors.length, renewals: g.st.renewCalls };
+      up = true;
+      let after;
+      if (kind === "blip-then-poll") {
+        w.R.clock.now += 6 * MIN;
+        await kickOf(c);
+        after = { doors: c.doors.length, renewals: g.st.renewCalls };
+      } else {
+        w.R.clock.now += MIN;
+        const soon = g.st.relaySoon;
+        await g.signinPressNow(true);
+        await settle(c);
+        after = { doors: c.doors.length, renewals: g.st.renewCalls, woke: g.st.relaySoon > soon };
+      }
+      const row = { c1, after };
+      row.ok = c1.doors === 0 && after.doors === 1 && (kind === "check-now" ? after.woke : true);
+      await c.ch.stop();
+      rows[kind] = row;
+    }
+    return { ok: Object.values(rows).every(r => r.ok), detail: brief(rows) };
+  }
+  /* Finding 5: one press, one renewal: Check now on a desk whose certificate the relay still refuses renews once (the press's own) and the
+     cycle it wakes renews no more; Sign in, its certificate just taken, renews none. A press at the door knocks once with the certificate
+     the channel already refused there, the press passing its memory by; and a second press inside thirty seconds is an ordinary wake. */
+  async function pressOnceScene(mod, src) {
+    const rows = {};
+    for (const kind of ["check-now", "sign-in"]) {
+      const w = await team({ seats: true }), a = w.desks.a, at = w.R.clock.now, tm = "t-" + w.rt.slice(0, 8), holder = {};
+      const wrong = n => certFor(a.pub, hex(16), at + n, 7 * DAY);
+      const g = holder.g = shellGlue(w, a, { held: { provider: "microsoft", cert: wrong(0), revoked: null }, service: async n => ({ said: "renewed", cert: wrong(n) }),
+        team: tm, onRelaySoon: pressRun(holder) }, src);
+      const c = holder.c = deskChannel(w, "a", { renewMs: 200 }, mod, { shell: g });
+      await cycleOf(c);
+      w.R.clock.now += 2 * HOUR;
+      const before = g.st.renewCalls, mark = c.log.length;
+      if (kind === "sign-in") g.st.held = { provider: "microsoft", cert: wrong(500), revoked: null };
+      await g.signinPressNow(kind === "check-now");
+      await settle(c);
+      const row = { renewals: g.st.renewCalls - before, hellos: c.log.slice(mark).filter(l => l === "POST hello 200").length };
+      row.ok = row.renewals === (kind === "check-now" ? 1 : 0) && row.hellos === 1;
+      await c.ch.stop();
+      rows[kind] = row;
+    }
+    {
+      const w = await team({}), d = named(w, "k"), tm = "t-" + w.rt.slice(0, 8), holder = {};
+      await doorOf(w, [hex(16)]);
+      const cert = certFor(d.pub, w.licence, w.R.clock.now, 7 * DAY);
+      const join = { rt: w.rt, url: "https://etiuda.dev/relay/v1", door: true, box: w.leadBox.pub };
+      const g = holder.g = shellGlue(w, d, { held: { provider: "microsoft", cert, revoked: null }, team: tm, join, onRelaySoon: pressRun(holder),
+        service: async () => ({ said: "renewed", cert }) }, src);
+      const c = holder.c = deskChannel(w, "k", { renewMs: 200 }, mod, { shell: g, invite: () => g.signinDoorInvite(tm, w.rt), onDoor: id => { join.inv = id; } });
+      await cycleOf(c);
+      w.R.clock.now += MIN;
+      await kickOf(c);
+      const quiet = knocks(c).length;
+      w.R.clock.now += 2 * HOUR;
+      await g.signinPressNow(true);
+      await settle(c);
+      const pressed = knocks(c).length;
+      await g.signinPressNow(true);
+      await settle(c);
+      const again = knocks(c).length;
+      rows.door = { quiet, pressed, again, ends: c.ends.slice() };
+      rows.door.ok = quiet === 1 && pressed === 2 && again === 2 && rows.door.ends.length === 0;
+      await c.ch.stop();
+    }
+    return { ok: Object.values(rows).every(r => r.ok), detail: brief(rows) };
+  }
+  /* Finding 7: the door's seatless request carries the request's id and marks a door, so a waiting door join whose certificate this desk's
+     clock holds run out (the relay's still takes it) reads the lead's answer; and a door request whose first reply was lost resumes and is
+     kept under the seatless request too. */
+  async function seatlessDoorScene(mod, src) {
+    const rows = {};
+    {
+      const w = await team({}), d = named(w, "k"), tm = "t-" + w.rt.slice(0, 8), skew = { ms: 0 };
+      const seat = { cert: certFor(d.pub, w.licence, w.R.clock.now, HOUR) };
+      seat.renew = () => seat.cert;
+      const j = await joinedUp(w, d, seat, true, null, mod);
+      const answered = (await leadAnswers(w, d, j.id, "joined")).status;
+      w.R.clock.now = seat.cert.until - 30 * 1000;
+      skew.ms = 60 * 1000;
+      const join = { rt: w.rt, url: "https://etiuda.dev/relay/v1", door: true, box: w.leadBox.pub, inv: j.id };
+      const g = shellGlue(w, d, { held: { provider: "microsoft", cert: seat.cert, revoked: null }, team: tm, join, skew, service: async () => ({ said: "unreached", cert: null, reached: false }) }, src);
+      const handed = g.signinDoorInvite(tm, w.rt);
+      const c = deskChannel(w, "k", seat, mod, { state: j.c.mirror, invite: () => g.signinDoorInvite(tm, w.rt) });
+      await j.c.ch.stop();
+      await cycleOf(c);
+      rows.waiting = { answered, handed: handed && { seatless: handed.seatless, door: handed.door, inv: handed.inv === j.id }, got: c.got.slice() };
+      rows.waiting.ok = answered === 200 && !!handed && handed.inv === j.id && handed.door !== undefined && rows.waiting.got.join() === "joined";
+      await c.ch.stop();
+    }
+    {
+      const w = await team({}), d = named(w, "k"), tm = "t-" + w.rt.slice(0, 8), skew = { ms: 0 };
+      await doorOf(w, [w.licence]);
+      const cert = certFor(d.pub, w.licence, w.R.clock.now, HOUR), knock = await knockWith(w, d, cert), id = knock.json && knock.json.door;
+      w.R.clock.now = cert.until - 30 * 1000;
+      skew.ms = 60 * 1000;
+      const join = { rt: w.rt, url: "https://etiuda.dev/relay/v1", door: true, box: w.leadBox.pub };
+      const g = shellGlue(w, d, { held: { provider: "microsoft", cert, revoked: null }, team: tm, join, skew, service: async () => ({ said: "unreached", cert: null, reached: false }) }, src);
+      const c = deskChannel(w, "k", { cert }, mod, { invite: () => g.signinDoorInvite(tm, w.rt),
+        onDoor: (got, mirror) => { join.inv = got; fs.mkdirSync(path.join(mirror, "desks", d.place), { recursive: true }); fs.writeFileSync(path.join(mirror, "desks", d.place, "join.json"), JSON.stringify({ door: got })); } });
+      await cycleOf(c);
+      rows.lostReply = { knocked: knock.status, kept: c.doors.join() === String(id), up: invRow(w, id).uploaded === true };
+      rows.lostReply.ok = knock.status === 200 && rows.lostReply.kept && rows.lostReply.up;
+      await c.ch.stop();
+    }
+    return { ok: Object.values(rows).every(r => r.ok), detail: brief(rows) };
+  }
+  await leg("d27a", () => pressSignoutScene(), "finding 1: after a refusal a sign out ends the notice and wakes the relay, and the next Sign in, a press, brings the notice back at once where its certificate is still refused and opens at once where it is current");
+  await leg("d28a", () => pressBlipScene(), "finding 2: a door join's renewal that does not reach the service holds no hour, so the knock follows within minutes; the person's Check now at the door wakes the relay and knocks in that press");
+  await leg("d29a", () => pressOnceScene(), "finding 5: one press, one renewal: Check now on a still-refused certificate renews once, Sign in renews none, one hello each; a press at a door knocks once with the certificate already refused there; a second press inside thirty seconds is an ordinary wake");
+  await leg("d30a", () => seatlessDoorScene(), "finding 7: the door's seatless request carries the request's id and marks a door, so a waiting door join whose certificate this desk's clock holds run out reads the lead's answer, and a door request whose first reply was lost is kept and sent up");
   const PRODUCT_CH = path.join(ROOT, "shell", "relay", "channel.cjs");
   /* `tag` a plant line to lift, or {name, edits: [[from, to]]}, a planted fault whose `from` is found once in the channel. */
   async function liftedChannel(tag, fn) {
