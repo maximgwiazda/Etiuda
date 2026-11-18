@@ -707,6 +707,12 @@ function signinDoorsHtml(doors){
 function signinActsHtml(acts){
   return '<div class="sgn-acts">'+acts.map(a=>'<button type="button" class="btn'+(a.solid?' primary':'')+'" data-signin-act="'+esc(a.act)+'">'+esc(a.label)+'</button>').join("")+'</div>';
 }
+/* State 4: the way on and Buy on their own row, then the quiet presses under the rule. */
+function signinEndedActsHtml(acts){
+  const on=acts.filter(a=>a.solid||a.act==="buy"), rest=acts.filter(a=>!(a.solid||a.act==="buy"));
+  const btn=a=>'<button type="button" class="btn'+(a.solid?' primary':'')+'" data-signin-act="'+esc(a.act)+'">'+esc(a.label)+'</button>';
+  return '<div class="door-on-row">'+on.map(btn).join("")+'</div><div class="sgn-acts">'+rest.map(btn).join("")+'</div>';
+}
 /* The preview's line, as the panel and Account draw it, its first sentence the bold one; "" outside the preview. */
 function signinPreviewHtml(v){
   return v && v.preview ? '<p class="sgn-cap sgn-preview" data-signin-preview><b>'+esc(t("Preview only."))+'</b> <span>'
@@ -737,7 +743,10 @@ function signinPanelHtml(d){
   if(d.providers && d.providers.length) h+=signinProvidersHtml(d.providers, false);
   if(d.cap) h+='<p class="sgn-cap">'+esc(d.cap)+'</p>';
   if(d.privacy) h+='<p class="sgn-cap">'+esc(d.privacy)+'</p>';
-  if(d.acts && d.acts.length) h+=signinActsHtml(d.acts);
+  if(d.acts && d.acts.length){
+    if(d.moment==="ended") h+=signinEndedActsHtml(d.acts); /* plant:door-panel-rows */
+    else h+=signinActsHtml(d.acts);
+  }
   if(d.own) h+='<p class="sgn-say sgn-own"><b>'+esc(d.own[0])+'</b><span>'+esc(d.own[1])+'</span></p>';
   if(d.link) h+=signinLinkHtml(d.link);
   if(d.foot) h+='<p class="sgn-ft">'+esc(d.foot)+'</p>';

@@ -18,7 +18,7 @@ const SETTINGS_PATH = path.join(ROOT, "src", "modules", "settings.js");
 const TEMPLATE_PATH = path.join(ROOT, "src", "template.html");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
-const CHECKS = 30, PLANTS = 16;
+const CHECKS = 31, PLANTS = 17;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -470,6 +470,28 @@ CASES.css = (src) => {
     && /\.door-out\{[^}]*margin-top:18px;padding-top:18px;border-top:1px solid var\(--line\)/.test(tpl);
 };
 
+/* State 4's panel: the way on and Buy on one row, Check now and Account settings on the next. */
+CASES.panelRows = (pg = P) => {
+  const split = (html) => {
+    const on = String(html || "").match(/<div class="door-on-row">([\s\S]*?)<\/div>/);
+    const rest = String(html || "").match(/<div class="sgn-acts">([\s\S]*?)<\/div>/);
+    return { on: on && on[1], rest: rest && rest[1] };
+  };
+  const ask = split(panelHtml(pg, VIEWS.ended, "en"));
+  const own = split(panelHtml(pg, Object.assign({}, VIEWS.ended, { holding: { on: "own", ends: T_ENDS } }), "en", { noTeam: true }));
+  const work = panelHtml(pg, VIEWS.working("own"), "en");
+  if (!ask.on || !ask.rest || !own.on || !own.rest) return false;
+  const askOk = ask.on.includes('class="btn primary"') && ask.on.includes("Ask " + LEAD) && ask.on.includes(">Buy<")
+    && ask.on.indexOf("Check now") < 0 && ask.on.indexOf("Account settings") < 0
+    && ask.rest.includes(">Check now<") && ask.rest.includes(">Account settings<")
+    && ask.rest.indexOf("btn primary") < 0 && ask.rest.indexOf(">Buy<") < 0;
+  const ownOk = own.on.includes('class="btn primary"') && own.on.includes(">Check now<") && own.on.includes(">Buy<")
+    && own.on.indexOf("Account settings") < 0
+    && own.rest.includes(">Account settings<") && own.rest.indexOf("Check now") < 0 && own.rest.indexOf(">Buy<") < 0;
+  return askOk && ownOk && work.indexOf("door-on-row") < 0 && work.includes('class="sgn-acts"')
+    && cssText().includes(".door-on-row{display:flex;gap:8px;flex-wrap:nowrap;");
+};
+
 /* No lead's name: the five forms the words file already holds. A named lead keeps the named sentence. */
 CASES.noName = (pg = P) => {
   const opt = { noTeam: true };
@@ -563,6 +585,7 @@ const RUN_LIST = [
   ["dd28", "bandFixed", "the band is flex 0 0 30px with a 30px minimum, so it cannot shrink to its text"],
   ["dd29", "doorDates", "door lines use a long month, and a date in another year keeps the year"],
   ["dd30", "noName", "an unknown lead uses the words file's no-name forms, in English and Polish, and draws no blank"],
+  ["dd31", "panelRows", "state 4 puts the way on and Buy on one row, then Check now and Account settings on the next"],
 ];
 
 /* Verify CHECKS matches the 21 named entries (plus 5 extra state-1..6 parity checks? Keep CHECKS exact). */
@@ -647,6 +670,9 @@ if (!PLANTS_OFF) {
   await plant("ddp12", SETTINGS_PATH,
     ["+'<p class=\"sgn-cap\">'+esc(t(\"This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name, address and picture, and shows them only to the leads and administrator of the licence it asks to join.\"))+'</p></div>'; /* plant:account-privacy-full */", "+'<p class=\"sgn-cap\">'+esc(t(\"This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev.\"))+'</p></div>';"],
     "account_en");
+  await plant("ddp17", SIGNIN_PATH,
+    ["if(d.moment===\"ended\") h+=signinEndedActsHtml(d.acts); /* plant:door-panel-rows */", "if(false) h+=signinEndedActsHtml(d.acts); /* plant:door-panel-rows */"],
+    "panelRows");
   await plant("ddp16", SIGNIN_PATH,
     ["if(!lead) return t(\"Ask a team's lead…\"); /* plant:door-ask-noname */", "if(false) return t(\"Ask a team's lead…\"); /* plant:door-ask-noname */"],
     "noName");
