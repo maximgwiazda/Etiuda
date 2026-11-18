@@ -46,7 +46,8 @@ env:
   #   tests/folder-mirror.mjs: r5b and n1b need a directory that does not list, and a runner's account lists everything (run 44177625970).
   #   tests/card-reword.mjs: cr2 (the menu's box above its button) red in three runs of four and at its one rerun (44187378215); not looked into.
   #   tests/catalog-trust-desk.mjs: red in two runs of four, a different check each time (76o; 72b and 74s), red at its rerun; not looked into.
-  DESK_ONLY: tests/card-reword.mjs,tests/catalog-trust-desk.mjs,tests/build-readers.mjs,tests/desk-one-line.mjs,tests/glass-rim.js,tests/rail-side.mjs,tests/smoke.js,tests/theme-continuity.mjs,tests/tour-ring.js,tests/plant-compare.mjs,tests/opening-legs.mjs,tests/folder-mirror.mjs
+  #   tests/sbom.mjs: reads node_modules/electron/dist/version, which a runner's npm ci left absent; refused, exit 78 (run 44286005787).
+  DESK_ONLY: tests/sbom.mjs,tests/card-reword.mjs,tests/catalog-trust-desk.mjs,tests/build-readers.mjs,tests/desk-one-line.mjs,tests/glass-rim.js,tests/rail-side.mjs,tests/smoke.js,tests/theme-continuity.mjs,tests/tour-ring.js,tests/plant-compare.mjs,tests/opening-legs.mjs,tests/folder-mirror.mjs
 
 jobs:
   area:
