@@ -56,13 +56,14 @@ import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createLab } from "./lab-owner.mjs";
+import { createSeatLab, createSigninGuard } from "./seat-lab.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 532;
+const EXPECTED = 533;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -110,31 +111,18 @@ const isInside = (dir, target) => {
   const rel = path.relative(dir, path.resolve(target));
   return !rel.startsWith("..") && !path.isAbsolute(rel);
 };
-function noteWrite(target) {
-  if (typeof target !== "string") return;
-  const resolved = path.resolve(target);
-  const inRoot = isInside(ROOT, resolved);
-  const inLab = isInside(LAB, resolved);
-  const inTmp = !isInside(os.tmpdir(), ROOT) && isInside(os.tmpdir(), resolved);
-  if (inRoot && !inLab && !inTmp) {
-    productWrites.push(path.relative(ROOT, resolved).replace(/\\/g, "/"));
-  }
-}
-const origWriteFileSync = fs.writeFileSync.bind(fs);
-const origRenameSync = fs.renameSync.bind(fs);
-const origCopyFileSync = fs.copyFileSync.bind(fs);
-fs.writeFileSync = function (file, ...args) {
-  noteWrite(file);
-  return origWriteFileSync(file, ...args);
-};
-fs.renameSync = function (oldPath, newPath, ...args) {
-  noteWrite(newPath);
-  return origRenameSync(oldPath, newPath, ...args);
-};
-fs.copyFileSync = function (src, dest, ...args) {
-  noteWrite(dest);
-  return origCopyFileSync(src, dest, ...args);
-};
+const signinGuard = createSigninGuard({
+  dirs: [LAB, ROOT],
+  labelRoot: LAB,
+  onWrite(resolved) {
+    const inRoot = isInside(ROOT, resolved);
+    const inLab = isInside(LAB, resolved);
+    const inTmp = !isInside(os.tmpdir(), ROOT) && isInside(os.tmpdir(), resolved);
+    if (inRoot && !inLab && !inTmp) {
+      productWrites.push(path.relative(ROOT, resolved).replace(/\\/g, "/"));
+    }
+  },
+});
 
 function filesUnder(dir) {
   const out = [];
@@ -1747,10 +1735,17 @@ if (deskOn()) try {
     send() {}
     close() { if (this.h) this.h.close(); }
   };
+  const seatLab = createSeatLab({
+    labDir: LAB,
+    rootKey: K.ROOT,
+    signer: K.DELEGATE,
+    clock: () => R.clock.now,
+  });
   /* The second argument is either the shell source to load in place of SRC (a plant) or hooks (a fetch stand-in, or `app`:
      a copy of shell/ to load from, as a planted channel needs). */
-  function loadDesk(ud, arg) {
+  async function loadDesk(ud, arg) {
     const hooks = arg && typeof arg === "object" ? arg : null;
+    const clockNow = () => (hooks && typeof hooks.clock === "function" ? hooks.clock() : R.clock.now);
     const source = typeof arg === "string" ? arg : hooks && typeof hooks.source === "string" ? hooks.source : SRC;
     const shellDir = hooks && typeof hooks.app === "string" ? hooks.app : path.join(APP, "shell");
     const said = [], on = {}, invoke = {};
@@ -1761,6 +1756,8 @@ if (deskOn()) try {
       decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
     };
     const net = { fetch: (url, init) => {
+      const lab = seatLab.labFetch(url, init, clockNow());
+      if (lab) return lab;
       deskTransport.log.push((init && init.method) + " " + url);
       noteInit(url, init);
       if (deskTransport.down) return Promise.reject(new Error("down"));
@@ -1771,20 +1768,22 @@ if (deskOn()) try {
       app: { getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop,
         getVersion: () => "0.0.0", whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
       ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
-      BrowserWindow: inert, Menu: inert, dialog: inert, net, protocol: inert, session: directSession, shell: inert,
+      BrowserWindow: inert, Menu: inert, dialog: inert, net, protocol: inert, session: directSession, shell: seatLab.labShell(),
       screen: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" }, safeStorage, powerMonitor: inert,
     };
     process.env.XDG_CURRENT_DESKTOP = "GNOME";
-    const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
+    const api = seatLab.withSigninLab(() => new Function("require", "__dirname", "__filename", "module", "exports", "console",
       source + "\nreturn { " + EXPOSE.join(", ") + " };")(
-      n => (n === "electron" ? electron : nodeRequire(n)),
-      shellDir, path.join(shellDir, "main.js"), { exports: {} }, {}, quiet);
+      n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? signinGuard.shellFs : nodeRequire(n)),
+      shellDir, path.join(shellDir, "main.js"), { exports: {} }, {}, quiet));
     const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
     const sync = (ch, ...args) => { const ev = eventFor(); if (on[ch]) on[ch](ev, ...args); return ev.returnValue; };
     const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
-    return { api, ask, sync, said, ud, envelope };
+    const desk = { api, ask, sync, said, ud, envelope };
+    await seatLab.seatDesk(desk);
+    return desk;
   }
-  const newDesk = (name, folder, hooks) => {
+  const newDesk = async (name, folder, hooks) => {
     const ud = path.join(LAB, name);
     fs.mkdirSync(ud, { recursive: true });
     fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: folder, eUiLang: "en" } }), "utf8");
@@ -1820,7 +1819,7 @@ if (deskOn()) try {
   const studio = C.createChannel({ rt: RT2, url: URL2, mirror: studioMirror, stateFile: path.join(LAB, "studio.json"), pin: () => PIN2,
     me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root" }), keyFor: e => (e === 1 ? K2 : null),
     sealEpoch: () => 1, inviteKeys: () => liveInvites, request: studioT.request, connect: studioT.connect, pollMs: 1e9 });
-  const D = newDesk("main-desk", path.join(LAB, "main-share"));
+  const D = await newDesk("main-desk", path.join(LAB, "main-share"));
   fs.mkdirSync(path.join(LAB, "main-share"), { recursive: true });
   const SEALED = D.api.sealCatalog(K2, TEAM2, 1, catalogText(1));
   put(studioMirror, "board.ec", JSON.stringify(SEALED));
@@ -1854,7 +1853,7 @@ if (deskOn()) try {
       const from = deskInits.length;
       const inv = await relayInviteOn(RT2, TEAM2);
       fs.mkdirSync(path.join(LAB, "cred-plant-share"), { recursive: true });
-      const P = newDesk("cred-plant", path.join(LAB, "cred-plant-share"), { source: next });
+      const P = await newDesk("cred-plant", path.join(LAB, "cred-plant-share"), { source: next });
       await P.ask("etiuda:team-join", "invite", inv.text, "Desk Ten", codeOf(inv.secret));
       const got = deskInits.slice(from);
       return got.length > 0 && got.some(x => x.credentials !== "omit");
@@ -1892,7 +1891,7 @@ if (deskOn()) try {
     };
     const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
       text + "\nreturn { " + EXPOSE.join(", ") + " };")(
-      n => (n === "electron" ? electron : nodeRequire(n)),
+      n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? signinGuard.shellFs : nodeRequire(n)),
       path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
     const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
     return { api, ask, said, ud, envelope: () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8")) };
@@ -1921,13 +1920,13 @@ if (deskOn()) try {
   const quietInvite = await relayInviteOn(RT2, TEAM2);
 
   
-  const beforeRead = deskTransport.log.length;
-
-  
-  const Dq = newDesk("join-quiet", path.join(LAB, "join-quiet-share"));
+  const Dq = await newDesk("join-quiet", path.join(LAB, "join-quiet-share"));
 
   
   fs.mkdirSync(path.join(LAB, "join-quiet-share"), { recursive: true });
+
+  
+  const beforeRead = deskTransport.log.length;
 
   
   const readQ = await Dq.ask("etiuda:team-join", "read", quietInvite.text);
@@ -1942,7 +1941,7 @@ if (deskOn()) try {
   const yesInvite = await relayInviteOn(RT2, TEAM2);
 
   
-  const Dy = newDesk("join-yes", path.join(LAB, "join-yes-share"));
+  const Dy = await newDesk("join-yes", path.join(LAB, "join-yes-share"));
 
   
   fs.mkdirSync(path.join(LAB, "join-yes-share"), { recursive: true });
@@ -2063,7 +2062,7 @@ if (deskOn()) try {
   const markA = deskTransport.log.length;
 
   
-  const Dw = deskOnWrap("wrap-read", invA.wrap);
+  const Dw = await deskOnWrap("wrap-read", invA.wrap);
 
   
   const takenA = await Dw.ask("etiuda:team-join", "invite", invA.text, "Desk Nine", "");
@@ -2113,7 +2112,7 @@ if (deskOn()) try {
   const invE = await inviteOnW(2);
 
   
-  const De = deskOnWrap("wrap-epoch", invE.wrap);
+  const De = await deskOnWrap("wrap-epoch", invE.wrap);
 
   
   const takenE = await De.ask("etiuda:team-join", "invite", invE.text, "Desk Nine", "");
@@ -2170,7 +2169,7 @@ if (deskOn()) try {
   if (partOn("pDesk")) {
   const openPlant = await liftChannel("plant:wrap-open", async () => {
       const invP = await inviteOnW(1);
-      const Dp = deskOnWrap("wrap-plant", invP.wrap);
+      const Dp = await deskOnWrap("wrap-plant", invP.wrap);
       const takenP = await Dp.ask("etiuda:team-join", "invite", invP.text, "Desk Nine", "");
       const end = Date.now() + 4000;
       while (Date.now() < end) {
@@ -2236,7 +2235,7 @@ if (deskOn()) try {
     } };
     const folder = path.join(LAB, label + "-share");
     fs.mkdirSync(folder, { recursive: true });
-    const first = newDesk(label, folder, hooks);
+    const first = await newDesk(label, folder, hooks);
     const taken = await first.ask("etiuda:team-join", "invite", inv.text, "Desk Nine", "");
     const me = await first.ask("etiuda:branch-identity", false);
     const joinRel = "desks/" + me.id + "/join.json";
@@ -2255,7 +2254,7 @@ if (deskOn()) try {
     const stopFirst = first.api.relayRun();
     if (stopFirst) await stopFirst.stop();
     mode = "spent";
-    const second = loadDesk(first.ud, hooks);
+    const second = await loadDesk(first.ud, hooks);
     const notYet = second.api.relayRun();
     if (notYet) { notYet.kick(); await notYet.idle(); }
     teamRevW += 1;
@@ -2377,7 +2376,7 @@ if (deskOn()) try {
       : null) };
     const folder = path.join(LAB, label + "-share");
     fs.mkdirSync(folder, { recursive: true });
-    const desk = newDesk(label, folder, hooks);
+    const desk = await newDesk(label, folder, hooks);
     const taken = await desk.ask("etiuda:team-join", "invite", inv.text, "Desk Nine", "");
     let view = null;
     const shown = await until(async () => {
@@ -2387,7 +2386,7 @@ if (deskOn()) try {
       return !!(view && view.join && view.join.state !== "waiting");
     }, shownCeiling || 30000);
     const kept = (((((desk.envelope().teamJoin || {}).invite || {}).relay || {}).end)) || "";
-    const again = loadDesk(desk.ud);
+    const again = await loadDesk(desk.ud);
     const after = await again.ask("etiuda:team-join", "view");
     const stop = desk.api.relayRun();
     if (stop) await stop.stop();
@@ -2477,7 +2476,7 @@ if (deskOn()) try {
       async function takeOne(name, offer) {
         const folder = path.join(LAB, name + "-share");
         fs.mkdirSync(folder, { recursive: true });
-        const desk = newDesk(name, folder);
+        const desk = await newDesk(name, folder);
         const taken = await desk.ask("etiuda:team-join", "invite", offer.text, "Desk Nine", "");
         const who = await desk.ask("etiuda:branch-identity", false);
         const rel = "desks/" + who.id + "/join.json";
@@ -3085,7 +3084,7 @@ if (deskOn()) try {
       }
       const shareH = path.join(LAB, "head-folder");
       fs.mkdirSync(shareH, { recursive: true });
-      const H = newDesk("head-folder-desk", shareH);
+      const H = await newDesk("head-folder-desk", shareH);
       const hme = await H.ask("etiuda:branch-identity", true);
       const KH = crypto.randomBytes(32), TEAMH = "t-" + hex(8);
       const folderTeam = JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: TEAMH, catalogs: ["quay-board"],
@@ -3119,7 +3118,7 @@ if (deskOn()) try {
           teamPins: { [TEAM2]: { keyId: LEAD.keyId, public: LEAD.pub }, [TEAMH]: { keyId: INTR.keyId, public: INTR.pub } },
           teamPinFrom: { [TEAM2]: "invite" }, teamChannel: { [TEAM2]: { kind: "relay", rt: RT2, url: URL2 } },
           teamShown: { [TEAMH]: { folder: shareH } } }), "utf8");
-        const BD = loadDesk(udBoth);
+        const BD = await loadDesk(udBoth);
         await BD.ask("etiuda:branch-identity", true);
         const runBD = BD.api.relayRun();
         const bv = await BD.ask("etiuda:team-join", "leads");
@@ -3172,7 +3171,7 @@ if (deskOn()) try {
         for (const id of Object.keys(opt.revs || {})) revs[id] = { [LEAD.pub]: opt.revs[id] };
         fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: elsewhere, eUiLang: "en" },
           teamPins: { [TMF]: { keyId: LEAD.keyId, public: LEAD.pub } }, catalogRevs: revs }), "utf8");
-        const FD = loadDesk(ud, opt.src);
+        const FD = await loadDesk(ud, opt.src);
         await FD.ask("etiuda:branch-identity", true);
         const look = async () => {
           const v = await FD.ask("etiuda:team-join", "leads");
@@ -3288,7 +3287,7 @@ if (deskOn()) try {
         if (head) fs.writeFileSync(path.join(mir, HEAD_FILE), head);
         fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: elsewhere, eUiLang: "en" },
           teamPins: { [TME6]: { keyId: LEAD.keyId, public: LEAD.pub } } }), "utf8");
-        const FD = loadDesk(ud, src);
+        const FD = await loadDesk(ud, src);
         await FD.ask("etiuda:branch-identity", true);
         const v = await FD.ask("etiuda:team-join", "leads");
         const row = (v && Array.isArray(v.leads) ? v.leads : []).filter(l => l && l.team === TME6)[0];
@@ -3317,7 +3316,7 @@ if (deskOn()) try {
           keys: { eCatalogFolder: share, eUiLang: "en" }, teamPins: { [team]: { keyId: LEAD.keyId, public: LEAD.pub } },
           teamKeys: { [team]: { 1: encE6(key.toString("base64")) } } },
           channel ? { teamPinFrom: { [team]: "invite" }, teamChannel: { [team]: channel } } : { folderTeams: { [team]: { folder: share } } })), "utf8");
-        const D = loadDesk(ud, src);
+        const D = await loadDesk(ud, src);
         const me = await D.ask("etiuda:branch-identity", true);
         const put6 = text => { if (!channel) fs.writeFileSync(path.join(share, C.TEAM_NAME), text); fs.writeFileSync(path.join(mir, C.TEAM_NAME), text); };
         const land = text => { put6(text); D.api.heedTeam(); };
@@ -3357,7 +3356,7 @@ if (deskOn()) try {
         const sameList = fs.existsSync(b.file);
         if (restart) {
           d.put6(teamE6(d.team, ["pebble-board"], 3, d.me, d.D, d.key, d.channel));
-          const D2 = loadDesk(d.ud, src);
+          const D2 = await loadDesk(d.ud, src);
           await D2.ask("etiuda:branch-identity", false);
           D2.api.heedTeam();
         } else d.land(teamE6(d.team, ["pebble-board"], 3, d.me, d.D, d.key, d.channel));
@@ -3381,7 +3380,7 @@ if (deskOn()) try {
         fs.unlinkSync(path.join(d.mir, "quay-board.ec"));
         d.land(teamE6(d.team, ["pebble-board"], 2, d.me, d.D, d.key, d.channel));
         const live = inB(d.D);
-        const D2 = loadDesk(d.ud, src);
+        const D2 = await loadDesk(d.ud, src);
         await D2.ask("etiuda:branch-identity", false);
         const restart = inB(D2);
         const pick = D2.api.pickEdition([{ file: "pebble-board.ec", data: JSON.parse(d.texts["pebble-board"]) }]);
@@ -3495,7 +3494,7 @@ if (deskOn()) try {
         me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root" }), keyFor: e => (e === 1 ? K4 : null),
         sealEpoch: () => 1, inviteKeys: () => live4, agree: agree4, request: studio4T.request, connect: studio4T.connect, pollMs: 1e9 });
       fs.mkdirSync(path.join(LAB, "f6-share"), { recursive: true });
-      const G = newDesk("f6-desk", path.join(LAB, "f6-share"));
+      const G = await newDesk("f6-desk", path.join(LAB, "f6-share"));
       put(studio4Mirror, "board.ec", JSON.stringify(G.api.sealCatalog(K4, TEAM4, 1, catalogText(1))));
       put(studio4Mirror, C.TEAM_NAME, team4(1, []));
       const text4 = "etiuda-join:" + Buffer.from(JSON.stringify({ team: TEAM4, relay: { rt: RT4, url: URL2, token: TOK4, inv: INV4 },
@@ -3553,7 +3552,7 @@ if (deskOn()) try {
   fs.mkdirSync(share, { recursive: true });
 
   
-  const E = newDesk("self-desk", share);
+  const E = await newDesk("self-desk", share);
 
   
   const eme = await E.ask("etiuda:branch-identity", true);
@@ -3613,7 +3612,7 @@ if (deskOn()) try {
   fs.mkdirSync(shareF, { recursive: true });
 
   
-  const F = newDesk("forget-desk", shareF);
+  const F = await newDesk("forget-desk", shareF);
 
   
   const SECF = hex(16);
@@ -3663,7 +3662,7 @@ if (deskOn()) try {
       const BS = String.fromCharCode(92);
       regOpts.policy = ["Windows Registry Editor Version 5.00", "", "[HKEY_LOCAL_MACHINE" + BS + "SOFTWARE" + BS + "Policies" + BS + "Etiuda]",
         "\"TeamFolder\"=\"" + shareP.split(BS).join(BS + BS) + "\"", "", ""].join("\n");
-      const P = loadDesk(udP);
+      const P = await loadDesk(udP);
       const folderP = P.api.catalogFolder();
       regOpts.policy = null;
       await P.ask("etiuda:branch-identity", true);
@@ -5213,7 +5212,7 @@ if (deskOn()) try {
     await lead.idle();
     const share = path.join(LAB, "961-share-" + tag);
     fs.mkdirSync(share, { recursive: true });
-    const H = make(share, tag);
+    const H = await make(share, tag);
     const text = "etiuda-join:" + Buffer.from(JSON.stringify({ team, relay: { rt, url: URLV1, token, inv },
       lead: { keyId: LEAD.keyId, public: LEAD.pub, name: "Ada Quay" }, secret }), "utf8").toString("base64url");
     const taken = await H.ask("etiuda:team-join", "invite", text, "Desk Twelve", codeOf(secret));
@@ -5390,7 +5389,7 @@ if (deskOn()) try {
           fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eUiLang: "en" },
             teamPins: { [team]: { keyId: LEAD.keyId, public: LEAD.pub } }, teamPinFrom: { [team]: "invite" },
             teamChannel: { [team]: { kind: "relay", rt, url: URLV1 } }, teamShown: { [team]: { lead: "Ada Quay" } } }), "utf8");
-          const desk = loadDesk(ud, { fetch: lfetch });
+          const desk = await loadDesk(ud, { fetch: lfetch, clock: () => RL.clock.now });
           const me = await desk.ask("etiuda:branch-identity", true);
           const t = RL.clock.now, keys = [{ id: me.id, pub: me.key, desk: me.id }];
           const en = await ladmin("POST", "/relay/v1/t/" + rt + "/devices", { keys, rev: 1, t, sig: signHex(LEAD, core.devicesBytes(rt, 1, t, keys)) });
@@ -5569,7 +5568,7 @@ if (deskOn()) try {
           teamPins: { [unmadeTeam]: { keyId: LEAD.keyId, public: LEAD.pub } }, teamPinFrom: { [unmadeTeam]: "invite" },
           teamChannel: { [unmadeTeam]: { kind: "relay", rt: unmadeRt, url: URLV1 } }, teamShown: { [unmadeTeam]: { lead: "Ada Quay" } } }), "utf8");
         let blockSince = false;
-        const unmadeDesk = loadDesk(unmadeUd, { fetch: (url, init) => {
+        const unmadeDesk = await loadDesk(unmadeUd, { clock: () => RL.clock.now, fetch: (url, init) => {
           if (blockSince && url.indexOf("/since/") >= 0) {
             return Promise.resolve(new Response(JSON.stringify({ error: "temporary" }), { status: 503, headers: { "content-type": "application/json" } }));
           }
@@ -5690,7 +5689,7 @@ if (deskOn()) try {
       fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eUiLang: "en" },
         teamPins: { [team]: { keyId: LEAD.keyId, public: LEAD.pub } }, teamPinFrom: { [team]: "invite" },
         teamChannel: { [team]: { kind: "relay", rt, url: URLV1 } }, teamShown: { [team]: { lead: "Ada Quay" } } }), "utf8");
-      desk = loadDesk(ud);
+      desk = await loadDesk(ud);
       const me = await desk.ask("etiuda:branch-identity", true);
       const t = R.clock.now, keys = [{ id: me.id, pub: me.key, desk: me.id }];
       const en = await admin("POST", "/relay/v1/t/" + rt + "/devices", { keys, rev: 1, t, sig: signHex(LEAD, core.devicesBytes(rt, 1, t, keys)) });
@@ -5777,7 +5776,7 @@ if (deskOn()) try {
     fs.mkdirSync(ud, { recursive: true });
     fs.mkdirSync(share, { recursive: true });
     fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: share, eUiLang: "en" } }), "utf8");
-    const Dk = loadDesk(ud, source);
+    const Dk = await loadDesk(ud, source);
     let ch = null, counting = true;
     try {
       put(sMirror, "board.ec", JSON.stringify(Dk.api.sealCatalog(key, team, 1, catalogText(1))));
@@ -5997,7 +5996,7 @@ if (deskOn()) try {
     fs.mkdirSync(s.share, { recursive: true });
     fs.writeFileSync(path.join(s.ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: s.share, eUiLang: "en" } }), "utf8");
     /* An object is hooks for loadDesk, or { src } for a planted shell source (the leave route's 987v). */
-    s.Dk = loadDesk(s.ud, app ? (typeof app === "object" ? (typeof app.src === "string" ? app.src : app) : { app }) : undefined);
+    s.Dk = await loadDesk(s.ud, app ? (typeof app === "object" ? (typeof app.src === "string" ? app.src : app) : { app }) : undefined);
     s.stop = async () => {
       deskTransport.down = false;
       try { await s.studio.stop(); } catch { /* stopped */ }
@@ -6254,7 +6253,7 @@ if (deskOn()) try {
       /* The desk started again on the same profile: the line is not said again, and still nothing goes up. */
       const was = s.Dk.api.relayRun();
       if (was) await was.stop();
-      s.Dk = loadDesk(s.ud, app ? (typeof app === "object" ? app : { app }) : undefined);
+      s.Dk = await loadDesk(s.ud, app ? (typeof app === "object" ? app : { app }) : undefined);
       const again = deskTransport.log.length;
       for (let i = 0; i < 3; i++) await s.pump();
       out.saidRestart = s.Dk.said.filter(l => l.indexOf(C.STRANDED_SAID || "the line is not exported") >= 0).length;
@@ -6892,7 +6891,7 @@ if (deskOn()) try {
       out.held = c1 && c1.program ? c1.program.ahead().length : -1;
       if (c1) await c1.stop();
       v.again = true;
-      s.Dk = loadDesk(s.ud, hooks);
+      s.Dk = await loadDesk(s.ud, hooks);
       const done = n => n.pin === "the new lead" && n.edition === "re-signed rev 1" && n.head === "Handover edition" && n.span;
       await until(async () => { await s.pump(); return done(deskNow(s, NEXT, span)); }, ceiling || 30000);
       out.now = deskNow(s, NEXT, span);
@@ -13798,6 +13797,8 @@ if (partOn("pRv3")) {
     }
   }
   check(productWrites.length === 0 && changed.length === 0, "943b no leg wrote a product file: " + productWrites.length + " write(s) into the repository" + (productWrites.length ? " (" + [...new Set(productWrites)].join(" ") + ")" : "") + ", and every file under shell/relay/, shell/main.js and src/modules/settings.js ends with the sha256 it began with" + (changed.length ? "; changed: " + changed.join(" ") : ""));
+  const g943c = signinGuard.report("943c", deskOn());
+  check(g943c.ok, g943c.line);
 }
 markPart(null);
 console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + " expected=" + EXPECTED);
