@@ -140,6 +140,7 @@ async function challenge(w, rt) {
   const r = await call(w.R, "POST", "/relay/v1/t/" + (rt || w.rt) + "/hello", { json: {} });
   return r.status === 200 ? r.json.challenge : null;
 }
+const seatOf = (w, pub) => K.certFor(pub, hex(16), Math.max(1, w && w.R && w.R.clock ? w.R.clock.now : 0), C.CERT_SPAN_MS);
 async function helloAs(w, key, o) {
   const opts = o || {};
   const rt = opts.rt || w.rt;
@@ -147,13 +148,18 @@ async function helloAs(w, key, o) {
   const sig = opts.sig !== undefined ? opts.sig : signHex(opts.signer || key, C.helloBytes(opts.signedRt || rt, nonce, key.keyId));
   const body = { challenge: nonce, key: key.keyId, sig };
   if (!opts.omitPub) body.pub = opts.pub || key.pub;
+  if (opts.seat !== undefined) { if (opts.seat !== null) body.seat = opts.seat; }
+  else if (!opts.omitPub && !(w.lead && key.keyId === w.lead.keyId)) body.seat = seatOf(w, body.pub);
   return call(w.R, "POST", "/relay/v1/t/" + rt + "/session", { json: body });
 }
-async function tokenHello(w, inv, token, nonce, key) {
+async function tokenHello(w, inv, token, nonce, key, o) {
+  const opts = o || {};
   const n = nonce || await challenge(w);
   const who = key || keyPair(true);
   const body = { challenge: n, invite: token, inv, key: who.keyId, pub: who.pub,
-    sig: signHex(who, C.helloBytes(w.rt, n, who.keyId)) };
+    sig: signHex(who, C.helloBytes(w.rt, n, who.keyId)),
+    seat: opts.seat !== undefined ? opts.seat : seatOf(w, who.pub) };
+  if (body.seat === null) delete body.seat;
   return call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: body });
 }
 async function sessionOf(w, key) {
@@ -1041,7 +1047,7 @@ async function main() {
     await invites(w, [{ id: id3, hash: sha(t3) }], []);
     const n3 = await challenge(w);
     const bound = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: n3, invite: t3, inv: id3,
-      key: asker.keyId, pub: asker.pub, sig: signHex(asker, C.helloBytes(w.rt, n3, asker.keyId)) } });
+      key: asker.keyId, pub: asker.pub, sig: signHex(asker, C.helloBytes(w.rt, n3, asker.keyId)), seat: seatOf(w, asker.pub) } });
     const tokenAgain = await tokenHello(w, id3, t3);
     const resumed = await helloAs(w, asker);
     const strangerKey = await helloAs(w, keyPair(true));
@@ -1087,12 +1093,12 @@ async function main() {
     await invites(w, [{ id: id4, hash: sha(t4) }], []);
     const n4 = await challenge(w);
     const loose = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: n4, invite: t4, inv: id4,
-      key: unsigned.keyId, pub: unsigned.pub, sig: signHex(keyPair(true), C.helloBytes(w.rt, n4, unsigned.keyId)) } });
+      key: unsigned.keyId, pub: unsigned.pub, sig: signHex(keyPair(true), C.helloBytes(w.rt, n4, unsigned.keyId)), seat: seatOf(w, unsigned.pub) } });
     const looseKey = await helloAs(w, unsigned);
     const held4 = w.R.stores.get(w.rt).get("inv:" + id4) || {};
     const n4b = await challenge(w);
     const later = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: n4b, invite: t4, inv: id4,
-      key: unsigned.keyId, pub: unsigned.pub, sig: signHex(unsigned, C.helloBytes(w.rt, n4b, unsigned.keyId)) } });
+      key: unsigned.keyId, pub: unsigned.pub, sig: signHex(unsigned, C.helloBytes(w.rt, n4b, unsigned.keyId)), seat: seatOf(w, unsigned.pub) } });
     check(refused(loose, "bad-signature") && refused(looseKey, "not-enrolled") && held4.spent !== true && !("key" in held4)
       && later.status === 200 && later.json.invite === true,
       "10h a token hello naming a key it is not signed by is refused and spends nothing, and a later hello signed by that key opens");
@@ -1105,7 +1111,7 @@ async function main() {
     await invites(w, [{ id: id5, hash: sha(t5) }], []);
     const n5 = await challenge(w);
     const bind5 = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: n5, invite: t5, inv: id5,
-      key: binder.keyId, pub: binder.pub, sig: signHex(binder, C.helloBytes(w.rt, n5, binder.keyId)) } });
+      key: binder.keyId, pub: binder.pub, sig: signHex(binder, C.helloBytes(w.rt, n5, binder.keyId)), seat: seatOf(w, binder.pub) } });
     const own = await helloAs(w, binder);
     const forged = await helloAs(w, binder, { signer: keyPair(true) });
     const bare = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: await challenge(w), key: binder.keyId } });
@@ -1128,7 +1134,7 @@ async function main() {
       await invites(w, [{ id, hash: sha(token) }], []);
       const n = await challenge(w);
       const r = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: n, invite: token, inv: id,
-        key: who.keyId, pub: who.pub, sig: signHex(who, C.helloBytes(w.rt, n, who.keyId)) } });
+        key: who.keyId, pub: who.pub, sig: signHex(who, C.helloBytes(w.rt, n, who.keyId)), seat: seatOf(w, who.pub) } });
       return { id, ok: r.status === 200 && r.json.invite === true };
     }
     const early = keyPair(true), late = keyPair(true), earlyDesk = "k-" + hex(8);
@@ -1348,7 +1354,7 @@ async function main() {
   async function boundHello(w, who, id, token) {
     const n = await challenge(w);
     return call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: n, invite: token, inv: id,
-      key: who.keyId, pub: who.pub, sig: signHex(who, C.helloBytes(w.rt, n, who.keyId)) } });
+      key: who.keyId, pub: who.pub, sig: signHex(who, C.helloBytes(w.rt, n, who.keyId)), seat: seatOf(w, who.pub) } });
   }
   function sealJoin(w, who, counter, place) {
     return B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: crypto.randomBytes(32),
