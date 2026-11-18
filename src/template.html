@@ -3914,7 +3914,7 @@ body.e-first-signin .stage>.dotfield{content-visibility:hidden}
 .fs-skip{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
 .fs-skip-line{margin:10px 0 0;font:12.5px/1.45 var(--sans);color:var(--dim)}
 /* The desk's door (B-3b): the band under the header, the dot, the offline box and the way out. */
-.door-band{display:flex;align-items:center;gap:8px;box-sizing:border-box;width:100%;height:30px;padding:0 16px;background:color-mix(in srgb,#d98a1f 14%,var(--panel));border-bottom:1px solid color-mix(in srgb,#d98a1f 32%,transparent);color:var(--ink);font:13px/1.3 var(--sans)}
+.door-band{display:flex;align-items:center;gap:8px;box-sizing:border-box;width:100%;flex:0 0 30px;min-height:30px;height:30px;/* plant:door-band-fixed */padding:0 16px;background:color-mix(in srgb,#d98a1f 14%,var(--panel));border-bottom:1px solid color-mix(in srgb,#d98a1f 32%,transparent);color:var(--ink);font:13px/1.3 var(--sans)}
 .door-band[hidden]{display:none}
 .door-band-dot{width:8px;height:8px;border-radius:50%;background:#d98a1f;flex:none}
 .signin-wrap .sgn-btn{position:relative}

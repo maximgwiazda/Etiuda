@@ -18,7 +18,7 @@ const SETTINGS_PATH = path.join(ROOT, "src", "modules", "settings.js");
 const TEMPLATE_PATH = path.join(ROOT, "src", "template.html");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
-const CHECKS = 27, PLANTS = 13;
+const CHECKS = 28, PLANTS = 14;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -465,6 +465,12 @@ CASES.css = (src) => {
     && /\.door-out\{[^}]*margin-top:18px;padding-top:18px;border-top:1px solid var\(--line\)/.test(tpl);
 };
 
+/* The band keeps the sheet's 30px. A flex child otherwise shrinks to its text, which measured 18px. */
+CASES.bandFixed = (src) => {
+  const tpl = cssText(src);
+  return tpl.includes(".door-band{display:flex;align-items:center;gap:8px;box-sizing:border-box;width:100%;flex:0 0 30px;min-height:30px;height:30px;");
+};
+
 /* The way on is filled accent, and stays filled when focused: the ring is the page's own outline, outside the press. */
 CASES.wayOn = (src) => {
   const tpl = cssText(src);
@@ -500,6 +506,7 @@ const RUN_LIST = [
   ["dd20", "account_pl", "Settings Account (PL): full before-signin privacy, state 4 Seat row + dot, state 6 Seat rows, no Held by this account"],
   ["dd21", "css", "template.html holds exact band, dot, offline box and way-out CSS measures"],
   ["dd27", "wayOn", "the way on is filled var(--accent) with white text and an accent border, and the fill is restated on hover and focus"],
+  ["dd28", "bandFixed", "the band is flex 0 0 30px with a 30px minimum, so it cannot shrink to its text"],
 ];
 
 /* Verify CHECKS matches the 21 named entries (plus 5 extra state-1..6 parity checks? Keep CHECKS exact). */
@@ -584,6 +591,9 @@ if (!PLANTS_OFF) {
   await plant("ddp12", SETTINGS_PATH,
     ["+'<p class=\"sgn-cap\">'+esc(t(\"This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name, address and picture, and shows them only to the leads and administrator of the licence it asks to join.\"))+'</p></div>'; /* plant:account-privacy-full */", "+'<p class=\"sgn-cap\">'+esc(t(\"This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev.\"))+'</p></div>';"],
     "account_en");
+  plantText("ddp14", TEMPLATE_PATH,
+    ["flex:0 0 30px;min-height:30px;height:30px;/* plant:door-band-fixed */", "height:30px;/* plant:door-band-fixed */"],
+    "bandFixed");
   plantText("ddp13", TEMPLATE_PATH,
     ["{background:var(--accent);color:#fff;border-color:var(--accent)} /* plant:door-on-fill */", "{background:var(--btn-rest)} /* plant:door-on-fill */"],
     "wayOn");
