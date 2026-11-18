@@ -7630,7 +7630,7 @@ function relayRun() {
   const team = want.team, mirror = relayMirrorOf(want.rt);
   try { fs.mkdirSync(mirror, { recursive: true }); }
   catch (e) { teamSay("the relay's mirror " + mirror + " could not be made - " + e.message); relayAt = ""; return null; }
-  relayChannel = RelayChannel().createChannel(signinSeatWall(want.url, {
+  relayChannel = RelayChannel().createChannel(signinRelaySeatIo(team, want.url, {
     rt: want.rt, url: want.url, mirror: mirror, stateFile: mirror + ".json", write: writeReplacing,
     pin: () => { const now = pinFor(want) || pin; return { teamId: team, rt: want.rt, lead: { keyId: now.keyId, public: now.public } }; },
     me: () => {
@@ -7666,8 +7666,8 @@ function relayRun() {
     },
     /* The relay named this desk's request at the standing door: kept, and the request written with its seat and that id. */
     onDoor: id => { signinDoorKept(team, mirror, id); }, /* plant:door-on */
-    /* Every hello for this desk's own key carries its seat certificate (seatHello in shell/relay/channel.cjs). */
-    ...signinRelaySeatIo(team),
+    /* Every hello for this desk's own key carries its seat certificate (seatHello in shell/relay/channel.cjs): the call that
+       wraps these options adds the seat's three and walls them by the channel's address. */
     onTeam: () => {
       const j = teamJoin;
       if (j && j.team === team && j.invite && j.invite.relay && (j.invite.relay.withdrawing === true || j.invite.relay.withdrawn === true)) return;
@@ -11238,10 +11238,13 @@ function signinSeatWall(url, opts) {
   if (typeof opts.invite === "function") out.invite = () => { const inv = opts.invite(); return inv && inv.door ? null : inv; }; /* plant:seat-wall-door */
   return out;
 }
-/* What a team's relay channel is handed for its seat; null forgets the refusal of a channel let go. */
-function signinRelaySeatIo(team) {
+/* What a team's relay channel is handed for its seat; null forgets the refusal of a channel let go. Given the channel's address
+   and its other options, it hands back the whole set behind the seat's wall, so the wall is asked where the seat is handed over
+   and nowhere else. */
+function signinRelaySeatIo(team, url, opts) {
   if (team === null) { signinRelaySeatTold(signinRelaySeatTeam, "open"); return null; }
-  return { seat: () => signinSeatCert(), seatRenew: () => signinSeatRenew(), onSeat: state => signinRelaySeatTold(team, state) };
+  const io = { seat: () => signinSeatCert(), seatRenew: () => signinSeatRenew(), onSeat: state => signinRelaySeatTold(team, state) };
+  return opts === undefined ? io : signinSeatWall(url, Object.assign({}, opts, io));
 }
 /* Google's client secret, where the package step put one beside the asar: read here once, at start, installed only. */
 if (INSTALLED) { try { signinPacked = signinSecretRead(fs.readFileSync(path.join(String(process.resourcesPath || ""), SIGNIN_SECRET_FILE), "utf8")); } catch { /* none packaged: every byte as before */ } }
