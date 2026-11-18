@@ -13,6 +13,9 @@ licence, with its whole history behind it, and it opens straight from
 or from [etiuda.dev/v1](https://etiuda.dev/v1). The older `etiuda-v1` repository now redirects
 here and keeps the 1.x history and every 1.x tag.
 
+The copy served at etiuda.dev/v1 counts its use (how long it is open and in use, and how many cards are used) and
+says so in a line under its footer; the file itself, run from disk or served elsewhere, sends nothing.
+
 `Etiuda.html` at the root is a redirect to `v1/Etiuda.html`, kept so an older link carries on
 working.
 
