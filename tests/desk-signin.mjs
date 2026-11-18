@@ -166,8 +166,13 @@ const UNREVOKED = ANSWER_CASES.filter(c => c.route === "signin/desk" && c.body &
    each of them without it, an answer of today and not a past one. */
 const BEFORE_OFFER = ANSWER_CASES.filter(c => c.route === "signin/desk" && c.body && c.body.storeOffer !== undefined).concat(PAST_ANSWERS, UNREVOKED)
   .filter(c => c.body && c.body.storeOffer !== undefined).map(c => { const body = Object.assign({}, c.body); delete body.storeOffer; return { status: c.status, body }; });
+/* Before the seat and trials (B-1): the record's answers carry `seat` and `trials` beside a certificate or none; the service deployed
+   today gives each of them without both, an answer of today and not a past one. */
+const BEFORE_SEAT = ANSWER_CASES.filter(c => c.route === "signin/desk").concat(PAST_ANSWERS, UNREVOKED, BEFORE_OFFER)
+  .filter(c => c.body && (c.body.seat !== undefined || c.body.trials !== undefined))
+  .map(c => { const body = Object.assign({}, c.body); delete body.seat; delete body.trials; return { status: c.status, body }; });
 const SERVED = new Set(ANSWER_CASES.filter(c => c.route === "signin/desk").map(c => answerSig(c.status, c.body))
-  .concat(PAST_ANSWERS.concat(UNREVOKED, BEFORE_OFFER).map(p => answerSig(p.status, p.body))));
+  .concat(PAST_ANSWERS.concat(UNREVOKED, BEFORE_OFFER, BEFORE_SEAT).map(p => answerSig(p.status, p.body))));
 /* The observer: while the legs run (and not their plants), each answer the section read, with what it read. */
 const ANSWERS_READ = [];
 let answersWatched = true;
@@ -4254,6 +4259,17 @@ const DESK_READS = {
   "ask-lead-trial": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && !!r.cert && r.cert.deskOnly === true && r.askLead === true
     && r.code === c.body.code && h.askLead === true && h.said === ""; },
   "ask-lead": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && r.cert === null && r.askLead === true && h.askLead === true && h.said === ""; },
+  /* The seat and trials beside an answer (B-1): read here as this desk reads them, by its named keys, the new block ignored and the
+     lead's name nowhere in what it keeps. */
+  "trial": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && !!r.cert && r.cert.deskOnly === true && r.code === c.body.code
+    && h.cert === r.cert && h.said === "" && !("seat" in r) && !("trials" in r); },
+  "studio-trial": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && !!r.cert && r.cert.deskOnly !== true && h.cert === r.cert
+    && h.said === "" && !("seat" in r) && !("trials" in r); },
+  "trials-ended": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && r.cert === null && r.code === c.body.code && h.cert === null
+    && h.said === "" && !("trials" in r); },
+  "own": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && !!r.cert && r.cert.deskOnly === true && h.cert === r.cert && !("seat" in r); },
+  "team": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && !!r.cert && r.cert.deskOnly !== true && h.cert === r.cert && !("seat" in r)
+    && JSON.stringify(h).indexOf(c.body.seat.lead) < 0; },
 };
 const recordedAnswer = c => ({ status: c.status, bytes: Buffer.from(JSON.stringify(c.body)) });
 const caseNames = ANSWER_CASES.map(c => c.case);
