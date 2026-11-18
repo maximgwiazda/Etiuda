@@ -161,6 +161,8 @@ function createTarget(limits) {
     return r.status === 200 ? { nonce: r.json.challenge } : refusalOf(r);
   }
 
+  const seatFor = pub => K.certFor(pub, crypto.randomBytes(16).toString("hex"), Math.max(1, now), core.CERT_SPAN_MS);
+
   function hello(input) {
     let body;
     if (input.token !== undefined) {
@@ -177,6 +179,9 @@ function createTarget(limits) {
       if (input.publicKey !== undefined) body.pub = input.publicKey;
       notePub(input.keyId, input.publicKey);
     }
+    const team = teams.get(input.relayTeamId);
+    if (input.seat !== undefined) { if (input.seat !== null) body.seat = input.seat; }
+    else if (/^[0-9a-f]{64}$/.test(String(body.pub || "")) && !(team && team.lead && body.key === team.lead.keyId)) body.seat = seatFor(body.pub);
     const r = http("POST", teamPath(input.relayTeamId, "session"), { json: body });
     if (r.status !== 200) return refusalOf(r);
     const out = { ok: true, session: r.json.session };
@@ -236,8 +241,10 @@ function createTarget(limits) {
     if (!privateKey) return { ok: true, token: null, held: false };
     const ch = challenge({ relayTeamId: rt });
     if (!ch.nonce) return ch;
-    const r = http("POST", teamPath(rt, "session"), { json: { challenge: ch.nonce, key: name, pub,
-      sig: sign(privateKey, C.helloBytes(rt, ch.nonce, name)) } });
+    const team = teams.get(rt);
+    const json = { challenge: ch.nonce, key: name, pub, sig: sign(privateKey, C.helloBytes(rt, ch.nonce, name)) };
+    if (/^[0-9a-f]{64}$/.test(String(pub || "")) && !(team && team.lead && name === team.lead.keyId)) json.seat = seatFor(pub);
+    const r = http("POST", teamPath(rt, "session"), { json });
     if (r.status !== 200) return refusalOf(r);
     sessions.set(rt + ":" + keyId, { token: r.json.session, until: r.json.until });
     return { ok: true, token: r.json.session, held: false };

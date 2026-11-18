@@ -40,6 +40,22 @@ function delegationFor(now, o) {
 /* A grant signed by the delegated key under a delegation from ROOT. */
 const delegatedGrantFor = (leadPub, now, o) => grantFor(leadPub, now, Object.assign({ via: delegationFor(now), signer: DELEGATE }, o || {}));
 
+/* A seat certificate as the licence service signs one, for any desk key: of `licence`, issued at `issued` and running `span`, under a
+   delegation of the test delegated key that may sign "licence". `o.pooled`, `o.deskOnly` and `o.member` (a following Studio's) mark it,
+   each signed as its line; `o.fields` overrides or adds fields before the signing (a mark added after it rides outside the signature);
+   `o.signer` and `o.via` sign it under another service key; `o.forger` signs it with another private key; `o.person` names the person's pseudonym, random unless given. */
+function certFor(deskPub, licence, issued, span, o) {
+  const opts = o || {};
+  const signer = opts.signer || DELEGATE;
+  const via = opts.via || delegationFor(issued, { fields: { may: ["licence"], key: { id: signer.id, pub: signer.pub } } });
+  const c = Object.assign({ kind: "etiuda-seat-certificate", format: 1, licence, desk: deskPub, person: opts.person || crypto.randomBytes(32).toString("hex"),
+    code: "ABCDEFGHJKMNPQRS", issued, until: issued + span, via }, opts.pooled ? { pooled: true } : {}, opts.deskOnly ? { deskOnly: true } : {},
+    opts.member ? { member: true } : {}, opts.fields || {});
+  c.sig = { alg: "Ed25519", keyId: signer.id, value: "" };
+  c.sig.value = sign(opts.forger || signer, core.certBytes(c));
+  return c;
+}
+
 /* A create's body: `lead` is { keyId, pub }, `signLead` signs bytes under the lead's key and answers 128 hex. `o.now` is the time
    the grant is made around (the create's t unless given), `o.grant` is a grant to carry in place of the good one (null carries
    none), `o.signedGrant` is the grant the signature covers, `o.bytes` the bytes it signs in place of the create-2 bytes. */
@@ -54,4 +70,4 @@ function createBody(rt, lead, t, signLead, o) {
   return Object.assign(body, opts.extra || {});
 }
 
-module.exports = { ROOT, DELEGATE, ROOTS, HOUR, DAY, grantFor, delegationFor, delegatedGrantFor, createBody };
+module.exports = { ROOT, DELEGATE, ROOTS, HOUR, DAY, grantFor, delegationFor, delegatedGrantFor, certFor, createBody };

@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 637;
+const EXPECTED = 633;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -140,6 +140,7 @@ async function challenge(w, rt) {
   const r = await call(w.R, "POST", "/relay/v1/t/" + (rt || w.rt) + "/hello", { json: {} });
   return r.status === 200 ? r.json.challenge : null;
 }
+const seatOf = (w, pub) => K.certFor(pub, hex(16), Math.max(1, w && w.R && w.R.clock ? w.R.clock.now : 0), C.CERT_SPAN_MS);
 async function helloAs(w, key, o) {
   const opts = o || {};
   const rt = opts.rt || w.rt;
@@ -147,13 +148,18 @@ async function helloAs(w, key, o) {
   const sig = opts.sig !== undefined ? opts.sig : signHex(opts.signer || key, C.helloBytes(opts.signedRt || rt, nonce, key.keyId));
   const body = { challenge: nonce, key: key.keyId, sig };
   if (!opts.omitPub) body.pub = opts.pub || key.pub;
+  if (opts.seat !== undefined) { if (opts.seat !== null) body.seat = opts.seat; }
+  else if (!opts.omitPub && !(w.lead && key.keyId === w.lead.keyId)) body.seat = seatOf(w, body.pub);
   return call(w.R, "POST", "/relay/v1/t/" + rt + "/session", { json: body });
 }
-async function tokenHello(w, inv, token, nonce, key) {
+async function tokenHello(w, inv, token, nonce, key, o) {
+  const opts = o || {};
   const n = nonce || await challenge(w);
   const who = key || keyPair(true);
   const body = { challenge: n, invite: token, inv, key: who.keyId, pub: who.pub,
-    sig: signHex(who, C.helloBytes(w.rt, n, who.keyId)) };
+    sig: signHex(who, C.helloBytes(w.rt, n, who.keyId)),
+    seat: opts.seat !== undefined ? opts.seat : seatOf(w, who.pub) };
+  if (body.seat === null) delete body.seat;
   return call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: body });
 }
 async function sessionOf(w, key) {
@@ -1041,7 +1047,7 @@ async function main() {
     await invites(w, [{ id: id3, hash: sha(t3) }], []);
     const n3 = await challenge(w);
     const bound = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: n3, invite: t3, inv: id3,
-      key: asker.keyId, pub: asker.pub, sig: signHex(asker, C.helloBytes(w.rt, n3, asker.keyId)) } });
+      key: asker.keyId, pub: asker.pub, sig: signHex(asker, C.helloBytes(w.rt, n3, asker.keyId)), seat: seatOf(w, asker.pub) } });
     const tokenAgain = await tokenHello(w, id3, t3);
     const resumed = await helloAs(w, asker);
     const strangerKey = await helloAs(w, keyPair(true));
@@ -1087,12 +1093,12 @@ async function main() {
     await invites(w, [{ id: id4, hash: sha(t4) }], []);
     const n4 = await challenge(w);
     const loose = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: n4, invite: t4, inv: id4,
-      key: unsigned.keyId, pub: unsigned.pub, sig: signHex(keyPair(true), C.helloBytes(w.rt, n4, unsigned.keyId)) } });
+      key: unsigned.keyId, pub: unsigned.pub, sig: signHex(keyPair(true), C.helloBytes(w.rt, n4, unsigned.keyId)), seat: seatOf(w, unsigned.pub) } });
     const looseKey = await helloAs(w, unsigned);
     const held4 = w.R.stores.get(w.rt).get("inv:" + id4) || {};
     const n4b = await challenge(w);
     const later = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: n4b, invite: t4, inv: id4,
-      key: unsigned.keyId, pub: unsigned.pub, sig: signHex(unsigned, C.helloBytes(w.rt, n4b, unsigned.keyId)) } });
+      key: unsigned.keyId, pub: unsigned.pub, sig: signHex(unsigned, C.helloBytes(w.rt, n4b, unsigned.keyId)), seat: seatOf(w, unsigned.pub) } });
     check(refused(loose, "bad-signature") && refused(looseKey, "not-enrolled") && held4.spent !== true && !("key" in held4)
       && later.status === 200 && later.json.invite === true,
       "10h a token hello naming a key it is not signed by is refused and spends nothing, and a later hello signed by that key opens");
@@ -1105,7 +1111,7 @@ async function main() {
     await invites(w, [{ id: id5, hash: sha(t5) }], []);
     const n5 = await challenge(w);
     const bind5 = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: n5, invite: t5, inv: id5,
-      key: binder.keyId, pub: binder.pub, sig: signHex(binder, C.helloBytes(w.rt, n5, binder.keyId)) } });
+      key: binder.keyId, pub: binder.pub, sig: signHex(binder, C.helloBytes(w.rt, n5, binder.keyId)), seat: seatOf(w, binder.pub) } });
     const own = await helloAs(w, binder);
     const forged = await helloAs(w, binder, { signer: keyPair(true) });
     const bare = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: await challenge(w), key: binder.keyId } });
@@ -1128,7 +1134,7 @@ async function main() {
       await invites(w, [{ id, hash: sha(token) }], []);
       const n = await challenge(w);
       const r = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: n, invite: token, inv: id,
-        key: who.keyId, pub: who.pub, sig: signHex(who, C.helloBytes(w.rt, n, who.keyId)) } });
+        key: who.keyId, pub: who.pub, sig: signHex(who, C.helloBytes(w.rt, n, who.keyId)), seat: seatOf(w, who.pub) } });
       return { id, ok: r.status === 200 && r.json.invite === true };
     }
     const early = keyPair(true), late = keyPair(true), earlyDesk = "k-" + hex(8);
@@ -1348,7 +1354,7 @@ async function main() {
   async function boundHello(w, who, id, token) {
     const n = await challenge(w);
     return call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: n, invite: token, inv: id,
-      key: who.keyId, pub: who.pub, sig: signHex(who, C.helloBytes(w.rt, n, who.keyId)) } });
+      key: who.keyId, pub: who.pub, sig: signHex(who, C.helloBytes(w.rt, n, who.keyId)), seat: seatOf(w, who.pub) } });
   }
   function sealJoin(w, who, counter, place) {
     return B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: crypto.randomBytes(32),
@@ -6386,15 +6392,12 @@ async function main() {
           reads: said(reads), a2: said(a2), a3: said(a3), cut }),
       };
     }
-    /* A paid team on a root grant to T0R + 30 d, holding a team file and a move. An older grant under another key, the grant in
-       force again, and a later grant. */
+    /* A paid team on a root grant to T0R + 30 d. An older grant under another key, the grant in force again, and a later grant. */
     async function grantScene() {
       const R = relayEnv();
       R.clock.now = T0R;
       const w = await world({ R });
       const st = stOf(w);
-      st.put("teamFile", hex(16));
-      st.put("moved", hex(16));
       const before = dumpOf(w);
       const older = await call(R, "POST", "/relay/v1/t/" + w.rt + "/grant", { json: { grant: K.delegatedGrantFor(w.lead.pub, T0R, { fields: { until: T0R + 10 * DAY } }) } });
       const afterOlder = dumpOf(w), keyAfterOlder = st.get("grantKey");
@@ -6404,7 +6407,7 @@ async function main() {
       return {
         older: refused(older, "bad-grant") && afterOlder === before && keyAfterOlder === undefined,
         again: again.status === 200 && afterAgain === before,
-        later: later.status === 200 && st.get("team").until === T0R + 40 * DAY && st.get("grantKey") === K.DELEGATE.pub && st.get("moved") === undefined,
+        later: later.status === 200 && st.get("team").until === T0R + 40 * DAY && st.get("grantKey") === K.DELEGATE.pub,
         detail: JSON.stringify({ older: said(older), olderSame: afterOlder === before, grantKey: keyAfterOlder === K.DELEGATE.pub ? "delegate" : "root",
           again: said(again), againSame: afterAgain === before, later: said(later) }),
       };
@@ -6422,8 +6425,8 @@ async function main() {
       return { ok: made.status === 200 && refused(shut, "revoked") && renewed.status === 200 && open.status === 200 && R.stores.get(rt).get("grantKey") === undefined,
         detail: JSON.stringify({ made: said(made), shut: said(shut), renewed: said(renewed), open: said(open) }) };
     }
-    /* A team handed to a new lead, holding the new lead's team file and a move, made again by the new lead: once under the grant
-       in force, once under an older grant of another key. */
+    /* A team handed to a new lead, holding the new lead's team file, made again by the new lead: once under the grant in force, once
+       under an older grant of another key. */
     async function repeatScene() {
       const R = relayEnv();
       R.clock.now = T0R;
@@ -6435,42 +6438,16 @@ async function main() {
       const tf = sealAs(w, next, "etiuda-team.json", 1);
       const up = await put(w, await sessionOf(w, next), tf, { extra: { channel: { kind: "relay" } } });
       const st = stOf(w);
-      st.put("moved", hex(16));
-      const held = () => JSON.stringify([st.get("team").handoverT, st.get("teamFile"), st.get("moved"), st.get("grantKey")]);
+      const held = () => JSON.stringify([st.get("team").handoverT, st.get("grantKey")]);
       const before = held();
       const same = await create(w, next, T0R);
       const afterSame = held();
       const older = await call(R, "POST", "/relay/v1/teams", { json: createBody(w.rt, next, T0R, { grant: K.delegatedGrantFor(next.pub, T0R, { fields: { until: T0R + 10 * DAY } }) }) });
       const afterOlder = held();
       return {
-        ok: moved.status === 200 && up.status === 200 && st.get("teamFile") === tf.id && st.get("team").handoverT === t
+        ok: moved.status === 200 && up.status === 200 && st.get("team").handoverT === t
           && same.status === 200 && afterSame === before && older.status === 200 && afterOlder === before,
         detail: JSON.stringify({ handover: said(moved), teamFile: said(up), same: said(same), older: said(older), before, afterSame, afterOlder }),
-      };
-    }
-    /* A paid team read-only 31 days past its end. A move whose signature does not hold is refused; a move under a new id is then
-       taken; a second move, superseding it, is refused. */
-    async function moveScene() {
-      const R = relayEnv();
-      R.clock.now = T0R;
-      const w = { R, rt: hex(16), lead: keyPair(false), rev: 0 };
-      const made = await call(R, "POST", "/relay/v1/teams", { json: K.createBody(w.rt, w.lead, T0R, bytes => signHex(w.lead, bytes), { grantOpts: { fields: { paid: true, until: T0R + DAY } } }) });
-      R.clock.now = T0R + 32 * DAY;
-      const lead = await sessionOf(w, w.lead);
-      const folder = { channel: { kind: "folder" } };
-      const forged = sealAs(w, w.lead, "etiuda-team.json", 1);
-      const flip = forged.signature.slice(0, -1) + (forged.signature.endsWith("0") ? "1" : "0");
-      const refusedMove = await put(w, lead, forged, { extra: Object.assign({ sig: flip }, folder) });
-      const unset = stOf(w).get("moved") === undefined;
-      const genuine = sealAs(w, w.lead, "etiuda-team.json", 2);
-      const taken = await put(w, lead, genuine, { extra: folder });
-      const second = sealAs(w, w.lead, "etiuda-team.json", 3, { supersedes: genuine.id });
-      const again = await put(w, lead, second, { extra: folder });
-      return {
-        refusedLeaves: made.status === 200 && refused(refusedMove, "bad-signature") && unset,
-        retried: taken.status === 200 && stOf(w).get("moved") === genuine.id,
-        once: refused(again, "team-lapsed"),
-        detail: JSON.stringify({ made: said(made), forged: said(refusedMove), unset, genuine: said(taken), second: said(again) }),
       };
     }
 
@@ -6481,35 +6458,27 @@ async function main() {
       + (behind.detail || behind.failed));
     const grants = await guard(grantScene);
     check(grants.older === true && grants.again === true && grants.later === true, "1101b an older grant under another key is refused bad-grant and changes"
-      + " nothing, its grant key, team file and move among it; the grant in force posted again is answered and changes nothing; a later grant still moves the"
-      + " team on, its key and the move with it: " + (grants.detail || grants.failed));
+      + " nothing, its grant key among it; the grant in force posted again is answered and changes nothing; a later grant still moves the"
+      + " team on, its key with it: " + (grants.detail || grants.failed));
     const rescue = await guard(rescueScene);
     check(rescue.ok === true, "1101c a team whose grant key is revoked takes a root grant that ends sooner, and hello is answered again: " + (rescue.detail || rescue.failed));
     const repeat = await guard(repeatScene);
-    check(repeat.ok === true, "1101d a repeat create by the lead a handover named keeps the handover's time, the team file and the move, under the grant in"
+    check(repeat.ok === true, "1101d a repeat create by the lead a handover named keeps the handover's time under the grant in"
       + " force and under an older grant of another key, which leaves the grant key as it was: " + (repeat.detail || repeat.failed));
-    const move = await guard(moveScene);
-    check(move.refusedLeaves === true && move.retried === true && move.once === true, "1101e a read-only team's move refused at its signature leaves the move"
-      + " open, a move under a new id is then taken and marked, and a second move superseding it is refused team-lapsed: " + (move.detail || move.failed));
 
     const LIFTS = [
-      ["devices-behind", "1101a", "a list read from an older team file is taken", async () => (await guard(behindScene)).behind !== true],
-      ["devices-unversioned", "1101a", "a list naming no team file is taken once one was named", async () => (await guard(behindScene)).bare !== true],
-      ["devices-from-kept", "1101a", "the team file a list was read from is not kept", async () => (await guard(behindScene)).behind !== true],
-      ["renew-older", "1101b", "an older grant under another key is taken", async () => (await guard(grantScene)).older !== true],
-      ["renew-moved", "1101b", "the grant in force posted again clears the move", async () => (await guard(grantScene)).again !== true],
-      ["create-row", "1101d", "a repeat create drops the handover's time", async () => (await guard(repeatScene)).ok !== true],
-      ["create-keeps", "1101d", "a repeat create clears the team file and the move", async () => (await guard(repeatScene)).ok !== true],
-      ["create-older", "1101d", "a repeat create takes an older grant's key", async () => (await guard(repeatScene)).ok !== true],
-      ["moved-commit", "1101e", "a committed move is not marked, so a second is taken", async () => (await guard(moveScene)).once !== true],
+      ["a", "devices-behind", "1101a", "a list read from an older team file is taken", async () => (await guard(behindScene)).behind !== true],
+      ["b", "devices-unversioned", "1101a", "a list naming no team file is taken once one was named", async () => (await guard(behindScene)).bare !== true],
+      ["c", "devices-from-kept", "1101a", "the team file a list was read from is not kept", async () => (await guard(behindScene)).behind !== true],
+      ["d", "renew-older", "1101b", "an older grant under another key is taken", async () => (await guard(grantScene)).older !== true],
+      ["f", "create-row", "1101d", "a repeat create drops the handover's time", async () => (await guard(repeatScene)).ok !== true],
+      ["h", "create-older", "1101d", "a repeat create takes an older grant's key", async () => (await guard(repeatScene)).ok !== true],
     ];
     const base = { "1101a": behind.behind === true && behind.bare === true && behind.current === true,
-      "1101b": grants.older === true && grants.again === true && grants.later === true, "1101d": repeat.ok === true,
-      "1101e": move.refusedLeaves === true && move.retried === true && move.once === true };
-    let n = 0;
-    for (const [tag, leg, say, turns] of LIFTS) {
+      "1101b": grants.older === true && grants.again === true && grants.later === true, "1101d": repeat.ok === true };
+    for (const [letter, tag, leg, say, turns] of LIFTS) {
       const p = await liftCore("plant:" + tag, turns);
-      check(base[leg] && p.turned && p.back, "1102" + String.fromCharCode(97 + n++) + " lifting plant:" + tag + " turns " + leg + " red (" + say
+      check(base[leg] && p.turned && p.back, "1102" + letter + " lifting plant:" + tag + " turns " + leg + " red (" + say
         + "), and the product file is never written: " + how(p));
     }
   }
@@ -6923,23 +6892,82 @@ async function main() {
       + " held id is taken and the lead is served it in place of the held file), and the product file is never written: " + how(heldId));
   }
 
-  /* ---- 1153: the previous release's requests, kept frozen in relay/test/previous/, answered as before (the version policy's point
-     2, adopted 2026-11-01). Every fixture there is sent again over fresh stand-ins; the set covers every route of the table. ---- */
+  /* ---- 1153: the previous release's requests, kept frozen in relay/test/previous/, cut off at the seat rule (the version policy's
+     point 2, re-seated for the seat certificate rule). Every step before the hello and every later non-session/lead step answers as
+     recorded (with the declared raw-key exemption at step 3 of 2026-11-01-59713def.json); recorded desk/invite hellos are refused
+     403 seat-lapsed with nothing stored; and session-needing steps do not run. ---- */
   {
     const DIR = path.join(ROOT, "relay", "test", "previous");
     const PREV = await import(pathToFileURL(path.join(DIR, "replay.mjs")).href);
     const files = fs.readdirSync(DIR).filter(f => /^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9a-f]{8}(-[a-z]+)?\.json$/.test(f)).sort();
-    /* THE ONE DECLARED EXEMPTION (the test architect's ruling on one spelling for a desk): 59713def's recorder enrolled one desk by
-       its raw public half at step 3, which this relay refuses, and the list is taken whole or not at all, so that team has no desk
-       from there. Every step before it is answered as before; step 3 is answered the refusal, pinned here; the steps after it
-       are covered instead by 2026-11-01-59713def-branch.json, the same release's requests recorded on its own tree with that desk
-       named by its branch id, answered as before step for step. */
+    /* THE ONE DECLARED EXEMPTION: 59713def's recorder enrolled one desk by its raw public half at step 3 (before the first hello),
+       which this relay refuses, and the list is taken whole or not at all, so that team has no desk from there. Every step before
+       it answers as recorded; step 3 is refused bad-signature; 2026-11-01-59713def-branch.json covers the enrolled-desk steps. */
     const EXEMPT = { "2026-11-01-59713def.json": { at: 3, status: 403, error: "bad-signature", from: 4,
       why: "the raw-key enrol refused at step 3, so no desk is on the team after it; 2026-11-01-59713def-branch.json covers these steps" } };
     const fixtures = files.map(f => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8")));
     const freshEnv = () => S.relayEnv({ roots: K.ROOTS });
+    const snapStores = R => JSON.stringify([...R.stores.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([k, st]) => [k, st.dump()]));
+    const isSessionStep = st => !!(st.req && st.req.headers && typeof st.req.headers.authorization === "string" && /\$session\d+\$/.test(st.req.headers.authorization));
+    const isHelloStep = st => !!(st.req && st.req.method === "POST" && /\/session$/.test(st.req.path));
+    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const sameLeadHello = (got, want) => {
+      if (!got || !want || got.status !== 200 || want.status !== 200) return false;
+      if (!got.json || !want.json || typeof got.json.session !== "string" || !/^\$session\d+\$$/.test(got.json.session)) return false;
+      const g = Object.assign({}, got, { json: Object.assign({}, got.json, { session: want.json.session }) });
+      return same(g, want);
+    };
+    const WANT_CUTOFF = { error: "seat-lapsed", said: B.REASONS["seat-lapsed"] };
+    async function replayCutoff(fx, file) {
+      const R = freshEnv(), ph = PREV.placeholders(), seen = new Map();
+      const leadIds = new Set([fx.keys && fx.keys.lead && fx.keys.lead.keyId, fx.keys && fx.keys.next && fx.keys.next.keyId].filter(Boolean));
+      const firstHello = fx.steps.findIndex(st => isHelloStep(st) && st.res && st.res.status === 200 && st.req.body && st.req.body.json && !leadIds.has(st.req.body.json.key));
+      const ex = EXEMPT[file];
+      const differ = [], refused = [], refusedDiffer = [], notRun = [], beforeMatched = [], afterMatched = [];
+      let exemptAtOk = !ex, exemptAfterCount = 0;
+      for (let i = 0; i < fx.steps.length; i++) {
+        const step = fx.steps[i];
+        if (isSessionStep(step)) { notRun.push(i); continue; }
+        R.clock.now = step.at;
+        const req = ph.into(step.req);
+        if (step.sign) req.body.json[step.sign.field] = PREV.signText(fx.keys[step.sign.key].seed, ph.into(step.sign.text));
+        const storeBefore = snapStores(R);
+        let res;
+        try { res = await PREV.send(W, R, req); } catch (e) { differ.push({ step: i, what: step.what, got: "threw " + e.message }); continue; }
+        const storeAfter = snapStores(R);
+        ph.bindFrom(res);
+        const got = ph.out(res);
+        const said = {};
+        for (const [id, msgs] of Object.entries(PREV.socketsSaid(R, seen))) said[ph.out(id)] = ph.out(msgs);
+        const exemptAt = ex && i === ex.at;
+        const exemptFrom = ex && i >= ex.from;
+        const cutOffHello = isHelloStep(step) && step.res && step.res.status === 200 && step.req.body && step.req.body.json && !leadIds.has(step.req.body.json.key);
+        if (exemptAt) {
+          exemptAtOk = got.status === ex.status && !!got.json && got.json.error === ex.error && same(said, {});
+          if (!exemptAtOk) differ.push({ step: i, what: step.what, got: got.status });
+          continue;
+        }
+        if (cutOffHello && (!exemptFrom || (got.json && got.json.error === "seat-lapsed"))) {
+          const okCut = got.status === 403 && same(got.json, WANT_CUTOFF) && got.meta === null && got.lapse === null && got.socket === null && same(said, {}) && storeBefore === storeAfter;
+          if (okCut) refused.push(i);
+          else { refusedDiffer.push(i); differ.push({ step: i, what: step.what, got: got.status + " " + JSON.stringify(got.json) }); }
+          continue;
+        }
+        if (exemptFrom) { exemptAfterCount++; continue; }
+        const leadHello = isHelloStep(step) && step.res && step.res.status === 200 && step.req.body && step.req.body.json && leadIds.has(step.req.body.json.key);
+        const okAnswer = (leadHello ? sameLeadHello(got, step.res) : same(got, step.res)) && same(said, step.sent || {});
+        if (!okAnswer) differ.push({ step: i, what: step.what, want: step.res, got });
+        else if (i < firstHello) beforeMatched.push(i);
+        else afterMatched.push(i);
+      }
+      return {
+        ok: differ.length === 0 && refusedDiffer.length === 0 && exemptAtOk && refused.length >= 1 && notRun.length === fx.steps.filter(isSessionStep).length,
+        steps: fx.steps.length, firstHello, beforeMatched, afterMatched, refused, refusedDiffer, notRun,
+        exemptAtOk, exemptAfterCount, differ,
+      };
+    }
     const results = [];
-    for (const fx of fixtures) results.push(await PREV.replay(fx, W, freshEnv));
+    for (let i = 0; i < fixtures.length; i++) results.push(await replayCutoff(fixtures[i], files[i]));
     const asked = new Set();
     for (const fx of fixtures) for (const st of fx.steps) {
       const hit = /^\/relay\/v1\//.test(st.req.path) ? require(path.join(ROOT, "relay", "team.cjs")).routeOf(st.req.method, st.req.path) : null;
@@ -6949,35 +6977,37 @@ async function main() {
       "states GET", "since GET", "b GET", "b PUT"];
     const unasked = table.filter(r => !asked.has(r));
     const steps = results.reduce((n, r) => n + r.steps, 0);
-    const pinned = [], exempt = [];
-    const differ = results.flatMap((r, i) => r.differ.filter(d => {
-      const ex = EXEMPT[files[i]];
-      if (ex && d.step === ex.at) { pinned.push(d.got.status === ex.status && !!d.got.json && d.got.json.error === ex.error ? files[i] : files[i] + " answered " + d.got.status); return false; }
-      if (ex && d.step >= ex.from) { exempt.push(d.step); return false; }
-      return true;
-    }).map(d => files[i] + " step " + d.step + " (" + d.what + ")"));
-    const pinnedOk = Object.keys(EXEMPT).every(f => files.indexOf(f) < 0 || pinned.indexOf(f) >= 0);
-    check(files.length >= 2 && steps >= 100 && differ.length === 0 && pinnedOk && unasked.length === 0,
-      "1153a the previous release's requests, " + steps + " steps over " + files.length + " frozen fixture(s) (" + files.join(", ") + "), every route of the table among them,"
-      + " are answered by this relay as they were, but for the one declared exemption: " + (differ.length ? "answered otherwise at " + differ.slice(0, 3).join("; ") : "all as before")
-      + "; the raw-key enrol answered the refusal: " + (pinnedOk ? "yes" : JSON.stringify(pinned)) + "; exempt after it, covered by the branch-id fixture: " + exempt.length + " step(s)"
+    const allOk = results.every(r => r.ok);
+    const perFx = results.map((r, i) => files[i] + ": before-hello " + r.beforeMatched.length
+      + (EXEMPT[files[i]] ? " (+exempt step " + EXEMPT[files[i]].at + " 403 bad-signature, " + r.exemptAfterCount + " exempt after)" : "")
+      + " as recorded, later non-session/lead " + r.afterMatched.length + " as recorded, hellos " + JSON.stringify(r.refused)
+      + " refused 403 " + JSON.stringify(WANT_CUTOFF) + " with R.stores dump unchanged, " + r.notRun.length + " session steps not run"
+      + (r.differ.length ? ", differ: " + r.differ.slice(0, 3).map(d => "step " + d.step + " (" + d.what + ")").join("; ") : ""));
+    check(files.length >= 2 && steps >= 100 && allOk && unasked.length === 0,
+      "1153a the previous release's requests, " + steps + " steps over " + files.length + " frozen fixture(s) (" + files.join(", ") + "), answer as recorded before the hello"
+      + " (with the declared raw-key exemption at step 3 of 2026-11-01-59713def.json), refuse recorded desk/invite hellos with 403 seat-lapsed and nothing stored"
+      + " (R.stores dump identical before/after), answer later non-session/lead steps as recorded, and run no session-needing steps: " + perFx.join("; ")
       + (unasked.length ? ", never asked: " + unasked.join(", ") : ""));
-    /* The control: the replay sees a change. With plant:session-life lifted from a copy of the core, a session past its thirty
-       minutes still reads, and the step that recorded its refusal is answered otherwise; one recorded answer altered in a copy of
-       the fixture is found at its step. */
+    /* The control: the replay sees a change. With plant:seat-ordinary lifted from a copy of the core, a desk hello with no certificate
+       opens instead of refusing seat-lapsed and turns 1153a red; one recorded answer altered before the hello is found at its step alone. */
     const how = p => p.detail.split("\n")[0] + ", sha " + (p.back ? "unchanged" : "CHANGED");
-    const control = fixtures[files.indexOf("2026-11-01-59713def-branch.json")] || fixtures[0];
-    const lifted = await liftCore("plant:session-life", async () => {
-      const r = await PREV.replay(control, W, freshEnv);
-      return r.differ.some(d => /past its thirty minutes/.test(d.what));
+    const controlIdx = files.indexOf("2026-11-01-59713def-branch.json") >= 0 ? files.indexOf("2026-11-01-59713def-branch.json") : 0;
+    const control = fixtures[controlIdx], controlFile = files[controlIdx];
+    let liftedRedAt = [];
+    const lifted = await liftCore("/* plant:seat-ordinary */", async () => {
+      const r = await replayCutoff(control, controlFile);
+      liftedRedAt = r.refusedDiffer;
+      return !r.ok && r.refusedDiffer.length > 0;
     });
     const altered = JSON.parse(JSON.stringify(control || { steps: [] }));
-    const at = altered.steps.findIndex(st => st.res && st.res.status === 410);
+    const firstHelloCtrl = results[controlIdx] ? results[controlIdx].firstHello : 0;
+    const at = altered.steps.findIndex((st, i) => i < firstHelloCtrl && st.res && st.res.status === 409);
     if (at >= 0) altered.steps[at].res.status = 404;
-    const seen = at >= 0 ? (await PREV.replay(altered, W, freshEnv)).differ.map(d => d.step) : [];
+    const seen = at >= 0 ? (await replayCutoff(altered, controlFile)).differ.map(d => d.step) : [];
     check(lifted.turned && lifted.back && at >= 0 && seen.length === 1 && seen[0] === at,
-      "1153b the replay sees a change: lifting plant:session-life is answered otherwise at the expired session's step, and one recorded answer altered is found at"
-      + " its step alone, and the product file is never written: " + how(lifted) + ", altered step " + at + " found at " + JSON.stringify(seen));
+      "1153b the replay sees a change: lifting plant:seat-ordinary lets desk hellos open and turns 1153a red at steps " + JSON.stringify(liftedRedAt)
+      + ", and one recorded answer altered before the hello is found at its step alone, and the product file is never written: " + how(lifted)
+      + ", altered step " + at + " found at " + JSON.stringify(seen));
   }
 
   /* ---- 1168: an upload reserves its room before the bucket's write, and a fault gives it back and leaves no object (relay triage
@@ -7979,11 +8009,12 @@ async function main() {
     const between = (text, from, to) => { const a = text.indexOf(from), b = a < 0 ? -1 : text.indexOf(to, a); return a < 0 || b < 0 ? "ABSENT " + from : text.slice(a, b + to.length); };
     const forms = [...coreText.matchAll(/^function \w*Bytes\([\s\S]*?^}$/gm)].map(m => m[0]).concat(coreText.split("\n").filter(l => /^const \w*Bytes = /.test(l))).join("\n");
     const wire = [between(teamText, "const STATUS = {", "};"), between(teamText, "const CLOSE = {", "};"), between(teamText, "const ROUTE_TAIL = ", ";"),
-      between(teamText, "const METHODS = {", "};"), JSON.stringify(B.REASONS), forms].join("\n");
+      between(teamText, "const METHODS = {", "};"), JSON.stringify(B.REASONS), forms, between(coreText, "const CERT_MARKS = [", "];")].join("\n");
     /* Where this half met the relay seats (integration, Held for decision 49), the digest is the relay seats branch's wire: its seats grant
        and its status; this half changes neither. A person's store moved it: the notice route, and the store grant, store certificate,
-       notice and store computer list byte forms. */
-    const WIRE_SHA = "33466c59c88cb5af5d7676b68a2c75ca873df6e9da1d534c6b321a3bec30dced";
+       notice and store computer list byte forms. A seat certificate's signed marks moved it: the "desk-only" and "member" lines, signed
+       from CERT_MARKS, whose rows the digest reads beside the byte forms. */
+    const WIRE_SHA = "29c30cc5ca8c00862960b2dd12ad33558e2cb48368ef9bcbb22853c8c5a2ce26";
     check(sha(wire) === WIRE_SHA && forms.length > 200,
       "1013w the relay's wire is as it was: its routes, methods, refusals and their words, socket closes and signed byte forms digest to "
       + WIRE_SHA.slice(0, 12) + ": " + sha(wire).slice(0, 12));

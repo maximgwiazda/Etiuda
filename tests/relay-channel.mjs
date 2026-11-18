@@ -62,7 +62,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 532;
+const EXPECTED = 533;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -106,11 +106,13 @@ const sha = b => crypto.createHash("sha256").update(b).digest("hex");
 const SPKI = Buffer.from("302a300506032b6570032100", "hex");
 
 const productWrites = [];
+const legSigninWrites = [];
+const shellSigninWrites = [];
 const isInside = (dir, target) => {
   const rel = path.relative(dir, path.resolve(target));
   return !rel.startsWith("..") && !path.isAbsolute(rel);
 };
-function noteWrite(target) {
+function noteWrite(target, fromShell) {
   if (typeof target !== "string") return;
   const resolved = path.resolve(target);
   const inRoot = isInside(ROOT, resolved);
@@ -119,22 +121,87 @@ function noteWrite(target) {
   if (inRoot && !inLab && !inTmp) {
     productWrites.push(path.relative(ROOT, resolved).replace(/\\/g, "/"));
   }
+  if (path.basename(resolved) === "signin.json" && (inLab || inRoot)) {
+    if (fromShell) shellSigninWrites.push(path.relative(LAB, resolved).replace(/\\/g, "/"));
+    else legSigninWrites.push(path.relative(LAB, resolved).replace(/\\/g, "/"));
+  }
 }
-const origWriteFileSync = fs.writeFileSync.bind(fs);
-const origRenameSync = fs.renameSync.bind(fs);
-const origCopyFileSync = fs.copyFileSync.bind(fs);
+const rawWriteFileSync = fs.writeFileSync.bind(fs);
+const rawRenameSync = fs.renameSync.bind(fs);
+const rawCopyFileSync = fs.copyFileSync.bind(fs);
+const rawAppendFileSync = fs.appendFileSync.bind(fs);
+const rawWriteFile = fs.writeFile.bind(fs);
+const rawOpenSync = fs.openSync.bind(fs);
+const rawPromisesWriteFile = fs.promises.writeFile.bind(fs.promises);
+const rawPromisesRename = fs.promises.rename.bind(fs.promises);
+const rawPromisesCopyFile = fs.promises.copyFile.bind(fs.promises);
+const rawPromisesAppendFile = fs.promises.appendFile.bind(fs.promises);
+const isWriteFlags = flags => (typeof flags === "string"
+  ? /[wa+]/.test(flags)
+  : typeof flags === "number" && (flags & (fs.constants.O_WRONLY | fs.constants.O_RDWR | fs.constants.O_CREAT | fs.constants.O_TRUNC | fs.constants.O_APPEND)) !== 0);
 fs.writeFileSync = function (file, ...args) {
-  noteWrite(file);
-  return origWriteFileSync(file, ...args);
+  noteWrite(file, false);
+  return rawWriteFileSync(file, ...args);
 };
 fs.renameSync = function (oldPath, newPath, ...args) {
-  noteWrite(newPath);
-  return origRenameSync(oldPath, newPath, ...args);
+  noteWrite(newPath, false);
+  return rawRenameSync(oldPath, newPath, ...args);
 };
 fs.copyFileSync = function (src, dest, ...args) {
-  noteWrite(dest);
-  return origCopyFileSync(src, dest, ...args);
+  noteWrite(dest, false);
+  return rawCopyFileSync(src, dest, ...args);
 };
+fs.appendFileSync = function (file, ...args) {
+  noteWrite(file, false);
+  return rawAppendFileSync(file, ...args);
+};
+fs.writeFile = function (file, ...args) {
+  noteWrite(file, false);
+  return rawWriteFile(file, ...args);
+};
+fs.openSync = function (file, flags, ...args) {
+  if (isWriteFlags(flags)) noteWrite(file, false);
+  return rawOpenSync(file, flags, ...args);
+};
+fs.promises.writeFile = function (file, ...args) {
+  noteWrite(file, false);
+  return rawPromisesWriteFile(file, ...args);
+};
+fs.promises.rename = function (oldPath, newPath, ...args) {
+  noteWrite(newPath, false);
+  return rawPromisesRename(oldPath, newPath, ...args);
+};
+fs.promises.copyFile = function (src, dest, ...args) {
+  noteWrite(dest, false);
+  return rawPromisesCopyFile(src, dest, ...args);
+};
+fs.promises.appendFile = function (file, ...args) {
+  noteWrite(file, false);
+  return rawPromisesAppendFile(file, ...args);
+};
+const shellPromises = new Proxy(fs.promises, {
+  get(t, k) {
+    if (k === "writeFile") return (file, ...args) => { noteWrite(file, true); return rawPromisesWriteFile(file, ...args); };
+    if (k === "rename") return (oldPath, newPath, ...args) => { noteWrite(newPath, true); return rawPromisesRename(oldPath, newPath, ...args); };
+    if (k === "copyFile") return (src, dest, ...args) => { noteWrite(dest, true); return rawPromisesCopyFile(src, dest, ...args); };
+    if (k === "appendFile") return (file, ...args) => { noteWrite(file, true); return rawPromisesAppendFile(file, ...args); };
+    const v = Reflect.get(t, k, t);
+    return typeof v === "function" ? v.bind(t) : v;
+  },
+});
+const shellFs = new Proxy(fs, {
+  get(t, k) {
+    if (k === "writeFileSync") return (file, ...args) => { noteWrite(file, true); return rawWriteFileSync(file, ...args); };
+    if (k === "renameSync") return (oldPath, newPath, ...args) => { noteWrite(newPath, true); return rawRenameSync(oldPath, newPath, ...args); };
+    if (k === "copyFileSync") return (src, dest, ...args) => { noteWrite(dest, true); return rawCopyFileSync(src, dest, ...args); };
+    if (k === "appendFileSync") return (file, ...args) => { noteWrite(file, true); return rawAppendFileSync(file, ...args); };
+    if (k === "writeFile") return (file, ...args) => { noteWrite(file, true); return rawWriteFile(file, ...args); };
+    if (k === "openSync") return (file, flags, ...args) => { if (isWriteFlags(flags)) noteWrite(file, true); return rawOpenSync(file, flags, ...args); };
+    if (k === "promises") return shellPromises;
+    const v = Reflect.get(t, k, t);
+    return typeof v === "function" ? v.bind(t) : v;
+  },
+});
 
 function filesUnder(dir) {
   const out = [];
@@ -321,6 +388,7 @@ const entries = () => store().dump().map(([k, v]) => [k, JSON.parse(v)]);
 const relayText = () => store().dump().map(([k, v]) => k + "=" + v).join("\n")
   + [...R.bucket.objects.values()].map(b => b.toString("latin1")).join("\n");
 
+const seatFor = (who, now) => K.certFor(who.pub, hex(16), Math.max(1, now != null ? now : R.clock.now), core.CERT_SPAN_MS);
 /* A program over the relay: the lead's (place root) or a desk's (place desk:<id>), its mirror and record in the lab. */
 function program(name, who, place, o) {
   const x = o || {};
@@ -334,7 +402,7 @@ function program(name, who, place, o) {
     request: t.request, connect: t.connect, pollMs: 1e9,
     write: (f, text) => { if (!f.endsWith(".json") || f.startsWith(mirror + path.sep)) written.push(path.relative(mirror, f).split(path.sep).join("/")); C.writeWhole(f, text); },
     say: l => said.push(l),
-  }, x));
+  }, who && who.keyId !== LEAD.keyId ? { seat: () => seatFor(who) } : {}, x));
   return { name, ch, t, said, written, mirror, prog: ch.program };
 }
 async function settle(...ps) { for (let i = 0; i < 3; i++) for (const p of ps) { p.ch.kick(); await p.ch.idle(); } }
@@ -460,7 +528,7 @@ if (partOn("p940")) {
       const ch = JSON.parse(s.bytes.toString()).challenge;
       const who = prog === other ? OTHER : STRAY;
       const ses = await prog.t.request("POST", URLV1 + "/t/" + RT + "/session", { "content-type": "application/json" },
-        Buffer.from(JSON.stringify({ challenge: ch, key: who.keyId, pub: who.pub, sig: signHex(who, C.helloBytes(RT, ch, who.keyId)) })));
+        Buffer.from(JSON.stringify({ challenge: ch, key: who.keyId, pub: who.pub, sig: signHex(who, C.helloBytes(RT, ch, who.keyId)), seat: seatFor(who) })));
       const token = JSON.parse(ses.bytes.toString()).session;
       const r = await prog.t.request("PUT", URLV1 + "/t/" + RT + "/b/" + b.id,
         { authorization: "Bearer " + token, "etiuda-blob": Buffer.from(JSON.stringify(metaOf(b))).toString("base64url") }, b.ciphertext);
@@ -1501,12 +1569,12 @@ async function relayRefusal(mod, tag) {
       const said = [];
       const mirror = path.join(LAB, tag + "-" + label + "-" + slot);
       const stateFile = path.join(LAB, tag + "-" + label + "-" + slot + ".json");
-      const ch = mod.createChannel({
+      const ch = mod.createChannel(Object.assign({
         rt, url: URLV1, mirror, stateFile, watch: false, pollMs: 1e9, pin: () => pin,
         me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place }),
         keyFor: e => (e === 1 ? key : null), sealEpoch: () => 1,
         request, connect: () => null, say: l => said.push(l),
-      });
+      }, who.keyId !== LEAD.keyId ? { seat: () => seatFor(who) } : {}));
       running.push(ch);
       return { ch, said, tally, mirror, stateFile };
     };
@@ -1747,10 +1815,82 @@ if (deskOn()) try {
     send() {}
     close() { if (this.h) this.h.close(); }
   };
+  const signinLabPath = path.join(LAB, "signin-lab.json");
+  fs.writeFileSync(signinLabPath, JSON.stringify({
+    service: "http://127.0.0.1:1/",
+    root: K.ROOT.pub,
+    provider: { id: "lab", clientId: "lab-client", scope: "openid", authorize: "http://127.0.0.1:1/auth", token: "http://127.0.0.1:1/token", issuer: "http://127.0.0.1:1" },
+  }), "utf8");
+  const pendingNonces = new Map();
+  const labFetches = [];
+  function labShell() {
+    return {
+      openExternal(url) {
+        const u = new URL(String(url));
+        if (u.origin + u.pathname !== "http://127.0.0.1:1/auth") return Promise.reject(new Error("unexpected external url: " + url));
+        const redirect = u.searchParams.get("redirect_uri");
+        const state = u.searchParams.get("state");
+        const nonce = u.searchParams.get("nonce");
+        const code = "lab-code-" + hex(8);
+        pendingNonces.set(code, nonce);
+        const back = redirect + "/?state=" + encodeURIComponent(state) + "&code=" + encodeURIComponent(code);
+        labFetches.push(fetch(back, { redirect: "follow" }).then(r => r.arrayBuffer()).catch(() => {}));
+        return Promise.resolve();
+      },
+    };
+  }
+  async function settleLabShell() {
+    while (labFetches.length) await Promise.allSettled(labFetches.splice(0));
+  }
+  function labFetch(url, init, clockNow) {
+    const uStr = String(url);
+    if (!uStr.startsWith("http://127.0.0.1:1/")) return null;
+    const jsonRes = o => Promise.resolve(new Response(JSON.stringify(o), { status: 200, headers: { "content-type": "application/json" } }));
+    if (uStr.endsWith("/token")) {
+      const form = new URLSearchParams(Buffer.from(init && init.body ? init.body : "").toString("utf8"));
+      const code = form.get("code") || "";
+      const nonce = pendingNonces.get(code);
+      if (nonce) pendingNonces.delete(code);
+      const nowSec = Math.floor(Date.now() / 1000);
+      const claims = { iss: "http://127.0.0.1:1", aud: "lab-client", sub: "sub-1", iat: nowSec, exp: nowSec + 3600 };
+      if (nonce) claims.nonce = nonce;
+      const jwt = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url") + "."
+        + Buffer.from(JSON.stringify(claims)).toString("base64url") + ".sig";
+      return jsonRes({ token_type: "Bearer", expires_in: 3600, id_token: jwt, refresh_token: "rt-1" });
+    }
+    if (uStr.endsWith("/signin/desk")) {
+      const req = JSON.parse(Buffer.from(init.body).toString("utf8"));
+      const cert = K.certFor(req.desk, hex(16), Math.max(1, clockNow), core.CERT_SPAN_MS);
+      return jsonRes({ ok: true, code: "ABCDEFGHJKMNPQRS", certificate: cert });
+    }
+    return null;
+  }
+  async function seatDesk(desk) {
+    let sameDesk = false;
+    try {
+      const d = JSON.parse(fs.readFileSync(path.join(desk.ud, "desk.json"), "utf8"));
+      const cur = JSON.parse(fs.readFileSync(path.join(desk.ud, "signin.json"), "utf8"));
+      sameDesk = !!(d && d.branch && d.branch.sign && d.branch.sign.pub && cur && cur.held && cur.held.cert && cur.held.cert.desk === d.branch.sign.pub);
+    } catch { sameDesk = false; }
+    if (sameDesk) return;
+    desk.sync("etiuda:signin-click", "lab");
+    const view = await desk.ask("etiuda:signin", "lab");
+    await settleLabShell();
+    if (!view || view.signedIn !== "lab" || (view.seat !== "held" && view.seat !== "lapsed")) {
+      throw new Error("lab sign-in did not seat desk " + desk.ud + ": " + JSON.stringify(view));
+    }
+  }
+  function withSigninLab(fn) {
+    const wasLab = process.env.ETIUDA_SIGNIN_LAB;
+    process.env.ETIUDA_SIGNIN_LAB = signinLabPath;
+    try { return fn(); }
+    finally { if (wasLab === undefined) delete process.env.ETIUDA_SIGNIN_LAB; else process.env.ETIUDA_SIGNIN_LAB = wasLab; }
+  }
   /* The second argument is either the shell source to load in place of SRC (a plant) or hooks (a fetch stand-in, or `app`:
      a copy of shell/ to load from, as a planted channel needs). */
-  function loadDesk(ud, arg) {
+  async function loadDesk(ud, arg) {
     const hooks = arg && typeof arg === "object" ? arg : null;
+    const clockNow = () => (hooks && typeof hooks.clock === "function" ? hooks.clock() : R.clock.now);
     const source = typeof arg === "string" ? arg : hooks && typeof hooks.source === "string" ? hooks.source : SRC;
     const shellDir = hooks && typeof hooks.app === "string" ? hooks.app : path.join(APP, "shell");
     const said = [], on = {}, invoke = {};
@@ -1761,6 +1901,8 @@ if (deskOn()) try {
       decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
     };
     const net = { fetch: (url, init) => {
+      const lab = labFetch(url, init, clockNow());
+      if (lab) return lab;
       deskTransport.log.push((init && init.method) + " " + url);
       noteInit(url, init);
       if (deskTransport.down) return Promise.reject(new Error("down"));
@@ -1771,20 +1913,22 @@ if (deskOn()) try {
       app: { getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop,
         getVersion: () => "0.0.0", whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
       ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
-      BrowserWindow: inert, Menu: inert, dialog: inert, net, protocol: inert, session: directSession, shell: inert,
+      BrowserWindow: inert, Menu: inert, dialog: inert, net, protocol: inert, session: directSession, shell: labShell(),
       screen: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" }, safeStorage, powerMonitor: inert,
     };
     process.env.XDG_CURRENT_DESKTOP = "GNOME";
-    const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
+    const api = withSigninLab(() => new Function("require", "__dirname", "__filename", "module", "exports", "console",
       source + "\nreturn { " + EXPOSE.join(", ") + " };")(
-      n => (n === "electron" ? electron : nodeRequire(n)),
-      shellDir, path.join(shellDir, "main.js"), { exports: {} }, {}, quiet);
+      n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? shellFs : nodeRequire(n)),
+      shellDir, path.join(shellDir, "main.js"), { exports: {} }, {}, quiet));
     const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
     const sync = (ch, ...args) => { const ev = eventFor(); if (on[ch]) on[ch](ev, ...args); return ev.returnValue; };
     const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
-    return { api, ask, sync, said, ud, envelope };
+    const desk = { api, ask, sync, said, ud, envelope };
+    await seatDesk(desk);
+    return desk;
   }
-  const newDesk = (name, folder, hooks) => {
+  const newDesk = async (name, folder, hooks) => {
     const ud = path.join(LAB, name);
     fs.mkdirSync(ud, { recursive: true });
     fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: folder, eUiLang: "en" } }), "utf8");
@@ -1820,7 +1964,7 @@ if (deskOn()) try {
   const studio = C.createChannel({ rt: RT2, url: URL2, mirror: studioMirror, stateFile: path.join(LAB, "studio.json"), pin: () => PIN2,
     me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root" }), keyFor: e => (e === 1 ? K2 : null),
     sealEpoch: () => 1, inviteKeys: () => liveInvites, request: studioT.request, connect: studioT.connect, pollMs: 1e9 });
-  const D = newDesk("main-desk", path.join(LAB, "main-share"));
+  const D = await newDesk("main-desk", path.join(LAB, "main-share"));
   fs.mkdirSync(path.join(LAB, "main-share"), { recursive: true });
   const SEALED = D.api.sealCatalog(K2, TEAM2, 1, catalogText(1));
   put(studioMirror, "board.ec", JSON.stringify(SEALED));
@@ -1854,7 +1998,7 @@ if (deskOn()) try {
       const from = deskInits.length;
       const inv = await relayInviteOn(RT2, TEAM2);
       fs.mkdirSync(path.join(LAB, "cred-plant-share"), { recursive: true });
-      const P = newDesk("cred-plant", path.join(LAB, "cred-plant-share"), { source: next });
+      const P = await newDesk("cred-plant", path.join(LAB, "cred-plant-share"), { source: next });
       await P.ask("etiuda:team-join", "invite", inv.text, "Desk Ten", codeOf(inv.secret));
       const got = deskInits.slice(from);
       return got.length > 0 && got.some(x => x.credentials !== "omit");
@@ -1892,7 +2036,7 @@ if (deskOn()) try {
     };
     const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
       text + "\nreturn { " + EXPOSE.join(", ") + " };")(
-      n => (n === "electron" ? electron : nodeRequire(n)),
+      n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? shellFs : nodeRequire(n)),
       path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
     const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
     return { api, ask, said, ud, envelope: () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8")) };
@@ -1921,13 +2065,13 @@ if (deskOn()) try {
   const quietInvite = await relayInviteOn(RT2, TEAM2);
 
   
-  const beforeRead = deskTransport.log.length;
-
-  
-  const Dq = newDesk("join-quiet", path.join(LAB, "join-quiet-share"));
+  const Dq = await newDesk("join-quiet", path.join(LAB, "join-quiet-share"));
 
   
   fs.mkdirSync(path.join(LAB, "join-quiet-share"), { recursive: true });
+
+  
+  const beforeRead = deskTransport.log.length;
 
   
   const readQ = await Dq.ask("etiuda:team-join", "read", quietInvite.text);
@@ -1942,7 +2086,7 @@ if (deskOn()) try {
   const yesInvite = await relayInviteOn(RT2, TEAM2);
 
   
-  const Dy = newDesk("join-yes", path.join(LAB, "join-yes-share"));
+  const Dy = await newDesk("join-yes", path.join(LAB, "join-yes-share"));
 
   
   fs.mkdirSync(path.join(LAB, "join-yes-share"), { recursive: true });
@@ -2049,7 +2193,7 @@ if (deskOn()) try {
     const wrap = B.sealInviteWrap({ secret: secret, relayTeamId: RTW, teamId: TEAMW, invitationId: inv, epoch: epoch, key: KW });
     return { text: text, wrap: wrap };
   }
-  function deskOnWrap(name, wrap) {
+  async function deskOnWrap(name, wrap) {
     const folder = path.join(LAB, name + "-share");
     fs.mkdirSync(folder, { recursive: true });
     return newDesk(name, folder, { fetch: (url, init) => (init && init.method === "GET" && String(url).endsWith("/wrap")
@@ -2063,7 +2207,7 @@ if (deskOn()) try {
   const markA = deskTransport.log.length;
 
   
-  const Dw = deskOnWrap("wrap-read", invA.wrap);
+  const Dw = await deskOnWrap("wrap-read", invA.wrap);
 
   
   const takenA = await Dw.ask("etiuda:team-join", "invite", invA.text, "Desk Nine", "");
@@ -2113,7 +2257,7 @@ if (deskOn()) try {
   const invE = await inviteOnW(2);
 
   
-  const De = deskOnWrap("wrap-epoch", invE.wrap);
+  const De = await deskOnWrap("wrap-epoch", invE.wrap);
 
   
   const takenE = await De.ask("etiuda:team-join", "invite", invE.text, "Desk Nine", "");
@@ -2170,7 +2314,7 @@ if (deskOn()) try {
   if (partOn("pDesk")) {
   const openPlant = await liftChannel("plant:wrap-open", async () => {
       const invP = await inviteOnW(1);
-      const Dp = deskOnWrap("wrap-plant", invP.wrap);
+      const Dp = await deskOnWrap("wrap-plant", invP.wrap);
       const takenP = await Dp.ask("etiuda:team-join", "invite", invP.text, "Desk Nine", "");
       const end = Date.now() + 4000;
       while (Date.now() < end) {
@@ -2236,7 +2380,7 @@ if (deskOn()) try {
     } };
     const folder = path.join(LAB, label + "-share");
     fs.mkdirSync(folder, { recursive: true });
-    const first = newDesk(label, folder, hooks);
+    const first = await newDesk(label, folder, hooks);
     const taken = await first.ask("etiuda:team-join", "invite", inv.text, "Desk Nine", "");
     const me = await first.ask("etiuda:branch-identity", false);
     const joinRel = "desks/" + me.id + "/join.json";
@@ -2255,7 +2399,7 @@ if (deskOn()) try {
     const stopFirst = first.api.relayRun();
     if (stopFirst) await stopFirst.stop();
     mode = "spent";
-    const second = loadDesk(first.ud, hooks);
+    const second = await loadDesk(first.ud, hooks);
     const notYet = second.api.relayRun();
     if (notYet) { notYet.kick(); await notYet.idle(); }
     teamRevW += 1;
@@ -2377,7 +2521,7 @@ if (deskOn()) try {
       : null) };
     const folder = path.join(LAB, label + "-share");
     fs.mkdirSync(folder, { recursive: true });
-    const desk = newDesk(label, folder, hooks);
+    const desk = await newDesk(label, folder, hooks);
     const taken = await desk.ask("etiuda:team-join", "invite", inv.text, "Desk Nine", "");
     let view = null;
     const shown = await until(async () => {
@@ -2387,7 +2531,7 @@ if (deskOn()) try {
       return !!(view && view.join && view.join.state !== "waiting");
     }, shownCeiling || 30000);
     const kept = (((((desk.envelope().teamJoin || {}).invite || {}).relay || {}).end)) || "";
-    const again = loadDesk(desk.ud);
+    const again = await loadDesk(desk.ud);
     const after = await again.ask("etiuda:team-join", "view");
     const stop = desk.api.relayRun();
     if (stop) await stop.stop();
@@ -2477,7 +2621,7 @@ if (deskOn()) try {
       async function takeOne(name, offer) {
         const folder = path.join(LAB, name + "-share");
         fs.mkdirSync(folder, { recursive: true });
-        const desk = newDesk(name, folder);
+        const desk = await newDesk(name, folder);
         const taken = await desk.ask("etiuda:team-join", "invite", offer.text, "Desk Nine", "");
         const who = await desk.ask("etiuda:branch-identity", false);
         const rel = "desks/" + who.id + "/join.json";
@@ -3085,7 +3229,7 @@ if (deskOn()) try {
       }
       const shareH = path.join(LAB, "head-folder");
       fs.mkdirSync(shareH, { recursive: true });
-      const H = newDesk("head-folder-desk", shareH);
+      const H = await newDesk("head-folder-desk", shareH);
       const hme = await H.ask("etiuda:branch-identity", true);
       const KH = crypto.randomBytes(32), TEAMH = "t-" + hex(8);
       const folderTeam = JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: TEAMH, catalogs: ["quay-board"],
@@ -3119,7 +3263,7 @@ if (deskOn()) try {
           teamPins: { [TEAM2]: { keyId: LEAD.keyId, public: LEAD.pub }, [TEAMH]: { keyId: INTR.keyId, public: INTR.pub } },
           teamPinFrom: { [TEAM2]: "invite" }, teamChannel: { [TEAM2]: { kind: "relay", rt: RT2, url: URL2 } },
           teamShown: { [TEAMH]: { folder: shareH } } }), "utf8");
-        const BD = loadDesk(udBoth);
+        const BD = await loadDesk(udBoth);
         await BD.ask("etiuda:branch-identity", true);
         const runBD = BD.api.relayRun();
         const bv = await BD.ask("etiuda:team-join", "leads");
@@ -3172,7 +3316,7 @@ if (deskOn()) try {
         for (const id of Object.keys(opt.revs || {})) revs[id] = { [LEAD.pub]: opt.revs[id] };
         fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: elsewhere, eUiLang: "en" },
           teamPins: { [TMF]: { keyId: LEAD.keyId, public: LEAD.pub } }, catalogRevs: revs }), "utf8");
-        const FD = loadDesk(ud, opt.src);
+        const FD = await loadDesk(ud, opt.src);
         await FD.ask("etiuda:branch-identity", true);
         const look = async () => {
           const v = await FD.ask("etiuda:team-join", "leads");
@@ -3288,7 +3432,7 @@ if (deskOn()) try {
         if (head) fs.writeFileSync(path.join(mir, HEAD_FILE), head);
         fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: elsewhere, eUiLang: "en" },
           teamPins: { [TME6]: { keyId: LEAD.keyId, public: LEAD.pub } } }), "utf8");
-        const FD = loadDesk(ud, src);
+        const FD = await loadDesk(ud, src);
         await FD.ask("etiuda:branch-identity", true);
         const v = await FD.ask("etiuda:team-join", "leads");
         const row = (v && Array.isArray(v.leads) ? v.leads : []).filter(l => l && l.team === TME6)[0];
@@ -3317,7 +3461,7 @@ if (deskOn()) try {
           keys: { eCatalogFolder: share, eUiLang: "en" }, teamPins: { [team]: { keyId: LEAD.keyId, public: LEAD.pub } },
           teamKeys: { [team]: { 1: encE6(key.toString("base64")) } } },
           channel ? { teamPinFrom: { [team]: "invite" }, teamChannel: { [team]: channel } } : { folderTeams: { [team]: { folder: share } } })), "utf8");
-        const D = loadDesk(ud, src);
+        const D = await loadDesk(ud, src);
         const me = await D.ask("etiuda:branch-identity", true);
         const put6 = text => { if (!channel) fs.writeFileSync(path.join(share, C.TEAM_NAME), text); fs.writeFileSync(path.join(mir, C.TEAM_NAME), text); };
         const land = text => { put6(text); D.api.heedTeam(); };
@@ -3357,7 +3501,7 @@ if (deskOn()) try {
         const sameList = fs.existsSync(b.file);
         if (restart) {
           d.put6(teamE6(d.team, ["pebble-board"], 3, d.me, d.D, d.key, d.channel));
-          const D2 = loadDesk(d.ud, src);
+          const D2 = await loadDesk(d.ud, src);
           await D2.ask("etiuda:branch-identity", false);
           D2.api.heedTeam();
         } else d.land(teamE6(d.team, ["pebble-board"], 3, d.me, d.D, d.key, d.channel));
@@ -3381,7 +3525,7 @@ if (deskOn()) try {
         fs.unlinkSync(path.join(d.mir, "quay-board.ec"));
         d.land(teamE6(d.team, ["pebble-board"], 2, d.me, d.D, d.key, d.channel));
         const live = inB(d.D);
-        const D2 = loadDesk(d.ud, src);
+        const D2 = await loadDesk(d.ud, src);
         await D2.ask("etiuda:branch-identity", false);
         const restart = inB(D2);
         const pick = D2.api.pickEdition([{ file: "pebble-board.ec", data: JSON.parse(d.texts["pebble-board"]) }]);
@@ -3495,7 +3639,7 @@ if (deskOn()) try {
         me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root" }), keyFor: e => (e === 1 ? K4 : null),
         sealEpoch: () => 1, inviteKeys: () => live4, agree: agree4, request: studio4T.request, connect: studio4T.connect, pollMs: 1e9 });
       fs.mkdirSync(path.join(LAB, "f6-share"), { recursive: true });
-      const G = newDesk("f6-desk", path.join(LAB, "f6-share"));
+      const G = await newDesk("f6-desk", path.join(LAB, "f6-share"));
       put(studio4Mirror, "board.ec", JSON.stringify(G.api.sealCatalog(K4, TEAM4, 1, catalogText(1))));
       put(studio4Mirror, C.TEAM_NAME, team4(1, []));
       const text4 = "etiuda-join:" + Buffer.from(JSON.stringify({ team: TEAM4, relay: { rt: RT4, url: URL2, token: TOK4, inv: INV4 },
@@ -3553,7 +3697,7 @@ if (deskOn()) try {
   fs.mkdirSync(share, { recursive: true });
 
   
-  const E = newDesk("self-desk", share);
+  const E = await newDesk("self-desk", share);
 
   
   const eme = await E.ask("etiuda:branch-identity", true);
@@ -3613,7 +3757,7 @@ if (deskOn()) try {
   fs.mkdirSync(shareF, { recursive: true });
 
   
-  const F = newDesk("forget-desk", shareF);
+  const F = await newDesk("forget-desk", shareF);
 
   
   const SECF = hex(16);
@@ -3663,7 +3807,7 @@ if (deskOn()) try {
       const BS = String.fromCharCode(92);
       regOpts.policy = ["Windows Registry Editor Version 5.00", "", "[HKEY_LOCAL_MACHINE" + BS + "SOFTWARE" + BS + "Policies" + BS + "Etiuda]",
         "\"TeamFolder\"=\"" + shareP.split(BS).join(BS + BS) + "\"", "", ""].join("\n");
-      const P = loadDesk(udP);
+      const P = await loadDesk(udP);
       const folderP = P.api.catalogFolder();
       regOpts.policy = null;
       await P.ask("etiuda:branch-identity", true);
@@ -3783,7 +3927,7 @@ if (deskOn()) try {
   
   try {
       /* The shell `src` loaded over the desk folder `ud` and the envelope already in it, as a restarted desk loads. */
-      function deskLoad(ud, src, serve) {
+      async function deskLoad(ud, src, serve) {
         const said = [];
         const sent = [];
         const on = {}, invoke = {};
@@ -3793,7 +3937,7 @@ if (deskOn()) try {
           encryptString: s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)),
           decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
         };
-        const net = { fetch: (url, init) => { deskTransport.log.push(init.method + " " + url); if (deskTransport.down) return Promise.reject(new Error("down")); return (serve && serve(url, init)) || relayFetch(url, init); } };
+        const net = { fetch: (url, init) => { const lab = labFetch(url, init, R.clock.now); if (lab) return lab; deskTransport.log.push(init.method + " " + url); if (deskTransport.down) return Promise.reject(new Error("down")); return (serve && serve(url, init)) || relayFetch(url, init); } };
         /* A person's desk has a window, and the folder syncer starts only then (catalogFolderChanged returns while
            theWindow is unset). This window is never shown: it records what the page is sent. */
         function DeskWindow() {
@@ -3836,19 +3980,22 @@ if (deskOn()) try {
           app: { getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop,
             getVersion: () => "0.0.0", whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
           ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
-          BrowserWindow: DeskWindow, Menu: inert, dialog: inert, net, protocol: inert, session: directSession, shell: inert,
+          BrowserWindow: DeskWindow, Menu: inert, dialog: inert, net, protocol: inert, session: directSession, shell: labShell(),
           screen, systemPreferences: inert, nativeTheme: { themeSource: "system" }, safeStorage, powerMonitor: inert,
         };
         process.env.XDG_CURRENT_DESKTOP = "GNOME";
-        const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
+        const api = withSigninLab(() => new Function("require", "__dirname", "__filename", "module", "exports", "console",
           src + "\nreturn { " + EXPOSE.join(", ") + " };")(
-          n => (n === "electron" ? electron : nodeRequire(n)),
-          path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
+          n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? shellFs : nodeRequire(n)),
+          path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet));
         const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
+        const sync = (ch, ...args) => { const ev = eventFor(); if (on[ch]) on[ch](ev, ...args); return ev.returnValue; };
         const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
-        return { api, ask, said, sent, ud, envelope };
+        const desk = { api, ask, sync, said, sent, ud, envelope };
+        await seatDesk(desk);
+        return desk;
       }
-      function deskFrom(name, folder, src, held, serve) {
+      async function deskFrom(name, folder, src, held, serve) {
         const ud = path.join(LAB, name);
         fs.mkdirSync(ud, { recursive: true });
         fs.mkdirSync(folder, { recursive: true });
@@ -3893,7 +4040,7 @@ if (deskOn()) try {
         studio.start();
         await studio.idle();
         deskTransport.down = false;
-        let D = deskFrom("c7-desk-" + tag, share, src, opt.held ? opt.held(team, key, share) : null, serve);
+        let D = await deskFrom("c7-desk-" + tag, share, src, opt.held ? opt.held(team, key, share) : null, serve);
         const before = D.api.catalogFolder();
         const text = "etiuda-join:" + Buffer.from(JSON.stringify({ team, relay: { rt, url: URLV1, token, inv },
           lead: { keyId: LEAD.keyId, public: LEAD.pub, name: "Ada Quay" }, secret }), "utf8").toString("base64url");
@@ -3927,7 +4074,7 @@ if (deskOn()) try {
             opt.edit(doc, team, key);
             fs.writeFileSync(path.join(D.ud, "desk.json"), JSON.stringify(doc), "utf8");
           }
-          D = deskLoad(D.ud, src, serve);
+          D = await deskLoad(D.ud, src, serve);
           if (opt.view) {
             const seen = await D.ask("etiuda:team-join", "read", "no invitation");
             try { await studio.stop(); } catch { /* already stopped */ }
@@ -4004,7 +4151,7 @@ if (deskOn()) try {
         const team = "t-" + hex(8), secret = hex(16);
         const own = path.join(LAB, "c8-own-" + tag), yard = path.join(LAB, "c8-yard-" + tag);
         fs.mkdirSync(yard, { recursive: true });
-        const D = deskFrom("c8-desk-" + tag, own, src, opt.held ? opt.held(team) : null);
+        const D = await deskFrom("c8-desk-" + tag, own, src, opt.held ? opt.held(team) : null);
         const text = "etiuda-join:" + Buffer.from(JSON.stringify({ team, folder: yard,
           lead: { keyId: LEAD.keyId, public: LEAD.pub, name: "Ada Quay" }, secret }), "utf8").toString("base64url");
         const requests = () => {
@@ -4250,7 +4397,7 @@ if (deskOn()) try {
         fs.mkdirSync(yard, { recursive: true });
         const doc = (rev, roster) => JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: team, catalogs: ["quay-board"],
           lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev, roster }, LEAD), null, 1) + "\n";
-        const D = deskFrom("c6-desk-" + tag, own, src, Object.assign({ teamPins: { [team]: leadPin }, teamKeys: { [team]: { 1: sealedKey(key) } } },
+        const D = await deskFrom("c6-desk-" + tag, own, src, Object.assign({ teamPins: { [team]: leadPin }, teamKeys: { [team]: { 1: sealedKey(key) } } },
           named ? { teamRevSeen: { [team]: { [LEAD.pub]: { epoch: 1, rev: 1 } } } } : {}));
         D.api.createWindow();
         const pre = await D.ask("etiuda:branch-identity", true);
@@ -4316,7 +4463,7 @@ if (deskOn()) try {
         const rt = hex(16), team = "t-" + hex(8), key = crypto.randomBytes(32), share = path.join(LAB, "h35-removed-share");
         R.clock.now += 1;
         const made = await admin("POST", "/relay/v1/teams", createBody(rt, R.clock.now));
-        const D = deskFrom("h35-removed", share, mainNow, { teamPins: { [team]: leadPin }, teamPinFrom: { [team]: "answer" },
+        const D = await deskFrom("h35-removed", share, mainNow, { teamPins: { [team]: leadPin }, teamPinFrom: { [team]: "answer" },
           teamChannel: { [team]: { kind: "relay", rt, url: URLV1 } }, teamKeys: { [team]: { 1: sealedKey(key) } },
           teamShown: { [team]: { lead: "Ada Quay", folder: share } } });
         const me = await D.ask("etiuda:branch-identity", true);
@@ -4358,7 +4505,7 @@ if (deskOn()) try {
           const rt = hex(16), team = "t-" + hex(8), key = crypto.randomBytes(32), share = path.join(LAB, "h35-gone-share");
           R.clock.now += 1;
           await admin("POST", "/relay/v1/teams", createBody(rt, R.clock.now));
-          const D = deskFrom("h35-gone", share, lines.join("\n"), { teamPins: { [team]: leadPin }, teamPinFrom: { [team]: "answer" },
+          const D = await deskFrom("h35-gone", share, lines.join("\n"), { teamPins: { [team]: leadPin }, teamPinFrom: { [team]: "answer" },
             teamChannel: { [team]: { kind: "relay", rt, url: URLV1 } }, teamKeys: { [team]: { 1: sealedKey(key) } },
             teamShown: { [team]: { lead: "Ada Quay", folder: share } } });
           const me = await D.ask("etiuda:branch-identity", true);
@@ -4405,7 +4552,7 @@ if (deskOn()) try {
           pin: () => pin, me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root" }),
           keyFor: e => (e === 1 ? key : null), sealEpoch: () => 1, inviteKeys: () => [],
           request: studioT.request, connect: studioT.connect, pollMs: 1e9 });
-        const D = deskFrom("h35-readd-desk-" + tag, share, src, { teamPins: { [team]: leadPin }, teamPinFrom: { [team]: "answer" },
+        const D = await deskFrom("h35-readd-desk-" + tag, share, src, { teamPins: { [team]: leadPin }, teamPinFrom: { [team]: "answer" },
           teamChannel: { [team]: { kind: "relay", rt, url: URLV1 } }, teamKeys: { [team]: { 1: sealedKey(key) } },
           teamShown: { [team]: { lead: "Ada Quay", folder: share } } });
         const me = await D.ask("etiuda:branch-identity", true);
@@ -4482,7 +4629,7 @@ if (deskOn()) try {
         const rt = hex(16), team = "t-" + hex(8), share = path.join(LAB, "h35-old-share");
         R.clock.now += 1;
         const made = await admin("POST", "/relay/v1/teams", createBody(rt, R.clock.now));
-        const D = deskFrom("h35-old", share, mainNow, null);
+        const D = await deskFrom("h35-old", share, mainNow, null);
         const me = await D.ask("etiuda:branch-identity", true);
         const row = me && me.id ? [{ id: me.id, pub: me.key, desk: me.id }] : [];
         const enrolled = row.length ? await enrolDesk(rt, 1, row) : { status: 0 };
@@ -4580,7 +4727,7 @@ if (deskOn()) try {
         await studio.idle();
         deskTransport.down = false;
         const share = path.join(LAB, "e4-share-" + tag);
-        const D = deskFrom("e4-desk-" + tag, share, src, null, serve);
+        const D = await deskFrom("e4-desk-" + tag, share, src, null, serve);
         const me = await D.ask("etiuda:branch-identity", true);
         const text = "etiuda-join:" + Buffer.from(JSON.stringify({ team, relay: { rt, url: URLV1, token, inv },
           lead: { keyId: LEAD.keyId, public: LEAD.pub, name: "Ada Quay" }, secret }), "utf8").toString("base64url");
@@ -4834,7 +4981,7 @@ if (deskOn()) try {
         await studio.idle();
         deskTransport.down = false;
         const share = path.join(LAB, "c5-share-" + kind + "-" + rt.slice(0, 4));
-        const D = deskFrom("c5-desk-" + kind + "-" + rt.slice(0, 4), share, mainNow, null, serve);
+        const D = await deskFrom("c5-desk-" + kind + "-" + rt.slice(0, 4), share, mainNow, null, serve);
         const me = await D.ask("etiuda:branch-identity", true);
         const text = "etiuda-join:" + Buffer.from(JSON.stringify({ team, relay: { rt, url: URLV1, token, inv },
           lead: { keyId: LEAD.keyId, public: LEAD.pub, name: "Ada Quay" }, secret }), "utf8").toString("base64url");
@@ -5009,7 +5156,7 @@ if (deskOn()) try {
         await studio.idle();
         deskTransport.down = false;
         const share = path.join(LAB, "g996-share-" + tag);
-        const D = deskFrom("g996-desk-" + tag, share, src, null, serve);
+        const D = await deskFrom("g996-desk-" + tag, share, src, null, serve);
         try {
           me = await D.ask("etiuda:branch-identity", true);
           const text = "etiuda-join:" + Buffer.from(JSON.stringify({ team, relay: { rt, url: URLV1, token, inv },
@@ -5107,7 +5254,7 @@ if (deskOn()) try {
         const rt = hex(16), team = "t-" + hex(8), key = crypto.randomBytes(32), share = path.join(LAB, "c1-share-" + tag);
         R.clock.now += 1;
         await admin("POST", "/relay/v1/teams", createBody(rt, R.clock.now));
-        const D = deskFrom("c1-" + tag, share, src, { teamPins: { [team]: leadPin }, teamPinFrom: { [team]: "answer" },
+        const D = await deskFrom("c1-" + tag, share, src, { teamPins: { [team]: leadPin }, teamPinFrom: { [team]: "answer" },
           teamChannel: { [team]: { kind: "relay", rt, url: URLV1 } }, teamKeys: { [team]: { 1: sealedKey(key) } },
           teamShown: { [team]: { lead: "Ada Quay", folder: share } } });
         const me = await D.ask("etiuda:branch-identity", true);
@@ -5213,7 +5360,7 @@ if (deskOn()) try {
     await lead.idle();
     const share = path.join(LAB, "961-share-" + tag);
     fs.mkdirSync(share, { recursive: true });
-    const H = make(share, tag);
+    const H = await make(share, tag);
     const text = "etiuda-join:" + Buffer.from(JSON.stringify({ team, relay: { rt, url: URLV1, token, inv },
       lead: { keyId: LEAD.keyId, public: LEAD.pub, name: "Ada Quay" }, secret }), "utf8").toString("base64url");
     const taken = await H.ask("etiuda:team-join", "invite", text, "Desk Twelve", codeOf(secret));
@@ -5390,7 +5537,7 @@ if (deskOn()) try {
           fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eUiLang: "en" },
             teamPins: { [team]: { keyId: LEAD.keyId, public: LEAD.pub } }, teamPinFrom: { [team]: "invite" },
             teamChannel: { [team]: { kind: "relay", rt, url: URLV1 } }, teamShown: { [team]: { lead: "Ada Quay" } } }), "utf8");
-          const desk = loadDesk(ud, { fetch: lfetch });
+          const desk = await loadDesk(ud, { fetch: lfetch, clock: () => RL.clock.now });
           const me = await desk.ask("etiuda:branch-identity", true);
           const t = RL.clock.now, keys = [{ id: me.id, pub: me.key, desk: me.id }];
           const en = await ladmin("POST", "/relay/v1/t/" + rt + "/devices", { keys, rev: 1, t, sig: signHex(LEAD, core.devicesBytes(rt, 1, t, keys)) });
@@ -5569,7 +5716,7 @@ if (deskOn()) try {
           teamPins: { [unmadeTeam]: { keyId: LEAD.keyId, public: LEAD.pub } }, teamPinFrom: { [unmadeTeam]: "invite" },
           teamChannel: { [unmadeTeam]: { kind: "relay", rt: unmadeRt, url: URLV1 } }, teamShown: { [unmadeTeam]: { lead: "Ada Quay" } } }), "utf8");
         let blockSince = false;
-        const unmadeDesk = loadDesk(unmadeUd, { fetch: (url, init) => {
+        const unmadeDesk = await loadDesk(unmadeUd, { clock: () => RL.clock.now, fetch: (url, init) => {
           if (blockSince && url.indexOf("/since/") >= 0) {
             return Promise.resolve(new Response(JSON.stringify({ error: "temporary" }), { status: 503, headers: { "content-type": "application/json" } }));
           }
@@ -5690,7 +5837,7 @@ if (deskOn()) try {
       fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eUiLang: "en" },
         teamPins: { [team]: { keyId: LEAD.keyId, public: LEAD.pub } }, teamPinFrom: { [team]: "invite" },
         teamChannel: { [team]: { kind: "relay", rt, url: URLV1 } }, teamShown: { [team]: { lead: "Ada Quay" } } }), "utf8");
-      desk = loadDesk(ud);
+      desk = await loadDesk(ud);
       const me = await desk.ask("etiuda:branch-identity", true);
       const t = R.clock.now, keys = [{ id: me.id, pub: me.key, desk: me.id }];
       const en = await admin("POST", "/relay/v1/t/" + rt + "/devices", { keys, rev: 1, t, sig: signHex(LEAD, core.devicesBytes(rt, 1, t, keys)) });
@@ -5777,7 +5924,7 @@ if (deskOn()) try {
     fs.mkdirSync(ud, { recursive: true });
     fs.mkdirSync(share, { recursive: true });
     fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: share, eUiLang: "en" } }), "utf8");
-    const Dk = loadDesk(ud, source);
+    const Dk = await loadDesk(ud, source);
     let ch = null, counting = true;
     try {
       put(sMirror, "board.ec", JSON.stringify(Dk.api.sealCatalog(key, team, 1, catalogText(1))));
@@ -5920,7 +6067,8 @@ if (deskOn()) try {
     const h = await t.request("POST", URLV1 + "/t/" + rt + "/hello", {}, Buffer.from("{}"));
     const challenge = JSON.parse(h.bytes.toString()).challenge;
     const ses = await t.request("POST", URLV1 + "/t/" + rt + "/session", { "content-type": "application/json" },
-      Buffer.from(JSON.stringify({ challenge, key: who.keyId, pub: who.pub, sig: signHex(who, C.helloBytes(rt, challenge, who.keyId)) })));
+      Buffer.from(JSON.stringify(Object.assign({ challenge, key: who.keyId, pub: who.pub, sig: signHex(who, C.helloBytes(rt, challenge, who.keyId)) },
+        who.keyId !== LEAD.keyId ? { seat: seatFor(who) } : {}))));
     const token = JSON.parse(ses.bytes.toString()).session;
     const meta = { v: 1, id: b.id, supersedes: b.supersedes, epoch: b.epoch, writer: b.writerKeyId, counter: b.counter, del: b.deletion,
       sig: b.signature, nonce: b.nonce, place: b.place };
@@ -5997,7 +6145,7 @@ if (deskOn()) try {
     fs.mkdirSync(s.share, { recursive: true });
     fs.writeFileSync(path.join(s.ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: s.share, eUiLang: "en" } }), "utf8");
     /* An object is hooks for loadDesk, or { src } for a planted shell source (the leave route's 987v). */
-    s.Dk = loadDesk(s.ud, app ? (typeof app === "object" ? (typeof app.src === "string" ? app.src : app) : { app }) : undefined);
+    s.Dk = await loadDesk(s.ud, app ? (typeof app === "object" ? (typeof app.src === "string" ? app.src : app) : { app }) : undefined);
     s.stop = async () => {
       deskTransport.down = false;
       try { await s.studio.stop(); } catch { /* stopped */ }
@@ -6254,7 +6402,7 @@ if (deskOn()) try {
       /* The desk started again on the same profile: the line is not said again, and still nothing goes up. */
       const was = s.Dk.api.relayRun();
       if (was) await was.stop();
-      s.Dk = loadDesk(s.ud, app ? (typeof app === "object" ? app : { app }) : undefined);
+      s.Dk = await loadDesk(s.ud, app ? (typeof app === "object" ? app : { app }) : undefined);
       const again = deskTransport.log.length;
       for (let i = 0; i < 3; i++) await s.pump();
       out.saidRestart = s.Dk.said.filter(l => l.indexOf(C.STRANDED_SAID || "the line is not exported") >= 0).length;
@@ -6892,7 +7040,7 @@ if (deskOn()) try {
       out.held = c1 && c1.program ? c1.program.ahead().length : -1;
       if (c1) await c1.stop();
       v.again = true;
-      s.Dk = loadDesk(s.ud, hooks);
+      s.Dk = await loadDesk(s.ud, hooks);
       const done = n => n.pin === "the new lead" && n.edition === "re-signed rev 1" && n.head === "Handover edition" && n.span;
       await until(async () => { await s.pump(); return done(deskNow(s, NEXT, span)); }, ceiling || 30000);
       out.now = deskNow(s, NEXT, span);
@@ -7706,7 +7854,7 @@ function opened(mod, name, tm, who, place, o) {
     me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place }),
     request: t.request, connect: t.connect, pollMs: 1e9, watch: false,
     say: l => said.push(l),
-  }, x));
+  }, who && who.keyId !== LEAD.keyId ? { seat: () => seatFor(who) } : {}, x));
   return { name, ch, t, said, mirror, prog: ch.program };
 }
 /* The lead seals guide.ec at epoch 1, that blob is held back, the desk catches up the epoch-2 edition, and the held
@@ -7786,7 +7934,8 @@ async function rawUpload(rt, who, b) {
   const h = await t.request("POST", URLV1 + "/t/" + rt + "/hello", {}, Buffer.from("{}"));
   const challenge = JSON.parse(h.bytes.toString()).challenge;
   const ses = await t.request("POST", URLV1 + "/t/" + rt + "/session", { "content-type": "application/json" },
-    Buffer.from(JSON.stringify({ challenge, key: who.keyId, pub: who.pub, sig: signHex(who, C.helloBytes(rt, challenge, who.keyId)) })));
+    Buffer.from(JSON.stringify(Object.assign({ challenge, key: who.keyId, pub: who.pub, sig: signHex(who, C.helloBytes(rt, challenge, who.keyId)) },
+      who.keyId !== LEAD.keyId ? { seat: seatFor(who) } : {}))));
   const token = JSON.parse(ses.bytes.toString()).session;
   const meta = { v: 1, id: b.id, supersedes: b.supersedes, epoch: b.epoch, writer: b.writerKeyId, counter: b.counter, del: b.deletion,
     sig: b.signature, nonce: b.nonce, place: b.place };
@@ -8682,6 +8831,7 @@ async function lostWithdraw(mod, label, losses) {
     pin: () => ({ teamId: "t-" + rt.slice(0, 8), rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
     me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place: "desk:" + who.keyId }),
     invite: () => ({ inv, token, seal: mod.inviteSealKey(secret) }),
+    seat: () => seatFor(who),
     keyFor: () => null, sealEpoch: () => null, request, connect: null,
   });
   try {
@@ -8861,14 +9011,26 @@ function pgRelay(page, cut) {
 function pgProgram(mod, x, name, tm, who, place, o) {
   const t = x.transport(o && o.fail, o && o.alter), said = [];
   const mirror = path.join(LAB, name);
+  const request = (method, url, headers, body) => {
+    if (who && who.keyId !== LEAD.keyId && method === "POST" && String(url).endsWith("/session") && body) {
+      try {
+        const parsed = JSON.parse(Buffer.from(body).toString("utf8"));
+        if (parsed && parsed.pub && parsed.seat === undefined) {
+          parsed.seat = seatFor(who, x.RL.clock.now);
+          body = Buffer.from(JSON.stringify(parsed), "utf8");
+        }
+      } catch { /* pass through as given */ }
+    }
+    return t.request(method, url, headers, body);
+  };
   const ch = mod.createChannel(Object.assign({
     rt: tm.rt, url: URLV1, mirror, stateFile: path.join(LAB, name + ".json"),
     pin: () => ({ teamId: tm.id, rt: tm.rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
     me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place }),
     keyFor: e => (e === 1 ? tm.key : null), sealEpoch: () => 1,
-    request: t.request, connect: null, pollMs: 1e9, watch: false, clock: () => Date.now() + x.shift,
+    request, connect: null, pollMs: 1e9, watch: false, clock: () => Date.now() + x.shift,
     say: l => said.push(l),
-  }, o && o.more));
+  }, who && who.keyId !== LEAD.keyId ? { seat: () => seatFor(who, x.RL.clock.now) } : {}, o && o.more));
   return { name, ch, t, said, mirror, prog: ch.program };
 }
 /* The mirror as path and sha256, the team file's rev, the pending count, the held count, and whether the place reached the top. */
@@ -8954,7 +9116,8 @@ async function pgAway(mod, page, cut, o) {
   await settle(lead);
   const blobs = x.RL.stores.get(tm.rt).dump().map(([k, v]) => [k, JSON.parse(v)]).filter(([k]) => k.startsWith("blob:")).map(([, v]) => v);
   const of = w => blobs.filter(v => v.writer === w && !v.del).sort((a, b) => b.seq - a.seq)[0] || null;
-  const b0 = of(D0.keyId), b2 = of(D2.keyId), teamNow = blobs.find(v => v.id === x.RL.stores.get(tm.rt).get("teamFile")) || null;
+  /* The team file is the lead's newest file here: rev 3, written after the eight pads. */
+  const b0 = of(D0.keyId), b2 = of(D2.keyId), teamNow = of(LEAD.keyId);
   const out = { order: !!(b0 && b2 && teamNow && b0.seq < b2.seq && b2.seq < teamNow.seq) };
   let failed = 0;
   const fail = opts.stop ? (m, rel) => m === "GET" && teamNow && rel === "b/" + teamNow.id && failed++ === 0 : null;
@@ -11520,7 +11683,7 @@ if (partOn("p963")) {
         return { status: res.status, header: n => res.headers.get(n), bytes, socket: res.headers.get("x-stand-in-socket") };
       };
       const desk = opened(C, "981-" + rt.slice(0, 8), { rt, id: "t-" + hex(8) }, who, "desk:" + who.keyId, {
-        request, connect: () => ({ send() {}, close() {} }),
+        request, connect: () => ({ send() {}, close() {} }), seat: () => seatFor(who, RL.clock.now),
       });
       let said = [];
       try { desk.ch.start(); await desk.ch.idle(); said = desk.said.slice(); }
@@ -11633,6 +11796,7 @@ function relay9() {
       return res;
     };
     const p = program(name, d.k, "desk:" + d.k.keyId, Object.assign({ mod, rt: tm.rt, pin: pin9, request, connect: () => null, watch: false,
+      seat: () => seatFor(d.k, RS.clock.now),
       me: () => ({ keyId: d.k.keyId, public: d.k.pub, privateKey: d.k.privateKey, place: "desk:" + d.k.keyId, box: d.box.pub }),
       keyFor: e => held.get(e) || null, sealEpoch: () => Math.max(...held.keys()), agree: agreeWith(d.box),
       onTeam: () => {
@@ -11956,7 +12120,7 @@ async function sceneA4(mod, atDoor) {
   const desk = mod.createChannel({ rt, url: URLV1, mirror: deskMirror, stateFile: deskMirror + ".json", pin: pinOf,
     me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place: "desk:" + who.keyId, box: deskBox.pub }),
     agree: peer => xAgree(deskBox, peer), keyFor: () => null, sealEpoch: () => null,
-    invite: () => door, onAnswer: a => answers.push(a),
+    invite: () => door, seat: () => door.door, onAnswer: a => answers.push(a),
     onDoor: id => {
       door.inv = id;
       if (atDoor && !doorJoin) { doorJoin = JSON.stringify(Object.assign({ door: id }, JSON.parse(JOIN))) + "\n"; put(deskMirror, "desks/" + who.keyId + "/join.json", doorJoin); }
@@ -12149,6 +12313,7 @@ if (partOn("p993")) {
       pin: () => ({ teamId: pinTeam, rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
       me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place: "desk:" + who.keyId }),
       invite: () => ({ inv, token, seal: C.inviteSealKey(secret) }),
+      seat: () => seatFor(who),
       request: tport.request, connect: tport.connect, pollMs: 1e9, watch: false, say: l => said.push(String(l)),
     });
     ch.start();
@@ -12192,6 +12357,7 @@ if (partOn("p993")) {
       rt, url: URLV1, mirror: path.join(LAB, "h35-hush"), stateFile: path.join(LAB, "h35-hush.json"),
       pin: () => ({ teamId: pinTeam, rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
       me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place: "desk:" + who.keyId }),
+      seat: () => seatFor(who),
       onRemoved() {},
       request: tport.request, connect: tport.connect, pollMs: 1e9, watch: false,
     });
@@ -12251,6 +12417,7 @@ if (partOn("p993")) {
       pin: () => ({ teamId: pinTeam, rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
       me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place: "desk:" + who.keyId }),
       invite: () => ({ inv, token, seal: mod.inviteSealKey(secret) }),
+      seat: () => seatFor(who),
       onInviteEnd(k) { kind = String(k); },
       onRemoved() {},
       request: tport.request, connect: tport.connect, pollMs: 1e9, watch: false,
@@ -12288,6 +12455,7 @@ if (partOn("p993")) {
       pin: () => ({ teamId: pinTeam, rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
       me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place: "desk:" + who.keyId }),
       invite: () => ({ inv, token, seal: mod.inviteSealKey(secret) }),
+      seat: () => seatFor(who),
       request: tport.request, connect: tport.connect, pollMs: 1e9, watch: false,
     });
     ch.start();
@@ -13798,6 +13966,10 @@ if (partOn("pRv3")) {
     }
   }
   check(productWrites.length === 0 && changed.length === 0, "943b no leg wrote a product file: " + productWrites.length + " write(s) into the repository" + (productWrites.length ? " (" + [...new Set(productWrites)].join(" ") + ")" : "") + ", and every file under shell/relay/, shell/main.js and src/modules/settings.js ends with the sha256 it began with" + (changed.length ? "; changed: " + changed.join(" ") : ""));
+  check(legSigninWrites.length === 0 && (!deskOn() || shellSigninWrites.length > 0),
+    "943c no signin.json under any desk folder of the leg was written by the leg itself: leg writes "
+    + legSigninWrites.length + (legSigninWrites.length ? " (" + [...new Set(legSigninWrites)].slice(0, 5).join(", ") + ")" : "")
+    + ", shell writes " + shellSigninWrites.length);
 }
 markPart(null);
 console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + " expected=" + EXPECTED);

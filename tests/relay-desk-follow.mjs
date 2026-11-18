@@ -88,8 +88,7 @@ function makePolicyExport(folder, leadHex) {
 
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 
-/* ================================================================================================
-   ONE LAUNCH: shell/main.js loaded with stubbed electron, watched fs and mock relay channel,
+/* =========================================================================================   ONE LAUNCH: shell/main.js loaded with stubbed electron, watched fs and mock relay channel,
    started through app.whenReady().
    ================================================================================================ */
 async function launch(plan) {
@@ -1085,6 +1084,106 @@ async function main() {
   }
   [known.invite, known.policy, known.answer].forEach(k => { try { fs.rmSync(k.p.lab, { recursive: true, force: true }); } catch {} });
   [kb, kh, ks, kk].forEach(s => { try { fs.rmSync(s.lab, { recursive: true, force: true }); } catch {} });
+=======
+  /* THE SEAT'S WALL (945s25): a desk pinned by invitation whose lead's signed team file names another https host builds its channel
+     there through signinSeatWall, as a channel at the built-in relay is built. Judged at that hand-over, on a customer's start
+     (harnessLaunch false, under which knownRelayAddress takes only the built-in and staging relays): the other host's channel holds no
+     seat, no renewal, nothing to tell, and knocks with no certificate, its token hello and a withdrawal going as before; the built-in
+     relay's holds the seat and the door's certificate. Judged at the hand-over rather than on the traffic, so it holds whether or not
+     the desk follows the team file to that host at all. */
+  const seatWallSays = src => {
+    const sliceFn = name => { const at = src.indexOf("\nfunction " + name + "("), end = src.indexOf("\n}\n", at); return at < 0 || end < 0 ? "" : src.slice(at + 1, end + 2); };
+    const wall = new Function("const BUILTIN_RELAY_URL = " + JSON.stringify(BUILTIN_RELAY) + ", STAGING_RELAY_URL = " + JSON.stringify(STAGING_RELAY) + ";\n"
+      + "const harnessLaunch = () => false;\n" + sliceFn("knownRelayAddress") + "\n" + sliceFn("signinSeatWall") + "\nreturn signinSeatWall;")();
+    const cert = { sig: { value: "ab" } }, OTHER = "https://other.test/relay/v1";
+    const opts = invite => ({ seat: () => cert, seatRenew: async () => {}, onSeat: () => {}, invite: () => invite });
+    const built = wall(BUILTIN_RELAY, opts({ door: cert, box: "b" })), other = wall(OTHER, opts({ door: cert, box: "b" }));
+    const withdrawal = wall(OTHER, opts({ door: null, box: "b", inv: "i" })).invite(), token = wall(OTHER, opts({ inv: "i", token: "t" })).invite();
+    return { builtinSeat: typeof built.seat === "function" && built.seat() === cert && typeof built.seatRenew === "function" && built.invite().door === cert,
+      otherSeat: other.seat !== undefined || other.seatRenew !== undefined || other.onSeat !== undefined, otherDoor: other.invite() !== null,
+      withdrawalGoes: !!withdrawal && withdrawal.inv === "i", tokenGoes: !!token && token.token === "t" };
+  };
+  const mainNow = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
+  const wallOk = w => w.builtinSeat && !w.otherSeat && !w.otherDoor && w.withdrawalGoes && w.tokenGoes;
+  let sw = null;
+  try { sw = seatWallSays(mainNow); } catch (e) { sw = { threw: String(e && e.message || e) }; }
+  check(wallOk(sw), "945s25 on a customer's start a team's relay channel at a host an invitation may not name, where a pinned lead's team file"
+    + " moved it, is handed no seat certificate, renewal or seat word and knocks with no certificate, its token hello and a withdrawal going as"
+    + " before, while the built-in relay's holds the seat and the door's certificate: " + JSON.stringify(sw));
+  for (const [id, tag, what] of [["945s26", "plant:seat-wall", "the other host's channel is handed the seat"],
+    ["945s27", "plant:seat-wall-door", "the other host's channel knocks with the certificate"]]) {
+    const lines = mainNow.split(/\n/), at = lines.findIndex(l => l.includes("/* " + tag + " */"));
+    let turned = false;
+    if (at >= 0) { lines.splice(at, 1); try { turned = !wallOk(seatWallSays(lines.join("\n"))); } catch { turned = true; } }
+    const shaSame = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8") === mainNow;
+    check(wallOk(sw) && turned && shaSame, id + " lifting " + tag + " turns 945s25 red (" + what + "): turned=" + turned + ", shaSame=" + shaSame);
+  }
+
+  /* THE WALL WHERE THE SEAT IS HANDED OVER (945s28 to 945s31). 945s25 judges signinSeatWall alone; that wall is a second wall, since a
+     wider rule already refuses to follow an unknown relay address at all, so no scene reaches it through the product, and only a check
+     keeps it standing where it is applied. 945s28 judges signinRelaySeatIo itself, the function a team's relay channel takes its options
+     from, on a customer's start: given an address knownRelayAddress refuses, what it hands back holds no seat, no seatRenew and no onSeat
+     and keeps the options it was given, and given the built-in address it holds all three. 945s30 judges the wiring as text: every
+     createChannel( in shell/main.js is either a team's relay channel, which takes its options from signinRelaySeatIo( with its own address
+     (the url it names) as the second argument, or the person's own store's channel, which is named for what it is handed: no seat of
+     this desk's from main.js at all, only seatRenew (storeTurn, the look that renews the store's own certificate); its certificate is
+     the store's, from the look (shell/sync/sync.cjs storeChannelOptions), and its address is the one the person's own sealed key list
+     names, made at the relay a door may name (STORE_RELAY), never a team file's. It is not walled, for it carries no desk seat and no
+     team file's address. A createChannel( that is neither is red. */
+  const seatIoSays = src => {
+    const sliceFn = name => { const at = src.indexOf("\nfunction " + name + "("), end = src.indexOf("\n}\n", at); return at < 0 || end < 0 ? "" : src.slice(at + 1, end + 2); };
+    const CERT = { sig: { value: "ab" } };
+    const io = new Function("const BUILTIN_RELAY_URL = " + JSON.stringify(BUILTIN_RELAY) + ", STAGING_RELAY_URL = " + JSON.stringify(STAGING_RELAY) + ";\n"
+      + "const harnessLaunch = () => false;\n"
+      + "const CERT = " + JSON.stringify(CERT) + ";\n"
+      + "const signinSeatCert = () => CERT, signinSeatRenew = async () => {}, signinRelaySeatTold = () => {};\nlet signinRelaySeatTeam = '';\n"
+      + sliceFn("knownRelayAddress") + "\n" + sliceFn("signinSeatWall") + "\n" + sliceFn("signinRelaySeatIo") + "\nreturn { io: signinRelaySeatIo, CERT };")();
+    const given = { rt: "r", url: "x", mirror: "m", invite: () => ({ inv: "i", token: "t" }) }, OTHER = "https://other.test/relay/v1";
+    const other = io.io("t1", OTHER, given), built = io.io("t1", BUILTIN_RELAY, given);
+    return { otherNoSeat: other.seat === undefined && other.seatRenew === undefined && other.onSeat === undefined,
+      otherKeeps: other.rt === "r" && other.mirror === "m" && other.invite().token === "t",
+      builtAll: typeof built.seat === "function" && built.seat() === io.CERT && typeof built.seatRenew === "function" && typeof built.onSeat === "function" };
+  };
+  const seatIoOk = w => w.otherNoSeat && w.otherKeeps && w.builtAll;
+  let si = null;
+  try { si = seatIoSays(mainNow); } catch (e) { si = { threw: String(e && e.message || e) }; }
+  check(seatIoOk(si), "945s28 signinRelaySeatIo, the seat a team's relay channel is handed, given an address an invitation may not name and the channel's"
+    + " other options hands back no seat, renewal or seat word and keeps the other options, and given the built-in relay's address holds all three: " + JSON.stringify(si));
+  {
+    const lines = mainNow.split(/\n/), at = lines.findIndex(l => l.includes("/* plant:seat-wall-hand */"));
+    let turned = false;
+    if (at >= 0) { lines.splice(at, 1); try { turned = !seatIoOk(seatIoSays(lines.join("\n"))); } catch { turned = true; } }
+    const shaSame = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8") === mainNow;
+    check(seatIoOk(si) && turned && shaSame, "945s29 lifting plant:seat-wall-hand, the line that walls the options signinRelaySeatIo hands back, turns 945s28 red (the"
+      + " other host's channel is handed the seat): turned=" + turned + ", shaSame=" + shaSame);
+  }
+  const channelWiring = src => {
+    const calls = [], re = /createChannel\(/g;
+    for (let m; (m = re.exec(src));) {
+      const rest = src.slice(m.index + m[0].length, m.index + m[0].length + 1500);
+      const team = /^signinRelaySeatIo\(\s*team\s*,\s*([A-Za-z_$][\w$.]*)\s*,\s*\{/.exec(rest);
+      const own = team && /\burl:\s*([A-Za-z_$][\w$.]*)\s*,/.exec(rest.slice(team[0].length, team[0].length + 400));
+      const storeAt = /^Object\.assign\(opts\s*,\s*\{/.exec(rest), storeBody = storeAt ? rest.slice(0, rest.indexOf(" io: mirror")) : "";
+      calls.push(team && own && own[1] === team[1] ? "team"
+        : storeAt && /seatRenew:\s*\(\)\s*=>\s*storeTurn\(\)/.test(storeBody) && !/signinSeatCert|signinRelaySeatIo|\bseat:/.test(storeBody) ? "store" : "other");
+    }
+    return calls;
+  };
+  const wiringOk = c => c.length === 2 && c.filter(x => x === "team").length === 1 && c.filter(x => x === "store").length === 1;
+  const wiring = channelWiring(mainNow);
+  check(wiringOk(wiring), "945s30 every createChannel( in shell/main.js is a team's relay channel taking its options from signinRelaySeatIo( with its own"
+    + " address (the url it names) as the second argument, or the person's own store's channel, which is handed no seat of this desk's and only"
+    + " seatRenew (storeTurn), its certificate the store's own and its address the person's own sealed key list's, so it needs no wall: " + JSON.stringify(wiring));
+  {
+    const at = mainNow.indexOf("createChannel(signinRelaySeatIo(team, want.url, {");
+    let turned = false;
+    if (at >= 0 && mainNow.indexOf("createChannel(signinRelaySeatIo(team, want.url, {", at + 1) < 0) {
+      const planted = mainNow.slice(0, at) + "createChannel({" + mainNow.slice(at + "createChannel(signinRelaySeatIo(team, want.url, {".length);
+      turned = !wiringOk(channelWiring(planted));
+    }
+    const shaSame = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8") === mainNow;
+    check(wiringOk(wiring) && turned && shaSame, "945s31 the bare options put back at the team's relay channel's createChannel( turn 945s30 red: turned=" + turned + ", shaSame=" + shaSame);
+  }
 
   // Clean up scenario temp dirs
   [s1, s2, s3, s4, s6, s7, s8, s9, s10, s11, s12, s13].filter(Boolean).forEach(s => {
