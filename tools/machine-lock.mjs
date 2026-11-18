@@ -380,15 +380,22 @@ function cli(argv) {
     console.log("machine-lock: " + s.count + " lanes in force (" + s.reason + ")");
     return 0;
   }
+  /* A WAIT CEILING FOR A RUN THAT CANNOT WATCH (the lead engineer, 2026-11-18: a build run's shell call returns only when its
+     command ends, so a leg waiting for a lane looks hung). ETIUDA_LOCK_TIMEOUT_MS, the variable gate-run already reads, bounds
+     run's and wait's wait; past it the taker refuses with 78 and says who holds the lanes. Unset, the wait has no ceiling. */
+  const rawCeiling = process.env.ETIUDA_LOCK_TIMEOUT_MS;
+  const waitMs = rawCeiling === undefined || rawCeiling === "" ? Infinity : Number(rawCeiling);
+  if (!(waitMs >= 0)) { console.log("  FAIL machine-lock: ETIUDA_LOCK_TIMEOUT_MS is " + JSON.stringify(rawCeiling) + ", want milliseconds"); return 78; }
   if (verb === "wait") {
-    const r = acquire({ what: "wait", exclusive });
+    const r = acquire({ what: "wait", exclusive, waitMs });
+    if (!r.ok) console.log("  FAIL machine-lock: " + r.reason);
     if (r.ok) release();
     return r.ok ? 0 : 78;
   }
   if (verb === "run") {
     const cmd = at >= 0 ? argv.slice(at + 1) : [];
     if (!cmd.length) { console.log("  FAIL machine-lock run needs a command after --"); return 78; }
-    const r = acquire({ what: cmd.join(" ").slice(0, 200), exclusive });
+    const r = acquire({ what: cmd.join(" ").slice(0, 200), exclusive, waitMs });
     if (!r.ok) { console.log("  FAIL machine-lock: " + r.reason); return 78; }
     const free = () => { release(); };
     process.on("exit", free);

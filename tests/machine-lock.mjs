@@ -34,7 +34,9 @@
  *   ml28 in use: two active, a third taker waits (the control)
  *   ml29 lane file 4 gives four, 3 gives three, 2 gives two, 7 or junk ignored and idle rule decides
  *   ml31 the lane file may say up to six (LANES_MAX), the sixth taker then taking machine-6.lock
- *   ml30 a planted change of the idle count back to 3 turns leg 1 red, honours ETIUDA_PLANTS=off */
+ *   ml30 a planted change of the idle count back to 3 turns leg 1 red, honours ETIUDA_PLANTS=off
+ *   ml32 run with ETIUDA_LOCK_TIMEOUT_MS refuses with 78 past the ceiling while a live holder holds the lane, names the holder and
+ *        runs nothing; a value that is not milliseconds is refused with 78 too */
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -46,7 +48,7 @@ const TOOL = path.join(ROOT, "tools", "machine-lock.mjs");
 const GATE_RUN = path.join(ROOT, "tools", "gate-run.mjs");
 const L = await import(pathToFileURL(TOOL).href);
 const G = await import(pathToFileURL(GATE_RUN).href);
-const EXPECTED = 31;
+const EXPECTED = 32;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "machine-lock-legs-"));
 let asserted = 0, failed = 0, skipped = 0;
@@ -795,6 +797,25 @@ async function runLeg1(lockModule) {
       "ml30 a planted change of the idle count back to 3 turns leg 1 red: leg 1 failed as expected: ok="
       + res.ok + ", count=" + res.pol.count + ", slot 4 taken=" + res.s4Taken);
   }
+}
+
+/* ml32 */
+{
+  const live = await child(60000);
+  const file = lockAt("ml32");
+  const held = L.acquire({ lockPath: file, what: "ml32 holder", holder: { pid: live.pid, started: L.processStart(live.pid) }, waitMs: 0, say: quiet });
+  const ran = path.join(LAB, "ml32-ran");
+  const cmd = [TOOL, "run", "--", process.execPath, "-e", "require('fs').writeFileSync(" + JSON.stringify(ran) + ", 'x')"];
+  const began = Date.now();
+  const r = spawnSync(process.execPath, cmd, { encoding: "utf8", env: Object.assign({}, process.env, { ETIUDA_LOCK_PATH: file, ETIUDA_LOCK_TIMEOUT_MS: "400" }) });
+  const took = Date.now() - began;
+  const out = String(r.stdout || "") + String(r.stderr || "");
+  const junk = spawnSync(process.execPath, cmd, { encoding: "utf8", env: Object.assign({}, process.env, { ETIUDA_LOCK_PATH: file, ETIUDA_LOCK_TIMEOUT_MS: "soon" }) });
+  check(held.ok && r.status === 78 && out.includes("FAIL machine-lock: lock held by pid " + live.pid) && !fs.existsSync(ran) && took < 30000
+    && junk.status === 78 && String(junk.stdout || "").includes("want milliseconds"),
+    "ml32 run past ETIUDA_LOCK_TIMEOUT_MS refuses with 78, names the holder and runs nothing; junk refused: holder " + held.ok + ", exit " + r.status
+    + " in " + took + " ms, names holder " + out.includes("lock held by pid " + live.pid) + ", ran " + fs.existsSync(ran) + ", junk exit " + junk.status);
+  live.kill();
 }
 
 try { fs.rmSync(LAB, { recursive: true, force: true, maxRetries: 3 }); } catch (e) { /* the system's to clear */ }
