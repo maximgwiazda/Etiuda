@@ -1512,7 +1512,8 @@ function createCore(deps) {
 
   /* A bound invitation's session again, by its key's hello: lapse first, as issue would judge it, and the seat as the token hello asked
      it. A DESK ALWAYS TAKES BACK ITS OWN REQUEST: where the request is up (letGo) and no current seat comes, the session opens marked
-     `withdraw`, which reads nothing (sessionOf) and writes only that request's withdrawal (admitInvite), so no seat is asked for it. */
+     `withdraw`, which reads nothing (sessionOf) and writes only that request's withdrawal (admitInvite), so no seat is asked for it.
+     Only a hello asking for it (`withdraw: true`) opens one; any other is refused seat-lapsed, its challenge unspent for the renewal. */
   function resumeBound(b, held) {
     if (entriesShut()) return later();
     const letGo = held.inv.uploaded === true;
@@ -1521,6 +1522,7 @@ function createCore(deps) {
     const seat = anySeat(b.seat, b.pub);
     let exempt = false;
     exempt = letGo && !seat.ok; /* plant:withdraw-exempt */
+    if (b.withdraw !== true) exempt = false; /* plant:withdraw-asked */
     if (!seat.ok && !exempt) return seat; /* plant:resume-seat */
     const who = seated({ key: null, inv: held.id, bound: b.key, letGo }, exempt ? { ok: true } : seat);
     if (exempt) who.withdraw = true;

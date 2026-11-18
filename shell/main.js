@@ -6231,7 +6231,7 @@ function askAgain(j) {
   delete j.invite.relay.withdrawing;
   joinTold = false;
   persistDeskEnvelope();
-  relaySoon();
+  signinPressNow(true).catch(() => false); /* plant:ask-again-press */
   return joinView();
 }
 function cancelJoin() {
@@ -6511,7 +6511,9 @@ function beforeKept(b) {
    token and the seal key sealed by safeStorage, and `wrapped`, the epochs the invitation's wrap gave a key for (whole numbers
    from 1), which Cancel forgets. */
 function relayKept(r) {
-  const c = r && typeof r === "object" && !Array.isArray(r) ? teamChannelOf({ channel: { kind: "relay", rt: r.rt, url: r.url } }) : null;
+  let c = r && typeof r === "object" && !Array.isArray(r) ? teamChannelOf({ channel: { kind: "relay", rt: r.rt, url: r.url } }) : null;
+  /* Kept only at an address an invitation may name now (knownRelayAddress), the rule every other way in keeps. */
+  if (c && c.kind === "relay" && !knownRelayAddress(c.url)) c = null; /* plant:relay-kept-known */
   /* A join at a team's standing door (the door-finding) holds no invitation's token, seal or wrap: its address, the lead's box from
      the door, and the relay's id for its request once named. Without the box it is no door join. */
   if (r && r.door !== undefined) {
@@ -7326,12 +7328,14 @@ function forgetLead(team, left) {
 const BUILTIN_RELAY_URL = "https://etiuda.dev/relay/v1";
 /* A test service build's second built-in relay, fixed here as the first is and never read from a file or the environment. */
 const STAGING_RELAY_URL = "https://etiuda.dev/relay-staging/v1";
-/* An invitation may name only this build's relay or the staging relay. A harness start may also name
+/* An invitation may name only this build's relay, or staging's in a test service build. A harness start may also name
    the https address a leg points at a stand-in. A customer's start may not, so a page cannot choose a host. */
 function knownRelayAddress(u) {
   if (typeof u !== "string") return false;
   const at = u.trim().replace(/\/+$/, "");
-  if (at === BUILTIN_RELAY_URL || at === STAGING_RELAY_URL) return true; /* plant:builtin-relay-known */
+  let staging = at === STAGING_RELAY_URL;
+  staging = staging && testServiceOn; /* plant:staging-known */
+  if (at === BUILTIN_RELAY_URL || staging) return true; /* plant:builtin-relay-known */
   if (!harnessLaunch()) return false; /* plant:relay-known */
   return /^https:\/\/[a-z0-9.-]+(?::[0-9]{1,5})?(?:\/[A-Za-z0-9._~-]+)*\/?$/.test(at);
 }
@@ -7639,10 +7643,15 @@ function relayRun() {
     /* A channel halted on a team the relay refused starts again only at the probe, so its pace is the backoff's. */
     let restart = true;
     restart = !!open || relayProbing; /* plant:n2-hush-wait */
-    if (typeof relayChannel.online === "function" && relayChannel.online()) relayChannel.kick();
+    let pressing = false;
+    pressing = relayPressOwed && typeof relayChannel.press === "function"; /* plant:press-reaches */
+    relayPressOwed = false;
+    if (pressing) relayChannel.press();
+    else if (typeof relayChannel.online === "function" && relayChannel.online()) relayChannel.kick();
     else if (restart) relayChannel.start(); /* plant:h35-follow */
     return relayChannel;
   }
+  relayPressOwed = false;
   if (relayChannel) { const old = relayChannel; relayChannel = null; old.stop().catch(() => {}); signinRelaySeatIo(null); }
   relayAt = at;
   relayAtPin = pin ? pin.public : "";
@@ -11373,17 +11382,32 @@ let signinClock = null, signinClockKept = 0, signinOnline = null, signinTicker =
    once in SIGNIN_SEAT_RENEW_MS, so a desk the relay keeps refusing does not ask the provider at each poll. */
 const SIGNIN_SEAT_RENEW_MS = 60 * 60 * 1000;
 let signinRelaySeatTeam = "", signinSeatRenewAt = 0;
+/* THE PRESS RULE: a person's own press (Ask again, Check now, Sign in) makes one real attempt, one renewal outside the hour's throttle and
+   then one knock or hello with the certificate that then stands, whatever the channel remembers of a refusal (signinPressNow, the
+   channel's press); presses are SIGNIN_PRESS_GAP_MS apart, a closer one an ordinary wake. A renewal that did not reach the service holds
+   the throttle SIGNIN_SEAT_RETRY_MS, not the hour. */
+const SIGNIN_PRESS_GAP_MS = 30 * 1000, SIGNIN_SEAT_RETRY_MS = 5 * 60 * 1000;
+let signinPressAt = 0, relayPressOwed = false;
 function signinRelaySeatTold(team, state) {
   const was = signinRelaySeatTeam;
   if (state === "refused") signinRelaySeatTeam = String(team);
   else if (signinRelaySeatTeam === String(team)) signinRelaySeatTeam = "";
   if (was !== signinRelaySeatTeam) tellSignin(); /* plant:relay-seat-told */
 }
-function signinRelaySeatClear() {
+/* A certificate came, or the person signed out: `how` "out" (sign out, an account switch's leaving included), "person" (a press's own
+   renewal, whose press wakes the relay), "relay" (the channel's own, used in the same cycle), or anything else (a quiet renewal). The
+   notice ends only at a sign out or the relay's "open"; a sign out wakes the relay always, a quiet renewal where it refused. */
+function signinRelaySeatClear(how) {
   const was = signinRelaySeatTeam;
-  signinRelaySeatTeam = "";
-  signinSeatRenewAt = 0;
-  if (was && typeof relaySoon === "function") relaySoon(); /* plant:relay-seat-clear */
+  let ends = true;
+  ends = how === "out"; /* plant:relay-seat-notice-kept */
+  if (ends) signinRelaySeatTeam = "";
+  let resets = true;
+  resets = how === "out"; /* plant:relay-seat-throttle-kept */
+  if (resets) signinSeatRenewAt = 0;
+  let wakes = !!was && how !== "relay";
+  wakes = how === "out" || (!!was && how !== "relay" && how !== "person"); /* plant:relay-seat-clear */
+  if (wakes && typeof relaySoon === "function") relaySoon();
 }
 function signinRelaySeat(held) {
   if (!signinRelaySeatTeam || !held) return "";
@@ -11400,7 +11424,26 @@ function signinSeatRenew() {
   const now = Date.now();
   if (signinSeatRenewAt && now >= signinSeatRenewAt && now - signinSeatRenewAt < SIGNIN_SEAT_RENEW_MS) return Promise.resolve(); /* plant:seat-renew-gap */
   signinSeatRenewAt = now;
-  return signinRenewNow().then(() => {}, () => {});
+  return signinRenewNow({ relay: true }).then(said => {
+    const h = signinState().held;
+    let short = false;
+    short = said === "" || said === "unreached" || (!!h && h.reached === false); /* plant:seat-renew-unreached */
+    if (short && signinSeatRenewAt === now) signinSeatRenewAt = now - SIGNIN_SEAT_RENEW_MS + SIGNIN_SEAT_RETRY_MS;
+  }, () => { if (signinSeatRenewAt === now) signinSeatRenewAt = now - SIGNIN_SEAT_RENEW_MS + SIGNIN_SEAT_RETRY_MS; });
+}
+/* A person's press (THE PRESS RULE): its one renewal where `renew` (Check now, Ask again; a Sign in has just made its own), the throttle
+   stamped by it so the cycle it wakes renews no more, and a press owed to the relay's channel (relayRun). Inside the gap, an ordinary wake. */
+async function signinPressNow(renew) {
+  const at = Date.now();
+  if (signinPressAt && at >= signinPressAt && at - signinPressAt < SIGNIN_PRESS_GAP_MS) { if (typeof relaySoon === "function") relaySoon(); return false; } /* plant:press-gap */
+  signinPressAt = at;
+  if (renew) { try { await signinRenewNow({ person: true }); } catch { /* the certificate in hand stands */ } }
+  let stamp = 0;
+  stamp = Date.now(); /* plant:press-stamps */
+  signinSeatRenewAt = stamp;
+  relayPressOwed = true; /* plant:press-owed */
+  if (typeof relaySoon === "function") relaySoon();
+  return true;
 }
 /* THE SEAT'S WALL: a team's relay channel at an address an invitation may not name (knownRelayAddress) is handed no seat certificate,
    asks no renewal and knocks at no door with one, since the certificate names the person's code and a team file may name any host.
@@ -11536,9 +11579,15 @@ function signinDoorInvite(team, rt) {
      the session the desk's key resumes. */
   if (inv.withdrawing === true) return inv.rt === rt && /^[0-9a-f]{64}$/.test(String(inv.box)) && /^[0-9a-f]{32}$/.test(String(inv.inv)) ? { door: null, box: inv.box, inv: inv.inv } : null; /* plant:door-withdraw-invite */
   const held = signinState().held, cert = held && held.cert, me = branchIdentity(false);
-  if (inv.rt !== rt || !me || !/^[0-9a-f]{64}$/.test(String(inv.box)) || !signinCertOk(cert, me.key) || !(cert.until > Date.now())) return null; /* plant:door-invite-cert */
-  if (signinCertEarly(cert, Date.now())) return null; /* plant:door-invite-early */
-  if (signinRevokedHas(held.revoked, cert)) return null; /* plant:revoked-knock */
+  if (inv.rt !== rt || !me || !/^[0-9a-f]{64}$/.test(String(inv.box))) return null;
+  /* Signed in with no certificate this desk may knock with: a seatless request (the lead's box, no certificate), so the channel asks the
+     renewal and waits for it before it reads this again. Signed out: nothing. */
+  let none = null;
+  none = held ? { seatless: true, box: inv.box } : null; /* plant:door-seatless */
+  if (none) { none.door = false; if (/^[0-9a-f]{32}$/.test(String(inv.inv))) none.inv = inv.inv; } /* plant:seatless-inv */
+  if (!signinCertOk(cert, me.key) || !(cert.until > Date.now())) return none; /* plant:door-invite-cert */
+  if (signinCertEarly(cert, Date.now())) return none; /* plant:door-invite-early */
+  if (signinRevokedHas(held.revoked, cert)) return none; /* plant:revoked-knock */
   const out = { door: cert, box: inv.box };
   if (/^[0-9a-f]{32}$/.test(String(inv.inv))) out.inv = inv.inv;
   return out;
@@ -11724,7 +11773,7 @@ function signinTake(provider, got, ans, now, access) {
   s.held = signinSettle(base, ans, now);
   s.revoked = s.held.revoked;
   delete s.out; /* this sign-in holds the desk's place again, so a sign out still owed is no longer wanted */
-  if (ans.ok && ans.cert && typeof signinRelaySeatClear === "function") signinRelaySeatClear(); /* plant:relay-seat-signin */
+  if (ans.ok && typeof signinPressNow === "function") signinPressNow(false).catch(() => false); /* plant:relay-seat-signin */
   signinSave();
   return true;
 }
@@ -11868,7 +11917,7 @@ function signinLeave(s, me, sent) {
     try { unlinkOwn(path.join(sharedFolderForWrite(), "desks", me.id, SEAT_NAME)); } catch { /* not written, or the folder is away */ } /* plant:signout-unlink-own */
   }
   s.held = null;
-  if (typeof signinRelaySeatClear === "function") signinRelaySeatClear(); /* plant:relay-seat-leave */
+  if (typeof signinRelaySeatClear === "function") signinRelaySeatClear("out"); /* plant:relay-seat-leave */
   storeForget();
   /* Signed out, the account's organisation no longer stands in for this desk: Buy, which needs no sign-in, is offered again. */
   delete s.licenceManaged; /* plant:signout-managed */
@@ -11925,7 +11974,7 @@ ipcMain.handle("etiuda:signin-check", async (e) => {
   const since = Date.now() - signinCheckAt;
   if (since >= 0 && since < SIGNIN_CHECK_GAP_MS) return signinView(); /* plant:check-gap */
   signinCheckAt = Date.now();
-  await signinRenewNow().catch(() => "");
+  await signinPressNow(true).catch(() => false);
   return signinView();
 });
 /* The quiet renewal, for a desk holding a sign-in for a provider still offered: a new certificate kept and written, or the
@@ -11949,7 +11998,7 @@ async function signinRenewNow(o) {
   s.held = r.held;
   s.revoked = signinRevokedNext(s.revoked || null, r.held ? r.held.revoked : null);
   signinSaid = ""; /* plant:renew-said */
-  if (r.said === "renewed" && s.held && s.held.cert && typeof signinRelaySeatClear === "function") signinRelaySeatClear(); /* plant:relay-seat-renew */
+  if (r.said === "renewed" && s.held && s.held.cert && typeof signinRelaySeatClear === "function") signinRelaySeatClear(o && o.relay ? "relay" : o && o.person ? "person" : ""); /* plant:relay-seat-renew */
   signinSave();
   signinFlush();
   if (r.idToken && typeof signinNameTake === "function") signinNameTake(r.idToken);

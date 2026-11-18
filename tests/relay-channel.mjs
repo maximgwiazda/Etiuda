@@ -4087,7 +4087,11 @@ if (deskOn()) try {
         const running = D.api.relayRun();
         const wasOnline = !!(running && running.online());
         await D.ask("etiuda:team-join", "cancel");
-        const stopped = await until(() => !!(running && running.online() === false), 1500);
+        await until(() => !!(running && running.online() === false), 1500);
+        /* Kept is still the desk's channel, and kicked it says hello again: a withdrawal lets its session go (the seat's life on the
+           channel), so offline for a moment is not stopped. */
+        let stopped = !running || D.api.relayRun() !== running;
+        if (!stopped) { running.kick(); stopped = !(await until(() => running.online() === true, 3000)); }
         const here = D.api.relayHere();
         const folder = D.api.catalogFolder();
         let after = {};
@@ -4991,6 +4995,10 @@ if (deskOn()) try {
         const first = await until(async () => { await both(); return fs.existsSync(asked); }, 30000);
         if (kind === "spent") {
           R.clock.now = t0 + core.KEEP_MS - 2 * MIN;
+          /* The person checks the seat a month on: the shell holds its renewals to an hour of this computer's clock, which the relay's
+             month did not move, and a press to thirty seconds after the last (the sign-in's own), so the leg waits those out. */
+          await new Promise(r => setTimeout(r, 31 * 1000));
+          await D.ask("etiuda:signin-check");
           await both();
           R.clock.now = t0 + core.KEEP_MS + MIN;
         } else {
@@ -12151,7 +12159,8 @@ async function sceneA4(mod, atDoor) {
       && !!wrote.ok && answers.length === 1 && answers[0] === "joined" };
 }
 /* A door request turned away (board 980, the door-finding's words): a desk knocking at a door shut to its licence is told "turned"
-   at once, and so is one whose request the lead dropped, at its next round; a desk let in at an open door is told nothing. */
+   once a renewed certificate is refused there too, in the same round, and so is one whose request the lead dropped, at its next round;
+   a desk let in at an open door is told nothing. Each desk renews as the shell's would, to a certificate issued later. */
 async function sceneA4Turned(mod) {
   const rt = hex(16), pinTeam = "t-" + hex(8), ref = hex(16), leadBox = xPair();
   R.clock.now += 1;
@@ -12163,7 +12172,9 @@ async function sceneA4Turned(mod) {
   const deskAt = (name, licence) => {
     const who = keyPair(true), box = xPair(), tr = transport("a4t-" + name), mirror = path.join(LAB, "a4t-" + name + "-" + rt);
     const door = { door: certA4(who.pub, licence, R.clock.now), box: leadBox.pub, inv: "" }, ends = [];
+    let renewals = 0;
     const ch = mod.createChannel({ rt, url: URLV1, mirror, stateFile: mirror + ".json", pin: pinOf,
+      seat: () => door.door, seatRenew: async () => { door.door = certA4(who.pub, licence, R.clock.now + (++renewals)); },
       me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place: "desk:" + who.keyId, box: box.pub }),
       agree: peer => xAgree(box, peer), keyFor: () => null, sealEpoch: () => null, invite: () => door, onDoor: id => { door.inv = id; },
       onInviteEnd: kind => ends.push(kind), request: tr.request, connect: tr.connect, pollMs: 1e9, watch: false, say: () => {} });
@@ -12272,8 +12283,8 @@ if (partOn("pA4")) {
     check(g.ok, "a4g the desk writes its request only when the relay names its id, carrying that id, and its one upload still reaches the"
       + " lead's mirror whole and is answered joined, with no relay change: " + JSON.stringify(g));
     const h = await sceneA4Turned(C);
-    check(h.ok, "a4h a desk knocking at a door shut to its licence is told turned at once, one whose door request the lead dropped is told"
-      + " turned at its next round, and one let in at an open door is told nothing: " + JSON.stringify(h));
+    check(h.ok, "a4h a desk knocking at a door shut to its licence is told turned once its renewed certificate is refused there too, one whose"
+      + " door request the lead dropped is told turned at its next round, and one let in at an open door is told nothing: " + JSON.stringify(h));
     if (PLANTS_OFF) skip("a4i lifting plant:door-turned, a door request turned away is never told, and a4h goes red");
     else {
       const p = await liftChannel("plant:door-turned", async mod => !(await sceneA4Turned(mod)).ok);

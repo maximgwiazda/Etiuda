@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-seats-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 147;
+const EXPECTED = 199;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* ETIUDA_PLANT_ONLY, a comma list of plant tags or planted names: only those plants run, every other is skipped, so one plant is proved
    alone without the whole sweep. */
@@ -90,7 +90,8 @@ async function team(o) {
   R.clock.now = opts.at || T0;
   const w = { R, rt: hex(16), lead: keyPair(false), rev: 0, desks: {}, licence: opts.licence || hex(16) };
   const seats = opts.seats === undefined ? undefined : opts.seats === true ? { licence: w.licence, live: R.clock.now } : opts.seats;
-  const grant = grantAt(w.lead.pub, R.clock.now, seats, opts.paid === false ? { fields: { paid: false } } : undefined);
+  const fields = Object.assign({}, opts.paid === false ? { paid: false } : {}, opts.until ? { until: opts.until } : {});
+  const grant = grantAt(w.lead.pub, R.clock.now, seats, Object.keys(fields).length ? { fields } : undefined);
   w.firstGrant = grant;
   w.made = await call(R, "POST", "/relay/v1/teams", { json: K.createBody(w.rt, w.lead, R.clock.now, b => signHex(w.lead, b), { grant }) });
   const names = opts.desks || ["a", "b", "c"];
@@ -105,11 +106,11 @@ function devicesOf(w, names) {
   return call(w.R, "POST", "/relay/v1/t/" + w.rt + "/devices", { json: { keys, rev, t, sig: signHex(w.lead, C.devicesBytes(w.rt, rev, t, keys)) } })
     .then(r => { if (r.status === 200) w.rev = rev; return r; });
 }
-/* A desk's session: a challenge, then the key's hello, carrying `seat` where given. */
-async function session(w, key, seat) {
+/* A desk's session: a challenge, then the key's hello, carrying `seat` where given and the fields of `more` (a withdrawal asked). */
+async function session(w, key, seat, more) {
   const ch = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/hello", { json: {} });
   const n = ch.json && ch.json.challenge;
-  const body = { challenge: n, key: key.keyId, pub: key.pub, sig: signHex(key, C.helloBytes(w.rt, n, key.keyId)) };
+  const body = Object.assign({ challenge: n, key: key.keyId, pub: key.pub, sig: signHex(key, C.helloBytes(w.rt, n, key.keyId)) }, more || {});
   if (seat !== undefined) body.seat = seat;
   return call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: body });
 }
@@ -400,7 +401,7 @@ async function main() {
     dw.R.clock.now = knockCert.until + M + HOUR;
     prove(dw, "b", span);
     await sessionAs(dw, "b");
-    const again = await session(dw, k, knockCert);
+    const again = await session(dw, k, knockCert, { withdraw: true });
     const del = B.seal({ relayTeamId: dw.rt, epoch: 1, teamKey: sealKey, writer: { keyId: k.keyId, privateKey: k.privateKey },
       path: "desks/" + place + "/join.json", body: "", counter: 2, place: "desk:" + place, kind: "delete", supersedes: ask.id });
     const taken = await putBlob(dw, again.json && again.json.session, del);
@@ -1296,7 +1297,9 @@ async function main() {
       answer.place = "answer:" + id;
       const answered = await putBlob(w, ls.json && ls.json.session, answer);
       w.R.clock.now = cert.until + 2 * HOUR;
-      const s = await session(w, k, cert), token = opened(s) ? s.json.session : "", row = rowOf(w, s) || {};
+      /* The resume that asks no withdrawal is refused for its seat, its challenge unspent, and the same challenge asking one opens. */
+      const plainResume = await helloWith(w, k, { seat: cert });
+      const s = await helloWith(w, k, { seat: cert, withdraw: true }, plainResume.challenge), token = opened(s) ? s.json.session : "", row = rowOf(w, s) || {};
       const tried = {
         since: said(await call(w.R, "GET", "/relay/v1/t/" + w.rt + "/since/0", { token })),
         answer: said(await call(w.R, "GET", "/relay/v1/t/" + w.rt + "/b/" + id, { token })),
@@ -1314,18 +1317,19 @@ async function main() {
           path: "desks/" + place + "/join.json", body: "again", counter: 4, place: "desk:" + place, kind: "file" }), { pub: k.pub })),
         knock: said(await knockWith(w, k, cert)),
         resume: said(await session(w, k, cert)),
+        resumeAsking: said(await session(w, k, cert, { withdraw: true })),
       };
       const seated = await session(w, k, certFor(k.pub, hex(16), w.R.clock.now, 7 * DAY));
-      const r = { knock: said(knock), up: up.status, answered: answered.status, withdrawSession: said(s), marked: row.withdraw === true && !row.seat, tried,
+      const r = { knock: said(knock), up: up.status, answered: answered.status, plainResume: said(plainResume), withdrawSession: said(s), marked: row.withdraw === true && !row.seat, tried,
         withdrawn: withdrawn.status, requestGone: storeOf(w).get("blob:" + ask.id) === undefined && inv.withdrawn === true && inv.uploaded === false, after, seated: said(seated) };
-      r.ok = knock.status === 200 && up.status === 200 && answered.status === 200 && opened(s) && r.marked
+      r.ok = knock.status === 200 && up.status === 200 && answered.status === 200 && refused(plainResume, "seat-lapsed") && opened(s) && r.marked
         && Object.values(tried).every(x => x === "seat-lapsed") && withdrawn.status === 200 && r.requestGone
-        && after.askAgain === "seat-lapsed" && after.knock === "not-enrolled" && after.resume === "seat-lapsed" && opened(seated) && !(rowOf(w, seated) || {}).withdraw;
+        && after.askAgain === "seat-lapsed" && after.knock === "not-enrolled" && after.resume === "seat-lapsed" && after.resumeAsking === "seat-lapsed" && opened(seated) && !(rowOf(w, seated) || {}).withdraw;
       rows[kind] = r;
     }
     return { ok: rows.ordinary.ok && rows.entra.ok, detail: brief(rows) };
   }
-  await leg("s26a", withdrawScene, "a desk always takes back its own request: its certificate run out, its key's hello opens a session that withdraws the door request, the request's row then gone, and that session lists, reads the lead's answer or a wrap, opens a socket or sends another request no more than the desk can then knock, ask again or resume; a current certificate's session is opened as built; on an ordinary and an Entra team");
+  await leg("s26a", withdrawScene, "a desk always takes back its own request: its certificate run out, its key's hello asking for it (withdraw) opens a session that withdraws the door request, the same hello asking nothing refused seat-lapsed on the challenge it then opens on, the request's row then gone, and that session lists, reads the lead's answer or a wrap, opens a socket or sends another request no more than the desk can then knock, ask again or resume, asking a withdrawal or not; a current certificate's session is opened as built; on an ordinary and an Entra team");
   await leg("s24i", storeScene, "a person's store: a session opens on its store certificate alone, a seat certificate or none is refused, and a store session, carrying no seat, still reads twenty minutes on");
 
   /* ---- the plants: each guard lifted in a copy of relay/core.cjs turns its named leg red, and the product file is never written ---- */
@@ -1382,7 +1386,8 @@ async function main() {
   /* The planted faults of the ordinary arm that no plant line lifts. */
   const MARK_LOOP = "for (const m of CERT_MARKS) if (c[m.field] === true) lines.push(m.line);";
   const PLANTED = {
-    withdrawAny: { name: "the withdrawal's exemption widened to any resume", edits: [["    exempt = letGo && !seat.ok; /* plant:withdraw-exempt */", "    exempt = !seat.ok;"]] },
+    withdrawAny: { name: "the withdrawal's exemption widened to any resume", edits: [["    exempt = letGo && !seat.ok; /* plant:withdraw-exempt */", "    exempt = !seat.ok;"],
+      ["    if (b.withdraw !== true) exempt = false; /* plant:withdraw-asked */\n", ""]] },
     folderBack: { name: "the folder arm restored", edits: [["    const lapsedPut = goes ? null : lapseGate(true);",
       '    const lapsedPut = goes || (lapseState() === "read-only" && !s.inv && !!m && m.writer === team.lead.keyId && m.place === "root" && !!m.channel && m.channel.kind === "folder") ? null : lapseGate(true);']] },
     pooledOutside: { name: "the pooled mark signed as no line", edits: [[MARK_LOOP, MARK_LOOP.replace("=== true)", "=== true && m.field !== \"pooled\")")]] },
@@ -1456,6 +1461,7 @@ async function main() {
     ["door-member", "s25b", memberDoorScene, "the door takes a marked certificate"],
     [PLANTED.memberOutside, "s25c", memberBytesScene, "a certificate given the mark after its signing is taken"],
     ["withdraw-exempt", "s26a", withdrawScene, "a desk whose certificate ran out cannot take back its request"],
+    ["withdraw-asked", "s26a", withdrawScene, "a resume asking no withdrawal opens the withdrawal's session, so the desk is never told its seat ran out"],
     ["withdraw-reads", "s26a", withdrawScene, "a withdrawal's session reads the team"],
     ["withdraw-only", "s26a", withdrawScene, "a withdrawal's session sends another request"],
     [PLANTED.withdrawAny, "s26a", withdrawScene, "the exemption widened to any resume, so a resume that is not a withdrawal opens"],
@@ -1475,16 +1481,21 @@ async function main() {
      `x.invite` an invitation it holds; `x.state` the mirror of an earlier channel, whose record it takes on; `x.strict` refuses any
      session request carrying a seat, as no relay does. */
   function deskChannel(w, name, seat, mod, x) {
-    const d = w.desks[name], opt = x || {}, bodies = [], told = [], ends = [], answers = [];
+    const d = w.desks[name], opt = x || {}, bodies = [], told = [], ends = [], answers = [], says = [], log = [], got = [], doors = [];
     const mirror = opt.state || path.join(WORK, "m" + (++copies));
     const ch = (mod || CH).createChannel({
       rt: w.rt, url: "https://relay.test/relay/v1", mirror, stateFile: mirror + ".json", watch: false, pollMs: 1e9,
       pin: () => ({ teamId: "t-" + w.rt.slice(0, 8), rt: w.rt, lead: { keyId: w.lead.keyId, public: w.lead.pub } }),
       me: () => Object.assign({ keyId: d.keyId, public: d.pub, privateKey: d.privateKey, place: "desk:" + d.place }, d.box ? { box: d.box } : {}),
-      keyFor: () => null, sealEpoch: () => 1, clock: () => w.R.clock.now, say: () => {},
-      invite: opt.invite ? () => opt.invite : undefined,
+      agree: d.agree, keyFor: () => null, sealEpoch: () => 1, clock: () => w.R.clock.now, say: line => says.push(line),
+      invite: typeof opt.invite === "function" ? opt.invite : opt.invite ? () => opt.invite : undefined,
       onInviteEnd: kind => ends.push(kind),
+      onAnswer: a => got.push(a),
+      onDoor: id => { doors.push(id); if (opt.onDoor) opt.onDoor(id, mirror); },
       request: async (method, url, headers, body) => {
+        const rel = url.replace(/^https:\/\/relay\.test\/relay\/v1\/t\/[0-9a-f]{32}\//, "");
+        const held = opt.intercept ? await opt.intercept(method, rel) : null;
+        if (held) { log.push(method + " " + rel + " " + held.status + ":" + held.error); return { status: held.status, header: () => null, bytes: Buffer.from(JSON.stringify({ error: held.error, said: B.REASONS[held.error] })) }; }
         let sent = null;
         if (/\/session$/.test(url)) { try { sent = JSON.parse(Buffer.from(body).toString("utf8")); } catch { sent = null; } bodies.push(sent); }
         if (sent && opt.strict && sent.seat !== undefined) {
@@ -1493,17 +1504,21 @@ async function main() {
           return { status: 403, header: () => null, bytes: Buffer.from(JSON.stringify(refusal)) };
         }
         const res = await W.fetch(new Request(url, { method, headers, body: method === "GET" ? undefined : body, duplex: "half" }), w.R.env);
+        if (opt.lose && opt.lose(method, rel, res.status)) { log.push(method + " " + rel + " " + res.status + " lost"); throw new Error("the reply was lost"); }
         const bytes = Buffer.from(await res.arrayBuffer());
-        if (sent) { let json = null; try { json = JSON.parse(bytes.toString("utf8")); } catch { json = null; } answers.push(redact({ status: res.status, json })); }
+        let json = null;
+        try { json = JSON.parse(bytes.toString("utf8")); } catch { json = null; }
+        if (sent) answers.push(redact({ status: res.status, json }));
+        log.push(method + " " + (/^b\//.test(rel) ? "b" : rel.replace(/\/\d+$/, "")) + " " + res.status + (json && json.error ? ":" + json.error : "") + (sent && sent.withdraw ? " withdraw" : sent && sent.door ? " knock" : ""));
         return { status: res.status, header: n => res.headers.get(n), bytes };
       },
-      connect: () => null,
-      seat: () => seat.cert || null,
-      seatRenew: async () => { seat.renewals = (seat.renewals || 0) + 1; if (seat.hold) await seat.hold(); if (seat.renew) seat.cert = seat.renew(); },
+      connect: opt.connect || (() => null),
+      seat: opt.shell ? () => opt.shell.signinSeatCert() : () => seat.cert || null,
+      seatRenew: opt.shell ? () => opt.shell.signinSeatRenew() : async () => { seat.renewals = (seat.renewals || 0) + 1; if (seat.hold) await seat.hold(); if (seat.renew) seat.cert = seat.renew(); },
       seatRenewMs: seat.renewMs,
-      onSeat: s => told.push(s),
+      onSeat: s => { told.push(s); if (opt.shell) opt.shell.signinRelaySeatTold("t-" + w.rt.slice(0, 8), s); },
     });
-    return { ch, bodies, told, ends, answers, mirror };
+    return { ch, bodies, told, ends, answers, mirror, says, log, got, doors };
   }
   /* The relay's own random values (a challenge, a session, a secret) set aside, as O1 sets them aside. */
   const redact = v => JSON.parse(JSON.stringify(v, (k, x) => (typeof x === "string" ? x.replace(/[0-9a-f]{16,}/g, "#") : x)));
@@ -1874,6 +1889,772 @@ async function main() {
   await leg("d10a", () => deskRenewHangsScene(), "a desk whose renewal never answers waits for it only the bound, then sends its hello with the certificate in hand and ends its cycle, and the next cycle says hello again: the channel is not stuck");
   await leg("d10b", () => deskRenewLateScene(), "a renewal answering after the bound decides nothing already done: the first hello went with the certificate in hand, the late certificate is what the next hello carries and opens with; a renewal answering in time is used, its one hello carrying the new certificate");
   await leg("d10c", () => deskRenewOptionScene(), "the renewal's bound is the option where it is a positive whole number of milliseconds and thirty seconds otherwise, and its timer is cleared where the renewal answered first");
+
+  /* ---- THE SEAT'S LIFE ON THE CHANNEL (Argon 45's 2 to 6): each reviewer's probe and a step to its side, the desk over this relay ---- */
+  const X_SPKI = Buffer.from("302a300506032b656e032100", "hex");
+  const xPair = () => {
+    const p = crypto.generateKeyPairSync("x25519");
+    return { pub: p.publicKey.export({ type: "spki", format: "der" }).subarray(X_SPKI.length).toString("hex"),
+      agree: peer => crypto.diffieHellman({ privateKey: p.privateKey, publicKey: crypto.createPublicKey({ key: Buffer.concat([X_SPKI, Buffer.from(peer, "hex")]), format: "der", type: "spki" }) }) };
+  };
+  /* A joining desk with a box of its own, so it seals its request and opens the lead's answer; the lead's box beside it. */
+  function boxedJoiner(w, name) {
+    const d = joiner(w, name), x = xPair();
+    d.box = x.pub;
+    d.agree = x.agree;
+    if (!w.leadBox) w.leadBox = xPair();
+    return d;
+  }
+  /* The lead's answer to request `id` from desk `d`, written on the lead's own session (carrying its seat on an Entra team). */
+  async function leadAnswers(w, d, id, answer) {
+    const ls = await session(w, w.lead, w.seated ? certFor(w.lead.pub, w.licence, w.R.clock.now, 7 * DAY) : undefined);
+    const key = CH.answerKey(w.leadBox.agree(d.box), { rt: w.rt, inv: id, deskId: d.keyId, deskBox: d.box, leadBox: w.leadBox.pub });
+    const body = JSON.stringify({ v: 1, kind: "etiuda-join-answer", answer, inv: id, desk: d.keyId });
+    const blob = B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: key, id, writer: { keyId: w.lead.keyId, privateKey: w.lead.privateKey },
+      path: CH.ANSWER_NAME, body, counter: 1, place: "root", kind: "file" });
+    blob.place = "answer:" + id;
+    return putBlob(w, ls.json && ls.json.session, blob);
+  }
+  const askFile = (c, d) => path.join(c.mirror, "desks", d.place, "join.json");
+  const askOn = (c, d, n) => { fs.mkdirSync(path.dirname(askFile(c, d)), { recursive: true }); fs.writeFileSync(askFile(c, d), JSON.stringify({ ask: n || 1 })); };
+  const kickOf = async c => { c.ch.kick(); await c.ch.idle(); };
+  const waitingSaid = c => c.says.some(l => l === CH.WAITING_SAID);
+  const invRow = (w, id) => storeOf(w).get("inv:" + id) || {};
+  const knocks = c => c.log.filter(l => / knock$/.test(l));
+  /* Desk `d` joins team `w` by an invitation, or at the door (opened for the team's licence), and its request goes up in the first cycle.
+     `more` adds options to its channel. */
+  async function joinedUp(w, d, seat, door, more, mod) {
+    if (!door) {
+      const invite = Object.assign(await inviteOn(w), { box: w.leadBox.pub });
+      const c = deskChannel(w, d.name, seat, mod, Object.assign({ invite }, more || {}));
+      askOn(c, d);
+      await cycleOf(c);
+      return { c, id: invite.inv };
+    }
+    await doorOf(w, [w.licence]);
+    const j = { id: null, withdrawing: false };
+    j.c = deskChannel(w, d.name, seat, mod, Object.assign({
+      invite: () => (j.withdrawing ? { door: null, box: w.leadBox.pub, inv: j.id } : Object.assign({ door: seat.cert, box: w.leadBox.pub }, j.id ? { inv: j.id } : {})),
+      onDoor: (id, mirror) => { j.id = id; fs.mkdirSync(path.join(mirror, "desks", d.place), { recursive: true }); fs.writeFileSync(path.join(mirror, "desks", d.place, "join.json"), JSON.stringify({ door: id })); },
+    }, more || {}));
+    await cycleOf(j.c);
+    return j;
+  }
+  const named = (w, name) => Object.assign(boxedJoiner(w, name), { name });
+  const revokedVia = w => {
+    const svc = serviceKey();
+    return { svc, signer: svc, via: K.delegationFor(w.R.clock.now, { fields: { may: ["licence"], key: { id: svc.id, pub: svc.pub } } }) };
+  };
+  /* Finding 2: a desk waiting for the lead's answer whose certificate the relay stops taking (its service key revoked) renews on the channel,
+     on the challenge the refusal left, and reads the answer, by invitation and at the door, on an ordinary and an Entra team; one whose
+     certificate ended and cannot renew is told refused and never said to wait; one whose ended certificate renews reads the answer. */
+  async function waitingSeatScene(mod) {
+    const rows = {};
+    for (const [kind, o, door, how] of [["ordinary-revoked", {}, false, "revoked"], ["entra-revoked", { seats: true }, false, "revoked"],
+      ["door-revoked", {}, true, "revoked"], ["ordinary-ended", {}, false, "ended"], ["ordinary-ended-renews", {}, false, "renews"]]) {
+      const w = await team(o);
+      w.seated = !!o.seats;
+      const d = named(w, "j"), now = w.R.clock.now, r = revokedVia(w);
+      const seat = how === "revoked" ? { cert: certFor(d.pub, w.licence, now, 7 * DAY, { signer: r.signer, via: r.via }) } : { cert: certFor(d.pub, w.licence, now, HOUR) };
+      seat.renew = how === "ended" ? () => seat.cert : () => certFor(d.pub, w.licence, w.R.clock.now, 7 * DAY);
+      const j = await joinedUp(w, d, seat, door, null, mod);
+      const up = invRow(w, j.id).uploaded === true;
+      const answered = (await leadAnswers(w, d, j.id, "refused")).status;
+      if (how === "revoked") { w.R.env.REVOKED = revokedText([r.svc.pub]); w.R.clock.now += 5 * MIN; }
+      else w.R.clock.now = seat.cert.until + 10 * MIN;
+      const before = seat.renewals || 0;
+      j.c.says.length = 0;
+      await kickOf(j.c);
+      const row = { up, answered, got: j.c.got.slice(), told: j.c.told.slice(), waitingSaid: waitingSaid(j.c), renewals: (seat.renewals || 0) - before };
+      row.ok = up && answered === 200 && !row.waitingSaid && (how === "ended" ? row.got.length === 0 && row.told.join() === "refused"
+        : row.got.join() === "refused" && row.told.length === 0 && row.renewals === 1);
+      await j.c.ch.stop();
+      rows[kind] = row;
+    }
+    return { ok: Object.values(rows).every(r => r.ok), detail: brief(rows) };
+  }
+  /* Findings 3 and 6 and the withdrawal's own way in: a desk whose certificate ended (or whose service key was revoked) while its request
+     waited takes the request back on the session it asks for that alone, holds no session after, and, given a current certificate a minute
+     later, sends its request again in that cycle on a fresh hello, never the withdrawal's session; the door's request the same. */
+  async function deskWithdrawScene(mod) {
+    const rows = {};
+    for (const [kind, door, how] of [["token-ended", false, "ended"], ["token-revoked", false, "revoked"], ["door-ended", true, "ended"]]) {
+      const w = await team({}), d = named(w, "j"), now = w.R.clock.now, r = revokedVia(w);
+      const seat = how === "revoked" ? { cert: certFor(d.pub, w.licence, now, 7 * DAY, { signer: r.signer, via: r.via }) } : { cert: certFor(d.pub, w.licence, now, HOUR) };
+      seat.renew = () => seat.cert;
+      const j = await joinedUp(w, d, seat, door, null, mod);
+      const up = invRow(w, j.id).uploaded === true;
+      if (how === "revoked") { w.R.env.REVOKED = revokedText([r.svc.pub]); w.R.clock.now += 5 * MIN; } else w.R.clock.now = seat.cert.until + 10 * MIN;
+      if (door) j.withdrawing = true;
+      fs.unlinkSync(askFile(j.c, d));
+      await kickOf(j.c);
+      const after = invRow(w, j.id), row = { up, withdrawn: after.withdrawn === true && after.uploaded === false, heldAfter: j.c.ch.online(),
+        asked: j.c.log.filter(l => / withdraw$/.test(l)).map(l => l.split(" ")[2]), told: j.c.told.slice() };
+      row.ok = up && row.withdrawn && !row.heldAfter && row.asked.length >= 1 && row.asked.every(x => x === "200") && row.told.join() === "refused";
+      if (!door) {
+        w.R.clock.now += MIN;
+        seat.cert = certFor(d.pub, w.licence, w.R.clock.now, 7 * DAY);
+        askOn(j.c, d, 2);
+        const mark = j.c.log.length;
+        await kickOf(j.c);
+        const again = j.c.log.slice(mark);
+        row.againUp = invRow(w, j.id).uploaded === true;
+        row.again = again;
+        row.toldAfter = j.c.told.slice();
+        row.ok = row.ok && row.againUp && !again.some(l => /^GET since 403/.test(l)) && /^POST hello 200$/.test(again[0] || "") && row.toldAfter.join() === "refused,open";
+      }
+      await j.c.ch.stop();
+      rows[kind] = row;
+    }
+    return { ok: Object.values(rows).every(r => r.ok), detail: brief(rows) };
+  }
+  /* Finding 6: an open session the relay stops taking for its seat (403 seat-lapsed) is opened again at once, in the same cycle: an ordinary
+     team gated mid-session with the desk's new certificate in hand reads on, one with none new is told refused at once, and an Entra
+     desk's run-out session past the margin, a renewed certificate in hand, reads on. */
+  async function reopenScene(mod) {
+    const rows = {};
+    for (const kind of ["gated-renewed", "gated-none", "entra-runout"]) {
+      const entra = kind === "entra-runout", w = await team(entra ? { seats: true } : {}), a = w.desks.a;
+      const seat = entra ? { cert: certFor(a.pub, w.licence, T0, HOUR) } : { cert: certFor(a.pub, hex(16), w.R.clock.now, 7 * DAY) };
+      seat.renew = () => seat.cert;
+      if (entra) w.R.clock.now = T0 + 2 * HOUR;
+      const c = deskChannel(w, "a", seat, mod);
+      await cycleOf(c);
+      const first = c.ch.online();
+      w.R.clock.now += 5 * MIN;
+      if (entra) { prove(w, "c", DAY); await sessionAs(w, "c"); }
+      else await renew(w, grantAt(w.lead.pub, w.R.clock.now, { licence: w.licence, live: w.R.clock.now }));
+      if (kind !== "gated-none") seat.cert = certFor(a.pub, w.licence, w.R.clock.now, DAY);
+      const mark = c.log.length, before = seat.renewals || 0;
+      await kickOf(c);
+      const cycle = c.log.slice(mark);
+      const row = { first, cycle, told: c.told.slice(), online: c.ch.online(), renewals: (seat.renewals || 0) - before };
+      const reopened = /^GET since 403:seat-lapsed$/.test(cycle[0] || "") && cycle[1] === "POST hello 200";
+      row.ok = first && reopened && (kind === "gated-none" ? row.told.join() === "refused" && row.renewals === 1
+        : row.told.length === 0 && row.online && cycle.includes("GET since 200"));
+      await c.ch.stop();
+      rows[kind] = row;
+    }
+    return { ok: Object.values(rows).every(r => r.ok), detail: brief(rows) };
+  }
+  /* Finding 5: a desk holding no certificate, refused for it, asks the renewal once and goes again on the same challenge: on an ordinary
+     team, at an invitation's hello, on an Entra team; and where the renewal brings none it is told refused, one renewal for that hello. */
+  async function noneSeatScene(mod) {
+    const rows = {};
+    for (const kind of ["ordinary", "invite", "entra", "none-stays"]) {
+      const w = await team(kind === "entra" ? { seats: true } : {});
+      const d = kind === "invite" ? joiner(w, "j") : w.desks.a, invite = kind === "invite" ? await inviteOn(w) : null;
+      const seat = { cert: null };
+      if (kind !== "none-stays") seat.renew = () => certFor(d.pub, w.licence, w.R.clock.now, 7 * DAY);
+      const c = deskChannel(w, kind === "invite" ? "j" : "a", seat, mod, invite ? { invite } : undefined);
+      await cycleOf(c);
+      const refusedThen = c.answers.filter(x => x.status === 403 && x.json && x.json.error === "seat-lapsed").length;
+      const row = { online: c.ch.online(), renewals: seat.renewals || 0, told: c.told.slice(), refusedThen, spent: invite ? c.ch.program.tokenSpent(invite.inv) : null };
+      row.ok = kind === "none-stays" ? !row.online && row.renewals === 1 && row.told.join() === "refused"
+        : row.online && row.renewals === 1 && row.told.length === 0 && refusedThen === 1 && (kind !== "invite" || row.spent === true);
+      await c.ch.stop();
+      rows[kind] = row;
+    }
+    return { ok: Object.values(rows).every(r => r.ok), detail: brief(rows) };
+  }
+  /* Finding 4 and the door's refusal: a certificate that ends while the session opens is renewed and the knock carries the renewed one, once;
+     a knock refused while its certificate's service key is revoked renews once and knocks again, and the request opens; a stranger (a licence
+     the door does not name) is turned away once a renewed certificate is refused too, knocking twice; one whose renewal brings the same
+     certificate is not turned away and does not knock with it again. */
+  async function doorSeatScene(mod) {
+    const rows = {};
+    for (const kind of ["race", "revoked", "stranger", "stranger-same"]) {
+      const w = await team({}), d = named(w, "k"), now = w.R.clock.now, r = revokedVia(w);
+      await doorOf(w, [kind.startsWith("stranger") ? hex(16) : w.licence]);
+      const old = certFor(d.pub, w.licence, now - 7 * DAY + 1, 7 * DAY);
+      const seat = kind === "race" ? { cert: old } : kind === "revoked" ? { cert: certFor(d.pub, w.licence, now, 7 * DAY, { signer: r.signer, via: r.via }) }
+        : { cert: certFor(d.pub, w.licence, now, 7 * DAY) };
+      seat.renew = kind === "stranger-same" ? () => seat.cert : () => certFor(d.pub, w.licence, w.R.clock.now, 7 * DAY);
+      if (kind === "revoked") w.R.env.REVOKED = revokedText([r.svc.pub]);
+      let crossed = false;
+      const c = deskChannel(w, "k", seat, mod, {
+        invite: () => ({ door: seat.cert, box: w.leadBox.pub }),
+        intercept: (m, rel) => { if (kind === "race" && rel === "hello" && !crossed) { crossed = true; w.R.clock.now = old.until; } return null; },
+      });
+      await cycleOf(c);
+      if (kind === "stranger-same") { w.R.clock.now += MIN; await kickOf(c); }
+      const k = knocks(c).map(l => l.split(" ")[2]);
+      const row = { knocks: k, ends: c.ends.slice(), doors: c.doors.length, renewals: seat.renewals || 0 };
+      row.ok = kind === "race" ? k.join() === "200" && row.ends.length === 0 && row.doors === 1 && row.renewals === 1
+        : kind === "revoked" ? k.join() === "403:not-enrolled,200" && row.ends.length === 0 && row.doors === 1 && row.renewals === 1
+        : kind === "stranger" ? k.join() === "403:not-enrolled,403:not-enrolled" && row.ends.join() === "turned" && row.doors === 0
+        : k.join() === "403:not-enrolled" && row.ends.length === 0 && row.doors === 0;
+      await c.ch.stop();
+      rows[kind] = row;
+    }
+    return { ok: Object.values(rows).every(r => r.ok), detail: brief(rows) };
+  }
+  /* A waiting desk whose session the relay stops taking at the answer's fetch (401, or 403 seat-lapsed) lets the session go and is not said to
+     wait; the next cycle says hello again and waits as before; an answer not yet written (404) is the wait, said. */
+  async function answerGoneScene(mod) {
+    const rows = {};
+    for (const [kind, status, error] of [["no-hello", 401, "no-hello"], ["seat-lapsed", 403, "seat-lapsed"], ["missing", 0, ""]]) {
+      const w = await team({}), d = named(w, "j"), seat = { cert: certFor(d.pub, w.licence, w.R.clock.now, 7 * DAY) };
+      const arm = { on: false, id: null };
+      const j = await joinedUp(w, d, seat, false, { intercept: (m, rel) => (arm.on && status && m === "GET" && rel === "b/" + arm.id ? (arm.on = false, { status, error }) : null) }, mod);
+      arm.id = j.id;
+      arm.on = true;
+      j.c.says.length = 0;
+      await kickOf(j.c);
+      const row = { waitingSaid: waitingSaid(j.c), heldAfter: j.c.ch.online() };
+      j.c.says.length = 0;
+      await kickOf(j.c);
+      row.nextWaitingSaid = waitingSaid(j.c);
+      row.nextHeld = j.c.ch.online();
+      row.ok = status ? !row.waitingSaid && !row.heldAfter && row.nextWaitingSaid && row.nextHeld : row.waitingSaid && row.heldAfter;
+      await j.c.ch.stop();
+      rows[kind] = row;
+    }
+    return { ok: Object.values(rows).every(r => r.ok), detail: brief(rows) };
+  }
+  await leg("d11a", () => waitingSeatScene(), "finding 2: a desk waiting for the lead's answer whose certificate the relay stops taking renews on the channel on the challenge the refusal left and reads the answer, by invitation and at the door, on an ordinary and an Entra team, never said to wait; one whose certificate ended and cannot renew is told refused and never said to wait; one whose ended certificate renews reads the answer");
+  await leg("d12a", () => deskWithdrawScene(), "findings 3 and 6: a desk whose certificate ended or was revoked while its request waited takes it back on the session it asks for that alone, holds no session after, and given a current certificate a minute later sends its request again in that cycle on a fresh hello; the door's request is taken back the same way");
+  await leg("d13a", () => reopenScene(), "finding 6: a session the relay stops taking for its seat is opened again in the same cycle: an ordinary team gated mid-session with the new certificate in hand reads on, with none new the desk is told refused at once, and an Entra desk's run-out session past the margin reads on with its renewed certificate");
+  await leg("d14a", () => noneSeatScene(), "finding 5: a desk holding no certificate, refused for it, asks the renewal once and goes again on the same challenge and opens, on an ordinary team, at an invitation's hello and on an Entra team; where the renewal brings none it is told refused after one renewal");
+  await leg("d15a", () => doorSeatScene(), "finding 4 and the door's refusal: a certificate ending while the session opens is renewed and the one knock carries the renewed one; a knock refused while its service key is revoked renews once and knocks again, and the request opens; a stranger to the door is turned away once a renewed certificate is refused too, and one whose renewal brings the same certificate is neither turned away nor knocks again with it the next cycle");
+  await leg("d16a", () => answerGoneScene(), "a waiting desk whose session the relay stops taking at the answer's fetch (401, 403 seat-lapsed) lets it go and is not said to wait, and waits again the next cycle; an answer not yet written is the wait, said");
+
+  /* ---- THE SECOND ROUND (Argon 49 on ba2c3087): each of his twelve probes as a check, and the first review's two left (W5, L4). A probe
+     of a finding Claude alpha boarded runs and SKIPs, naming the fault, while the fault stands, and is ok once it does not. The shell's
+     own seat glue (signinRelaySeatTold, signinRelaySeatClear, signinSeatRenew, signinRenewNow, signinSeatCert, signinDoorInvite) is
+     sliced from shell/main.js and run beside the channel over this relay, its neighbours stood in. ---- */
+  const MAIN_FILE = path.join(ROOT, "shell", "main.js");
+  const MAIN_NOW = fs.readFileSync(MAIN_FILE, "utf8");
+  const mainSlice = (src, name) => {
+    let at = src.indexOf("\nfunction " + name + "(");
+    if (at < 0) at = src.indexOf("\nasync function " + name + "(");
+    const end = at < 0 ? -1 : src.indexOf("\n}\n", at);
+    if (end < 0) throw new Error("shell/main.js names no " + name);
+    return src.slice(at + 1, end + 2);
+  };
+  const GLUE = ["signinRelaySeatTold", "signinRelaySeatClear", "signinSeatRenew", "signinRenewNow", "signinSeatCert", "signinRevokedHas", "signinDoorInvite"];
+  /* `o`: held (signinState's), service(n) the licence service's answer to the nth renewal ({said, cert}), team, join (a door join's relay
+     part, or none), onRelaySoon(). Answers the shell's own functions, its renewals counted (st.renewCalls), and its notice and throttle. */
+  function shellGlue(w, d, o, src) {
+    const st = { held: o.held, relaySoon: 0, renewCalls: 0 };
+    const stands = {
+      Date: { now: () => w.R.clock.now + (o.skew ? o.skew.ms : 0) }, harnessLaunch: () => false, signinLabHeld: () => false, signinFlush: () => {},
+      signinState: () => st, signinOutAgain: async () => {}, storeEndAgain: () => Promise.resolve(false),
+      signinOffered: () => [{ id: "microsoft" }], branchIdentity: () => ({ id: d.keyId, key: d.pub }),
+      signinRenewHeld: async (io, p, key, held) => {
+        const a = await o.service(++st.renewCalls);
+        return { said: a.said, held: a.cert ? Object.assign({}, held, { cert: a.cert }) : a.said === "no-role" ? Object.assign({}, held, { cert: null, said: "no-role" })
+          : a.reached === false ? Object.assign({}, held, { reached: false }) : held };
+      },
+      signinIo: () => ({}), signinRevokedNext: (a, b) => b || a, signinSave: () => {}, tellSignin: () => {}, storeLeaveNow: () => {}, storeTurn: () => {},
+      relaySoon: () => { st.relaySoon++; if (o.onRelaySoon) o.onRelaySoon(); },
+      signinCertOk: (c, k) => !!c && c.desk === k, signinCertEarly: (c, n) => !!c && c.issued > n + 5 * MIN,
+      signinDoorAddressOk: () => true, SIGNIN_DESK_PACKED: true, getJoin: () => (o.join ? { team: o.team, invite: { relay: o.join } } : null),
+    };
+    const names = Object.keys(stands);
+    const from = src || MAIN_NOW, glue = GLUE.concat(from.indexOf("\nasync function signinPressNow(") >= 0 ? ["signinPressNow"] : []);
+    const text = "const SIGNIN_SEAT_RENEW_MS = 60 * 60 * 1000, SIGNIN_SEAT_RETRY_MS = 5 * 60 * 1000, SIGNIN_PRESS_GAP_MS = 30 * 1000;\n"
+      + "let signinRelaySeatTeam = '', signinSeatRenewAt = 0, signinRenewing = null, signinBusy = false, signinSaid = '', relayPressOwed = false, signinPressAt = 0;\n"
+      + glue.map(n => mainSlice(from, n)).join("\n").replace("const j = teamJoin,", "const j = getJoin(),")
+      + "\nreturn { " + glue.join(", ") + ", notice: () => signinRelaySeatTeam, throttle: () => signinSeatRenewAt,"
+      + " pressOwed: () => { const v = relayPressOwed; relayPressOwed = false; return v; } };";
+    return Object.assign(new Function(...names, text)(...names.map(n => stands[n])), { st });
+  }
+  /* What relayRun does with a channel it keeps (shell/main.js): kicked where it is online, started where it is not. */
+  const relayRunOn = holder => () => setTimeout(() => { const c = holder.c; if (!c) return; if (c.ch.online()) c.ch.kick(); else c.ch.start(); }, 0);
+  const svcCert = (w, d, at, r) => certFor(d.pub, w.licence, at, 7 * DAY, { signer: r.signer, via: r.via });
+  const revokedList = r => JSON.parse(revokedText([r.svc.pub]));
+  /* The first review's two left: W5, a session ending at its certificate's end renews on the 401 in the same cycle; L4, a lapsed team's
+     joining desk whose certificate ended takes its request back through the channel. */
+  async function firstLeftScene(mod) {
+    const rows = {};
+    {
+      const w = await team({}), a = w.desks.a;
+      const seat = { cert: certFor(a.pub, hex(16), T0 - 7 * DAY + 10 * MIN, 7 * DAY) };
+      seat.renew = () => certFor(a.pub, hex(16), w.R.clock.now, 7 * DAY);
+      const c = deskChannel(w, "a", seat, mod);
+      await cycleOf(c);
+      w.R.clock.now = seat.cert.until;
+      const mark = c.log.length;
+      await kickOf(c);
+      rows.W5 = { cycle: c.log.slice(mark), online: c.ch.online(), told: c.told.slice() };
+      rows.W5.ok = rows.W5.cycle[0] === "GET since 401:no-hello" && rows.W5.cycle.includes("POST session 200") && rows.W5.online && rows.W5.told.length === 0;
+      await c.ch.stop();
+    }
+    {
+      const w = await team({ paid: false, until: T0 + 5 * DAY });
+      const d = named(w, "j"), seat = { cert: certFor(d.pub, w.licence, w.R.clock.now, HOUR) };
+      seat.renew = () => seat.cert;
+      const j = await joinedUp(w, d, seat, false, null, mod);
+      const up = invRow(w, j.id).uploaded === true;
+      w.R.clock.now = T0 + 6 * DAY;
+      fs.unlinkSync(askFile(j.c, d));
+      await kickOf(j.c);
+      const row = invRow(w, j.id);
+      rows.L4 = { up, withdrawn: row.withdrawn === true && row.uploaded === false };
+      rows.L4.ok = up && rows.L4.withdrawn;
+      await j.c.ch.stop();
+    }
+    return { ok: Object.values(rows).every(r => r.ok), detail: brief(rows) };
+  }
+  /* Finding 2 with 12 (the door's glue): a signed-in desk whose door join has no certificate it may knock with (none yet, one for another
+     desk key, one its own list revokes) asks the renewal through the channel, awaited, and knocks in that cycle when one comes; the shell's
+     invite() asks none itself, so a still-revoked renewal is asked once an hour, not at every read; a signed-out desk asks none; and a wrong
+     relay team id is refused before anything is asked. */
+  async function doorGlueScene(mod, src) {
+    const rows = {};
+    for (const kind of ["signed-out", "no-cert", "no-cert-refused", "revoked-still", "wrong-key"]) {
+      const w = await team({}), d = named(w, "k"), r = revokedVia(w), at = w.R.clock.now, tm = "t-" + w.rt.slice(0, 8);
+      await doorOf(w, [w.licence]);
+      const good = () => certFor(d.pub, w.licence, w.R.clock.now, 7 * DAY);
+      const held = kind === "signed-out" ? null : kind === "revoked-still" ? { provider: "microsoft", cert: svcCert(w, d, at, r), revoked: revokedList(r) }
+        : kind === "wrong-key" ? { provider: "microsoft", cert: certFor(keyPair(true).pub, w.licence, at, 7 * DAY), revoked: null } : { provider: "microsoft", cert: null, revoked: null };
+      const service = kind === "no-cert" ? async () => { await nap(30); return { said: "renewed", cert: good() }; }
+        : kind === "no-cert-refused" ? async () => ({ said: "no-role", cert: null })
+        : kind === "revoked-still" ? async n => ({ said: "renewed", cert: svcCert(w, d, at + n * 1000, r) })
+        : async () => ({ said: "renewed", cert: good() });
+      const join = { rt: w.rt, url: "https://etiuda.dev/relay/v1", door: true, box: w.leadBox.pub };
+      const glue = shellGlue(w, d, { held, service, team: tm, join }, src);
+      const c = deskChannel(w, "k", { renewMs: 200 }, mod, { shell: glue, invite: () => glue.signinDoorInvite(tm, w.rt), onDoor: id => { join.inv = id; } });
+      await cycleOf(c);
+      const c1 = { doors: c.doors.length, renewals: glue.st.renewCalls, ends: c.ends.slice() };
+      await nap(60);
+      w.R.clock.now += MIN;
+      await kickOf(c);
+      const c2 = { doors: c.doors.length, renewals: glue.st.renewCalls, ends: c.ends.slice() };
+      await c.ch.stop();
+      const row = { c1, c2 };
+      row.ok = kind === "signed-out" ? c2.renewals === 0 && c2.doors === 0
+        : kind === "no-cert" || kind === "wrong-key" ? c1.doors === 1 && c1.renewals === 1
+        : c1.renewals === 1 && c2.renewals === 1 && c2.doors === 0 && c2.ends.length === 0;
+      rows[kind] = row;
+    }
+    {
+      const w = await team({}), d = named(w, "k"), tm = "t-" + w.rt.slice(0, 8);
+      const glue = shellGlue(w, d, { held: { provider: "microsoft", cert: null, revoked: null }, service: async () => ({ said: "renewed", cert: null }), team: tm,
+        join: { rt: w.rt, url: "https://etiuda.dev/relay/v1", door: true, box: w.leadBox.pub } }, src);
+      const wrong = glue.signinDoorInvite(tm, hex(16)), right = glue.signinDoorInvite(tm, w.rt);
+      await nap(5);
+      rows.guards = { wrongRt: wrong, knocksRight: !!(right && right.door), renewals: glue.st.renewCalls };
+      rows.guards.ok = wrong === null && !rows.guards.knocksRight && glue.st.renewCalls === 0;
+    }
+    return { ok: Object.values(rows).every(r => r.ok), detail: brief(rows) };
+  }
+  /* Finding 7: a renewal that brings a certificate the relay still refuses keeps the refusal notice and the hour's throttle: an Entra desk
+     given another licence's certificate at every renewal asks one renewal in three polls a minute apart and keeps the notice; a waiting desk
+     whose service key is revoked while the service still signs with it asks one in two polls, and its renewals start no cycle of their own;
+     the person's own Check now resets the throttle and keeps the notice; a sign out ends it. */
+  async function noticeScene(mod, src) {
+    const rows = {};
+    {
+      const w = await team({ seats: true }), a = w.desks.a, wrong = hex(16), at = w.R.clock.now, tm = "t-" + w.rt.slice(0, 8), holder = {};
+      const glue = shellGlue(w, a, { held: { provider: "microsoft", cert: certFor(a.pub, wrong, at, 7 * DAY), revoked: null },
+        service: async n => ({ said: "renewed", cert: certFor(a.pub, wrong, at + n * 1000, 7 * DAY) }), team: tm, onRelaySoon: relayRunOn(holder) }, src);
+      const c = holder.c = deskChannel(w, "a", { renewMs: 200 }, mod, { shell: glue });
+      const polls = [];
+      for (let i = 0; i < 3; i++) { if (i === 0) await cycleOf(c); else await kickOf(c); await nap(10); await c.ch.idle(); polls.push({ renewals: glue.st.renewCalls, notice: glue.notice() === tm }); w.R.clock.now += MIN; }
+      const beforeCheck = glue.st.renewCalls;
+      await glue.signinPressNow(true);
+      const reset = glue.throttle(), checkRenewed = glue.st.renewCalls - beforeCheck;
+      await nap(10); await c.ch.idle();
+      const check = { notice: glue.notice() === tm, throttle: reset, renewed: checkRenewed, relaySoon: glue.st.relaySoon };
+      glue.signinRelaySeatClear("out");
+      const out = { notice: glue.notice() };
+      await c.ch.stop();
+      rows.entra = { polls, check, out };
+      rows.entra.ok = polls.every(p => p.renewals === 1 && p.notice) && check.notice && check.throttle > 0 && check.renewed === 1 && check.relaySoon >= 1 && out.notice === "";
+    }
+    {
+      const w = await team({}), d = named(w, "j"), r = revokedVia(w), at = w.R.clock.now, tm = "t-" + w.rt.slice(0, 8), holder = {};
+      const glue = shellGlue(w, d, { held: { provider: "microsoft", cert: svcCert(w, d, at, r), revoked: null },
+        service: async n => ({ said: "renewed", cert: svcCert(w, d, at + n * 1000, r) }), team: tm, onRelaySoon: relayRunOn(holder) }, src);
+      const invite = Object.assign(await inviteOn(w), { box: w.leadBox.pub });
+      const c = holder.c = deskChannel(w, "j", { renewMs: 200 }, mod, { shell: glue, invite });
+      askOn(c, d);
+      await cycleOf(c);
+      w.R.env.REVOKED = revokedText([r.svc.pub]);
+      w.R.clock.now += 5 * MIN;
+      const mark = c.log.length;
+      for (let i = 0; i < 2; i++) { await kickOf(c); await nap(10); await c.ch.idle(); w.R.clock.now += MIN; }
+      const hellos = c.log.slice(mark).filter(l => l === "POST hello 200").length;
+      rows.waiting = { renewals: glue.st.renewCalls, notice: glue.notice() === tm, relaySoon: glue.st.relaySoon, hellos };
+      rows.waiting.ok = rows.waiting.renewals === 1 && rows.waiting.notice && rows.waiting.relaySoon === 0 && hellos === 2;
+      await c.ch.stop();
+    }
+    return { ok: Object.values(rows).every(r => r.ok), detail: brief(rows) };
+  }
+  /* Finding 1: a knock refused for its certificate never ends the join on a transient failure or a retry the renewal did not change: a
+     renewal slower than the bound, one that fails, a 503 or a 429 at the retry's hello; the next cycle knocks with the certificate that
+     came, and the request opens. */
+  async function doorTransientScene(mod) {
+    const rows = {};
+    for (const kind of ["slow", "fails", "hello-503", "hello-429"]) {
+      const w = await team({}), d = named(w, "k"), r = revokedVia(w);
+      await doorOf(w, [w.licence]);
+      w.R.env.REVOKED = revokedText([r.svc.pub]);
+      const seat = { cert: svcCert(w, d, w.R.clock.now, r) }, good = () => certFor(d.pub, w.licence, w.R.clock.now, 7 * DAY);
+      let tries = 0, hellos = 0;
+      if (kind === "slow") { seat.renewMs = 60; seat.hold = () => nap(150); seat.renew = good; }
+      else if (kind === "fails") seat.renew = () => { if (++tries === 1) throw new Error("the service did not answer"); return good(); };
+      else seat.renew = good;
+      const status = kind === "hello-503" ? 503 : 429, error = kind === "hello-503" ? "unavailable" : "rate";
+      const c = deskChannel(w, "k", seat, mod, { invite: () => ({ door: seat.cert, box: w.leadBox.pub }),
+        intercept: (m, rel) => (kind.startsWith("hello") && rel === "hello" && ++hellos === 2 ? { status, error } : null) });
+      await cycleOf(c);
+      const c1 = { ends: c.ends.slice(), doors: c.doors.length };
+      await nap(200);
+      w.R.clock.now += MIN;
+      await kickOf(c);
+      const row = { c1, ends: c.ends.slice(), doors: c.doors.length, knocks: knocks(c).map(l => l.split(" ")[2]) };
+      row.ok = c1.ends.length === 0 && row.ends.length === 0 && row.doors === 1;
+      await c.ch.stop();
+      rows[kind] = row;
+    }
+    return { ok: Object.values(rows).every(r => r.ok), detail: brief(rows) };
+  }
+  /* Findings 3 and 11: the invitation read again right after the key hello. A door request whose first reply was lost, the certificate run
+     out before the desk starts again, resumes by the key's hello and is kept (doorKept) and sent up in that cycle; a removed desk whose new
+     invitation arrives while its key hello is out spends the new invitation, not the removal. */
+  async function rereadScene(mod) {
+    const rows = {};
+    {
+      const w = await team({}), d = named(w, "k");
+      await doorOf(w, [w.licence]);
+      const old = certFor(d.pub, w.licence, w.R.clock.now, HOUR), knock = await knockWith(w, d, old), id = knock.json && knock.json.door;
+      w.R.clock.now = old.until + 10 * MIN;
+      const seat = { cert: old, renew: () => certFor(d.pub, w.licence, w.R.clock.now, 7 * DAY) };
+      const c = deskChannel(w, "k", seat, mod, { invite: () => (seat.cert.until > w.R.clock.now ? { door: seat.cert, box: w.leadBox.pub } : null),
+        onDoor: (got, mirror) => { fs.mkdirSync(path.join(mirror, "desks", d.place), { recursive: true }); fs.writeFileSync(path.join(mirror, "desks", d.place, "join.json"), JSON.stringify({ door: got })); } });
+      await cycleOf(c);
+      rows.lostKnockReply = { knocked: knock.status, kept: c.doors.slice().join() === String(id), up: invRow(w, id).uploaded === true };
+      rows.lostKnockReply.ok = knock.status === 200 && rows.lostKnockReply.kept && rows.lostKnockReply.up;
+      await c.ch.stop();
+    }
+    {
+      const w = await team({}), b = w.desks.b;
+      await devicesOf(w, ["a", "c"]);
+      const fresh = await inviteOn(w);
+      let cur = null;
+      const seat = { cert: certFor(b.pub, w.licence, w.R.clock.now, 7 * DAY) };
+      const c = deskChannel(w, "b", seat, mod, { invite: () => cur, intercept: (m, rel) => { if (m === "POST" && rel === "session" && !cur) cur = fresh; return null; } });
+      await cycleOf(c);
+      rows.freshDuringHello = { online: c.ch.online(), spent: c.ch.program.tokenSpent(fresh.inv), log: c.log.slice() };
+      rows.freshDuringHello.ok = rows.freshDuringHello.online && rows.freshDuringHello.spent === true;
+      await c.ch.stop();
+    }
+    return { ok: Object.values(rows).every(r => r.ok), detail: brief(rows) };
+  }
+  /* Finding 5 and the socket's states: a session the relay stops taking lets its socket go with it. On an Entra team, a run-out session's
+     socket open, another desk's proof past the margin: where the reopen fails the socket is closed (so the poll asks again), where it opens
+     a new socket is opened under the new session and the old one closed; a socket closing as it is let go starts nothing. */
+  async function socketScene(mod) {
+    const rows = {};
+    for (const kind of ["reopen-fails", "reopen-opens"]) {
+      const w = await team({ seats: true }), a = w.desks.a, end = certFor(a.pub, w.licence, T0, HOUR);
+      const seat = { cert: end, phase: 1 };
+      seat.renew = () => (kind === "reopen-opens" && seat.phase === 2 ? certFor(a.pub, w.licence, w.R.clock.now, 7 * DAY) : end);
+      w.R.clock.now = T0 + 2 * HOUR;
+      const socks = { opened: 0, closed: 0, tokens: [] };
+      const connect = (url, headers, on) => {
+        socks.opened++; socks.tokens.push(headers.authorization);
+        setTimeout(() => on.open && on.open(), 0);
+        return { opens: true, send: () => {}, close: () => { socks.closed++; if (on.close) on.close(); } };
+      };
+      const c = deskChannel(w, "a", seat, mod, { connect });
+      await cycleOf(c);
+      await nap(10);
+      const before = { online: c.ch.online(), open: c.ch.socketOpen() };
+      w.R.clock.now += 5 * MIN;
+      prove(w, "c", DAY);
+      await sessionAs(w, "c");
+      seat.phase = 2;
+      const mark = c.log.length;
+      await kickOf(c);
+      await nap(10);
+      const after = { online: c.ch.online(), open: c.ch.socketOpen(), opened: socks.opened, closed: socks.closed, tokens: new Set(socks.tokens).size,
+        hellos: c.log.slice(mark).filter(l => l === "POST hello 200").length };
+      const row = { before, after };
+      row.ok = before.online && before.open && after.hellos === 1 && (kind === "reopen-fails" ? !after.online && !after.open && after.closed === 1
+        : after.online && after.closed >= 1 && after.tokens === 2);
+      await c.ch.stop();
+      rows[kind] = row;
+    }
+    return { ok: Object.values(rows).every(r => r.ok), detail: brief(rows) };
+  }
+  /* Finding 6: a channel already running that holds no session is cycled when started again, as the shell's relayRun starts it after
+     Sign in, Check now or Ask again: a desk that took back its request on a run-out certificate, given a current one and asking again,
+     sends the request at that start. */
+  async function startScene(mod) {
+    const w = await team({}), d = named(w, "j"), seat = { cert: certFor(d.pub, w.licence, w.R.clock.now, HOUR) };
+    seat.renew = () => seat.cert;
+    const j = await joinedUp(w, d, seat, false, null, mod);
+    w.R.clock.now = seat.cert.until + 10 * MIN;
+    fs.unlinkSync(askFile(j.c, d));
+    await kickOf(j.c);
+    const offline = !j.c.ch.online();
+    seat.cert = certFor(d.pub, w.licence, w.R.clock.now, 7 * DAY);
+    askOn(j.c, d, 2);
+    const mark = j.c.log.length;
+    j.c.ch.start();
+    await j.c.ch.idle();
+    const row = { offline, atStart: j.c.log.slice(mark), up: invRow(w, j.id).uploaded === true };
+    await j.c.ch.stop();
+    return { ok: offline && row.atStart.length > 0 && row.up, detail: brief(row) };
+  }
+  /* BOARDED 4: a withdrawal whose 200 is lost after the relay took it. */
+  async function withdrawLostScene(mod) {
+    const w = await team({}), d = named(w, "j"), seat = { cert: certFor(d.pub, w.licence, w.R.clock.now, HOUR) };
+    seat.renew = () => seat.cert;
+    let lose = false;
+    const j = await joinedUp(w, d, seat, false, { lose: (m, rel, status) => { if (lose && m === "PUT" && status === 200) { lose = false; return true; } return false; } }, mod);
+    w.R.clock.now = seat.cert.until + 10 * MIN;
+    fs.unlinkSync(askFile(j.c, d));
+    lose = true;
+    await kickOf(j.c);
+    await kickOf(j.c);
+    seat.cert = certFor(d.pub, w.licence, w.R.clock.now, 7 * DAY);
+    const mark = j.c.log.length;
+    await kickOf(j.c);
+    const retry = j.c.log.slice(mark);
+    await j.c.ch.stop();
+    const fault = retry.some(l => /^PUT b 403:bad-signature/.test(l));
+    return fault ? { skip: true, detail: "BOARDED (finding 4): the valid retry " + brief(retry) } : { ok: true, detail: brief(retry) };
+  }
+  /* BOARDED 9: one withdrawal on a run-out certificate. */
+  async function withdrawCountScene(mod) {
+    const w = await team({}), d = named(w, "j"), seat = { cert: certFor(d.pub, w.licence, w.R.clock.now, HOUR) };
+    seat.renew = () => seat.cert;
+    const j = await joinedUp(w, d, seat, false, null, mod);
+    w.R.clock.now = seat.cert.until + 10 * MIN;
+    fs.unlinkSync(askFile(j.c, d));
+    const before = seat.renewals || 0, mark = j.c.log.length;
+    await kickOf(j.c);
+    const row = { renewals: (seat.renewals || 0) - before, asks: j.c.log.slice(mark).filter(l => / withdraw$/.test(l)).length };
+    await j.c.ch.stop();
+    return row.renewals > 2 || row.asks > 1 ? { skip: true, detail: "BOARDED (finding 9): " + brief(row) } : { ok: true, detail: brief(row) };
+  }
+  /* BOARDED 8: one seatless desk's withdrawal hellos against the team's challenge table. */
+  async function challengeShareScene() {
+    const w = await team({}), k = keyPair(true), cert = certFor(k.pub, w.licence, w.R.clock.now, HOUR), invite = await inviteOn(w);
+    const t = await helloWith(w, k, { invite: invite.token, inv: invite.inv, seat: cert });
+    const place = "k-" + hex(8), sealKey = crypto.randomBytes(32);
+    const up = await putBlob(w, t.json && t.json.session, B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: sealKey, writer: { keyId: k.keyId, privateKey: k.privateKey },
+      path: "desks/" + place + "/join.json", body: JSON.stringify({ ask: 1 }), counter: 1, place: "desk:" + place, kind: "file" }), { pub: k.pub });
+    w.R.clock.now = cert.until + 10 * MIN;
+    let ok = 0;
+    for (let i = 0; i < 257; i++) if (opened(await helloWith(w, k, { seat: cert, withdraw: true }))) ok++;
+    const lead = await session(w, w.lead), desk = await sessionAs(w, "a");
+    const row = { up: up.status, withdrawSessions: ok, lead: said(lead), desk: said(desk) };
+    return said(lead) === "rate" ? { skip: true, detail: "BOARDED (finding 8): " + brief(row) } : { ok: up.status === 200 && opened(lead), detail: brief(row) };
+  }
+  /* BOARDED 10: a released build's reading of staging, and an unpackaged start's two rules. */
+  async function releasedReadsScene() {
+    const lib = new Function("const BUILTIN_RELAY_URL = \"https://etiuda.dev/relay/v1\", STAGING_RELAY_URL = \"https://etiuda.dev/relay-staging/v1\";\n"
+      + "const DOOR_RELAYS = Object.freeze({ installed: [BUILTIN_RELAY_URL], unpackaged: [STAGING_RELAY_URL] });\n"
+      + "const harnessLaunch = () => false, testServiceOn = false;\n"
+      + ["teamChannelOf", "knownRelayAddress", "signinDoorAddressOk"].map(n => mainSlice(MAIN_NOW, n)).join("\n") + "\nreturn { knownRelayAddress, signinDoorAddressOk };")();
+    const staging = { rt: hex(16), url: "https://etiuda.dev/relay-staging/v1" };
+    const row = { unpackagedDoor: lib.signinDoorAddressOk(staging, false), known: lib.knownRelayAddress(staging.url) };
+    return row.unpackagedDoor !== row.known ? { skip: true, detail: "BOARDED (finding 10): an unpackaged start takes staging's door and refuses its address " + brief(row) } : { ok: true, detail: brief(row) };
+  }
+  await leg("d17a", () => firstLeftScene(), "the first review's two left: W5, a session ending at its certificate's end renews on the 401 in the same cycle; L4, a lapsed team's joining desk whose certificate ended takes its request back through the channel");
+  await leg("d18a", () => doorGlueScene(), "finding 2 with 12: a signed-in desk whose door join holds no certificate it may knock with (none yet, another desk key's, one its list revokes) asks the renewal through the channel, awaited, and knocks in that cycle when one comes; the shell's invite() asks none, so a still-revoked renewal is asked once in two polls; signed out, none; a wrong relay team id refused before anything is asked");
+  await leg("d19a", () => noticeScene(), "finding 7: a renewal bringing a certificate the relay still refuses keeps the refusal notice and the hour's throttle (an Entra desk given another licence's certificate asks one renewal in three polls; a waiting desk whose service key is revoked asks one in two polls, and its renewals start no cycle); the person's Check now, a press, renews once, stamps the throttle with that renewal and keeps the notice; a sign out ends it");
+  await leg("d20a", () => doorTransientScene(), "finding 1: a knock refused for its certificate never ends the join on a renewal slower than the bound, one that fails, or a 503 or 429 at the retry's hello; the next cycle knocks with the certificate that came and the request opens");
+  await leg("d21a", () => rereadScene(), "findings 3 and 11: a door request whose first reply was lost resumes by the key's hello after the certificate ran out, is kept and sent up in that cycle; a removed desk whose new invitation arrives while its key hello is out spends it");
+  await leg("d22a", () => socketScene(), "finding 5: a session the relay stops taking lets its socket go: a failed reopen closes it, a reopen that opens closes it and opens one under the new session, one hello each");
+  await leg("d23a", () => startScene(), "finding 6: a running channel holding no session is cycled when started again, as relayRun starts it after Sign in, Check now or Ask again, and the request asked again goes");
+  await leg("d24a", () => withdrawLostScene(), "boarded 4: a withdrawal whose 200 is lost after the relay took it settles on the retry with a current certificate");
+  await leg("d25a", () => withdrawCountScene(), "boarded 9: one withdrawal on a run-out certificate asks at most two renewals and one withdrawal session");
+  await leg("s27a", () => challengeShareScene(), "boarded 8: one seatless desk's withdrawal hellos cannot fill the team's challenge table, so the lead still opens");
+  await leg("d26a", () => releasedReadsScene(), "boarded 10: an unpackaged start takes staging's door exactly where it takes staging's address");
+
+  /* ---- THE THIRD ROUND (review 50 on 1e5269b9), the press rule: a person's own press (Ask again, Check now, Sign in) makes one real
+     attempt, one renewal outside the hour's throttle and then one knock or hello with the certificate that then stands, whatever the
+     channel remembers of an earlier refusal; presses are at least thirty seconds apart. The shell's press (signinPressNow) and the
+     channel's (press) are judged here beside the glue; what relayRun does with a press it owes is stood in as relayRun does it. ---- */
+  const pressRun = holder => () => setTimeout(() => {
+    const c = holder.c, g = holder.g;
+    if (!c) return;
+    if (g && g.pressOwed()) { if (typeof c.ch.press === "function") c.ch.press(); else c.ch.kick(); return; }
+    if (c.ch.online()) c.ch.kick(); else c.ch.start();
+  }, 0);
+  const settle = async c => { await nap(15); await c.ch.idle(); await nap(5); await c.ch.idle(); };
+  /* Finding 1: after a refusal, a sign out ends the notice and wakes the relay; the next Sign in is a press, so a certificate still refused
+     brings the notice back at once, and a current one opens at once. */
+  async function pressSignoutScene(mod, src) {
+    const rows = {};
+    for (const kind of ["still-refused", "current"]) {
+      const w = await team({ seats: true }), a = w.desks.a, at = w.R.clock.now, tm = "t-" + w.rt.slice(0, 8), holder = {};
+      const wrong = n => certFor(a.pub, hex(16), at + n, 7 * DAY);
+      const g = holder.g = shellGlue(w, a, { held: { provider: "microsoft", cert: wrong(0), revoked: null }, service: async n => ({ said: "renewed", cert: wrong(n) }),
+        team: tm, onRelaySoon: pressRun(holder) }, src);
+      const c = holder.c = deskChannel(w, "a", { renewMs: 200 }, mod, { shell: g });
+      await cycleOf(c);
+      const refused = g.notice() === tm;
+      const soonBefore = g.st.relaySoon;
+      g.signinRelaySeatClear("out");
+      g.st.held = null;
+      await settle(c);
+      const out = { notice: g.notice(), woke: g.st.relaySoon > soonBefore };
+      w.R.clock.now += MIN;
+      g.st.held = { provider: "microsoft", cert: kind === "current" ? certFor(a.pub, w.licence, w.R.clock.now, 7 * DAY) : wrong(99), revoked: null };
+      const soon = g.st.relaySoon;
+      await g.signinPressNow(false);
+      await settle(c);
+      const row = { refused, out, signinWoke: g.st.relaySoon > soon, notice: g.notice(), online: c.ch.online() };
+      row.ok = refused && out.notice === "" && out.woke && row.signinWoke && (kind === "current" ? row.online && row.notice === "" : row.notice === tm && !row.online);
+      await c.ch.stop();
+      rows[kind] = row;
+    }
+    return { ok: Object.values(rows).every(r => r.ok), detail: brief(rows) };
+  }
+  /* Finding 2: a door join's renewal that does not reach the service does not hold the hour: the next renewal goes within minutes and the
+     knock follows; and the person's Check now at the door wakes the relay and knocks in that press. */
+  async function pressBlipScene(mod, src) {
+    const rows = {};
+    for (const kind of ["blip-then-poll", "check-now"]) {
+      const w = await team({}), d = named(w, "k"), tm = "t-" + w.rt.slice(0, 8), holder = {};
+      await doorOf(w, [w.licence]);
+      let up = false;
+      const join = { rt: w.rt, url: "https://etiuda.dev/relay/v1", door: true, box: w.leadBox.pub };
+      const g = holder.g = shellGlue(w, d, { held: { provider: "microsoft", cert: null, revoked: null }, team: tm, join, onRelaySoon: pressRun(holder),
+        service: async () => (up ? { said: "renewed", cert: certFor(d.pub, w.licence, w.R.clock.now, 7 * DAY) } : { said: "unreached", cert: null, reached: false }) }, src);
+      const c = holder.c = deskChannel(w, "k", { renewMs: 200 }, mod, { shell: g, invite: () => g.signinDoorInvite(tm, w.rt), onDoor: id => { join.inv = id; } });
+      await cycleOf(c);
+      const c1 = { doors: c.doors.length, renewals: g.st.renewCalls };
+      up = true;
+      let after;
+      if (kind === "blip-then-poll") {
+        w.R.clock.now += 6 * MIN;
+        await kickOf(c);
+        after = { doors: c.doors.length, renewals: g.st.renewCalls };
+      } else {
+        w.R.clock.now += MIN;
+        const soon = g.st.relaySoon;
+        await g.signinPressNow(true);
+        await settle(c);
+        after = { doors: c.doors.length, renewals: g.st.renewCalls, woke: g.st.relaySoon > soon };
+      }
+      const row = { c1, after };
+      row.ok = c1.doors === 0 && after.doors === 1 && (kind === "check-now" ? after.woke : true);
+      await c.ch.stop();
+      rows[kind] = row;
+    }
+    return { ok: Object.values(rows).every(r => r.ok), detail: brief(rows) };
+  }
+  /* Finding 5: one press, one renewal: Check now on a desk whose certificate the relay still refuses renews once (the press's own) and the
+     cycle it wakes renews no more; Sign in, its certificate just taken, renews none. A press at the door knocks once with the certificate
+     the channel already refused there, the press passing its memory by; and a second press inside thirty seconds is an ordinary wake. */
+  async function pressOnceScene(mod, src) {
+    const rows = {};
+    for (const kind of ["check-now", "sign-in"]) {
+      const w = await team({ seats: true }), a = w.desks.a, at = w.R.clock.now, tm = "t-" + w.rt.slice(0, 8), holder = {};
+      const wrong = n => certFor(a.pub, hex(16), at + n, 7 * DAY);
+      const g = holder.g = shellGlue(w, a, { held: { provider: "microsoft", cert: wrong(0), revoked: null }, service: async n => ({ said: "renewed", cert: wrong(n) }),
+        team: tm, onRelaySoon: pressRun(holder) }, src);
+      const c = holder.c = deskChannel(w, "a", { renewMs: 200 }, mod, { shell: g });
+      await cycleOf(c);
+      w.R.clock.now += 2 * HOUR;
+      const before = g.st.renewCalls, mark = c.log.length;
+      if (kind === "sign-in") g.st.held = { provider: "microsoft", cert: wrong(500), revoked: null };
+      await g.signinPressNow(kind === "check-now");
+      await settle(c);
+      const row = { renewals: g.st.renewCalls - before, hellos: c.log.slice(mark).filter(l => l === "POST hello 200").length };
+      row.ok = row.renewals === (kind === "check-now" ? 1 : 0) && row.hellos === 1;
+      await c.ch.stop();
+      rows[kind] = row;
+    }
+    {
+      const w = await team({}), a = w.desks.a, tm = "t-" + w.rt.slice(0, 8), holder = {}, cert = certFor(a.pub, w.licence, w.R.clock.now, 7 * DAY);
+      const g = holder.g = shellGlue(w, a, { held: { provider: "microsoft", cert, revoked: null }, service: async () => ({ said: "renewed", cert }), team: tm, onRelaySoon: pressRun(holder) }, src);
+      const c = holder.c = deskChannel(w, "a", { renewMs: 200 }, mod, { shell: g });
+      await cycleOf(c);
+      w.R.clock.now += 2 * MIN;
+      const mark = c.log.length;
+      await g.signinPressNow(true);
+      await settle(c);
+      rows.seated = { hellos: c.log.slice(mark).filter(l => l === "POST hello 200").length, online: c.ch.online() };
+      rows.seated.ok = rows.seated.hellos === 1 && rows.seated.online;
+      await c.ch.stop();
+    }
+    {
+      const w = await team({}), d = named(w, "k"), tm = "t-" + w.rt.slice(0, 8), holder = {};
+      await doorOf(w, [hex(16)]);
+      const cert = certFor(d.pub, w.licence, w.R.clock.now, 7 * DAY);
+      const join = { rt: w.rt, url: "https://etiuda.dev/relay/v1", door: true, box: w.leadBox.pub };
+      const g = holder.g = shellGlue(w, d, { held: { provider: "microsoft", cert, revoked: null }, team: tm, join, onRelaySoon: pressRun(holder),
+        service: async () => ({ said: "renewed", cert }) }, src);
+      const c = holder.c = deskChannel(w, "k", { renewMs: 200 }, mod, { shell: g, invite: () => g.signinDoorInvite(tm, w.rt), onDoor: id => { join.inv = id; } });
+      await cycleOf(c);
+      w.R.clock.now += MIN;
+      await kickOf(c);
+      const quiet = knocks(c).length;
+      w.R.clock.now += 2 * HOUR;
+      await g.signinPressNow(true);
+      await settle(c);
+      const pressed = knocks(c).length;
+      await g.signinPressNow(true);
+      await settle(c);
+      const again = knocks(c).length;
+      rows.door = { quiet, pressed, again, ends: c.ends.slice() };
+      rows.door.ok = quiet === 1 && pressed === 2 && again === 2 && rows.door.ends.length === 0;
+      await c.ch.stop();
+    }
+    return { ok: Object.values(rows).every(r => r.ok), detail: brief(rows) };
+  }
+  /* Finding 7: the door's seatless request carries the request's id and marks a door, so a waiting door join whose certificate this desk's
+     clock holds run out (the relay's still takes it) reads the lead's answer; and a door request whose first reply was lost resumes and is
+     kept under the seatless request too. */
+  async function seatlessDoorScene(mod, src) {
+    const rows = {};
+    {
+      const w = await team({}), d = named(w, "k"), tm = "t-" + w.rt.slice(0, 8), skew = { ms: 0 };
+      const seat = { cert: certFor(d.pub, w.licence, w.R.clock.now, HOUR) };
+      seat.renew = () => seat.cert;
+      const j = await joinedUp(w, d, seat, true, null, mod);
+      const answered = (await leadAnswers(w, d, j.id, "joined")).status;
+      w.R.clock.now = seat.cert.until - 30 * 1000;
+      skew.ms = 60 * 1000;
+      const join = { rt: w.rt, url: "https://etiuda.dev/relay/v1", door: true, box: w.leadBox.pub, inv: j.id };
+      const g = shellGlue(w, d, { held: { provider: "microsoft", cert: seat.cert, revoked: null }, team: tm, join, skew, service: async () => ({ said: "unreached", cert: null, reached: false }) }, src);
+      const handed = g.signinDoorInvite(tm, w.rt);
+      const c = deskChannel(w, "k", seat, mod, { state: j.c.mirror, invite: () => g.signinDoorInvite(tm, w.rt) });
+      await j.c.ch.stop();
+      await cycleOf(c);
+      rows.waiting = { answered, handed: handed && { seatless: handed.seatless, door: handed.door, inv: handed.inv === j.id }, got: c.got.slice() };
+      rows.waiting.ok = answered === 200 && !!handed && handed.inv === j.id && handed.door !== undefined && rows.waiting.got.join() === "joined";
+      await c.ch.stop();
+    }
+    {
+      const w = await team({}), d = named(w, "k"), tm = "t-" + w.rt.slice(0, 8), skew = { ms: 0 };
+      await doorOf(w, [w.licence]);
+      const cert = certFor(d.pub, w.licence, w.R.clock.now, HOUR), knock = await knockWith(w, d, cert), id = knock.json && knock.json.door;
+      w.R.clock.now = cert.until - 30 * 1000;
+      skew.ms = 60 * 1000;
+      const join = { rt: w.rt, url: "https://etiuda.dev/relay/v1", door: true, box: w.leadBox.pub };
+      const g = shellGlue(w, d, { held: { provider: "microsoft", cert, revoked: null }, team: tm, join, skew, service: async () => ({ said: "unreached", cert: null, reached: false }) }, src);
+      const c = deskChannel(w, "k", { cert }, mod, { invite: () => g.signinDoorInvite(tm, w.rt),
+        onDoor: (got, mirror) => { join.inv = got; fs.mkdirSync(path.join(mirror, "desks", d.place), { recursive: true }); fs.writeFileSync(path.join(mirror, "desks", d.place, "join.json"), JSON.stringify({ door: got })); } });
+      await cycleOf(c);
+      rows.lostReply = { knocked: knock.status, kept: c.doors.join() === String(id), up: invRow(w, id).uploaded === true };
+      rows.lostReply.ok = knock.status === 200 && rows.lostReply.kept && rows.lostReply.up;
+      await c.ch.stop();
+    }
+    return { ok: Object.values(rows).every(r => r.ok), detail: brief(rows) };
+  }
+  await leg("d27a", () => pressSignoutScene(), "finding 1: after a refusal a sign out ends the notice and wakes the relay, and the next Sign in, a press, brings the notice back at once where its certificate is still refused and opens at once where it is current");
+  await leg("d28a", () => pressBlipScene(), "finding 2: a door join's renewal that does not reach the service holds no hour, so the knock follows within minutes; the person's Check now at the door wakes the relay and knocks in that press");
+  await leg("d29a", () => pressOnceScene(), "finding 5: one press, one renewal: Check now on a still-refused certificate renews once, Sign in renews none, one hello each; a press at a door knocks once with the certificate already refused there; a second press inside thirty seconds is an ordinary wake");
+  /* The press's wiring in shell/main.js, read as text: relayRun hands a press it owes to the channel it keeps, and Ask again presses. */
+  const pressWiring = src => {
+    const run = mainSlice(src, "relayRun"), ask = mainSlice(src, "askAgain");
+    return { reaches: /pressing = relayPressOwed && typeof relayChannel\.press === "function";/.test(run) && /if \(pressing\) relayChannel\.press\(\);/.test(run),
+      askPresses: /signinPressNow\(true\)/.test(ask) && !/\n  relaySoon\(\);\n/.test(ask) };
+  };
+  await leg("d31a", async () => { const p = pressWiring(MAIN_NOW); return { ok: p.reaches && p.askPresses, detail: brief(p) }; },
+    "the press's wiring: relayRun hands a press it owes to the channel it keeps, and Ask again is a press (its renewal, then the channel's press)");
+  await leg("d30a", () => seatlessDoorScene(), "finding 7: the door's seatless request carries the request's id and marks a door, so a waiting door join whose certificate this desk's clock holds run out reads the lead's answer, and a door request whose first reply was lost is kept and sent up");
   const PRODUCT_CH = path.join(ROOT, "shell", "relay", "channel.cjs");
   /* `tag` a plant line to lift, or {name, edits: [[from, to]]}, a planted fault whose `from` is found once in the channel. */
   async function liftedChannel(tag, fn) {
@@ -1910,11 +2691,65 @@ async function main() {
     ["seat-bound", "d10b", deskRenewLateScene, "the hello waits for a late renewal and goes with its certificate, not the one in hand"],
     [{ name: "a failed renewal let out of seatNow", edits: [["} catch { /* the certificate in hand goes */ }", "} finally { /* planted: a failure is not caught */ }"]] },
       "d9a", deskRenewFailsScene, "the renewal's failure stops the hello"],
+    ["withdraw-ask", "d12a", deskWithdrawScene, "a desk whose seat is refused never asks for the withdrawal's session, so its request stays up"],
+    ["withdrawn-session", "d12a", deskWithdrawScene, "the withdrawal's session is kept, and the request asked again goes first to it"],
+    ["seat-lapsed-reopen", "d13a", reopenScene, "a session refused for its seat is kept to its keep, and the desk reads nothing and is told nothing meanwhile"],
+    ["seat-none-renew", "d14a", noneSeatScene, "a hello refused for carrying no certificate asks no renewal"],
+    ["invite-reread", "d15a", doorSeatScene, "the knock carries the invitation read before the hello, whose certificate the hello's renewal replaced"],
+    ["door-second", "d15a", doorSeatScene, "a knock refused for its certificate turns the join away with no renewal"],
+    ["door-second", "d20a", doorTransientScene, "a knock refused once turns the join away, the renewal slow, failed or its hello refused"],
+    ["door-refused-kept", "d15a", doorSeatScene, "a certificate the door refused is knocked with again at every cycle"],
+    ["door-turned", "d15a", doorSeatScene, "a stranger whose renewed certificate is refused too is never turned away"],
+    ["door-seat-awaited", "d18a", doorGlueScene, "a door join with no certificate is never waited for, so it knocks a poll late or never"],
+    ["invite-reread", "d21a", rereadScene, "a resumed door request is read from the invitation before the hello, so it is never kept or sent"],
+    ["fresh-reread", "d21a", rereadScene, "an invitation arriving during the key hello is judged by the invitation before it, so a removed desk is told removed"],
+    ["reopen-socket", "d22a", socketScene, "the socket outlives its session"],
+    ["start-kicks", "d23a", startScene, "a running channel started again does nothing"],
+    ["press-hello", "d29a", pressOnceScene, "a press on a desk holding a session says no hello"],
+    ["press-retells", "d27a", pressSignoutScene, "a press's refusal is not told, so the notice a sign out ended stays away"],
+    ["door-press", "d29a", pressOnceScene, "a press at the door knocks with nothing the door refused before"],
+    ["answer-session-gone", "d16a", answerGoneScene, "a session the relay no longer takes at the answer's fetch is said as the wait and kept"],
   ]) {
     const line = "p " + id + (typeof tag === "object" ? " planting " + tag.name : " lifting plant:" + tag) + " in a copy of shell/relay/channel.cjs turns " + id + " red (" + what + "), and the product file is never written";
     if (plantSkipped(tag)) { skip(line); continue; }
     const p = await liftedChannel(tag, scene);
     check(results[id] && results[id].ok === true && p.turned && p.back, line + ": " + p.detail + ", sha " + (p.back ? "unchanged" : "CHANGED"));
+  }
+  /* The shell's glue lifted line by line in a copy of shell/main.js's text, handed to the scene (findings 2 and 7). */
+  for (const [tag, id, scene, what] of [
+    ["door-seatless", "d18a", doorGlueScene, "a door join with no certificate hands the channel nothing, so nothing asks for one"],
+    ["relay-seat-notice-kept", "d19a", noticeScene, "a renewal that still meets a refusal clears the notice"],
+    ["relay-seat-throttle-kept", "d19a", noticeScene, "a renewal resets the hour's throttle, so every poll asks the service"],
+    ["press-owed", "d29a", pressOnceScene, "a press owes the channel nothing, so it passes no refusal by"],
+    ["press-stamps", "d29a", pressOnceScene, "a press leaves the throttle open, so the cycle it wakes renews again"],
+    ["press-gap", "d29a", pressOnceScene, "a second press inside thirty seconds is a press again"],
+    ["seat-renew-unreached", "d28a", pressBlipScene, "an unreached renewal holds the whole hour"],
+    ["seatless-inv", "d30a", seatlessDoorScene, "the seatless request carries no id and marks no door"],
+  ]) {
+    const line = "p " + id + " lifting plant:" + tag + " in a copy of shell/main.js turns " + id + " red (" + what + "), and the product file is never written";
+    if (plantSkipped(tag)) { skip(line); continue; }
+    const lines = MAIN_NOW.split(/\n/), at = lines.findIndex(l => l.indexOf("/* plant:" + tag + " */") >= 0);
+    let turned = false, detail = "plant line absent";
+    if (at >= 0) { lines.splice(at, 1); const r = await safe(() => scene(undefined, lines.join("\n"))); turned = r.ok !== true; detail = turned ? "the check lifted" : "the check still held"; }
+    const back = fs.readFileSync(MAIN_FILE, "utf8") === MAIN_NOW;
+    check(results[id] && results[id].ok === true && turned && back, line + ": " + detail + ", sha " + (back ? "unchanged" : "CHANGED"));
+  }
+  for (const [tag, what] of [["press-reaches", "relayRun kicks or starts the channel and never presses it"], ["ask-again-press", "Ask again wakes the relay without a press"]]) {
+    const line = "p d31a lifting plant:" + tag + " in a copy of shell/main.js turns d31a red (" + what + "), and the product file is never written";
+    if (plantSkipped(tag)) { skip(line); continue; }
+    const lines = MAIN_NOW.split(/\n/), at = lines.findIndex(l => l.indexOf("/* plant:" + tag + " */") >= 0);
+    let turned = false;
+    if (at >= 0) { lines.splice(at, 1); try { const p = pressWiring(lines.join("\n")); turned = !(p.reaches && p.askPresses); } catch { turned = true; } }
+    check(results.d31a && results.d31a.ok === true && turned && fs.readFileSync(MAIN_FILE, "utf8") === MAIN_NOW, line + ": turned=" + turned);
+  }
+  /* The relay's half of finding 2, judged at the desk: a resume asking no withdrawal opens the withdrawal's session again. */
+  {
+    const line = "p d11a lifting plant:withdraw-asked in a copy of relay/core.cjs turns d11a red (the waiting desk's resume opens the withdrawal's session, so it never renews and never reads its answer), and the product file is never written";
+    if (plantSkipped("withdraw-asked")) skip(line);
+    else {
+      const p = await lifted("withdraw-asked", waitingSeatScene);
+      check(results.d11a && results.d11a.ok === true && p.turned && p.back, line + ": " + p.detail + ", sha " + (p.back ? "unchanged" : "CHANGED"));
+    }
   }
   /* s12b ("main's core does not name seats") is retired with the fixture: its alarm, that the relay and the service might be
      deployed in the wrong order, is now the landing plan's deploy order and the deploy's own legs. O1 leans on main's core still. */
