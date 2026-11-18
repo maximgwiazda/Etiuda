@@ -153,6 +153,8 @@ const SETTLE_MS = 300;
 const POLL_MS = 60 * 1000;
 const COUNTER_RETRY_MS = 60 * 1000;
 const PING_MS = 30 * 1000;
+/* How long a hello waits for its seat's renewal: a licence service that never answers must not hold the hello, and with it the whole channel, for good. */
+const SEAT_RENEW_MS = 30 * 1000;
 const RETRY_MIN_MS = 2000, RETRY_MAX_MS = 60 * 1000;
 const TMP_RE = /\.tmp$/i;
 const HEX32 = /^[0-9a-f]{32}$/, HEX64 = /^[0-9a-f]{64}$/;
@@ -2090,8 +2092,9 @@ function createProgram(opts) {
    url, headers, body) answering {status, header(name), bytes} and throwing where the relay does not answer; connect(url,
    headers, {message, close}) a socket or null; write(abs, text) the shell's atomic write; say(line); onTeam() after a team
    file lands; onRemoved() once, when the relay refuses this desk as removed and the shell is listening, after which
-   the channel stops asking; seat() this desk's seat certificate or null, seatRenew() a promise that renews it, and
-   onSeat(state), "refused" or "open", as the relay refuses or takes it (seatHello); room(reason) after each upload, "" where it
+   the channel stops asking; seat() this desk's seat certificate or null, seatRenew() a promise that renews it (a hello waits for it
+   seatRenewMs, a positive whole number of milliseconds, thirty seconds where absent, then goes on with the certificate in hand),
+   and onSeat(state), "refused" or "open", as the relay refuses or takes it (seatHello); room(reason) after each upload, "" where it
    was taken and the refusal's reason where it was not; clock. */
 function createChannel(opts) {
   const o = opts || {};
@@ -2108,6 +2111,7 @@ function createChannel(opts) {
   const prog = createProgram({ io, clock, say, onFork: () => { if (typeof o.onFork === "function") o.onFork(); }, load: () => readState(stateFile), save: stateFile ? saveState : null, pin: o.pin && o.pin() });
   const base = String(o.url || "").replace(/\/+$/, "") + "/t/" + o.rt + "/";
   const pollMs = Number.isFinite(o.pollMs) ? o.pollMs : POLL_MS;
+  const seatRenewMs = Number.isSafeInteger(o.seatRenewMs) && o.seatRenewMs > 0 ? o.seatRenewMs : SEAT_RENEW_MS;
   let session = null, sock = null, running = false, busy = null, again = false, backoff = RETRY_MIN_MS, answerHeld = null, answerDue = null;
   /* A socket whose connector says when it opens (`opens`): live once open; down after two closes in a row before opening, or a
      whole poll unopened, until one opens; while down it is tried with each poll's ask, not on a loop of its own, timed by
@@ -2296,7 +2300,15 @@ function createChannel(opts) {
   async function seatNow(force) {
     let c = typeof o.seat === "function" ? o.seat() : null;
     if (c && (force || (Number.isSafeInteger(c.until) && c.until <= clock())) && typeof o.seatRenew === "function") { /* plant:seat-renew-first */
-      try { await o.seatRenew(); } catch { /* the certificate in hand goes */ }
+      let timer = null;
+      try {
+        const asked = Promise.resolve(o.seatRenew());
+        asked.catch(() => { /* a renewal that fails after the bound has decided nothing */ });
+        let waited = asked;
+        waited = Promise.race([asked, new Promise(done => { timer = setTimeout(done, seatRenewMs); if (timer.unref) timer.unref(); })]); /* plant:seat-bound */
+        await waited;
+      } catch { /* the certificate in hand goes */ }
+      if (timer) clearTimeout(timer);
       c = o.seat();
     }
     return table(c) ? c : null;

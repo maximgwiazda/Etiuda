@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-seats-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 142;
+const EXPECTED = 147;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* ETIUDA_PLANT_ONLY, a comma list of plant tags or planted names: only those plants run, every other is skipped, so one plant is proved
    alone without the whole sweep. */
@@ -1499,7 +1499,8 @@ async function main() {
       },
       connect: () => null,
       seat: () => seat.cert || null,
-      seatRenew: async () => { seat.renewals = (seat.renewals || 0) + 1; if (seat.renew) seat.cert = seat.renew(); },
+      seatRenew: async () => { seat.renewals = (seat.renewals || 0) + 1; if (seat.hold) await seat.hold(); if (seat.renew) seat.cert = seat.renew(); },
+      seatRenewMs: seat.renewMs,
       onSeat: s => told.push(s),
     });
     return { ch, bodies, told, ends, answers, mirror };
@@ -1755,7 +1756,7 @@ async function main() {
   /* The test architect's case on C-4: a desk holding a run-out certificate asks its renewal before the hello, and where the renewal fails
      (it throws) the hello still goes, the run-out certificate in hand, and the cycle ends: over the core before seats it opens exactly
      as a desk holding none; over this relay it is refused seat-lapsed, the shell told refused once, and the next cycle tries again. A
-     renewal that never answers is not driven here: the channel bounds no wait on it (see the report). */
+     renewal that never answers is d10a's, answering late d10b's and the bound's option d10c's. */
   async function deskRenewFailsScene(mod) {
     const failing = (w, name) => ({ cert: certFor(w.desks[name].pub, w.licence, w.R.clock.now - 8 * DAY, 7 * DAY), renew: () => { throw new Error("the service did not answer"); } });
     const w = await team({});
@@ -1786,6 +1787,81 @@ async function main() {
       && here.second >= 2 && here.toldAfter.join() === "refused" && there.online && there.sent.join() === "seat" && there.renewals >= 1 && there.sameAsNone;
     return { ok, detail: brief({ thisRelay: here, beforeSeats: there }) };
   }
+  /* A renewal that never answers, or answers late: the hello waits for it at most seatRenewMs (here a tenth of a second where the product's is
+     thirty), then goes with the certificate in hand and the cycle ends, the channel not stuck; the late answer decides nothing already
+     done and is the certificate the next hello reads; one that answers in time is used as it always was; the option is read only as a
+     positive whole number. Each scene is held to a guard of its own, so a wait without end is a red leg and not a hung suite. */
+  const guarded = (ms, work) => new Promise(done => { const t = setTimeout(() => done({ stuck: true }), ms); work().then(v => { clearTimeout(t); done(v); }, e => { clearTimeout(t); done({ threw: String(e && e.message || e) }); }); });
+  const nap = ms => new Promise(r => setTimeout(r, ms));
+  const aged = w => certFor(w.desks.a.pub, w.licence, w.R.clock.now - 8 * DAY, 7 * DAY);
+  async function deskRenewHangsScene(mod) {
+    const w = await team({});
+    const old = aged(w), seat = { cert: old, renewMs: 100, hold: () => new Promise(() => {}) }, c = deskChannel(w, "a", seat, mod);
+    const t0 = Date.now();
+    const cycle = await guarded(5000, async () => { await cycleOf(c); return { done: true }; });
+    const took = Date.now() - t0;
+    if (!cycle.done) return { ok: false, detail: brief({ stuck: !!cycle.stuck, threw: cycle.threw, hellos: c.bodies.length }) };
+    const first = c.bodies[0];
+    const here = { online: c.ch.online(), sent: keyHellos(c).map(carries), sentOld: !!first && !!first.seat && first.seat.issued === old.issued, told: c.told.slice(), renewals: seat.renewals || 0, took };
+    c.ch.kick();
+    const again = await guarded(5000, async () => { await c.ch.idle(); return { done: true }; });
+    here.second = keyHellos(c).length;
+    here.notStuck = !!again.done;
+    if (again.done) await c.ch.stop();
+    const ok = !here.online && here.sent[0] === "seat" && here.sentOld && here.told.join() === "refused" && here.renewals >= 1 && took >= 90 && took < 4000 && here.notStuck && here.second >= 2;
+    return { ok, detail: brief(here) };
+  }
+  async function deskRenewLateScene(mod) {
+    const w = await team({});
+    const old = aged(w), fresh = certFor(w.desks.a.pub, w.licence, w.R.clock.now, 7 * DAY);
+    const seat = { cert: old, renewMs: 100, hold: () => nap(500), renew: () => fresh };
+    const c = deskChannel(w, "a", seat, mod);
+    const first = await guarded(5000, async () => { await cycleOf(c); return { done: true }; });
+    if (!first.done) return { ok: false, detail: brief({ stuck: !!first.stuck, threw: first.threw }) };
+    const row = { online: c.ch.online(), sentOld: !!c.bodies[0] && !!c.bodies[0].seat && c.bodies[0].seat.issued === old.issued, told: c.told.slice() };
+    for (let i = 0; i < 50 && seat.cert !== fresh; i++) await nap(100);
+    row.lateTaken = seat.cert === fresh;
+    c.ch.kick();
+    await c.ch.idle();
+    const last = c.bodies[c.bodies.length - 1];
+    row.nextOnline = c.ch.online();
+    row.nextSentFresh = !!last && !!last.seat && last.seat.issued === fresh.issued;
+    row.toldAfter = c.told.slice();
+    await c.ch.stop();
+    /* A renewal that answers in time, well inside a long bound: used as ever, the one hello carrying the new certificate. */
+    const o = await team({});
+    const nowSeat = { cert: aged(o), renewMs: 5000, hold: () => nap(30), renew: () => certFor(o.desks.a.pub, o.licence, o.R.clock.now, 7 * DAY) };
+    const oc = deskChannel(o, "a", nowSeat, mod);
+    const t0 = Date.now();
+    const quick = await guarded(5000, async () => { await cycleOf(oc); return { done: true }; });
+    const inTime = { done: !!quick.done, online: oc.ch.online(), renewals: nowSeat.renewals || 0, carriesNew: !!oc.bodies[0] && !!oc.bodies[0].seat && oc.bodies[0].seat.issued === o.R.clock.now, took: Date.now() - t0 };
+    if (quick.done) await oc.ch.stop();
+    const ok = !row.online && row.sentOld && row.told[0] === "refused" && row.lateTaken && row.nextOnline && row.nextSentFresh && row.toldAfter.join() === "refused,open"
+      && inTime.done && inTime.online && inTime.renewals === 1 && inTime.carriesNew && inTime.took < 3000;
+    return { ok, detail: brief({ late: row, inTime }) };
+  }
+  /* The option is read only as a positive whole number: the delay the channel asks its timer for, recorded through the global timer
+     while a renewal that answers at once is waited on, is the option where it is one and thirty seconds where it is anything else
+     (absent, zero, negative, fractional, text, infinite), and the timer is cleared where the renewal answered first. */
+  async function deskRenewOptionScene(mod) {
+    const rows = {}, realSet = globalThis.setTimeout, realClear = globalThis.clearTimeout;
+    for (const [name, value, want] of [["100", 100, 100], ["absent", undefined, 30000], ["zero", 0, 30000], ["negative", -5, 30000], ["fraction", 1.5, 30000],
+      ["text", "100", 30000], ["infinite", Infinity, 30000], ["nan", NaN, 30000]]) {
+      const w = await team({}), seat = { cert: aged(w), hold: () => nap(5), renew: () => certFor(w.desks.a.pub, w.licence, w.R.clock.now, 7 * DAY) };
+      if (value !== undefined) seat.renewMs = value;
+      const asked = [], cleared = [];
+      globalThis.setTimeout = (fn, ms, ...rest) => { const t = realSet(fn, ms, ...rest); if (ms === 100 || ms === 30000) asked.push({ ms, t }); return t; };
+      globalThis.clearTimeout = t => { cleared.push(t); return realClear(t); };
+      let c = null;
+      try { c = deskChannel(w, "a", seat, mod); await cycleOf(c); } finally { globalThis.setTimeout = realSet; globalThis.clearTimeout = realClear; }
+      const mine = asked.filter(a => a.ms === want);
+      rows[name] = { asked: asked.map(a => a.ms), clearedOnAnswer: mine.length > 0 && mine.every(a => cleared.indexOf(a.t) >= 0), opened: c.ch.online() };
+      await c.ch.stop();
+    }
+    const ok = Object.values(rows).every(r => r.asked.length > 0 && r.clearedOnAnswer && r.opened) && rows["100"].asked.every(ms => ms === 100)
+      && Object.keys(rows).filter(k => k !== "100").every(k => rows[k].asked.every(ms => ms === 30000));
+    return { ok, detail: brief(rows) };
+  }
   await leg("d4a", () => deskRefusedRenewsScene(), "a desk whose current certificate the relay refuses (its service key revoked) renews once and opens with the new one on the same challenge; a renewal bringing the same certificate is not sent again");
   await leg("d1a", () => deskFirstScene(), "the desk sends its certificate from the first hello on every team: on an Entra team its one hello carries it and opens, on an ordinary team its first hello carries it and opens, and a desk holding none sends none and is refused, the shell told");
   await leg("d2a", () => deskRenewsScene(), "a desk whose certificate has run out renews before its session, once, and the session carries the new certificate and opens");
@@ -1795,6 +1871,9 @@ async function main() {
   await leg("d7a", () => deskResumeScene(), "the resume of a bound invitation carries the certificate and opens, and a certificate the relay refuses is renewed and the resume sent again on the same challenge, and opens");
   await leg("d8a", () => harmlessScene(), "a key hello, an invitation's hello, a bound resume and a door request by desks holding certificates answer and store exactly as by desks holding none, over the relay before the ordinary arm and over the core before seats, and open all four over this relay; a relay refusing the field would be seen");
   await leg("d9a", () => deskRenewFailsScene(), "a desk whose run-out certificate's renewal fails still sends its hello with that certificate and ends its cycle: over the core before seats it opens exactly as a desk holding none; over this relay it is refused seat-lapsed, the shell told refused once, and the next cycle says hello again");
+  await leg("d10a", () => deskRenewHangsScene(), "a desk whose renewal never answers waits for it only the bound, then sends its hello with the certificate in hand and ends its cycle, and the next cycle says hello again: the channel is not stuck");
+  await leg("d10b", () => deskRenewLateScene(), "a renewal answering after the bound decides nothing already done: the first hello went with the certificate in hand, the late certificate is what the next hello carries and opens with; a renewal answering in time is used, its one hello carrying the new certificate");
+  await leg("d10c", () => deskRenewOptionScene(), "the renewal's bound is the option where it is a positive whole number of milliseconds and thirty seconds otherwise, and its timer is cleared where the renewal answered first");
   const PRODUCT_CH = path.join(ROOT, "shell", "relay", "channel.cjs");
   /* `tag` a plant line to lift, or {name, edits: [[from, to]]}, a planted fault whose `from` is found once in the channel. */
   async function liftedChannel(tag, fn) {
@@ -1827,7 +1906,9 @@ async function main() {
     ["seat-renew-refused", "d4a", deskRefusedRenewsScene, "a refused current certificate is never renewed"],
     ["invite-seat", "d5a", deskInviteScene, "the invitation's hello goes without the certificate"],
     ["token-kept", "d6a", deskInviteRefusedScene, "an invitation's hello refused for its seat marks the token used"],
-    [{ name: "a failed renewal let out of seatNow", edits: [["try { await o.seatRenew(); } catch { /* the certificate in hand goes */ }", "await o.seatRenew();"]] },
+    ["seat-bound", "d10a", deskRenewHangsScene, "the hello waits without end for a renewal that never answers"],
+    ["seat-bound", "d10b", deskRenewLateScene, "the hello waits for a late renewal and goes with its certificate, not the one in hand"],
+    [{ name: "a failed renewal let out of seatNow", edits: [["} catch { /* the certificate in hand goes */ }", "} finally { /* planted: a failure is not caught */ }"]] },
       "d9a", deskRenewFailsScene, "the renewal's failure stops the hello"],
   ]) {
     const line = "p " + id + (typeof tag === "object" ? " planting " + tag.name : " lifting plant:" + tag) + " in a copy of shell/relay/channel.cjs turns " + id + " red (" + what + "), and the product file is never written";
