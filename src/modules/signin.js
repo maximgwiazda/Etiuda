@@ -436,7 +436,7 @@ function deskWhySentence(on, lead){
   if(on==="trial") return t("its trial ended");
   if(on==="studio-trial") return t("the Etiuda Studio trial that covered it ended");
   if(on==="own") return t("the licence ended");
-  if(on==="team") return named(t("the seat on the team {LEAD} leads ended"),"{LEAD}",lead);
+  if(on==="team") return lead ? named(t("the seat on the team {LEAD} leads ended"),"{LEAD}",lead) : t("the seat on the team ended");
   if(on==="org") return t("the organisation's licence no longer gives this account a seat");
   return "";
 }
@@ -450,7 +450,8 @@ function deskDoorLines(ds){
   if(ds.state==="first" || ds.state==="first-offline") return [t("Etiuda starts with a sign-in."),
     t("Signing in with Microsoft or Google gives this computer a seat: the team's, where its lead has admitted this account, or else a trial of fourteen days. Catalogs open once the seat is here.")];
   if(ds.state==="waiting") return [t("The request to join is waiting."),
-    fill(t("Catalogs open here again once {LEAD}, the team's lead, accepts it. Etiuda's own fourteen days ended on {DESK_END}."), {"{LEAD}":lead, "{DESK_END}":desk})];
+    lead ? fill(t("Catalogs open here again once {LEAD}, the team's lead, accepts it. Etiuda's own fourteen days ended on {DESK_END}."), {"{LEAD}":lead, "{DESK_END}":desk})
+      : fill(t("Catalogs open here again once the team's lead accepts it. Etiuda's own fourteen days ended on {DESK_END}."), {"{DESK_END}":desk})];
   if(ds.state==="trial-over-org") return [t("Etiuda's trial has ended."),
     fill(t("It ended on {DESK_END}. This account's organisation holds an Etiuda licence, so a team's lead can admit this account; buying a licence opens the catalogs again too."), {"{DESK_END}":desk})];
   if(ds.state==="trial-over") return [t("Etiuda's trial has ended."),
@@ -464,12 +465,13 @@ function deskDoorLines(ds){
     fill(t("Etiuda's own fourteen days ended on {DESK_END}. The Etiuda Studio trial on this account began later and covers Etiuda too, until {STUDIO_END}."), {"{DESK_END}":desk, "{STUDIO_END}":studio})];
   if(ds.state==="working" && ds.seatOn==="own") return [t("This account holds an Etiuda licence."),
     fill(t("Paid until {ENDS}, on up to three computers."), {"{ENDS}":ends})];
-  if(ds.state==="working" && ds.seatOn==="team") return [fill(t("This account has a seat on the team {LEAD} leads."), {"{LEAD}":lead}),
+  if(ds.state==="working" && ds.seatOn==="team") return [lead ? fill(t("This account has a seat on the team {LEAD} leads."), {"{LEAD}":lead}) : t("This account has a seat on a team."),
     fill(t("It renews by itself; the team's licence runs until {ENDS}."), {"{ENDS}":ends})];
   if(ds.state==="working" && ds.seatOn==="org") return [t("This account has a seat on its organisation's licence."),
     fill(t("It renews by itself; the licence runs until {ENDS}."), {"{ENDS}":ends})];
   if(ds.state==="working" && ds.waitingOnLead) return [t("Etiuda's own trial is running."),
-    fill(t("Day {N} of 14, until {DESK_END}. The request to join waits for {LEAD}, and Etiuda works meanwhile."), {"{N}":n, "{DESK_END}":desk, "{LEAD}":lead})];
+    lead ? fill(t("Day {N} of 14, until {DESK_END}. The request to join waits for {LEAD}, and Etiuda works meanwhile."), {"{N}":n, "{DESK_END}":desk, "{LEAD}":lead})
+      : fill(t("Day {N} of 14, until {DESK_END}. The request to join waits for the team's lead, and Etiuda works meanwhile."), {"{N}":n, "{DESK_END}":desk})];
   if(ds.state==="working") return [t("Etiuda's own trial is running."),
     fill(t("Day {N} of 14, until {DATE}, on up to three computers."), {"{N}":n, "{DATE}":desk})];
   return ["", ""];
@@ -481,6 +483,10 @@ function doorBandState(v){
   return {shown:true, dot:true,
     text:named(named(t("Seat ended {ENDED} · Etiuda stops {DATE}"),"{ENDED}",ended),"{DATE}",until),
     tip:named(t("This account's seat has ended; Etiuda stops on {DATE}."),"{DATE}",until)};
+}
+function doorAskLabel(lead){
+  if(!lead) return t("Ask a team's lead…"); /* plant:door-ask-noname */
+  return named(t("Ask {LEAD}"),"{LEAD}",lead);
 }
 function doorPress(label, solid, act){
   const buy=act==="buy"?' data-e-open="buy"':'';
@@ -542,7 +548,7 @@ function doorLaterHtml(v, ds){
   const checkFilled=ds.state==="waiting";
   let acts="";
   if(checkFilled) acts+=doorPress(t("Check now"), true, "check");
-  else if(askable) acts+=doorPress(named(t("Ask {LEAD}"),"{LEAD}",ds.lead), true, "ask");
+  else if(askable) acts+=doorPress(doorAskLabel(ds.lead), true, "ask");
   else acts+=doorPress(t("Buy"), true, "buy");
   if(checkFilled || askable) acts+=doorPress(t("Buy"), false, "buy");
   const quiet=[];
@@ -624,7 +630,7 @@ function signinDoorOf(v){
     const endedPair=deskDoorLines(ds);
     const ask=!!(ds.orgLicence || ds.seatOn==="team");
     const acts=[];
-    if(ask) acts.push({act:"ask", label:named(t("Ask {LEAD}"),"{LEAD}",ds.lead), solid:true});
+    if(ask) acts.push({act:"ask", label:doorAskLabel(ds.lead), solid:true});
     else acts.push({act:"check", label:t("Check now"), solid:true});
     acts.push({act:"buy", label:t("Buy")});
     if(ask) acts.push({act:"check", label:t("Check now")});

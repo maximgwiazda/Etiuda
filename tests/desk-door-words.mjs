@@ -18,7 +18,7 @@ const SETTINGS_PATH = path.join(ROOT, "src", "modules", "settings.js");
 const TEMPLATE_PATH = path.join(ROOT, "src", "template.html");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
-const CHECKS = 29, PLANTS = 15;
+const CHECKS = 30, PLANTS = 16;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -470,6 +470,39 @@ CASES.css = (src) => {
     && /\.door-out\{[^}]*margin-top:18px;padding-top:18px;border-top:1px solid var\(--line\)/.test(tpl);
 };
 
+/* No lead's name: the five forms the words file already holds. A named lead keeps the named sentence. */
+CASES.noName = (pg = P) => {
+  const opt = { noTeam: true };
+  const en2 = textOf(doorHtml(pg, VIEWS.waiting, "en", opt));
+  const pl2 = textOf(doorHtml(pg, VIEWS.waiting, "pl", opt));
+  const en3 = doorHtml(pg, VIEWS.trialOverOrg, "en", opt);
+  const pl3 = doorHtml(pg, VIEWS.trialOverOrg, "pl", opt);
+  const stoppedTeam = Object.assign({}, VIEWS.stopped("team"), { holding: { on: "team", ends: T_ENDS } });
+  const en5 = textOf(doorHtml(pg, stoppedTeam, "en", opt));
+  const pl5 = textOf(doorHtml(pg, stoppedTeam, "pl", opt));
+  const en6 = textOf(panelHtml(pg, VIEWS.working("trial", { askLead: true }), "en", opt));
+  const pl6 = textOf(panelHtml(pg, VIEWS.working("trial", { askLead: true }), "pl", opt));
+  const seat = Object.assign({}, VIEWS.working("team"), { holding: { on: "team", ends: T_ENDS } });
+  const enTeam = textOf(panelHtml(pg, seat, "en", opt));
+  const plTeam = textOf(panelHtml(pg, seat, "pl", opt));
+  const ended = Object.assign({}, VIEWS.ended, { holding: { on: "team", ends: T_ENDS } });
+  const en4 = panelHtml(pg, ended, "en", opt);
+  const pl4 = panelHtml(pg, ended, "pl", opt);
+  const ask = "Ask a team's lead\u2026";
+  const askPl = "Popro\u015b lidera zespo\u0142u\u2026";
+  return en2.includes("once the team's lead accepts it") && en2.indexOf("once ,") < 0
+    && pl2.includes("gdy lider zespo\u0142u j\u0105 przyjmie") && pl2.indexOf("gdy ,") < 0
+    && textOf(en3).includes(ask) && en3.indexOf(">Ask <") < 0
+    && textOf(pl3).includes(askPl) && pl3.indexOf(">Popro\u015b: <") < 0
+    && textOf(en4).includes(ask) && textOf(pl4).includes(askPl)
+    && en5.includes("the seat on the team ended") && en5.indexOf("leads ended") < 0
+    && pl5.includes("wygas\u0142o miejsce w zespole") && pl5.indexOf("kt\u00f3ry prowadzi") < 0
+    && en6.includes("waits for the team's lead") && en6.indexOf("waits for ,") < 0
+    && pl6.includes("czeka na odpowied\u017a lidera zespo\u0142u") && pl6.indexOf("udzieli ,") < 0
+    && enTeam.includes("This account has a seat on a team.") && enTeam.indexOf("leads.") < 0
+    && plTeam.includes("To konto ma miejsce w zespole.") && plTeam.indexOf("kt\u00f3ry prowadzi") < 0;
+};
+
 /* Door lines say the month in full, and a date in another year keeps the year. The panel's own short day is unchanged. */
 CASES.doorDates = (pg = P) => {
   const en2 = textOf(doorHtml(pg, VIEWS.waiting, "en"));
@@ -529,6 +562,7 @@ const RUN_LIST = [
   ["dd27", "wayOn", "the way on is filled var(--accent) with white text and an accent border, and the fill is restated on hover and focus"],
   ["dd28", "bandFixed", "the band is flex 0 0 30px with a 30px minimum, so it cannot shrink to its text"],
   ["dd29", "doorDates", "door lines use a long month, and a date in another year keeps the year"],
+  ["dd30", "noName", "an unknown lead uses the words file's no-name forms, in English and Polish, and draws no blank"],
 ];
 
 /* Verify CHECKS matches the 21 named entries (plus 5 extra state-1..6 parity checks? Keep CHECKS exact). */
@@ -613,6 +647,9 @@ if (!PLANTS_OFF) {
   await plant("ddp12", SETTINGS_PATH,
     ["+'<p class=\"sgn-cap\">'+esc(t(\"This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name, address and picture, and shows them only to the leads and administrator of the licence it asks to join.\"))+'</p></div>'; /* plant:account-privacy-full */", "+'<p class=\"sgn-cap\">'+esc(t(\"This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev.\"))+'</p></div>';"],
     "account_en");
+  await plant("ddp16", SIGNIN_PATH,
+    ["if(!lead) return t(\"Ask a team's lead…\"); /* plant:door-ask-noname */", "if(false) return t(\"Ask a team's lead…\"); /* plant:door-ask-noname */"],
+    "noName");
   await plant("ddp15", SIGNIN_PATH,
     ["if(d.getFullYear()!==new Date(now>0?now:Date.now()).getFullYear()) opt.year=\"numeric\"; /* plant:door-day-year */", "if(false) opt.year=\"numeric\"; /* plant:door-day-year */"],
     "doorDates");
