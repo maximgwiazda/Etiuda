@@ -18,7 +18,7 @@ const SETTINGS_PATH = path.join(ROOT, "src", "modules", "settings.js");
 const TEMPLATE_PATH = path.join(ROOT, "src", "template.html");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
-const CHECKS = 33, PLANTS = 22;
+const CHECKS = 34, PLANTS = 22;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -255,8 +255,8 @@ CASES.seamShape = (pg = P) => {
     const shapesOk = all.every(x => Object.keys(x).sort().join() === expectedKeys
       && Object.keys(expectedTypes).every(k => typeof x[k] === expectedTypes[k]));
     const stoppedPlain = s({ offered: ["microsoft"], signedIn: "microsoft", code: CODE, works: false, stoppedAt: T_UNTIL }).state === "stopped";
-    const noCompoundTeam = s({ offered: ["microsoft"], signedIn: "microsoft", code: CODE, works: false, stoppedAt: 0, holding: { on: "team", ends: T_ENDS } }).state === "none";
-    const noCompoundEnded = s({ offered: ["microsoft"], signedIn: "microsoft", code: CODE, works: false, stoppedAt: 0, ended: T_ENDED }).state === "none";
+    const noCompoundTeam = s({ offered: ["microsoft"], signedIn: "microsoft", code: CODE, works: false, stoppedAt: 0, holding: { on: "team", ends: T_ENDS } }).state === "stopped";
+    const noCompoundEnded = s({ offered: ["microsoft"], signedIn: "microsoft", code: CODE, works: false, stoppedAt: 0, ended: T_ENDED }).state === "stopped";
     /* The shell sets stoppedAt on every seated desk that does not work (shell/main.js signinViewOf). */
     const trialsOnly = { offered: ["microsoft"], signedIn: "microsoft", code: CODE, works: false, stoppedAt: T_UNTIL, now: T_NOW, trials: { desk: T_DESK_END } };
     const trialSeat = { holding: { on: "trial", ends: T_DESK_END } };
@@ -269,6 +269,54 @@ CASES.seamShape = (pg = P) => {
       && s(Object.assign({}, VIEWS.first, { said: "unreached" })).state === "none";
     return shapesOk && stoppedPlain && noCompoundTeam && noCompoundEnded && trialsEndedOk && busyRefusedOk;
   } finally {
+    hostOff();
+  }
+};
+
+/* 1c. Argon 51 B2: deskDoorState must not answer "none" while the gate is due (waiting, full, no licence, and signin.json
+   marked by another key while a team seat is held). Side-step: paintFirstSignin never draws the retired "Sign in to Etiuda"
+   fallback for any signed-in non-working view, and other held seat kinds marked by another key map to stopped too. */
+CASES.doorNotNoneWhenDue = (pg = P) => {
+  const s = v => pg.deskDoorState(pg.signinRead(v));
+  const waiting = { offered: ["microsoft", "google"], signedIn: "microsoft", code: CODE, works: false, refused: "waiting" };
+  const full = { offered: ["microsoft", "google"], signedIn: "microsoft", code: CODE, works: false, refused: "full" };
+  const noLic = { offered: ["microsoft", "google"], signedIn: "microsoft", code: CODE, works: false, refused: "" };
+  const noLicSaid = { offered: ["microsoft", "google"], signedIn: "microsoft", code: CODE, works: false, refused: "nolicence" };
+  const askNoTrial = { offered: ["microsoft", "google"], signedIn: "microsoft", code: CODE, works: false, askLead: true };
+  const otherKeyTeam = { offered: ["microsoft", "google"], signedIn: "microsoft", code: "", works: false, stoppedAt: 0, holding: { on: "team", ends: T_ENDS, lead: LEAD } };
+  const otherKeyOwn = { offered: ["microsoft", "google"], signedIn: "microsoft", code: "", works: false, stoppedAt: 0, holding: { on: "own", ends: T_ENDS } };
+
+  hostOn(waiting);
+  const hadDoc = "document" in globalThis, prevDoc = globalThis.document;
+  try {
+    const dueStatesOk = [waiting, full, noLic, noLicSaid, askNoTrial, otherKeyTeam, otherKeyOwn].every(v => {
+      const rv = pg.signinRead(v), ds = s(rv), html = pg.firstSigninHtml(rv);
+      return pg.firstSigninDue(rv) === true && ds.state !== "none" && html.length > 0 && !html.includes("Sign in to Etiuda");
+    });
+    const waitKindOk = s(waiting).state === "waiting" && s(full).state === "waiting" && s(askNoTrial).state === "waiting";
+    const stopKindOk = s(noLic).state === "stopped" && s(noLicSaid).state === "stopped"
+      && s(otherKeyTeam).state === "stopped" && s(otherKeyOwn).state === "stopped"
+      && pg.firstSigninHtml(pg.signinRead(otherKeyTeam)).includes("data-door-save")
+      && pg.firstSigninHtml(pg.signinRead(otherKeyTeam)).includes(LEAD);
+
+    /* Side-step: paintFirstSignin on DOM stand-in draws doorLaterHtml (not the retired fallback) for waiting, full, noLic, C2.5a. */
+    const classes = new Set();
+    const fsEl = { hidden: true, innerHTML: "", setAttribute() {}, contains: () => false, querySelector: () => null };
+    globalThis.document = {
+      body: { classList: { add: c => classes.add(c), remove: c => classes.delete(c), contains: c => classes.has(c) } },
+      activeElement: null,
+      querySelector: sel => (sel === "#firstSignin" ? fsEl : null)
+    };
+    let paintedOk = true;
+    for (const v of [waiting, full, noLic, otherKeyTeam]) {
+      hostOn(v);
+      pg.signinNow();
+      pg.bootFirstSignin();
+      if (!pg.firstSigninOpenNow() || fsEl.innerHTML.includes("Sign in to Etiuda") || !fsEl.innerHTML.length) paintedOk = false;
+    }
+    return dueStatesOk && waitKindOk && stopKindOk && paintedOk;
+  } finally {
+    if (!hadDoc) delete globalThis.document; else globalThis.document = prevDoc;
     hostOff();
   }
 };
@@ -638,6 +686,7 @@ const RUN_LIST = [
   ["dd31", "panelRows", "state 4 puts the way on and Buy on one row, then Check now and Account settings on the next"],
   ["dd32", "offlineGlyph", "the offline box leads with an 18px crossed-signal glyph at 70% opacity"],
   ["dd33", "seamShape", "B-3a1 seam: same keys and types; waiting and both trial-over states come before stopped where their fields hold, on the stoppedAt the shell sends; stopped is !works with stoppedAt > 0 where those fields do not; trials-ended, busy and refusal map cleanly"],
+  ["dd34", "doorNotNoneWhenDue", "Argon 51 B2: deskDoorState never answers none while signed in and due (waiting, full, no licence, team seat marked by another key), and paintFirstSignin never draws the retired fallback"],
 ];
 
 /* Verify CHECKS matches the 21 named entries (plus 5 extra state-1..6 parity checks? Keep CHECKS exact). */

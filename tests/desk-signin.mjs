@@ -52,7 +52,7 @@ const PLANTS = 278;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 201 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 203 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -4330,6 +4330,169 @@ CASES.stateKeyLate = (s, swap) => {
     && after.now === NOW + 3 * DAY_MS && after.stoppedAt === 0 && st.writes === 1 && !!onDisk && !!onDisk.cert;
 };
 
+/* Argon 51 M1: the settle and the kept-file path also compare against the clock's own issued mark, so a null held certificate
+   in memory or an older one from signin.json cannot revive the desk; side-step: sign-in after Sign out and kept-file via tick. */
+CASES.settleClockIssued = async (s, swap) => {
+  const c1 = cert({ issued: NOW, until: NOW + 30 * DAY_MS });
+  const c2 = cert({ issued: NOW + 5 * DAY_MS, until: NOW + 7 * DAY_MS });
+  const deskNow = NOW + 8 * DAY_MS;
+  const h2 = heldOf({ cert: c2, seated: true });
+  let clk = s.signinClockObserve(null, NOW + 5 * DAY_MS, 1000, h2, DESK_KEY);
+  clk = s.signinClockObserve(clk, deskNow, 1000 + 3 * DAY_MS, h2, DESK_KEY);
+  const olderBody = strayAnswer({ ok: true, code: CODE, certificate: c1, doors: [] });
+  const olderAns = s.signinAnswer(olderBody, DESK_KEY, true);
+
+  /* C1.2: null held cert in memory, older replayed cert refused against clk.issued; equal issued taken. */
+  const hNoCert = Object.assign({}, h2, { cert: null, code: "" });
+  const rOldNull = s.signinSettle(hNoCert, olderAns, deskNow, clk.desk, clk.issued);
+  const cSameIssued = cert({ issued: c2.issued, until: NOW + 20 * DAY_MS });
+  const rEqNull = s.signinSettle(hNoCert, s.signinAnswer(answer({ ok: true, code: CODE, certificate: cSameIssued, doors: [] }), DESK_KEY, true), deskNow, clk.desk, clk.issued);
+  const directOk = rOldNull.cert === null && rOldNull.reached === false
+    && s.signinWorks(rOldNull, DESK_KEY, clk.desk) === false
+    && rEqNull.cert === cSameIssued && s.signinWorks(rEqNull, DESK_KEY, clk.desk) === true;
+
+  /* Wired signinIo + signinRenewHeld: io.deskIssued() hands clock.issued so renewal with null held cert refuses older cert. */
+  let ioSrc = decl(MAIN, "function signinIo(");
+  if (swap && ioSrc.split(swap[0]).length === 2) ioSrc = ioSrc.replace(swap[0], swap[1]);
+  const ioFn = new Function("signinListen", "http", "SIGNIN_WAIT_MS", "signinPageOk", "tellSignin", "handOut", "signinRequest", "deskFetch",
+    "signinServiceAsk", "signinSign", "signinKeep", "safeStorage", "process", "signinKept", "signinPageHtml", "SIGNIN_TRACE_ASKED",
+    "console", "SIGNIN_DESK_PACKED", "signinState", "storeOn", "storeOffered", "storeTokenTake", "signinClockNow",
+    ioSrc + "\nreturn signinIo;")(
+    async () => ({}), {}, 1000, () => true, () => {}, () => {}, async () => ({}), () => {}, async () => ({}), () => "", () => "", {},
+    { platform: "win32" }, () => "", () => "", false, console, true, () => ({ managed: null }), () => false, () => false, () => {},
+    () => ({ key: DESK_KEY, desk: clk.desk, last: c2.until, issued: clk.issued, online: true }));
+  const wiredIo = ioFn({ loop: null });
+  const rw = await s.signinRenewHeld(Object.assign({}, renewIo(answer({ id_token: jwt(msClaims(undefined)), refresh_token: "rt-2" }), olderBody),
+    { deskNow: () => wiredIo.deskNow(), deskIssued: () => (typeof wiredIo.deskIssued === "function" ? wiredIo.deskIssued() : 0) }),
+    MS, DESK_KEY, Object.assign({}, hNoCert, { refresh: "sealed:rt-1", sub: "sealed:s-1" }), () => deskNow);
+  const renewOk = rw.held.cert === null && s.signinWorks(rw.held, DESK_KEY, clk.desk) === false;
+
+  /* Wired signinTake (and side-step: sign-in after Sign out with held: null while clock.issued stays in memory/disk). */
+  let takeSrc = decl(MAIN, "function signinTake(");
+  if (swap && takeSrc.split(swap[0]).length === 2) takeSrc = takeSrc.replace(swap[0], swap[1]);
+  const runTake = initialHeld => {
+    const store = { held: initialHeld, revoked: null };
+    const fn = new Function("signinState", "signinSave", "signinHeldIs", "signinKeep", "safeStorage", "process", "signinClaims", "signinSettle", "signinClockNow", "signinRelaySeatClear",
+      takeSrc + "\nreturn signinTake;")(
+      () => store, () => {}, () => true, (ss, pl, t) => (t ? "sealed:" + t : ""), {}, { platform: "win32" }, () => null, s.signinSettle,
+      () => ({ desk: clk.desk, issued: clk.issued }), () => {});
+    fn("microsoft", { sub: "s-1", seed: "1".repeat(64), idToken: "", refreshToken: "rt-2" }, olderAns, deskNow, false);
+    return store.held;
+  };
+  const takeNullHeld = runTake(hNoCert), takeAfterOut = runTake(null);
+  const takeOk = takeNullHeld.cert === null && s.signinWorks(takeNullHeld, DESK_KEY, clk.desk) === false
+    && takeAfterOut.cert === null && s.signinWorks(takeAfterOut, DESK_KEY, clk.desk) === false;
+
+  /* C4.1: kept-file path with older marked cert (c1) and newer marked clock (c2.issued), via signinView and side-step signinTick. */
+  const markedOld = s.signinFileMarkText(s.signinFileText({ held: heldOf({ cert: c1, seated: true, doors: [] }) }), signWith(signKey));
+  const splicedFile = s.signinClockText(markedOld, { desk: deskNow, wall: deskNow, last: c2.until, issued: c2.issued }, signWith(signKey));
+  const directFile = s.signinFileHeld(s.signinFileRead(splicedFile), splicedFile, DESK_KEY).held;
+  const equalFileText = s.signinClockText(markedOld, { desk: deskNow, wall: deskNow, last: c1.until, issued: c1.issued }, signWith(signKey));
+  const equalFile = s.signinFileHeld(s.signinFileRead(equalFileText), equalFileText, DESK_KEY).held;
+  let wireText = ["function signinState(", "function signinView("].concat(CLOCK_DECLS).map(d => decl(MAIN, d)).join("\n");
+  if (swap && wireText.split(swap[0]).length === 2) wireText = wireText.replace(swap[0], swap[1]);
+  const runSpliced = fileText => {
+    const st = { file: fileText, writes: 0, tells: 0 };
+    const names = ["managedPolicy", "signinPinTable", "signinOffered", "fs", "path", "app", "SIGNIN_FILE", "SIGNIN_FILE_MAX",
+      "signinFileRead", "SIGNIN_DESK_PACKED", "branchIdentity", "signinFileHeld", "signinPreviewing", "signinDoorsShown", "signinRelaySeat",
+      "sealsForReal", "safeStorage", "process", "deskKeyStranded", "signinAccountKept", "signinViewOf", "Date", "performance",
+      "signinClockRead", "signinClockObserve", "signinClockStart", "signinClockText", "setInterval", "net", "tellSignin",
+      "writeReplacing", "signinFileMarkText", "signinFileText", "signinSign", "console", "setTimeout", "signinStopArm"];
+    const vals = [() => ({ any: false }), table => table, () => [MS],
+      { statSync: () => ({ size: st.file.length }), readFileSync: () => st.file }, path, { getPath: () => "/ud" }, "signin.json", s.SIGNIN_FILE_MAX,
+      s.signinFileRead, true, () => ({ id: DESK_ID, key: DESK_KEY }), s.signinFileHeld, () => false, () => [], () => "",
+      () => true, {}, { platform: "win32" }, () => false, () => false, s.signinViewOf, { now: () => deskNow }, { now: () => 2000 },
+      s.signinClockRead, s.signinClockObserve, s.signinClockStart, s.signinClockText, () => ({ unref() {} }), { isOnline: () => true }, () => { st.tells++; },
+      (f, t) => { st.file = t; st.writes++; }, s.signinFileMarkText, s.signinFileText, signWith(signKey), { error() {}, log() {} },
+      () => ({ unref() {} }), () => {}];
+    return new Function(...names,
+      "let signinStore, SIGNIN_PROVIDERS = { microsoft: {} }, signinTableBase, signinPinStamp = \"\", signinBusy = null, signinRenewing = null, signinOutFlight = null, signinSaid = \"\";\n"
+      + "let signinClock = null, signinClockKept = 0, signinOnline = null, signinTicker = null, signinClockKey = \"\", signinStopFor = \"\";\n"
+      + wireText + "\nreturn { signinState, signinView, signinTick, signinClockNow };")(...vals);
+  };
+  const hView = runSpliced(splicedFile), vSplice = hView.signinView();
+  const hTick = runSpliced(splicedFile);
+  hTick.signinTick();
+  const worksViaTick = s.signinWorksOf(hTick.signinState().held, [MS], DESK_KEY, hTick.signinClockNow().desk);
+  const fileOk = !!directFile && directFile.cert === null && !!equalFile && !!equalFile.cert
+    && vSplice.works === false && vSplice.until === 0 && vSplice.now === deskNow && vSplice.stoppedAt === c2.until
+    && worksViaTick === false;
+
+  return directOk && renewOk && takeOk && fileOk;
+};
+
+/* Argon 51 M2 (both halves): unopenable key -> other key -> old key restored keeps works:true and does not let the first tick
+   wipe held.cert on disk (C2.2); and when the key arrives after a pre-key ask, the page is told (C2.1).
+   Side-steps: tick immediately after restore without calling signinView first; and signinClockNow directly on key arrival. */
+CASES.stateKeyRestoreAndTell = (s, swap) => {
+  const decls = ["function signinState(", "function signinView("].concat(CLOCK_DECLS);
+  let text = decls.map(d => decl(MAIN, d)).join("\n");
+  if (swap) {
+    if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in M2 wiring once: " + swap[0]);
+    text = text.replace(swap[0], swap[1]);
+  }
+  const held = heldOf({ seated: true, doors: [] });
+  const marked = s.signinFileMarkText(s.signinFileText({ held }), signWith(signKey));
+  const initialDisk = s.signinClockText(marked, { desk: NOW + 3 * DAY_MS, wall: NOW + 3 * DAY_MS, last: cert().until, issued: NOW }, signWith(signKey));
+  const makeWire = key0 => {
+    const st = { file: initialDisk, writes: 0, tells: 0, key: key0, wall: NOW + 3 * DAY_MS, mono: 1000 };
+    const names = ["managedPolicy", "signinPinTable", "signinOffered", "fs", "path", "app", "SIGNIN_FILE", "SIGNIN_FILE_MAX",
+      "signinFileRead", "SIGNIN_DESK_PACKED", "branchIdentity", "signinFileHeld", "signinPreviewing", "signinDoorsShown", "signinRelaySeat",
+      "sealsForReal", "safeStorage", "process", "deskKeyStranded", "signinAccountKept", "signinViewOf", "Date", "performance",
+      "signinClockRead", "signinClockObserve", "signinClockStart", "signinClockText", "setInterval", "net", "tellSignin",
+      "writeReplacing", "signinFileMarkText", "signinFileText", "signinSign", "console", "setTimeout", "signinStopArm"];
+    const vals = [() => ({ any: false }), table => table, () => [MS],
+      { statSync: () => ({ size: st.file.length }), readFileSync: () => st.file }, path, { getPath: () => "/ud" }, "signin.json", s.SIGNIN_FILE_MAX,
+      s.signinFileRead, true, () => (st.key ? { id: DESK_ID, key: st.key } : null), s.signinFileHeld, () => false, () => [], () => "",
+      () => true, {}, { platform: "win32" }, () => false, () => false, s.signinViewOf, { now: () => st.wall }, { now: () => st.mono },
+      s.signinClockRead, s.signinClockObserve, s.signinClockStart, s.signinClockText, () => ({ unref() {} }), { isOnline: () => true }, () => { st.tells++; },
+      (f, t) => { st.file = t; st.writes++; }, s.signinFileMarkText, s.signinFileText, signWith(signKey), { error() {}, log() {} },
+      () => ({ unref() {} }), () => {}];
+    const w = new Function(...names,
+      "let signinStore, SIGNIN_PROVIDERS = { microsoft: {} }, signinTableBase, signinPinStamp = \"\", signinBusy = null, signinRenewing = null, signinOutFlight = null, signinSaid = \"\";\n"
+      + "let signinClock = null, signinClockKept = 0, signinOnline = null, signinTicker = null, signinClockKey = \"\", signinStopFor = \"\";\n"
+      + text + "\nreturn { signinState, signinView, signinClockNow, signinTick, signinSave };")(...vals);
+    return { st, w };
+  };
+
+  /* C2.2: OTHER_DESK_KEY -> signinView -> restore DESK_KEY -> signinView -> signinTick. */
+  const c22 = makeWire(OTHER_DESK_KEY);
+  const vWrong = c22.w.signinView();
+  c22.st.key = DESK_KEY;
+  const vRestored = c22.w.signinView();
+  c22.w.signinTick();
+  const diskC22 = s.signinFileHeld(s.signinFileRead(c22.st.file), c22.st.file, DESK_KEY).held;
+  const c22Ok = vWrong.works === false && vRestored.works === true && vRestored.stoppedAt === 0 && vRestored.until === cert().until
+    && c22.st.writes === 1 && !!diskC22 && !!diskC22.cert && diskC22.code === CODE;
+
+  /* Side-step for C2.2: restore DESK_KEY then run signinTick directly without calling signinView first. */
+  const c22Tick = makeWire(OTHER_DESK_KEY);
+  c22Tick.w.signinView();
+  c22Tick.st.key = DESK_KEY;
+  c22Tick.w.signinTick();
+  const diskC22Tick = s.signinFileHeld(s.signinFileRead(c22Tick.st.file), c22Tick.st.file, DESK_KEY).held;
+  const c22SideOk = !!diskC22Tick && !!diskC22Tick.cert && diskC22Tick.code === CODE && c22Tick.w.signinView().works === true && c22Tick.st.tells >= 1;
+
+  /* C2.1: no key -> signinView -> key arrives -> signinTick tells the page. */
+  const c21 = makeWire(null);
+  const vBefore = c21.w.signinView();
+  const tellsBefore = c21.st.tells;
+  c21.st.key = DESK_KEY;
+  c21.w.signinTick();
+  const diskC21 = s.signinFileHeld(s.signinFileRead(c21.st.file), c21.st.file, DESK_KEY).held;
+  const c21Ok = vBefore.works === false && tellsBefore === 0 && c21.st.tells >= 1 && c21.w.signinView().works === true
+    && !!diskC21 && !!diskC21.cert;
+
+  /* Side-step for C2.1: key arrives then signinClockNow runs directly (e.g. from resume/stop arm). */
+  const c21Clock = makeWire(null);
+  c21Clock.w.signinView();
+  c21Clock.st.key = DESK_KEY;
+  const clkArrived = c21Clock.w.signinClockNow();
+  const c21SideOk = c21Clock.st.tells >= 1 && clkArrived.desk === NOW + 3 * DAY_MS && c21Clock.w.signinView().works === true;
+
+  return c22Ok && c22SideOk && c21Ok && c21SideOk;
+};
+
 /* Fresh copy of signin.js in memory with no swap (or a plant swap), so module state starts clean. */
 async function freshSignin(swap) {
   const dir = pathToFileURL(path.join(ROOT, "src", "modules")).href + "/";
@@ -4658,6 +4821,8 @@ const LEGS = [
   ["dsg2", "stateKeyLate", "B-3a1, finding 2: a first ask before the desk key exists does not cache a stripped state; once the key arrives the view carries the certificate and works, without clockWire's stub"],
   ["dsg3", "deskWorksGate", "B-3a1: deskWorks() is the one gate predicate, answers false with no host, follows works on host views, and gate functions call no write"],
   ["dsg4", "doorRule", "B-3a1: firstSigninDue ignores seen and policy pin and fires when view is read and deskWorks() is false; Not now, Escape, Continue and seen memory are gone; door lowers only when deskWorks() turns true"],
+  ["dsg5", "settleClockIssued", "Argon 51 M1: settle and kept-file path compare against clock.issued so null held cert or older cert in signin.json cannot revive the desk"],
+  ["dsg6", "stateKeyRestoreAndTell", "Argon 51 M2: unopenable key then old key restored keeps works:true and preserves disk cert on tick; key arrival tells the page"],
 ];
 for (let [id, name, line] of LEGS) {
   let ok = false;
