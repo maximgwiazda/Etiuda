@@ -4244,8 +4244,10 @@ CASES.settleIssued = async (s, swap) => {
     && clockAfterDirect.desk === deskNow && clockAfterDirect.issued === heldCert.issued;
   const rSame = s.signinSettle(held, sameAns, NOW + 27 * DAY_MS, deskNow);
   const rNew = s.signinSettle(held, newerAns, NOW + 27 * DAY_MS, deskNow);
-  const equalNewOk = rSame.cert === sameCert && rSame.ended === undefined && s.signinWorks(rSame, DESK_KEY, deskNow) === true
-    && rNew.cert === newerCert && s.signinWorks(rNew, DESK_KEY, deskNow) === true;
+  const equalNewOk = rSame.cert === sameAns.cert && JSON.stringify(rSame.cert) === JSON.stringify(sameCert)
+    && rSame.ended === undefined && s.signinWorks(rSame, DESK_KEY, deskNow) === true
+    && rNew.cert === newerAns.cert && JSON.stringify(rNew.cert) === JSON.stringify(newerCert)
+    && s.signinWorks(rNew, DESK_KEY, deskNow) === true;
 
   /* Path 1: daily renewal (signinRenewHeld). */
   const ioRenew = Object.assign(renewIo(answer({ id_token: jwt(msClaims(undefined)), refresh_token: "rt-2" }), olderBody), { deskNow: () => deskNow });
@@ -4331,6 +4333,7 @@ CASES.stateKeyLate = (s, swap) => {
 };
 
 /* Fresh copy of signin.js in memory with no swap (or a plant swap), so module state starts clean. */
+let freshSeq = 0;
 async function freshSignin(swap) {
   const dir = pathToFileURL(path.join(ROOT, "src", "modules")).href + "/";
   let text = PAGE;
@@ -4338,7 +4341,7 @@ async function freshSignin(swap) {
     if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in signin.js once: " + swap[0]);
     text = text.replace(swap[0], swap[1]);
   }
-  return import("data:text/javascript;base64," + Buffer.from(text.replace(/from "\.\//g, 'from "' + dir)).toString("base64"));
+  return import("data:text/javascript;base64," + Buffer.from(text.replace(/from "\.\//g, 'from "' + dir) + "\n/* fresh:" + (++freshSeq) + " */").toString("base64"));
 }
 
 /* B-3a1: deskWorks() is the one gate predicate on the page; no host answers false; gate functions call no write to desk.json or storage. */
@@ -4805,7 +4808,11 @@ CASES.pickAskDoor = async (s, pickSwap) => {
   const AS = await import(pathToFileURL(path.join(ROOT, "src", "modules", "app-state.js")).href);
   const PK = await import(pathToFileURL(path.join(ROOT, "src", "modules", "pack.js")).href);
   const ST = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
+  const DOM = await import(pathToFileURL(path.join(ROOT, "src", "modules", "dom.js")).href);
+  const HK = await import(pathToFileURL(path.join(ROOT, "src", "modules", "hooks.js")).href);
   const hadWin = "window" in globalThis, prevWin = globalThis.window;
+  const hadDoc = "document" in globalThis, prevDoc = globalThis.document;
+  const hadRailHook = "railDecorate" in HK.hooks, prevRailHook = HK.hooks.railDecorate;
   const prevCards = AS.cards.slice();
   const prevUses = Object.assign({}, PK.pack.useCounts || {});
   try {
@@ -4829,6 +4836,13 @@ CASES.pickAskDoor = async (s, pickSwap) => {
     const noStats = ((PK.pack.useCounts && PK.pack.useCounts["c-door"]) || 0) === usesBefore;
 
     /* Control: seated view -> answerPick answers with the real card as before. */
+    globalThis.document = {
+      querySelector: sel => (sel === "#pax" || sel === "#roleSel" ? { value: "" } : null),
+      createElement: () => ({ getContext: () => ({}) }),
+      createRange: () => ({}),
+    };
+    DOM.grabDom();
+    HK.hooks.railDecorate = () => {};
     cur = seated;
     SGN.signinChanged(seated, false);
     const found = PKM.answerPick("find", JSON.stringify({ q: "door" }));
@@ -4840,6 +4854,8 @@ CASES.pickAskDoor = async (s, pickSwap) => {
     AS.setCards(prevCards);
     PK.pack.useCounts = prevUses;
     ST.lsDel("eNameAsked"); ST.lsDel("eAgent");
+    if (!hadRailHook) delete HK.hooks.railDecorate; else HK.hooks.railDecorate = prevRailHook;
+    if (!hadDoc) delete globalThis.document; else globalThis.document = prevDoc;
     if (!hadWin) delete globalThis.window; else globalThis.window = prevWin;
   }
 };

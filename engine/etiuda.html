@@ -18987,6 +18987,52 @@ What is typed here stays in this browser.`;
   var joinReads = 0;
   var lapseUp = "";
   var lapseDismissed = /* @__PURE__ */ new Set();
+  var joinGate = null;
+  var pendingInvite = null;
+  var pendingJoinLoad = "";
+  function joinDoorHolds() {
+    return !!(joinGate && typeof joinGate.holds === "function" && joinGate.holds());
+  }
+  function whenJoinDoorOpens(fn) {
+    if (joinGate && typeof joinGate.whenOpen === "function") {
+      joinGate.whenOpen(fn);
+      return;
+    }
+    fn();
+  }
+  function replayJoinLoad() {
+    if (joinDoorHolds()) return;
+    const file = pendingJoinLoad;
+    pendingJoinLoad = "";
+    if (file && (wholeThingEmpty() || nsGet("Sample") === "1")) hooks.loadCatalogFromFolder(file, 0);
+  }
+  function replayPendingInvite() {
+    if (joinDoorHolds()) return;
+    const inv = pendingInvite;
+    pendingInvite = null;
+    if (!inv) return;
+    if (inv.kind === "link" && inv.offer) {
+      joinOffer = Object.assign({}, inv.offer);
+      joinRead = "link";
+      joinBlob = "";
+      joinTyped = "";
+      joinWhy = "";
+      joinLinkSaid = null;
+      joinMode = "confirm";
+      paintJoin();
+    } else if (inv.kind === "link-refusal" && inv.refusal) {
+      dropInvite();
+      joinLinkSaid = Object.assign({}, inv.refusal);
+      joinWhy = "link";
+      joinMode = "refused";
+      paintJoin();
+    } else if (inv.kind === "paste" && inv.text) {
+      const sent = String(inv.text), n = ++joinReads;
+      joinMode = "paste";
+      joinBlob = sent;
+      joinAsk("read", sent, "", "", (v) => readTook(v, n, sent));
+    }
+  }
   function eHasJoin() {
     const h = eHost();
     return !!h && typeof h.teamJoin === "function";
@@ -19388,9 +19434,26 @@ What is typed here stays in this browser.`;
     };
     if (s.joined && s.joined.file) {
       closeJoinBubble();
-      if (wholeThingEmpty() || nsGet("Sample") === "1") hooks.loadCatalogFromFolder(String(s.joined.file), 0);
-    } else if (s.opens && typeof s.opens.file === "string" && s.opens.file && (wholeThingEmpty() || nsGet("Sample") === "1"))
-      hooks.loadCatalogFromFolder(s.opens.file, 0);
+      if (wholeThingEmpty() || nsGet("Sample") === "1") {
+        let waitAdmit = false;
+        if (joinDoorHolds()) {
+          pendingJoinLoad = String(s.joined.file);
+          whenJoinDoorOpens(replayJoinLoad);
+          waitAdmit = true;
+        }
+        if (!waitAdmit) hooks.loadCatalogFromFolder(String(s.joined.file), 0);
+      }
+    } else if (s.opens && typeof s.opens.file === "string" && s.opens.file && (wholeThingEmpty() || nsGet("Sample") === "1")) {
+      let waitOpens = false;
+      if (joinDoorHolds()) {
+        pendingJoinLoad = String(s.opens.file);
+        whenJoinDoorOpens(replayJoinLoad);
+        waitOpens = true;
+      }
+      if (!waitOpens) {
+        hooks.loadCatalogFromFolder(s.opens.file, 0);
+      }
+    }
     syncJoinDoor();
     syncLapseNotice();
     syncRelayRemoved();
@@ -19398,8 +19461,14 @@ What is typed here stays in this browser.`;
     syncStrandedNotice();
     const refusal = s.linkRefusal;
     if (refusal && typeof refusal === "object" && typeof refusal.en === "string" && refusal.en) {
+      const heldRefusal = { en: String(refusal.en), pl: typeof refusal.pl === "string" ? String(refusal.pl) : "" };
+      if (joinDoorHolds()) {
+        pendingInvite = { kind: "link-refusal", refusal: heldRefusal };
+        whenJoinDoorOpens(replayPendingInvite);
+        return joinNow;
+      }
       dropInvite();
-      joinLinkSaid = { en: String(refusal.en), pl: typeof refusal.pl === "string" ? String(refusal.pl) : "" };
+      joinLinkSaid = heldRefusal;
       joinWhy = "link";
       joinMode = "refused";
       paintJoin();
@@ -19416,7 +19485,13 @@ What is typed here stays in this browser.`;
     }
     const offer = s.offer;
     if (offer && offer.link === true && typeof offer.relay === "string" && offer.relay) {
-      joinOffer = { lead: String(offer.lead || ""), team: String(offer.team || ""), relay: String(offer.relay), link: true, code: "", left: String(offer.left || "") };
+      const heldOffer = { lead: String(offer.lead || ""), team: String(offer.team || ""), relay: String(offer.relay), link: true, code: "", left: String(offer.left || "") };
+      if (joinDoorHolds()) {
+        pendingInvite = { kind: "link", offer: heldOffer };
+        whenJoinDoorOpens(replayPendingInvite);
+        return joinNow;
+      }
+      joinOffer = heldOffer;
       joinRead = "link";
       joinBlob = "";
       joinTyped = "";
@@ -19432,7 +19507,8 @@ What is typed here stays in this browser.`;
   function noteCatalogCopy(m) {
     toast(m && m.lead === true ? "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team's lead alone." : "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.");
   }
-  function wireTeamJoin() {
+  function wireTeamJoin(gate) {
+    if (gate !== void 0) joinGate = gate && typeof gate.holds === "function" ? gate : null;
     if (!eHasJoin()) return;
     if (typeof eHost().onTeamJoin === "function") eHost().onTeamJoin(joinTook);
     if (typeof eHost().onCatalogCopy === "function") eOnCatalogCopy(noteCatalogCopy);
@@ -19440,6 +19516,11 @@ What is typed here stays in this browser.`;
     joinAsk("held");
   }
   function paintJoin() {
+    if (joinDoorHolds()) {
+      closeJoinBubble();
+      whenJoinDoorOpens(paintJoin);
+      return;
+    }
     if (wholeThingEmpty()) {
       closeJoinBubble();
       hooks.render();
@@ -19479,7 +19560,7 @@ What is typed here stays in this browser.`;
     repaintJoin();
   }
   function openJoinPaste() {
-    if (!teamCanJoin()) return;
+    if (!teamCanJoin() || joinDoorHolds()) return;
     dropInvite();
     joinMode = "paste";
     repaintJoin();
@@ -19692,6 +19773,7 @@ What is typed here stays in this browser.`;
   }
   function joinAct(act) {
     const j = joinNow && joinNow.join, s = joinNow && joinNow.sealed;
+    if (joinDoorHolds() && (act === "invite" || act === "ask" || act === "join")) return Promise.resolve(null);
     if (act === "join") return Promise.resolve(openJoinPaste());
     if (act === "back") {
       if (joinOffer && joinOffer.link || joinMode === "refused" && joinWhy === "link")
@@ -19702,7 +19784,15 @@ What is typed here stays in this browser.`;
       return Promise.resolve(clearJoinAsk());
     }
     if (act === "read") {
-      const sent = pastedText(), n = ++joinReads;
+      const sent = pastedText();
+      if (joinDoorHolds()) {
+        if (String(sent || "").trim()) {
+          pendingInvite = { kind: "paste", text: String(sent) };
+          whenJoinDoorOpens(replayPendingInvite);
+        }
+        return Promise.resolve(null);
+      }
+      const n = ++joinReads;
       joinBlob = sent;
       return joinAsk("read", sent, "", "", (v) => readTook(v, n, sent));
     }
@@ -29338,6 +29428,7 @@ What is typed here stays in this browser.`;
   }
 
   // src/modules/signin.js
+  var $2 = (s) => typeof document === "undefined" ? null : $(s);
   var SIGNIN_NAMES = { microsoft: "Microsoft", google: "Google", lab: "Lab" };
   function signinRead(v) {
     const o = v && typeof v === "object" ? v : {};
@@ -29516,6 +29607,10 @@ What is typed here stays in this browser.`;
   function firstSigninStands() {
     return !!(firstSigninPending || firstSigninOpen);
   }
+  function doorHolds() {
+    if (firstSigninStands() || signinHasView && !deskWorks()) return true;
+    return false;
+  }
   function onFirstSigninClosed(fn) {
     if (typeof fn !== "function") return;
     if (!firstSigninStands()) {
@@ -29523,6 +29618,14 @@ What is typed here stays in this browser.`;
       return;
     }
     firstSigninWaits.push(fn);
+  }
+  function whenDoorLowers(fn) {
+    if (typeof fn !== "function") return;
+    if (!doorHolds()) {
+      fn();
+      return;
+    }
+    if (firstSigninWaits.indexOf(fn) < 0) firstSigninWaits.push(fn);
   }
   function tellFirstSigninClosed() {
     const w = firstSigninWaits;
@@ -29541,7 +29644,7 @@ What is typed here stays in this browser.`;
   }
   function paintFirstSignin() {
     if (!firstSigninOpen || typeof document === "undefined") return;
-    const el = $("#firstSignin");
+    const el = $2("#firstSignin");
     if (!el) return;
     const hadFocus = el.contains(document.activeElement);
     const d = signinDoor(signinV);
@@ -29571,7 +29674,7 @@ What is typed here stays in this browser.`;
     firstSigninOpen = true;
     if (typeof document === "undefined") return;
     document.body.classList.add("e-first-signin");
-    const el = $("#firstSignin");
+    const el = $2("#firstSignin");
     if (el) {
       el.hidden = false;
       el.setAttribute("aria-hidden", "false");
@@ -29592,7 +29695,7 @@ What is typed here stays in this browser.`;
     firstSigninOpen = false;
     if (typeof document !== "undefined") {
       document.body.classList.remove("e-first-signin");
-      const el = $("#firstSignin");
+      const el = $2("#firstSignin");
       if (el) {
         el.hidden = true;
         el.setAttribute("aria-hidden", "true");
@@ -29961,13 +30064,13 @@ What is typed here stays in this browser.`;
   }
   function paintDoorBand() {
     const band = doorBandState(signinV);
-    const el = $("#doorBand");
+    const el = $2("#doorBand");
     if (el) {
       el.hidden = !band.shown;
       el.setAttribute("aria-hidden", band.shown ? "false" : "true");
       el.innerHTML = band.shown ? '<span class="door-band-dot" aria-hidden="true"></span><span>' + esc(band.text) + "</span>" : "";
     }
-    const btn = $("#signinBtn");
+    const btn = $2("#signinBtn");
     if (!btn || typeof btn.querySelector !== "function") return;
     let dot = btn.querySelector(".door-btn-dot");
     if (band.dot) {
@@ -30188,7 +30291,7 @@ What is typed here stays in this browser.`;
     });
   }
   function paintSigninButton() {
-    const wrap = $("#signinWrap"), btn = $("#signinBtn");
+    const wrap = $2("#signinWrap"), btn = $2("#signinBtn");
     if (!wrap || !btn) return;
     const v = signinV, show = signinShown(v);
     wrap.hidden = !show;
@@ -30210,7 +30313,7 @@ What is typed here stays in this browser.`;
     paintDoorBand();
   }
   function paintSigninPanel() {
-    const panel = $("#signinPanel");
+    const panel = $2("#signinPanel");
     if (!panel) return;
     const d = signinChoosing && !signinV.busy ? signinDoor(Object.assign({}, signinV, { signedIn: "", said: "" })) : signinDoor(signinV);
     if (!d) {
@@ -30225,11 +30328,11 @@ What is typed here stays in this browser.`;
     signinOpen = true;
     paintSigninPanel();
     paintSigninButton();
-    const btn = $("#signinBtn");
+    const btn = $2("#signinBtn");
     if (btn) btn.setAttribute("aria-expanded", "true");
   }
   function closeSigninPanel(back) {
-    const panel = $("#signinPanel"), btn = $("#signinBtn");
+    const panel = $2("#signinPanel"), btn = $2("#signinBtn");
     const was = signinOpen;
     signinOpen = false;
     signinChoosing = false;
@@ -30258,6 +30361,7 @@ What is typed here stays in this browser.`;
       signinTell();
       return;
     }
+    if (deskWorks() && firstSigninWaits.length) tellFirstSigninClosed();
     if (answered && signinShown(signinV) && !signinV.busy) signinOpen = true;
     if (signinOpen) paintSigninPanel();
     signinTell();
@@ -30507,16 +30611,16 @@ What is typed here stays in this browser.`;
     if (choice !== "mine" && choice !== "start" && choice !== "kept") return;
     const off = !!view && view.shown === true && view.on === false;
     if (off && choice === "mine") return;
-    const btn = $("#signinBtn");
+    const btn = $2("#signinBtn");
     if (!btn || !btn.getClientRects().length) return;
     const tpl = choice === "mine" ? t("Syncing now, with what was already on this desk.") : choice === "kept" ? t(`Starting from your account did not finish, and nothing was lost. What could not be put back is kept on this computer, in Etiuda's "Set aside" folder, and is never uploaded. The question about what is on this desk still waits for your answer.`) : t(`This desk now has your account's content. What was here before is kept on this computer, in Etiuda's "Set aside" folder, and is never uploaded.`);
     const i = tpl.indexOf(". "), rest = off && choice === "start" && i >= 0 ? tpl.slice(i + 2) : tpl;
     const j = rest.indexOf(". ");
     const head = j < 0 ? rest : rest.slice(0, j + 1), tail = j < 0 ? "" : " " + rest.slice(j + 2);
     const extra = choice !== "mine" ? { label: t("Open this folder"), onClick: () => eOpenSetAside() } : null;
-    const d = syncNoticeBubble("eSyncChoiceNote", head, tail, () => $("#signinBtn"), true, () => {
+    const d = syncNoticeBubble("eSyncChoiceNote", head, tail, () => $2("#signinBtn"), true, () => {
       const said2 = document.getElementById("eSyncSaid");
-      if (said2) hangBubble(said2, () => $("#signinBtn"));
+      if (said2) hangBubble(said2, () => $2("#signinBtn"));
     }, extra);
     const said = document.getElementById("eSyncSaid");
     if (said) hangBubble(said, d);
@@ -30543,7 +30647,7 @@ What is typed here stays in this browser.`;
       syncWhoseShut(false);
       syncWhoseShut = null;
     }
-    const target = origin || (() => $("#signinBtn"));
+    const target = origin || (() => $2("#signinBtn"));
     const anchor = typeof target === "function" ? target() : target;
     if (!anchor || !anchor.getClientRects().length) return;
     const el = document.createElement("div");
@@ -30615,7 +30719,7 @@ What is typed here stays in this browser.`;
     const wantAsk = s.line === "ask" && s.askNow && !document.getElementById("eSyncWhose");
     const wantSay = !!s.say && !document.getElementById("eSyncSaid");
     if (!wantAsk && !wantSay) return;
-    const btn = $("#signinBtn"), panel = $("#signinPanel");
+    const btn = $2("#signinBtn"), panel = $2("#signinPanel");
     if (!btn || !btn.getClientRects().length) return;
     if (panel && !panel.hidden) {
       if (syncWaiting) return;
@@ -30634,7 +30738,7 @@ What is typed here stays in this browser.`;
     const words = s.say === "on" ? t("Your catalogs, edits and settings now follow you to every computer you sign in on. You can turn this off in Account.") : syncUnavailable(s.say, signinV.signedIn, true);
     const i = words.indexOf(". ");
     const tail = i < 0 || s.say === "on" && s.held === true ? "" : " " + words.slice(i + 2);
-    syncNoticeBubble("eSyncSaid", i < 0 ? words : words.slice(0, i + 1), tail, () => document.getElementById("eSyncChoiceNote") || $("#signinBtn"), false);
+    syncNoticeBubble("eSyncSaid", i < 0 ? words : words.slice(0, i + 1), tail, () => document.getElementById("eSyncChoiceNote") || $2("#signinBtn"), false);
     const h = eHost();
     try {
       if (h && typeof h.storeSaid === "function") h.storeSaid();
@@ -30687,7 +30791,7 @@ What is typed here stays in this browser.`;
     firstSigninPending = firstSigninDue();
     if (typeof h.onSignin === "function") h.onSignin((v) => signinChanged(v, false));
     if (typeof h.onStore === "function") h.onStore(() => syncChanged());
-    const btn = $("#signinBtn"), panel = $("#signinPanel"), wrap = $("#signinWrap"), fs = $("#firstSignin");
+    const btn = $2("#signinBtn"), panel = $2("#signinPanel"), wrap = $2("#signinWrap"), fs = $2("#firstSignin");
     if (btn) btn.onclick = (e) => {
       e.stopPropagation();
       if (signinOpen) closeSigninPanel(true);
@@ -34107,7 +34211,18 @@ What is typed here stays in this browser.`;
       return null;
     }
   }
+  var pendingImport = null;
+  function replayPendingImport() {
+    const p = pendingImport;
+    pendingImport = null;
+    if (p) importCatalogText(p.text, p.fileName, p.offTeam);
+  }
   function importCatalogText(text, fileName, offTeam) {
+    if (doorHolds()) {
+      pendingImport = { text: String(text || ""), fileName, offTeam: !!offTeam };
+      whenDoorLowers(replayPendingImport);
+      return false;
+    }
     const c = catalogFromFileText(String(text || ""), fileName);
     if (!c) return false;
     hooks.offerPickedCatalog(c, fileName, () => eWatchClear().then(() => activateCatalog(c, { from: fileName })), !!offTeam);
@@ -34124,6 +34239,7 @@ What is typed here stays in this browser.`;
     });
   }
   function importCatalogHere() {
+    if (doorHolds()) return;
     if (eHasCatalogPicker()) importCatalogHosted();
     else if (eWatchSupported()) importCatalogPicked();
     else importCatalogFile();
@@ -34148,6 +34264,12 @@ What is typed here stays in this browser.`;
     const dt = e.dataTransfer;
     return !!dt && Array.prototype.indexOf.call(dt.types || [], "Files") > -1;
   }
+  var pendingDrop = null;
+  function replayPendingDrop() {
+    const f = pendingDrop;
+    pendingDrop = null;
+    if (f) handleDroppedFile(f);
+  }
   function wireCatalogDrop() {
     addEventListener("dragover", (e) => {
       if (!isFileDrag(e)) return;
@@ -34159,16 +34281,43 @@ What is typed here stays in this browser.`;
       e.preventDefault();
       const f = e.dataTransfer.files && e.dataTransfer.files[0];
       if (!f) return;
-      if (!/[.](ec|json|js)$/i.test(f.name)) {
-        toastRefusal(t("{FILE} is not a catalog file Etiuda can read.").split("{FILE}").join(f.name));
+      if (doorHolds()) {
+        pendingDrop = f;
+        whenDoorLowers(replayPendingDrop);
         return;
       }
-      const h = eHost();
-      if (h && typeof h.offerDropped === "function" && /[.]ec$/i.test(f.name) && h.offerDropped(f)) return;
-      f.text().then(
-        (text) => importCatalogText(text, f.name),
-        () => toastRefusal(fileReadLine(f.name, ""))
-      );
+      handleDroppedFile(f);
+    });
+  }
+  function handleDroppedFile(f) {
+    if (!/[.](ec|json|js)$/i.test(f.name)) {
+      toastRefusal(t("{FILE} is not a catalog file Etiuda can read.").split("{FILE}").join(f.name));
+      return;
+    }
+    const h = eHost();
+    if (h && typeof h.offerDropped === "function" && /[.]ec$/i.test(f.name) && h.offerDropped(f)) return;
+    f.text().then(
+      (text) => importCatalogText(text, f.name),
+      () => toastRefusal(fileReadLine(f.name, ""))
+    );
+  }
+  var pendingPicked = null;
+  function replayPendingPicked() {
+    const p = pendingPicked;
+    pendingPicked = null;
+    if (p) takePickedFile(p.handle, p.file);
+  }
+  function takePickedFile(handle, f) {
+    return f.text().then((text) => {
+      const c = catalogFromFileText(text, f.name);
+      if (!c) return null;
+      hooks.offerPickedCatalog(c, f.name, () => {
+        nsSet("WatchName", f.name);
+        nsSet("WatchSeen", String(f.lastModified || 0));
+        nsDel("WatchNo");
+        return eWatchPut(handle).then(() => activateCatalog(c, { from: f.name }));
+      });
+      return null;
     });
   }
   function importCatalogPicked() {
@@ -34182,17 +34331,12 @@ What is typed here stays in this browser.`;
     }).then((f) => {
       if (!f) return null;
       picked = f.name;
-      return f.text().then((text) => {
-        const c = catalogFromFileText(text, f.name);
-        if (!c) return null;
-        hooks.offerPickedCatalog(c, f.name, () => {
-          nsSet("WatchName", f.name);
-          nsSet("WatchSeen", String(f.lastModified || 0));
-          nsDel("WatchNo");
-          return eWatchPut(handle).then(() => activateCatalog(c, { from: f.name }));
-        });
+      if (doorHolds()) {
+        pendingPicked = { handle, file: f };
+        whenDoorLowers(replayPendingPicked);
         return null;
-      });
+      }
+      return takePickedFile(handle, f);
     }).catch((e) => {
       if (e && e.name === "AbortError") return;
       toastRefusal(t("The catalog file could not be loaded:") + " " + (picked || e && e.name || ""));
@@ -37469,13 +37613,13 @@ What is typed here stays in this browser.`;
     });
   }
   function offerAtBoot() {
+    if (doorHolds()) {
+      whenDoorLowers(eOfferCatalogAtBoot);
+      return false;
+    }
     const at = +(nsGet("CatalogNoAt") || 0), mt = eCatalogMtime(), asked = eOpenedWith();
     if (!asked && tourDueAtBoot()) {
       afterTour(eOfferCatalogAtBoot);
-      return false;
-    }
-    if (!asked && firstSigninStands()) {
-      onFirstSigninClosed(eOfferCatalogAtBoot);
       return false;
     }
     const found = eCatalog(), held = storedCatalog();
@@ -38160,7 +38304,18 @@ What is typed here stays in this browser.`;
       none.hidden = !!shown2;
     }
   }
+  var pendingWatch = null;
+  function replayPendingWatch() {
+    const iv = pendingWatch;
+    pendingWatch = null;
+    if (iv !== null) eCheckWatchedFile(iv);
+  }
   function eCheckWatchedFile(interactive) {
+    if (doorHolds()) {
+      pendingWatch = pendingWatch === null ? !!interactive : pendingWatch || !!interactive;
+      whenDoorLowers(replayPendingWatch);
+      return;
+    }
     if (!eWatchSupported()) return;
     if (document.getElementById("eCatalogOffer")) return;
     eWatchGet().then((h) => {
@@ -38241,7 +38396,18 @@ What is typed here stays in this browser.`;
   function listingNoticeFiles(all, held) {
     return (all || []).filter((f) => !f.desk && !f.builtIn && !f.sample && f.id && !(held && held.id === f.id)).filter((f) => f.leadSigned === true);
   }
+  var pendingListing = null;
+  function replayPendingListing() {
+    const all = pendingListing;
+    pendingListing = null;
+    if (all) onCatalogListing(all);
+  }
   function onCatalogListing(all) {
+    if (doorHolds()) {
+      pendingListing = all;
+      whenDoorLowers(replayPendingListing);
+      return;
+    }
     let flipped = false;
     try {
       flipped = noteCatalogFolderHold(all);
@@ -38344,53 +38510,72 @@ What is typed here stays in this browser.`;
     }
     toastRefusal(t("{FILE} is not a catalog file Etiuda can read.").split("{FILE}").join(String(name || "")));
   }
+  var pendingHostFile = null;
+  function replayPendingHostFile() {
+    const args = pendingHostFile;
+    pendingHostFile = null;
+    if (args) takeHostCatalogFile(args);
+  }
+  function takeHostCatalogFile(args) {
+    if (doorHolds()) {
+      pendingHostFile = args;
+      whenDoorLowers(replayPendingHostFile);
+      return;
+    }
+    const [text, name, where, asked, why, builtIn, notOnTeam, code] = args;
+    paintCatalogList();
+    let c = null;
+    try {
+      if (!why) c = parseCatalogFile(text);
+    } catch (e) {
+      c = null;
+    }
+    if (!c && !why) {
+      refuseAskedFile(name, "parse");
+      const next = eRefuseCatalogFile(name);
+      let n = null;
+      try {
+        n = next ? parseCatalogFile(String(next.json)) : null;
+      } catch (e) {
+        n = null;
+      }
+      if (n && !asked) eOfferCatalog(n, String(next.file || ""), String(next.in || ""), false, false, !!next.builtIn);
+      return;
+    }
+    if (!c) {
+      if (asked) refuseAskedFile(name, why || "parse", code);
+      return;
+    }
+    eOfferCatalog(c, name, where, !!asked, !!asked, builtIn, notOnTeam === "off-roster");
+  }
   function wireHostCatalogWatch() {
     const h = typeof window !== "undefined" && window.E_HOST || null;
     if (!h || typeof h.onCatalogFile !== "function") return;
     eCatalog();
     const cold = eOpenedRefused() || (eCatalogRefusedNames().length ? { name: eCatalogRefusedNames()[0], why: "parse" } : null);
     if (cold) setTimeout(() => {
-      try {
-        refuseAskedFile(cold.name, cold.why);
-      } catch (e) {
-      }
+      whenDoorLowers(() => {
+        try {
+          refuseAskedFile(cold.name, cold.why);
+        } catch (e) {
+        }
+      });
     }, 1400);
     const newer = h.catalogNewer;
     if (newer && newer.version) setTimeout(() => {
-      try {
-        toastRefusal(eNeedsNewerLine(newer.version));
-      } catch (e) {
-      }
+      whenDoorLowers(() => {
+        try {
+          toastRefusal(eNeedsNewerLine(newer.version));
+        } catch (e) {
+        }
+      });
     }, cold ? 2800 : 1400);
     if (typeof h.onCatalogNewer === "function") h.onCatalogNewer((v) => {
-      if (v && v.version) toastRefusal(eNeedsNewerLine(v.version));
+      if (v && v.version) whenDoorLowers(() => toastRefusal(eNeedsNewerLine(v.version)));
     });
     eOnCatalogListing(onCatalogListing);
     h.onCatalogFile((text, name, where, asked, why, builtIn, notOnTeam, code) => {
-      paintCatalogList();
-      let c = null;
-      try {
-        if (!why) c = parseCatalogFile(text);
-      } catch (e) {
-        c = null;
-      }
-      if (!c && !why) {
-        refuseAskedFile(name, "parse");
-        const next = eRefuseCatalogFile(name);
-        let n = null;
-        try {
-          n = next ? parseCatalogFile(String(next.json)) : null;
-        } catch (e) {
-          n = null;
-        }
-        if (n && !asked) eOfferCatalog(n, String(next.file || ""), String(next.in || ""), false, false, !!next.builtIn);
-        return;
-      }
-      if (!c) {
-        if (asked) refuseAskedFile(name, why || "parse", code);
-        return;
-      }
-      eOfferCatalog(c, name, where, !!asked, !!asked, builtIn, notOnTeam === "off-roster");
+      takeHostCatalogFile([text, name, where, asked, why, builtIn, notOnTeam, code]);
     });
   }
 
@@ -43443,7 +43628,26 @@ What is typed here stays in this browser.`;
   function wireCaptureKeydown() {
     addEventListener("keydown", (e) => {
       if (scCaptureId && !modalFront() && !scListShown()) scStopCapture();
-      if (!scCaptureId) return;
+      if (!scCaptureId) {
+        let capLock = false;
+        if (firstSigninOpenNow() && !openCover()) capLock = true;
+        if (capLock) {
+          const fs = $("#firstSignin"), act = document.activeElement;
+          const targetOutside = !!(e.target && e.target !== window && e.target !== document && e.target !== document.body && e.target !== document.documentElement && (!fs || typeof fs.contains !== "function" || !fs.contains(e.target)));
+          const inDoor = !targetOutside && !!(fs && act && typeof fs.contains === "function" && fs.contains(act));
+          const doorTab = e.key === "Tab" && !e.ctrlKey && !e.altKey && !e.metaKey;
+          const doorPress2 = inDoor && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && (e.key === "Enter" || e.key === " ");
+          const doorEsc = e.key === "Escape" || eventMatchesAction(e, "escape");
+          const doorCopy = inDoor && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (act.tagName || "").toLowerCase() === "input" && (e.key === "c" || e.key === "C" || e.key === "a" || e.key === "A");
+          const doorQuit = e.altKey && e.key === "F4";
+          if (!doorTab && !doorPress2 && !doorEsc && !doorCopy && !doorQuit && (e.key === "Control" || e.key === "Meta" || targetOutside)) {
+            e.preventDefault();
+            if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+            else e.stopPropagation();
+          }
+        }
+        return;
+      }
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
@@ -43492,6 +43696,33 @@ What is typed here stays in this browser.`;
     }, true);
     addEventListener("keydown", (e) => {
       if (scCaptureId) return;
+      let doorLock = false;
+      if (firstSigninOpenNow() && !openCover()) doorLock = true;
+      if (doorLock) {
+        if (e.key === "Tab" && !e.ctrlKey && !e.altKey && !e.metaKey) {
+          const to = tabTargetIn($("#firstSignin"), e.shiftKey);
+          if (to) {
+            e.preventDefault();
+            try {
+              to.focus({ preventScroll: true });
+            } catch (x) {
+              to.focus();
+            }
+          }
+          return;
+        }
+        const fs = $("#firstSignin"), act = document.activeElement;
+        const targetOutside = !!(e.target && e.target !== window && e.target !== document && e.target !== document.body && e.target !== document.documentElement && (!fs || typeof fs.contains !== "function" || !fs.contains(e.target)));
+        const inDoor = !targetOutside && !!(fs && act && typeof fs.contains === "function" && fs.contains(act));
+        const doorPress2 = inDoor && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && (e.key === "Enter" || e.key === " ");
+        const doorCopy = inDoor && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (act.tagName || "").toLowerCase() === "input" && (e.key === "c" || e.key === "C" || e.key === "a" || e.key === "A");
+        const doorQuit = e.altKey && e.key === "F4";
+        if (!doorPress2 && !doorCopy && !doorQuit) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        return;
+      }
       if (tourActive() && tourHasFocus()) {
         if (e.target && e.target.id === "tourName" && e.key !== "Escape") return;
         if (e.key === "Escape" || eventMatchesAction(e, "escape")) {
@@ -43526,25 +43757,6 @@ What is typed here stays in this browser.`;
               to.focus();
             }
           }
-        }
-        return;
-      }
-      if (firstSigninOpenNow()) {
-        if (e.key === "Tab" && !e.ctrlKey && !e.altKey && !e.metaKey) {
-          const to = tabTargetIn($("#firstSignin"), e.shiftKey);
-          if (to) {
-            e.preventDefault();
-            try {
-              to.focus({ preventScroll: true });
-            } catch (x) {
-              to.focus();
-            }
-          }
-          return;
-        }
-        if (eventMatchesAction(e, "escape") || e.key === "Escape") {
-          e.preventDefault();
-          e.stopPropagation();
         }
         return;
       }
@@ -45053,7 +45265,9 @@ What is typed here stays in this browser.`;
     });
     return cachedModel;
   }
+  var PICK_EMPTY_OPS = /* @__PURE__ */ new Set(["find", "who", "tab", "lang", "suggest-take", "suggest-rows"]);
   function answerPick(op, argText) {
+    if (!deskWorks()) return PICK_EMPTY_OPS.has(op) ? { rows: [], count: "" } : null;
     let a = {};
     try {
       a = JSON.parse(String(argText || "{}")) || {};
@@ -45517,7 +45731,7 @@ What is typed here stays in this browser.`;
     syncSampleMark();
     paintCatNow();
     eOfferCatalogAtBoot();
-    wireTeamJoin();
+    wireTeamJoin({ holds: doorHolds, whenOpen: whenDoorLowers });
     syncRoleWheel();
     maybeStartTour();
     wireHostCatalogWatch();

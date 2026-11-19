@@ -60,14 +60,14 @@ function wireCaptureKeydown(){
       if(firstSigninOpenNow() && !openCover()) capLock=true; /* plant:door-capture-lock */
       if(capLock){
         const fs=$("#firstSignin"), act=document.activeElement;
-        const inDoor=!!(fs && act && typeof fs.contains==="function" && fs.contains(act));
+        const targetOutside=!!(e.target && e.target!==window && e.target!==document && e.target!==document.body && e.target!==document.documentElement
+          && (!fs || typeof fs.contains!=="function" || !fs.contains(e.target)));
+        const inDoor=!targetOutside && !!(fs && act && typeof fs.contains==="function" && fs.contains(act));
         const doorTab=e.key==="Tab" && !e.ctrlKey && !e.altKey && !e.metaKey;
         const doorPress=inDoor && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && (e.key==="Enter" || e.key===" ");
         const doorEsc=e.key==="Escape" || eventMatchesAction(e,"escape");
         const doorCopy=inDoor && (e.ctrlKey||e.metaKey) && !e.altKey && !e.shiftKey && (act.tagName||"").toLowerCase()==="input" && (e.key==="c"||e.key==="C"||e.key==="a"||e.key==="A");
         const doorQuit=e.altKey && e.key==="F4";
-        const targetOutside=!!(e.target && e.target!==window && e.target!==document && e.target!==document.body && e.target!==document.documentElement
-          && (!fs || typeof fs.contains!=="function" || !fs.contains(e.target)));
         if(!doorTab && !doorPress && !doorEsc && !doorCopy && !doorQuit && (e.key==="Control" || e.key==="Meta" || targetOutside)){
           e.preventDefault();
           if(typeof e.stopImmediatePropagation==="function") e.stopImmediatePropagation();
@@ -136,7 +136,9 @@ function wireGlobalKeydown(){
         return;
       }
       const fs=$("#firstSignin"), act=document.activeElement;
-      const inDoor=!!(fs && act && typeof fs.contains==="function" && fs.contains(act));
+      const targetOutside=!!(e.target && e.target!==window && e.target!==document && e.target!==document.body && e.target!==document.documentElement
+        && (!fs || typeof fs.contains!=="function" || !fs.contains(e.target)));
+      const inDoor=!targetOutside && !!(fs && act && typeof fs.contains==="function" && fs.contains(act));
       const doorPress=inDoor && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && (e.key==="Enter" || e.key===" ");
       const doorCopy=inDoor && (e.ctrlKey||e.metaKey) && !e.altKey && !e.shiftKey && (act.tagName||"").toLowerCase()==="input" && (e.key==="c"||e.key==="C"||e.key==="a"||e.key==="A");
       const doorQuit=e.altKey && e.key==="F4";
