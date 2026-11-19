@@ -48,7 +48,7 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 278;
+const PLANTS = 284;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
@@ -5453,7 +5453,7 @@ if (!PLANTS_OFF) {
   await plant("dskp5", ["    const keep = !ans.cert && !!held && !!held.cert; /* plant:keep-none */","    const keep = false;"], "keepNone");
   await plant("dskp6", ["    const ended = ans.cert ? 0 : !keep ? 0 : held.ended > 0 ? held.ended : Number.isSafeInteger(deskNow) && deskNow > 0 ? deskNow : now; /* plant:ended-first */","    const ended = ans.cert ? 0 : !keep ? 0 : Number.isSafeInteger(deskNow) && deskNow > 0 ? deskNow : now; /* plant:ended-first */"], "keepNone");
   await plant("dskp7", ["    return Object.assign(out, ended ? { ended: ended } : {}, signinWordsOf(ans.cert ? ans.holding : keep ? held.holding : null, ans.trials || (held && held.trials))); /* plant:words-settle */","    return Object.assign(out, ended ? { ended: ended } : {}, signinWordsOf(ans.holding, ans.trials)); /* plant:words-settle */"], "wordsKept");
-  await plant("dskp8", ["  return Object.assign({ held: signinSettle(fresh, said, now(), io && typeof io.deskNow === \"function\" ? io.deskNow() : 0), said: said.ok ? \"renewed\" : said.reason }, said.ok ? { idToken: m ? m.got.idToken : got.idToken } : {}); /* plant:renew-desk-now */","  return Object.assign({ held: signinSettle(fresh, said, now()), said: said.ok ? \"renewed\" : said.reason }, said.ok ? { idToken: m ? m.got.idToken : got.idToken } : {}); /* plant:renew-desk-now */"], "keepNone");
+  await plant("dskp8", ["  return Object.assign({ held: signinSettle(fresh, said, now(), io && typeof io.deskNow === \"function\" ? io.deskNow() : 0, io && typeof io.deskIssued === \"function\" ? io.deskIssued() : 0), said: said.ok ? \"renewed\" : said.reason }, said.ok ? { idToken: m ? m.got.idToken : got.idToken } : {}); /* plant:renew-desk-now */","  return Object.assign({ held: signinSettle(fresh, said, now()), said: said.ok ? \"renewed\" : said.reason }, said.ok ? { idToken: m ? m.got.idToken : got.idToken } : {}); /* plant:renew-desk-now */"], "keepNone");
   await plantWire("dskp9", ["    if (was.cert) Object.assign(base, { code: was.code, cert: was.cert }, was.ended > 0 ? { ended: was.ended } : {}, was.holding ? { holding: was.holding } : {}); /* plant:take-keeps-cert */\n",""], "wordsKept");
   await plant("dskp10", ["  return Array.isArray(offered) && offered.length > 0 && signinWorks(held, deskKey, deskNow); /* plant:works-offered */","  return signinWorks(held, deskKey, deskNow);"], "noProvider");
   await plant("dskp11", ["  const held = signinSaidOf(kept); /* plant:view-said */","  const held = kept;"], "saidMeaning");
@@ -5496,6 +5496,13 @@ if (!PLANTS_OFF) {
     const r = await plantRed(async () => CASES.doorRule(S, undefined, [from, ""]));
     check(r.red, "dsgp9 plant " + from.trim().slice(0, 50) + " turns doorRule red" + said(r));
   }
+  /* Argon 51 M1 and M2 plants: each turns its check red alone. */
+  await plant("dsgp10", ["    const clockFloor = Number.isSafeInteger(clockIssued) && clockIssued > 0 ? clockIssued : 0; /* plant:settle-clock-issued */", "    const clockFloor = 0;"], "settleClockIssued");
+  await plantWire("dsgp11", ["    deskIssued: () => signinClockNow().issued, /* plant:io-desk-issued */\n", ""], "settleClockIssued");
+  await plantWire("dsgp12", ["  const clkIssued = clk && Number.isSafeInteger(clk.issued) ? clk.issued : 0; /* plant:take-clock-issued */", "  const clkIssued = 0;"], "settleClockIssued");
+  await plant("dsgp13", ["  current = !h.cert || !clock || !(clock.issued > 0) || h.cert.issued >= clock.issued; /* plant:file-clock-issued */", "  current = true;"], "settleClockIssued");
+  await plantWire("dsgp14", ["  const keyOk = !signinState._key || key === signinState._key; /* plant:state-key */", "  const keyOk = true;"], "stateKeyRestoreAndTell");
+  await plantWire("dsgp15", ["  if (wasClock && wasKey !== key && key && held && held.cert) tellSignin(); /* plant:clock-key-told */\n", ""], "stateKeyRestoreAndTell");
   const gated = MAIN.replace("function writeBranch(stem, text) {\n", "function writeBranch(stem, text) {\n  if (!signinView().signedIn) return { ok: false };\n");
   check(gated !== MAIN && outsideNames(gated).slice().sort().join() !== expectOutside.slice().sort().join(),
     "dsp14 plant a sign-in gate on the desk file's write turns ds5a red");

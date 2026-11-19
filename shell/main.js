@@ -11177,14 +11177,16 @@ function signinViewOf(kept, o) {
    keeps it and is said; "signin", a seat freed, forgets the refresh token, since only a sign-in takes it again. The seat's words go
    with the certificate they came with, the trials are kept until an answer names others. Whatever the answer, the list it carried
    replaces the kept one only where it is later (signinRevokedNext). */
-function signinSettle(held, ans, now, deskNow) {
-  const settled = signinSettleSeat(held, ans, now, deskNow);
+function signinSettle(held, ans, now, deskNow, clockIssued) {
+  const settled = signinSettleSeat(held, ans, now, deskNow, clockIssued);
   if (settled.cert) settled.seated = true; /* plant:seated-settle */
   return Object.assign(settled, { revoked: signinRevokedNext(held && held.revoked, ans.revoked) }); /* plant:revoked-settle */
 }
-function signinSettleSeat(held, ans, now, deskNow) {
+function signinSettleSeat(held, ans, now, deskNow, clockIssued) {
   if (ans.ok) {
     if (ans.cert && held && held.cert && ans.cert.issued < held.cert.issued) return Object.assign({}, held, { checked: now, reached: false }); /* plant:settle-issued */
+    const clockFloor = Number.isSafeInteger(clockIssued) && clockIssued > 0 ? clockIssued : 0; /* plant:settle-clock-issued */
+    if (ans.cert && clockFloor > 0 && ans.cert.issued < clockFloor) return Object.assign({}, held, { checked: now, reached: false });
     const keep = !ans.cert && !!held && !!held.cert; /* plant:keep-none */
     const ended = ans.cert ? 0 : !keep ? 0 : held.ended > 0 ? held.ended : Number.isSafeInteger(deskNow) && deskNow > 0 ? deskNow : now; /* plant:ended-first */
     const out = Object.assign({}, held, { code: ans.code, cert: ans.cert || (keep ? held.cert : null), doors: ans.cert ? (ans.doors || []) : [], doorsSig: ans.cert ? String(ans.doorsSig || "") : "", at: now, checked: now, reached: true,
@@ -11222,7 +11224,7 @@ async function signinRenewHeld(io, p, deskKey, held, now) {
   if (m && m.access) { fresh.access = true; fresh.refresh = io.keep(m.got.refreshToken) || fresh.refresh; } /* plant:access-rotated */
   else if (!m && ans.reason !== "unreached" && fresh.access) delete fresh.access; /* plant:access-clear */
   const said = m ? m.ans : ans;
-  return Object.assign({ held: signinSettle(fresh, said, now(), io && typeof io.deskNow === "function" ? io.deskNow() : 0), said: said.ok ? "renewed" : said.reason }, said.ok ? { idToken: m ? m.got.idToken : got.idToken } : {}); /* plant:renew-desk-now */
+  return Object.assign({ held: signinSettle(fresh, said, now(), io && typeof io.deskNow === "function" ? io.deskNow() : 0, io && typeof io.deskIssued === "function" ? io.deskIssued() : 0), said: said.ok ? "renewed" : said.reason }, said.ok ? { idToken: m ? m.got.idToken : got.idToken } : {}); /* plant:renew-desk-now */
 }
 /* The renewal on a managed path: the refresh asks the service's scope beside today's, and the seat is asked with both tokens. An
    account the organisation has not assigned keeps what it held, said; the rest fails as the ordinary renewal does. */
@@ -11237,7 +11239,7 @@ async function signinRenewHeldAccess(io, p, deskKey, held, now, access) {
   }
   const fresh = Object.assign({}, held, { refresh: io.keep(got.refreshToken) || held.refresh, sub: held.sub || io.keep(got.sub) });
   const ans = await signinSeat(io, p.id, deskKey, got.idToken, "", now, got.accessToken); /* plant:access-renew-seat */
-  return Object.assign({ held: signinSettle(fresh, ans, now(), io && typeof io.deskNow === "function" ? io.deskNow() : 0), said: ans.ok ? "renewed" : ans.reason }, ans.ok ? { idToken: got.idToken } : {});
+  return Object.assign({ held: signinSettle(fresh, ans, now(), io && typeof io.deskNow === "function" ? io.deskNow() : 0, io && typeof io.deskIssued === "function" ? io.deskIssued() : 0), said: ans.ok ? "renewed" : ans.reason }, ans.ok ? { idToken: got.idToken } : {});
 }
 /* seat.json as the desk writes it for its lead: {format: 2, desk, certificate}, unsealed, since it holds pseudonyms alone. */
 const SEAT_NAME = "seat.json";
@@ -11319,7 +11321,10 @@ function signinFileHeld(store, text, deskKey) {
   /* The certificate is this desk's own, judged against this desk's key and not the desk the certificate names. */
   let mine = true;
   mine = !h.cert || signinCertOk(h.cert, String(deskKey || "")); /* plant:file-desk-key */
-  if (marked && mine) return store;
+  const clock = signinClockRead(text, deskKey);
+  let current = true;
+  current = !h.cert || !clock || !(clock.issued > 0) || h.cert.issued >= clock.issued; /* plant:file-clock-issued */
+  if (marked && mine && current) return store;
   return Object.assign({}, store, { held: Object.assign({}, h, { cert: null, code: "", doors: [], doorsSig: "" }) });
 }
 function signinFileText(s) {
@@ -11417,7 +11422,9 @@ function signinLabHeld() {
 let signinTableBase, signinPinStamp = "";
 function signinState() {
   const managed = managedPolicy(), stamp = JSON.stringify(managed);
-  if (signinStore !== undefined && (stamp === signinPinStamp || signinBusy || signinRenewing || signinOutFlight)) return signinStore; /* plant:signin-follows */
+  const me = branchIdentity(false), key = me ? me.key : "";
+  const keyOk = !signinState._key || key === signinState._key; /* plant:state-key */
+  if (signinStore !== undefined && (keyOk || signinBusy || signinRenewing || signinOutFlight) && (stamp === signinPinStamp || signinBusy || signinRenewing || signinOutFlight)) return signinStore; /* plant:signin-follows */
   if (signinTableBase === undefined) signinTableBase = SIGNIN_PROVIDERS;
   const pinned = signinPinTable(signinTableBase, managed);
   SIGNIN_PROVIDERS = managed.waiting === true ? signinTableBase : pinned; /* plant:signin-file-unpinned */
@@ -11429,7 +11436,6 @@ function signinState() {
     text = within ? fs.readFileSync(at, "utf8") : "";
   } catch { text = ""; }
   signinStore = signinFileRead(text, SIGNIN_DESK_PACKED); /* plant:door-file-packed */
-  const me = branchIdentity(false);
   const rawHeld = signinStore.held;
   signinStore = signinFileHeld(signinStore, text, me ? me.key : ""); /* plant:file-held */
   SIGNIN_PROVIDERS = pinned; /* plant:pin-taken */
@@ -11437,6 +11443,7 @@ function signinState() {
   signinStore.managed = managed;
   /* Whether this build holds any provider's registration, whatever machine policy pins: unwritten, beside `managed`. */
   signinStore.registered = signinOffered(signinTableBase).length > 0; /* plant:registered-base */
+  signinState._key = key;
   if (!(me && me.key) && rawHeld && (rawHeld.cert || rawHeld.code)) { const stripped = signinStore; signinStore = undefined; return stripped; } /* plant:state-no-key */
   return signinStore;
 }
@@ -11607,6 +11614,7 @@ function signinOnlineNow() {
 }
 function signinClockNow() {
   const held = signinState().held, me = branchIdentity(false), key = me ? me.key : "", wall = Date.now(), mono = signinMono();
+  const wasClock = signinClock !== null, wasKey = signinClockKey;
   /* Read again whenever the desk's key is not the one it was read under, so an ask before the key exists loses no kept time. */
   if (signinClock === null || signinClockKey !== key) { /* plant:clock-key */
     let text = "";
@@ -11623,7 +11631,8 @@ function signinClockNow() {
   /* The stop follows the certificate held: armed again, after this turn, whenever another one is held. */
   const sig = held && held.cert && held.cert.sig ? String(held.cert.sig.value) : "";
   if (sig !== signinStopFor) { signinStopFor = sig; const soon = setTimeout(signinStopArm, 0); if (soon && soon.unref) soon.unref(); } /* plant:stop-follows */
-  return { key: key, desk: signinClock.desk, last: signinClock.last, online: signinOnline };
+  if (wasClock && wasKey !== key && key && held && held.cert) tellSignin(); /* plant:clock-key-told */
+  return { key: key, desk: signinClock.desk, last: signinClock.last, issued: signinClock.issued, online: signinOnline };
 }
 function signinTick() {
   const c = signinClockNow();
@@ -11707,6 +11716,7 @@ function signinIo(run) {
     folderToken: t => storeTokenTake(t),
     /* The desk's own time, read when an answer is settled (signinSettle's `ended`). */
     deskNow: () => signinClockNow().desk,
+    deskIssued: () => signinClockNow().issued, /* plant:io-desk-issued */
   };
 }
 /* A first sign-in's outcome kept: the refresh token and the sub sealed where the system seals for real, the seed beside, and the
@@ -11731,7 +11741,9 @@ function signinTake(provider, got, ans, now, access) {
   /* The account's organisation as its provider named it, so a policy set later is held to it (signinPolicyRefuses). */
   const claims = signinClaims(String(got.idToken || ""));
   if (claims) base.org = { tid: typeof claims.tid === "string" ? claims.tid.toLowerCase() : "", hd: typeof claims.hd === "string" ? claims.hd.toLowerCase() : "" }; /* plant:org-take */
-  s.held = signinSettle(base, ans, now, typeof signinClockNow === "function" ? signinClockNow().desk : 0);
+  const clk = typeof signinClockNow === "function" ? signinClockNow() : null;
+  const clkIssued = clk && Number.isSafeInteger(clk.issued) ? clk.issued : 0; /* plant:take-clock-issued */
+  s.held = signinSettle(base, ans, now, clk ? clk.desk : 0, clkIssued);
   s.revoked = s.held.revoked;
   delete s.out; /* this sign-in holds the desk's place again, so a sign out still owed is no longer wanted */
   if (ans.ok && ans.cert && typeof signinRelaySeatClear === "function") signinRelaySeatClear(); /* plant:relay-seat-signin */
