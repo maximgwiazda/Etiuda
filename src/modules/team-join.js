@@ -844,10 +844,11 @@ function wireTeamJoinEmpty(root){
 const bubbleClosers=new Map();
 function closeTeamBubble(id){ const fn=bubbleClosers.get(id); if(fn) fn(); }
 function openTeamBubble(opts){
-  if(typeof document==="undefined" || typeof document.createElement!=="function" || !document.body) return null;
+  if(typeof document==="undefined" || typeof document.createElement!=="function" || !document.body || typeof document.body.appendChild!=="function") return null;
+  const wrap=document.createElement("div");
+  if(!wrap || typeof wrap.setAttribute!=="function" || typeof wrap.addEventListener!=="function" || typeof wrap.querySelector!=="function") return null;
   const id=String(opts.id||"");
   if(id) closeTeamBubble(id);
-  const wrap=document.createElement("div");
   wrap.className="bub bub-ask e-offer e-join-bub"+(opts.cls?" "+opts.cls:"");
   if(id) wrap.id=id;
   wrap.setAttribute("role",opts.role||"dialog");
@@ -961,7 +962,7 @@ function syncToldNotice(){
     onEscape:()=>dismiss(),
     onClose:()=>{ if(toldTeamOpen===want){ toldTeamOpen=""; toldLangOpen=""; } }
   });
-  if(!b) return;
+  if(!b){ toldTeamOpen=""; toldLangOpen=""; return; }
   const ok=b.wrap.querySelector('[data-join="told-ok"]');
   if(ok) ok.onclick=dismiss;
 }
