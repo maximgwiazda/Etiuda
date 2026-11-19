@@ -100,8 +100,8 @@ if (typeof P.firstSigninDue === "function") {
     "fs1l still due when stranded with works false");
   check(S.lsGet("eFirstSigninSeen") === null,
     "fs1i gate checks write nothing to storage");
-  check(P.firstSigninDue() === false,
-    "fs1j firstSigninDue() with no view read is false");
+  check(P.firstSigninDue() === true,
+    "fs1j firstSigninDue() with no host is true (the browser door, B-3a2b)");
   globalThis.window = { E_HOST: { catalogFolderPolicy: "C:\\Policy\\Team", signinState: () => due } };
   P.signinNow();
   check(P.firstSigninDue() === true && P.deskWorks() === false,
