@@ -408,11 +408,11 @@ check("tabs.js", "810tf6 each conversation's name is a tab stop, named as it rea
       wrap.querySelectorAll = () => [];
       let switched = null;
       const fn = new Function("document", "$", "tabs", "activeTabId", "t", "tabLabel", "drawTabs", "bindTabScroll",
-        "fitTabLabels", "requestAnimationFrame", "tabAddTitle", "ICON_TAB_X", "ICON_TAB_ADD", "tabDrag", "switchTab", "scrollTabIntoView", "closeTab", "focusRingOn",
+        "fitTabLabels", "requestAnimationFrame", "tabAddTitle", "ICON_TAB_X", "ICON_TAB_ADD", "tabDrag", "switchTab", "scrollTabIntoView", "closeTab", "focusRingOn", "tabLangText",
         extractDecl(tabsSrc, "function drawTabsCore(") + "\nreturn drawTabsCore;");
       fn({ createElement: () => new El() }, s => (s === "#tabsBar" ? bar : s === "#tabsWrap" ? wrap : null),
         tabs, "a", UL.t, labelOf(UL.t, tabs), {}, () => {}, () => {}, () => {}, () => "", "", "", null,
-        id => { switched = id; }, () => {}, () => {}, el => !!(el && typeof el.matches === "function" && el.matches(":focus-visible")))();
+        id => { switched = id; }, () => {}, () => {}, el => !!(el && typeof el.matches === "function" && el.matches(":focus-visible")), () => "EN")();
       const row = el => {
         const name = el.kids[0];
         const shown = name.kids[0] && name.kids[0].textContent;
@@ -461,11 +461,11 @@ check("tabs.js", "901t1 a middle click on a conversation's tab closes that conve
     bar.parentElement = wrap;
     const closed = [];
     const fn = new Function("document", "$", "tabs", "activeTabId", "t", "tabLabel", "drawTabs", "bindTabScroll",
-      "fitTabLabels", "requestAnimationFrame", "tabAddTitle", "ICON_TAB_X", "ICON_TAB_ADD", "tabDrag", "switchTab", "scrollTabIntoView", "closeTab",
+      "fitTabLabels", "requestAnimationFrame", "tabAddTitle", "ICON_TAB_X", "ICON_TAB_ADD", "tabDrag", "switchTab", "scrollTabIntoView", "closeTab", "tabLangText",
       extractDecl(tabsSrc, "function drawTabsCore(") + "\nreturn drawTabsCore;");
     fn({ createElement: () => new El() }, s => (s === "#tabsBar" ? bar : s === "#tabsWrap" ? wrap : null),
       tabs, "a", UL.t, labelOf(UL.t, tabs), {}, () => {}, () => {}, () => {}, () => "", "", "", null,
-      () => {}, () => {}, (id, ev) => { closed.push(id + (ev ? "+ev" : "")); })();
+      () => {}, () => {}, (id, ev) => { closed.push(id + (ev ? "+ev" : "")); }, () => "EN")();
     const tab = bar.kids[1];
     const ev = button => ({ button, prevented: false, preventDefault() { this.prevented = true; }, stopPropagation() {} });
     const down = [0, 1, 2].map(b => { const e = ev(b); if (typeof tab.onmousedown === "function") tab.onmousedown(e); return e.prevented; });

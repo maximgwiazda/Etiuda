@@ -14277,7 +14277,7 @@ What is typed here stays in this browser.`;
   }
   function syncTabLang() {
     const bar = $("#tabsBar");
-    if (!bar) return;
+    if (!bar || typeof bar.querySelectorAll !== "function") return;
     bar.querySelectorAll(".tab[data-tid]").forEach((el) => {
       const tag = el.querySelector(".tab-lang");
       const txt = tabLangText(tabs.find((x) => x.id === el.dataset.tid));

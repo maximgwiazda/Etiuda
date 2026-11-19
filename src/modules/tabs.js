@@ -416,7 +416,7 @@ function tabLangText(tb){
 /** Every drawn tab's language tag, after a change of the language on screen. */
 function syncTabLang(){
   const bar=$("#tabsBar");
-  if(!bar) return;
+  if(!bar||typeof bar.querySelectorAll!=="function") return;
   bar.querySelectorAll(".tab[data-tid]").forEach(el=>{
     const tag=el.querySelector(".tab-lang");
     const txt=tabLangText(tabs.find(x=>x.id===el.dataset.tid));
