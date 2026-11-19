@@ -1654,7 +1654,8 @@ const t0 = Date.now();
                   loaded: !!rows[0] && rows[0].classList.contains("is-loaded"),
                   act: rows[0] ? [...rows[0].querySelectorAll("button.btn")].map(x => x.getAttribute("aria-label") || x.textContent).join("|") : null,
                   meta: rows[0] ? (rows[0].querySelector(".ec-meta") || {}).textContent : null,
-                  held: (typeof E_CATALOG_SCRIPT === "string" && E_CATALOG_SCRIPT) || "" };
+                  held: (typeof E_CATALOG_SCRIPT === "string" && E_CATALOG_SCRIPT) || "",
+                  hosted: !!window.E_HOST };
     /* EXPORT COMES WHEN THERE IS SOMETHING TO EXPORT, ruled 2026-09-17: nothing has been edited
        on top of this catalog, so the file it came from holds every word an export would write.
        One edit through the product's own save, and the row is asked again. */
@@ -1669,12 +1670,13 @@ const t0 = Date.now();
   });
   check(mgList.step === "open" && mgList.n === 1 && mgList.loaded && mgList.act === "Eject"
         && mgList.actEdited === "Export…|Eject"
-        && mgList.name === mgList.held && !mgList.open && !mgList.change
+        && mgList.name === (mgList.hosted ? "Unnamed catalog" : mgList.held) && !mgList.open && !mgList.change
         && /card/.test(mgList.meta || ""),
     "the Library lists the catalog this browser holds as its one row, marked and carrying Eject -"
     + " and Export beside it the moment there is an edit to export - with none of the host's file"
-    + " rows and no folder on the title line ("
-    + JSON.stringify({ n: mgList.n, loaded: mgList.loaded, act: mgList.act, meta: mgList.meta,
+    + " rows and no folder on the title line, named by the script it came from on a bare page and left unnamed on a seated desk,"
+    + " where a host is present and the catalog has no file of its own ("
+    + JSON.stringify({ hosted: mgList.hosted, name: mgList.name, n: mgList.n, loaded: mgList.loaded, act: mgList.act, meta: mgList.meta,
                        open: mgList.open, change: mgList.change }) + ")");
 
   /* 2s9x: CATALOG AND DATA'S ROWS ON A NARROW WINDOW, in Polish, its longest. A browser has no host,
