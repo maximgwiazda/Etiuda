@@ -159,8 +159,8 @@ try {
     + "): unselected shows its tag in the close button's place, selected drops its tag, hover swaps them back");
   await real.page.close();
   const srcLines = rawHtml.split("\n");
-  const plantTag = srcLines.findIndex((l) => l.includes("plant:tab-lang-tag"));
-  const plantKeep = srcLines.findIndex((l) => l.includes("plant:tab-lang-keep"));
+  const plantTag = srcLines.findIndex((l) => l.includes("plant:tab-lang-tag")) - 1;
+  const plantKeep = srcLines.findIndex((l) => l.includes("plant:tab-lang-keep")) + 1;
   const planted = async (at, tag, edit) => {
     if (process.env.ETIUDA_PLANTS === "off") return { off: true };
     if (at < 0) return { err: "no plant mark " + tag };
@@ -171,8 +171,8 @@ try {
     await out.page.close();
     return { rows: out.rows };
   };
-  const pTag = await planted(plantTag, "tag", (l) => l.replace(/lab\.after\(\w+\);/, "0;"));
-  const pKeep = await planted(plantKeep, "keep", (l) => l.replace(/tabLangCode\(\w+\.lang\)\|\|lang/, '(t.lang==="pl"||t.lang==="en")?t.lang:lang'));
+  const pTag = await planted(plantTag, "tag", (l) => l.replace(/^(\s*)tl,/, "$1"));
+  const pKeep = await planted(plantKeep, "keep", (l) => l.replace(/tabLangCode\((\w+)\.lang\) \|\| lang/, '($1.lang === "pl" || $1.lang === "en") ? $1.lang : lang'));
   if (pTag.off) { check(true, "tl3 NOT RUN (ETIUDA_PLANTS=off)"); check(true, "tl4 NOT RUN (ETIUDA_PLANTS=off)"); check(true, "tl5 NOT RUN (ETIUDA_PLANTS=off)"); }
   else {
     check(!!pTag.rows && !tl1(pTag.rows), "tl3 PLANT lifting the line that draws the tag turns tl1 red" + (pTag.err ? " (" + pTag.err + ")" : ""));

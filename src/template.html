@@ -1073,6 +1073,18 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .tab-x .ic,.tab-add-mark .ic,.tabs-nav-mark .ic,.tabs-list-mark .ic{width:16px;height:16px;stroke-width:1.5}
 .tab:hover .tab-x,.tab:focus-visible .tab-x,.tab:focus-within .tab-x,.tab-x:focus-visible{opacity:1}
 .tab-x:hover,.tab-x:focus-visible{color:#c44;background:rgba(196,68,68,.14);opacity:1}
+/* Each conversation tab says its language: its code in capitals in a small outlined tag after the name, before the beads
+   and the close button (board 1012). Below 140px (data-narrow, set by fitTabLabels) an unselected tab shows the tag in the
+   close button's place until hovered or focused, and the selected tab drops its tag: the bar's language control says it. */
+.tab-lang{flex:none;display:inline-flex;align-items:center;height:16px;padding:0 4px;border-radius:4px;box-sizing:border-box;
+  box-shadow:inset 0 0 0 1px rgba(var(--band-ink-rgb),.55);color:rgba(var(--band-ink-rgb),.92);font:650 10px/1 var(--sans);letter-spacing:.06em}
+.tab.on .tab-lang{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ink) 35%,transparent);color:var(--ink)}
+.tab:hover .tab-lang{color:var(--band-ink)}
+.tab.on:hover .tab-lang{color:var(--ink)}
+.tab[data-narrow] .tab-lang{margin-right:2px}
+.tab[data-narrow]:not(.on):not(:hover):not(:focus-within) .tab-x{display:none}
+.tab[data-narrow]:not(.on):is(:hover,:focus-within) .tab-lang{display:none}
+.tab.on[data-narrow] .tab-lang{display:none}
 /* No hairline between the last tab and + - if the strip's end ever needs marking again,
    the aperture edges by the arrows (.tabs-nav) are the vocabulary. */
 /* + sits in same height band as tabs; mark matches .tab-x (× inherits weight 600 from .tab) */
