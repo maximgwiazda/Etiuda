@@ -5126,7 +5126,7 @@ try {
     };
     shareCat.sig = { alg: "Ed25519", keyId: S_LEAD.keyId };
     shareCat.sig.value = crypto.sign(null, Buffer.from(V2.v2SignedBytes(shareCat)), sLead.privateKey).toString("hex");
-    const sealedShareCat = JSON.stringify(D1.api.sealCatalog(KEY_S, TEAM_S, 1, JSON.stringify(shareCat, null, 1) + "\n"), null, 1) + "\n";
+    const sealedShareCat = D1.api.sealCatalog(KEY_S, TEAM_S, 1, JSON.stringify(shareCat, null, 1) + "\n");
 
     const loadShareDesk = async (name, shareDir, src) => {
       const ud = path.join(LAB, "share-" + name);
@@ -5198,7 +5198,7 @@ try {
     });
     const teamDoc2 = signS({
       format: 1, kind: "etiuda-team", id: TEAM_S, catalogs: ["lamp-shop"],
-      lead: S_LEAD, sealed: true, exportsSealed: false, epoch: 2, rev: 2,
+      lead: S_LEAD, sealed: true, exportsSealed: false, epoch: 1, rev: 2,
       channel: { kind: "relay", rt: RT_S, url: URL_S },
       roster: [
         { desk: { id: dA.me.id, key: dA.me.key, box: dA.me.box }, name: "Ada Nowak" },
@@ -5267,8 +5267,9 @@ try {
       "1013s2 share-to seals and writes only to chosen desk's addressed place, opened by share-inbox with sender key from roster: "
       + JSON.stringify({ sentB, bLen: bItems.length, cLen: cItems.length, bItem }));
 
-    /* Never-edited Desk B loads lamp-shop via etiuda:catalog-read; has NO desks/<B>/ file yet */
-    await dB.ask("etiuda:catalog-read", "lamp-shop.ec", false, false);
+    /* Never-edited Desk B loads lamp-shop via etiuda:catalog-read + etiuda:catalog-taken; has NO desks/<B>/ file yet */
+    await dB.ask("etiuda:catalog-read", "lamp-shop.ec", null, true, false);
+    dB.sync("etiuda:catalog-taken", dB.api.signedSha(shareCat));
     const bDeskDir = path.join(shareFolder, "desks", dB.me.id);
     const hadDirBefore = fs.existsSync(bDeskDir);
     const keepVerdict = await dB.join("share-keep", JSON.stringify({ from: bItem.from, team: TEAM_S, card: JSON.stringify(bItem.card) }), "lamp-shop");
@@ -5285,7 +5286,7 @@ try {
     await dB.ask("etiuda:branch-write", "lamp-shop-" + crypto.createHash("sha256").update("lamp-shop").digest("hex").slice(0, 8),
       JSON.stringify({ format: 2, kind: "etiuda-catalog", id: dB.me.id + "-" + crypto.createHash("sha256").update("lamp-shop").digest("hex").slice(0, 8),
         rev: 0, langs: shareCat.langs, tags: shareCat.tags, cards: [keepVerdict && keepVerdict.card ? keepVerdict.card : sharedCard],
-        desk: { id: dB.me.id, key: dB.me.key, box: dB.me.box }, grew: { id: "lamp-shop", rev: 1, sha: "sha256:" + dB.api.signedSha(shareCat) } }));
+        desk: { id: dB.me.id, key: dB.me.key, box: dB.me.box }, grew: { id: "lamp-shop", rev: 1, sha: dB.api.signedSha(shareCat) } }));
     const refAlready = await dB.join("share-keep", JSON.stringify({ from: bItem.from, team: TEAM_S, card: JSON.stringify(bItem.card) }), "lamp-shop");
     check(!!refOther && refOther.ok === false && !!refShelf && refShelf.ok === false && !!refBad && refBad.ok === false
       && !!refAlready && refAlready.ok === false && refAlready.already === true,
@@ -5312,7 +5313,7 @@ try {
       const liftSharePlant = async (tag, fn) => {
         const lines = SRC.split("\n"), at = lines.findIndex(l => l.includes("/* plant:" + tag + " */"));
         if (at < 0) return { missing: true };
-        lines[at] = lines[at].replace(/if\s*\([^)]*\)\s*return[^;]*;/, "if (false) ;").replace(/openCardFrom\([^)]*\)/, "JSON.stringify(env)");
+        lines[at] = lines[at].replace(/if\s*\([^)]*\)\s*return[^;]*;/, "if (false) ;").replace(/openCardFrom\([^)]*\)/, "String(env && env.card || \"\")");
         return fn(lines.join("\n"));
       };
       const loadFromCopy = async (tag, baseUd, src) => {
@@ -5348,7 +5349,7 @@ try {
       const p8 = await liftSharePlant("share-seal-to", async src => {
         const lines = SRC.split("\n"), at = lines.findIndex(l => l.includes("/* plant:share-seal-to */"));
         if (at < 0) return { missing: true };
-        lines[at] = "const env = { format: 1, kind: \"raw\", from: ctx.me.id, card: payloadText }; /* unsealed */";
+        lines[at] = "env = { format: 1, kind: \"raw\", from: ctx.me.id, card: payloadText }; /* unsealed */";
         const dP = await loadFromCopy("p8-" + hexS(3), dA.ud, lines.join("\n"));
         await dP.join("share-to", dB.me.id, JSON.stringify(sharedCard), "");
         const got = await dB.join("share-inbox");

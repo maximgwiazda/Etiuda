@@ -3103,7 +3103,7 @@ function createChannel(opts) {
     const s = addressedSealing();
     if (s.err) return s.err;
     if (!place || String(recipientId) === s.who.keyId || typeof bodyText !== "string") return R("outside-place");
-    return putAddressed({ rel: "to/" + recipientId, kind: "file", body: bodyText, sha: null, place, supersedes: null }, s.sealing);
+    return putAddressed({ rel: "desks/" + s.who.keyId + "/to/" + recipientId, kind: "file", body: bodyText, sha: null, place, supersedes: null }, s.sealing);
   }
   async function listTo(writerKeyFor) {
     const who = me();
@@ -3114,14 +3114,20 @@ function createChannel(opts) {
     for (const e of all) {
       const m = e && e.meta;
       if (!B.addressedTo(m, who.keyId) || m.del) continue;
-      const writerKey = typeof writerKeyFor === "function" ? writerKeyFor(m.writer) : null;
-      const tKey = typeof o.keyFor === "function" ? o.keyFor(m.epoch) : null;
-      if (!writerKey || !tKey) continue;
       const got = await authed("GET", "b/" + m.id);
       if (got.status !== 200) continue;
-      const opened = B.openBlob({ relayTeamId: pin.rt, teamKey: tKey, writerPublicKey: writerKey, meta: m, ciphertext: got.bytes });
+      let gm = table(got.meta) && got.meta.id === m.id ? got.meta : null;
+      if (gm && !envelopeOf({ meta: gm, ct: got.bytes })) gm = null;
+      gm = gm || m;
+      const writerKey = typeof writerKeyFor === "function" ? writerKeyFor(gm.writer) : null;
+      const tKey = typeof o.keyFor === "function" ? o.keyFor(gm.epoch) : null;
+      if (!writerKey || !tKey) continue;
+      const blob = { id: gm.id, epoch: gm.epoch, supersedes: gm.supersedes == null ? null : gm.supersedes,
+        writerKeyId: gm.writer, counter: gm.counter, nonce: gm.nonce, signature: gm.sig, ciphertext: toBytes(got.bytes) };
+      const opened = B.openBlob({ blob, relayTeamId: o.rt, epoch: gm.epoch, teamKey: tKey,
+        trust: { desks: [{ deskId: gm.writer, keyId: gm.writer, public: writerKey }] }, counters: {} });
       if (!opened || !opened.ok || opened.kind !== "file") continue;
-      items.push({ id: m.id, seq: e.seq, writer: m.writer, epoch: m.epoch, body: opened.body });
+      items.push({ id: gm.id, seq: e.seq, writer: gm.writer, epoch: gm.epoch, body: opened.body });
     }
     return { ok: true, items };
   }
@@ -3131,7 +3137,7 @@ function createChannel(opts) {
     if (s.err) return s.err;
     const place = B.toPlace(s.who.keyId);
     if (!place) return R("outside-place");
-    const r = await putAddressed({ rel: "to/" + s.who.keyId, kind: "delete", body: "", sha: null, place, supersedes: String(blobId) }, s.sealing);
+    const r = await putAddressed({ rel: "desks/" + s.who.keyId + "/to/" + s.who.keyId, kind: "delete", body: "", sha: null, place, supersedes: String(blobId) }, s.sealing);
     if (r && r.ok) return { ok: true };
     if (r && (r.reason === "superseded" || r.reason === "missing" || r.reason === "expired")) return { ok: true };
     return r;
