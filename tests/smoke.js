@@ -1371,6 +1371,13 @@ const t0 = Date.now();
      the relation rather than as the margin: the last roomy width has room above the floor, and
      the retreat adds to it. */
   const roomOf = r => r.find - r.findFloor;
+  /* NO ROOMY WIDTH AT ALL: the first width tried (620px) already stands shed, so there is no
+     roomy reading to compare the retreat with. That is a failure of the check, recorded with what
+     stood at the widest width tried, and the run goes on to its end rather than throwing. */
+  if (!roomy) {
+    check(false, "the second row has no roomy width in the sweep: at " + (pinch ? pinch.w : "no") + "px, the widest tried, "
+      + JSON.stringify(pinch));
+  } else
   check(!!shedAt && !!roomy && !pinch.theme && !pinch.facts && pinch.chevron
         && pinch.rows.join(",") === "moreFacts,moreTheme"
         && roomy.theme && roomy.facts && !roomy.chevron
