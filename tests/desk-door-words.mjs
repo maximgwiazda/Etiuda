@@ -18,7 +18,7 @@ const SETTINGS_PATH = path.join(ROOT, "src", "modules", "settings.js");
 const TEMPLATE_PATH = path.join(ROOT, "src", "template.html");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
-const CHECKS = 34, PLANTS = 22;
+const CHECKS = 34, PLANTS = 25;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -739,10 +739,10 @@ if (!PLANTS_OFF) {
     ["if(works && v.ended>0) state=\"ended\"; /* plant:door-state-ended */", "if(false) state=\"ended\";"],
     "seam");
   await plant("ddp2", SIGNIN_PATH,
-    ["else if(!works && v.signedIn && v.stoppedAt>0) state=\"stopped\"; /* plant:door-state-stopped */", "else if(false) state=\"stopped\";"],
+    ["else if(!works && v.signedIn) state=\"stopped\"; /* plant:door-state-stopped */", "else if(false) state=\"stopped\";"],
     "seam");
   await plant("ddp3", SIGNIN_PATH,
-    ["else if(!works && v.signedIn && trialOver && waitingOnLead) state=\"waiting\"; /* plant:door-state-waiting */", "else if(false) state=\"waiting\";"],
+    ["else if(!works && v.signedIn && waitingOnLead && (trialOver || (!seatOn && !(v.stoppedAt>0)))) state=\"waiting\"; /* plant:door-state-waiting */", "else if(false) state=\"waiting\";"],
     "seam");
   await plant("ddp4", SIGNIN_PATH,
     ["else if(!works && !v.signedIn && !v.busy && FAIL_FIRST.indexOf(v.said)<0 && v.offered.length && v.registered && !v.online && !signinWaiting(v) && !signinStranded(v)) state=\"first-offline\"; /* plant:door-first-offline */", "else if(false) state=\"first-offline\";"],
@@ -751,9 +751,18 @@ if (!PLANTS_OFF) {
     ["const trialOver=seatOn===\"trial\" || (!seatOn && deskEnd>0); /* plant:door-trial-over */", "const trialOver=seatOn===\"trial\";"],
     "seamShape");
   await plant("ddp21", SIGNIN_PATH,
-    ["else if(!works && v.signedIn && trialOver && waitingOnLead) state=\"waiting\"; /* plant:door-state-waiting */\n  else if(!works && v.signedIn && trialOpen && orgLicence) state=\"trial-over-org\";\n  else if(!works && v.signedIn && trialOpen) state=\"trial-over\";\n  else if(!works && v.signedIn && v.stoppedAt>0) state=\"stopped\"; /* plant:door-state-stopped */",
-     "else if(!works && v.signedIn && v.stoppedAt>0) state=\"stopped\"; /* plant:door-state-stopped */\n  else if(!works && v.signedIn && trialOver && waitingOnLead) state=\"waiting\"; /* plant:door-state-waiting */\n  else if(!works && v.signedIn && trialOpen && orgLicence) state=\"trial-over-org\";\n  else if(!works && v.signedIn && trialOpen) state=\"trial-over\";"],
+    ["else if(!works && v.signedIn && waitingOnLead && (trialOver || (!seatOn && !(v.stoppedAt>0)))) state=\"waiting\"; /* plant:door-state-waiting */\n  else if(!works && v.signedIn && trialOpen && orgLicence) state=\"trial-over-org\";\n  else if(!works && v.signedIn && trialOpen) state=\"trial-over\";\n  else if(!works && v.signedIn) state=\"stopped\"; /* plant:door-state-stopped */",
+     "else if(!works && v.signedIn) state=\"stopped\"; /* plant:door-state-stopped */\n  else if(!works && v.signedIn && waitingOnLead && (trialOver || (!seatOn && !(v.stoppedAt>0)))) state=\"waiting\"; /* plant:door-state-waiting */\n  else if(!works && v.signedIn && trialOpen && orgLicence) state=\"trial-over-org\";\n  else if(!works && v.signedIn && trialOpen) state=\"trial-over\";"],
     "seamShape");
+  await plant("ddp23", SIGNIN_PATH,
+    ["const waitingOnLead=!!(v.askLead || signinNoSeat(v)); /* B-3a feeds this */ /* plant:door-waiting-noseat */", "const waitingOnLead=!!v.askLead; /* B-3a feeds this */"],
+    "doorNotNoneWhenDue");
+  await plant("ddp24", SIGNIN_PATH,
+    ["else if(!works && v.signedIn && waitingOnLead && (trialOver || (!seatOn && !(v.stoppedAt>0)))) state=\"waiting\"; /* plant:door-state-waiting */", "else if(!works && v.signedIn && waitingOnLead && trialOver) state=\"waiting\";"],
+    "doorNotNoneWhenDue");
+  await plant("ddp25", SIGNIN_PATH,
+    ["else if(!works && v.signedIn) state=\"stopped\"; /* plant:door-state-stopped */", "else if(!works && v.signedIn && v.stoppedAt>0) state=\"stopped\";"],
+    "doorNotNoneWhenDue");
   await plant("ddp22", SIGNIN_PATH,
     ["const trialOpen=trialOver && !(seatOn && v.stoppedAt>0); /* plant:door-trial-open */", "const trialOpen=trialOver;"],
     "state5_en");

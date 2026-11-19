@@ -4349,7 +4349,7 @@ CASES.settleClockIssued = async (s, swap) => {
   const rEqNull = s.signinSettle(hNoCert, s.signinAnswer(answer({ ok: true, code: CODE, certificate: cSameIssued, doors: [] }), DESK_KEY, true), deskNow, clk.desk, clk.issued);
   const directOk = rOldNull.cert === null && rOldNull.reached === false
     && s.signinWorks(rOldNull, DESK_KEY, clk.desk) === false
-    && rEqNull.cert === cSameIssued && s.signinWorks(rEqNull, DESK_KEY, clk.desk) === true;
+    && JSON.stringify(rEqNull.cert) === JSON.stringify(cSameIssued) && s.signinWorks(rEqNull, DESK_KEY, clk.desk) === true;
 
   /* Wired signinIo + signinRenewHeld: io.deskIssued() hands clock.issued so renewal with null held cert refuses older cert. */
   let ioSrc = decl(MAIN, "function signinIo(");
