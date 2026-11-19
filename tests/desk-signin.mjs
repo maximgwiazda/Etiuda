@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 269;
+const PLANTS = 278;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 197 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 201 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -3841,20 +3841,24 @@ CASES.clockTick = (s, swap) => {
   wb.signinClockNow(); bare.ticks[0].fn(); clockRun(bare, 2 * HOUR_MS); bare.ticks[0].fn();
   return armed && first && quiet && hourly && off && st.tells === 2 && bare.writes === 0 && bare.file === null;
 };
-/* The page keeps the five fields, typed and bounded. deskDoorState is the one read of them outside signinRead: no other page
-   module names works or stoppedAt, and the rest of signin.js names none of the five on a view. */
+/* The page keeps the five fields, typed and bounded. deskWorks is the one read of works outside signinRead and deskDoorState reads
+   the remaining four: no other page module names works or stoppedAt, and the rest of signin.js names none of the five on a view. */
 CASES.readFields = async (s, page) => {
   const pg = page || P;
   if (!pg) return false;
   const r = o => JSON.stringify((v => [v.works, v.now, v.until, v.stoppedAt, v.online])(pg.signinRead(o)));
   const is = (...a) => JSON.stringify(a);
-  const readAt = PAGE.indexOf("function signinRead(v){"), readEnd = readAt < 0 ? -1 : PAGE.indexOf("\n}\n", readAt);
-  const seamAt = PAGE.indexOf("function deskDoorState(v){"), seamEnd = seamAt < 0 ? -1 : PAGE.indexOf("\n}\n", seamAt);
-  const seam = seamAt < 0 || seamEnd < 0 ? "" : PAGE.slice(seamAt, seamEnd);
-  const outside = readAt < 0 || seamAt < 0 ? PAGE : PAGE.slice(0, readAt) + PAGE.slice(readEnd, seamAt) + PAGE.slice(seamEnd);
-  const seamReads = /\bv\.works\b/.test(seam) && /\bv\.now\b/.test(seam) && /\bv\.until\b/.test(seam)
-    && /\bv\.stoppedAt\b/.test(seam) && /\bv\.online\b/.test(seam);
-  const quiet = seamReads && fs.readdirSync(path.join(ROOT, "src", "modules")).filter(n => n.endsWith(".js") && n !== "signin.js")
+  const sliceFn = (sig) => { const a = PAGE.indexOf(sig), b = a < 0 ? -1 : PAGE.indexOf("\n}\n", a); return a < 0 || b < 0 ? null : [a, b + 2, PAGE.slice(a, b + 2)]; };
+  const rd = sliceFn("function signinRead(v){"), wk = sliceFn("function deskWorks(v){"), sm = sliceFn("function deskDoorState(v){");
+  if (!rd || !wk || !sm) return false;
+  const cuts = [rd, wk, sm].sort((a, b) => a[0] - b[0]);
+  let outside = "", pos = 0;
+  for (const [a, b] of cuts) { outside += PAGE.slice(pos, a); pos = b; }
+  outside += PAGE.slice(pos);
+  const worksReads = /\bsigninV\.works\b/.test(wk[2]) && /\bv\.works\b/.test(wk[2]);
+  const seamReads = /\bdeskWorks\(v\)/.test(sm[2]) && !/\bv\.works\b/.test(sm[2]) && /\bv\.now\b/.test(sm[2]) && /\bv\.until\b/.test(sm[2])
+    && /\bv\.stoppedAt\b/.test(sm[2]) && /\bv\.online\b/.test(sm[2]);
+  const quiet = worksReads && seamReads && fs.readdirSync(path.join(ROOT, "src", "modules")).filter(n => n.endsWith(".js") && n !== "signin.js")
     .every(n => !/\.(?:works|stoppedAt)\b/.test(fs.readFileSync(path.join(ROOT, "src", "modules", n), "utf8")))
     && !/\b(?:v|o|s|sv|view|signinV)\.(?:works|now|until|stoppedAt|online)\b/.test(outside);
   return r({ works: true, now: NOW, until: NOW + 1, stoppedAt: NOW - 1, online: false }) === is(true, NOW, NOW + 1, NOW - 1, false)
@@ -4214,6 +4218,255 @@ CASES.pageWords = async (s, page) => {
     && lead("<b>x</b>") === undefined && lead("x" + ch(1)) === undefined && lead("L".repeat(121)) === undefined && lead(B2B_LEAD) === B2B_LEAD
     && out.ended === 0 && out.holding === null && out.trials === null && out.registered === true && pg.signinRead(null).registered === false && quiet;
 };
+/* ---- B-3a1: review 46 findings 1 and 2, deskWorks() and the door rule ---------------------------------------------------------- */
+/* Finding 1 (class A): signinSettleSeat refuses a certificate whose issued is before the held one's, across renewal, Check now and sign in;
+   an older certificate with a later until revives nothing and moves neither the held certificate, works nor the desk clock; equal issued is taken. */
+CASES.settleIssued = async (s, swap) => {
+  const heldCert = cert({ issued: NOW + 20 * DAY_MS, until: NOW + 25 * DAY_MS });
+  const olderCert = cert({ issued: NOW + 10 * DAY_MS, until: NOW + 40 * DAY_MS });
+  const sameCert = cert({ issued: NOW + 20 * DAY_MS, until: NOW + 45 * DAY_MS });
+  const newerCert = cert({ issued: NOW + 26 * DAY_MS, until: NOW + 56 * DAY_MS });
+  const deskNow = NOW + 26 * DAY_MS;
+  const held = heldOf({ cert: heldCert, seated: true, ended: NOW + 21 * DAY_MS, at: NOW + 20 * DAY_MS,
+    holding: { on: "team", ends: NOW + 25 * DAY_MS, lead: B2B_LEAD }, trials: { desk: NOW + 14 * DAY_MS }, doors: [] });
+  const olderBody = strayAnswer({ ok: true, code: CODE, certificate: olderCert, doors: [],
+    seat: { on: "own", ends: NOW + 40 * DAY_MS }, trials: { studio: NOW + 40 * DAY_MS } });
+  const olderAns = s.signinAnswer(olderBody, DESK_KEY, true);
+  const sameAns = s.signinAnswer(answer({ ok: true, code: CODE, certificate: sameCert, doors: [] }), DESK_KEY, true);
+  const newerAns = s.signinAnswer(answer({ ok: true, code: CODE, certificate: newerCert, doors: [] }), DESK_KEY, true);
+  const clock0 = s.signinClockObserve(s.signinClockObserve(null, NOW + 20 * DAY_MS, 1000, held, DESK_KEY), deskNow, 1000 + 6 * DAY_MS, held, DESK_KEY);
+  const rOld = s.signinSettle(held, olderAns, NOW + 27 * DAY_MS, deskNow);
+  const clockAfterDirect = s.signinClockObserve(clock0, deskNow, 1000 + 6 * DAY_MS, rOld, DESK_KEY);
+  const directOk = rOld.cert === heldCert && rOld.ended === held.ended && rOld.at === held.at && rOld.checked === NOW + 27 * DAY_MS && rOld.reached === false
+    && JSON.stringify(rOld.holding) === JSON.stringify(held.holding) && JSON.stringify(rOld.trials) === JSON.stringify(held.trials)
+    && s.signinWorks(rOld, DESK_KEY, clockAfterDirect.desk) === false
+    && s.signinWorks({ cert: olderCert }, DESK_KEY, deskNow) === true
+    && clockAfterDirect.desk === deskNow && clockAfterDirect.issued === heldCert.issued;
+  const rSame = s.signinSettle(held, sameAns, NOW + 27 * DAY_MS, deskNow);
+  const rNew = s.signinSettle(held, newerAns, NOW + 27 * DAY_MS, deskNow);
+  const equalNewOk = rSame.cert === sameCert && rSame.ended === undefined && s.signinWorks(rSame, DESK_KEY, deskNow) === true
+    && rNew.cert === newerCert && s.signinWorks(rNew, DESK_KEY, deskNow) === true;
+
+  /* Path 1: daily renewal (signinRenewHeld). */
+  const ioRenew = Object.assign(renewIo(answer({ id_token: jwt(msClaims(undefined)), refresh_token: "rt-2" }), olderBody), { deskNow: () => deskNow });
+  const renewed = await s.signinRenewHeld(ioRenew, MS, DESK_KEY, held, () => NOW);
+  const clockAfterRenew = s.signinClockObserve(clock0, deskNow, 1000 + 6 * DAY_MS, renewed.held, DESK_KEY);
+  const renewOk = renewed.held.cert === heldCert && renewed.held.ended === held.ended
+    && s.signinWorks(renewed.held, DESK_KEY, clockAfterRenew.desk) === false
+    && clockAfterRenew.desk === deskNow && clockAfterRenew.issued === heldCert.issued;
+
+  /* Path 2: Check now (etiuda:signin-check -> signinRenewNow). */
+  const tNow = Date.now();
+  const cHeldNow = cert({ issued: tNow - 10 * DAY_MS, until: tNow - DAY_MS });
+  const cOldNow = cert({ issued: tNow - 20 * DAY_MS, until: tNow + 10 * DAY_MS });
+  const hNow = heldOf({ cert: cHeldNow, seated: true, ended: tNow - 5 * DAY_MS, at: tNow - 10 * DAY_MS, doors: [] });
+  const clockNow0 = s.signinClockObserve(s.signinClockObserve(null, tNow - 10 * DAY_MS, 500, hNow, DESK_KEY), tNow, 500 + 10 * DAY_MS, hNow, DESK_KEY);
+  const wst = wireStand(s, () => answer({ id_token: jwt(msClaims(undefined, tNow)), refresh_token: "rt-2" }),
+    () => strayAnswer({ ok: true, code: CODE, certificate: cOldNow, doors: [] }));
+  wst.store.held = hNow;
+  const wWire = loadWire(wst);
+  const chkSlice = (() => { const a = WIRING.indexOf('ipcMain.handle("etiuda:signin-check",'); return WIRING.slice(a, WIRING.indexOf("\n});", a) + 4); })();
+  let chkFn = null;
+  new Function("ipcMain", "fromEngine", "signinRenewNow", "signinView", "SIGNIN_CHECK_GAP_MS", "Date", "let signinCheckAt = 0;\n" + chkSlice)(
+    { handle: (ch, fn) => { chkFn = fn; } }, () => true, () => wWire.signinRenewNow(), () => s.signinViewOf(wst.store.held, viewFacts({ deskNow: clockNow0.desk })), 10000, Date);
+  const chkView = await chkFn({});
+  const clockAfterCheck = s.signinClockObserve(clockNow0, tNow, 500 + 10 * DAY_MS, wst.store.held, DESK_KEY);
+  const checkOk = wst.store.held.cert === cHeldNow && wst.store.held.ended === hNow.ended && chkView.works === false
+    && s.signinWorks(wst.store.held, DESK_KEY, clockAfterCheck.desk) === false
+    && clockAfterCheck.desk === tNow && clockAfterCheck.issued === cHeldNow.issued;
+
+  /* Path 3: sign in as the same account (etiuda:signin -> signinTake -> signinSettle). */
+  const sst = switchStand(s, { held: Object.assign({}, held, { sub: "sealed:s-1" }) });
+  sst.sub = "s-1";
+  sst.answer = olderAns;
+  await loadSwitch(sst).press();
+  await tick(5);
+  const clockAfterSignin = s.signinClockObserve(clock0, deskNow, 1000 + 6 * DAY_MS, sst.store.held, DESK_KEY);
+  const signinOk = !!sst.store.held && sst.store.held.cert === heldCert && sst.store.held.ended === held.ended
+    && s.signinWorks(sst.store.held, DESK_KEY, clockAfterSignin.desk) === false
+    && clockAfterSignin.desk === deskNow && clockAfterSignin.issued === heldCert.issued;
+
+  return directOk && equalNewOk && renewOk && checkOk && signinOk;
+};
+
+/* Finding 2 (class B): a first ask of the view before the desk's key exists must not cache a state stripped of the held certificate.
+   Drives the real signinState + signinClockNow + signinTick + signinSave + signinView without clockWire's stub. */
+CASES.stateKeyLate = (s, swap) => {
+  const decls = ["function signinState(", "function signinView("].concat(CLOCK_DECLS);
+  let text = decls.map(d => decl(MAIN, d)).join("\n");
+  if (swap) {
+    if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in finding-2 wiring once: " + swap[0]);
+    text = text.replace(swap[0], swap[1]);
+  }
+  const held = heldOf({ seated: true, doors: [] });
+  const marked = s.signinFileMarkText(s.signinFileText({ held }), signWith(signKey));
+  const initialDisk = s.signinClockText(marked, { desk: NOW + 3 * DAY_MS, wall: NOW + 3 * DAY_MS, last: cert().until, issued: NOW }, signWith(signKey));
+  const st = { file: initialDisk, writes: 0, tells: 0, key: null, wall: NOW + 3 * DAY_MS, mono: 1000 };
+  const names = ["managedPolicy", "signinPinTable", "signinOffered", "fs", "path", "app", "SIGNIN_FILE", "SIGNIN_FILE_MAX",
+    "signinFileRead", "SIGNIN_DESK_PACKED", "branchIdentity", "signinFileHeld", "signinPreviewing", "signinDoorsShown", "signinRelaySeat",
+    "sealsForReal", "safeStorage", "process", "deskKeyStranded", "signinAccountKept", "signinViewOf", "Date", "performance",
+    "signinClockRead", "signinClockObserve", "signinClockStart", "signinClockText", "setInterval", "net", "tellSignin",
+    "writeReplacing", "signinFileMarkText", "signinFileText", "signinSign", "console", "setTimeout", "signinStopArm"];
+  const vals = [() => ({ any: false }), table => table, () => [MS],
+    { statSync: () => ({ size: st.file.length }), readFileSync: () => st.file }, path, { getPath: () => "/ud" }, "signin.json", s.SIGNIN_FILE_MAX,
+    s.signinFileRead, true, () => (st.key ? { id: DESK_ID, key: st.key } : null), s.signinFileHeld, () => false, () => [], () => "",
+    () => true, {}, { platform: "win32" }, () => false, () => false, s.signinViewOf, { now: () => st.wall }, { now: () => st.mono },
+    s.signinClockRead, s.signinClockObserve, s.signinClockStart, s.signinClockText, () => ({ unref() {} }), { isOnline: () => true }, () => { st.tells++; },
+    (f, t) => { st.file = t; st.writes++; }, s.signinFileMarkText, s.signinFileText, signWith(signKey), { error() {}, log() {} },
+    () => ({ unref() {} }), () => {}];
+  const w = new Function(...names,
+    "let signinStore, SIGNIN_PROVIDERS = { microsoft: {} }, signinTableBase, signinPinStamp = \"\", signinBusy = null, signinRenewing = null, signinOutFlight = null, signinSaid = \"\";\n"
+    + "let signinClock = null, signinClockKept = 0, signinOnline = null, signinTicker = null, signinClockKey = \"\", signinStopFor = \"\";\n"
+    + text + "\nreturn { signinState, signinView, signinClockNow, signinTick, signinSave };")(...vals);
+  const before = w.signinView();
+  w.signinTick();
+  const safeBefore = before.works === false && st.writes === 0;
+  st.key = DESK_KEY;
+  const after = w.signinView();
+  const kept = w.signinState().held;
+  w.signinSave();
+  const onDisk = s.signinFileHeld(s.signinFileRead(st.file), st.file, DESK_KEY).held;
+  return safeBefore && !!kept && !!kept.cert && after.works === true && after.until === cert().until && after.code === CODE
+    && after.now === NOW + 3 * DAY_MS && after.stoppedAt === 0 && st.writes === 1 && !!onDisk && !!onDisk.cert;
+};
+
+/* Fresh copy of signin.js in memory with no swap (or a plant swap), so module state starts clean. */
+async function freshSignin(swap) {
+  const dir = pathToFileURL(path.join(ROOT, "src", "modules")).href + "/";
+  let text = PAGE;
+  if (swap) {
+    if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in signin.js once: " + swap[0]);
+    text = text.replace(swap[0], swap[1]);
+  }
+  return import("data:text/javascript;base64," + Buffer.from(text.replace(/from "\.\//g, 'from "' + dir)).toString("base64"));
+}
+
+/* B-3a1: deskWorks() is the one gate predicate on the page; no host answers false; gate functions call no write to desk.json or storage. */
+CASES.deskWorksGate = async (s, page) => {
+  const pg = page || await freshSignin();
+  if (typeof pg.deskWorks !== "function") return false;
+  const storage = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
+  const hadWin = "window" in globalThis, prevWin = globalThis.window;
+  let deskSaves = 0;
+  try {
+    delete globalThis.window;
+    const noWin = pg.deskWorks() === false;
+    globalThis.window = {};
+    const noHost = pg.deskWorks() === false;
+    let cur = { offered: ["microsoft"], signedIn: "microsoft", code: CODE, works: true, now: NOW, until: NOW + DAY_MS, registered: true, holding: { on: "trial", ends: NOW + DAY_MS } };
+    globalThis.window = { E_HOST: { signinState: () => cur, deskSave: () => { deskSaves++; return true; } } };
+    pg.signinNow();
+    const withWork = pg.deskWorks() === true;
+    /* Removing the host after a working view must still answer false (plain browser build). */
+    delete globalThis.window.E_HOST;
+    const droppedHost = pg.deskWorks() === false;
+    globalThis.window.E_HOST = { signinState: () => cur, deskSave: () => { deskSaves++; return true; } };
+    pg.signinChanged(Object.assign({}, cur, { works: false }), false);
+    const stopped = pg.deskWorks() === false;
+    pg.signinChanged(cur, false);
+    const back = pg.deskWorks() === true;
+    const explicit = pg.deskWorks({ works: true }) === true && pg.deskWorks({ works: false }) === false
+      && pg.deskWorks({ works: "yes" }) === false && pg.deskWorks(null) === false;
+    /* Gate functions must call no write. */
+    pg.deskDoorState(pg.signinRead(cur));
+    pg.firstSigninDue(cur);
+    const noWrites = deskSaves === 0 && storage.lsGet("eFirstSigninSeen") === null
+      && !/\blsSet\b|\bFIRST_SIGNIN_KEY\b|\beFirstSigninSeen\b|\bmarkFirstSigninSeen\b|\bfirstSigninSeen\b/.test(PAGE);
+    return noWin && noHost && withWork && droppedHost && stopped && back && explicit && noWrites;
+  } finally {
+    if (!hadWin) delete globalThis.window; else globalThis.window = prevWin;
+  }
+};
+
+/* B-3a1: the door rule: firstSigninDue ignores seen and policy pin, fires whenever view is read and deskWorks() is false;
+   Not now, Continue, Escape, seen memory and skipFirstSignin are gone; the door lowers only when deskWorks() turns true. */
+CASES.doorRule = async (s, page, kdSwap) => {
+  const pg = page || await freshSignin();
+  const storage = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
+  const KD_SRC = fs.readFileSync(path.join(ROOT, "src", "modules", "keydown.js"), "utf8");
+  const hadWin = "window" in globalThis, prevWin = globalThis.window;
+  const hadDoc = "document" in globalThis, prevDoc = globalThis.document;
+  try {
+    /* Before any view is read (no host), firstSigninDue() is false. */
+    delete globalThis.window;
+    const beforeRead = pg.firstSigninDue() === false && pg.firstSigninDue(null) === false;
+
+    /* Exports retired: FIRST_SIGNIN_KEY, firstSigninSeen, markFirstSigninSeen, skipFirstSignin are gone. */
+    const exportsClean = !("FIRST_SIGNIN_KEY" in pg) && !("firstSigninSeen" in pg) && !("markFirstSigninSeen" in pg) && !("skipFirstSignin" in pg);
+
+    /* Direct view calls: ignores seen, policy pin, stranded, and signedIn-without-works; false only when works is true. */
+    storage.lsSet("eFirstSigninSeen", "1");
+    const directDue = pg.firstSigninDue({ offered: ["microsoft"], signedIn: "", works: false }) === true
+      && pg.firstSigninDue({ offered: ["microsoft"], signedIn: "", works: false }, { seen: true, policy: true }) === true
+      && pg.firstSigninDue({ offered: ["microsoft"], signedIn: "microsoft", works: false }) === true
+      && pg.firstSigninDue({ offered: [], signedIn: "", works: false, registered: false }) === true
+      && pg.firstSigninDue({ offered: ["microsoft"], signedIn: "", managed: { on: true, stranded: true }, works: false }) === true
+      && pg.firstSigninDue({ offered: ["microsoft"], signedIn: "microsoft", works: true }) === false;
+
+    /* Host view read: policy desk + eFirstSigninSeen still due when works is false; not due when works is true. */
+    const unseated = { offered: ["microsoft", "google"], signedIn: "", works: false, online: true, registered: true };
+    const signedNoSeat = { offered: ["microsoft", "google"], signedIn: "microsoft", code: CODE, works: false, online: true, registered: true,
+      holding: { on: "trial", ends: NOW }, trials: { desk: NOW } };
+    const seated = { offered: ["microsoft", "google"], signedIn: "microsoft", code: CODE, works: true, online: true, registered: true,
+      now: NOW, until: NOW + DAY_MS, holding: { on: "trial", ends: NOW + DAY_MS } };
+    let cur = unseated, closedCount = 0;
+    const classes = new Set();
+    const fsEl = { hidden: true, innerHTML: "", attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, contains: () => false, querySelector: () => null };
+    globalThis.document = { body: { classList: { add: c => classes.add(c), remove: c => classes.delete(c), contains: c => classes.has(c) } },
+      activeElement: null, querySelector: sel => (sel === "#firstSignin" ? fsEl : null) };
+    globalThis.window = { E_HOST: { catalogFolderPolicy: "C:\\Policy\\Team", signinState: () => cur } };
+    pg.signinNow();
+    const dueWithHost = pg.firstSigninDue() === true;
+    pg.bootFirstSignin();
+    pg.onFirstSigninClosed(() => { closedCount++; });
+    const opened = pg.firstSigninOpenNow() === true && classes.has("e-first-signin") && !fsEl.hidden;
+
+    /* Refused, managed-refused and stranded on the door draw NO Not now, NO skip line, NO Continue, NO firstSigninSkip. */
+    let noSkipOnPaint = true;
+    for (const v of [
+      Object.assign({}, unseated, { said: "unreached" }),
+      Object.assign({}, unseated, { said: "signin-notassigned", managed: { on: true, tenant: true, contact: "IT" } }),
+      Object.assign({}, unseated, { managed: { on: true, stranded: true } })
+    ]) {
+      pg.signinChanged(v, false);
+      if (fsEl.innerHTML.includes("firstSigninSkip") || fsEl.innerHTML.includes("Not now") || fsEl.innerHTML.includes("Continue")
+          || fsEl.innerHTML.includes("fs-skip")) noSkipOnPaint = false;
+    }
+
+    /* Signing in with works: false must NOT lower the door; only works: true lowers it. */
+    pg.signinChanged(signedNoSeat, false);
+    const stayedOpen = pg.firstSigninOpenNow() === true && classes.has("e-first-signin") && closedCount === 0;
+    pg.signinChanged(seated, false);
+    const loweredOnWorks = pg.firstSigninOpenNow() === false && !classes.has("e-first-signin") && closedCount === 1 && pg.firstSigninDue() === false;
+
+    /* keydown.js: does not import or call skipFirstSignin; Escape while door stands neither lowers door nor invokes escape shortcut. */
+    let kdText = KD_SRC;
+    if (kdSwap) {
+      if (kdText.split(kdSwap[0]).length !== 2) throw new Error("plant anchor not in keydown.js once: " + kdSwap[0]);
+      kdText = kdText.replace(kdSwap[0], kdSwap[1]);
+    }
+    let kdListener = null, escRan = 0;
+    const kdSlice = decl(kdText, "function wireGlobalKeydown(");
+    const off = () => false;
+    const kdOwn = { document: { activeElement: null, body: { classList: { contains: off } } },
+      addEventListener: (k, fn) => { if (k === "keydown") kdListener = fn; }, $: () => null, scCaptureId: "", SC_DEFS: [], intentEl: null,
+      tourActive: off, tourHasFocus: off, openCover: () => null, modalFront: off, factsPanelOpen: off,
+      eventMatchesAction: (e, id) => id === "escape" && e.key === "Escape", eHost: off, hooks: { runShortcut: () => { escRan++; } },
+      noteUndoTyping: off, takeStandingUndo: off, typingInField: off, firstSigninOpenNow: () => true, tabTargetIn: () => null };
+    new Function("scope", "with(scope){\n" + kdSlice + "\nwireGlobalKeydown();\n}")(new Proxy(kdOwn, { has: () => true,
+      get: (t, k) => k === Symbol.unscopables ? undefined : k in t ? t[k] : globalThis[k] }));
+    let prevented = false;
+    if (kdListener) kdListener({ key: "Escape", ctrlKey: false, altKey: false, metaKey: false, shiftKey: false, repeat: false,
+      preventDefault() { prevented = true; }, stopPropagation() {} });
+    const kdClean = !/\bskipFirstSignin\b/.test(KD_SRC) && !!kdListener && escRan === 0 && prevented === true;
+
+    return beforeRead && exportsClean && directDue && dueWithHost && opened && noSkipOnPaint && stayedOpen && loweredOnWorks && kdClean;
+  } finally {
+    storage.lsDel("eFirstSigninSeen");
+    if (!hadWin) delete globalThis.window; else globalThis.window = prevWin;
+    if (!hadDoc) delete globalThis.document; else globalThis.document = prevDoc;
+  }
+};
 const LEGS = [
   ["ds1a", "offered", "as shipped no client id is configured and nothing is offered; a configured table offers what it configures, in order"],
   ["ds1b", "noHintStart", "an invitation naming providers carries no sign-in hint: the team's start is retired"],
@@ -4400,7 +4653,11 @@ const LEGS = [
   ["dsk12","pickRefused","B-2b: the quick replies' key and tray open nothing on a desk that does not work and bring its window forward; on one that works they open as before, and a second press still closes one that stands"],
   ["dsk13","noProvider","B-2b: a build offering no provider works with no certificate, a genuine one held, arms no stop, asks no renewal and tells the page registered false; machine policy pinning the providers away leaves registered as the build is; nothing held is dropped"],
   ["dsk14","pageWords","the page keeps ended, holding, trials and registered, typed and bounded, the first three for a signed-in desk alone, and deskDoorState is what reads them"],
-  ["dsw14", "readFields", "the page keeps works, now, until, stoppedAt and online, typed and bounded, and deskDoorState is what reads them"],
+  ["dsw14", "readFields", "the page keeps works, now, until, stoppedAt and online, typed and bounded; deskWorks is the one read of works and deskDoorState reads the other four"],
+  ["dsg1", "settleIssued", "B-3a1, finding 1: signinSettleSeat refuses a certificate issued before the held one across renewal, Check now and sign in, keeping held cert, works and desk clock unchanged; equal issued is taken"],
+  ["dsg2", "stateKeyLate", "B-3a1, finding 2: a first ask before the desk key exists does not cache a stripped state; once the key arrives the view carries the certificate and works, without clockWire's stub"],
+  ["dsg3", "deskWorksGate", "B-3a1: deskWorks() is the one gate predicate, answers false with no host, follows works on host views, and gate functions call no write"],
+  ["dsg4", "doorRule", "B-3a1: firstSigninDue ignores seen and policy pin and fires when view is read and deskWorks() is false; Not now, Escape, Continue and seen memory are gone; door lowers only when deskWorks() turns true"],
 ];
 for (let [id, name, line] of LEGS) {
   let ok = false;
@@ -4626,7 +4883,8 @@ answersWatched = false;
 /* What the desk makes of each case the service records, by its name there. A case the record gains with no line here, or a line
    here naming a case the record no longer holds, is red (ds23b): the desk has no reading for an answer the service gives, or reads
    one it no longer gives. A held certificate stands in for what the desk kept before the answer. */
-const HELD_BEFORE = () => ({ provider: "microsoft", refresh: "sealed:rt", sub: "sealed:s", seed: "6".repeat(64), code: CODE, cert: cert(), at: 1, checked: 1, reached: true, said: "", ask: false });
+/* A held certificate issued before every recorded answer in tests/signin-answers.json, standing in for what the desk kept before. */
+const HELD_BEFORE = () => ({ provider: "microsoft", refresh: "sealed:rt", sub: "sealed:s", seed: "6".repeat(64), code: CODE, cert: cert({ issued: VIA_FROM, until: VIA_FROM + 30 * 86400000 }), at: 1, checked: 1, reached: true, said: "", ask: false });
 const unreached = r => r.ok === false && r.reason === "unreached";
 const DESK_READS = {
   "seated": (r, c, s) => r.ok === true && !!r.cert && r.cert.desk === c.body.certificate.desk && r.code === c.body.code && r.doors.length === 0
@@ -5059,6 +5317,20 @@ if (!PLANTS_OFF) {
   await plantPage("dskp34", ["  if(!h || typeof h!==\"object\" || SIGNIN_HOLDING_ON.indexOf(h.on)<0) return null; /* plant:read-holding */","  if(!h || typeof h!==\"object\") return null;"], "pageWords");
   await plantPage("dskp35", ["  if(h.on===\"team\" && typeof h.lead===\"string\" && h.lead.length<=120 && h.lead.trim() && !/[<>]/.test(h.lead) && !/[\\x00-\\x1f\\x7f-\\x9f]/.test(h.lead)) out.lead=h.lead; /* plant:read-lead */","  if(typeof h.lead===\"string\") out.lead=h.lead;"], "pageWords");
   await plantPage("dskp36", ["    registered: o.registered===true /* plant:read-registered */","    registered: !!o.registered"], "pageWords");
+  /* B-3a1: review 46 findings 1 and 2, deskWorks() and the door rule. */
+  await plant("dsgp1", ["    if (ans.cert && held && held.cert && ans.cert.issued < held.cert.issued) return Object.assign({}, held, { checked: now, reached: false }); /* plant:settle-issued */\n", ""], "settleIssued");
+  await plantWire("dsgp2", ["  if (!(me && me.key) && rawHeld && (rawHeld.cert || rawHeld.code)) { const stripped = signinStore; signinStore = undefined; return stripped; } /* plant:state-no-key */\n", ""], "stateKeyLate");
+  await plantPage("dsgp3", ["    if(!signinHost()) return false; /* plant:desk-works-host */\n", ""], "deskWorksGate");
+  await plantPage("dsgp4", ["    if(signinV.works!==true) return false; /* plant:desk-works */\n", ""], "deskWorksGate");
+  await plantPage("dsgp5", ["  if(!v || typeof v!==\"object\" || v.works!==true) return false; /* plant:desk-works-arg */\n", ""], "deskWorksGate");
+  await plantPage("dsgp6", ["    if(!signinHasView) return false; /* plant:door-due-read */\n", ""], "doorRule");
+  await plantPage("dsgp7", ["    if(!deskWorks()) return true; /* plant:door-due-works */\n", ""], "doorRule");
+  await plantPage("dsgp8", ["    if(!deskWorks()){ if(firstSigninOpen) paintFirstSignin(); signinTell(); return; } /* plant:door-close-works */\n", ""], "doorRule");
+  {
+    const from = "      return; /* plant:door-no-escape */\n";
+    const r = await plantRed(async () => CASES.doorRule(S, undefined, [from, ""]));
+    check(r.red, "dsgp9 plant " + from.trim().slice(0, 50) + " turns doorRule red" + said(r));
+  }
   const gated = MAIN.replace("function writeBranch(stem, text) {\n", "function writeBranch(stem, text) {\n  if (!signinView().signedIn) return { ok: false };\n");
   check(gated !== MAIN && outsideNames(gated).slice().sort().join() !== expectOutside.slice().sort().join(),
     "dsp14 plant a sign-in gate on the desk file's write turns ds5a red");

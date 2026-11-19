@@ -18,7 +18,7 @@ const SETTINGS_PATH = path.join(ROOT, "src", "modules", "settings.js");
 const TEMPLATE_PATH = path.join(ROOT, "src", "template.html");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
-const CHECKS = 32, PLANTS = 19;
+const CHECKS = 33, PLANTS = 20;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -233,6 +233,38 @@ CASES.seam = (pg = P) => {
       && got[8].seatOn === "trial" && got[8].day === 1 && got[8].deskEnd === T_DESK_END;
     return statesOk && closedOk && factsOk;
   } finally { hostOff(); }
+};
+
+/* 1b. Seam shape and gate body (B-3a1): exact same keys and types across all states; stopped is !works with stoppedAt > 0 (no compound);
+   trials-ended with null holding maps to trial-over / trial-over-org / waiting; busy/refusal maps to none; no host answers deskWorks() false. */
+CASES.seamShape = (pg = P) => {
+  if (typeof pg.deskDoorState !== "function" || typeof pg.deskWorks !== "function") return false;
+  const expectedTypes = {
+    day: "number", deskEnd: "number", ended: "number", ends: "number", lead: "string", now: "number",
+    online: "boolean", orgLicence: "boolean", seatOn: "string", state: "string", stoppedAt: "number",
+    studioEnd: "number", until: "number", waitingOnLead: "boolean", why: "string"
+  };
+  const expectedKeys = Object.keys(expectedTypes).sort().join();
+  hostOn(VIEWS.ended);
+  try {
+    const s = v => pg.deskDoorState(pg.signinRead(v));
+    const all = [VIEWS.none, VIEWS.first, VIEWS.firstOffline, VIEWS.waiting, VIEWS.trialOverOrg, VIEWS.trialOver,
+      VIEWS.ended, VIEWS.stopped("team"), VIEWS.working("trial")].map(s);
+    const shapesOk = all.every(x => Object.keys(x).sort().join() === expectedKeys
+      && Object.keys(expectedTypes).every(k => typeof x[k] === expectedTypes[k]));
+    const stoppedPlain = s({ offered: ["microsoft"], signedIn: "microsoft", code: CODE, works: false, stoppedAt: T_UNTIL }).state === "stopped";
+    const noCompoundTeam = s({ offered: ["microsoft"], signedIn: "microsoft", code: CODE, works: false, stoppedAt: 0, holding: { on: "team", ends: T_ENDS } }).state === "none";
+    const noCompoundEnded = s({ offered: ["microsoft"], signedIn: "microsoft", code: CODE, works: false, stoppedAt: 0, ended: T_ENDED }).state === "none";
+    const trialsOnly = { offered: ["microsoft"], signedIn: "microsoft", code: CODE, works: false, stoppedAt: 0, now: T_NOW, trials: { desk: T_DESK_END } };
+    const trialsEndedOk = s(trialsOnly).state === "trial-over"
+      && s(Object.assign({}, trialsOnly, { licenceManaged: true })).state === "trial-over-org"
+      && s(Object.assign({}, trialsOnly, { askLead: true })).state === "waiting";
+    const busyRefusedOk = s(Object.assign({}, VIEWS.first, { busy: "microsoft" })).state === "none"
+      && s(Object.assign({}, VIEWS.first, { said: "unreached" })).state === "none";
+    return shapesOk && stoppedPlain && noCompoundTeam && noCompoundEnded && trialsEndedOk && busyRefusedOk;
+  } finally {
+    hostOff();
+  }
 };
 
 function doorHtml(pg, v, lang, opts) {
@@ -599,6 +631,7 @@ const RUN_LIST = [
   ["dd30", "noName", "an unknown lead uses the words file's no-name forms, in English and Polish, and draws no blank"],
   ["dd31", "panelRows", "state 4 puts the way on and Buy on one row, then Check now and Account settings on the next"],
   ["dd32", "offlineGlyph", "the offline box leads with an 18px crossed-signal glyph at 70% opacity"],
+  ["dd33", "seamShape", "B-3a1 seam: returned shape keeps exact keys and types; stopped is !works with stoppedAt > 0 (no compound); trials-ended, busy and refusal map cleanly"],
 ];
 
 /* Verify CHECKS matches the 21 named entries (plus 5 extra state-1..6 parity checks? Keep CHECKS exact). */
@@ -648,17 +681,20 @@ function plantText(id, filePath, swap, caseName) {
 
 if (!PLANTS_OFF) {
   await plant("ddp1", SIGNIN_PATH,
-    ["if(v.works && v.ended>0) state=\"ended\"; /* plant:door-state-ended */", "if(false) state=\"ended\";"],
+    ["if(works && v.ended>0) state=\"ended\"; /* plant:door-state-ended */", "if(false) state=\"ended\";"],
     "seam");
   await plant("ddp2", SIGNIN_PATH,
-    ["else if(!v.works && v.signedIn && (v.ended>0 || (v.stoppedAt>0 && seatOn!==\"trial\") || (seatOn && seatOn!==\"trial\"))) state=\"stopped\"; /* plant:door-state-stopped */", "else if(false) state=\"stopped\";"],
+    ["else if(!works && v.signedIn && v.stoppedAt>0) state=\"stopped\"; /* plant:door-state-stopped */", "else if(false) state=\"stopped\";"],
     "seam");
   await plant("ddp3", SIGNIN_PATH,
-    ["else if(!v.works && v.signedIn && (seatOn===\"trial\" || (!seatOn && deskEnd>0)) && waitingOnLead) state=\"waiting\"; /* plant:door-state-waiting */", "else if(false) state=\"waiting\";"],
+    ["else if(!works && v.signedIn && trialOver && waitingOnLead) state=\"waiting\"; /* plant:door-state-waiting */", "else if(false) state=\"waiting\";"],
     "seam");
   await plant("ddp4", SIGNIN_PATH,
-    ["else if(!v.signedIn && v.offered.length && !v.online && !signinWaiting(v) && !signinStranded(v)) state=\"first-offline\"; /* plant:door-first-offline */", "else if(false) state=\"first-offline\";"],
+    ["else if(!works && !v.signedIn && !v.busy && FAIL_FIRST.indexOf(v.said)<0 && v.offered.length && v.registered && !v.online && !signinWaiting(v) && !signinStranded(v)) state=\"first-offline\"; /* plant:door-first-offline */", "else if(false) state=\"first-offline\";"],
     "state1o_en");
+  await plant("ddp20", SIGNIN_PATH,
+    ["const trialOver=seatOn===\"trial\" || (!seatOn && deskEnd>0); /* plant:door-trial-over */", "const trialOver=seatOn===\"trial\";"],
+    "seamShape");
   await plant("ddp5", SIGNIN_PATH,
     ["const showSkip=(d.state===\"none\") && (d.moment===\"refused\" || d.moment===\"managed-refused\"); /* plant:door-no-skip */", "const showSkip=true;"],
     "state1_en");
