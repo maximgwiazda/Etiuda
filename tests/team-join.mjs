@@ -5046,11 +5046,13 @@ try {
     const runDoorJoin = async (mod) => {
       const hostWas = window.E_HOST, loadWas = HK.hooks.loadCatalogFromFolder, renderWas = HK.hooks.render, qsWas = document.querySelector;
       const cardsWas = AS.cards.slice();
+      const bodyWas = document.body; /* the first sign-in door opens on an unseated view (src/modules/signin.js openFirstSignin) and marks the body */
       const unseated = { offered: ["microsoft"], signedIn: "", works: false, online: true, registered: true };
       const seated = { offered: ["microsoft"], signedIn: "microsoft", code: "ABCDEFGHJKMNPQRS", works: true, online: true, registered: true,
         now: Date.now(), until: Date.now() + 86400000, holding: { on: "trial", ends: Date.now() + 86400000 } };
       let cur = unseated, joinCalls = [], loaded = [], pasteVal = "";
       try {
+        document.body = { classList: { add() {}, remove() {}, toggle() {}, contains: () => false } };
         AS.setCards([]);
         HK.hooks.loadCatalogFromFolder = file => { loaded.push(String(file)); };
         HK.hooks.render = () => {};
@@ -5064,6 +5066,9 @@ try {
             return { leads: [] };
           },
         };
+        /* With plants on, an earlier leg can leave an invitation held on the page (a refused one); Back drops it, as step 2 does, so step 1 starts from none. */
+        { const back = { hasAttribute: () => false, getAttribute: x => (x === "data-join" ? "back" : null) };
+          mod.wireTeamJoinEmpty({ querySelectorAll: () => [back] }); await Promise.resolve(back.onclick && back.onclick()); }
         SGN.signinNow();
         SGN.bootFirstSignin();
         mod.wireTeamJoin(typeof SGN.doorHolds === "function" ? { holds: SGN.doorHolds, whenOpen: SGN.whenDoorLowers } : null);
@@ -5132,6 +5137,7 @@ try {
         HK.hooks.loadCatalogFromFolder = loadWas;
         HK.hooks.render = renderWas;
         document.querySelector = qsWas;
+        document.body = bodyWas;
       }
     };
 
@@ -5152,9 +5158,10 @@ try {
       ["b3a2-p3", "plant:join-act-door", async () => {
         const pm = await plantedModule("team-join.js", "plant:join-act-door");
         if (!pm.mod) return { red: false, same: pm.same };
-        const hostWas = window.E_HOST, qsWas = document.querySelector;
+        const hostWas = window.E_HOST, qsWas = document.querySelector, bodyWas = document.body;
         let asked = 0;
         try {
+          document.body = { classList: { add() {}, remove() {}, toggle() {}, contains: () => false } }; /* the door opens on this unseated view and marks the body */
           window.E_HOST = { signinState: () => ({ offered: ["microsoft"], signedIn: "", works: false, online: true, registered: true }), onTeamJoin: () => {},
             teamJoin: op => { if (op === "ask") asked++; return { leads: [] }; } };
           SGN.signinNow(); SGN.bootFirstSignin();
@@ -5163,7 +5170,7 @@ try {
           pm.mod.wireTeamJoinEmpty({ querySelectorAll: () => [btn] });
           await Promise.resolve(btn.onclick && btn.onclick());
           return { red: asked > 0, same: pm.same };
-        } finally { pm.mod.wireTeamJoin(null); window.E_HOST = hostWas; document.querySelector = qsWas; }
+        } finally { pm.mod.wireTeamJoin(null); window.E_HOST = hostWas; document.querySelector = qsWas; document.body = bodyWas; }
       }, "joinAct(ask) sends while door stands"],
       ["b3a2-p4", "plant:join-admit-door", r => !r.admitHeld, "s.joined auto-loads while door stands"],
       ["b3a2-p5", "plant:join-opens-door", r => !r.opensHeld, "s.opens auto-loads while door stands"],
