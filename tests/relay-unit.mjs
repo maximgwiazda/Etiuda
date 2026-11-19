@@ -8013,8 +8013,8 @@ async function main() {
     /* Where this half met the relay seats (integration, Held for decision 49), the digest is the relay seats branch's wire: its seats grant
        and its status; this half changes neither. A person's store moved it: the notice route, and the store grant, store certificate,
        notice and store computer list byte forms. A seat certificate's signed marks moved it: the "desk-only" and "member" lines, signed
-       from CERT_MARKS, whose rows the digest reads beside the byte forms. */
-    const WIRE_SHA = "29c30cc5ca8c00862960b2dd12ad33558e2cb48368ef9bcbb22853c8c5a2ce26";
+       from CERT_MARKS, whose rows the digest reads beside the byte forms. The addressed place (board 1013, piece 2) added one refusal, recipient-full (403): its reason word and its STATUS row. */
+    const WIRE_SHA = "a7788ffa9e175f3a7da8a5fee0a31800026618705eb46d3006e3a78c55a31bf6";
     check(sha(wire) === WIRE_SHA && forms.length > 200,
       "1013w the relay's wire is as it was: its routes, methods, refusals and their words, socket closes and signed byte forms digest to "
       + WIRE_SHA.slice(0, 12) + ": " + sha(wire).slice(0, 12));
@@ -8196,7 +8196,7 @@ async function main() {
       const after = await since(w, sB);
       out.goneB = !listed(after, sent.b.id);
       out.tombC = listed(await since(w, sC), bDel.id) || listed(await since(w, sL), bDel.id);
-      out.readAfter = (await getBlob(w, sB, sent.b.id)).status !== 200;
+      const ra = await getBlob(w, sB, sent.b.id); out.readAfter = ra.status !== 200; out.raS = ra.status;
       /* the cap: A and B send half each to C, the next is refused, and room comes back when C removes one */
       let ca = 10, cb = 10, ok = 0, first = null;
       for (let i = 0; i < CAP; i++) {
@@ -8222,8 +8222,8 @@ async function main() {
       && B.REASONS["recipient-full"] === "That desk already has as many items waiting as the relay holds.",
     "1013bc a desk with " + CAP + " items waiting is refused the next, recipient-full, and room comes back when it removes one: " + JSON.stringify({ filled: sc.filled, full: sc.full && sc.full.json, freed: sc.freed, again: sc.again }));
     check(refused(sc.seatless, "seat-lapsed"), "1013bd a writer holding no seat opens no session, so writes nothing: " + (sc.seatless.json && sc.seatless.json.error));
-    check(refused(sc.delC, "outside-place") && sc.delB === 200 && sc.goneB && !sc.tombC && sc.readAfter,
-      "1013be the addressee removes an item once read, nobody else can, and the removal is listed to the addressee alone: " + JSON.stringify({ delC: sc.delC.json && sc.delC.json.error, delB: sc.delB, goneB: sc.goneB, tombC: sc.tombC }));
+    check(refused(sc.delC, "outside-place") && sc.delB.status === 200 && sc.goneB && !sc.tombC && sc.readAfter,
+      "1013be the addressee removes an item once read, nobody else can, and the removal is listed to the addressee alone: " + JSON.stringify({ delC: sc.delC.json && sc.delC.json.error, delB: sc.delB, goneB: sc.goneB, tombC: sc.tombC, raS: sc.raS }));
     let sealed = false, sealedPlace = null;
     const k0 = keyPair(true);
     try {
