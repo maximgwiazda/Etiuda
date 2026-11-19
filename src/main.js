@@ -463,6 +463,7 @@ function boot(){
   catalogFile.syncSampleMark();
   // The catalog in use, named on the band, and the catalog found beside it offered
   catalogOffer.paintCatNow();
+  catalogOffer.paintCatPrivate();
   catalogOffer.eOfferCatalogAtBoot();
   // A sealed catalog in the folder this desk cannot open, and any request to join its team
   teamJoin.wireTeamJoin({ holds: signin.doorHolds, whenOpen: signin.whenDoorLowers });

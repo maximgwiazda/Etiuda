@@ -747,10 +747,13 @@ body.e-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,4
 /* AN EDITION WAITING TO BE LOADED puts a dot before the name, and the name then opens that offer: a door to
    it alone, never to the Library (catalog-offer.js, paintCatWaiting). */
 .cat-now.is-waiting{display:flex;align-items:center;gap:7px;color:var(--band-ink)}
+.cat-now.is-private{display:flex;align-items:center;gap:5px}
 .cat-now .cn-dot{flex:none;width:7px;height:7px;border-radius:50%;
   background:color-mix(in srgb,var(--accent) 45%,var(--band-ink));
   box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 35%,transparent)}
-.cat-now.is-waiting .cn-name{min-width:0}
+.cat-now.is-waiting .cn-name,.cat-now.is-private .cn-name{min-width:0}
+.cat-now .cn-lock{flex:none;display:inline-flex;align-items:center;color:rgba(var(--band-ink-rgb),.58)}
+.cat-now .cn-lock .ic{width:14px;height:14px}
 .cat-now.is-waiting:focus-visible{outline:2px solid var(--band-ink);outline-offset:2px;border-radius:3px}
 /* The file arriving: a sheet that travels onto the name and goes into the dot. */
 .e-ed-sheet{position:fixed;z-index:300;width:22px;height:28px;margin:-14px 0 0 -11px;border-radius:3px;
@@ -790,7 +793,7 @@ body.e-host.e-max .win-g-max{display:none}
 body.e-host .row{app-region:drag;-webkit-app-region:drag;user-select:none}
 body.e-host .row button,body.e-host .row input,body.e-host .row .tab,body.e-host .row .menu{
   app-region:no-drag;-webkit-app-region:no-drag}
-body.e-host .row .cat-now.is-waiting{app-region:no-drag;-webkit-app-region:no-drag}
+body.e-host .row .cat-now.is-waiting,body.e-host .row .cat-now .cn-lock{app-region:no-drag;-webkit-app-region:no-drag}
 
 /* ---- THE BACKDROP. A material is composited behind the window and shows only where the
    window leaves pixels unpainted, so under e-backdrop the band's strip is the one place
@@ -2503,6 +2506,8 @@ code.open-folder:hover,code.open-folder:focus-visible{color:var(--accent);text-d
 .e-join-bub .e-join-meta{color:var(--bub-dim);margin:0 0 8px}
 .e-join-key{font:600 22px var(--mono);color:var(--ink);margin:16px 0 4px;white-space:nowrap}
 .e-join-bub .e-join-key{color:var(--bub-ink);font-size:19px;margin:8px 0 10px}
+.e-join-bub p.ec-sub{color:var(--bub-ink)}
+.e-join-bub.e-priv-bub p.ec-sub{margin:0;color:var(--bub-ink)}
 .e-lead-key{font:600 13px var(--mono);margin-right:10px;white-space:nowrap}
 /* THE KEY'S SIGN (team-join.js keySignHtml): a disc before the groups, Studio's violet with a key, a desk's cobalt with the
    desk glyph. On a cobalt bubble the desk's disc turns white so it does not vanish, and each wears a white hairline. */
@@ -3330,7 +3335,21 @@ details.mf-fold>summary:focus-visible .mf-lab{text-decoration:underline 2px var(
   border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--panel)}
 .ec-row.is-loaded{border-color:var(--go-edge,var(--go))}
 .ec-name{flex:1 1 auto;min-width:0}
-.ec-name b{display:block;overflow:hidden;white-space:nowrap}
+.ec-title{display:flex;align-items:center;gap:5px;min-width:0}
+.ec-name b{display:block;flex:0 1 auto;min-width:0;overflow:hidden;white-space:nowrap}
+.ec-lock{flex:0 0 auto;display:inline-flex;align-items:center;color:var(--dim)}
+.ec-lock .ic{width:14px;height:14px}
+.ec-team{flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;color:var(--dim);font-size:12px;white-space:nowrap}
+.ec-team .sx-ic{width:15px;height:15px}
+.ec-priv{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;color:var(--dim);font-size:12.5px;cursor:default;white-space:nowrap}
+.ec-priv.is-on{color:var(--ink);font-weight:600}
+.ec-priv-sw{appearance:none;-webkit-appearance:none;position:relative;flex:0 0 auto;width:30px;height:18px;
+  margin:0;border-radius:9px;background:var(--line-strong);cursor:default}
+.ec-priv-sw::after{content:"";position:absolute;left:2px;top:2px;width:14px;height:14px;border-radius:50%;
+  background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.ec-priv-sw:checked{background:var(--accent-fill)}
+.ec-priv-sw:checked::after{left:14px}
+.ec-priv-sw:focus-visible{box-shadow:0 0 0 2px var(--accent-soft)}
 .ec-meta{display:block;color:var(--dim);font-size:11.5px}
 .ec-tag{flex:0 0 auto;font:600 10.5px var(--mono);color:var(--dim);
   border:1px solid var(--line);border-radius:999px;padding:1px 7px}

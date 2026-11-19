@@ -26,8 +26,9 @@ import { cardFieldKey } from "./card-fields.js";
 import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { intentIdAt, intentOrder } from "./intent-id.js";
 import { pack } from "./pack.js";
-import { ICON_AWAITING, ICON_SUCCESS, ICON_LOAD, ICON_EJECT, ICON_DESK, ICON_LOOK } from "./icons.js";
-import { keyTipHtml, leadKeyText, leadsNow, teamLeads } from "./team-join.js";
+import { ICON_AWAITING, ICON_SUCCESS, ICON_LOAD, ICON_EJECT, ICON_DESK, ICON_LOOK, ICON_LOCK } from "./icons.js";
+import { sxIcon } from "./sx-icons.js";
+import { keyTipHtml, leadKeyText, leadsNow, teamLeads, teamContent, teamContentNow, markCatalogPrivate, onContentChanged, openTeamBubble, closeTeamBubble } from "./team-join.js";
 import { V2_SIG_VALID, v2RingRead, v2SigState, v2SignedBytes } from "./catalog-v2.js";
 import { editionChanges } from "./edition-changes.js";
 import { editionOfferHtml, openEditionPanel, repaintEditionRows, editionCountWords } from "./edition-panel.js";
@@ -181,7 +182,7 @@ function ecWatchHtml(){
 }
 function ecRowHtml(o){
   return '<div class="ec-row'+(o.loaded?" is-loaded":"")+'"'+(o.file?' data-ec-file="'+esc(o.file)+'"':'')+'>'
-    +'<span class="ec-name"><b>'+esc(o.name)+'</b>'
+    +'<span class="ec-name"><span class="ec-title"><b>'+esc(o.name)+'</b>'+(o.lockHtml||'')+'</span>'
     +(o.meta?'<small class="ec-meta">'+o.meta+'</small>':'')
     +(o.loaded?ecWatchHtml():'')+(o.extra||'')+'</span>'
     /* A MARK RATHER THAN A WORD on the loaded row, and no tag at all on the sample. The row
@@ -199,6 +200,7 @@ function ecRowHtml(o){
       ?'<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="'
         +esc(t("Save everything loaded now as a catalog file, your edits merged in"))+'">'
         +esc(t("Export…"))+'</button>':'')
+    +(o.teamHtml||'')
     +trustKeyHtml(o.trust||"",o.print||"")
     +(o.loaded
       ?ecActHtml("Eject",ICON_EJECT,' data-ec-eject="1"')
@@ -347,18 +349,75 @@ function loadedMeta(stamp){
 function ecCopyHtml(f){
   return f.builtIn ? '<span class="ec-copy" data-ec-copy="builtin">'+esc(t("comes with Etiuda"))+'</span>' : "";
 }
+const catParentOf=new Map();
+let paintListSeq=0, listFetchingContent=false;
+function isTeamCatalogId(id, grew, parentOf, listedSet){
+  if(!id || !listedSet || !listedSet.size) return false;
+  if(listedSet.has(id)) return true;
+  if(grew && grew.root && listedSet.has(String(grew.root))) return true;
+  const seen=new Set([id]);
+  let cur=grew && grew.id ? String(grew.id) : (parentOf && parentOf.get(id)) || "";
+  while(cur && !seen.has(cur)){
+    if(listedSet.has(cur)) return true;
+    seen.add(cur);
+    cur=(parentOf && parentOf.get(cur)) || "";
+  }
+  return false;
+}
+function rowShareParts(id, grew, content, parentOf){
+  if(!content || !content.team || !id) return {lockHtml:"", teamHtml:""};
+  const listed=new Set(content.listed||[]);
+  if(isTeamCatalogId(id, grew, parentOf, listed)){
+    return {
+      lockHtml:"",
+      teamHtml:'<span class="ec-team">'+sxIcon("people")+'<span data-i18n-text="Team catalog">'+esc(t("Team catalog"))+'</span></span>'
+    };
+  }
+  let priv=false;
+  priv=(content.private||[]).indexOf(id)>=0; /* plant:list-private-personal-only */
+  return {
+    lockHtml:priv?'<span class="ec-lock" aria-hidden="true">'+ICON_LOCK+'</span>':"",
+    teamHtml:'<label class="ec-priv'+(priv?' is-on':'')+'"><input type="checkbox" class="ec-priv-sw" role="switch" data-ec-private="'+esc(id)+'"'
+      +(priv?' checked':'')+'><span data-i18n-text="Private">'+esc(t("Private"))+'</span></label>'
+  };
+}
+function openPrivateBubble(id, nowPriv){
+  if(!id) return;
+  const msg=nowPriv
+    ? t("The team's lead still sees this catalog's name and edition, but its content and this desk's changes to it are never sent. Marking it withdraws what this desk had shared of it; what the team's lead has already opened cannot be taken back.")
+    : t("This catalog is no longer private: the team's lead can now see its content and this desk's changes to it.");
+  openTeamBubble({
+    id:"ePrivateBubble",
+    cls:"e-priv-bub",
+    role:"status",
+    html:'<p class="ec-sub">'+esc(msg)+'</p>',
+    hang:true,
+    dismissOnOutside:true,
+    origin:()=>{
+      const box=document.getElementById("mgCatList");
+      if(!box) return null;
+      return Array.from(box.querySelectorAll("input[data-ec-private]")).find(el=>el.getAttribute("data-ec-private")===id) || null;
+    }
+  });
+}
 function paintCatalogList(){
   const box=document.getElementById("mgCatList");
-  if(!box) return;
+  if(!box) return Promise.resolve();
+  const seq=++paintListSeq;
   const held=storedCatalog();
   const mine=eLoadedCatalogFile();
   recheckHeldTrust(eCatalog(),held,paintCatalogList);
   /* A COLLEAGUE'S FILE HAS A ROW where it is the shape a desk writes, its id that desk's own followed by eight hex of
      what it grew from, so a file claiming any other id has none. This desk's own file is a line, not a row. The rows
      wait for the held signature to answer to a pinned lead, so the loaded row never draws a key this load has not vouched for. */
-  Promise.all([eCatalogFiles(),eBranchIdentity(false),settleHeldTrustWithin(eCatalog(),held)]).then(([all,me])=>{
-    if(!box.isConnected) return;
+  listFetchingContent=true;
+  return Promise.all([eCatalogFiles(),eBranchIdentity(false),settleHeldTrustWithin(eCatalog(),held),teamContent()]).then(([all,me,_,content])=>{
+    listFetchingContent=false;
+    if(!box.isConnected || seq!==paintListSeq) return;
     const files=all.filter(f=>!f.desk);
+    catParentOf.clear();
+    files.forEach(f=>{ if(f.id && f.grew && f.grew.id) catParentOf.set(String(f.id),String(f.grew.id)); });
+    if(held && held.id && held.grew && held.grew.id) catParentOf.set(String(held.id),String(held.grew.id));
     const shaped=f=>!!f.desk && f.id.indexOf(f.desk.id+"-")===0;
     const desks=all.filter(f=>shaped(f) && !(me && f.desk.id===me.id)), own=me?all.filter(f=>shaped(f) && f.desk.id===me.id):[];
     const heldId=held?String(held.id||""):"";
@@ -404,16 +463,21 @@ function paintCatalogList(){
       const on=i===onAt;
       const stamp=catalogStamp(f.edition,f.mtime,f.rev);
       const copy=ecCopyHtml(f), meta=on?loadedMeta(stamp):ecMeta(stamp,f);
+      const share=rowShareParts(String(f.id||""),f.grew,content,catParentOf);
       return {id:f.id, sha:f.sha, on:on, html:ecRowHtml({ name:f.name, file:f.name, mtime:f.mtime, loaded:on, newer:at>0 && f.mtime>at,
-        sample:!!f.sample, meta:copy&&meta ? copy+" · "+meta : copy||meta, trust:on?heldCatalogTrust():"", print:on?heldCatalogPrint():"", extra:extraFor(f.id,on) })};
+        sample:!!f.sample, meta:copy&&meta ? copy+" · "+meta : copy||meta, trust:on?heldCatalogTrust():"", print:on?heldCatalogPrint():"", extra:extraFor(f.id,on),
+        lockHtml:share.lockHtml, teamHtml:share.teamHtml })};
     });
     /* THE CATALOG IN USE ALWAYS HAS A ROW, even where no file in the folder is it: a browser's
        import, a copy loaded from elsewhere, or a desk whose catalog was applied before the store
        existed. What is APPLIED decides rather than what is stored, because "no catalog" over two
        hundred visible cards is worse than useless. A colleague's file worked from is its own row. */
-    if((held||catalogLoaded()||(cards||[]).length) && onAt<0 && deskOn<0)
+    if((held||catalogLoaded()||(cards||[]).length) && onAt<0 && deskOn<0){
+      const share=rowShareParts(heldId,held&&held.grew,content,catParentOf);
       tops.unshift({id:heldId, sha:String(held&&held.pin||""), on:true, html:ecRowHtml({ name:shownCatalogName(catalogFileName()),
-        loaded:true, newer:false, meta:loadedMeta(""), trust:heldCatalogTrust(), print:heldCatalogPrint(), extra:mineLine })});
+        loaded:true, newer:false, meta:loadedMeta(""), trust:heldCatalogTrust(), print:heldCatalogPrint(), extra:mineLine,
+        lockHtml:share.lockHtml, teamHtml:share.teamHtml })});
+    }
     /* Under the catalog each grew from: the row in use, else the edition it grew from, else the newest of that catalog.
        The rest stand at the foot. */
     const under=tops.map(()=>[]), alone=[], named=new Map(), nested=[];
@@ -428,12 +492,26 @@ function paintCatalogList(){
       if(p!=null && !on) nested.push(i);
     });
     ecKeyBubClose();
+    closeTeamBubble("ePrivateBubble");
     const rows=tops.reduce((out,x,k)=>out.concat([x.html],under[k]),[]).concat(alone);
     /* With no catalog in use the line has no row to stand under, and the fault is still said. */
     if((outboxUnread || takenBack) && !rows.some(r=>r.indexOf("data-ec-fault")>=0)) rows.unshift(mineLine);
     box.innerHTML=rows.length?rows.join(""):ecEmptyHtml();
     markCutText(box);
     wireEcKeys(box);
+    box.querySelectorAll("input[data-ec-private]").forEach(sw=>{
+      sw.onchange=()=>{
+        const id=sw.getAttribute("data-ec-private")||"";
+        const want=!!sw.checked;
+        sw.disabled=true;
+        markCatalogPrivate(id,want).then(next=>{
+          if(!box.isConnected) return;
+          paintCatPrivate();
+          const nowPriv=!!(next && (next.private||[]).indexOf(id)>=0);
+          paintCatalogList().then(()=>{ openPrivateBubble(id,nowPriv); });
+        },()=>{ if(sw.isConnected) sw.disabled=false; });
+      };
+    });
     // A hanging row's line says what that desk changed, once both files have been read.
     nested.forEach(i=>deskChangeWords(desks[i],deskBase(desks[i],files,held)).then(words=>{
       const row=box.querySelector('[data-ec-desk="'+i+'"]'), meta=row && row.querySelector(".ec-meta");
@@ -476,7 +554,7 @@ function paintCatalogList(){
     });
     const dir=box.querySelector("[data-ec-open]");
     if(dir) wireFolderLink(dir);
-  });
+  },()=>{ listFetchingContent=false; });
 }
 /* LOOK, from a colleague's row: the panel stands where the Library was, and its two ways out go back to the Library or
    on to the question that loads that desk's file, as the row's own Work from it does. */
@@ -905,6 +983,35 @@ function paintCatNow(){
   if(none){ const key=(storedCatalog()||catalogLoaded())?"Unnamed catalog":"No catalog loaded";
     none.setAttribute("data-i18n-text",key); none.textContent=t(key); none.hidden=!!shown; }
 }
+/* Dim lock after the catalog's name in the bar when the catalog in use is marked Private on a team. */
+function paintCatPrivate(){
+  const el=document.getElementById("catNow");
+  if(!el) return;
+  const held=storedCatalog(), id=held&&held.id?String(held.id):"", content=teamContentNow();
+  let shown=false;
+  shown=!!(content && content.team && id && !isTeamCatalogId(id,held&&held.grew,catParentOf,new Set(content.listed||[])) && (content.private||[]).indexOf(id)>=0); /* plant:bar-private-lock */
+  let lock=el.querySelector(".cn-lock");
+  el.classList.toggle("is-private",shown);
+  if(!shown){ if(lock) lock.remove(); return; }
+  const word=t("Private");
+  if(!lock){
+    lock=document.createElement("span");
+    lock.className="cn-lock";
+    lock.setAttribute("role","img");
+    lock.innerHTML=ICON_LOCK;
+    const none=el.querySelector(".cn-none");
+    if(none && none.parentNode===el) el.insertBefore(lock,none);
+    else el.appendChild(lock);
+  }
+  lock.setAttribute("data-i18n-title","Private");
+  lock.setAttribute("data-i18n-aria-label","Private");
+  lock.setAttribute("title",word);
+  lock.setAttribute("aria-label",word);
+}
+onContentChanged(()=>{
+  paintCatPrivate();
+  if(!listFetchingContent && typeof document!=="undefined" && document.getElementById("mgCatList")) paintCatalogList();
+});
 
 /* The watched file. Silent at boot and only while the browser still holds permission:
    re-granting needs a user gesture, which is what `interactive` supplies. The stored edit
@@ -1139,6 +1246,7 @@ export {
   toastIfSameCatalog,
   eOfferPickedCatalog,
   paintCatNow,
+  paintCatPrivate,
   paintCatWaiting,
   loadCatalogFromFolder,
   onCatalogListing,

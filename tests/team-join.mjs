@@ -2425,8 +2425,8 @@ try {
   await press("back");
   if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
 
-  const discEn = "Once this desk joins, the team's lead can see which catalog it uses";
-  const discPl = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko";
+  const discEn = "Once this desk joins, the team's lead can see the catalogs it uses";
+  const discPl = "Po dołączeniu lider zespołu widzi katalogi, których używa to stanowisko";
   const leftHeadEn = "This desk left this team on 1 September 2026. Join it again?";
   const leftHeadPl = "To stanowisko opuściło ten zespół 1 września 2026. Dołączyć do niego ponownie?";
 
