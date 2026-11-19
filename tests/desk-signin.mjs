@@ -4776,7 +4776,7 @@ CASES.doorKeyboard = async (s, kdSwap) => {
   const allBlocked = st.undoCalls === 0 && st.shortcuts.length === 0 && st.intentVal === "" && st.pageScrolls === 0
     && undoEv.defaultPrevented && ctrlW.defaultPrevented && ctrlShiftT.defaultPrevented && ctrlTab.defaultPrevented
     && ctrlK.defaultPrevented && escEv.defaultPrevented && typeEv.defaultPrevented
-    && ctrlMod.stopped && outsideTarget.stopped && enterOutside.defaultPrevented;
+    && ctrlMod.immediateStopped && outsideTarget.immediateStopped && enterOutside.defaultPrevented;
 
   /* Control: door closed -> Ctrl+Z calls undo, Ctrl+W runs tabClose, printable key types into intent. */
   const c = runWith(false);
@@ -4816,6 +4816,14 @@ CASES.pickAskDoor = async (s, pickSwap) => {
   const prevCards = AS.cards.slice();
   const prevUses = Object.assign({}, PK.pack.useCounts || {});
   try {
+    globalThis.document = {
+      querySelector: sel => (sel === "#pax" || sel === "#roleSel" ? { value: "" } : null),
+      getElementById: id => (id === "pax" || id === "roleSel" ? { value: "" } : null),
+      createElement: () => ({ getContext: () => ({}) }),
+      createRange: () => ({}),
+    };
+    DOM.grabDom();
+    HK.hooks.railDecorate = () => {};
     AS.putLang("en");
     AS.setCards([{ id: "c-door", c: "orders", t: "Door card", en: "Secret reply body." }]);
     ST.lsSet("eNameAsked", "1"); ST.lsSet("eAgent", "Kate");
@@ -4836,13 +4844,6 @@ CASES.pickAskDoor = async (s, pickSwap) => {
     const noStats = ((PK.pack.useCounts && PK.pack.useCounts["c-door"]) || 0) === usesBefore;
 
     /* Control: seated view -> answerPick answers with the real card as before. */
-    globalThis.document = {
-      querySelector: sel => (sel === "#pax" || sel === "#roleSel" ? { value: "" } : null),
-      createElement: () => ({ getContext: () => ({}) }),
-      createRange: () => ({}),
-    };
-    DOM.grabDom();
-    HK.hooks.railDecorate = () => {};
     cur = seated;
     SGN.signinChanged(seated, false);
     const found = PKM.answerPick("find", JSON.stringify({ q: "door" }));
