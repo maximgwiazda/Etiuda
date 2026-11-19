@@ -5293,6 +5293,11 @@ const CARD_B = {
        from the name typed in it now, through the picker's own answer. */
     {
       const PICKM = await import(MOD("pick.js"));
+      /* answerPick refuses an ask while the desk has no seat (the desk gate), so this block holds one, and puts the host back after. */
+      const SGN901 = await import(MOD("signin.js"));
+      const hadHost901 = globalThis.window.E_HOST, view901 = createRequire(import.meta.url)("./seat-page.js").seatedView();
+      globalThis.window.E_HOST = Object.assign({}, hadHost901 || {}, { signinState: () => view901 });
+      SGN901.signinNow();
       const who = () => (PICKM.answerPick("open", "{}") || {}).who;
       start([["dp-a", "Anna Nowak"], ["dp-b", ""]], "dp-a");
       const named = who();
@@ -5305,6 +5310,8 @@ const CARD_B = {
       UILANG_STORE.lsDel("eUiLang");
       check("pick.js", "901p1 the picker is told which conversation fills the reply, by its tab's name: the first name typed in it now, else its number",
         () => eq([named, typed, nameless, plNameless].join("|"), "Anna|Celina|New chat|Nowa rozmowa"));
+      if (hadHost901 === undefined) delete globalThis.window.E_HOST; else globalThis.window.E_HOST = hadHost901;
+      SGN901.signinNow();
     }
 
     /* The window's close: the shell asks, and the conversations answer. */
