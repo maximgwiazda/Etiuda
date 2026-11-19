@@ -22,7 +22,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 138;
+const EXPECTED = 140;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk: its content reaches the lead only if the lead turns on copies of unlisted catalogs in Studio, and this desk is told before anything is sent. A catalog the team does not list can be marked private here, and is then never sent. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, and Studio shows them in the team's totals.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie). Kopię katalogu z listy zespołu Studio lidera może pobrać w każdej chwili, bez pytania tutaj, zapieczętowaną dla zespołu. Każdy inny katalog zostaje na tym stanowisku: jego treść trafi do lidera tylko wtedy, gdy lider włączy w Studiu kopie katalogów spoza listy, a to stanowisko zostanie o tym powiadomione, zanim cokolwiek zostanie wysłane. Katalog spoza listy zespołu można tutaj oznaczyć jako prywatny i wtedy nigdy nie jest wysyłany. Studio lidera wymienia to stanowisko z nazwy, chyba że organizacja wyłączy nazwy, razem z używanym katalogiem, jego wydaniem i okresem zliczania, i wymienia je dalej, gdy przestanie się odzywać. Własne dane stanowiska trafiają do lidera zapieczętowane, a Studio pokazuje je w sumach zespołu.";
@@ -1544,6 +1544,41 @@ try {
     const branchAt = (box, tail) => path.join(ownDir(box.share, box.me.id), "quay-" + tail + ".ec");
     const writeCopy = (box, tail, grewId) => box.D.ask("etiuda:branch-write", "quay-" + tail, JSON.stringify(branchDoc(box, tail, grewId)));
 
+    {
+      /* The told record is the lead key's: the team handed over to another lead key is untold until the desk shows the notice again. */
+      const handed = async (name, src) => {
+        const h = await b0Ask(name, { src });
+        const other2 = crypto.generateKeyPairSync("ed25519");
+        const LEAD2 = { keyId: "quay-lead-2", public: pubHex(other2.publicKey) };
+        const step = { format: 1, kind: "etiuda-team-handover", team: h.box.team, to: { keyId: LEAD2.keyId, public: LEAD2.public },
+          sig: { alg: "Ed25519", keyId: LEAD.keyId } };
+        step.sig.value = crypto.sign(null, Buffer.concat([Buffer.from("etiuda-team-handover\n", "utf8"), Buffer.from(V2.v2SignedBytes(step))]),
+          lead.privateKey).toString("hex");
+        const toldA = (await h.box.D.ask("etiuda:team-join", "content")).told === true;
+        relead(h.box, { lead: LEAD2, who: LEAD2, signer: other2.privateKey, handover: [step] });
+        h.again();
+        const moved = ((h.box.D.envelope().teamPins || {})[h.box.team] || {}).public === LEAD2.public;
+        putAsk(h.box, "Askhand2", h.pin, 2, { who: LEAD2, key: other2.privateKey });
+        const before = answeredTo(h, "Askhand2");
+        const view = await h.box.D.ask("etiuda:team-join", "content");
+        const copy = await writeCopy(h.box, "d4d4d4d4", "quay-held");
+        const copyBefore = copy.held === true && !fs.existsSync(branchAt(h.box, "d4d4d4d4"));
+        const said = await say(h);
+        const after = answeredTo(h, "Askhand2");
+        return { first: h.written, toldA, moved, before, told: view.told, team: view.team === h.box.team, copyBefore, saidTold: said.told, after };
+      };
+      const h = await handed("r2-handover");
+      check(h.first && h.toldA && h.moved && !h.before && h.told === false && h.team && h.copyBefore && h.saidTold === true && h.after,
+        "r2b the team handed over to another lead key: the desk told under the old key is untold, the new lead's ask is not answered and no copy is written sealed for it, and after content-said it is told and answers ("
+        + JSON.stringify(h) + ")");
+      if (PLANTS_OFF) skip("r2u lifting plant:s0b-told-lead turns r2b red: the old key's told record holds for the new lead");
+      else {
+        const planted = SRC.split("\n").map(l => l.indexOf("plant:s0b-told-lead") >= 0 ? "  return true;" : l).join("\n");
+        const p = planted !== SRC ? await handed("r2-handover-plant", planted) : null;
+        check(!!p && p.told === true && (p.before || !p.copyBefore),
+          "r2u lifting plant:s0b-told-lead turns r2b red: the old key's told record holds for the new lead (" + (p ? JSON.stringify(p) : "plant not found") + ")");
+      }
+    }
     {
       /* F2: an older team file put back where the desk reads it, listing a catalog the lead has since taken off the list. */
       const roll = async (name, src) => {
