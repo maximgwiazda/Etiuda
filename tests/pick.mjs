@@ -26,17 +26,20 @@
 process.removeAllListeners("warning");
 process.on("warning", () => {});
 
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { pathToFileURL, fileURLToPath } from "node:url";
+import { createSeatLab, createSigninGuard } from "./seat-lab.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
+nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 162 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 8);
+const EXPECTED = 164 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 9);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -248,6 +251,8 @@ try {
   LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-pick-"));
   const UD = path.join(LAB, "user-data"), DOCS = path.join(LAB, "documents");
   fs.mkdirSync(UD, { recursive: true }); fs.mkdirSync(DOCS, { recursive: true });
+  const signinGuard = createSigninGuard({ dirs: [LAB, ROOT], labelRoot: LAB });
+  const seatLab = createSeatLab({ labDir: LAB });
   /* The shell reads a catalog from the folder above itself, so it is loaded beside copies of the two
      folders it needs and never above the checkout: an ignored file at a checkout's root is then not
      in this world. */
@@ -329,34 +334,44 @@ try {
       commandLine: { appendSwitch() {} },
       getPreferredSystemLanguages: () => ["en-US"] },
     ipcMain: { on: (ch, fn) => { onH[ch] = fn; }, handle: (ch, fn) => { invH[ch] = fn; } },
-    BrowserWindow: BW, Menu: anything(), dialog: anything(), net: anything(), protocol: anything(), session: anything(),
+    BrowserWindow: BW, Menu: anything(), dialog: anything(), net: seatLab.net(), protocol: anything(), session: anything(),
     clipboard: { writeText: t => clip.push(t), readText: () => { clipReads++; return clipNever ? new Promise(() => {}) : clipAsPromise ? Promise.resolve(clipHeld) : clipHeld; } },
     globalShortcut: { register: (a, fn) => { if (taken.has(a)) return false; held.set(a, fn); return true; },
       unregister: a => { held.delete(a); }, unregisterAll: () => held.clear(), setSuspended: v => { suspended = !!v; } },
     screen: { getCursorScreenPoint: () => cursor, getDisplayNearestPoint: () => ({ workArea: area }),
       getAllDisplays: () => [{ bounds: area, workArea: area }], getPrimaryDisplay: () => ({ workArea: area }) },
-    shell: anything(), systemPreferences: { on() {}, getAccentColor: () => "" },
+    shell: seatLab.labShell(), systemPreferences: { on() {}, getAccentColor: () => "" },
+    safeStorage: {
+      isEncryptionAvailable: () => true,
+      getSelectedStorageBackend: () => "gnome_libsecret",
+      encryptString: s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)),
+      decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
+    },
     nativeTheme: { themeSource: "system", shouldUseDarkColors: false }, powerMonitor: { on() {} },
   };
   const said = [];
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn() {} };
   const SRC = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
   const listed = [];
-  const shellFs = Object.create(fs);
   const written = [];
   const noteWrite = data => { try { written.push(Buffer.isBuffer(data) ? data.toString("utf8") : String(data == null ? "" : data)); } catch (e) { written.push(""); } };
-  shellFs.writeFileSync = (p, data, ...rest) => { noteWrite(data); return fs.writeFileSync(p, data, ...rest); };
-  shellFs.appendFileSync = (p, data, ...rest) => { noteWrite(data); return fs.appendFileSync(p, data, ...rest); };
-  shellFs.readdirSync = (p, ...rest) => (listed.push(path.resolve(String(p)).toLowerCase()), fs.readdirSync(p, ...rest));
-  shellFs.existsSync = p => /[\\/]caret\.exe$/i.test(String(p)) ? caret.there : fs.existsSync(p);
+  const shellFs = new Proxy(signinGuard.shellFs, {
+    get(t, k) {
+      if (k === "writeFileSync") return (p, data, ...rest) => { noteWrite(data); return t.writeFileSync(p, data, ...rest); };
+      if (k === "appendFileSync") return (p, data, ...rest) => { noteWrite(data); return t.appendFileSync(p, data, ...rest); };
+      if (k === "readdirSync") return (p, ...rest) => (listed.push(path.resolve(String(p)).toLowerCase()), t.readdirSync(p, ...rest));
+      if (k === "existsSync") return p => /[\\/]caret\.exe$/i.test(String(p)) ? caret.there : t.existsSync(p);
+      return Reflect.get(t, k, t);
+    },
+  });
   const EXPOSE = ["hotkeyRefusal", "pickerPlace", "pickerGrow", "pickClipText", "PICK_SIZE", "HOTKEY_DEFAULT"];
   process.env.XDG_CURRENT_DESKTOP = "GNOME"; /* so the shell's Linux keyring switch (tests/shell-office.mjs 14) stays out, on any machine */
-  const SH = new Function("require", "__dirname", "__filename", "module", "exports", "console",
+  const SH = seatLab.withSigninLab(() => new Function("require", "__dirname", "__filename", "module", "exports", "console",
     SRC + "\nreturn { " + EXPOSE.map(n => n + ": " + n).join(", ")
     + ", __rw: { config: f => { deskAiConfig = f; }, result: t => { pickReworded = t; } } };")(
     n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? shellFs : n === "node:child_process" ? cpStub : nodeRequire(n)),
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"),
-    { exports: {} }, {}, quiet);
+    { exports: {} }, {}, quiet));
 
   const refusals = {
     "Control+Shift+Space": "", "Control+Alt+E": "altgr", "Control+Alt+Shift+F13": "altgr", "Shift+A": "bare", "F5": "bare",
@@ -423,6 +438,88 @@ try {
   onH["etiuda:desk-patch-save"](deskEvent(), JSON.stringify({ eHotkey: null }));
   check(off === 0 && [...held.keys()].join(" ") === "Control+Shift+Space",
     "2f the hotkey follows the desk: an empty key is off, and no key is the default again (" + off + " held when off)");
+
+  const deskAdapter = {
+    ud: UD,
+    sync: (ch, ...a) => { const e = deskEvent(); if (onH[ch]) onH[ch](e, ...a); return e.returnValue; },
+    ask: (ch, ...a) => Promise.resolve(invH[ch] ? invH[ch](deskEvent(), ...a) : undefined),
+  };
+  /* Before the desk holds a seat (both before sign-in and signed in with none), the hotkey focuses the desk and opens no picker. */
+  {
+    const runUnseated = async (srcText, tag) => {
+      const ud2 = path.join(LAB, "unseated-" + tag);
+      fs.mkdirSync(ud2, { recursive: true });
+      fs.writeFileSync(path.join(ud2, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
+        keys: { eCatalogFolder: path.join(LAB, "catalogs") } }), "utf8");
+      const wins2 = [], held2 = new Map(), on2 = {}, inv2 = {};
+      const makeWin2 = () => {
+        const w = { calls: [], sent: [], visible: false, destroyed: false, focused: false };
+        const note = (k, fn) => (...a) => { w.calls.push(k); return fn ? fn(...a) : undefined; };
+        w.webContents = anything({ id: wins2.length + 1, send: (...a) => { w.sent.push(a); }, on() {}, once() {}, setWindowOpenHandler() {}, getURL: () => "" });
+        w.self = anything({
+          webContents: w.webContents, on() {}, once() {}, isDestroyed: () => w.destroyed, isVisible: () => w.visible,
+          isMinimized: () => false, isMaximized: () => false, show: note("show", () => { w.visible = true; }),
+          focus: note("focus", () => { w.focused = true; }), showInactive: note("showInactive"), hide: note("hide"),
+          destroy: note("destroy", () => { w.destroyed = true; }), restore: note("restore"), center: note("center"),
+          setBounds() {}, getBounds: () => ({ x: 0, y: 0, width: 1280, height: 880 }),
+          loadFile: note("loadFile"), loadURL: note("loadURL"),
+        });
+        wins2.push(w);
+        return w.self;
+      };
+      const BW2 = new Proxy(function () {}, { construct: () => makeWin2(),
+        get: (t, k) => k === "fromWebContents" ? () => null : k === "getAllWindows" ? () => wins2.map(x => x.self) : undefined });
+      const el2 = Object.assign({}, electron, {
+        app: Object.assign({}, electron.app, { getPath: n => (n === "documents" ? DOCS : ud2) }),
+        ipcMain: { on: (ch, fn) => { on2[ch] = fn; }, handle: (ch, fn) => { inv2[ch] = fn; } },
+        BrowserWindow: BW2,
+        clipboard: { writeText() {}, readText: () => "" },
+        globalShortcut: { register: (a, fn) => { held2.set(a, fn); return true; }, unregister: a => held2.delete(a), unregisterAll: () => held2.clear(), setSuspended() {} },
+        shell: seatLab.labShell(),
+      });
+      seatLab.withSigninLab(() => new Function("require", "__dirname", "__filename", "module", "exports", "console", srcText)(
+        n => (n === "electron" ? el2 : (n === "node:fs" || n === "fs") ? signinGuard.shellFs : n === "node:child_process" ? cpStub : nodeRequire(n)),
+        path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet));
+      await until(() => wins2.length > 0 && held2.has("Control+Shift+Space"), 5000);
+      const d = wins2[0];
+      d.calls.length = 0; d.sent.length = 0;
+      held2.get("Control+Shift+Space")();
+      await tick(30);
+      return { wins: wins2.length, focused: d.calls.includes("show") && d.calls.includes("focus"),
+        askedPick: d.sent.some(a => a[0] === "etiuda:pick-ask") };
+    };
+    desk.calls.length = 0; desk.sent.length = 0;
+    held.get("Control+Shift+Space")();
+    await tick(30);
+    const beforeSignin = { wins: wins.length, focused: desk.calls.includes("show") && desk.calls.includes("focus"),
+      askedPick: desk.sent.some(a => a[0] === "etiuda:pick-ask") };
+    await seatLab.seatDesk(deskAdapter, { none: true });
+    desk.calls.length = 0; desk.sent.length = 0;
+    held.get("Control+Shift+Space")();
+    await tick(30);
+    const signedNoSeat = { wins: wins.length, focused: desk.calls.includes("show") && desk.calls.includes("focus"),
+      askedPick: desk.sent.some(a => a[0] === "etiuda:pick-ask") };
+    check(beforeSignin.wins === 1 && beforeSignin.focused && !beforeSignin.askedPick
+      && signedNoSeat.wins === 1 && signedNoSeat.focused && !signedNoSeat.askedPick,
+      "2g0 on a desk with no seat (before sign-in or signed in with none), the hotkey brings the desk's own window forward and opens no picker: "
+      + JSON.stringify({ beforeSignin, signedNoSeat }));
+    if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  2g0p lifting plant:pick-works opens a picker on an unseated desk (ETIUDA_PLANTS=off)");
+    else {
+      const mainPath = path.join(ROOT, "shell", "main.js");
+      const mainBytes = fs.readFileSync(mainPath);
+      const lines = SRC.split("\n");
+      const hits = lines.filter(l => l.indexOf("plant:pick-works") >= 0);
+      const lifted = lines.filter(l => l.indexOf("plant:pick-works") < 0).join("\n");
+      const ctrl = await runUnseated(SRC, "ctrl");
+      const planted = hits.length === 1 ? await runUnseated(lifted, "plant") : null;
+      const sameFile = fs.readFileSync(mainPath).equals(mainBytes);
+      check(hits.length === 1 && ctrl.wins === 1 && ctrl.focused && !ctrl.askedPick
+        && !!planted && !planted.focused && (planted.wins > 1 || planted.askedPick) && sameFile,
+        "2g0p lifting plant:pick-works lets the hotkey open a picker on a desk with no seat instead of focusing the desk: "
+        + JSON.stringify({ hits: hits.length, ctrl, planted, sha: sameFile ? "restored" : "differs" }));
+    }
+  }
+  await seatLab.seatDesk(deskAdapter, { force: true, expectWorks: true });
 
   /* The hotkey, as Windows would call it. */
   ST.lsSet("eAgent", "Kate");
@@ -895,10 +992,11 @@ try {
       const runToggle = async src => {
         const calls = [];
         new Function("pickWin", "pickOpening", "theWindow", "hidePickNote", "pickPress", "pickTarget", "caretWhich", "caretSelection",
-          "withClipText", "pickWithClip", "hidePicker", "pickTrace", src + "\npickToggle();")(null, false, { isDestroyed: () => false }, () => {}, 0, null,
+          "withClipText", "pickWithClip", "hidePicker", "pickTrace", "signinWorksNow", "focusDesk", src + "\npickToggle();")(
+          null, false, { isDestroyed: () => false }, () => {}, 0, null,
           () => Promise.resolve(null), () => Promise.resolve({ words: "the words", editable: true, fact: "editable", reason: "" }),
           then => then("the clipboard"),
-          (p, w, text, sel, editable) => calls.push([text, sel, editable]), () => {}, () => {});
+          (p, w, text, sel, editable) => calls.push([text, sel, editable]), () => {}, () => {}, () => true, () => {});
         await tick(20);
         return calls;
       };
@@ -1026,10 +1124,11 @@ try {
     const noteDoc = w => decodeURIComponent(String(w.url || "").replace(/^data:text\/html;charset=utf-8,/, ""));
     const said = pickAnswer("open").words;
     const noteSays = w => (/<\/svg>([^<]*)<\/body>/.exec(noteDoc(w)) || [])[1] || "";
-    /* 2v called every handler with nothing, which turned the hotkey off and toggled the language; both are restored. */
+    /* 2v called every handler with nothing, which turned the hotkey off, toggled the language and signed out; all are restored. */
     await deskPage.E_HOST.setHotkey("Control+Shift+Space");
     AS.putLang("en");
     LS.cancelLangTail();
+    await seatLab.seatDesk(deskAdapter, { force: true, expectWorks: true });
     caret.there = true; caret.front = "4242 " + (process.pid + 1); caret.fail = false;
     await pressHotkey();
     const placed = Object.assign({}, pw.bounds);
@@ -2588,6 +2687,9 @@ try {
       "7x ranking constants in shell/main.js match src/modules (and lifting plant:pick-weight turns red): "
       + (realDiffs.length ? realDiffs.join("; ") : "matched") + ", plant " + (plantTurned ? "turned" : "missed") + ", sha " + (sameFile ? "restored" : "differs"));
   }
+  const gReport = signinGuard.report("2sg", true);
+  check(gReport.ok, gReport.line);
+  signinGuard.restore();
   }
 } catch (e) {
   failed++;

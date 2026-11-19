@@ -102,7 +102,8 @@ function viewShellOf(swap) {
       src.slice(once(src, "\nfunction managedStrands(") + 1, src.indexOf("\n", once(src, "\nfunction managedStrands(") + 1)),
       src.slice(once(src, "\nfunction rawPublic(") + 1, src.indexOf("\n", once(src, "\nfunction rawPublic(") + 1)),
       fnIn("function branchIdOf("), fnIn("function branchIdentity("),
-      fnIn("function deskKeyStranded("), fnIn("function signinView("), fnIn("function signinViewOf("), fnIn("function signinWorks(")].join("\n")
+      fnIn("function deskKeyStranded("), fnIn("function signinView("), fnIn("function signinViewOf("), fnIn("function signinWorks("),
+      fnIn("function signinWorksOf("), fnIn("function signinSaidOf(")].join("\n")
     + "\nreturn { branchIdentity, signinView, set: (b) => { deskBranch = b; deskBranchOld = []; deskStranded = false; deskStrandedFor = \"\"; }, get: () => ({ branch: deskBranch, stranded: deskStranded }) };";
   const st = { saved: 0, opens: new Set(), openCalls: 0, tells: 0, managed: null, held: null, said: [] };
   const api = new Function("crypto", "Buffer", "readDesk", "branchSealable", "openPrivate", "sealPrivate", "saveDeskFile", "managedPolicy",

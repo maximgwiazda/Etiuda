@@ -56,6 +56,7 @@ import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createLab } from "./lab-owner.mjs";
+import { createSeatLab, createSigninGuard } from "./seat-lab.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
@@ -112,94 +113,16 @@ const isInside = (dir, target) => {
   const rel = path.relative(dir, path.resolve(target));
   return !rel.startsWith("..") && !path.isAbsolute(rel);
 };
-function noteWrite(target, fromShell) {
-  if (typeof target !== "string") return;
-  const resolved = path.resolve(target);
-  const inRoot = isInside(ROOT, resolved);
-  const inLab = isInside(LAB, resolved);
-  const inTmp = !isInside(os.tmpdir(), ROOT) && isInside(os.tmpdir(), resolved);
-  if (inRoot && !inLab && !inTmp) {
-    productWrites.push(path.relative(ROOT, resolved).replace(/\\/g, "/"));
-  }
-  if (path.basename(resolved) === "signin.json" && (inLab || inRoot)) {
-    if (fromShell) shellSigninWrites.push(path.relative(LAB, resolved).replace(/\\/g, "/"));
-    else legSigninWrites.push(path.relative(LAB, resolved).replace(/\\/g, "/"));
-  }
-}
-const rawWriteFileSync = fs.writeFileSync.bind(fs);
-const rawRenameSync = fs.renameSync.bind(fs);
-const rawCopyFileSync = fs.copyFileSync.bind(fs);
-const rawAppendFileSync = fs.appendFileSync.bind(fs);
-const rawWriteFile = fs.writeFile.bind(fs);
-const rawOpenSync = fs.openSync.bind(fs);
-const rawPromisesWriteFile = fs.promises.writeFile.bind(fs.promises);
-const rawPromisesRename = fs.promises.rename.bind(fs.promises);
-const rawPromisesCopyFile = fs.promises.copyFile.bind(fs.promises);
-const rawPromisesAppendFile = fs.promises.appendFile.bind(fs.promises);
-const isWriteFlags = flags => (typeof flags === "string"
-  ? /[wa+]/.test(flags)
-  : typeof flags === "number" && (flags & (fs.constants.O_WRONLY | fs.constants.O_RDWR | fs.constants.O_CREAT | fs.constants.O_TRUNC | fs.constants.O_APPEND)) !== 0);
-fs.writeFileSync = function (file, ...args) {
-  noteWrite(file, false);
-  return rawWriteFileSync(file, ...args);
-};
-fs.renameSync = function (oldPath, newPath, ...args) {
-  noteWrite(newPath, false);
-  return rawRenameSync(oldPath, newPath, ...args);
-};
-fs.copyFileSync = function (src, dest, ...args) {
-  noteWrite(dest, false);
-  return rawCopyFileSync(src, dest, ...args);
-};
-fs.appendFileSync = function (file, ...args) {
-  noteWrite(file, false);
-  return rawAppendFileSync(file, ...args);
-};
-fs.writeFile = function (file, ...args) {
-  noteWrite(file, false);
-  return rawWriteFile(file, ...args);
-};
-fs.openSync = function (file, flags, ...args) {
-  if (isWriteFlags(flags)) noteWrite(file, false);
-  return rawOpenSync(file, flags, ...args);
-};
-fs.promises.writeFile = function (file, ...args) {
-  noteWrite(file, false);
-  return rawPromisesWriteFile(file, ...args);
-};
-fs.promises.rename = function (oldPath, newPath, ...args) {
-  noteWrite(newPath, false);
-  return rawPromisesRename(oldPath, newPath, ...args);
-};
-fs.promises.copyFile = function (src, dest, ...args) {
-  noteWrite(dest, false);
-  return rawPromisesCopyFile(src, dest, ...args);
-};
-fs.promises.appendFile = function (file, ...args) {
-  noteWrite(file, false);
-  return rawPromisesAppendFile(file, ...args);
-};
-const shellPromises = new Proxy(fs.promises, {
-  get(t, k) {
-    if (k === "writeFile") return (file, ...args) => { noteWrite(file, true); return rawPromisesWriteFile(file, ...args); };
-    if (k === "rename") return (oldPath, newPath, ...args) => { noteWrite(newPath, true); return rawPromisesRename(oldPath, newPath, ...args); };
-    if (k === "copyFile") return (src, dest, ...args) => { noteWrite(dest, true); return rawPromisesCopyFile(src, dest, ...args); };
-    if (k === "appendFile") return (file, ...args) => { noteWrite(file, true); return rawPromisesAppendFile(file, ...args); };
-    const v = Reflect.get(t, k, t);
-    return typeof v === "function" ? v.bind(t) : v;
-  },
-});
-const shellFs = new Proxy(fs, {
-  get(t, k) {
-    if (k === "writeFileSync") return (file, ...args) => { noteWrite(file, true); return rawWriteFileSync(file, ...args); };
-    if (k === "renameSync") return (oldPath, newPath, ...args) => { noteWrite(newPath, true); return rawRenameSync(oldPath, newPath, ...args); };
-    if (k === "copyFileSync") return (src, dest, ...args) => { noteWrite(dest, true); return rawCopyFileSync(src, dest, ...args); };
-    if (k === "appendFileSync") return (file, ...args) => { noteWrite(file, true); return rawAppendFileSync(file, ...args); };
-    if (k === "writeFile") return (file, ...args) => { noteWrite(file, true); return rawWriteFile(file, ...args); };
-    if (k === "openSync") return (file, flags, ...args) => { if (isWriteFlags(flags)) noteWrite(file, true); return rawOpenSync(file, flags, ...args); };
-    if (k === "promises") return shellPromises;
-    const v = Reflect.get(t, k, t);
-    return typeof v === "function" ? v.bind(t) : v;
+const signinGuard = createSigninGuard({
+  dirs: [LAB, ROOT],
+  labelRoot: LAB,
+  onWrite(resolved) {
+    const inRoot = isInside(ROOT, resolved);
+    const inLab = isInside(LAB, resolved);
+    const inTmp = !isInside(os.tmpdir(), ROOT) && isInside(os.tmpdir(), resolved);
+    if (inRoot && !inLab && !inTmp) {
+      productWrites.push(path.relative(ROOT, resolved).replace(/\\/g, "/"));
+    }
   },
 });
 
@@ -1815,77 +1738,12 @@ if (deskOn()) try {
     send() {}
     close() { if (this.h) this.h.close(); }
   };
-  const signinLabPath = path.join(LAB, "signin-lab.json");
-  fs.writeFileSync(signinLabPath, JSON.stringify({
-    service: "http://127.0.0.1:1/",
-    root: K.ROOT.pub,
-    provider: { id: "lab", clientId: "lab-client", scope: "openid", authorize: "http://127.0.0.1:1/auth", token: "http://127.0.0.1:1/token", issuer: "http://127.0.0.1:1" },
-  }), "utf8");
-  const pendingNonces = new Map();
-  const labFetches = [];
-  function labShell() {
-    return {
-      openExternal(url) {
-        const u = new URL(String(url));
-        if (u.origin + u.pathname !== "http://127.0.0.1:1/auth") return Promise.reject(new Error("unexpected external url: " + url));
-        const redirect = u.searchParams.get("redirect_uri");
-        const state = u.searchParams.get("state");
-        const nonce = u.searchParams.get("nonce");
-        const code = "lab-code-" + hex(8);
-        pendingNonces.set(code, nonce);
-        const back = redirect + "/?state=" + encodeURIComponent(state) + "&code=" + encodeURIComponent(code);
-        labFetches.push(fetch(back, { redirect: "follow" }).then(r => r.arrayBuffer()).catch(() => {}));
-        return Promise.resolve();
-      },
-    };
-  }
-  async function settleLabShell() {
-    while (labFetches.length) await Promise.allSettled(labFetches.splice(0));
-  }
-  function labFetch(url, init, clockNow) {
-    const uStr = String(url);
-    if (!uStr.startsWith("http://127.0.0.1:1/")) return null;
-    const jsonRes = o => Promise.resolve(new Response(JSON.stringify(o), { status: 200, headers: { "content-type": "application/json" } }));
-    if (uStr.endsWith("/token")) {
-      const form = new URLSearchParams(Buffer.from(init && init.body ? init.body : "").toString("utf8"));
-      const code = form.get("code") || "";
-      const nonce = pendingNonces.get(code);
-      if (nonce) pendingNonces.delete(code);
-      const nowSec = Math.floor(Date.now() / 1000);
-      const claims = { iss: "http://127.0.0.1:1", aud: "lab-client", sub: "sub-1", iat: nowSec, exp: nowSec + 3600 };
-      if (nonce) claims.nonce = nonce;
-      const jwt = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url") + "."
-        + Buffer.from(JSON.stringify(claims)).toString("base64url") + ".sig";
-      return jsonRes({ token_type: "Bearer", expires_in: 3600, id_token: jwt, refresh_token: "rt-1" });
-    }
-    if (uStr.endsWith("/signin/desk")) {
-      const req = JSON.parse(Buffer.from(init.body).toString("utf8"));
-      const cert = K.certFor(req.desk, hex(16), Math.max(1, clockNow), core.CERT_SPAN_MS);
-      return jsonRes({ ok: true, code: "ABCDEFGHJKMNPQRS", certificate: cert });
-    }
-    return null;
-  }
-  async function seatDesk(desk) {
-    let sameDesk = false;
-    try {
-      const d = JSON.parse(fs.readFileSync(path.join(desk.ud, "desk.json"), "utf8"));
-      const cur = JSON.parse(fs.readFileSync(path.join(desk.ud, "signin.json"), "utf8"));
-      sameDesk = !!(d && d.branch && d.branch.sign && d.branch.sign.pub && cur && cur.held && cur.held.cert && cur.held.cert.desk === d.branch.sign.pub);
-    } catch { sameDesk = false; }
-    if (sameDesk) return;
-    desk.sync("etiuda:signin-click", "lab");
-    const view = await desk.ask("etiuda:signin", "lab");
-    await settleLabShell();
-    if (!view || view.signedIn !== "lab" || (view.seat !== "held" && view.seat !== "lapsed")) {
-      throw new Error("lab sign-in did not seat desk " + desk.ud + ": " + JSON.stringify(view));
-    }
-  }
-  function withSigninLab(fn) {
-    const wasLab = process.env.ETIUDA_SIGNIN_LAB;
-    process.env.ETIUDA_SIGNIN_LAB = signinLabPath;
-    try { return fn(); }
-    finally { if (wasLab === undefined) delete process.env.ETIUDA_SIGNIN_LAB; else process.env.ETIUDA_SIGNIN_LAB = wasLab; }
-  }
+  const seatLab = createSeatLab({
+    labDir: LAB,
+    rootKey: K.ROOT,
+    signer: K.DELEGATE,
+    clock: () => R.clock.now,
+  });
   /* The second argument is either the shell source to load in place of SRC (a plant) or hooks (a fetch stand-in, or `app`:
      a copy of shell/ to load from, as a planted channel needs). */
   async function loadDesk(ud, arg) {
@@ -1901,7 +1759,7 @@ if (deskOn()) try {
       decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
     };
     const net = { fetch: (url, init) => {
-      const lab = labFetch(url, init, clockNow());
+      const lab = seatLab.labFetch(url, init, clockNow());
       if (lab) return lab;
       deskTransport.log.push((init && init.method) + " " + url);
       noteInit(url, init);
@@ -1913,19 +1771,19 @@ if (deskOn()) try {
       app: { getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop,
         getVersion: () => "0.0.0", whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
       ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
-      BrowserWindow: inert, Menu: inert, dialog: inert, net, protocol: inert, session: directSession, shell: labShell(),
+      BrowserWindow: inert, Menu: inert, dialog: inert, net, protocol: inert, session: directSession, shell: seatLab.labShell(),
       screen: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" }, safeStorage, powerMonitor: inert,
     };
     process.env.XDG_CURRENT_DESKTOP = "GNOME";
-    const api = withSigninLab(() => new Function("require", "__dirname", "__filename", "module", "exports", "console",
+    const api = seatLab.withSigninLab(() => new Function("require", "__dirname", "__filename", "module", "exports", "console",
       source + "\nreturn { " + EXPOSE.join(", ") + " };")(
-      n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? shellFs : nodeRequire(n)),
+      n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? signinGuard.shellFs : nodeRequire(n)),
       shellDir, path.join(shellDir, "main.js"), { exports: {} }, {}, quiet));
     const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
     const sync = (ch, ...args) => { const ev = eventFor(); if (on[ch]) on[ch](ev, ...args); return ev.returnValue; };
     const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
     const desk = { api, ask, sync, said, ud, envelope };
-    await seatDesk(desk);
+    await seatLab.seatDesk(desk);
     return desk;
   }
   const newDesk = async (name, folder, hooks) => {
@@ -2036,7 +1894,7 @@ if (deskOn()) try {
     };
     const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
       text + "\nreturn { " + EXPOSE.join(", ") + " };")(
-      n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? shellFs : nodeRequire(n)),
+      n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? signinGuard.shellFs : nodeRequire(n)),
       path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
     const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
     return { api, ask, said, ud, envelope: () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8")) };
@@ -3937,7 +3795,7 @@ if (deskOn()) try {
           encryptString: s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)),
           decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
         };
-        const net = { fetch: (url, init) => { const lab = labFetch(url, init, R.clock.now); if (lab) return lab; deskTransport.log.push(init.method + " " + url); if (deskTransport.down) return Promise.reject(new Error("down")); return (serve && serve(url, init)) || relayFetch(url, init); } };
+        const net = { fetch: (url, init) => { const lab = seatLab.labFetch(url, init, R.clock.now); if (lab) return lab; deskTransport.log.push(init.method + " " + url); if (deskTransport.down) return Promise.reject(new Error("down")); return (serve && serve(url, init)) || relayFetch(url, init); } };
         /* A person's desk has a window, and the folder syncer starts only then (catalogFolderChanged returns while
            theWindow is unset). This window is never shown: it records what the page is sent. */
         function DeskWindow() {
@@ -3980,19 +3838,19 @@ if (deskOn()) try {
           app: { getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop,
             getVersion: () => "0.0.0", whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
           ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
-          BrowserWindow: DeskWindow, Menu: inert, dialog: inert, net, protocol: inert, session: directSession, shell: labShell(),
+          BrowserWindow: DeskWindow, Menu: inert, dialog: inert, net, protocol: inert, session: directSession, shell: seatLab.labShell(),
           screen, systemPreferences: inert, nativeTheme: { themeSource: "system" }, safeStorage, powerMonitor: inert,
         };
         process.env.XDG_CURRENT_DESKTOP = "GNOME";
-        const api = withSigninLab(() => new Function("require", "__dirname", "__filename", "module", "exports", "console",
+        const api = seatLab.withSigninLab(() => new Function("require", "__dirname", "__filename", "module", "exports", "console",
           src + "\nreturn { " + EXPOSE.join(", ") + " };")(
-          n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? shellFs : nodeRequire(n)),
+          n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? signinGuard.shellFs : nodeRequire(n)),
           path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet));
         const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
         const sync = (ch, ...args) => { const ev = eventFor(); if (on[ch]) on[ch](ev, ...args); return ev.returnValue; };
         const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
         const desk = { api, ask, sync, said, sent, ud, envelope };
-        await seatDesk(desk);
+        await seatLab.seatDesk(desk);
         return desk;
       }
       async function deskFrom(name, folder, src, held, serve) {
@@ -13977,10 +13835,8 @@ if (partOn("pRv3")) {
     }
   }
   check(productWrites.length === 0 && changed.length === 0, "943b no leg wrote a product file: " + productWrites.length + " write(s) into the repository" + (productWrites.length ? " (" + [...new Set(productWrites)].join(" ") + ")" : "") + ", and every file under shell/relay/, shell/main.js and src/modules/settings.js ends with the sha256 it began with" + (changed.length ? "; changed: " + changed.join(" ") : ""));
-  check(legSigninWrites.length === 0 && (!deskOn() || shellSigninWrites.length > 0),
-    "943c no signin.json under any desk folder of the leg was written by the leg itself: leg writes "
-    + legSigninWrites.length + (legSigninWrites.length ? " (" + [...new Set(legSigninWrites)].slice(0, 5).join(", ") + ")" : "")
-    + ", shell writes " + shellSigninWrites.length);
+  const g943c = signinGuard.report("943c", deskOn());
+  check(g943c.ok, g943c.line);
 }
 markPart(null);
 console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + " expected=" + EXPECTED);

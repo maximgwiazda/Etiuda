@@ -26,6 +26,7 @@ import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { pathToFileURL, fileURLToPath } from "node:url";
+import { createSeatLab, createSigninGuard } from "./seat-lab.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
@@ -34,7 +35,7 @@ const nodeRequire = createRequire(import.meta.url);
    open now asks machine policy whether to keep the desk (section 12), and 77z drives exactly that. Before the shell loads. */
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 159;
+const EXPECTED = 160;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const ASIDE_D6_LOGIN = nodeRequire("./off-windows.cjs").offWindows("D6-login",
   "the shell sets no login item off Windows, so Reset's turn-off has nothing to reach");
@@ -56,6 +57,9 @@ const waitNotes = async (list, count) => { for (let w = 0; list.length < count &
 
 /* ---- electron, as small as main.js needs at load and at a desk write ---------------------- */
 const UD = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-ipc-"));
+const LAB_SIGNIN = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-ipc-lab-"));
+const signinGuard = createSigninGuard({ dirs: [UD, ROOT], labelRoot: UD });
+const seatLab = createSeatLab({ labDir: LAB_SIGNIN });
 const DESK = path.join(UD, "desk.json");
 /* A desk.json no write can replace. Windows refuses a rename over a read-only file; elsewhere the
    rename asks only the folder, so the folder is held read-only too (which root ignores). */
@@ -112,8 +116,8 @@ const electron = {
   ipcMain: { on: (ch, fn) => { onHandlers[ch] = fn; }, handle: (ch, fn) => { invokeHandlers[ch] = fn; } },
   BrowserWindow: RecWin, Menu: inert,
   dialog: { showOpenDialog: (...a) => (dialogOpen ? dialogOpen(...a) : Promise.resolve({ canceled: true, filePaths: [] })), showSaveDialog: () => Promise.resolve({ canceled: true }) },
-  net: inert, protocol: inert, session: inert,
-  screen: inert, shell: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" },
+  net: seatLab.net(), protocol: inert, session: inert,
+  screen: inert, shell: seatLab.labShell(), systemPreferences: inert, nativeTheme: { themeSource: "system" },
 };
 /* safeStorage as far as main.js asks of it: a reversible sealing that shows nothing of what it holds. */
 let sealOk = true, decryptFails = null, keyring = "gnome_libsecret";
@@ -158,7 +162,7 @@ FakeTray.prototype.destroy = function () { this.dead = true; };
 electron.Tray = FakeTray;
 electron.Menu = { setApplicationMenu: noop, buildFromTemplate(tpl) { const items = tpl.slice(); return { items: items, template: items, popup() {} }; } };
 electron.nativeImage = { createFromPath(p) { return { path: p, isEmpty: () => false }; } };
-const fakeRequire = n => (n === "electron" ? electron : nodeRequire(n));
+const fakeRequire = n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? signinGuard.shellFs : nodeRequire(n));
 const shellSrc = f => fs.readFileSync(path.join(ROOT, "shell", f), "utf8");
 /* main.js is evaluated as a function body, so one line appended to it hands the test the retry that Electron's events call. */
 const mainTest = {};
@@ -167,9 +171,9 @@ const desktopWas = process.env.XDG_CURRENT_DESKTOP;
 process.env.XDG_CURRENT_DESKTOP = "GNOME";
 /* What the test reads from main.js, appended to its source; a second boot over the same folders appends it again. */
 const MAIN_TAIL = "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged; __test.sealsForReal = sealsForReal; __test.closeHeld = closeHeld; __test.closeAnswered = closeAnswered; __test.wireHold = wireHold; __test.closeFromRefusal = closeFromRefusal; __test.createWindow = createWindow; __test.CLOSE_WAIT_MS = CLOSE_WAIT_MS; if (typeof tabsFile === 'function') __test.tabsFile = tabsFile; if (typeof writeSavedTabs === 'function') __test.writeSavedTabs = writeSavedTabs; if (typeof readSavedTabs === 'function') __test.readSavedTabs = readSavedTabs; if (typeof sessionHeld !== 'undefined') __test.sessionHeld = sessionHeld; if (typeof handleUpdateClose === 'function') __test.handleUpdateClose = handleUpdateClose; __test.setQuitting = v => { quitting = !!v; }; __test.windowFile = windowFile; if (typeof setQuitOnClose === 'function') __test.setQuitOnClose = setQuitOnClose; if (typeof trayQuit === 'function') __test.trayQuit = trayQuit; if (typeof ensureTray === 'function') __test.ensureTray = ensureTray; if (typeof onSecondInstance === 'function') __test.onSecondInstance = onSecondInstance; if (typeof launchHidden === 'function') __test.launchHidden = launchHidden; if (typeof syncJumpList === 'function') __test.syncJumpList = syncJumpList; if (typeof syncLoginItemPath === 'function') __test.syncLoginItemPath = syncLoginItemPath; if (typeof catalogFolder === 'function') __test.catalogFolder = catalogFolder; if (typeof offerFile === 'function') __test.offerFile = offerFile; if (typeof recordRecentCatalog === 'function') __test.recordRecentCatalog = recordRecentCatalog; if (typeof rebuildTrayMenu === 'function') __test.rebuildTrayMenu = rebuildTrayMenu; if (typeof dispatchColdStartArgs === 'function') __test.dispatchColdStartArgs = dispatchColdStartArgs; if (typeof trayIcon === 'function') __test.trayIcon = trayIcon; if (typeof deskTray !== 'undefined') __test.resetTray = () => { deskTray = null; };";
-new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
+seatLab.withSigninLab(() => new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
   shellSrc("main.js") + MAIN_TAIL)(
-  fakeRequire, path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet, mainTest);
+  fakeRequire, path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet, mainTest));
 const quitsAtBoot = appQuits;
 if (desktopWas === undefined) delete process.env.XDG_CURRENT_DESKTOP; else process.env.XDG_CURRENT_DESKTOP = desktopWas;
 
@@ -2241,6 +2245,11 @@ try {
 
   let d8Args = false, d8ArgsWhy = "";
   try {
+    await seatLab.seatDesk({
+      ud: UD,
+      sync: (ch, ...a) => { const e = eventFor(ENGINE_FRAME); if (onHandlers[ch]) onHandlers[ch](e, ...a); return e.returnValue; },
+      ask: (ch, ...a) => Promise.resolve(invokeHandlers[ch] ? invokeHandlers[ch](eventFor(ENGINE_FRAME), ...a) : undefined),
+    }, { expectWorks: true });
     mainTest.createWindow();
     const w = madeWins[madeWins.length - 1];
     let shows = 0;
@@ -3247,10 +3256,14 @@ try {
     ST.lsDel("e1zz~Pack");
     try { fs.rmSync(out83Root, { recursive: true, force: true }); } catch { /* temp */ }
   }
+  const gReport = signinGuard.report("D8-signin-guard", true);
+  check(gReport.ok, gReport.line);
 } catch (e) {
   failed++;
   console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));
 } finally {
+  signinGuard.restore();
+  try { fs.rmSync(LAB_SIGNIN, { recursive: true, force: true }); } catch { /* a temp folder */ }
   try { fs.rmSync(UD, { recursive: true, force: true }); } catch { /* reported below */ }
   try { if (COPY) fs.rmSync(COPY, { recursive: true, force: true }); } catch { /* a temp folder */ }
   check(!fs.existsSync(UD), "4a the temp desk folder is gone");

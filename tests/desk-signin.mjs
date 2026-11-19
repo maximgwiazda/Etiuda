@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 236;
+const PLANTS = 272;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 184 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 198 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -98,6 +98,7 @@ NAMES.push("SIGNIN_TRACE_ASKED", "signinTraceLine", "signinTraceSaid");
 NAMES.push("signinLanding", "signinLandingHtml", "signinLandingCsp", "SIGNIN_LAND_MS");
 NAMES.push("signinAccessFor", "signinClaims", "signinPinOk");
 NAMES.push("signinWorks", "signinViewOf", "signinClockObserve", "signinClockRead", "signinClockText", "signinClockBytes", "signinVerified");
+NAMES.push("signinClockStart", "signinWorksOf", "signinSaidOf", "signinHoldingOf", "signinTrialsOf", "signinWordsOf", "SIGNIN_LEAD_MAX");
 /* The section, evaluated: `swap` is [from, to], put in place of the one line that holds `from`, for a plant; `invSwap` the same in the
    invitation's slice as well. */
 function load(swap, where, invSwap, needs) {
@@ -405,7 +406,7 @@ CASES.seatFile = s => {
     && s.SEAT_NAME === "seat.json";
 };
 /* A refusal keeps the last certificate; "signin" forgets the refresh token; a service not reached is only marked; an answer of none
-   drops the certificate. */
+   keeps a held certificate to its own end, `ended` stamped (B-2b; the stamp itself, keepNone), and takes none where none was held. */
 CASES.settle = s => {
   const h = { provider: "microsoft", refresh: "sealed:rt", sub: "sealed:s", seed: "6".repeat(64), code: CODE, cert: cert(), at: 1, checked: 1, reached: true, said: "", ask: false };
   const full = s.signinSettle(h, { ok: false, reason: "full" }, NOW), freed = s.signinSettle(h, { ok: false, reason: "signin" }, NOW);
@@ -413,7 +414,8 @@ CASES.settle = s => {
   const fresh = s.signinSettle(Object.assign({}, h, { reached: false, said: "full" }), { ok: true, code: CODE, cert: cert({ issued: NOW + 1 }) }, NOW);
   return full.cert === h.cert && full.said === "full" && full.refresh === "sealed:rt" && full.ask === false
     && freed.cert === h.cert && freed.refresh === "" && freed.ask === true && away.reached === false && away.cert === h.cert && away.at === 1
-    && none.cert === null && none.code === CODE && fresh.cert.issued === NOW + 1 && fresh.reached === true && fresh.said === "" && fresh.at === NOW;
+    && none.cert === h.cert && none.ended === NOW && none.code === CODE && s.signinSettle(Object.assign({}, h, { cert: null }), { ok: true, code: CODE, cert: null }, NOW).cert === null
+    && fresh.cert.issued === NOW + 1 && fresh.reached === true && fresh.said === "" && fresh.at === NOW;
 };
 /* THE CALM LAPSE: lapsed once the kept certificate's until has passed, never with no certificate. */
 CASES.lapse = s => {
@@ -2651,8 +2653,11 @@ CASES.seatedKept = async (s, swap) => {
   const once = s.signinSettle(heldOf({ cert: null }), { ok: true, code: CODE, cert: cert(), doors: [] }, NOW);
   const lost = s.signinSettle(once, { ok: true, code: CODE, cert: null }, NOW);
   const back = s.signinFileRead(s.signinFileText({ held: lost })).held, never = s.signinFileRead(s.signinFileText({ held: heldOf({ cert: null }) })).held;
+  /* Since B-2b an answer of none keeps the certificate, so that the file carries `seated` alone is shown by a seat whose certificate it no longer holds. */
+  const voided = s.signinFileRead(s.signinFileText({ held: Object.assign({}, lost, { cert: null }) })).held;
   const older = s.signinFileRead(s.signinFileText({ held: Object.assign(heldOf(), { seated: undefined }) })).held;
-  return once.seated === true && lost.seated === true && lost.cert === null && !!back && back.seated === true && !!never && never.seated !== true
+  return once.seated === true && lost.seated === true && lost.cert === once.cert && lost.ended === NOW && !!back && back.seated === true && !!never && never.seated !== true
+    && !!voided && voided.seated === true && voided.cert === null
     && !!older && older.seated === true && s.signinSettle(heldOf({ cert: null }), { ok: true, code: CODE, cert: null }, NOW).seated !== true;
 };
 /* (09/1) The account's organisation as its provider named it is kept with the sign-in (`org`), so a policy set later is held to it:
@@ -3109,8 +3114,8 @@ CASES.fileMax = (s, swap) => {
     const fsStand = { statSync: () => ({ size }), readFileSync: () => { reads++; return kept; } };
     /* signinState also reads machine policy and pins the provider table by it (the sync line's managed half): no policy here. */
     const st = new Function("fs", "path", "app", "SIGNIN_FILE", "SIGNIN_FILE_MAX", "signinFileRead", "SIGNIN_DESK_PACKED", "branchIdentity", "signinFileHeld",
-      "managedPolicy", "signinPinTable", "let signinStore, SIGNIN_PROVIDERS = {}, signinTableBase, signinPinStamp = \"\";\n" + text + "\nreturn signinState();")(fsStand, path, { getPath: () => "/ud" }, "signin.json",
-      s.SIGNIN_FILE_MAX, s.signinFileRead, true, () => ({ key: DESK_KEY }), s.signinFileHeld, () => ({ any: false }), table => table);
+      "managedPolicy", "signinPinTable", "signinOffered", "let signinStore, SIGNIN_PROVIDERS = {}, signinTableBase, signinPinStamp = \"\";\n" + text + "\nreturn signinState();")(fsStand, path, { getPath: () => "/ud" }, "signin.json",
+      s.SIGNIN_FILE_MAX, s.signinFileRead, true, () => ({ key: DESK_KEY }), s.signinFileHeld, () => ({ any: false }), table => table, () => []);
     return { reads, held: !!st.held, cert: !!(st.held && st.held.cert) };
   };
   const small = run(kept.length), over = run(s.SIGNIN_FILE_MAX + 1);
@@ -3616,7 +3621,7 @@ CASES.viewFields = s => {
     && of(heldOf({ seated: true })) === is(true, at, c.until, 0, true)
     && of(heldOf({ seated: true }), { offered: ["google"] }) === is(true, at, c.until, 0, true)
     && of(heldOf({ seated: true }), { deskNow: c.until }) === is(false, c.until, c.until, c.until, true)
-    && of(heldOf({ seated: true, revoked: revokedList(1, [SERVICE_PUB]) })) === is(false, at, c.until, c.until, true)
+    && of(heldOf({ seated: true, revoked: revokedList(1, [SERVICE_PUB]) })) === is(false, at, c.until, at, true)
     && of(heldOf({ seated: true, cert: null }), { last }) === is(false, at, 0, last, true)
     && of(heldOf({ cert: null }), { last }) === is(false, at, 0, 0, true)
     && of(heldOf({ seated: true, cert: null }), { last: 0 }) === is(false, at, 0, 0, true)
@@ -3668,7 +3673,7 @@ const ORACLE_VIEW = `function signinView() {
   if (m && m.waiting === true) view.managed.waiting = true;
   return view;
 }`;
-const VIEW_NEW = ["works", "now", "until", "stoppedAt", "online"];
+const VIEW_NEW = ["works", "now", "until", "stoppedAt", "online", "ended", "holding", "trials", "registered"];
 function viewPair(s, st, swap) {
   let text = decl(MAIN, "function signinView(");
   if (swap) {
@@ -3719,8 +3724,9 @@ CASES.clockRules = s => {
     && o(c, 1e12 - YEAR_MS, 500 + 10000) === NOW + 10000 && o(c, 1e12 - 5, 495) === NOW
     && o(file, 1e12 + 3 * HOUR_MS, 77) === NOW + 3 * HOUR_MS && o(file, 1e12 - YEAR_MS, 77) === NOW
     && o(null, NOW + YEAR_MS, 1) === 0 && o({ desk: 0, wall: 1, mono: 1, last: 0 }, NOW, 2) === 0
-    && anchor(null, heldOf()).desk === NOW && anchor({ desk: NOW + 86400000, wall: 5, mono: 1, last: 0 }, heldOf()).desk === NOW + 86400000
-    && anchor({ desk: NOW - 86400000, wall: 5, mono: 1, last: 0 }, heldOf()).desk === NOW
+    && anchor(null, heldOf()).desk === NOW && anchor({ desk: NOW + 86400000, wall: 5, mono: 1, last: 0, issued: NOW }, heldOf()).desk === NOW + 86400000
+    && anchor({ desk: NOW - 86400000, wall: 5, mono: 1, last: 0, issued: NOW - 30 * 86400000 }, heldOf()).desk === NOW
+    && anchor({ desk: NOW + 86400000, wall: 5, mono: 1, last: 0, issued: NOW - 86400000 }, heldOf()).desk === NOW && anchor(null, heldOf()).issued === NOW
     && anchor(null, heldOf({ cert: cert({ desk: OTHER_DESK_KEY }) })).desk === 0
     && anchor(null, heldOf()).last === cert().until && anchor({ desk: NOW, wall: 5, mono: 1, last: 99 }, heldOf({ cert: null })).last === 99;
 };
@@ -3733,7 +3739,7 @@ CASES.clockApart = s => {
   const d = JSON.parse(text), bare = JSON.parse(text);
   delete bare.clock; delete bare.clockMark;
   return text !== marked && JSON.stringify(today(text)) === JSON.stringify(today(marked)) && !!today(text).held.cert && today(text).held.code === CODE
-    && d.mark === JSON.parse(marked).mark && JSON.stringify(bare) === JSON.stringify(JSON.parse(marked)) && Object.keys(d.clock).sort().join() === "desk,last,wall"
+    && d.mark === JSON.parse(marked).mark && JSON.stringify(bare) === JSON.stringify(JSON.parse(marked)) && Object.keys(d.clock).sort().join() === "desk,issued,last,wall"
     && s.signinClockText(marked, { desk: 0, wall: NOW, last: 0 }, signWith(signKey)) === marked
     && s.signinClockText(marked, { desk: NOW, wall: NOW, last: 0 }, () => "") === marked;
 };
@@ -3746,22 +3752,29 @@ function clockWire(s, st, swap) {
     if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in the wiring once: " + swap[0]);
     text = text.replace(swap[0], swap[1]);
   }
+  /* B-2b: the run's first clock (signinClockStart), and the stop it arms (signinStopArm, counted in st.arms; its soon in st.soons). The
+     desk's key is st.key where a leg sets it, null for no key yet. */
   const names = ["signinState", "branchIdentity", "Date", "performance", "path", "app", "fs", "SIGNIN_FILE", "SIGNIN_FILE_MAX", "signinClockRead",
-    "signinClockObserve", "signinClockText", "setInterval", "net", "tellSignin", "writeReplacing", "signinFileMarkText", "signinFileText", "signinSign", "console"];
-  const vals = [() => ({ held: st.held }), () => ({ key: DESK_KEY }), { now: () => st.wall }, { now: () => st.mono }, path, { getPath: () => "/ud" },
+    "signinClockObserve", "signinClockText", "setInterval", "net", "tellSignin", "writeReplacing", "signinFileMarkText", "signinFileText", "signinSign", "console",
+    "signinClockStart", "setTimeout", "signinStopArm"];
+  const vals = [() => ({ held: st.held }), () => (st.key === null ? null : { key: st.key || DESK_KEY }), { now: () => st.wall }, { now: () => st.mono }, path, { getPath: () => "/ud" },
     { statSync: () => { if (st.file === null) throw new Error("ENOENT"); return { size: st.file.length }; }, readFileSync: () => st.file },
     "signin.json", s.SIGNIN_FILE_MAX, s.signinClockRead, s.signinClockObserve, s.signinClockText,
     (fn, ms) => { st.ticks.push({ fn, ms }); return { unref() { st.unrefs++; } }; }, { isOnline: () => st.online }, () => { st.tells++; },
-    (f, t) => { st.file = t; st.writes++; }, s.signinFileMarkText, s.signinFileText, signWith(signKey), { error: () => {}, log: () => {} }];
-  return new Function(...names, "let signinClock = null, signinClockKept = 0, signinOnline = null, signinTicker = null;\n" + text
+    (f, t) => { st.file = t; st.writes++; }, s.signinFileMarkText, s.signinFileText, signWith(signKey), { error: () => {}, log: () => {} },
+    s.signinClockStart, (fn, ms) => { st.soons.push({ fn, ms }); return { unref() {} }; }, () => { st.arms++; }];
+  return new Function(...names, "let signinClock = null, signinClockKept = 0, signinOnline = null, signinTicker = null, signinClockKey = \"\", signinStopFor = \"\";\n" + text
     + "\nreturn { signinClockNow, signinTick, signinSave, SIGNIN_TICK_MS, SIGNIN_CLOCK_KEEP_MS };")(...vals);
 }
-const clockStand = over => Object.assign({ held: null, file: null, wall: NOW, mono: 1000, online: true, ticks: [], unrefs: 0, tells: 0, writes: 0 }, over);
+const clockStand = over => Object.assign({ held: null, file: null, wall: NOW, mono: 1000, online: true, ticks: [], unrefs: 0, tells: 0, writes: 0, soons: [], arms: 0 }, over);
 const clockRun = (st, ms) => { st.wall += ms; st.mono += ms; };
 /* The system clock five minutes slow, and ten, at a fresh sign-in: the desk works from the certificate's issue, and runs on. Today's
    calm lapse reads the certificate as lapsed (issued in the future) all the while. */
 CASES.clockSlow = (s, swap) => [5 * 60000 + 30000, 10 * 60000].every(slow => {
-  const st = clockStand({ held: heldOf(), wall: NOW - slow }), w = clockWire(s, st, swap);
+  /* The sign-in in this run: no certificate at the first ask, then the service's (B-2b, as clockFast). */
+  const st = clockStand({ held: null, wall: NOW - slow }), w = clockWire(s, st, swap);
+  w.signinClockNow();
+  st.held = heldOf();
   const first = w.signinClockNow().desk, lapsed = s.signinLapsed(st.held, st.wall);
   clockRun(st, HOUR_MS);
   const later = w.signinClockNow().desk;
@@ -3771,8 +3784,12 @@ CASES.clockSlow = (s, swap) => [5 * 60000 + 30000, 10 * 60000].every(slow => {
 /* A year fast at the sign-in: the desk works and runs on, and the next run carries on from the kept clock. Today's calm lapse reads
    the certificate as ended. */
 CASES.clockFast = (s, swap) => {
-  const st = clockStand({ held: heldOf(), wall: NOW + YEAR_MS }), w = clockWire(s, st, swap);
-  const first = w.signinClockNow().desk === NOW && s.signinLapsed(st.held, st.wall) === true;
+  /* The sign-in in this run: no certificate at the first ask, then the one the service gave (B-2b: a run that starts holding one with
+     no clock kept restarts at the later of its issue and the system clock, clockMark). */
+  const st = clockStand({ held: null, wall: NOW + YEAR_MS }), w = clockWire(s, st, swap);
+  const none = w.signinClockNow().desk === 0;
+  st.held = heldOf();
+  const first = none && w.signinClockNow().desk === NOW && s.signinLapsed(st.held, st.wall) === true;
   clockRun(st, HOUR_MS);
   w.signinSave();
   const ran = w.signinClockNow().desk === NOW + HOUR_MS;
@@ -3823,19 +3840,21 @@ CASES.clockReplay = (s, swap) => {
   const next = clockWire(s, st, swap).signinClockNow().desk;
   return anchored && after === NOW + 40 * 86400000 && next === after && s.signinWorks(old, DESK_KEY, after) === false && s.signinLapsed(old, NOW + 86400000) === false;
 };
-/* A clock missing, edited or marked by another key restarts at the held certificate's `issued`, and the seat read from the file is the
-   same as with the clock whole; another desk key reads no clock. */
+/* A clock missing, edited or marked by another key restarts at the later of the held certificate's `issued` and the system clock (B-2b;
+   B-2a restarted at the issue alone), and the seat read from the file is the same as with the clock whole; another desk key reads none. */
 CASES.clockMark = (s, swap) => {
   const st = clockStand({ held: heldOf({ seated: true }), wall: NOW }), w = clockWire(s, st, swap);
   w.signinClockNow();
   clockRun(st, 3 * 86400000);
   w.signinSave();
   const text = st.file, seat = t => JSON.stringify(s.signinFileHeld(s.signinFileRead(t), t, DESK_KEY));
-  const restart = t => clockWire(s, clockStand({ held: st.held, file: t, wall: st.wall, mono: 1 }), swap).signinClockNow().desk;
+  const restart = (t, wall) => clockWire(s, clockStand({ held: st.held, file: t, wall: wall === undefined ? st.wall : wall, mono: 1 }), swap).signinClockNow().desk;
   const edits = [d => { delete d.clockMark; }, d => { delete d.clock; }, d => { d.clock.desk -= 86400000; }, d => { d.clockMark = "0".repeat(128); },
     d => { d.clock.more = 1; }, d => { d.clock.desk = "1"; }];
-  const broken = edits.every(e => { const d = JSON.parse(text); e(d); const t = JSON.stringify(d, null, 1) + "\n"; return restart(t) === NOW && seat(t) === seat(text); });
-  return restart(text) === NOW + 3 * 86400000 && broken && !!s.signinClockRead(text, DESK_KEY) && s.signinClockRead(text, OTHER_DESK_KEY) === null;
+  const broken = edits.every(e => { const d = JSON.parse(text); e(d); const t = JSON.stringify(d, null, 1) + "\n";
+    return restart(t, NOW + 86400000) === NOW + 86400000 && restart(t, NOW - YEAR_MS) === NOW && seat(t) === seat(text); });
+  return restart(text) === NOW + 3 * 86400000 && restart(text, NOW + 86400000) === NOW + 3 * 86400000 && broken
+    && !!s.signinClockRead(text, DESK_KEY) && s.signinClockRead(text, OTHER_DESK_KEY) === null;
 };
 /* The tick: armed once by the first ask, every SIGNIN_TICK_MS and unref'd; it keeps the clock in the file at its first turn and then
    hourly, writes nothing while no certificate has anchored the clock, and tells the page once each time the network comes or goes. */
@@ -3872,6 +3891,356 @@ CASES.readFields = async (s, page) => {
     && r(null) === is(false, 0, 0, 0, true) && r({ works: "yes", now: "1", until: -5, stoppedAt: 1.5, online: 0 }) === is(false, 0, 0, 0, true)
     && r({ now: 9e15, until: Infinity, stoppedAt: NaN }) === is(false, 0, 0, 0, true) && unread;
 };
+/* ---- THE DESK KEEPS ITS CERTIFICATE TO ITS END, KNOWS WHAT ITS SEAT IS, AND STOPS AT THE END (B-2b) ----------------------------
+   The answer's seat and trials read and kept (holding, trials); a certificate kept through an answer of none, `ended` stamped on the
+   desk's clock; the stop at the certificate's end, told to the page, on any start; the clock's two mends; the quick replies refused
+   while the desk does not work; no provider, no work. Every answer handed here that the service would not give is stray. */
+const B2B_LEAD = "Lead Name";
+/* A recorded case as the service sends it (ds23's recordedAnswer, which is declared after the legs run). */
+const b2bRecorded = c => ({ status: c.status, bytes: Buffer.from(JSON.stringify(c.body)) });
+const okAnswer = (extra, withCert) => strayAnswer(Object.assign({ ok: true, code: CODE, certificate: withCert === false ? null : cert(), doors: [] }, extra));
+const readOk = (s, extra, withCert) => s.signinAnswer(okAnswer(extra, withCert), DESK_KEY, true);
+/* The seat and trials read from an answer: the five words or no seat; a team's lead as plain text of at most SIGNIN_LEAD_MAX; each
+   trial an end; an answer without them read exactly as before. */
+CASES.answerWords = s => {
+  const ch = n => String.fromCharCode(n);
+  const lead = v => { const r = readOk(s, { seat: { on: "team", ends: NOW, lead: v } }); return r.holding ? r.holding.lead : undefined; };
+  /* The record's certificates trace to its own test root, so its answers are read by the section with that root (as ds23 reads them). */
+  const rooted = ANSWERS && /^[0-9a-f]{64}$/.test(String(ANSWERS.root)) ? load(null, undefined, undefined, NEEDS.split("const NOTE_ROOT = \"" + TEST_ROOT + "\";").join("const NOTE_ROOT = \"" + ANSWERS.root + "\";")) : s;
+  const record = rooted !== s && ANSWER_CASES.filter(c => c.route === "signin/desk" && c.status === 200 && (c.body.seat || c.body.trials)).every(c => {
+    const r = rooted.signinAnswer(b2bRecorded(c), c.body.certificate ? c.body.certificate.desk : DESK_KEY, true);
+    return JSON.stringify(r.holding || null) === JSON.stringify(c.body.seat || null) && JSON.stringify(r.trials || null) === JSON.stringify(c.body.trials || null);
+  });
+  const plain = readOk(s, {}), plainNone = readOk(s, {}, false);
+  return record && SIGNIN_OK_WORDS.every(on => readOk(s, { seat: { on, ends: NOW } }).holding.on === on)
+    && readOk(s, { seat: { on: "free", ends: NOW } }).holding === undefined && readOk(s, { seat: ["trial"] }).holding === undefined
+    && readOk(s, { seat: { on: "trial", ends: "soon" } }).holding.ends === 0 && readOk(s, { seat: { on: "own", ends: NOW, lead: B2B_LEAD } }).holding.lead === undefined
+    && lead(B2B_LEAD) === B2B_LEAD && lead("  Ann O'Neil & Co  ") === "Ann O'Neil & Co" && lead("<b>Lead</b>") === undefined && lead("Lead" + ch(7)) === undefined
+    && lead("Lead" + ch(0x202e) + "x") === undefined && lead("L".repeat(s.SIGNIN_LEAD_MAX)) === "L".repeat(s.SIGNIN_LEAD_MAX)
+    && lead("L".repeat(s.SIGNIN_LEAD_MAX + 1)) === undefined && lead(42) === undefined && lead("   ") === undefined
+    && JSON.stringify(readOk(s, { trials: { desk: -1, studio: NOW, other: NOW } }).trials) === JSON.stringify({ studio: NOW })
+    && readOk(s, { trials: {} }).trials === undefined && readOk(s, { trials: [NOW] }).trials === undefined
+    && readOk(s, { seat: { on: "trial", ends: NOW }, trials: { desk: NOW } }, false).trials.desk === NOW
+    && !("holding" in plain) && !("trials" in plain) && !("holding" in plainNone) && !("trials" in plainNone) && plain.ok === true && !!plain.cert;
+};
+const SIGNIN_OK_WORDS = ["trial", "studio-trial", "own", "team", "org"];
+/* The words kept: the seat goes with the certificate it came with and stays with it through an answer of none; the trials stay until an
+   answer names others; signin.json keeps all three and reads them typed; the same account signed in again keeps them, another drops them. */
+CASES.wordsKept = async (s, swap) => {
+  const seat = { on: "team", ends: NOW + 9 * DAY_MS, lead: B2B_LEAD }, trials = { desk: NOW - DAY_MS };
+  const a = s.signinSettle(heldOf({ cert: null }), readOk(s, { seat, trials }), NOW);
+  const b = s.signinSettle(a, readOk(s, {}, false), NOW, NOW + 5);
+  const c = s.signinSettle(b, readOk(s, { trials: { desk: NOW - DAY_MS, studio: NOW + DAY_MS } }), NOW);
+  const back = h => s.signinFileRead(s.signinFileText({ held: h })).held;
+  const odd = back(Object.assign({}, b, { holding: { on: "team", ends: 1, lead: "<i>x</i>" }, trials: { desk: "x" } }));
+  const loose = back(Object.assign({}, a, { cert: null, holding: seat }));
+  const view = s.signinViewOf(b, viewFacts({}));
+  /* The same account signed in again and answered none keeps all three; another account's sign-in starts with what its answer names. */
+  const press = async (sub, ans) => { const st = switchStand(s, { held: Object.assign({}, b, { sub: "sealed:s-1" }) }); st.sub = sub; st.answer = ans; await loadSwitch(st, swap).press(); await tick(5); return st.store.held; };
+  const same = await press("s-1", { ok: true, code: CODE, cert: null, doors: [] }), other = await press("s-2", { ok: true, code: CODE, cert: null, doors: [], trials: { studio: NOW } });
+  return JSON.stringify(a.holding) === JSON.stringify(seat) && JSON.stringify(a.trials) === JSON.stringify(trials)
+    && b.cert === a.cert && JSON.stringify(b.holding) === JSON.stringify(seat) && JSON.stringify(b.trials) === JSON.stringify(trials)
+    && c.holding === undefined && c.trials.studio === NOW + DAY_MS
+    && JSON.stringify(back(b).holding) === JSON.stringify(seat) && JSON.stringify(back(b).trials) === JSON.stringify(trials) && back(b).ended === NOW + 5
+    && odd.holding.lead === undefined && odd.trials === undefined && loose.holding === undefined && JSON.stringify(loose.trials) === JSON.stringify(trials)
+    && JSON.stringify(view.holding) === JSON.stringify(seat) && JSON.stringify(view.trials) === JSON.stringify(trials) && view.holding !== b.holding
+    && s.signinViewOf(b, viewFacts({ offered: [] })).holding === null
+    && !!same && same.cert === b.cert && same.ended === NOW + 5 && JSON.stringify(same.holding) === JSON.stringify(seat)
+    && !!other && other.cert === null && other.holding === undefined && JSON.stringify(other.trials) === JSON.stringify({ studio: NOW }) && other.ended === undefined;
+};
+/* signinFileRead as it stands at engine main 158d1826, which B-2a left unchanged: today's desk and B-2a's read a file of this desk with
+   its seat, trials and `ended` exactly as the same file without them. */
+const ORACLE_FILE_READ = `function signinFileRead(text, packed) {
+  let d = null;
+  try { d = JSON.parse(String(text)); } catch { d = null; }
+  const out = { held: null };
+  if (!d || typeof d !== "object" || +d.format !== 2) return out;
+  const h = d.held, num = v => Number.isFinite(v) ? v : 0;
+  if (h && typeof h === "object" && signinKnown(h.provider) && /^[0-9a-f]{64}$/.test(String(h.seed)))
+    out.held = { provider: String(h.provider), refresh: typeof h.refresh === "string" ? h.refresh : "", sub: typeof h.sub === "string" ? h.sub : "",
+      seed: String(h.seed), code: SIGNIN_CODE.test(String(h.code)) ? String(h.code) : "",
+      cert: h.cert && typeof h.cert === "object" && signinCertOk(h.cert, h.cert.desk) ? h.cert : null, /* plant:file-cert */
+      at: num(h.at), checked: num(h.checked), reached: h.reached !== false, said: typeof h.said === "string" ? h.said : "", ask: h.ask === true,
+      askLead: h.askLead === true, /* plant:file-ask-lead */
+      doors: [], doorsSig: "", revoked: null, managed: h.managed === true, cause: h.cause === "own-licence" || h.cause === "assigned" ? h.cause : "", storeOffer: h.storeOffer === true };
+  /* The list is beside \`held\`, and the held seat judges by it. */
+  out.revoked = signinRevokedOk(d.revoked) ? d.revoked : null; /* plant:revoked-file */
+  if (out.held) out.held.revoked = out.revoked;
+  if (out.held && h.access === true) out.held.access = true; /* the service's answer "access-token", remembered (section 11.11) */
+  if (out.held && (h.seated === true || out.held.cert)) out.held.seated = true; /* plant:seated-file */
+  if (out.held && h.org && typeof h.org === "object") out.held.org = { tid: SIGNIN_TENANT.test(String(h.org.tid)) ? String(h.org.tid).toLowerCase() : "", /* plant:org-file */
+    hd: typeof h.org.hd === "string" && h.org.hd.length <= 253 ? h.org.hd.toLowerCase() : "" };
+  if (out.held && out.held.cert) {
+    const doors = signinDoorsOk(h.doors, packed), sig = typeof h.doorsSig === "string" ? h.doorsSig : "";
+    if (signinDoorsSigned(doors, sig, out.held.cert)) Object.assign(out.held, { doors: doors, doorsSig: sig }); /* plant:file-doors-signed */
+  }
+  /* The desk key whose sign out the service has not taken yet: asked again at the renewal's next turn (signinOutAgain). */
+  if (/^[0-9a-f]{64}$/.test(String(d.out))) out.out = String(d.out); /* plant:out-kept */
+  /* A sign-in the service refused for a managed tenant keeps no seat, but the desk remembers it offers nothing to buy (signinTake). */
+  if (d.licenceManaged === true) out.licenceManaged = true;
+  return out;
+}`;
+CASES.olderReaders = s => {
+  const old = load([decl(MAIN, "function signinFileRead("), ORACLE_FILE_READ]);
+  const held = heldOf({ seated: true, doors: [], ended: NOW + 7, holding: { on: "team", ends: NOW + DAY_MS, lead: B2B_LEAD }, trials: { desk: NOW, studio: NOW + 1 } });
+  const write = h => s.signinClockText(s.signinFileMarkText(s.signinFileText({ held: h }), signWith(signKey)), { desk: NOW + 1, wall: NOW, last: 0, issued: NOW }, signWith(signKey));
+  const bare = Object.assign({}, held); delete bare.ended; delete bare.holding; delete bare.trials;
+  const take = (r, t) => JSON.stringify(r.signinFileHeld(r.signinFileRead(t), t, DESK_KEY));
+  const now = s.signinFileRead(write(held)).held;
+  return old.signinFileRead !== s.signinFileRead && take(old, write(held)) === take(old, write(bare)) && JSON.parse(take(old, write(held))).held.cert !== null
+    && now.ended === NOW + 7 && now.holding.lead === B2B_LEAD && now.trials.studio === NOW + 1;
+};
+/* AN ANSWER OF NONE KEEPS THE CERTIFICATE TO ITS END: "none", "waiting" and an ask with no trial of one's own each keep it, `ended` the
+   desk's time at the first, kept through a second, a refusal and the file, cleared by a seating answer; a renewal stamps the desk's clock,
+   never the system's; the view works until the certificate's end on the desk's clock and then stops on that end, never a later day. */
+CASES.keepNone = async (s, swap) => {
+  const c = cert(), held = heldOf({ seated: true, doors: [] }), D = NOW + 3 * DAY_MS;
+  const of = name => s.signinAnswer(b2bRecorded(ANSWER_CASES.find(x => x.case === name)), DESK_KEY, true);
+  const each = ["none", "waiting", "ask-lead"].every(n => { const h = s.signinSettle(held, of(n), NOW + 9, D); return h.cert === held.cert && h.ended === D && h.doors.length === 0 && h.doorsSig === ""; });
+  const first = s.signinSettle(held, of("none"), NOW, D), second = s.signinSettle(first, of("waiting"), NOW, D + DAY_MS);
+  const refused = s.signinSettle(second, { ok: false, reason: "desks" }, NOW), away = s.signinSettle(second, { ok: false, reason: "unreached" }, NOW);
+  const seated = s.signinSettle(second, readOk(s, {}), NOW, D + 2 * DAY_MS);
+  const filed = s.signinFileRead(s.signinFileText({ held: second })).held;
+  /* The renewal stamps the desk's clock as signinIo hands it, not the system clock it is given. */
+  const io = Object.assign(renewIo(answer({ id_token: jwt(msClaims(undefined)), refresh_token: "rt-2" }), b2bRecorded(ANSWER_CASES.find(x => x.case === "none"))), { deskNow: () => D + 77 });
+  const renewed = await s.signinRenewHeld(io, MS, DESK_KEY, held, () => NOW);
+  const v = (h, at) => s.signinViewOf(h, viewFacts({ deskNow: at }));
+  const running = v(first, D), atEnd = v(first, c.until), after = v(first, c.until + 5 * DAY_MS);
+  /* B-2a's case: the certificate dropped by an answer of none, its end kept as the last; the view never names that future end. */
+  const dropped = s.signinViewOf(heldOf({ seated: true, cert: null }), viewFacts({ deskNow: D, last: c.until }));
+  return each && first.ended === D && second.ended === D && refused.ended === D && refused.cert === held.cert && away.ended === D
+    && seated.ended === undefined && seated.cert !== c && !!seated.cert && filed.ended === D && filed.cert !== null
+    && renewed.held.cert === held.cert && renewed.held.ended === D + 77 && renewed.said === "renewed"
+    && running.works === true && running.ended === D && running.stoppedAt === 0 && running.seat === "none" && running.until === c.until
+    && atEnd.works === false && atEnd.stoppedAt === c.until && after.works === false && after.stoppedAt === c.until
+    && dropped.works === false && dropped.stoppedAt === D && s.signinWorks(Object.assign({}, first, { revoked: revokedList(1, [SERVICE_PUB]) }), DESK_KEY, D) === false;
+};
+/* EVERY JUDGEMENT THAT READ NO CERTIFICATE AS THE SERVICE'S NONE KEEPS ITS MEANING: the view before `works` is the view of the same seat
+   with the certificate dropped, in each state; no knock at a team's door and no request written there. */
+CASES.saidMeaning = (s, swap) => {
+  const variants = [heldOf({ seated: true, ended: NOW + 1, doors: [] }), heldOf({ seated: true, ended: NOW + 1, cert: cert({ deskOnly: true }), askLead: true, doors: [] }),
+    heldOf({ seated: true, ended: NOW + 1, said: "waiting", code: "ABCDEFGHJKMNPQRS", doors: [] }), heldOf({ ended: NOW + 1, managed: true, cause: "assigned", doors: [] })];
+  const head = v => { const o = Object.assign({}, v); VIEW_NEW.forEach(k => { delete o[k]; }); return JSON.stringify(o); };
+  const same = variants.every(h => { const was = Object.assign({}, h, { cert: null, doors: [], doorsSig: "" }); delete was.ended;
+    return head(s.signinViewOf(h, viewFacts({}))) === head(s.signinViewOf(was, viewFacts({}))) && s.signinViewOf(h, viewFacts({})).works === true; });
+  const ended = heldOf({ ended: NOW + 1 });
+  const mirror = path.join("/relay", RT);
+  const knock = loadDoor(s, doorStand(doorJoin(), ended), swap).signinDoorInvite(TEAM, RT), standing = loadDoor(s, doorStand(doorJoin()), swap).signinDoorInvite(TEAM, RT);
+  const st = doorStand(doorJoin(), ended), kept = loadDoor(s, st, swap).signinDoorKept(TEAM, mirror, DOOR_ID);
+  return same && s.signinSaidOf(ended).cert === null && s.signinSaidOf(heldOf()).cert !== null && knock === null && !!standing && !!standing.door
+    && kept === false && st.writes.length === 0;
+};
+/* THE STOP, in real time: a certificate taken in this run that ends three seconds on leaves the pushed view not working after four, the
+   page told once, on a start that names no harness rule at all. Then, on stand-in time: past its end the desk asks one renewal for that
+   certificate, never a second, and one more for the next certificate past its end; while it works it asks none. */
+const STOP_DECLS = ["const SIGNIN_STOP_MAX_MS =", "function signinStopArm(", "function signinResumeHear(", "function signinWorksNow("];
+function stopWire(s, st, swap) {
+  let text = CLOCK_DECLS.concat(STOP_DECLS).map(d => decl(MAIN, d)).join("\n");
+  if (swap) {
+    if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in the stop's wiring once: " + swap[0]);
+    text = text.replace(swap[0], swap[1]);
+  }
+  const names = ["signinState", "branchIdentity", "Date", "performance", "path", "app", "fs", "SIGNIN_FILE", "SIGNIN_FILE_MAX", "signinClockRead",
+    "signinClockObserve", "signinClockText", "setInterval", "net", "tellSignin", "writeReplacing", "signinFileMarkText", "signinFileText", "signinSign", "console",
+    "signinClockStart", "setTimeout", "clearTimeout", "signinWorksOf", "signinOffered", "signinRenewNow", "require"];
+  const vals = [() => ({ held: st.held }), () => ({ key: DESK_KEY }), st.clock || Date, st.mono || performance, path, { getPath: () => "/ud", isReady: () => st.ready === true },
+    { statSync: () => { throw new Error("ENOENT"); }, readFileSync: () => "" }, "signin.json", s.SIGNIN_FILE_MAX, s.signinClockRead, s.signinClockObserve, s.signinClockText,
+    () => ({ unref() {} }), { isOnline: () => true }, () => { st.told.push({ at: Date.now(), view: st.view() }); },
+    () => {}, s.signinFileMarkText, s.signinFileText, signWith(signKey), { error: () => {}, log: () => {} },
+    s.signinClockStart, st.setTimeout || setTimeout, st.clearTimeout || clearTimeout, s.signinWorksOf, () => st.offered || [MS],
+    () => { st.renews++; return Promise.resolve(""); }, m => ({ powerMonitor: { on: (ev, fn) => { st.resumes.push(ev); st.onResume = fn; } } })];
+  const w = new Function(...names, "let signinClock = null, signinClockKept = 0, signinOnline = null, signinTicker = null, signinClockKey = \"\";\n"
+    + "let signinStopTimer = null, signinStopFor = \"\", signinWorksSeen = null, signinEndAsked = \"\", signinResumeHeard = false, signinRenewing = null;\n" + text
+    + "\nreturn { signinClockNow, signinTick, signinStopArm, signinWorksNow, timer: () => signinStopTimer };")(...vals);
+  st.view = () => s.signinViewOf(st.held, viewFacts({ deskNow: w.signinClockNow().desk, offered: (st.offered || [MS]).map(p => p.id) }));
+  return w;
+}
+const stopStand = over => Object.assign({ held: null, told: [], renews: 0, resumes: [], ready: true }, over);
+CASES.stopTimer = async (s, swap) => {
+  const st = stopStand(), w = stopWire(s, st, swap), t0 = Date.now();
+  w.signinClockNow();
+  st.held = heldOf({ seated: true, cert: cert({ issued: t0, until: t0 + 3000 }) });
+  const before = w.signinClockNow().desk === t0 && w.signinWorksNow() === true;
+  await tick(4000);
+  const last = st.told[st.told.length - 1], late = last ? last.at - t0 : -1;
+  if (w.timer()) clearTimeout(w.timer());
+  /* Stand-in time: past the end, one renewal per certificate, at each arm. */
+  let at = NOW + 40 * DAY_MS, mono = 1;
+  const pst = stopStand({ held: heldOf(), clock: { now: () => at }, mono: { now: () => mono }, setTimeout: () => ({ unref() {} }), clearTimeout: () => {} });
+  const pw = stopWire(s, pst, swap);
+  pw.signinClockNow(); pw.signinStopArm(); pw.signinStopArm(); pw.signinTick();
+  const once = pst.renews === 1;
+  /* The next certificate, issued later, sets the desk's time to its issue; past its own end it is asked for once more. */
+  pst.held = heldOf({ cert: cert({ issued: NOW + 10 * DAY_MS, until: NOW + 20 * DAY_MS }) });
+  pw.signinStopArm();
+  const runs = pst.renews === 1;
+  mono += 11 * DAY_MS;
+  pw.signinStopArm(); pw.signinStopArm();
+  const again = runs && pst.renews === 2;
+  const wst = stopStand({ held: heldOf(), clock: { now: () => NOW }, mono: { now: () => 1 }, setTimeout: () => ({ unref() {} }), clearTimeout: () => {} }), ww = stopWire(s, wst, swap);
+  ww.signinClockNow(); ww.signinStopArm();
+  return before && st.told.length === 1 && !!last && last.view.works === false && last.view.stoppedAt === t0 + 3000 && late >= 2900 && late < 4000
+    && once && again && wst.renews === 0 && !/harnessLaunch|signinLabHeld/.test(STOP_DECLS.map(d => decl(MAIN, d)).join("\n"));
+};
+/* The stop's wiring: the tick arms it, a certificate newly held arms it once after the turn, a resume arms it, heard once the app is
+   ready and only then; a timer is never armed further than SIGNIN_STOP_MAX_MS, nor while the desk does not work. */
+CASES.stopWired = (s, swap) => {
+  /* A plant goes where its line is: the clock's wiring, or the stop's alone. */
+  const inClock = swap && CLOCK_DECLS.map(d => decl(MAIN, d)).join("\n").split(swap[0]).length === 2 ? swap : undefined;
+  const st = clockStand({ held: null }), w = clockWire(s, st, inClock);
+  w.signinClockNow(); w.signinClockNow();
+  const quiet = st.soons.length === 0;
+  st.held = heldOf();
+  w.signinClockNow(); w.signinClockNow();
+  const armed = st.soons.length === 1 && st.soons[0].ms === 0;
+  st.held = heldOf({ cert: cert({ issued: NOW + 1 }) });
+  w.signinClockNow();
+  st.ticks[0].fn();
+  const ticked = st.soons.length === 2 && st.arms === 1;
+  const timers = [], rst = stopStand({ held: heldOf(), ready: false, clock: { now: () => NOW }, mono: { now: () => 1 },
+    setTimeout: (fn, ms) => { timers.push(ms); return { unref() {} }; }, clearTimeout: () => {} }), rw = stopWire(s, rst, swap);
+  rw.signinStopArm();
+  const notYet = rst.resumes.length === 0;
+  rst.ready = true;
+  rw.signinStopArm(); rw.signinStopArm();
+  const heard = rst.resumes.join() === "resume" && typeof rst.onResume === "function";
+  const day = timers.filter(ms => ms > 0);
+  const nst = stopStand({ held: heldOf(), offered: [], clock: { now: () => NOW }, mono: { now: () => 1 }, setTimeout: (fn, ms) => { timers.push(-ms); return { unref() {} }; }, clearTimeout: () => {} });
+  stopWire(s, nst, swap).signinStopArm();
+  return quiet && armed && ticked && notYet && heard && day.length >= 3 && day.every(ms => ms === DAY_MS)
+    && !timers.some(ms => ms < 0) && nst.renews === 0;
+};
+/* THE CLOCK'S FIRST MEND: a forward jump while running, then corrected, leaves the desk's time ahead until the next certificate, issued
+   later than any taken, sets it back to its issue; a replay, older, still moves nothing. */
+CASES.clockLater = (s, swap) => {
+  const st = clockStand({ held: null, wall: NOW }), w = clockWire(s, st, swap), a = heldOf(), b = heldOf({ cert: cert({ issued: NOW + HOUR_MS, until: NOW + 30 * DAY_MS }) });
+  w.signinClockNow();
+  st.held = a;
+  const anchored = w.signinClockNow().desk === NOW;
+  st.wall += YEAR_MS; st.mono += 10000;
+  const jumped = w.signinClockNow().desk === NOW + YEAR_MS && s.signinWorks(a, DESK_KEY, NOW + YEAR_MS) === false;
+  st.wall -= YEAR_MS; st.mono += 10000;
+  const stood = w.signinClockNow().desk === NOW + YEAR_MS + 10000;
+  st.held = b;
+  const righted = w.signinClockNow().desk === NOW + HOUR_MS && s.signinWorks(b, DESK_KEY, NOW + HOUR_MS) === true;
+  clockRun(st, 1000);
+  st.held = a;
+  const replay = w.signinClockNow().desk === NOW + HOUR_MS + 1000 && s.signinWorks(a, DESK_KEY, NOW + HOUR_MS + 1000) === true;
+  return anchored && jumped && stood && righted && replay;
+};
+/* THE CLOCK'S SECOND MEND, AND ITS BOUND: with the record deleted before every start, a run restarts at the later of the certificate's
+   issue and the system clock. An honest clock then ends the certificate at its own end, however many starts; a clock two days slow
+   works on and stops two days late; a clock a year fast finds it ended at once (and asks one renewal: stopTimer); a clock set back before
+   the issue, with the record deleted before each start, restarts each run at the issue, one span of running per run and never more
+   within one (the bound that holds; the relay judges a team's content by its own clock). */
+CASES.clockLost = (s, swap) => {
+  const held = heldOf(), until = cert().until;
+  const start = wall => clockWire(s, clockStand({ held, file: null, wall, mono: 1 }), swap).signinClockNow().desk;
+  const honest = [];
+  for (let d = 0; d <= 31; d++) honest.push(s.signinWorks(held, DESK_KEY, start(NOW + d * DAY_MS)));
+  /* Two days slow: a fresh certificate's issue lies ahead of the clock, and the run starts at the issue; near the end the slow clock
+     still reads two days short of it, so the desk runs on two days past the true end. */
+  const slow = start(NOW - 2 * DAY_MS), slowLate = start(until - 1), slowEnd = start(until);
+  const fast = start(NOW + YEAR_MS);
+  const st = clockStand({ held, file: null, wall: NOW - YEAR_MS, mono: 1 }), w = clockWire(s, st, swap);
+  const back = w.signinClockNow().desk;
+  clockRun(st, 30 * DAY_MS);
+  const inRun = w.signinClockNow().desk;
+  return honest.slice(0, 30).every(Boolean) && honest.slice(30).every(x => x === false) && honest.length === 32
+    && slow === NOW && s.signinWorks(held, DESK_KEY, slow) === true && s.signinWorks(held, DESK_KEY, slowLate) === true && s.signinWorks(held, DESK_KEY, slowEnd) === false
+    && fast === NOW + YEAR_MS && s.signinWorks(held, DESK_KEY, fast) === false
+    && back === NOW && inRun === until && s.signinWorks(held, DESK_KEY, inRun) === false && start(NOW - YEAR_MS) === NOW;
+};
+/* A file written by B-2a's clock (its bytes: desk, wall and last, marked by this desk's key) is no clock here, and the run restarts at the
+   later of the issue and the system clock, the seat whole; the issue is under the mark, so one edited with the mark kept is no clock. */
+CASES.clockB2a = (s, swap) => {
+  const marked = s.signinFileMarkText(s.signinFileText({ held: heldOf({ seated: true, doors: [] }) }), signWith(signKey));
+  const old = { desk: NOW + 5 * DAY_MS, wall: NOW + 5 * DAY_MS, last: cert().until };
+  const d = JSON.parse(marked);
+  d.clock = old; d.clockMark = signWith(signKey)(Buffer.from("etiuda-signin-clock\n" + [old.desk, old.wall, old.last].join("\n"), "utf8"));
+  const b2a = JSON.stringify(d, null, 1) + "\n";
+  const run = (t, wall) => clockWire(s, clockStand({ held: heldOf({ seated: true }), file: t, wall, mono: 1 }), swap).signinClockNow().desk;
+  const seat = t => JSON.stringify(s.signinFileHeld(s.signinFileRead(t), t, DESK_KEY));
+  const mine = s.signinClockText(marked, { desk: NOW + 5 * DAY_MS, wall: NOW + 5 * DAY_MS, last: 0, issued: NOW }, signWith(signKey));
+  const edited = JSON.parse(mine); edited.clock.issued = NOW - DAY_MS;
+  const e = JSON.stringify(edited, null, 1) + "\n";
+  return s.signinClockRead(b2a, DESK_KEY) === null && run(b2a, NOW + 2 * DAY_MS) === NOW + 2 * DAY_MS && run(b2a, NOW - YEAR_MS) === NOW && seat(b2a) === seat(marked)
+    && !!s.signinClockRead(mine, DESK_KEY) && run(mine, NOW + 2 * DAY_MS) === NOW + 5 * DAY_MS && s.signinClockRead(e, DESK_KEY) === null;
+};
+/* The test architect's candidate (his read of B-2a, 2026-11-17 23:53): a start whose first ask comes before the desk's key exists still
+   reads the kept clock once the key answers, and loses no time counted. */
+CASES.clockKeyLate = (s, swap) => {
+  const st = clockStand({ held: heldOf({ seated: true }), wall: NOW }), w = clockWire(s, st, swap);
+  w.signinClockNow();
+  clockRun(st, 3 * DAY_MS);
+  w.signinSave();
+  const next = clockStand({ held: st.held, file: st.file, wall: st.wall - DAY_MS, mono: 1, key: null }), w2 = clockWire(s, next, swap);
+  const before = w2.signinClockNow().desk;
+  next.key = undefined;
+  return before === 0 && w2.signinClockNow().desk === NOW + 3 * DAY_MS;
+};
+/* THE QUICK REPLIES ON A DESK THAT DOES NOT WORK: neither the key nor the tray opens them, and the desk's window comes forward instead;
+   on a desk that works they open as before, and a second press still closes one that stands. */
+CASES.pickRefused = (s, swap) => {
+  let text = decl(MAIN, "function pickToggle(");
+  if (swap) {
+    if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in pickToggle once: " + swap[0]);
+    text = text.replace(swap[0], swap[1]);
+  }
+  const run = (works, visible) => {
+    const st = { focus: 0, hide: 0, asked: 0, caret: 0, works };
+    const names = ["pickWin", "hidePicker", "theWindow", "signinWorksNow", "focusDesk", "hidePickNote", "caretWhich", "caretSelection", "pickTrace", "pickWithClip", "withClipText", "console"];
+    const vals = [{ isDestroyed: () => false, isVisible: () => visible === true }, () => { st.hide++; }, { isDestroyed: () => false }, () => { st.asked++; return st.works; },
+      () => { st.focus++; }, () => {}, () => { st.caret++; return Promise.resolve(null); }, () => new Promise(() => {}), () => {}, () => {}, () => {}, { error() {} }];
+    const f = new Function(...names, "let pickOpening = false, pickPress = 0, pickTarget = null;\n" + text + "\npickToggle();\nreturn pickOpening;");
+    st.opening = f(...vals);
+    return st;
+  };
+  const off = run(false), on = run(true), shut = run(false, true);
+  return off.focus === 1 && off.caret === 0 && off.opening === false && off.asked === 1 && on.focus === 0 && on.caret === 1 && on.opening === true
+    && shut.hide === 1 && shut.asked === 0 && shut.focus === 0;
+};
+/* NO PROVIDER, NO WORK: a build holding no provider's registration works with no certificate, a genuine one held included, arms no stop
+   and asks no renewal, and tells the page \`registered\` false; machine policy pinning the providers away leaves \`registered\` as the
+   build is. Nothing held is dropped. */
+CASES.noProvider = (s, swap) => {
+  const held = heldOf({ seated: true });
+  const v = s.signinViewOf(held, viewFacts({ offered: [], shown: [], registered: false })), preview = s.signinViewOf(held, viewFacts({ offered: [], preview: true, shown: ["microsoft", "google"] }));
+  const timers = [], nst = stopStand({ held, offered: [], clock: { now: () => NOW }, mono: { now: () => 1 }, setTimeout: (fn, ms) => { timers.push(ms); return { unref() {} }; }, clearTimeout: () => {} });
+  const nw = stopWire(s, nst);
+  nw.signinStopArm();
+  let text = decl(MAIN, "function signinState(");
+  if (swap && text.split(swap[0]).length === 2) text = text.replace(swap[0], swap[1]);
+  /* signinState over a build's table `base`, machine policy pinning it to `pinned`; signinOffered the section's own over the table given. */
+  const registered = (base, pinned) => new Function("fs", "path", "app", "SIGNIN_FILE", "SIGNIN_FILE_MAX", "signinFileRead", "SIGNIN_DESK_PACKED", "branchIdentity", "signinFileHeld",
+    "managedPolicy", "signinPinTable", "signinOffered", "BASE", "let signinStore, SIGNIN_PROVIDERS = BASE, signinTableBase, signinPinStamp = \"\";\n" + text + "\nreturn signinState();")(
+      { statSync: () => { throw new Error("ENOENT"); } }, path, { getPath: () => "/ud" }, "signin.json", s.SIGNIN_FILE_MAX, s.signinFileRead, true,
+      () => ({ key: DESK_KEY }), s.signinFileHeld, () => ({ any: true, managed: true }), () => pinned, t => s.signinOffered(t, {}), base).registered;
+  return v.works === false && v.registered === false && v.until === held.cert.until && preview.works === false && s.signinWorksOf(held, [], DESK_KEY, NOW + 1) === false
+    && s.signinWorksOf(held, [MS], DESK_KEY, NOW + 1) === true && !timers.some(ms => ms > 0) && nst.renews === 0 && nst.held === held && !!held.cert
+    && registered(configured(s), {}) === true && registered(s.SIGNIN_PROVIDERS, s.SIGNIN_PROVIDERS) === false;
+};
+/* The page keeps \`ended\`, \`holding\`, \`trials\` and \`registered\`, typed and bounded, the first three for a signed-in desk alone; no
+   other page module names any of them and signin.js reads none of them from a view. */
+CASES.pageWords = async (s, page) => {
+  const pg = page || P;
+  if (!pg) return false;
+  const r = o => pg.signinRead(Object.assign({ offered: ["microsoft"], signedIn: "microsoft" }, o));
+  const ch = n => String.fromCharCode(n);
+  const full = r({ ended: NOW, holding: { on: "team", ends: NOW + 1, lead: B2B_LEAD }, trials: { desk: NOW, studio: NOW + 1, x: 1 }, registered: true });
+  const odd = r({ ended: "1", holding: { on: "gift", ends: 1 }, trials: { desk: -1 }, registered: "yes" });
+  const lead = v => (r({ holding: { on: "team", ends: 1, lead: v } }).holding || {}).lead;
+  const out = pg.signinRead({ offered: ["microsoft"], ended: NOW, holding: { on: "own", ends: 1 }, trials: { desk: NOW }, registered: true });
+  const at = PAGE.indexOf("function signinRead(v){"), rest = at < 0 ? "" : PAGE.slice(0, at) + PAGE.slice(PAGE.indexOf("\n}\n", at));
+  const unread = at >= 0 && fs.readdirSync(path.join(ROOT, "src", "modules")).filter(n => n.endsWith(".js") && n !== "signin.js")
+    .every(n => !/\.(?:holding|registered)\b/.test(fs.readFileSync(path.join(ROOT, "src", "modules", n), "utf8")))
+    && !/\b(?:v|s|sv|view|signinV)\.(?:ended|holding|trials|registered)\b/.test(rest);
+  return full.ended === NOW && JSON.stringify(full.holding) === JSON.stringify({ on: "team", ends: NOW + 1, lead: B2B_LEAD })
+    && JSON.stringify(full.trials) === JSON.stringify({ desk: NOW, studio: NOW + 1 }) && full.registered === true
+    && odd.ended === 0 && odd.holding === null && odd.trials === null && odd.registered === false
+    && lead("<b>x</b>") === undefined && lead("x" + ch(1)) === undefined && lead("L".repeat(121)) === undefined && lead(B2B_LEAD) === B2B_LEAD
+    && out.ended === 0 && out.holding === null && out.trials === null && out.registered === true && pg.signinRead(null).registered === false && unread;
+};
 const LEGS = [
   ["ds1a", "offered", "as shipped no client id is configured and nothing is offered; a configured table offers what it configures, in order"],
   ["ds1b", "noHintStart", "an invitation naming providers carries no sign-in hint: the team's start is retired"],
@@ -3887,7 +4256,7 @@ const LEGS = [
   ["ds3c", "answers", "the service's answers read as the interface names them; a certificate for another desk or code is not taken"],
   ["ds3g", "managedRead", "a managed tenant: the service's word that it is managed, and why, read from a seat and a no-role refusal and kept; an ordinary answer clears it"],
   ["ds3d", "seatFile", "seat.json is {format: 2, desk, certificate}, the certificate whole and no token"],
-  ["ds3e", "settle", "a refusal keeps the last certificate, a freed seat forgets the refresh token, a service away is only marked, none drops it"],
+  ["ds3e", "settle", "a refusal keeps the last certificate, a freed seat forgets the refresh token, a service away is only marked, none keeps a held certificate with ended stamped and takes none where none was held"],
   ["ds3f", "lapse", "the calm lapse: lapsed once the kept certificate's until has passed, never with no certificate"],
   ["ds4b", "door", "the provider's door asks only its own token address, by POST, no redirect followed, nothing cached, no cookie"],
   ["ds4c", "keep", "the refresh token is sealed by a real keyring and never kept on Linux's basic_text"],
@@ -4033,18 +4402,32 @@ const LEGS = [
   ["ds51i", "switchOutWindow", "nothing written to signin.json while a switch's signout is still out says a signout is owed for an account the desk still holds, and a start from such a file signs nobody out, while Sign out still owes one"],
   ["ds51b", "switchShared", "review 11: Sign out and the switch share one leaving, signinLeave: Sign out is its guards, that call and its words, and the press calls it for another account only, at most once on a path, its signout decided on the same condition, before the new account is taken"],
   ["dsw1", "worksTable", "the desk works only holding a certificate signinCertOk takes for this desk's key, its signer not revoked, the desk's own clock inside it from its issue to its end; no certificate, another desk's, a revoked signer, ended or not yet reached on the desk's clock all read not working, whatever the system clock"],
-  ["dsw2", "viewFields", "the view carries works, the desk's clock as now, the held certificate's until, stoppedAt (the held or last certificate's end where the desk was seated and works no longer) and online, in each state, whatever provider is offered"],
+  ["dsw2", "viewFields", "the view carries works, the desk's clock as now, the held certificate's until, stoppedAt (the held or last certificate's end where the desk was seated and works no longer, never after the desk's now) and online, in each state, whatever provider is offered"],
   ["dsw3", "viewClockWire", "the wiring hands the view the desk's clock, key and network as signinClockNow reads them, never the system clock"],
-  ["dsw4", "viewSame", "the view is today's byte for byte, read beside signinView as it stood at engine main 158d1826 in fifteen states, with exactly the five new fields more"],
-  ["dsw5", "clockRules", "the desk's clock moves by the larger of the wall's and the monotonic difference and never below zero, by the wall's alone floored across a restart, keeps no time until a certificate anchors it, and is moved forward to a taken certificate's issue, never back and never by another desk's"],
+  ["dsw4", "viewSame", "the view is today's byte for byte, read beside signinView as it stood at engine main 158d1826 in fifteen states, with exactly the nine new fields more (B-2a's five, B-2b's four)"],
+  ["dsw5", "clockRules", "the desk's clock moves by the larger of the wall's and the monotonic difference and never below zero, by the wall's alone floored across a restart, keeps no time until a certificate anchors it, and is set to the issue of a certificate issued later than any taken, forward or back, never by an older one or another desk's"],
   ["dsw6", "clockApart", "the clock is kept beside signin.json's own mark, so today's reader takes a file this desk wrote exactly as the file without it, the seat and the mark whole; no anchor or no signature writes nothing"],
-  ["dsw7", "clockMark", "a clock missing, edited, of another shape or marked by another key restarts at the held certificate's issue and the seat read from the file stays the same; another desk key reads no clock"],
+  ["dsw7", "clockMark", "a clock missing, edited, of another shape or marked by another key restarts at the later of the held certificate's issue and the system clock, and the seat read from the file stays the same; another desk key reads no clock"],
   ["dsw8", "clockSlow", "the system clock five minutes slow, or ten, at a fresh sign-in: the desk works from the certificate's issue and runs on, where today's calm lapse reads it lapsed"],
   ["dsw9", "clockFast", "a year fast at the sign-in: the desk works and runs on, the next run carrying on from the kept clock, where today's calm lapse reads it ended"],
   ["dsw10", "clockBackClosed", "set back a year between two runs: the desk's time stands only while it was closed and it stops at the certificate's end after thirty days of running, where today's calm lapse reads it lapsed, issued in the future"],
   ["dsw11", "clockBackRunning", "set back a year while running: the monotonic clock carries the desk on, and the next run measures from the set-back clock"],
   ["dsw12", "clockReplay", "an old answer replayed rewinds the desk's clock neither in the run nor in the next, and its certificate stands ended on it"],
   ["dsw13", "clockTick", "the tick is armed once by the first ask and unref'd, keeps the clock at its first turn and then hourly, writes nothing before an anchor, and tells the page once each time the network comes or goes"],
+  ["dsk1","answerWords","B-2b: the answer's seat is read as {on, ends, lead?}, on one of the five words or no seat, a team's lead plain text of at most 120 characters with no markup, control or bidirectional character, each trial an end; an answer without them reads as before; the service's record reads as it says"],
+  ["dsk2","wordsKept","B-2b: the seat is kept with the certificate it came with, through an answer of none, and goes with the next certificate's; the trials until an answer names others; signin.json keeps them, typed; the view carries them for a signed-in desk; the same account signed in again keeps them, another account does not"],
+  ["dsk3","olderReaders","B-2b: today's desk and B-2a's (signinFileRead at engine main 158d1826, which B-2a left as it was) read a file of this desk with its seat, trials and ended exactly as the same file without them, the seat whole"],
+  ["dsk4","keepNone","B-2b: an answer of none (none, waiting, an ask with no trial of one's own) keeps the held certificate to its own end, ended the desk's time at the first, kept through a second, a refusal and the file, cleared by a seating answer; a renewal stamps the desk's clock; the view works to the end on the desk's clock and then stops on that end, never a later day, B-2a's dropped certificate included"],
+  ["dsk5","saidMeaning","B-2b: every judgement that read no certificate as the service's none keeps its meaning: the view before works is the view of the seat with the certificate dropped, and no knock or request at a team's door goes on a certificate the service has said none to"],
+  ["dsk6","stopTimer","B-2b: a certificate taken in this run ending three seconds on leaves the pushed view not working after four, told once, at its end, on a start that names no harness rule; past its end the desk asks one renewal per certificate and none while it works"],
+  ["dsk7","stopWired","B-2b: the tick arms the stop, a certificate newly held arms it once after the turn, a resume arms it, heard once the app is ready; the timer is never further than a day, and no timer or renewal where the desk does not work"],
+  ["dsk8","clockLater","B-2b: a forward jump while running, then corrected, leaves the desk's time ahead until the next certificate, issued later than any taken, sets it back to its issue; a replay still moves nothing"],
+  ["dsk9","clockLost","B-2b: with the record deleted before every start a run restarts at the later of the issue and the system clock: an honest clock ends the certificate at its end over thirty-two starts, a slow clock works at once, a year fast reads ended, and a clock set back gets one span per run and never more within one"],
+  ["dsk10","clockB2a","B-2b: a file written by B-2a's clock is no clock here, the run restarting at the later of the issue and the system clock with the seat whole; the issue is under the mark"],
+  ["dsk11","clockKeyLate","B-2b, the test architect's candidate: a start whose first ask comes before the desk's key still reads the kept clock once the key answers"],
+  ["dsk12","pickRefused","B-2b: the quick replies' key and tray open nothing on a desk that does not work and bring its window forward; on one that works they open as before, and a second press still closes one that stands"],
+  ["dsk13","noProvider","B-2b: a build offering no provider works with no certificate, a genuine one held, arms no stop, asks no renewal and tells the page registered false; machine policy pinning the providers away leaves registered as the build is; nothing held is dropped"],
+  ["dsk14","pageWords","B-2b: the page keeps ended, holding, trials and registered, typed and bounded, the first three for a signed-in desk alone, and nothing on the page reads them yet"],
   ["dsw14", "readFields", "the page keeps works, now, until, stoppedAt and online, typed and bounded, and nothing on the page reads them yet"],
 ];
 for (let [id, name, line] of LEGS) {
@@ -4241,7 +4624,7 @@ const outside = outsideNames(MAIN);
    certificate and write the request there (ds11d), and for Buy to carry the sign-in code to the order page (tests/desk-buy.mjs), none
    of which gates anything; and to hand a team's relay its seat on a licence that follows Entra, which the relay judges and nothing
    on the desk waits on (tests/relay-seats.mjs d1a to d3a). */
-const expectOutside = ["signinListen", "armSigninRenew", "signinFlush", "signinFlush", "signinDoorInvite", "signinDoorKept", "signinView",
+const expectOutside = ["signinListen", "armSigninRenew", "signinFlush", "signinFlush", "signinDoorInvite", "signinDoorKept", "signinView", "signinWorksNow",
   "signinRelaySeatIo", "signinRelaySeatIo", "signinPressNow"];
 check(outside.slice().sort().join() === expectOutside.slice().sort().join(),
   "ds5a nothing local is gated: outside its section the shell names the sign-in only to require its loopback, to arm the renewal, to write the seat after a join and to press on Ask again: " + outside.join(" "));
@@ -4277,7 +4660,8 @@ const DESK_READS = {
   "seated": (r, c, s) => r.ok === true && !!r.cert && r.cert.desk === c.body.certificate.desk && r.code === c.body.code && r.doors.length === 0
     && s.signinSettle(HELD_BEFORE(), r, NOW).cert === r.cert,
   "seated-doors": (r, c) => r.ok === true && !!r.cert && r.doors.length === c.body.doors.length && r.doors.length > 0,
-  "none": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && r.cert === null && r.code === c.body.code && h.cert === null && h.said === ""; },
+  "none": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && r.cert === null && r.code === c.body.code && !!h.cert && h.ended === NOW && h.said === ""
+    && JSON.stringify(h.trials) === JSON.stringify(c.body.trials); },
   "waiting": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && r.cert === null && r.code === c.body.code && h.said === "waiting" && h.ask === false && h.refresh === "sealed:rt"; },
   "signin": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === false && r.reason === "signin" && h.refresh === "" && h.ask === true; },
   "desks": r => r.ok === false && r.reason === "desks",
@@ -4286,7 +4670,7 @@ const DESK_READS = {
   "no-role": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === false && r.reason === "no-role" && r.managed === true && h.said === "no-role" && h.refresh === "sealed:rt" && h.managed === true; },
   "managed-seated": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && !!r.cert && r.managed === true && r.cause === "" && h.managed === true && h.cert === r.cert; },
   "managed-waiting": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && r.cert === null && r.waiting === true && r.managed === true && h.said === "waiting" && h.managed === true; },
-  "managed-none": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && r.cert === null && r.managed === true && h.cert === null && h.managed === true; },
+  "managed-none": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && r.cert === null && r.managed === true && !!h.cert && h.ended === NOW && h.managed === true; },
   "managed-own-waiting": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && r.cert === null && r.waiting === true && r.managed === true && r.cause === "own-licence" && h.said === "waiting" && h.cause === "own-licence"; },
   "managed-own": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && !!r.cert && r.managed === true && r.cause === "own-licence" && h.cause === "own-licence"; },
   "managed-assigned": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && !!r.cert && r.managed === true && r.cause === "assigned" && h.cause === "assigned"; },
@@ -4296,17 +4680,17 @@ const DESK_READS = {
   "ask-lead-trial": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && !!r.cert && r.cert.deskOnly === true && r.askLead === true
     && r.code === c.body.code && h.askLead === true && h.said === ""; },
   "ask-lead": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && r.cert === null && r.askLead === true && h.askLead === true && h.said === ""; },
-  /* The seat and trials beside an answer (B-1): read here as this desk reads them, by its named keys, the new block ignored and the
-     lead's name nowhere in what it keeps. */
+  /* The seat and trials beside an answer (B-1), read since B-2b as `holding` and `trials` and kept with the certificate they came with;
+     an answer of none keeps the certificate held before it, `ended` stamped, and the seat it last named. */
   "trial": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && !!r.cert && r.cert.deskOnly === true && r.code === c.body.code
-    && h.cert === r.cert && h.said === "" && !("seat" in r) && !("trials" in r); },
+    && h.cert === r.cert && h.said === "" && !h.ended && JSON.stringify(h.holding) === JSON.stringify(c.body.seat) && JSON.stringify(h.trials) === JSON.stringify(c.body.trials); },
   "studio-trial": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && !!r.cert && r.cert.deskOnly !== true && h.cert === r.cert
-    && h.said === "" && !("seat" in r) && !("trials" in r); },
-  "trials-ended": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && r.cert === null && r.code === c.body.code && h.cert === null
-    && h.said === "" && !("trials" in r); },
-  "own": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && !!r.cert && r.cert.deskOnly === true && h.cert === r.cert && !("seat" in r); },
-  "team": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && !!r.cert && r.cert.deskOnly !== true && h.cert === r.cert && !("seat" in r)
-    && JSON.stringify(h).indexOf(c.body.seat.lead) < 0; },
+    && h.holding.on === "studio-trial" && h.holding.ends === c.body.seat.ends && h.trials.desk === c.body.trials.desk && h.trials.studio === c.body.trials.studio; },
+  "trials-ended": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && r.cert === null && r.code === c.body.code && !!h.cert && h.ended === NOW
+    && h.said === "" && !h.holding && JSON.stringify(h.trials) === JSON.stringify(c.body.trials); },
+  "own": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && !!r.cert && r.cert.deskOnly === true && h.cert === r.cert && h.holding.on === "own" && h.holding.ends === c.body.seat.ends; },
+  "team": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && !!r.cert && r.cert.deskOnly !== true && h.cert === r.cert
+    && JSON.stringify(h.holding) === JSON.stringify(c.body.seat) && h.holding.lead === c.body.seat.lead; },
 };
 const recordedAnswer = c => ({ status: c.status, bytes: Buffer.from(JSON.stringify(c.body)) });
 const caseNames = ANSWER_CASES.map(c => c.case);
@@ -4446,8 +4830,8 @@ if (!PLANTS_OFF) {
   await plant("dsp53", ["/^http:\\/\\/127\\.0\\.0\\.1:([0-9]{1,5})", "/^http:\\/\\/[a-z0-9.]+:([0-9]{1,5})"], "labRead");
   await plant("dsp54", ["|| !(d.root === undefined || /^[0-9a-f]{64}$/.test(String(d.root)))) return null; /* plant:lab-shape */", ") return null;"], "labRead");
   await plant("dsp59", ["if (d.keyId !== \"studio-\" + crypto.createHash(\"sha256\").update(Buffer.from(d.lead, \"hex\")).digest(\"hex\").slice(0, 16)) return []; /* plant:door-key-id */", ""], "doorsRead");
-  await plant("dsp60", ["return Object.assign({ ok: true, code: String(j.code), cert: j.certificate, doors: signed ? doors : [], doorsSig: signed ? String(j.doorsSig) : \"\", askLead, storeOffer }, signinManagedOf(j)); /* plant:door-read */",
-    "return Object.assign({ ok: true, code: String(j.code), cert: j.certificate, doors: [], doorsSig: \"\", askLead, storeOffer }, signinManagedOf(j));"], "doorsRead");
+  await plant("dsp60", ["return Object.assign({ ok: true, code: String(j.code), cert: j.certificate, doors: signed ? doors : [], doorsSig: signed ? String(j.doorsSig) : \"\", askLead, storeOffer }, signinManagedOf(j), words); /* plant:door-read */",
+    "return Object.assign({ ok: true, code: String(j.code), cert: j.certificate, doors: [], doorsSig: \"\", askLead, storeOffer }, signinManagedOf(j), words);"], "doorsRead");
   await plant("dsp61", ["doors: ans.cert ? (ans.doors || []) : [],", "doors: ans.doors || [],"], "doorsKept");
   await plantWire("dsp62", ["|| !(held.cert.until > now) || pinnedLead() || teamJoin) return []; /* plant:door-shown */", ") return [];"], "doorJoin");
   await plantWire("dsp63", ["if (!d || !me) return Object.assign({}, joinView(), { refused: \"door\" }); /* plant:door-join-offered */", "if (!me) return joinView();"], "doorJoin");
@@ -4478,8 +4862,8 @@ if (!PLANTS_OFF) {
   await plantWire("dtp5", ["trace: SIGNIN_TRACE_ASKED ? line => console.error(line) : null, /* plant:trace-wired */", "trace: line => console.error(line),"], "traceDefault");
   await plantWire("dtp6", ["if (!io || typeof io.trace !== \"function\") return; /* plant:trace-off */",
     "if (!io || typeof io.trace !== \"function\") { console.error(signinTraceLine(provider, step, shown, said, hide)); return; }"], "traceDefault");
-  await plant("dsp79", ["if (j.certificate === null) return Object.assign({ ok: true, code: String(j.code), cert: null, doors: [], waiting: j.reason === \"waiting\", askLead, storeOffer }, signinManagedOf(j)); /* plant:wait-read */",
-    "if (j.certificate === null) return Object.assign({ ok: true, code: String(j.code), cert: null, doors: [], askLead, storeOffer }, signinManagedOf(j));"], "waitRead");
+  await plant("dsp79", ["if (j.certificate === null) return Object.assign({ ok: true, code: String(j.code), cert: null, doors: [], waiting: j.reason === \"waiting\", askLead, storeOffer }, signinManagedOf(j), words); /* plant:wait-read */",
+    "if (j.certificate === null) return Object.assign({ ok: true, code: String(j.code), cert: null, doors: [], askLead, storeOffer }, signinManagedOf(j), words);"], "waitRead");
   await plant("dsp80", ["said: ans.waiting === true ? \"waiting\" : \"\", ask: false, askLead: ans.askLead === true, managed: ans.managed === true, cause: ans.managed === true ? ans.cause || \"\" : \"\",",
     "said: \"\", ask: false, askLead: ans.askLead === true, managed: ans.managed === true, cause: ans.managed === true ? ans.cause || \"\" : \"\","], "waitRead");
   await plant("dsp80b", ["askLead: h.askLead === true, /* plant:file-ask-lead */", "askLead: false,"], "askLeadFile");
@@ -4619,7 +5003,7 @@ if (!PLANTS_OFF) {
   await plantWire("dsp163", ["return held.said === \"no-role\" ? \"removed\" : \"renew\"; /* plant:relay-seat-removed */", "return \"renew\";"], "relaySeatWire");
   await plantWire("dsp164", ["if (signinSeatRenewAt && now >= signinSeatRenewAt && now - signinSeatRenewAt < SIGNIN_SEAT_RENEW_MS) return Promise.resolve(); /* plant:seat-renew-gap */", ""], "seatRenewGap");
   await plantWire("dsp164a", ["  if (ans.ok && typeof signinPressNow === \"function\") signinPressNow(false).catch(() => false); /* plant:relay-seat-signin */\n", ""], "relaySeatCleared");
-  await plantWire("dsp164b", ["  if (r.said === \"renewed\" && s.held && s.held.cert && typeof signinRelaySeatClear === \"function\") signinRelaySeatClear(o && o.relay ? \"relay\" : o && o.person ? \"person\" : \"\"); /* plant:relay-seat-renew */\n", ""], "relaySeatCleared");
+  await plantWire("dsp164b", ["  if (r.said === \"renewed\" && s.held && s.held.cert && !(s.held.ended > 0) && typeof signinRelaySeatClear === \"function\") signinRelaySeatClear(o && o.relay ? \"relay\" : o && o.person ? \"person\" : \"\"); /* plant:relay-seat-renew */\n", ""], "relaySeatCleared");
   await plantWire("dsp164c", ["  if (typeof signinRelaySeatClear === \"function\") signinRelaySeatClear(\"out\"); /* plant:relay-seat-leave */\n", ""], "relaySeatCleared");
   await plantWire("dsp215", ["  ends = how === \"out\"; /* plant:relay-seat-notice-kept */\n", ""], "relaySeatCleared");
   await plantWire("dsp216", ["  resets = how === \"out\"; /* plant:relay-seat-throttle-kept */\n", ""], "relaySeatCleared");
@@ -4650,25 +5034,62 @@ if (!PLANTS_OFF) {
   await plant("dswp6", ["    now: Number.isSafeInteger(o.deskNow) && o.deskNow > 0 ? o.deskNow : 0, /* plant:view-now */", "    now: 0,"], "viewFields");
   await plant("dswp7", ["    until: cert && Number.isSafeInteger(cert.until) ? cert.until : 0, /* plant:view-until */", "    until: 0,"], "viewFields");
   await plant("dswp8", ["stoppedAt: !works && !!held && held.seated === true ?", "stoppedAt: !works && !!held ?"], "viewFields");
-  await plant("dswp9", ["    online: o.online !== false }; /* plant:view-online */", "    online: true };"], "viewFields");
-  await plantWire("dswp10", ["deskKey: at.key, deskNow: at.desk, last: at.last, online: at.online }); /* plant:view-clock */", "deskKey: at.key, deskNow: Date.now(), last: 0, online: true });"], "viewClockWire");
+  await plant("dswp9", ["    online: o.online !== false, /* plant:view-online */", "    online: true,"], "viewFields");
+  await plantWire("dswp10", ["deskKey: at.key, deskNow: at.desk, last: at.last, online: at.online, registered: st.registered === true }); /* plant:view-clock */","deskKey: at.key, deskNow: Date.now(), last: 0, online: true, registered: st.registered === true });"], "viewClockWire");
   await plantWire("dswp11", ["shown: preview ? Object.keys(SIGNIN_PROVIDERS) : real,", "shown: real,"], "viewSame");
   await plantWire("dswp12", ["outOwed: !!st.out && !signinOutFlight,", "outOwed: !!st.out,"], "viewSame");
   await plant("dswp13", ["licenceManaged: signedIn ? held.managed === true : o.licenceManaged === true,", "licenceManaged: signedIn ? held.managed === true : false,"], "viewSame");
   await plant("dswp14", ["  let desk = c.desk > 0 ? c.desk + Math.round(Math.max(0, byWall, byMono)) : 0; /* plant:clock-forward */", "  let desk = c.desk > 0 ? c.desk + Math.round(byWall) : 0;"], "clockRules");
   await plant("dswp15", ["  let desk = c.desk > 0 ? c.desk + Math.round(Math.max(0, byWall, byMono)) : 0; /* plant:clock-forward */", "  let desk = c.desk > 0 ? c.desk + Math.round(Math.max(byWall, byMono)) : 0;"], "clockRules");
-  await plant("dswp16", ["    if (desk < cert.issued) desk = cert.issued; /* plant:clock-anchor */\n", ""], "clockSlow");
-  await plant("dswp17", ["    if (desk < cert.issued) desk = cert.issued; /* plant:clock-anchor */", "    desk = cert.issued;"], "clockReplay");
+  await plant("dswp16", ["    if (cert.issued > issued) { desk = cert.issued; issued = cert.issued; } /* plant:clock-anchor */\n",""], "clockSlow");
+  await plant("dswp17", ["    if (cert.issued > issued) { desk = cert.issued; issued = cert.issued; } /* plant:clock-anchor */","    { desk = cert.issued; issued = cert.issued; }"], "clockReplay");
   await plant("dswp18", ["  if (!/^[0-9a-f]{64}$/.test(String(deskKey || \"\")) || !signinVerified(String(deskKey), signinClockBytes(c), d.clockMark)) return null; /* plant:clock-mark */\n", ""], "clockMark");
   await plant("dswp19", ["Object.assign(d, { clock: c, clockMark: mark })", "Object.assign(d, { clock: c, mark: mark })"], "clockApart");
-  await plantWire("dswp20", ["    signinClock = signinClockRead(text, key); /* plant:clock-kept-read */", "    signinClock = null;"], "clockMark");
+  await plantWire("dswp20", ["    signinClock = signinClockStart(signinClockRead(text, key), held, key, wall); /* plant:clock-kept-read */","    signinClock = signinClockStart(null, held, key, wall);"], "clockMark");
   await plantWire("dswp21", ["signinClockText(signinFileMarkText(signinFileText(signinState()), signinSign), signinClock, signinSign)", "signinFileMarkText(signinFileText(signinState()), signinSign)"], "clockFast");
   await plantWire("dswp22", ["if (c.desk > 0 && (!signinClockKept || c.desk - signinClockKept >= SIGNIN_CLOCK_KEEP_MS)) signinSave(); /* plant:clock-keep */", "if (c.desk > 0 && !signinClockKept) signinSave();"], "clockTick");
   await plantWire("dswp23", ["  if (online !== signinOnline) { signinOnline = online; tellSignin(); } /* plant:online-told */", "  if (online !== signinOnline) { signinOnline = online; }"], "clockTick");
   await plantPage("dswp24", ["    works: o.works===true, /* plant:read-works */", "    works: !!o.works,"], "readFields");
   await plantPage("dswp25", ["function signinTimeRead(v){ return Number.isSafeInteger(v) && v>0 && v<=8.64e15 ? v : 0; } /* plant:read-time */", "function signinTimeRead(v){ return Number(v)||0; }"], "readFields");
   await plantPage("dswp26", ["    stoppedAt: signinTimeRead(o.stoppedAt), /* plant:read-stopped */", "    stoppedAt: 0,"], "readFields");
-  await plantPage("dswp27", ["    online: o.online!==false /* plant:read-online */", "    online: true"], "readFields");
+  await plantPage("dswp27", ["    online: o.online!==false, /* plant:read-online */", "    online: true,"], "readFields");
+  /* B-2b: the desk keeps its certificate to its end, knows what its seat is, and stops at the end. */
+  await plant("dskp1", ["  if (!v || typeof v !== \"object\" || Array.isArray(v) || SIGNIN_HOLDING_ON.indexOf(v.on) < 0) return null; /* plant:holding-on */","  if (!v || typeof v !== \"object\" || Array.isArray(v)) return null;"], "answerWords");
+  await plant("dskp2", ["  if (lead && lead.length <= SIGNIN_LEAD_MAX && !/[\\u0000-\\u001f\\u007f-\\u009f<>\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]/.test(lead)) out.lead = lead; /* plant:holding-lead */","  if (typeof v.lead === \"string\") out.lead = v.lead;"], "answerWords");
+  await plant("dskp3", ["  for (const k of [\"desk\", \"studio\"]) if (Number.isSafeInteger(v[k]) && v[k] > 0) out[k] = v[k]; /* plant:trials-read */","  for (const k of [\"desk\", \"studio\"]) if (v[k] !== undefined) out[k] = v[k]; /* plant:trials-read */"], "answerWords");
+  await plant("dskp4", ["    const words = signinWordsOf(signinHoldingOf(j.seat), signinTrialsOf(j.trials)); /* plant:words-read */","    const words = {};"], "answerWords");
+  await plant("dskp5", ["    const keep = !ans.cert && !!held && !!held.cert; /* plant:keep-none */","    const keep = false;"], "keepNone");
+  await plant("dskp6", ["    const ended = ans.cert ? 0 : !keep ? 0 : held.ended > 0 ? held.ended : Number.isSafeInteger(deskNow) && deskNow > 0 ? deskNow : now; /* plant:ended-first */","    const ended = ans.cert ? 0 : !keep ? 0 : Number.isSafeInteger(deskNow) && deskNow > 0 ? deskNow : now; /* plant:ended-first */"], "keepNone");
+  await plant("dskp7", ["    return Object.assign(out, ended ? { ended: ended } : {}, signinWordsOf(ans.cert ? ans.holding : keep ? held.holding : null, ans.trials || (held && held.trials))); /* plant:words-settle */","    return Object.assign(out, ended ? { ended: ended } : {}, signinWordsOf(ans.holding, ans.trials)); /* plant:words-settle */"], "wordsKept");
+  await plant("dskp8", ["  return Object.assign({ held: signinSettle(fresh, said, now(), io && typeof io.deskNow === \"function\" ? io.deskNow() : 0), said: said.ok ? \"renewed\" : said.reason }, said.ok ? { idToken: m ? m.got.idToken : got.idToken } : {}); /* plant:renew-desk-now */","  return Object.assign({ held: signinSettle(fresh, said, now()), said: said.ok ? \"renewed\" : said.reason }, said.ok ? { idToken: m ? m.got.idToken : got.idToken } : {}); /* plant:renew-desk-now */"], "keepNone");
+  await plantWire("dskp9", ["    if (was.cert) Object.assign(base, { code: was.code, cert: was.cert }, was.ended > 0 ? { ended: was.ended } : {}, was.holding ? { holding: was.holding } : {}); /* plant:take-keeps-cert */\n",""], "wordsKept");
+  await plant("dskp10", ["  return Array.isArray(offered) && offered.length > 0 && signinWorks(held, deskKey, deskNow); /* plant:works-offered */","  return signinWorks(held, deskKey, deskNow);"], "noProvider");
+  await plant("dskp11", ["  const held = signinSaidOf(kept); /* plant:view-said */","  const held = kept;"], "saidMeaning");
+  await plant("dskp12", ["  return held && held.cert && held.ended > 0 ? Object.assign({}, held, { cert: null, doors: [], doorsSig: \"\" }) : held; /* plant:said-of */","  return held;"], "saidMeaning");
+  await plant("dskp13", ["    ended: !!signedIn && !!cert && kept.ended > 0 ? kept.ended : 0, /* plant:view-ended */","    ended: 0,"], "keepNone");
+  await plant("dskp14", ["    holding: !!signedIn && !!kept.holding ? Object.assign({}, kept.holding) : null, /* plant:view-holding */","    holding: null,"], "wordsKept");
+  await plant("dskp15", ["    registered: o.registered === true }; /* plant:view-registered */","    registered: true };"], "noProvider");
+  await plant("dskp16", ["      Number.isSafeInteger(o.deskNow) && o.deskNow > 0 ? o.deskNow : Infinity) : 0, /* plant:view-stopped */","      Infinity) : 0,"], "keepNone");
+  await plantWire("dskp17", ["  if (held.ended > 0) return null; /* plant:ended-knock */\n",""], "saidMeaning");
+  await plantWire("dskp18", ["  if (held && held.ended > 0) return false; /* plant:ended-request */\n",""], "saidMeaning");
+  await plant("dskp19", ["    if (cert.issued > issued) { desk = cert.issued; issued = cert.issued; } /* plant:clock-anchor */","    if (desk < cert.issued) { desk = cert.issued; issued = cert.issued; } /* plant:clock-anchor */"], "clockLater");
+  await plant("dskp20", ["  return { desk: Math.max(cert.issued, Math.round(wall)), wall: Math.round(wall), mono: null, last: cert.until, issued: cert.issued }; /* plant:clock-restart */","  return { desk: cert.issued, wall: Math.round(wall), mono: null, last: cert.until, issued: cert.issued }; /* plant:clock-restart */"], "clockLost");
+  await plant("dskp21", ["function signinClockBytes(c) { return Buffer.from(\"etiuda-signin-clock\\n\" + [c.desk, c.wall, c.last, c.issued].map(String).join(\"\\n\"), \"utf8\"); } /* plant:clock-bytes */","function signinClockBytes(c) { return Buffer.from(\"etiuda-signin-clock\\n\" + [c.desk, c.wall, c.last].map(String).join(\"\\n\"), \"utf8\"); } /* plant:clock-bytes */"], "clockB2a");
+  await plantWire("dskp22", ["  if (signinClock === null || signinClockKey !== key) { /* plant:clock-key */","  if (signinClock === null) {"], "clockKeyLate");
+  await plantWire("dskp23", ["  if (sig !== signinStopFor) { signinStopFor = sig; const soon = setTimeout(signinStopArm, 0); if (soon && soon.unref) soon.unref(); } /* plant:stop-follows */\n",""], "stopWired");
+  await plantWire("dskp24", ["  signinStopArm(); /* plant:stop-tick */\n",""], "stopWired");
+  await plantWire("dskp25", ["    require(\"electron\").powerMonitor.on(\"resume\", () => signinStopArm()); /* plant:stop-resume */\n",""], "stopWired");
+  await plantWire("dskp26", ["    signinStopTimer = setTimeout(signinStopArm, Math.max(1, Math.min(cert.until - c.desk, SIGNIN_STOP_MAX_MS))); /* plant:stop-at-end */","    signinStopTimer = null;"], "stopTimer");
+  await plantWire("dskp27", ["    signinEndAsked = String(cert.sig.value); /* plant:end-asked-once */","    signinEndAsked = \"\";"], "stopTimer");
+  await plantWire("dskp28", ["  if (turned) tellSignin(); /* plant:stop-told */\n",""], "stopTimer");
+  await plantWire("dskp29", ["  if (!signinWorksNow()) { focusDesk(); return; } /* plant:pick-works */\n",""], "pickRefused");
+  await plantWire("dskp30", ["  signinStore.registered = signinOffered(signinTableBase).length > 0; /* plant:registered-base */","  signinStore.registered = signinOffered().length > 0; /* plant:registered-base */"], "noProvider");
+  await plant("dskp31", ["  if (out.held && out.held.cert && Number.isSafeInteger(h.ended) && h.ended > 0) out.held.ended = h.ended; /* plant:ended-file */\n",""], "olderReaders");
+  await plant("dskp32", ["  if (out.held) Object.assign(out.held, signinWordsOf(out.held.cert ? signinHoldingOf(h.holding) : null, signinTrialsOf(h.trials))); /* plant:words-file */\n",""], "wordsKept");
+  await plantPage("dskp33", ["    ended: signedIn ? signinTimeRead(o.ended) : 0, /* plant:read-ended */","    ended: signinTimeRead(o.ended),"], "pageWords");
+  await plantPage("dskp34", ["  if(!h || typeof h!==\"object\" || SIGNIN_HOLDING_ON.indexOf(h.on)<0) return null; /* plant:read-holding */","  if(!h || typeof h!==\"object\") return null;"], "pageWords");
+  await plantPage("dskp35", ["  if(h.on===\"team\" && typeof h.lead===\"string\" && h.lead.length<=120 && h.lead.trim() && !/[<>]/.test(h.lead) && !/[\\x00-\\x1f\\x7f-\\x9f]/.test(h.lead)) out.lead=h.lead; /* plant:read-lead */","  if(typeof h.lead===\"string\") out.lead=h.lead;"], "pageWords");
+  await plantPage("dskp36", ["    registered: o.registered===true /* plant:read-registered */","    registered: !!o.registered"], "pageWords");
   const gated = MAIN.replace("function writeBranch(stem, text) {\n", "function writeBranch(stem, text) {\n  if (!signinView().signedIn) return { ok: false };\n");
   check(gated !== MAIN && outsideNames(gated).slice().sort().join() !== expectOutside.slice().sort().join(),
     "dsp14 plant a sign-in gate on the desk file's write turns ds5a red");

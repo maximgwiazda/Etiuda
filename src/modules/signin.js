@@ -58,10 +58,30 @@ function signinRead(v){
     now: signinTimeRead(o.now),
     until: signinTimeRead(o.until),
     stoppedAt: signinTimeRead(o.stoppedAt), /* plant:read-stopped */
-    online: o.online!==false /* plant:read-online */
+    online: o.online!==false, /* plant:read-online */
+    /* When the service first said none while a certificate ran, the seat and trials it last named, and whether this build can sign in
+       at all; kept as the shell said them, words for the page that no moment reads yet. */
+    ended: signedIn ? signinTimeRead(o.ended) : 0, /* plant:read-ended */
+    holding: signedIn ? signinHoldingRead(o.holding) : null,
+    trials: signedIn ? signinTrialsRead(o.trials) : null,
+    registered: o.registered===true /* plant:read-registered */
   };
 }
 function signinTimeRead(v){ return Number.isSafeInteger(v) && v>0 && v<=8.64e15 ? v : 0; } /* plant:read-time */
+const SIGNIN_HOLDING_ON=["trial", "studio-trial", "own", "team", "org"];
+function signinHoldingRead(h){
+  if(!h || typeof h!=="object" || SIGNIN_HOLDING_ON.indexOf(h.on)<0) return null; /* plant:read-holding */
+  const out={on:h.on, ends:signinTimeRead(h.ends)};
+  if(h.on==="team" && typeof h.lead==="string" && h.lead.length<=120 && h.lead.trim() && !/[<>]/.test(h.lead) && !/[\x00-\x1f\x7f-\x9f]/.test(h.lead)) out.lead=h.lead; /* plant:read-lead */
+  return out;
+}
+function signinTrialsRead(v){
+  if(!v || typeof v!=="object") return null;
+  const out={};
+  if(signinTimeRead(v.desk)) out.desk=v.desk;
+  if(signinTimeRead(v.studio)) out.studio=v.studio;
+  return out.desk || out.studio ? out : null;
+}
 function signinManagedRead(m){
   if(!m || typeof m!=="object") return null;
   return {on:m.on===true, shared:m.shared===true, personal:m.personal!==false,
