@@ -2628,6 +2628,8 @@ const CARD_SEAL_LABEL = "etiuda-card-to\n";
 const CARD_INNER_KIND = "etiuda-card-inner";
 const CARD_PREFIX = "etiuda-card\n";
 const CARD_MAX_BYTES = 64 * 1024;
+/* The largest ct worth opening: a 64 KB card whose every byte JSON writes as a six-character escape, plus 1 KB for the inner file's other fields and the 16-byte tag. */
+const CARD_MAX_CT_BYTES = CARD_MAX_BYTES * 6 + 1024;
 function cardSealInfo(team, sender, recipient) {
   return Buffer.from(CARD_SEAL_LABEL + team + "\n" + sender + "\n" + recipient, "utf8");
 }
@@ -2659,6 +2661,7 @@ function openCardFrom(env, team, recipientId, senderKey, boxKey) {
     if (!/^[0-9a-f]{64}$/.test(String(senderKey))) return null;
     const enc = String(env.enc), ct = String(env.ct);
     if (!/^[0-9a-f]{64}$/.test(enc) || !/^(?:[0-9a-f]{2}){16,}$/.test(ct)) return null;
+    if (ct.length > 2 * CARD_MAX_CT_BYTES) return null; /* plant:card-ct-size */
     const pt = hpkeOpen(boxKey, Buffer.from(enc, "hex"), cardSealInfo(String(team), String(env.from), String(recipientId)), Buffer.alloc(0), Buffer.from(ct, "hex"));
     if (!pt) return null;
     const inner = JSON.parse(pt.toString("utf8"));

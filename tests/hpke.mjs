@@ -30,7 +30,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 55;
+const EXPECTED = 57;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -86,10 +86,10 @@ function wrapFrom(src) {
 
 /* A card sealed to one desk's box and signed by its sender (board 1013, piece 3): sliced with HPKE, which is all it needs. */
 const CARD_DECLS = ["const SEALED_TEAM_RE =", "const SPKI_ED25519 =", "const CARD_SEAL_KIND =", "const CARD_SEAL_LABEL =", "const CARD_INNER_KIND =",
-  "const CARD_PREFIX =", "const CARD_MAX_BYTES =", "function cardSealInfo(", "function cardSignedBytes(", "function sealCardTo(", "function openCardFrom("];
-function cardFrom(src) {
+  "const CARD_PREFIX =", "const CARD_MAX_BYTES =", "const CARD_MAX_CT_BYTES =", "function cardSealInfo(", "function cardSignedBytes(", "function sealCardTo(", "function openCardFrom("];
+function cardFrom(src, cr = crypto) {
   const body = HPKE_DECLS.concat(CARD_DECLS).map(m => sliceDecl(src, m)).join("\n");
-  return new Function("crypto", "Buffer", body + "\nreturn { sealCardTo, openCardFrom };")(crypto, Buffer);
+  return new Function("crypto", "Buffer", body + "\nreturn { sealCardTo, openCardFrom };")(cr, Buffer);
 }
 
 const VECTOR = {
@@ -335,6 +335,12 @@ function main() {
     [Object.assign({}, cenv, { kind: "etiuda-sealed" }), TEAM, RECV, SENDK, box.privateKey], [Object.assign({}, cenv, { enc: "00" }), TEAM, RECV, SENDK, box.privateKey]]
     .filter(a => open(...a) === null).length;
   check(cquiet === 5, "12c11 opening gives null without a throw for no envelope, no key, a bad sender key, another kind and a short enc: " + cquiet + " of 5");
+  /* A huge envelope is refused before any key agreement: the crypto handed to the slice counts diffieHellman calls. */
+  const counting = () => { const n = { dh: 0 }; return { n, cr: new Proxy(crypto, { get: (t, k) => k === "diffieHellman" ? (...a) => { n.dh++; return t.diffieHellman(...a); } : t[k] }) }; };
+  const hugeCt = "ab".repeat(6 * 64 * 1024 + 1024 + 1), hugeEnv = Object.assign({}, cenv, { ct: hugeCt });
+  const sizeProbe = (P, src) => { const c = counting(); const Q = cardFrom(src || SRC, c.cr); return Q.openCardFrom(hugeEnv, TEAM, RECV, SENDK, box.privateKey) === null && c.n.dh === 0; };
+  const ctl = counting(), Qc = cardFrom(SRC, ctl.cr);
+  check(Qc.openCardFrom(cenv, TEAM, RECV, SENDK, box.privateKey) === CARD && ctl.n.dh === 1 && sizeProbe(), "12c12 a ct over the limit (CARD_MAX_CT_BYTES) is null with no key agreement run; the control, a normal card, opens with one");
   /* PLANTS: a deciding line altered in a copy of the slices; the check it guards must fail there. */
   const plant = (name, needle, repl, probe) => {
     if (!plantsOn) { check(true, "12cP SKIP the plant of " + name + " (ETIUDA_PLANTS=off)"); return; }
@@ -342,13 +348,15 @@ function main() {
     let P = null;
     try { P = cardFrom(SRC.replace(needle, repl)); } catch (e) { check(false, "plant " + name + " does not evaluate: " + e.message); return; }
     let red = false;
-    try { red = !probe(P); } catch { red = true; }
+    try { red = !probe(P, SRC.replace(needle, repl)); } catch { red = true; }
     check(red, "12cP " + name + ": the check that guards it fails under the plant");
   };
   plant("the id binding in info", "CARD_SEAL_LABEL + team + \"\\n\" + sender + \"\\n\" + recipient", "CARD_SEAL_LABEL + team",
     P => { const e = P.sealCardTo(BOX, TEAM, SEND, RECV, CARD, sk.privateKey); return !!H.hpkeOpen(box.privateKey, Buffer.from(e.enc, "hex"), CARDINFO(TEAM, SEND, RECV), Buffer.alloc(0), Buffer.from(e.ct, "hex")); });
   plant("the inner signature check", "crypto.verify(null, cardSignedBytes(", "(() => true)(null, cardSignedBytes(",
     P => { const e = P.sealCardTo(BOX, TEAM, SEND, RECV, CARD, sk.privateKey); return P.openCardFrom(e, TEAM, RECV, SENDK2, box.privateKey) === null; });
+  plant("the size line before the open", "if (ct.length > 2 * CARD_MAX_CT_BYTES) return null;", "",
+    (P, src) => sizeProbe(P, src));
 }
 
 try { main(); }
