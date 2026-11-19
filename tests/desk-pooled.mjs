@@ -246,13 +246,14 @@ CASES.startStranded = (s, pg, main, swap) => {
   const tellOk = made === null && V.get().stranded === true && V.st.tells === 1 && V.get().branch === lost && V.st.saved === 0;
   return npOk && plainOk && waitOk && tellOk;
 };
-/* dp8 (finding 6, page): firstSigninDue is false when stranded; signed in yesterday shows no sign-in/seat/buy/sync rows in Account;
-   no provider offered shows the notice in panel and Account with B5's last sentence, English and Polish. */
+/* dp8 (finding 6, page): firstSigninDue is true for a stranded view that does not work; seen and policy do not exempt it.
+   Signed in yesterday shows no sign-in/seat/buy/sync rows in Account; no provider offered shows the notice in the panel
+   and in Account with B5's last sentence, English and Polish. */
 CASES.strandedSurface = (s, pg, main, set) => {
   const P = pg || PG, ST = set || SET;
   const syncHost = { storeState: () => ({ shown: true, line: "on", on: true }) };
   const outStranded = { offered: ["microsoft", "google"], managed: M({ stranded: true }) };
-  if (P.firstSigninDue(outStranded, { seen: false, policy: false }) !== false) return false;
+  if (P.firstSigninDue(outStranded, { seen: true, policy: true }) !== true) return false;
   const outDrawn = drawn(outStranded, "en", P, ST, syncHost);
   if (outDrawn.moment !== "stranded" || outDrawn.acct.indexOf("data-signin-stranded") < 0) return false;
   const signedYesterday = { offered: ["microsoft"], signedIn: "microsoft", code: "ABCD2345EFGH6789", seat: "held", at: Date.now(), reached: true,
@@ -288,7 +289,7 @@ check(!!S && await run("page", S), "dp5 the page says what happened and whom to 
 check(MAIN.indexOf("    if (deskBranch && managedStrands(managedPolicy())) { /* plant:np-guard */") >= 0
   && MAIN.indexOf("stranded: m && m.any ? deskKeyStranded(m) : false,") >= 0 && MAIN.indexOf("    stranded: o.stranded };") >= 0, "dp6 the shell asks the policy only where a key will not open, and tells the page the desk is kept");
 check(!!S && await run("startStranded", S), "dp7 finding 6: signinView detects stranded at start under NonPersistent without replacing the key; ordinary desks and waiting policy call openPrivate 0 times; branchIdentity calls tellSignin");
-check(!!S && await run("strandedSurface", S), "dp8 finding 6: firstSigninDue stays false when stranded, Account hides sign-in/seat/buy/sync rows under the notice, and no-provider uses B5's last sentence");
+check(!!S && await run("strandedSurface", S), "dp8 finding 6: firstSigninDue is true for a stranded view that does not work, seen and policy do not exempt it, Account hides sign-in/seat/buy/sync rows under the notice, and no-provider uses B5's last sentence");
 
 async function plant(id, swap, name) {
   let red = false, why = "";
@@ -340,7 +341,7 @@ if (!PLANTS_OFF && S) {
   for (const [id, which, swap] of [
     ["dpp12", "signin", ["function signinShown(v){ return !!(v && (v.offered.length || v.signedIn || signinWaiting(v) || signinStranded(v))); } /* plant:shown-waiting */",
       "function signinShown(v){ return !!(v && (v.offered.length || v.signedIn || signinWaiting(v))); }"]],
-    ["dpp13", "signin", ["  if(signinStranded(s)) return false; /* plant:first-signin-stranded */", ""]],
+    ["dpp13", "signin", ["  return !deskWorks(signinRead(v));", "  if(signinStranded(signinRead(v))) return false;\n  return !deskWorks(signinRead(v));"]],
     ["dpp14", "signin", ["  const offered=!!(v && (v.offered.length || v.signedIn)); /* plant:stranded-offered */", "  const offered=true;"]],
     ["dpp15", "settings", ["  if(!stranded && v.signedIn && !signinChoosingNow()){ /* plant:account-stranded-rows */", "  if(v.signedIn && !signinChoosingNow()){"]],
     ["dpp16", "settings", ["  const s=!stranded && v.signedIn && !signinChoosingNow() ? syncNow() : null; /* plant:account-stranded-sync */", "  const s=v.signedIn && !signinChoosingNow() ? syncNow() : null;"]],
