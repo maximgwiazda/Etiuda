@@ -27,7 +27,7 @@ const puppeteer = require("puppeteer-core");
 let fails = 0, checks = 0;
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 3, REPS = 5;
+const EXPECTED = 8, REPS = 5;
 const argv = process.argv.slice(2);
 const at = argv.indexOf("--engine");
 const ENGINE = at >= 0 ? path.resolve(argv[at + 1]) : E.ENGINE_PATH;
@@ -99,6 +99,86 @@ try {
   await p.click(".tab-add"); await sleep(400);
   const added = (await p.evaluate(() => window.__rebuilds)) - was;
   check(added >= 1, "sr3 THE CONTROL: a new conversation from the strip's + rebuilds it " + added + " time(s), so the count sees a rebuild");
+
+  /* ---- tl1 to tl5: each conversation tab says its language ---- */
+  const CODES = ["en", "pl", "de", "cs", "es-mx", "pl", "en", "de", "pl", "en"];
+  const rawHtml = fs.readFileSync(ENGINE, "utf8");
+  const langRun = async (html, tag) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-tab-lang-" + tag + "-"));
+    fs.writeFileSync(path.join(dir, "etiuda.html"), html);
+    fs.copyFileSync(path.join(lab, "etiuda-catalog.js"), path.join(dir, "etiuda-catalog.js"));
+    const q = await browser.newPage();
+    try {
+      await q.setViewport({ width: 1280, height: 800 });
+      await q.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
+      await q.evaluateOnNewDocument((codes) => {
+        try {
+          for (const k of ["eTourDone_v3", "eTourInvite_v3", "eFirstSigninSeen", "eNameAsked"]) localStorage.setItem(k, "1");
+          const tabs = codes.map((l, i) => ({ id: "tb" + (i + 1), lang: l, customName: "Chat " + (i + 1), pax: "", paxNamed: false }));
+          sessionStorage.setItem("eSessionTabs", JSON.stringify({ tabs, activeTabId: "tb1" }));
+        } catch (e) {}
+      }, CODES);
+      await q.goto("file:///" + path.join(dir, "etiuda.html").replace(/\\/g, "/"), { waitUntil: "load", timeout: 60000 });
+      await q.waitForFunction(() => document.querySelectorAll("#tabsBar .tab[data-tid]").length >= 10, { timeout: 30000 });
+      if (await q.$("#ecYes")) await q.click("#ecYes");
+      await sleep(1500);
+      const read = () => q.evaluate(() => Array.from(document.querySelectorAll("#tabsBar .tab[data-tid]")).map((el) => {
+        const tag = el.querySelector(".tab-lang"), x = el.querySelector(".tab-x"), lab = el.querySelector(".tab-label");
+        const kids = Array.from(el.children), r = el.getBoundingClientRect();
+        const tcs = tag ? getComputedStyle(tag) : null, xcs = getComputedStyle(x);
+        return { tid: el.dataset.tid, on: el.classList.contains("on"), w: Math.round(r.width), narrow: el.dataset.narrow !== undefined,
+          text: tag ? tag.textContent : null, hidden: tag ? tag.getAttribute("aria-hidden") : null,
+          h: tcs ? tcs.height : null, fs: tcs ? tcs.fontSize : null, tagShown: !!tag && tcs.display !== "none", xShown: xcs.display !== "none",
+          order: !!tag && kids.indexOf(lab) < kids.indexOf(tag) && kids.indexOf(tag) < kids.indexOf(x) };
+      }));
+      const rows = await read();
+      return { rows, page: q, dir, read };
+    } catch (e) { await q.close().catch(() => {}); return { err: String(e && e.message || e) }; }
+  };
+  const tl1 = (rows) => rows.length === CODES.length && rows.every((r, i) => r.text === CODES[i].toUpperCase() && r.hidden === "true"
+    && r.h === "16px" && r.fs === "10px" && r.order);
+  const real = await langRun(rawHtml, "real");
+  if (real.err) throw new Error("the language run: " + real.err);
+  check(tl1(real.rows), "tl1 each conversation tab carries its chat's own code, in capitals, in a 16px tag of 10px type between name and close: "
+    + real.rows.map((r) => r.text).join(" "));
+  const narrowRows = real.rows.filter((r) => r.narrow);
+  const wideRows = real.rows.filter((r) => !r.narrow);
+  const unsel = narrowRows.find((r) => !r.on);
+  let swap = false;
+  if (unsel) {
+    const el = await real.page.$('#tabsBar .tab[data-tid="' + unsel.tid + '"]');
+    await el.hover(); await sleep(250);
+    const h = (await real.read()).find((r) => r.tid === unsel.tid);
+    swap = !!h && !h.tagShown && h.xShown;
+    await real.page.mouse.move(5, 500); await sleep(200);
+  }
+  const mark = narrowRows.length > 0 && narrowRows.every((r) => r.w < 140) && wideRows.every((r) => r.w >= 140)
+    && narrowRows.filter((r) => !r.on).every((r) => r.tagShown && !r.xShown)
+    && narrowRows.filter((r) => r.on).every((r) => !r.tagShown && r.xShown) && swap;
+  check(mark, "tl2 narrow tabs (" + narrowRows.length + " of " + real.rows.length + ", widths " + narrowRows.map((r) => r.w).join(",")
+    + "): unselected shows its tag in the close button's place, selected drops its tag, hover swaps them back");
+  await real.page.close();
+  const srcLines = rawHtml.split("\n");
+  const plantTag = srcLines.findIndex((l) => l.includes("plant:tab-lang-tag"));
+  const plantKeep = srcLines.findIndex((l) => l.includes("plant:tab-lang-keep"));
+  const planted = async (at, tag, edit) => {
+    if (process.env.ETIUDA_PLANTS === "off") return { off: true };
+    if (at < 0) return { err: "no plant mark " + tag };
+    const ls = srcLines.slice(); ls[at] = edit(ls[at]);
+    if (ls[at] === srcLines[at]) return { err: "the plant line did not change " + tag };
+    const out = await langRun(ls.join("\n"), tag);
+    if (out.err) return out;
+    await out.page.close();
+    return { rows: out.rows };
+  };
+  const pTag = await planted(plantTag, "tag", (l) => l.replace(/lab\.after\(\w+\);/, "0;"));
+  const pKeep = await planted(plantKeep, "keep", (l) => l.replace(/tabLangCode\(\w+\.lang\)\|\|lang/, '(t.lang==="pl"||t.lang==="en")?t.lang:lang'));
+  if (pTag.off) { check(true, "tl3 NOT RUN (ETIUDA_PLANTS=off)"); check(true, "tl4 NOT RUN (ETIUDA_PLANTS=off)"); check(true, "tl5 NOT RUN (ETIUDA_PLANTS=off)"); }
+  else {
+    check(!!pTag.rows && !tl1(pTag.rows), "tl3 PLANT lifting the line that draws the tag turns tl1 red" + (pTag.err ? " (" + pTag.err + ")" : ""));
+    check(!!pKeep.rows && !tl1(pKeep.rows), "tl4 PLANT the two-value keep of a stored language turns tl1 red" + (pKeep.err ? " (" + pKeep.err + ")" : ""));
+    check(!!pTag.rows && !!pKeep.rows && pTag.rows.length === CODES.length && pKeep.rows.length === CODES.length, "tl5 the planted copies still draw all " + CODES.length + " tabs");
+  }
   done = true;
 } catch (e) {
   console.log("  FAIL the run stopped: " + String(e && e.message || e));
