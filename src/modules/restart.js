@@ -27,7 +27,7 @@ import { syncPillsCollapse } from "./pills-box.js";
 import { drawIntentRail } from "./rail-list.js";
 import { initTabs, drawPills } from "./tabs.js";
 import { syncSampleMark } from "./catalog-file.js";
-import { paintCatNow, paintCatWaiting } from "./catalog-offer.js";
+import { paintCatNow, paintCatPrivate, paintCatWaiting } from "./catalog-offer.js";
 import { forgetEditionMarks } from "./edition-marks.js";
 import { forgetFlagOffered } from "./card-flag-desk.js";
 import { syncRoleWheel } from "./agent.js";
@@ -76,6 +76,7 @@ function restartDesk(){
   initTabs();
   syncSampleMark();
   paintCatNow();
+  paintCatPrivate();
   paintCatWaiting();
   syncRoleWheel();
   applyPrefs();

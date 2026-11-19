@@ -8,7 +8,7 @@ import { t, toast, uiLang } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { wholeThingEmpty } from "./app-state.js";
 import { agentName } from "./agent.js";
-import { placeBubble } from "./bubble.js";
+import { placeBubble, hangBubble } from "./bubble.js";
 import { cutLeaves, dismissNode } from "./motion.js";
 import { hooks } from "./hooks.js";
 import { ICON_LOCK, ICON_KEY, ICON_DESK } from "./icons.js";
@@ -30,6 +30,56 @@ let joinLinkSaid=null;            // {en, pl} when a link was refused: the shell
 let joinReads=0;                  // which read an answer belongs to: only the last one asked is shown
 let lapseUp="";                   // "team|step|until" of the lapse notice on screen
 const lapseDismissed=new Set();   // the same keys, dismissed here while the shell's answer is on its way
+let contentNow=null;              // {team, told, private:[ids], listed:[ids]} from teamJoin("content")
+const toldDismissed=new Set();    // teams whose one-time told notice was dismissed while content-said is in flight
+const contentHeard=[];
+function onContentChanged(fn){ if(contentHeard.indexOf(fn)<0) contentHeard.push(fn); }
+function contentChanged(){ contentHeard.slice().forEach(fn=>{ try{ fn(contentNow); }catch(e){} }); }
+/* Today's shell returns `said` rather than `told`: read `told` and fall back to `said`. */
+function normalizeContent(v){
+  if(!v || typeof v!=="object") return null;
+  const team=typeof v.team==="string"?v.team:"";
+  const told=v.told!==undefined ? v.told===true : v.said===true;
+  return {
+    team:team,
+    told:told,
+    private:Array.isArray(v.private)?v.private.map(String):[],
+    listed:Array.isArray(v.listed)?v.listed.map(String):[]
+  };
+}
+function setContentNow(v){
+  const next=normalizeContent(v);
+  if(!next) return null;
+  const same=JSON.stringify(contentNow)===JSON.stringify(next);
+  contentNow=next;
+  syncToldNotice();
+  if(!same) contentChanged();
+  return contentNow;
+}
+function teamContentNow(){ return contentNow; }
+function teamContent(){
+  if(!eHasJoin()) return Promise.resolve(null);
+  let asked;
+  try{ asked=Promise.resolve(eHost().teamJoin("content","","")); }
+  catch(e){ asked=Promise.reject(e); }
+  return asked.then(v=>setContentNow(v),()=>null);
+}
+function sendContentSaid(team){
+  team=String(team||"");
+  if(!eHasJoin() || !team) return Promise.resolve(null);
+  let asked;
+  try{ asked=Promise.resolve(eHost().teamJoin("content-said",team,"")); }
+  catch(e){ asked=Promise.reject(e); }
+  return asked.then(v=>setContentNow(v),()=>null);
+}
+function markCatalogPrivate(id,on){
+  id=String(id||"");
+  if(!eHasJoin() || !id) return Promise.resolve(null);
+  let asked;
+  try{ asked=Promise.resolve(eHost().teamJoin("private",id,on?"on":"off")); }
+  catch(e){ asked=Promise.reject(e); }
+  return asked.then(v=>setContentNow(v),()=>null);
+}
 function eHasJoin(){
   const h=eHost();
   return !!h && typeof h.teamJoin==="function";
@@ -433,6 +483,7 @@ function joinTook(v,changed){
     return joinNow;
   }
   if(changed===true || JSON.stringify(joinNow)!==was || askWhy!==hadAskWhy) paintJoin();
+  if(JSON.stringify(joinNow)!==was || (s.joined && s.joined.file)) teamContent();
   return joinNow;
 }
 function noteCatalogCopy(m){
@@ -444,11 +495,13 @@ function wireTeamJoin(){
   if(typeof eHost().onCatalogCopy==="function") eOnCatalogCopy(noteCatalogCopy);
   joinAsk("state");
   joinAsk("held");
+  teamContent();
 }
 function paintJoin(){
-  if(wholeThingEmpty()){ closeJoinBubble(); hooks.render(); joinPainted(); return; }
+  if(wholeThingEmpty()){ closeJoinBubble(); hooks.render(); syncToldNotice(); joinPainted(); return; }
   if(teamJoinShown() && JSON.stringify(joinNow)!==joinShut) openJoinBubble();
   else if(!teamJoinShown()) closeJoinBubble();
+  syncToldNotice();
   joinPainted();
 }
 function joinTime(ms){
@@ -488,7 +541,7 @@ function joinDoorButton(id){
   return '<button type="button" class="btn" id="'+esc(id)+'" title="'+esc(t("Paste the invitation from the team's lead."))+'">'+esc(t("Join a team"))+'</button>';
 }
 function joinDisclosure(){
-  return '<div class="e-join-meta">'+esc(t("Once this desk joins, the team's lead can see which catalog it uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk: its content reaches the lead only if the lead turns on copies of unlisted catalogs in Studio, and this desk is told before anything is sent. A catalog the team does not list can be marked private here, and is then never sent. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, and Studio shows them in the team's totals."))+'</div>';
+  return '<div class="e-join-meta">'+esc(t("Once this desk joins, the team's lead can see the catalogs it uses, their content included, and this desk's changes to them. The lead's Studio can take a copy of any of them at any time, without asking here: of a team catalog, one the lead publishes to the team, sealed for the team; of a personal catalog, any other on this desk, sealed for the lead alone. A personal catalog can be marked Private in the Library, under Catalog & data, and is then never sent, though the lead still sees its name and edition. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, and Studio shows them in the team's totals."))+'</div>';
 }
 /* The name of a sync root's kind, as the absent-root sentence names it. */
 function joinKindWord(kind){
@@ -714,13 +767,32 @@ function joinAct(act){
   }
   if(act==="invite"){
     if(joinMode!=="confirm" || !joinOffer) return Promise.resolve(null);
-    if(joinOffer.link) return joinAsk("link","",agentName(),"",v=>yesTook(v,"link"));
+    const offerTeam=String(joinOffer.team||"");
+    const prevTeams=new Set(((joinNow&&joinNow.leads)||[]).map(l=>l&&l.team).filter(Boolean));
+    const afterJoin=v=>{
+      if(!v || typeof v!=="object" || v.canceled || v.refused) return v;
+      const added=Array.isArray(v.leads) ? v.leads.find(l=>l&&l.team&&!prevTeams.has(l.team)) : null;
+      const team=String((v.join&&v.join.team)||(v.joined&&v.joined.team)||offerTeam||(added&&added.team)||"");
+      if(team) sendContentSaid(team); /* plant:join-confirm-said */
+      else teamContent();
+      return v;
+    };
+    if(joinOffer.link) return joinAsk("link","",agentName(),"",v=>yesTook(v,"link")).then(afterJoin);
     /* A pasted relay invitation sends the text that was read and no code; a folder invitation sends the code the agent typed. */
     if(!joinRead || (!joinOffer.relay && !typedOk())) return Promise.resolve(null);
     const sent=joinRead;
-    return joinAsk("invite",sent,agentName(),joinOffer.relay?"":joinTyped,v=>yesTook(v,sent));
+    return joinAsk("invite",sent,agentName(),joinOffer.relay?"":joinTyped,v=>yesTook(v,sent)).then(afterJoin);
   }
-  if(act==="ask") return joinAsk("ask",(j&&j.file)||(s&&s.file)||"",agentName());
+  if(act==="ask"){
+    const askTeam=String((j&&j.team)||(s&&s.team)||"");
+    return joinAsk("ask",(j&&j.file)||(s&&s.file)||"",agentName()).then(v=>{
+      if(v && typeof v==="object" && !v.refused && !v.askRefused){
+        const team=String((v.join&&v.join.team)||askTeam||"");
+        if(team) sendContentSaid(team);
+      }
+      return v;
+    });
+  }
   if(act==="cancel") return joinAsk("cancel");
   const l=leadToShow();
   if(act==="seen" && l) return joinAsk("seen",l.team);
@@ -768,38 +840,91 @@ function wireTeamJoinEmpty(root){
   });
 }
 /* THE BUBBLE, where a catalog is already open: hung from the catalog's name as the offer is, one at a time, and back
-   only when the answer it was hidden on changes. */
+   only when the answer it was hidden on changes. Shared with the one-time told notice and the Library's Private switch. */
+const bubbleClosers=new Map();
+function closeTeamBubble(id){ const fn=bubbleClosers.get(id); if(fn) fn(); }
+function openTeamBubble(opts){
+  if(typeof document==="undefined" || typeof document.createElement!=="function" || !document.body || typeof document.body.appendChild!=="function") return null;
+  const wrap=document.createElement("div");
+  if(!wrap || typeof wrap.setAttribute!=="function" || typeof wrap.addEventListener!=="function" || typeof wrap.querySelector!=="function") return null;
+  const id=String(opts.id||"");
+  if(id) closeTeamBubble(id);
+  wrap.className="bub bub-ask e-offer e-join-bub"+(opts.cls?" "+opts.cls:"");
+  if(id) wrap.id=id;
+  wrap.setAttribute("role",opts.role||"dialog");
+  if(opts.labelId) wrap.setAttribute("aria-labelledby",opts.labelId);
+  wrap.innerHTML=opts.html||"";
+  cutLeaves();
+  document.body.appendChild(wrap);
+  const originRect=()=>{
+    const o=typeof opts.origin==="function"?opts.origin():document.getElementById("catNow");
+    const r=o && typeof o.getBoundingClientRect==="function" ? o.getBoundingClientRect() : null;
+    return (r && (r.width || r.height)) ? {top:r.top,left:r.left,width:r.width,height:r.height} : null;
+  };
+  const place=()=>{
+    const r=originRect();
+    placeBubble(wrap, r || {top:0,left:innerWidth-24,width:0,height:40}, {width:opts.width||340, prefer:opts.prefer||"below"});
+  };
+  place();
+  const dropHang=(opts.hang && wrap.isConnected && typeof opts.origin==="function")
+    ? hangBubble(wrap, ()=>{ const r=originRect(); return r ? opts.origin() : null; }, {width:opts.width||340, prefer:opts.prefer||"below"})
+    : null;
+  if(typeof addEventListener==="function") addEventListener("resize",place);
+  let closed=false;
+  const onOutside=e=>{
+    if(wrap.contains && wrap.contains(e.target)) return;
+    close();
+  };
+  const close=()=>{
+    if(closed) return;
+    closed=true;
+    if(typeof document.removeEventListener==="function") document.removeEventListener("pointerdown",onOutside,true);
+    if(dropHang) dropHang();
+    if(typeof removeEventListener==="function") removeEventListener("resize",place);
+    dismissNode(wrap);
+    if(id && bubbleClosers.get(id)===close) bubbleClosers.delete(id);
+    if(typeof opts.onClose==="function") opts.onClose();
+  };
+  if(id) bubbleClosers.set(id,close);
+  if(opts.dismissOnOutside){
+    queueMicrotask(()=>{
+      if(!closed && typeof document!=="undefined" && typeof document.addEventListener==="function"){
+        document.addEventListener("pointerdown",onOutside,true);
+      }
+    });
+  }
+  wrap.addEventListener("keydown",e=>{
+    if(e.key!=="Escape") return;
+    e.preventDefault(); e.stopPropagation();
+    if(typeof opts.onEscape==="function") opts.onEscape(close);
+    else close();
+  });
+  return {wrap, close, place};
+}
 let joinBubbleClose=null;
 function closeJoinBubble(){ if(joinBubbleClose) joinBubbleClose(); }
 function openJoinBubble(){
   closeJoinBubble();
+  closeToldBubble();
   const offer=document.getElementById("eCatalogOffer");
   if(offer) dismissNode(offer);
   const p=joinParts();
-  const wrap=document.createElement("div");
-  wrap.className="bub bub-ask e-offer e-join-bub";
-  wrap.id="eTeamJoin";
-  wrap.setAttribute("role","dialog");
-  wrap.setAttribute("aria-labelledby","ejTitle");
-  wrap.innerHTML='<h3 id="ejTitle">'+esc(p.title)+'</h3><p class="ec-sub">'+esc(p.line)+'</p>'+p.body
-    +'<div class="tour-actions"><button type="button" class="btn" data-join="hide">'+esc(t("Hide"))+'</button>'
-    +p.acts.map((a,i)=>'<button type="button" class="btn'+(a[3]?' '+a[3]:i?'':' primary')+'" data-join="'+a[0]+'"'+(a[2]?' disabled':'')+'>'
-      +esc(a[1])+'</button>').join("")
-    +'</div>';
-  cutLeaves();
-  document.body.appendChild(wrap);
-  const place=()=>{
-    const at=document.getElementById("catNow"), r=at && at.getBoundingClientRect();
-    placeBubble(wrap,(r && r.width)?{top:r.top,left:r.left,width:r.width,height:r.height}
-      :{top:0,left:innerWidth-24,width:0,height:40},{width:340});
-  };
-  place();
-  addEventListener("resize",place);
-  const close=()=>{ removeEventListener("resize",place); dismissNode(wrap); if(joinBubbleClose===close) joinBubbleClose=null; };
+  const b=openTeamBubble({
+    id:"eTeamJoin",
+    labelId:"ejTitle",
+    html:'<h3 id="ejTitle">'+esc(p.title)+'</h3><p class="ec-sub">'+esc(p.line)+'</p>'+p.body
+      +'<div class="tour-actions"><button type="button" class="btn" data-join="hide">'+esc(t("Hide"))+'</button>'
+      +p.acts.map((a,i)=>'<button type="button" class="btn'+(a[3]?' '+a[3]:i?'':' primary')+'" data-join="'+a[0]+'"'+(a[2]?' disabled':'')+'>'
+        +esc(a[1])+'</button>').join("")
+      +'</div>',
+    onClose:()=>{ if(joinBubbleClose===close) joinBubbleClose=null; },
+    onEscape:()=>hide()
+  });
+  if(!b) return;
+  const wrap=b.wrap, close=b.close;
   joinBubbleClose=close;
   // Hiding the lead's key counts as having been shown it; the key stays in Settings. Hiding an invitation lets it go.
   const hide=()=>{ joinShut=JSON.stringify(joinNow); dropInvite(); close(); joinPainted(); if(p.lead) joinAsk("seen",p.lead); };
-  wrap.addEventListener("keydown",e=>{ if(e.key!=="Escape") return; e.preventDefault(); e.stopPropagation(); hide(); });
   wrap.querySelectorAll("[data-join], [data-join-paste], [data-join-check]").forEach(el=>{
     if(el.hasAttribute("data-join-paste")){ el.oninput=()=>{ joinBlob=String(el.value||""); }; return; }
     if(el.hasAttribute("data-join-check")){ el.oninput=()=>followCheck(wrap,el); return; }
@@ -807,12 +932,46 @@ function openJoinBubble(){
     el.onclick=()=>{ if(act==="hide") return hide(); close(); joinAct(act); };
   });
 }
+let toldTeamOpen="", toldLangOpen="";
+function closeToldBubble(){ toldTeamOpen=""; toldLangOpen=""; closeTeamBubble("eTeamTold"); }
+function syncToldNotice(){
+  if(typeof document==="undefined" || typeof document.createElement!=="function" || !document.body) return;
+  const want=(contentNow && contentNow.team && !contentNow.told && !toldDismissed.has(contentNow.team) && !teamJoinShown()) ? contentNow.team : "";
+  const up=document.getElementById("eTeamTold");
+  if(!want){ closeToldBubble(); return; }
+  const lang=uiLang();
+  if(up && toldTeamOpen===want && toldLangOpen===lang){
+    const b=bubbleClosers.get("eTeamTold");
+    if(b) return;
+  }
+  closeToldBubble();
+  const offer=document.getElementById("eCatalogOffer");
+  if(offer) dismissNode(offer);
+  toldTeamOpen=want; toldLangOpen=lang;
+  const dismiss=()=>{
+    toldDismissed.add(want);
+    closeToldBubble();
+    sendContentSaid(want); /* plant:told-bubble-said */
+  };
+  const b=openTeamBubble({
+    id:"eTeamTold",
+    labelId:"etTitle",
+    html:'<h3 id="etTitle">'+esc(t("What the team's lead can see has changed."))+'</h3>'
+      +'<p class="ec-sub">'+esc(t("From now on, the team's lead can see every catalog this desk uses, their content included, and this desk's changes to them: personal catalogs as well as team catalogs. A personal catalog can be marked Private in the Library, under Catalog & data, and is then never sent, though the lead still sees its name and edition. Nothing has been sent yet."))+'</p>'
+      +'<div class="tour-actions"><button type="button" class="btn primary" data-join="told-ok">'+esc(t("Understood"))+'</button></div>',
+    onEscape:()=>dismiss(),
+    onClose:()=>{ if(toldTeamOpen===want){ toldTeamOpen=""; toldLangOpen=""; } }
+  });
+  if(!b){ toldTeamOpen=""; toldLangOpen=""; return; }
+  const ok=b.wrap.querySelector('[data-join="told-ok"]');
+  if(ok) ok.onclick=dismiss;
+}
 
 /* Leaves a team, from Settings and from "It does not match": the shell forgets its lead and every key kept under it, and
    remembers when it left, so a later invitation asks rather than refuses; the catalog in use stays. `then()` runs once the
    shell has answered. */
 function forgetTeamLead(team,then){
-  return joinAsk("leave",team).then(v=>{ if(typeof then==="function") then(); return v; });
+  return joinAsk("leave",team).then(v=>{ teamContent(); if(typeof then==="function") then(); return v; });
 }
 /* Open a folder, for a team that moved to a shared folder this desk did not find: the shell's dialog, then the shell checks
    the folder holds this team's file from its lead and follows it, or says why not. Its answer is no join view, so the view
@@ -829,4 +988,4 @@ function pickMovedFolder(team,then){
   });
 }
 
-export { lapseNote, shareRefusedNotes, relayElsewhereNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, teamPolicySaid, relayDesk, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, openJoinPaste, joinDoorButton, teamCanJoin, inviteHeld, noteCatalogCopy };
+export { lapseNote, shareRefusedNotes, relayElsewhereNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, teamPolicySaid, relayDesk, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, openJoinPaste, joinDoorButton, teamCanJoin, inviteHeld, noteCatalogCopy, teamContent, teamContentNow, markCatalogPrivate, onContentChanged, openTeamBubble, closeTeamBubble };

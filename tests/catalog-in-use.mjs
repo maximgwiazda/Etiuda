@@ -22,12 +22,12 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 140;
+const EXPECTED = 144;
 
-const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk: its content reaches the lead only if the lead turns on copies of unlisted catalogs in Studio, and this desk is told before anything is sent. A catalog the team does not list can be marked private here, and is then never sent. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, and Studio shows them in the team's totals.";
-const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie). Kopię katalogu z listy zespołu Studio lidera może pobrać w każdej chwili, bez pytania tutaj, zapieczętowaną dla zespołu. Każdy inny katalog zostaje na tym stanowisku: jego treść trafi do lidera tylko wtedy, gdy lider włączy w Studiu kopie katalogów spoza listy, a to stanowisko zostanie o tym powiadomione, zanim cokolwiek zostanie wysłane. Katalog spoza listy zespołu można tutaj oznaczyć jako prywatny i wtedy nigdy nie jest wysyłany. Studio lidera wymienia to stanowisko z nazwy, chyba że organizacja wyłączy nazwy, razem z używanym katalogiem, jego wydaniem i okresem zliczania, i wymienia je dalej, gdy przestanie się odzywać. Własne dane stanowiska trafiają do lidera zapieczętowane, a Studio pokazuje je w sumach zespołu.";
-const STATUS_EN = "The team's lead can see which catalog this desk uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk, since copies of unlisted catalogs are off. A catalog the team does not list can be marked private here, and is then never sent. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, and Studio shows them in the team's totals.";
-const STATUS_PL = "Lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie). Kopię katalogu z listy zespołu Studio lidera może pobrać w każdej chwili, bez pytania tutaj, zapieczętowaną dla zespołu. Każdy inny katalog zostaje na tym stanowisku, bo kopie katalogów spoza listy są wyłączone. Katalog spoza listy zespołu można tutaj oznaczyć jako prywatny i wtedy nigdy nie jest wysyłany. Studio lidera wymienia to stanowisko z nazwy, chyba że organizacja wyłączy nazwy, razem z używanym katalogiem, jego wydaniem i okresem zliczania, i wymienia je dalej, gdy przestanie się odzywać. Własne dane stanowiska trafiają do lidera zapieczętowane, a Studio pokazuje je w sumach zespołu.";
+const JOIN_EN = "Once this desk joins, the team's lead can see the catalogs it uses, their content included, and this desk's changes to them. The lead's Studio can take a copy of any of them at any time, without asking here: of a team catalog, one the lead publishes to the team, sealed for the team; of a personal catalog, any other on this desk, sealed for the lead alone. A personal catalog can be marked Private in the Library, under Catalog & data, and is then never sent, though the lead still sees its name and edition. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, and Studio shows them in the team's totals.";
+const JOIN_PL = "Po dołączeniu lider zespołu widzi katalogi, których używa to stanowisko, razem z ich treścią, oraz zmiany wprowadzone w nich na tym stanowisku. Studio lidera może w każdej chwili, bez pytania tutaj, pobrać kopię każdego z nich: katalogu zespołowego, czyli publikowanego przez lidera dla zespołu, zapieczętowaną dla zespołu, a katalogu osobistego, czyli każdego innego na tym stanowisku, zapieczętowaną wyłącznie dla lidera. Katalog osobisty można oznaczyć jako Prywatny w Bibliotece, w części Katalog i dane, i wtedy nigdy nie jest wysyłany, choć lider nadal widzi jego nazwę i wydanie. Studio lidera wymienia to stanowisko z nazwy, chyba że organizacja wyłączy nazwy, razem z używanym katalogiem, jego wydaniem i okresem zliczania, i wymienia je dalej, gdy przestanie się odzywać. Własne dane stanowiska trafiają do lidera zapieczętowane, a Studio pokazuje je w sumach zespołu.";
+const STATUS_EN = "The team's lead can see the catalogs this desk uses, their content included, and this desk's changes to them. The lead's Studio can take a copy of any of them at any time, without asking here: of a team catalog, one the lead publishes to the team, sealed for the team; of a personal catalog, any other on this desk, sealed for the lead alone. A personal catalog can be marked Private in the Library, under Catalog & data, and is then never sent, though the lead still sees its name and edition. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, and Studio shows them in the team's totals.";
+const STATUS_PL = "Lider zespołu widzi katalogi, których używa to stanowisko, razem z ich treścią, oraz zmiany wprowadzone w nich na tym stanowisku. Studio lidera może w każdej chwili, bez pytania tutaj, pobrać kopię każdego z nich: katalogu zespołowego, czyli publikowanego przez lidera dla zespołu, zapieczętowaną dla zespołu, a katalogu osobistego, czyli każdego innego na tym stanowisku, zapieczętowaną wyłącznie dla lidera. Katalog osobisty można oznaczyć jako Prywatny w Bibliotece, w części Katalog i dane, i wtedy nigdy nie jest wysyłany, choć lider nadal widzi jego nazwę i wydanie. Studio lidera wymienia to stanowisko z nazwy, chyba że organizacja wyłączy nazwy, razem z używanym katalogiem, jego wydaniem i okresem zliczania, i wymienia je dalej, gdy przestanie się odzywać. Własne dane stanowiska trafiają do lidera zapieczętowane, a Studio pokazuje je w sumach zespołu.";
 const SENT_EN = "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.";
 const SENT_LEAD_EN = "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team's lead alone.";
 const SENT_LEAD_PL = "Na prośbę Studia lidera zespołu przesłano kopię katalogu używanego na tym stanowisku wyłącznie liderowi zespołu.";
@@ -1141,6 +1141,203 @@ try {
         && lang.indexOf("\"" + JOIN_EN + "\":\"" + JOIN_PL + "\"") >= 0
         && lang.indexOf("\"" + SENT_EN + "\":\"" + SENT_PL + "\"") >= 0,
       "890z the team's status sentence is the hint of the first team row whose roster still lists this desk, and both languages are in the string table");
+
+    /* Board 1014: copywriter words present and old switch notices absent; join sends content-said. */
+    const TOLD_HEAD_EN = "What the team's lead can see has changed.";
+    const TOLD_HEAD_PL = "Zmieniło się to, co widzi lider zespołu.";
+    const TOLD_LINE_EN = "From now on, the team's lead can see every catalog this desk uses, their content included, and this desk's changes to them: personal catalogs as well as team catalogs. A personal catalog can be marked Private in the Library, under Catalog & data, and is then never sent, though the lead still sees its name and edition. Nothing has been sent yet.";
+    const TOLD_LINE_PL = "Od teraz lider zespołu widzi każdy katalog, którego używa to stanowisko, razem z jego treścią, oraz zmiany wprowadzone w nim na tym stanowisku: nie tylko katalogi zespołowe, lecz także osobiste. Katalog osobisty można oznaczyć jako Prywatny w Bibliotece, w części Katalog i dane, i wtedy nigdy nie jest wysyłany, choć lider nadal widzi jego nazwę i wydanie. Nic jeszcze nie zostało wysłane.";
+    const UNMARK_EN = "This catalog is no longer private: the team's lead can now see its content and this desk's changes to it.";
+    const UNMARK_PL = "Ten katalog nie jest już prywatny: lider zespołu może teraz zobaczyć jego treść i zmiany wprowadzone w nim na tym stanowisku.";
+    const tjSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "team-join.js"), "utf8");
+    const removedGone = ["turned on copies of unlisted catalogs", "turned off copies of unlisted catalogs", "team's rules apply to it again", "copies of unlisted catalogs are off"]
+      .every(s => lang.indexOf(s) < 0 && tjSrc.indexOf(s) < 0 && settings.indexOf(s) < 0);
+    const wordsPresent = lang.indexOf("\"" + TOLD_HEAD_EN + "\":\"" + TOLD_HEAD_PL + "\"") >= 0
+      && lang.indexOf("\"" + TOLD_LINE_EN + "\":\"" + TOLD_LINE_PL + "\"") >= 0
+      && lang.indexOf("\"Understood\":\"Rozumiem\"") >= 0
+      && lang.indexOf("\"Team catalog\":\"Katalog zespołowy\"") >= 0
+      && lang.indexOf("\"" + UNMARK_EN + "\":\"" + UNMARK_PL + "\"") >= 0;
+    check(removedGone && wordsPresent,
+      "1014a copywriter words for board 1014 are in ui-lang.js (EN and PL) and the old switch notices are gone");
+
+    const savedTJ = globalThis.window.E_HOST.teamJoin;
+    const calls1014 = [];
+    let nextReadOffer = { offer: { lead: "North lead", team: "t-join1014", relay: "relay.example" } };
+    globalThis.window.E_HOST.teamJoin = (op, a, b, c) => {
+      calls1014.push([op, a, b, c]);
+      if (op === "read") return Promise.resolve(nextReadOffer);
+      if (op === "invite") return Promise.resolve({ sealed: null, join: { file: "", state: "waiting", team: "t-join1014", invite: { lead: "North lead", relay: "relay.example" } }, leads: [] });
+      if (op === "content") return Promise.resolve({ team: "t-join1014", told: true, private: [], listed: [] });
+      if (op === "content-said") return Promise.resolve({ team: "t-join1014", told: true, private: [], listed: [] });
+      return Promise.resolve({ sealed: null, join: null, leads: [] });
+    };
+    mem.eUiLang = "en";
+    showSealed = false;
+    TJ.openJoinPaste();
+    const readBtn1014 = { hasAttribute: a => a === "data-join", getAttribute: a => (a === "data-join" ? "read" : null) };
+    TJ.wireTeamJoinEmpty({ querySelectorAll: () => [readBtn1014] });
+    await Promise.resolve(readBtn1014.onclick && readBtn1014.onclick());
+    const confirm1014 = TJ.teamJoinEmptyHtml();
+    const invBtn1014 = { hasAttribute: a => a === "data-join", getAttribute: a => (a === "data-join" ? "invite" : null) };
+    TJ.wireTeamJoinEmpty({ querySelectorAll: () => [invBtn1014] });
+    await Promise.resolve(invBtn1014.onclick && invBtn1014.onclick());
+    await new Promise(r => setTimeout(r, 20));
+    const saidAtJoin = calls1014.some(x => x[0] === "content-said" && x[1] === "t-join1014");
+    check(shown(confirm1014).indexOf(JOIN_EN) >= 0 && saidAtJoin,
+      "1014b joining confirmation carries the joining words and sends content-said when the desk joins");
+
+    /* One-time told notice as a blue bubble when already on a team, reading told and falling back to said. */
+    const made1014 = [];
+    const savedDoc1014 = globalThis.document;
+    const mkEl1014 = tag => {
+      const ch = [], listeners = {}, attrs = {};
+      let cls = "", html = "", txt = "";
+      const el = {
+        nodeType: 1, tagName: String(tag).toUpperCase(), children: ch, attrs, isConnected: false, hidden: false,
+        style: {}, offsetWidth: 320, offsetHeight: 140,
+        classList: {
+          contains: c => cls.split(/\s+/).indexOf(c) >= 0,
+          add: (...cs) => { cs.forEach(c => { if (!el.classList.contains(c)) cls = (cls ? cls + " " : "") + c; }); },
+          remove: (...cs) => { cls = cls.split(/\s+/).filter(c => cs.indexOf(c) < 0).join(" "); },
+          toggle: (c, on) => { const w = on === undefined ? !el.classList.contains(c) : !!on; if (w) el.classList.add(c); else el.classList.remove(c); return w; },
+        },
+        get className() { return cls; },
+        set className(v) { cls = String(v || ""); },
+        get id() { return attrs.id || ""; },
+        set id(v) { attrs.id = String(v); el.setAttribute("id", v); },
+        setAttribute(k, v) { attrs[k] = String(v); if (k === "class") cls = String(v); },
+        removeAttribute(k) { delete attrs[k]; if (k === "class") cls = ""; },
+        getAttribute(k) { return Object.prototype.hasOwnProperty.call(attrs, k) ? attrs[k] : null; },
+        hasAttribute(k) { return Object.prototype.hasOwnProperty.call(attrs, k); },
+        appendChild(n) { if (n) { n.parentNode = el; n.isConnected = el.isConnected; ch.push(n); } return n; },
+        remove() { el.isConnected = false; const i = made1014.indexOf(el); if (i >= 0) made1014.splice(i, 1); },
+        addEventListener(t, fn) { (listeners[t] = listeners[t] || []).push(fn); },
+        removeEventListener(t, fn) { listeners[t] = (listeners[t] || []).filter(f => f !== fn); },
+        getBoundingClientRect() { return { top: 8, left: 200, width: 120, height: 24, right: 320, bottom: 32 }; },
+        animate() { return { finished: Promise.resolve(), cancel() {}, onfinish: null }; },
+        get innerHTML() { return html; },
+        set innerHTML(v) {
+          html = String(v || "");
+          ch.length = 0;
+          const bRe = /<button\b([^>]*)>([\s\S]*?)<\/button>/gi;
+          let bm;
+          while ((bm = bRe.exec(html))) {
+            const b = mkEl1014("button");
+            const am = /data-join="([^"]*)"/.exec(bm[1]);
+            if (am) b.setAttribute("data-join", am[1]);
+            b.textContent = bm[2].replace(/<[^>]*>/g, "");
+            ch.push(b);
+          }
+        },
+        get textContent() { return txt || html.replace(/<[^>]*>/g, "").replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&"); },
+        set textContent(v) { txt = String(v || ""); },
+        querySelector(s) { return el.querySelectorAll(s)[0] || null; },
+        querySelectorAll(s) {
+          const out = [];
+          const hit = n => {
+            if (s === ".bub-tip" && n.classList && n.classList.contains("bub-tip")) return true;
+            if (s === ":scope > .bub-tip" && n.parentNode === el && n.classList && n.classList.contains("bub-tip")) return true;
+            if (s === '[data-join="told-ok"]' && n.getAttribute && n.getAttribute("data-join") === "told-ok") return true;
+            if (s === "button" && n.tagName === "BUTTON") return true;
+            return false;
+          };
+          const walk = n => (n.children || []).forEach(c => { if (hit(c)) out.push(c); walk(c); });
+          walk(el);
+          return out;
+        },
+      };
+      return el;
+    };
+    const catNowEl = mkEl1014("div");
+    catNowEl.id = "catNow";
+    catNowEl.isConnected = true;
+    globalThis.innerWidth = 1280;
+    globalThis.document = {
+      addEventListener: noop, removeEventListener: noop,
+      createElement: mkEl1014,
+      getElementById: id => (id === "catNow" ? catNowEl : made1014.find(n => n.id === id) || null),
+      querySelector: sel => (sel === "#toast" ? toastEl : sel === "[data-join-paste]" ? pasted : null),
+      querySelectorAll: () => [],
+      body: { classList: classList(), isConnected: true, appendChild(n) { n.isConnected = true; made1014.push(n); return n; } },
+    };
+    const savedMotion1014 = mem.eMotionOff;
+    mem.eMotionOff = "1";
+    let toldResp = { team: "t-told1", told: false, private: [], listed: [] };
+    const toldSaid = [];
+    globalThis.window.E_HOST.teamJoin = (op, a) => {
+      if (op === "content") return Promise.resolve(toldResp);
+      if (op === "content-said") { toldSaid.push(a); toldResp = { team: "t-told1", told: true, private: [], listed: [] }; return Promise.resolve(toldResp); }
+      return Promise.resolve({ sealed: null, join: null, leads: [{ team: "t-told1", print: "a".repeat(64), admitted: true, seen: true, lead: "Lead", folder: "", removed: false, policy: false }] });
+    };
+    TJ.wireTeamJoin();
+    await new Promise(r => setTimeout(r, 25));
+    const bub1 = made1014.find(n => n.id === "eTeamTold");
+    const bub1Btns = bub1 ? bub1.querySelectorAll("button") : [];
+    const bub1Text = bub1 ? bub1.textContent : "";
+    const okBtn = bub1 ? bub1.querySelector('[data-join="told-ok"]') : null;
+    if (okBtn && okBtn.onclick) okBtn.onclick();
+    await new Promise(r => setTimeout(r, 25));
+    const bubAfterDismiss = made1014.find(n => n.id === "eTeamTold");
+    /* Fallback to `said` (today's shell) when `told` is absent. */
+    toldResp = { team: "t-told2", said: false, private: [], listed: [] };
+    TJ.wireTeamJoin();
+    await new Promise(r => setTimeout(r, 25));
+    const bubFallback = made1014.find(n => n.id === "eTeamTold");
+    if (bubFallback) {
+      const ok2 = bubFallback.querySelector('[data-join="told-ok"]');
+      if (ok2 && ok2.onclick) ok2.onclick();
+      await new Promise(r => setTimeout(r, 25));
+    }
+    toldResp = { team: "t-told2", said: true, private: [], listed: [] };
+    TJ.wireTeamJoin();
+    await new Promise(r => setTimeout(r, 25));
+    const bubWhenSaidTrue = made1014.find(n => n.id === "eTeamTold");
+    check(!!bub1 && bub1.classList.contains("bub") && bub1.classList.contains("e-join-bub")
+        && bub1Text.indexOf(TOLD_HEAD_EN) >= 0 && bub1Text.indexOf(TOLD_LINE_EN) >= 0
+        && bub1Btns.length === 1 && bub1Btns[0].textContent === "Understood"
+        && !bubAfterDismiss && toldSaid.indexOf("t-told1") >= 0
+        && !!bubFallback && toldSaid.indexOf("t-told2") >= 0 && !bubWhenSaidTrue,
+      "1014c one-time told notice opens as a blue bubble once, falls back from told to said, and dismissing sends content-said: "
+      + JSON.stringify({ bub1: !!bub1, btns: bub1Btns.map(b => b.textContent), bubAfterDismiss: !!bubAfterDismiss, toldSaid, bubFallback: !!bubFallback, bubWhenSaidTrue: !!bubWhenSaidTrue }));
+
+    if (PLANTS_OFF) skip("1014d lifting plant:join-confirm-said drops content-said on join confirmation");
+    else {
+      const lines = tjSrc.split("\n");
+      const at = lines.findIndex(l => l.indexOf("plant:join-confirm-said") >= 0);
+      let turned = false;
+      if (at >= 0) {
+        lines[at] = "/* plant:join-confirm-said */";
+        const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-1014-plant-"));
+        try {
+          fs.cpSync(path.join(ROOT, "src"), path.join(scratch, "src"), { recursive: true });
+          fs.writeFileSync(path.join(scratch, "src", "modules", "team-join.js"), lines.join("\n"));
+          const TJp = await import(pathToFileURL(path.join(scratch, "src", "modules", "team-join.js")).href + "?p=" + Date.now());
+          const pCalls = [];
+          globalThis.window.E_HOST.teamJoin = (op, a) => {
+            pCalls.push([op, a]);
+            if (op === "read") return Promise.resolve(nextReadOffer);
+            if (op === "invite") return Promise.resolve({ sealed: null, join: { file: "", state: "waiting", team: "t-join1014", invite: { lead: "North lead", relay: "relay.example" } }, leads: [] });
+            return Promise.resolve({ sealed: null, join: null, leads: [] });
+          };
+          TJp.openJoinPaste();
+          const rb = { hasAttribute: a => a === "data-join", getAttribute: a => (a === "data-join" ? "read" : null) };
+          TJp.wireTeamJoinEmpty({ querySelectorAll: () => [rb] });
+          await Promise.resolve(rb.onclick && rb.onclick());
+          const ib = { hasAttribute: a => a === "data-join", getAttribute: a => (a === "data-join" ? "invite" : null) };
+          TJp.wireTeamJoinEmpty({ querySelectorAll: () => [ib] });
+          await Promise.resolve(ib.onclick && ib.onclick());
+          await new Promise(r => setTimeout(r, 20));
+          turned = !pCalls.some(x => x[0] === "content-said");
+        } finally {
+          fs.rmSync(scratch, { recursive: true, force: true });
+        }
+      }
+      check(turned, "1014d lifting plant:join-confirm-said stops sending content-said at join");
+    }
+
+    if (savedMotion1014 === undefined) delete mem.eMotionOff; else mem.eMotionOff = savedMotion1014;
+    globalThis.document = savedDoc1014;
+    globalThis.window.E_HOST.teamJoin = savedTJ;
 
     mem.eUiLang = "en";
     toastEl.classList.remove("show");

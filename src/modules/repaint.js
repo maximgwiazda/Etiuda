@@ -10,6 +10,7 @@ import { render } from "./render.js";
 import { refreshDialogName } from "./dialog.js";
 import { syncSettingsMenu } from "./header-menus.js";
 import { paintJoin } from "./team-join.js";
+import { paintCatPrivate } from "./catalog-offer.js";
 import { renderFacts } from "./facts.js";
 import { paintFirstSignin } from "./signin.js";
 
@@ -31,7 +32,7 @@ function applyUiLang(){
   /* References, never names looked up on window: a top-level function is a property of window
      in a classic script and is not one in a module, so a lookup by string turns quietly false
      and these surfaces stop repainting with nothing thrown and nothing logged. */
-  [applyCatsToGlobal,drawIntentRail,drawPills,drawTabs,syncRoleDrum,syncGenderGlyph,render,paintJoin,renderFacts,paintFirstSignin].forEach(f=>{
+  [applyCatsToGlobal,drawIntentRail,drawPills,drawTabs,syncRoleDrum,syncGenderGlyph,render,paintJoin,paintCatPrivate,renderFacts,paintFirstSignin].forEach(f=>{
     try{ f(); }catch(e){}
   });
   translateChrome();
