@@ -1915,12 +1915,12 @@ try {
           { catalog: "harbour-board", desk: "k-" + "0".repeat(16), original: H("y") }];
         const signed = (who, team, rows) => textOf(sign({ format: 1, kind: "etiuda-team", id: team, catalogs: ["harbour-board"],
           lead: Object.assign({}, who, { box: BOX }), sealed: true, exportsSealed: false, epoch: 1, roster,
-          content: SWITCH, adopted: rows }, who === OTHER ? other.privateKey : lead.privateKey, who));
+          adopted: rows }, who === OTHER ? other.privateKey : lead.privateKey, who));
         put(author.share, "etiuda-team.json", signed(LEAD, author.team, list));
         /* the teammate's own mirror of the same share, synced as the author's is */
         syncMirror({ D: mate.D, team: author.team, share: author.share, key: author.key });
-        await author.D.ask("etiuda:team-join", "content-said", author.team, SWITCH.at);
-        await mate.D.ask("etiuda:team-join", "content-said", author.team, SWITCH.at);
+        await author.D.ask("etiuda:team-join", "content-said", author.team, "");
+        await mate.D.ask("etiuda:team-join", "content-said", author.team, "");
         const mine = await author.D.ask("etiuda:catalog-adopted");
         const theirs = await mate.D.ask("etiuda:catalog-adopted");
         /* the same entries under another lead's key, in a fresh folder this desk never pinned */

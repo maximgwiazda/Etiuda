@@ -13,6 +13,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
 const puppeteer = require("puppeteer-core");
+const { seatPage } = require("./seat-page.js");
 
 const PRIO = E.belowNormal();
 console.log("       this run at " + (PRIO.below ? "below-normal" : "priority " + PRIO.priority) + " priority");
@@ -166,6 +167,7 @@ async function boot(pageUrl, { lang = "en", theme = "light", onTeam = true, inbo
       },
     };
   }, lang, theme, onTeam, inbox);
+  await seatPage(p);
   await p.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
   await p.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   if (await p.$("#ecYes")) await p.click("#ecYes");
