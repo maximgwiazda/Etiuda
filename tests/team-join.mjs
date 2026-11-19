@@ -41,7 +41,7 @@ const ASIDE = {
   "15ep": offWindows("15ep", "15em stands aside off Windows, so lifting plant:w2-folder-not-writable has no green leg there to turn"),
 };
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 194;
+const EXPECTED = 202;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -5036,6 +5036,150 @@ try {
     if (at.length === 1) { lines[at[0]] = "  return false;"; lifted = await caseOf([["TeamFolder", named]], "r8c-lifted", lines.join("\n")); }
     check(!!lifted && !lifted.policy && lifted.leaveShown && !lifted.pinKept,
       "15r8c lifting plant:folder-holds-team offers Leave under the folder again, and the leave takes the pin: " + JSON.stringify(lifted));
+  });
+
+  /* ---- B-3a2a step 2: invitations, links and admission auto-load wait while the door stands ---------------------- */
+  await legTry("b3a2-door-waits", async () => {
+    const SGN = await import(MOD("signin.js"));
+    const mainSrc = fs.readFileSync(path.join(ROOT, "src", "main.js"), "utf8");
+    const mainWired = /teamJoin\.wireTeamJoin\(\{\s*holds:\s*signin\.doorHolds,\s*whenOpen:\s*signin\.whenDoorLowers\s*\}\)/.test(mainSrc);
+    const runDoorJoin = async (mod) => {
+      const hostWas = window.E_HOST, loadWas = HK.hooks.loadCatalogFromFolder, renderWas = HK.hooks.render, qsWas = document.querySelector;
+      const cardsWas = AS.cards.slice();
+      const unseated = { offered: ["microsoft"], signedIn: "", works: false, online: true, registered: true };
+      const seated = { offered: ["microsoft"], signedIn: "microsoft", code: "ABCDEFGHJKMNPQRS", works: true, online: true, registered: true,
+        now: Date.now(), until: Date.now() + 86400000, holding: { on: "trial", ends: Date.now() + 86400000 } };
+      let cur = unseated, joinCalls = [], loaded = [], pasteVal = "";
+      try {
+        AS.setCards([]);
+        HK.hooks.loadCatalogFromFolder = file => { loaded.push(String(file)); };
+        HK.hooks.render = () => {};
+        document.querySelector = sel => (sel === "[data-join-paste]" ? { value: pasteVal } : null);
+        window.E_HOST = {
+          signinState: () => cur,
+          onTeamJoin: () => {},
+          teamJoin: (op, a, b, c) => {
+            joinCalls.push({ op, a, b, c });
+            if (op === "read") return { offer: { lead: "Lead " + a, team: "team-p", relay: "https://relay.example" } };
+            return { leads: [] };
+          },
+        };
+        SGN.signinNow();
+        SGN.bootFirstSignin();
+        mod.wireTeamJoin(typeof SGN.doorHolds === "function" ? { holds: SGN.doorHolds, whenOpen: SGN.whenDoorLowers } : null);
+        await sleep(15);
+        joinCalls.length = 0;
+
+        /* 1. Two etiuda:join# links while door stands: neither shows confirm, latest wins on lower, still requires person's yes. */
+        mod.joinTook({ offer: { link: true, lead: "First Lead", team: "t-1", relay: "https://r1.example" } });
+        mod.joinTook({ offer: { link: true, lead: "Second Lead", team: "t-2", relay: "https://r2.example" } });
+        const linkHeldWhileStanding = mod.inviteHeld().mode === "" && !joinCalls.some(x => x.op === "link" || x.op === "invite");
+        cur = seated; SGN.signinChanged(seated, false);
+        await sleep(15);
+        const hLink = mod.inviteHeld();
+        const linkPlayedLatest = hLink.mode === "confirm" && !!hLink.offer && hLink.offer.lead === "Second Lead"
+          && hLink.offer.team === "t-2" && !joinCalls.some(x => x.op === "link" || x.op === "invite");
+
+        /* 2. Two pasted invitations while door stands: no read/join sent; joinAct("invite") blocked; latest paste reads to confirm on lower. */
+        const clickAct = act => {
+          const btn = { hasAttribute: () => false, getAttribute: a => (a === "data-join" ? act : null) };
+          mod.wireTeamJoinEmpty({ querySelectorAll: () => [btn] });
+          return Promise.resolve(btn.onclick && btn.onclick());
+        };
+        await clickAct("back");
+        cur = unseated; SGN.signinChanged(unseated, false);
+        joinCalls.length = 0;
+        pasteVal = "invite-one";
+        await clickAct("read");
+        pasteVal = "invite-two";
+        await clickAct("read");
+        await clickAct("invite");
+        await clickAct("ask");
+        const pasteHeldWhileStanding = mod.inviteHeld().mode === "" && joinCalls.length === 0;
+        cur = seated; SGN.signinChanged(seated, false);
+        await sleep(25);
+        const hPaste = mod.inviteHeld();
+        const pastePlayedLatest = hPaste.mode === "confirm" && !!hPaste.offer && hPaste.offer.lead === "Lead invite-two"
+          && joinCalls.filter(x => x.op === "read").length === 1 && !joinCalls.some(x => x.op === "invite" || x.op === "ask");
+
+        /* 3. Admission auto-load on s.joined and s.opens waits while door stands and loads once seated. */
+        cur = unseated; SGN.signinChanged(unseated, false);
+        loaded.length = 0;
+        mod.joinTook({ joined: { file: "admit.ec" } });
+        const admitHeld = loaded.length === 0;
+        cur = seated; SGN.signinChanged(seated, false);
+        await sleep(15);
+        const admitPlayed = loaded.join(",") === "admit.ec";
+
+        cur = unseated; SGN.signinChanged(unseated, false);
+        loaded.length = 0;
+        mod.joinTook({ opens: { file: "opens.ec" } });
+        const opensHeld = loaded.length === 0;
+        cur = seated; SGN.signinChanged(seated, false);
+        await sleep(15);
+        const opensPlayed = loaded.join(",") === "opens.ec";
+
+        /* Control: while seated, joinTook opens link and loads s.opens immediately. */
+        loaded.length = 0;
+        mod.joinTook({ opens: { file: "now.ec" }, offer: { link: true, lead: "Live Lead", team: "t-live", relay: "https://live.example" } });
+        const liveOk = loaded.join(",") === "now.ec" && mod.inviteHeld().mode === "confirm" && mod.inviteHeld().offer.lead === "Live Lead";
+
+        return { linkHeldWhileStanding, linkPlayedLatest, pasteHeldWhileStanding, pastePlayedLatest, admitHeld, admitPlayed, opensHeld, opensPlayed, liveOk };
+      } finally {
+        mod.wireTeamJoin(null);
+        AS.setCards(cardsWas);
+        window.E_HOST = hostWas;
+        HK.hooks.loadCatalogFromFolder = loadWas;
+        HK.hooks.render = renderWas;
+        document.querySelector = qsWas;
+      }
+    };
+
+    const base = await runDoorJoin(TJ);
+    check(mainWired && base.linkHeldWhileStanding && base.linkPlayedLatest && base.liveOk,
+      "b3a2-1 etiuda:join# links wait behind the door (latest only), put confirm once deskWorks() is true without joining, and main.js wires the gate: "
+      + JSON.stringify({ mainWired, held: base.linkHeldWhileStanding, played: base.linkPlayedLatest, live: base.liveOk }));
+    check(base.pasteHeldWhileStanding && base.pastePlayedLatest,
+      "b3a2-2 pasted invitations wait behind the door (latest only), invite/ask blocked while standing, and confirm shows once deskWorks() is true: "
+      + JSON.stringify({ held: base.pasteHeldWhileStanding, played: base.pastePlayedLatest }));
+    check(base.admitHeld && base.admitPlayed && base.opensHeld && base.opensPlayed,
+      "b3a2-3 admission auto-load (s.joined and s.opens) waits while the door stands and loads once deskWorks() is true: "
+      + JSON.stringify({ admitHeld: base.admitHeld, admitPlayed: base.admitPlayed, opensHeld: base.opensHeld, opensPlayed: base.opensPlayed }));
+
+    const plants = [
+      ["b3a2-p1", "plant:join-link-door", r => !r.linkHeldWhileStanding, "etiuda:join# link opens confirm while door stands"],
+      ["b3a2-p2", "plant:join-paste-door", r => !r.pasteHeldWhileStanding, "pasted invitation calls read while door stands"],
+      ["b3a2-p3", "plant:join-act-door", async () => {
+        const pm = await plantedModule("team-join.js", "plant:join-act-door");
+        if (!pm.mod) return { red: false, same: pm.same };
+        const hostWas = window.E_HOST, qsWas = document.querySelector;
+        let asked = 0;
+        try {
+          window.E_HOST = { signinState: () => ({ offered: ["microsoft"], signedIn: "", works: false, online: true, registered: true }), onTeamJoin: () => {},
+            teamJoin: op => { if (op === "ask") asked++; return { leads: [] }; } };
+          SGN.signinNow(); SGN.bootFirstSignin();
+          pm.mod.wireTeamJoin({ holds: SGN.doorHolds, whenOpen: SGN.whenDoorLowers });
+          const btn = { hasAttribute: () => false, getAttribute: a => (a === "data-join" ? "ask" : null) };
+          pm.mod.wireTeamJoinEmpty({ querySelectorAll: () => [btn] });
+          await Promise.resolve(btn.onclick && btn.onclick());
+          return { red: asked > 0, same: pm.same };
+        } finally { pm.mod.wireTeamJoin(null); window.E_HOST = hostWas; document.querySelector = qsWas; }
+      }, "joinAct(ask) sends while door stands"],
+      ["b3a2-p4", "plant:join-admit-door", r => !r.admitHeld, "s.joined auto-loads while door stands"],
+      ["b3a2-p5", "plant:join-opens-door", r => !r.opensHeld, "s.opens auto-loads while door stands"],
+    ];
+    for (const [id, tag, judge, desc] of plants) {
+      if (PLANTS_OFF) { skip(id + " lifting " + tag + " turns red (" + desc + ") (ETIUDA_PLANTS=off)"); continue; }
+      if (id === "b3a2-p3") {
+        const res = await judge();
+        check(res.red && res.same, id + " lifting " + tag + " turns red (" + desc + "): red " + res.red + ", tree " + (res.same ? "untouched" : "changed"));
+      } else {
+        const pm = await plantedModule("team-join.js", tag);
+        const r = pm.mod ? await runDoorJoin(pm.mod) : null;
+        const red = !!r && judge(r);
+        check(red && pm.same, id + " lifting " + tag + " turns red (" + desc + "): " + (r ? "red=" + red : "plant line absent") + ", tree " + (pm.same ? "untouched" : "changed"));
+      }
+    }
   });
 
   /* Last, over every desk above: the log of each holds none of the secrets any invitation carried. */
