@@ -3260,6 +3260,8 @@ async function run() {
       };
       new Function("require", fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8"))(
         (n) => (n === "electron" ? { contextBridge, ipcRenderer, webUtils: {} } : nodeRequire(n)));
+      /* The page offers a catalog only once the desk works (the desk gate), and this folder desk holds no seat in the shell, so the page is told one. */
+      { const seat = nodeRequire("./seat-page.js").seatedView(); window.E_HOST.signinState = () => seat; }
       kit.OFF.wireHostCatalogWatch();
       kit.TJ.wireTeamJoin();
       await sleep(200);
