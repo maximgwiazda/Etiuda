@@ -113,6 +113,8 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   catalogRing: () => ipcRenderer.invoke("etiuda:catalog-ring"),
   /* The leads this desk has pinned, [{keyId, public}], which decide the page's key where there are any. */
   catalogLeads: () => ipcRenderer.invoke("etiuda:catalog-leads"),
+  /* The team's adoptions naming this desk, [{catalog, desk, original}], from the trusted team file. */
+  catalogAdopted: () => ipcRenderer.invoke("etiuda:catalog-adopted"),
   /* `asked` is a Load the person chose. The shell then hands the bytes of a lower rev, and the page decides.
      `offer` is a read the page means to offer nobody having asked, which a pinned lead must have signed. */
   readCatalogFile: (name, desk, asked, offer) => ipcRenderer.invoke("etiuda:catalog-read", String(name || ""), desk ? String(desk) : "",

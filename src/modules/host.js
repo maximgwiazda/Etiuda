@@ -103,6 +103,16 @@ function eCatalogLeads(){
   try{ return Promise.resolve(h.catalogLeads()).then(v=>Array.isArray(v)?v.filter(ok).map(l=>({keyId:l.keyId, public:String(l.public)})):[]).catch(()=>[]); }
   catch(e){ return Promise.resolve([]); }
 }
+/* The team's adoptions naming this desk (board 1015), [{catalog, desk, original}] each well formed, [] in a browser and wherever the
+   host has none. */
+function eCatalogAdopted(){
+  const h=eHost();
+  if(!h || typeof h.catalogAdopted!=="function") return Promise.resolve([]);
+  const ok=a=>!!a && typeof a==="object" && typeof a.catalog==="string" && !!a.catalog && /^k-[0-9a-f]{16}$/.test(String(a.desk||""))
+    && /^[0-9a-f]{64}$/.test(String(a.original||""));
+  try{ return Promise.resolve(h.catalogAdopted()).then(v=>Array.isArray(v)?v.filter(ok).map(a=>({catalog:a.catalog, desk:String(a.desk), original:String(a.original)})):[]).catch(()=>[]); }
+  catch(e){ return Promise.resolve([]); }
+}
 /* The file this load is running, and the folder it was found in - which is not always the folder
    above: a catalog beside the installation still loads when the folder holds none. Where the
    engine refused the file the host named at boot, the file handed in its place answers, and the
@@ -633,6 +643,7 @@ export {
   noteCatalogFolderHold,
   eCatalogRing,
   eCatalogLeads,
+  eCatalogAdopted,
   eChooseCatalogFolder,
   eCatalogFolderPinned,
   eLoadedCatalogFile,

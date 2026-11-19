@@ -9,6 +9,8 @@ import { hooks } from "./hooks.js";
 const E_KEY_RE=/^e(?:[A-Z]|[0-9a-z]+~)/;
 /* The personal catalogs set aside (board 1015) are the one key a Reset leaves: what a person made, kept where a team catalog took its place. */
 const E_ASIDE_KEY="eAsidePersonal";
+/* The team's adoptions of this desk's own catalogs it has told and been answered about, by team catalog id (board 1015). */
+const E_ADOPTED_KEY="eAdoptedSeen";
 /* Whether a Reset clears this key. */
 function eResetKey(k){ return E_KEY_RE.test(k) && k!==E_ASIDE_KEY; } /* plant:aside-survives-reset */
 /* THE CATALOG'S ID, NEVER ITS SHAPE. Seeding this on the
@@ -401,6 +403,7 @@ export {
   E_NS,
   E_KEY_RE,
   E_ASIDE_KEY,
+  E_ADOPTED_KEY,
   eResetKey,
   E_LS_OK,
   E_SS_OK

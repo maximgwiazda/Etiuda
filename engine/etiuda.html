@@ -3385,6 +3385,11 @@ details.manage-sec>summary .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;
 .ec-fp{font:600 10.5px var(--mono);color:var(--dim);margin-left:6px;letter-spacing:.3px}
 .ec-mine{display:flex;align-items:center;gap:5px;margin-top:3px;color:var(--dim);font-size:11.5px}
 .ec-mine .ic{flex:0 0 auto;width:14px;height:14px;color:var(--accent)}
+/* Board 1015: the list's two groups, quiet small caps in the dim ink, and the line tying a team catalog to the person's own. */
+.ec-group{margin:10px 2px 4px;font:600 11px/1.2 var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--dim);user-select:none}
+.ec-group:first-child{margin-top:0}
+.ec-adopt{display:flex;align-items:center;gap:5px;margin-top:3px;color:var(--dim);font-size:11.5px}
+.ec-adopt .ic{flex:0 0 auto;width:14px;height:14px}
 /* Three lines change what the row centres on: the name is the subject, so the badge and the
    buttons align to the NAME's line rather than to the middle of a column that grew. */
 .ec-row:has(.ec-watch){align-items:flex-start}
@@ -4515,6 +4520,10 @@ body.e-first-signin .stage>.dotfield{content-visibility:hidden}
 .e-offer .ec-what{margin:0 0 8px;font-size:13.5px;color:var(--bub-ink)}
 .e-offer .ec-counts{font:12px var(--mono);color:var(--bub-dim);margin-top:2px}
 .e-offer .ec-ed{font-size:12px;color:var(--bub-dim)}
+/* The team's news: a team glyph in a soft disc before the heading, no warning colour. */
+.e-adopted h3{display:flex;align-items:center;gap:8px}
+.e-adopt-disc{flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.18)}
+.e-adopt-disc .ic{width:14px;height:14px;color:var(--bub-ink)}
 /* WHAT AN EDITION CHANGES, in the offer (edition-panel.js): the lead's note, the counts, the titles by kind.
    The block scrolls on its own where the window is short, so the answers stay where they are. */
 .e-offer .ec-change{overflow:auto;overscroll-behavior:contain;margin:0 0 8px}
@@ -5438,6 +5447,7 @@ body.e-host .row .win-btn:focus-visible{outline-offset:-2px}
     ICON_SUCCESS: () => ICON_SUCCESS,
     ICON_TAB_ADD: () => ICON_TAB_ADD,
     ICON_TAB_X: () => ICON_TAB_X,
+    ICON_TEAM: () => ICON_TEAM,
     ICON_TRASH: () => ICON_TRASH,
     ICON_X: () => ICON_X,
     _NOTE: () => _NOTE,
@@ -5648,6 +5658,7 @@ body.e-host .row .win-btn:focus-visible{outline-offset:-2px}
   var ICON_DESK = _svg("ic", '<rect x="3.2" y="7.4" width="10" height="6.6" rx="1.6"/><path d="M8.2 14v3.2M5.8 17.2h4.8M7.2 7.4V5.6a1.6 1.6 0 0 1 1.6-1.6h6.6a1.6 1.6 0 0 1 1.6 1.6v5a1.6 1.6 0 0 1-1.6 1.6h-2.2"/>');
   var ICON_LOOK = _svg("ic", '<path d="M1.9 10S5 5.1 10 5.1 18.1 10 18.1 10 15 14.9 10 14.9 1.9 10 1.9 10Z"/><circle cx="10" cy="10" r="2.5"/>');
   var ICON_KEY = _svg("ic", catIconInner("key"));
+  var ICON_TEAM = _svg("ic", catIconInner("people"));
   var ICON_STAMP = '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M10.2 12.5l.6-4.2a2.6 2.6 0 1 1 3.4 0l.6 4.2"/><path d="M5 17v-2.5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2V17z" fill="currentColor"/><path d="M6 20.5h13"/></svg>';
 
   // src/modules/stock.js
@@ -6728,6 +6739,7 @@ What is typed here stays in this browser.`;
   // src/modules/storage.js
   var storage_exports = {};
   __export(storage_exports, {
+    E_ADOPTED_KEY: () => E_ADOPTED_KEY,
     E_ASIDE_KEY: () => E_ASIDE_KEY,
     E_KEY_RE: () => E_KEY_RE,
     E_LS_OK: () => E_LS_OK,
@@ -6852,6 +6864,7 @@ What is typed here stays in this browser.`;
   // src/modules/storage.js
   var E_KEY_RE = /^e(?:[A-Z]|[0-9a-z]+~)/;
   var E_ASIDE_KEY = "eAsidePersonal";
+  var E_ADOPTED_KEY = "eAdoptedSeen";
   function eResetKey(k) {
     return E_KEY_RE.test(k) && k !== E_ASIDE_KEY;
   }
@@ -8119,6 +8132,21 @@ What is typed here stays in this browser.`;
     "{L} only": "tylko {L}",
     "nothing set": "nic nie ustawiono",
     "Unnamed catalog": "Katalog bez nazwy",
+    "The team has taken up this catalog": "Zespół przyjął ten katalog",
+    "{LEAD} made {TITLE} a team catalog, edition {N}, so everyone on the team now works from it.": "{LEAD} publikuje teraz {TITLE} jako katalog zespołowy, wydanie {N}, więc cały zespół z niego korzysta.",
+    "{TITLE} is now a team catalog, edition {N}, so everyone on the team works from it.": "{TITLE} jest teraz katalogiem zespołowym, wydanie {N}, więc cały zespół z niego korzysta.",
+    "Switch, and the team's edition is the one in use here. Your own {TITLE} stays on this desk, under personal catalogs, whichever you choose.": "Po przełączeniu w użyciu jest tu wydanie zespołu. Własny katalog {TITLE} zostaje na tym stanowisku, w katalogach osobistych, niezależnie od wyboru.",
+    "Keep both": "Zachowaj oba",
+    "Switch to the team's": "Przełącz na zespołowy",
+    "Team catalogs": "Katalogi zespołowe",
+    "Personal catalogs": "Katalogi osobiste",
+    "The team now publishes this catalog as {TITLE}, edition {N}, since {DATE}.": "Zespół publikuje teraz ten katalog jako {TITLE}, wydanie {N}, od {DATE}.",
+    "Made from your own {TITLE} by {LEAD}": "Powstał z własnego katalogu {TITLE}; publikuje {LEAD}",
+    "Made from your own {TITLE}": "Powstał z własnego katalogu {TITLE}",
+    "Put back in use": "Przywróć do użycia",
+    "Your own {TITLE} is in use again.": "Własny katalog {TITLE} znów jest w użyciu.",
+    "The catalog in use has changes not yet exported. Put your own {TITLE} back in use? The changes are set aside under Personal catalogs, not lost.": "Katalog w użyciu ma zmiany, których jeszcze nie wyeksportowano. Przywrócić do użycia własny katalog {TITLE}? Zmiany zostaną odłożone w katalogach osobistych i nie przepadną.",
+    "Everything stays as it was, and this can be tried again.": "Wszystko zostaje bez zmian i można spróbować ponownie.",
     "Collapse": "Zwiń",
     "Expand": "Rozwiń",
     "Supporting category, relevant regardless of the intent": "Kategoria wspierająca, przydatna niezależnie od intencji",
@@ -12213,6 +12241,7 @@ What is typed here stays in this browser.`;
     eAiOn: () => eAiOn,
     eBranchIdentity: () => eBranchIdentity,
     eBranchReach: () => eBranchReach,
+    eCatalogAdopted: () => eCatalogAdopted,
     eCatalogBuiltIn: () => eCatalogBuiltIn,
     eCatalogEject: () => eCatalogEject,
     eCatalogFile: () => eCatalogFile,
@@ -16832,6 +16861,16 @@ What is typed here stays in this browser.`;
     const ok = (l) => !!l && typeof l === "object" && typeof l.keyId === "string" && /^[0-9a-f]{64}$/.test(String(l.public || ""));
     try {
       return Promise.resolve(h.catalogLeads()).then((v) => Array.isArray(v) ? v.filter(ok).map((l) => ({ keyId: l.keyId, public: String(l.public) })) : []).catch(() => []);
+    } catch (e) {
+      return Promise.resolve([]);
+    }
+  }
+  function eCatalogAdopted() {
+    const h = eHost();
+    if (!h || typeof h.catalogAdopted !== "function") return Promise.resolve([]);
+    const ok = (a) => !!a && typeof a === "object" && typeof a.catalog === "string" && !!a.catalog && /^k-[0-9a-f]{16}$/.test(String(a.desk || "")) && /^[0-9a-f]{64}$/.test(String(a.original || ""));
+    try {
+      return Promise.resolve(h.catalogAdopted()).then((v) => Array.isArray(v) ? v.filter(ok).map((a) => ({ catalog: a.catalog, desk: String(a.desk), original: String(a.original) })) : []).catch(() => []);
     } catch (e) {
       return Promise.resolve([]);
     }
@@ -32295,6 +32334,7 @@ What is typed here stays in this browser.`;
     LOOSE_FIELDS: () => LOOSE_FIELDS,
     activateCatalog: () => activateCatalog,
     askLoose: () => askLoose,
+    askPutBack: () => askPutBack,
     branchFileId: () => branchFileId,
     catalogEdited: () => catalogEdited,
     catalogEditionOlder: () => catalogEditionOlder,
@@ -32303,6 +32343,7 @@ What is typed here stays in this browser.`;
     catalogMacroCount: () => catalogMacroCount,
     catalogNameOfFile: () => catalogNameOfFile,
     deskBranchHolds: () => deskBranchHolds,
+    editsUnexported: () => editsUnexported,
     exportCatalog: () => exportCatalog,
     followRenamedFile: () => followRenamedFile,
     importCatalogHere: () => importCatalogHere,
@@ -33769,7 +33810,20 @@ What is typed here stays in this browser.`;
     const all = asideStore() || {};
     return Object.keys(all).map((k) => {
       const r = all[k] || {};
-      return { id: k, loose: !!r.loose, at: +r.at || 0, file: String(r.file || ""), cards: r.catalog && Array.isArray(r.catalog.cards) ? r.catalog.cards.length : 0 };
+      const c = r.catalog && typeof r.catalog === "object" ? r.catalog : null;
+      return {
+        id: k,
+        loose: !!r.loose,
+        at: +r.at || 0,
+        file: String(r.file || ""),
+        cards: c && Array.isArray(c.cards) ? c.cards.length : 0,
+        from: String(r.from || ""),
+        rev: c && c.rev != null ? c.rev : null,
+        edition: c ? String(c.version || "") : "",
+        macros: c ? catalogMacroCount(c) : -1,
+        intents: c ? catalogIntentCount(c) : -1,
+        cats: c && c.categories ? Object.keys(c.categories).length : -1
+      };
     }).sort((a, b) => a.at - b.at);
   }
   function restorePersonal(id) {
@@ -33785,7 +33839,38 @@ What is typed here stays in this browser.`;
   function switchToAdopted(c, opts) {
     const aside = setAsidePersonal();
     if (aside === false) return false;
-    return activateCatalog(c, opts);
+    return takeCatalog(c, opts);
+  }
+  function editsUnexported() {
+    return catalogEdited() && lyGet("Exported") !== looseMark();
+  }
+  function askPutBack(title, go) {
+    const a = document.activeElement;
+    const from = originOf(a && a.tagName === "BUTTON" ? a : null, () => document.getElementById("catNow"));
+    const was = document.getElementById("ePutBack");
+    if (was) was.remove();
+    const el = document.createElement("div");
+    el.className = "bub bub-ask e-undo";
+    el.id = "ePutBack";
+    el.setAttribute("role", "alertdialog");
+    el.setAttribute("data-side", "none");
+    el.innerHTML = "<p>" + esc(t("The catalog in use has changes not yet exported. Put your own {TITLE} back in use? The changes are set aside under Personal catalogs, not lost.").split("{TITLE}").join(String(title || ""))) + '</p><div class="tour-actions"><button type="button" class="btn" id="ePutBackNo">' + esc(t("Cancel")) + '</button><button type="button" class="btn primary" id="ePutBackYes">' + esc(t("Put back in use")) + "</button></div>";
+    cutLeaves();
+    document.body.appendChild(el);
+    hangBubble(el, from);
+    const close = () => dismissNode(el);
+    el.querySelector("#ePutBackNo").onclick = close;
+    el.querySelector("#ePutBackYes").onclick = () => {
+      close();
+      go();
+    };
+    el.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      close();
+    });
+    el.querySelector("#ePutBackYes").focus();
   }
   function sampleUntouched() {
     const p = pack || {};
@@ -36982,6 +37067,7 @@ What is typed here stays in this browser.`;
   // src/modules/catalog-offer.js
   var catalog_offer_exports = {};
   __export(catalog_offer_exports, {
+    checkAdopted: () => checkAdopted,
     eCheckWatchedFile: () => eCheckWatchedFile,
     eOfferCatalog: () => eOfferCatalog,
     eOfferCatalogAtBoot: () => eOfferCatalogAtBoot,
@@ -37777,7 +37863,7 @@ What is typed here stays in this browser.`;
     const held = storedCatalog();
     const mine = eLoadedCatalogFile();
     recheckHeldTrust(eCatalog(), held, paintCatalogList);
-    Promise.all([eCatalogFiles(), eBranchIdentity(false), settleHeldTrustWithin(eCatalog(), held)]).then(([all, me]) => {
+    Promise.all([eCatalogFiles(), eBranchIdentity(false), settleHeldTrustWithin(eCatalog(), held), eCatalogAdopted()]).then(([all, me, , adopted]) => {
       if (!box.isConnected) return;
       const files = all.filter((f) => !f.desk);
       const shaped = (f) => !!f.desk && f.id.indexOf(f.desk.id + "-") === 0;
@@ -37799,11 +37885,14 @@ What is typed here stays in this browser.`;
       const keptLine = t("Your edits are kept on this computer and go to the team as soon as it can take them. To hand them over now, Export saves them in a catalog file for the team's lead.");
       const mineLine = outboxUnread ? ecMineHtml(unreadLine, true, "outbox-unread") : takenBack ? ecMineHtml(keptLine, true, "taken-back") : ownEntry || holdsEdits ? ecMineHtml(ownReached ? t("Your edits are with the team") : keptLine, true) : "";
       const extraFor = (id, on) => on ? mineLine : id && id !== heldId && ownOf(id) ? ecMineHtml(t("Your edits to it come back when it is loaded again"), false) : "";
+      const lo = looseOrigin(false);
+      const parts2 = adoptedListParts(adopted, me, held, lo ? lo.id : "", listPersonalAside(), all, shownCatalogName(catalogNameOfFile(catalogFileName())));
+      const adoptFor = parts2.adoptFor, asideShown = parts2.asideShown;
       const tops = files.map((f, i) => {
         const on = i === onAt;
         const stamp = catalogStamp(f.edition, f.mtime, f.rev);
         const copy2 = ecCopyHtml(f), meta = on ? loadedMeta(stamp) : ecMeta(stamp, f);
-        return { id: f.id, sha: f.sha, on, html: ecRowHtml({
+        return { id: f.id, sha: f.sha, on, team: f.leadSigned === true, html: ecRowHtml({
           name: f.name,
           file: f.name,
           mtime: f.mtime,
@@ -37813,7 +37902,7 @@ What is typed here stays in this browser.`;
           meta: copy2 && meta ? copy2 + " · " + meta : copy2 || meta,
           trust: on ? heldCatalogTrust() : "",
           print: on ? heldCatalogPrint() : "",
-          extra: extraFor(f.id, on)
+          extra: extraFor(f.id, on) + adoptFor(f.id, on, f.leadSigned === true)
         }) };
       });
       if ((held || catalogLoaded() || (cards || []).length) && onAt < 0 && deskOn < 0)
@@ -37824,7 +37913,7 @@ What is typed here stays in this browser.`;
           meta: loadedMeta(""),
           trust: heldCatalogTrust(),
           print: heldCatalogPrint(),
-          extra: mineLine
+          extra: mineLine + adoptFor(heldId, true, false)
         }) });
       const under = tops.map(() => []), alone = [], named2 = /* @__PURE__ */ new Map(), nested = [];
       desks.forEach((f) => {
@@ -37847,7 +37936,7 @@ What is typed here stays in this browser.`;
         if (p != null && !on) nested.push(i);
       });
       ecKeyBubClose();
-      const rows = tops.reduce((out2, x, k) => out2.concat([x.html], under[k]), []).concat(alone);
+      const rows = ecGroupedRows(tops, under, alone, parts2.asideRows, parts2.grouped);
       if ((outboxUnread || takenBack) && !rows.some((r) => r.indexOf("data-ec-fault") >= 0)) rows.unshift(mineLine);
       box.innerHTML = rows.length ? rows.join("") : ecEmptyHtml();
       markCutText(box);
@@ -37880,6 +37969,10 @@ What is typed here stays in this browser.`;
       });
       const out = box.querySelector("button[data-ec-eject]");
       if (out) out.onclick = ejectCatalog;
+      box.querySelectorAll("button[data-ec-restore]").forEach((b) => {
+        const r = asideShown[+b.getAttribute("data-ec-restore")];
+        b.onclick = () => putBackInUse(r, asideTitle(r));
+      });
       const exp = box.querySelector("button[data-ec-export]");
       if (exp) exp.onclick = () => exportCatalog();
       const chk = box.querySelector("button[data-ec-check]");
@@ -38375,6 +38468,230 @@ What is typed here stays in this browser.`;
       paintCatWaiting();
     }
   }
+  var ADOPT_REFUSED = "Everything stays as it was, and this can be tried again.";
+  function adoptedMatches(list2, me, held, looseId, aside) {
+    if (!me || !me.id) return [];
+    const own = [];
+    if (held && held.id) own.push({ fileId: branchFileId(me, held), current: true, aside: "" });
+    else if (looseId) own.push({ fileId: branchFileId(me, { id: looseId }), current: true, aside: "" });
+    (aside || []).forEach((r) => own.push({ fileId: branchFileId(me, { id: r.id }), current: false, aside: String(r.id) }));
+    const hashOf = (id) => sha256Hex(new TextEncoder().encode(String(id)));
+    const out = [];
+    (list2 || []).forEach((a) => {
+      if (!a || a.desk !== me.id || out.some((m) => m.catalog === a.catalog)) return;
+      const o = own.find((x) => hashOf(x.fileId) === a.original);
+      if (o) out.push({ catalog: String(a.catalog), fileId: o.fileId, current: o.current, aside: o.aside });
+    });
+    return out;
+  }
+  function adoptedRow(m, files) {
+    return (files || []).find((f) => !!f && f.id === m.catalog && !f.desk && !f.builtIn && f.leadSigned === true) || null;
+  }
+  function adoptedSeen() {
+    try {
+      const v = JSON.parse(lsGet(E_ADOPTED_KEY) || "{}");
+      return v && typeof v === "object" && !Array.isArray(v) ? v : {};
+    } catch (e) {
+      return {};
+    }
+  }
+  function adoptedMark(id, done) {
+    const all = adoptedSeen(), was = all[id] || {};
+    all[id] = { at: +was.at || Date.now(), done: !!(was.done || done) };
+    return lsSet(E_ADOPTED_KEY, JSON.stringify(all));
+  }
+  function adoptedArrived(matches, files) {
+    const seen = adoptedSeen();
+    matches.forEach((m) => {
+      if (!seen[m.catalog] && adoptedRow(m, files)) adoptedMark(m.catalog, false);
+    });
+  }
+  function adoptedDue(matches, files, seen) {
+    return (matches || []).find((m) => {
+      if (!adoptedRow(m, files)) return false;
+      const s = seen[m.catalog];
+      return !(s && s.done);
+    }) || null;
+  }
+  function adoptedLead() {
+    const tl = teamLeads().filter((l) => l && !l.removed);
+    return tl[0] && tl[0].lead || "";
+  }
+  function adoptedEdition(row2) {
+    return +row2.rev > 0 ? String(row2.rev) : String(row2.edition || "");
+  }
+  function adoptedDate(at) {
+    return new Date(+at || Date.now()).toLocaleDateString(uiLang() === "pl" ? "pl-PL" : "en-GB", { day: "numeric", month: "long" });
+  }
+  function adoptedFill(line, vals) {
+    return esc(line).replace(/\{(TITLE|N|LEAD|DATE)\}/g, (x, k) => k === "TITLE" ? vals.TITLE : esc(String(vals[k] == null ? "" : vals[k])));
+  }
+  function adoptedBubbleHtml(row2, lead) {
+    const vals = { TITLE: "<b data-i18n-skip>" + esc(catalogNameOfFile(row2.name) || t("Catalog")) + "</b>", N: adoptedEdition(row2), LEAD: lead };
+    return '<h3 id="ecTitle"><span class="e-adopt-disc">' + ICON_TEAM + "</span>" + esc(t("The team has taken up this catalog")) + '</h3><p class="ec-sub">' + adoptedFill(t(lead ? "{LEAD} made {TITLE} a team catalog, edition {N}, so everyone on the team now works from it." : "{TITLE} is now a team catalog, edition {N}, so everyone on the team works from it."), vals) + '</p><p class="ec-sub">' + adoptedFill(t("Switch, and the team's edition is the one in use here. Your own {TITLE} stays on this desk, under personal catalogs, whichever you choose."), vals) + '</p><div class="tour-actions"><button type="button" class="btn" id="ecNo">' + esc(t("Keep both")) + '</button><button type="button" class="btn primary" id="ecYes">' + esc(t("Switch to the team's")) + "</button></div>";
+  }
+  function adoptedSwitch(m, row2) {
+    return Promise.resolve(eReadCatalogFile(row2.name, "", false, true)).then((got) => {
+      let c = null;
+      try {
+        c = got && got.text ? parseCatalogFile(got.text) : null;
+      } catch (e) {
+        c = null;
+      }
+      if (!c || String(c.id || "") !== m.catalog) return false;
+      return whenTrusted(c).then((state) => {
+        if (state !== V2_SIG_VALID) return false;
+        const sig = eCatalogSignature(c), was = lsGet(E_CATALOG_KEY);
+        lsSet(E_CATALOG_KEY, sig);
+        if (!switchToAdopted(c, { file: row2.name, fileAt: +row2.mtime || 0 })) {
+          if (was == null) lsDel(E_CATALOG_KEY);
+          else lsSet(E_CATALOG_KEY, was);
+          return false;
+        }
+        adoptedMark(m.catalog, true);
+        return true;
+      });
+    }).catch(() => false);
+  }
+  var adoptedOpen = false;
+  function adoptedBubble(m, row2) {
+    if (adoptedOpen || document.getElementById("eCatalogOffer")) return false;
+    const wrap = document.createElement("div");
+    wrap.className = "bub bub-ask e-offer e-adopted";
+    wrap.id = "eCatalogOffer";
+    wrap.setAttribute("role", "dialog");
+    wrap.setAttribute("aria-labelledby", "ecTitle");
+    wrap.innerHTML = adoptedBubbleHtml(row2, adoptedLead());
+    cutLeaves();
+    document.body.appendChild(wrap);
+    adoptedOpen = true;
+    const place = () => {
+      const at = document.getElementById("catNow"), r = at && at.getBoundingClientRect();
+      placeBubble(wrap, r && r.width ? { top: r.top, left: r.left, width: r.width, height: r.height } : { top: 0, left: innerWidth - 24, width: 0, height: 40 }, { width: 340 });
+    };
+    let away = null;
+    const close = () => {
+      removeEventListener("resize", place);
+      if (away) removeEventListener("pointerdown", away, true);
+      dismissNode(wrap);
+      adoptedOpen = false;
+      if (offerStanding === close) offerStanding = null;
+    };
+    const keep = () => {
+      adoptedMark(m.catalog, true);
+      close();
+      paintCatalogList();
+    };
+    away = (e) => {
+      if (!wrap.contains(e.target)) keep();
+    };
+    place();
+    addEventListener("resize", place);
+    addEventListener("pointerdown", away, true);
+    offerStanding = close;
+    wrap.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      keep();
+    });
+    wrap.querySelector("#ecNo").onclick = keep;
+    let taking = false;
+    wrap.querySelector("#ecYes").onclick = () => {
+      if (taking) return;
+      taking = true;
+      adoptedSwitch(m, row2).then((ok) => {
+        taking = false;
+        if (ok) {
+          close();
+          paintCatalogList();
+          return;
+        }
+        if (!wrap.querySelector(".ec-warn")) wrap.querySelector(".tour-actions").insertAdjacentHTML("beforebegin", '<p class="ec-warn">' + esc(t(ADOPT_REFUSED)) + "</p>");
+        place();
+      });
+    };
+    return true;
+  }
+  function checkAdopted(all) {
+    return Promise.all([eCatalogAdopted(), eBranchIdentity(false)]).then(([list2, me]) => {
+      if (!list2.length) return /* @__PURE__ */ new Set();
+      const lo = looseOrigin(false);
+      const ms = adoptedMatches(list2, me, storedCatalog(), lo ? lo.id : "", listPersonalAside());
+      adoptedArrived(ms, all);
+      const due = adoptedDue(ms, all, adoptedSeen());
+      if (due) {
+        const go = () => adoptedBubble(due, adoptedRow(due, all));
+        if (tourDueAtBoot()) afterTour(go);
+        else go();
+      }
+      return new Set(ms.map((m) => m.catalog));
+    }).catch(() => /* @__PURE__ */ new Set());
+  }
+  function asideTitle(r) {
+    return r.loose ? t("Unnamed catalog") : catalogNameOfFile(r.from || r.file) || t("Unnamed catalog");
+  }
+  function ecAdoptLineHtml(html) {
+    return '<small class="ec-adopt">' + ICON_TEAM + "<span>" + html + "</span></small>";
+  }
+  function adoptedNoteHtml(row2, at) {
+    return ecAdoptLineHtml(adoptedFill(
+      t("The team now publishes this catalog as {TITLE}, edition {N}, since {DATE}."),
+      { TITLE: esc('"' + (catalogNameOfFile(row2.name) || t("Catalog")) + '"'), N: adoptedEdition(row2), DATE: adoptedDate(at) }
+    ));
+  }
+  function adoptedMadeHtml(title, lead) {
+    return ecAdoptLineHtml(adoptedFill(t(lead ? "Made from your own {TITLE} by {LEAD}" : "Made from your own {TITLE}"), { TITLE: esc(title), LEAD: lead }));
+  }
+  function ecAsideRowHtml(r, i, note) {
+    const stamp = catalogStamp(r.edition, r.at, r.rev);
+    const meta = [stamp, r.macros >= 0 ? catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}", r.cards, r.macros, r.intents, Math.max(0, r.cats)) : ""].filter(Boolean).map(esc).join(" · ");
+    return '<div class="ec-row ec-aside" data-ec-aside="' + i + '"><span class="ec-name"><b data-i18n-skip>' + esc(asideTitle(r)) + "</b>" + (meta ? '<small class="ec-meta">' + meta + "</small>" : "") + (note || "") + "</span>" + ecActHtml("Put back in use", ICON_LOAD, ' data-ec-restore="' + i + '"') + "</div>";
+  }
+  function adoptedListParts(adopted, me, held, looseId, aside, all, current) {
+    const asideShown = aside.filter((r) => held ? String(held.id || "") !== r.id : r.id !== looseId);
+    const matches = adoptedMatches(adopted, me, held, looseId, aside);
+    adoptedArrived(matches, all);
+    const seenAt = adoptedSeen(), lead = adoptedLead();
+    const origTitle = (m) => m.current ? current : asideTitle(aside.find((r) => r.id === m.aside) || {});
+    const noteFor2 = (m) => {
+      const row2 = adoptedRow(m, all);
+      return row2 ? adoptedNoteHtml(row2, (seenAt[m.catalog] || {}).at) : "";
+    };
+    const adoptFor = (id, on, teamRow) => (teamRow ? matches.filter((m) => m.catalog === id).map((m) => adoptedMadeHtml(origTitle(m), lead)).join("") : "") + (on ? matches.filter((m) => m.current).map(noteFor2).join("") : "");
+    const asideRows = asideShown.map((r, i) => ecAsideRowHtml(r, i, matches.filter((m) => m.aside === r.id && !m.current).map(noteFor2).join("")));
+    return { matches, asideShown, asideRows, adoptFor, grouped: asideShown.length > 0 || matches.length > 0 };
+  }
+  function ecGroupHtml(word) {
+    return '<div class="ec-group">' + esc(t(word)) + "</div>";
+  }
+  function ecGroupedRows(tops, under, alone, asideRows, grouped) {
+    const withUnder = (k) => [tops[k].html].concat(under[k]);
+    if (!grouped) return tops.reduce((out, x, k) => out.concat(withUnder(k)), []).concat(alone);
+    const team = tops.map((x, k) => k).filter((k) => tops[k].team), own = tops.map((x, k) => k).filter((k) => !tops[k].team);
+    return (team.length ? [ecGroupHtml("Team catalogs")] : []).concat(...team.map(withUnder)).concat(own.length || asideRows.length ? [ecGroupHtml("Personal catalogs")] : []).concat(...own.map(withUnder)).concat(asideRows).concat(alone);
+  }
+  function putBackInUse(r, title) {
+    const back = () => {
+      if (!restorePersonal(r.id)) {
+        toastRefusal(t(ADOPT_REFUSED));
+        return false;
+      }
+      if (r.loose && catalogLoaded()) ejectCatalog();
+      toast(t("Your own {TITLE} is in use again.").split("{TITLE}").join(title));
+      paintCatalogList();
+      return true;
+    };
+    if (!editsUnexported()) return back();
+    askPutBack(title, () => {
+      if (setAsidePersonal() === false) {
+        toastRefusal(t(ADOPT_REFUSED));
+        return;
+      }
+      back();
+    });
+    return false;
+  }
   function listingNoticeFiles(all, held) {
     return (all || []).filter((f) => !f.desk && !f.builtIn && !f.sample && f.id && !(held && held.id === f.id)).filter((f) => f.leadSigned === true);
   }
@@ -38390,6 +38707,7 @@ What is typed here stays in this browser.`;
     } catch (e) {
     }
     paintCatalogList();
+    const adoptedIds = checkAdopted(all);
     if (lsGet("eNotifyCatalogOff") !== "1") {
       const tLeads = teamLeads().filter((l) => l && !l.removed);
       if (tLeads.length > 0) {
@@ -38409,7 +38727,7 @@ What is typed here stays in this browser.`;
     dropOffersLeft(all);
     const held = storedCatalog();
     if (!held && !catalogLoaded()) {
-      offerToLooseAuthor(all);
+      offerToLooseAuthor(all, adoptedIds);
       return;
     }
     if (!held || !held.id) return;
@@ -38422,7 +38740,7 @@ What is typed here stays in this browser.`;
         paintCatalogList();
       }
     }
-    const go = () => offerFromListing(files, held);
+    const go = () => offerFromListing(files, held, adoptedIds);
     if (tourDueAtBoot()) afterTour(go);
     else go();
   }
@@ -38442,7 +38760,7 @@ What is typed here stays in this browser.`;
       return mustBeValid ? whenTrusted(c).then((s) => s === V2_SIG_VALID && offer()) : offer();
     }).catch(() => false);
   }
-  function offerFromListing(files, held) {
+  function offerFromListing(files, held, skip) {
     const own = sharedOwnPin();
     const higher = files.filter((f) => f.id === held.id && f.rev > (+held.rev || 0) && !(own && f.sha === own)).sort((a, b) => b.rev - a.rev || b.mtime - a.mtime)[0];
     if (higher) {
@@ -38452,18 +38770,18 @@ What is typed here stays in this browser.`;
     const grown = files.filter((f) => f.grew && f.id !== held.id);
     if (!grown.length) return;
     const mine = eBranchIdentity(false).then((who) => who ? branchFileId(who, held) : "");
-    mine.then((own2) => {
+    Promise.all([mine, skip || /* @__PURE__ */ new Set()]).then(([own2, told]) => {
       const ours = new Set([held.id].concat(own2 ? [own2] : []));
-      const next = grown.filter((f) => ours.has(f.grew.id)).sort((a, b) => b.mtime - a.mtime);
+      const next = grown.filter((f) => ours.has(f.grew.id) && !told.has(f.id)).sort((a, b) => b.mtime - a.mtime);
       return next.reduce((chain, f) => chain.then((done) => done || offerListed(f, true)), Promise.resolve(false));
     });
   }
-  function offerToLooseAuthor(all) {
+  function offerToLooseAuthor(all, skip) {
     const origin = looseOrigin(false), grown = all.filter((f) => !f.desk && !f.builtIn && f.grew);
     if (!origin || !grown.length) return;
-    const go = () => eBranchIdentity(false).then((who) => {
+    const go = () => Promise.all([eBranchIdentity(false), skip || /* @__PURE__ */ new Set()]).then(([who, told]) => {
       const own = who ? branchFileId(who, origin) : "";
-      const next = grown.filter((f) => own && f.grew.id === own).sort((a, b) => b.mtime - a.mtime);
+      const next = grown.filter((f) => own && f.grew.id === own && !told.has(f.id)).sort((a, b) => b.mtime - a.mtime);
       return next.reduce((chain, f) => chain.then((done) => done || offerListed(f, true)), Promise.resolve(false));
     });
     if (tourDueAtBoot()) afterTour(go);

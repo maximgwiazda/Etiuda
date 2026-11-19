@@ -746,7 +746,10 @@ function listPersonalAside(){
   const all=asideStore()||{};
   return Object.keys(all).map(k=>{
     const r=all[k]||{};
-    return { id:k, loose:!!r.loose, at:+r.at||0, file:String(r.file||""), cards:(r.catalog&&Array.isArray(r.catalog.cards))?r.catalog.cards.length:0 };
+    const c=r.catalog&&typeof r.catalog==="object"?r.catalog:null;
+    return { id:k, loose:!!r.loose, at:+r.at||0, file:String(r.file||""), cards:(c&&Array.isArray(c.cards))?c.cards.length:0,
+      from:String(r.from||""), rev:c&&c.rev!=null?c.rev:null, edition:c?String(c.version||""):"",
+      macros:c?catalogMacroCount(c):-1, intents:c?catalogIntentCount(c):-1, cats:c&&c.categories?Object.keys(c.categories).length:-1 };
   }).sort((a,b)=>a.at-b.at);
 }
 /** Bring a set-aside catalog back exactly: its layer is written back under its own namespace and its catalog is taken again, with the
@@ -766,7 +769,42 @@ function restorePersonal(id){
 function switchToAdopted(c,opts){
   const aside=setAsidePersonal(); /* plant:aside-snapshot */
   if(aside===false) return false; /* plant:aside-stops */
-  return activateCatalog(c,opts);
+  /* The empty desk's content is set aside already, so the question askLoose asks before erasing it would be untrue here. */
+  return takeCatalog(c,opts);
+}
+/** Whether the catalog in use carries edits of this desk's own that no export holds: the loose desk's as looseUnexported reads them,
+ *  and a loaded catalog's layer, which records no export, whenever it holds any. */
+function editsUnexported(){
+  return catalogEdited() && lyGet("Exported")!==looseMark();
+}
+/* PUT BACK IN USE OVER EDITS NOT YET EXPORTED asks first, from the press: yes sets those edits aside and puts the catalog back,
+   Cancel and Escape do nothing. */
+function askPutBack(title,go){
+  const a=document.activeElement;
+  const from=originOf(a && a.tagName==="BUTTON" ? a : null, ()=>document.getElementById("catNow"));
+  const was=document.getElementById("ePutBack");
+  if(was) was.remove();
+  const el=document.createElement("div");
+  el.className="bub bub-ask e-undo";
+  el.id="ePutBack";
+  el.setAttribute("role","alertdialog");
+  el.setAttribute("data-side","none");
+  el.innerHTML='<p>'+esc(t("The catalog in use has changes not yet exported. Put your own {TITLE} back in use? The changes are set aside under Personal catalogs, not lost.")
+      .split("{TITLE}").join(String(title||"")))+'</p>'
+    +'<div class="tour-actions">'
+    +'<button type="button" class="btn" id="ePutBackNo">'+esc(t("Cancel"))+'</button>'
+    +'<button type="button" class="btn primary" id="ePutBackYes">'+esc(t("Put back in use"))+'</button></div>';
+  cutLeaves();
+  document.body.appendChild(el);
+  hangBubble(el, from);
+  const close=()=>dismissNode(el);
+  el.querySelector("#ePutBackNo").onclick=close;
+  el.querySelector("#ePutBackYes").onclick=()=>{ close(); go(); };
+  el.addEventListener("keydown",e=>{
+    if(e.key!=="Escape") return;
+    e.preventDefault(); e.stopPropagation(); close();
+  });
+  el.querySelector("#ePutBackYes").focus();
 }
 /** True while the sample is still, word for word, the one that shipped. The test is
  *  "would an export differ from the sample?" - edits, additions, deletions, renames,
@@ -1336,6 +1374,8 @@ export {
   listPersonalAside,
   restorePersonal,
   switchToAdopted,
+  editsUnexported,
+  askPutBack,
   askLoose,
   catalogEdited,
   sampleUntouched,

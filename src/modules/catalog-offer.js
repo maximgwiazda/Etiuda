@@ -2,7 +2,8 @@
    offers the same way, and the dialog all three channels end in. */
 import { activateCatalog, catalogEdited, catalogEditionOlder, catalogMacroCount,
   catalogIntentCount, exportCatalog, isCatalogUpdate, catalogFileName, catalogNameOfFile, pinStoredFrom,
-  followRenamedFile, branchFileId, looseOrigin, sharedOwnPin, sharedOwnWrite, nameHeldCatalog, deskBranchHolds, sha256Hex } from "./catalog-file.js";
+  followRenamedFile, branchFileId, looseOrigin, sharedOwnPin, sharedOwnWrite, nameHeldCatalog, deskBranchHolds, sha256Hex,
+  switchToAdopted, setAsidePersonal, listPersonalAside, restorePersonal, editsUnexported, askPutBack } from "./catalog-file.js";
 import { catalogLoaded } from "./catalog-boot.js";
 import { E_CATALOG_KEY, E_CATALOG_VERSION, E_CATALOG_REV, catalogStamp, editionNameOf, editionLabel, editionSaid,
   eCatalog, eCatalogAccepted, eCatalogSignature, storedCatalog, eWatchSupported, eWatchGet,
@@ -10,15 +11,15 @@ import { E_CATALOG_KEY, E_CATALOG_VERSION, E_CATALOG_REV, catalogStamp, editionN
   eUnreadableLine, fileReadCode, fileReadLine } from "./catalog.js";
 import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalogFolderShort,
   eCatalogIn, eCatalogBuiltIn, eCatalogMtime, eCatalogRing, eCatalogLeads, eHost, eLoadedCatalogFile, wireFolderLink, eOpenedWith,
-  eOpenedRefused, eReadCatalogFile, eOnCatalogListing, eBranchIdentity, eNotify, noteCatalogFolderHold } from "./host.js";
+  eOpenedRefused, eReadCatalogFile, eOnCatalogListing, eBranchIdentity, eNotify, noteCatalogFolderHold, eCatalogAdopted } from "./host.js";
 import { ejectCatalog } from "./local-memory.js";
-import { lsGet, lsSet, nsGet, nsSet } from "./storage.js";
+import { lsGet, lsSet, lsDel, nsGet, nsSet, E_ADOPTED_KEY } from "./storage.js";
 import { tourDueAtBoot, afterTour } from "./tour.js";
 import { firstSigninStands, onFirstSigninClosed } from "./signin.js";
 import { placeBubble } from "./bubble.js";
 import { markCut, markCutText } from "./cut-text.js";
 import { cutLeaves, dismissNode, mgReduceMotion, M_MS, E_EASE, E_SPRING } from "./motion.js";
-import { catalogAwaitingLine, catalogCountsLine, t, toast, toastRefusal } from "./ui-lang.js";
+import { catalogAwaitingLine, catalogCountsLine, t, toast, toastRefusal, uiLang } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { cards, wholeThingEmpty } from "./app-state.js";
 import { totalMacroCount } from "./card-counts.js";
@@ -26,7 +27,7 @@ import { cardFieldKey } from "./card-fields.js";
 import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { intentIdAt, intentOrder } from "./intent-id.js";
 import { pack } from "./pack.js";
-import { ICON_AWAITING, ICON_SUCCESS, ICON_LOAD, ICON_EJECT, ICON_DESK, ICON_LOOK } from "./icons.js";
+import { ICON_AWAITING, ICON_SUCCESS, ICON_LOAD, ICON_EJECT, ICON_DESK, ICON_LOOK, ICON_TEAM } from "./icons.js";
 import { keyTipHtml, leadKeyText, leadsNow, teamLeads } from "./team-join.js";
 import { V2_SIG_VALID, v2RingRead, v2SigState, v2SignedBytes } from "./catalog-v2.js";
 import { editionChanges } from "./edition-changes.js";
@@ -356,7 +357,7 @@ function paintCatalogList(){
   /* A COLLEAGUE'S FILE HAS A ROW where it is the shape a desk writes, its id that desk's own followed by eight hex of
      what it grew from, so a file claiming any other id has none. This desk's own file is a line, not a row. The rows
      wait for the held signature to answer to a pinned lead, so the loaded row never draws a key this load has not vouched for. */
-  Promise.all([eCatalogFiles(),eBranchIdentity(false),settleHeldTrustWithin(eCatalog(),held)]).then(([all,me])=>{
+  Promise.all([eCatalogFiles(),eBranchIdentity(false),settleHeldTrustWithin(eCatalog(),held),eCatalogAdopted()]).then(([all,me,,adopted])=>{
     if(!box.isConnected) return;
     const files=all.filter(f=>!f.desk);
     const shaped=f=>!!f.desk && f.id.indexOf(f.desk.id+"-")===0;
@@ -400,12 +401,15 @@ function paintCatalogList(){
           : keptLine, true)
       : "";
     const extraFor=(id,on)=>on ? mineLine : (id && id!==heldId && ownOf(id)) ? ecMineHtml(t("Your edits to it come back when it is loaded again"),false) : "";
+    const lo=looseOrigin(false);
+    const parts=adoptedListParts(adopted,me,held,lo?lo.id:"",listPersonalAside(),all,shownCatalogName(catalogNameOfFile(catalogFileName())));
+    const adoptFor=parts.adoptFor, asideShown=parts.asideShown;
     const tops=files.map((f,i)=>{
       const on=i===onAt;
       const stamp=catalogStamp(f.edition,f.mtime,f.rev);
       const copy=ecCopyHtml(f), meta=on?loadedMeta(stamp):ecMeta(stamp,f);
-      return {id:f.id, sha:f.sha, on:on, html:ecRowHtml({ name:f.name, file:f.name, mtime:f.mtime, loaded:on, newer:at>0 && f.mtime>at,
-        sample:!!f.sample, meta:copy&&meta ? copy+" · "+meta : copy||meta, trust:on?heldCatalogTrust():"", print:on?heldCatalogPrint():"", extra:extraFor(f.id,on) })};
+      return {id:f.id, sha:f.sha, on:on, team:f.leadSigned===true, html:ecRowHtml({ name:f.name, file:f.name, mtime:f.mtime, loaded:on, newer:at>0 && f.mtime>at,
+        sample:!!f.sample, meta:copy&&meta ? copy+" · "+meta : copy||meta, trust:on?heldCatalogTrust():"", print:on?heldCatalogPrint():"", extra:extraFor(f.id,on)+adoptFor(f.id,on,f.leadSigned===true) })};
     });
     /* THE CATALOG IN USE ALWAYS HAS A ROW, even where no file in the folder is it: a browser's
        import, a copy loaded from elsewhere, or a desk whose catalog was applied before the store
@@ -413,7 +417,7 @@ function paintCatalogList(){
        hundred visible cards is worse than useless. A colleague's file worked from is its own row. */
     if((held||catalogLoaded()||(cards||[]).length) && onAt<0 && deskOn<0)
       tops.unshift({id:heldId, sha:String(held&&held.pin||""), on:true, html:ecRowHtml({ name:shownCatalogName(catalogFileName()),
-        loaded:true, newer:false, meta:loadedMeta(""), trust:heldCatalogTrust(), print:heldCatalogPrint(), extra:mineLine })});
+        loaded:true, newer:false, meta:loadedMeta(""), trust:heldCatalogTrust(), print:heldCatalogPrint(), extra:mineLine+adoptFor(heldId,true,false) })});
     /* Under the catalog each grew from: the row in use, else the edition it grew from, else the newest of that catalog.
        The rest stand at the foot. */
     const under=tops.map(()=>[]), alone=[], named=new Map(), nested=[];
@@ -428,7 +432,7 @@ function paintCatalogList(){
       if(p!=null && !on) nested.push(i);
     });
     ecKeyBubClose();
-    const rows=tops.reduce((out,x,k)=>out.concat([x.html],under[k]),[]).concat(alone);
+    const rows=ecGroupedRows(tops,under,alone,parts.asideRows,parts.grouped);
     /* With no catalog in use the line has no row to stand under, and the fault is still said. */
     if((outboxUnread || takenBack) && !rows.some(r=>r.indexOf("data-ec-fault")>=0)) rows.unshift(mineLine);
     box.innerHTML=rows.length?rows.join(""):ecEmptyHtml();
@@ -463,6 +467,10 @@ function paintCatalogList(){
     });
     const out=box.querySelector("button[data-ec-eject]");
     if(out) out.onclick=ejectCatalog;
+    box.querySelectorAll("button[data-ec-restore]").forEach(b=>{
+      const r=asideShown[+b.getAttribute("data-ec-restore")];
+      b.onclick=()=>putBackInUse(r,asideTitle(r));
+    });
     /* Wired here rather than in the Library, because the row is painted after that dialog has
        finished wiring itself: the host answers the folder asynchronously. */
     const exp=box.querySelector("button[data-ec-export]");
@@ -984,6 +992,232 @@ function dropOffersLeft(all){
     paintCatWaiting();
   }
 }
+/* ---- THE TEAM TOOK UP THIS DESK'S OWN CATALOG (board 1015). The shell hands the trusted team file's entries naming this desk; the
+   page matches each `original`, the SHA-256 of a desk file's own id, against the files this desk wrote: the one of the catalog in
+   use and those of the catalogs set aside. Told once, in a bubble at the catalog's name; the choice stays open in the Library. ---- */
+const ADOPT_REFUSED="Everything stays as it was, and this can be tried again.";
+function adoptedMatches(list,me,held,looseId,aside){
+  if(!me || !me.id) return [];
+  const own=[];
+  if(held && held.id) own.push({fileId:branchFileId(me,held), current:true, aside:""});
+  else if(looseId) own.push({fileId:branchFileId(me,{id:looseId}), current:true, aside:""});
+  (aside||[]).forEach(r=>own.push({fileId:branchFileId(me,{id:r.id}), current:false, aside:String(r.id)}));
+  const hashOf=id=>sha256Hex(new TextEncoder().encode(String(id)));
+  const out=[];
+  (list||[]).forEach(a=>{
+    if(!a || a.desk!==me.id || out.some(m=>m.catalog===a.catalog)) return;
+    const o=own.find(x=>hashOf(x.fileId)===a.original); /* plant:adopted-original */
+    if(o) out.push({catalog:String(a.catalog), fileId:o.fileId, current:o.current, aside:o.aside});
+  });
+  return out;
+}
+/* The team catalog's own row in the listing: the lead's signature found by the shell, never a file that merely carries the id. */
+function adoptedRow(m,files){
+  return (files||[]).find(f=>!!f && f.id===m.catalog && !f.desk && !f.builtIn && f.leadSigned===true) || null;
+}
+function adoptedSeen(){
+  try{
+    const v=JSON.parse(lsGet(E_ADOPTED_KEY)||"{}");
+    return (v && typeof v==="object" && !Array.isArray(v)) ? v : {};
+  }catch(e){ return {}; }
+}
+/* `at` is when the team catalog first arrived here, kept from the first mark; `done` that the bubble was answered. */
+function adoptedMark(id,done){
+  const all=adoptedSeen(), was=all[id]||{};
+  all[id]={at:+was.at||Date.now(), done:!!(was.done||done)};
+  return lsSet(E_ADOPTED_KEY,JSON.stringify(all));
+}
+function adoptedArrived(matches,files){
+  const seen=adoptedSeen();
+  matches.forEach(m=>{ if(!seen[m.catalog] && adoptedRow(m,files)) adoptedMark(m.catalog,false); });
+}
+/* The one to tell: arrived, and never answered. */
+function adoptedDue(matches,files,seen){
+  return (matches||[]).find(m=>{
+    if(!adoptedRow(m,files)) return false;
+    const s=seen[m.catalog];
+    return !(s && s.done); /* plant:adopted-seen */
+  }) || null;
+}
+function adoptedLead(){
+  const tl=teamLeads().filter(l=>l&&!l.removed);
+  return (tl[0]&&tl[0].lead)||"";
+}
+function adoptedEdition(row){ return +row.rev>0 ? String(row.rev) : String(row.edition||""); }
+function adoptedDate(at){
+  return new Date(+at||Date.now()).toLocaleDateString(uiLang()==="pl" ? "pl-PL" : "en-GB",{day:"numeric", month:"long"});
+}
+/* Each placeholder filled once: TITLE arrives as markup, every other value is escaped here. */
+function adoptedFill(line,vals){
+  return esc(line).replace(/\{(TITLE|N|LEAD|DATE)\}/g,(x,k)=>k==="TITLE" ? vals.TITLE : esc(String(vals[k]==null?"":vals[k])));
+}
+function adoptedBubbleHtml(row,lead){
+  const vals={TITLE:'<b data-i18n-skip>'+esc(catalogNameOfFile(row.name)||t("Catalog"))+'</b>', N:adoptedEdition(row), LEAD:lead};
+  return '<h3 id="ecTitle"><span class="e-adopt-disc">'+ICON_TEAM+'</span>'+esc(t("The team has taken up this catalog"))+'</h3>'
+    +'<p class="ec-sub">'+adoptedFill(t(lead
+      ? "{LEAD} made {TITLE} a team catalog, edition {N}, so everyone on the team now works from it."
+      : "{TITLE} is now a team catalog, edition {N}, so everyone on the team works from it."),vals)+'</p>'
+    +'<p class="ec-sub">'+adoptedFill(t("Switch, and the team's edition is the one in use here. Your own {TITLE} stays on this desk, under personal catalogs, whichever you choose."),vals)+'</p>'
+    +'<div class="tour-actions">'
+    +'<button type="button" class="btn" id="ecNo">'+esc(t("Keep both"))+'</button>'
+    +'<button type="button" class="btn primary" id="ecYes">'+esc(t("Switch to the team's"))+'</button></div>';
+}
+/* SWITCH: the team's file read as the lead signed it, then switchToAdopted, which sets the personal catalog aside first. Anything short
+   of that is false, with nothing changed. */
+function adoptedSwitch(m,row){
+  return Promise.resolve(eReadCatalogFile(row.name,"",false,true)).then(got=>{
+    let c=null;
+    try{ c=got && got.text ? parseCatalogFile(got.text) : null; }catch(e){ c=null; }
+    if(!c || String(c.id||"")!==m.catalog) return false;
+    return whenTrusted(c).then(state=>{
+      if(state!==V2_SIG_VALID) return false;
+      const sig=eCatalogSignature(c), was=lsGet(E_CATALOG_KEY);
+      lsSet(E_CATALOG_KEY,sig);
+      if(!switchToAdopted(c,{file:row.name, fileAt:+row.mtime||0})){
+        if(was==null) lsDel(E_CATALOG_KEY); else lsSet(E_CATALOG_KEY,was);
+        return false;
+      }
+      adoptedMark(m.catalog,true);
+      return true;
+    });
+  }).catch(()=>false);
+}
+/* THE BUBBLE AT THE CATALOG'S NAME, the offer's shape under its one-at-a-time rule. Keep both, Escape and a press elsewhere are one
+   answer; a refused Switch keeps it up with a line. An offer somebody asked for takes its place unanswered. */
+let adoptedOpen=false;
+function adoptedBubble(m,row){
+  if(adoptedOpen || document.getElementById("eCatalogOffer")) return false;
+  const wrap=document.createElement("div");
+  wrap.className="bub bub-ask e-offer e-adopted";
+  wrap.id="eCatalogOffer";
+  wrap.setAttribute("role","dialog");
+  wrap.setAttribute("aria-labelledby","ecTitle");
+  wrap.innerHTML=adoptedBubbleHtml(row,adoptedLead());
+  cutLeaves();
+  document.body.appendChild(wrap);
+  adoptedOpen=true;
+  const place=()=>{
+    const at=document.getElementById("catNow"), r=at && at.getBoundingClientRect();
+    placeBubble(wrap, (r && r.width) ? {top:r.top, left:r.left, width:r.width, height:r.height}
+      : {top:0, left:innerWidth-24, width:0, height:40}, {width:340});
+  };
+  let away=null;
+  const close=()=>{
+    removeEventListener("resize",place);
+    if(away) removeEventListener("pointerdown",away,true);
+    dismissNode(wrap);
+    adoptedOpen=false;
+    if(offerStanding===close) offerStanding=null;
+  };
+  const keep=()=>{ adoptedMark(m.catalog,true); close(); paintCatalogList(); };
+  away=e=>{ if(!wrap.contains(e.target)) keep(); };
+  place();
+  addEventListener("resize",place);
+  addEventListener("pointerdown",away,true);
+  offerStanding=close;
+  wrap.addEventListener("keydown",e=>{
+    if(e.key!=="Escape") return;
+    e.preventDefault(); e.stopPropagation();
+    keep();
+  });
+  wrap.querySelector("#ecNo").onclick=keep;
+  let taking=false;
+  wrap.querySelector("#ecYes").onclick=()=>{
+    if(taking) return;
+    taking=true;
+    adoptedSwitch(m,row).then(ok=>{
+      taking=false;
+      if(ok){ close(); paintCatalogList(); return; }
+      if(!wrap.querySelector(".ec-warn")) wrap.querySelector(".tour-actions").insertAdjacentHTML("beforebegin",'<p class="ec-warn">'+esc(t(ADOPT_REFUSED))+'</p>');
+      place();
+    });
+  };
+  return true;
+}
+/* What a listing tells: the matches, their arrival marked, and the bubble for the one due, after the tour as the offers wait. Resolves
+   to the team catalog ids matched, which the lineage offers leave to this. */
+function checkAdopted(all){
+  return Promise.all([eCatalogAdopted(),eBranchIdentity(false)]).then(([list,me])=>{
+    if(!list.length) return new Set();
+    const lo=looseOrigin(false);
+    const ms=adoptedMatches(list,me,storedCatalog(),lo?lo.id:"",listPersonalAside());
+    adoptedArrived(ms,all);
+    const due=adoptedDue(ms,all,adoptedSeen());
+    if(due){
+      const go=()=>adoptedBubble(due,adoptedRow(due,all));
+      if(tourDueAtBoot()) afterTour(go); else go();
+    }
+    return new Set(ms.map(m=>m.catalog));
+  }).catch(()=>new Set());
+}
+/* ---- In the Library: the two groups, the set-aside rows, and the lines that tie the team's catalog to the person's own. ---- */
+function asideTitle(r){
+  return r.loose ? t("Unnamed catalog") : (catalogNameOfFile(r.from||r.file)||t("Unnamed catalog"));
+}
+function ecAdoptLineHtml(html){
+  return '<small class="ec-adopt">'+ICON_TEAM+'<span>'+html+'</span></small>';
+}
+/* The original's quiet note, under Personal catalogs. */
+function adoptedNoteHtml(row,at){
+  return ecAdoptLineHtml(adoptedFill(t("The team now publishes this catalog as {TITLE}, edition {N}, since {DATE}."),
+    {TITLE:esc('"'+(catalogNameOfFile(row.name)||t("Catalog"))+'"'), N:adoptedEdition(row), DATE:adoptedDate(at)}));
+}
+/* The team catalog's line; only a match draws it, so only the author's desk has it. */
+function adoptedMadeHtml(title,lead){
+  return ecAdoptLineHtml(adoptedFill(t(lead ? "Made from your own {TITLE} by {LEAD}" : "Made from your own {TITLE}"), {TITLE:esc(title), LEAD:lead}));
+}
+function ecAsideRowHtml(r,i,note){
+  const stamp=catalogStamp(r.edition,r.at,r.rev);
+  const meta=[stamp, r.macros>=0 ? catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",r.cards,r.macros,r.intents,Math.max(0,r.cats)) : ""]
+    .filter(Boolean).map(esc).join(" · ");
+  return '<div class="ec-row ec-aside" data-ec-aside="'+i+'"><span class="ec-name"><b data-i18n-skip>'+esc(asideTitle(r))+'</b>'
+    +(meta?'<small class="ec-meta">'+meta+'</small>':'')+(note||'')+'</span>'
+    +ecActHtml("Put back in use",ICON_LOAD,' data-ec-restore="'+i+'"')+'</div>';
+}
+/* What the Library's list adds for board 1015: the set-aside rows less the one in use, each with its note where the team took it up,
+   and adoptFor(id, on, teamRow), the lines a top row carries: "Made from" on the team's row, the note on the row in use where that is
+   the original. `held` and `looseId` are the catalog in use; `current` is its shown name. */
+function adoptedListParts(adopted,me,held,looseId,aside,all,current){
+  const asideShown=aside.filter(r=>held ? String(held.id||"")!==r.id : r.id!==looseId);
+  const matches=adoptedMatches(adopted,me,held,looseId,aside);
+  adoptedArrived(matches,all);
+  const seenAt=adoptedSeen(), lead=adoptedLead();
+  const origTitle=m=>m.current ? current : asideTitle(aside.find(r=>r.id===m.aside)||{});
+  const noteFor=m=>{ const row=adoptedRow(m,all); return row ? adoptedNoteHtml(row,(seenAt[m.catalog]||{}).at) : ""; };
+  const adoptFor=(id,on,teamRow)=>(teamRow ? matches.filter(m=>m.catalog===id).map(m=>adoptedMadeHtml(origTitle(m),lead)).join("") : "")
+    +(on ? matches.filter(m=>m.current).map(noteFor).join("") : "");
+  const asideRows=asideShown.map((r,i)=>ecAsideRowHtml(r,i,matches.filter(m=>m.aside===r.id && !m.current).map(noteFor).join("")));
+  return {matches, asideShown, asideRows, adoptFor, grouped:asideShown.length>0 || matches.length>0};
+}
+function ecGroupHtml(word){ return '<div class="ec-group">'+esc(t(word))+'</div>'; }
+/* The rows in two groups where the desk holds a catalog set aside or one the team took up, and as they always were otherwise. A row is
+   the team's where the lead signed its file. */
+function ecGroupedRows(tops,under,alone,asideRows,grouped){
+  const withUnder=k=>[tops[k].html].concat(under[k]);
+  if(!grouped) return tops.reduce((out,x,k)=>out.concat(withUnder(k)),[]).concat(alone);
+  const team=tops.map((x,k)=>k).filter(k=>tops[k].team), own=tops.map((x,k)=>k).filter(k=>!tops[k].team);
+  return (team.length ? [ecGroupHtml("Team catalogs")] : []).concat(...team.map(withUnder))
+    .concat(own.length || asideRows.length ? [ecGroupHtml("Personal catalogs")] : []).concat(...own.map(withUnder))
+    .concat(asideRows).concat(alone);
+}
+/* PUT BACK IN USE. Edits not yet exported in the catalog in use are asked about first, and on yes set aside BEFORE the restore, so they
+   stand as their own row under Personal catalogs; Cancel changes nothing. A loose catalog's layer comes back, and the catalog in use is
+   put down by the Library's own Eject. */
+function putBackInUse(r,title){
+  const back=()=>{
+    if(!restorePersonal(r.id)){ toastRefusal(t(ADOPT_REFUSED)); return false; }
+    if(r.loose && catalogLoaded()) ejectCatalog();
+    toast(t("Your own {TITLE} is in use again.").split("{TITLE}").join(title));
+    paintCatalogList();
+    return true;
+  };
+  if(!editsUnexported()) return back();
+  askPutBack(title,()=>{
+    if(setAsidePersonal()===false){ toastRefusal(t(ADOPT_REFUSED)); return; } /* plant:putback-aside */
+    back();
+  });
+  return false;
+}
 /* The team's new catalogs a listing may announce as the lead's: a file the shell found signed by the pinned lead (leadSigned),
    never merely one that parsed, and not the catalog held. */
 function listingNoticeFiles(all,held){
@@ -1000,6 +1234,7 @@ function onCatalogListing(all){
   }catch(e){}
   // A colleague's file reaches an open Library this way only.
   paintCatalogList();
+  const adoptedIds=checkAdopted(all);
   if(lsGet("eNotifyCatalogOff")!=="1"){
     const tLeads=teamLeads().filter(l=>l&&!l.removed);
     if(tLeads.length>0){
@@ -1018,7 +1253,7 @@ function onCatalogListing(all){
   }
   dropOffersLeft(all);
   const held=storedCatalog();
-  if(!held && !catalogLoaded()){ offerToLooseAuthor(all); return; }
+  if(!held && !catalogLoaded()){ offerToLooseAuthor(all,adoptedIds); return; }
   if(!held || !held.id) return;
   const files=all.filter(f=>!f.desk && !f.builtIn);
   const mine=nsGet("CatalogFile")||"";
@@ -1026,7 +1261,7 @@ function onCatalogListing(all){
     const same=files.filter(f=>f.id===held.id && f.sha===held.pin);
     if(same.length===1 && followRenamedFile(mine,same[0].name,same[0].mtime)){ paintCatNow(); paintCatalogList(); }
   }
-  const go=()=>offerFromListing(files,held);
+  const go=()=>offerFromListing(files,held,adoptedIds);
   if(tourDueAtBoot()) afterTour(go); else go();
 }
 function offerListed(f,mustBeValid){
@@ -1038,28 +1273,28 @@ function offerListed(f,mustBeValid){
     return mustBeValid ? whenTrusted(c).then(s=>s===V2_SIG_VALID && offer()) : offer();
   }).catch(()=>false);
 }
-function offerFromListing(files,held){
+function offerFromListing(files,held,skip){
   const own=sharedOwnPin();
   const higher=files.filter(f=>f.id===held.id && f.rev>(+held.rev||0) && !(own && f.sha===own)).sort((a,b)=>b.rev-a.rev||b.mtime-a.mtime)[0];
   if(higher){ offerListed(higher,false); return; }
   const grown=files.filter(f=>f.grew && f.id!==held.id);
   if(!grown.length) return;
   const mine=eBranchIdentity(false).then(who=>who?branchFileId(who,held):"");
-  mine.then(own=>{
+  Promise.all([mine,skip||new Set()]).then(([own,told])=>{
     const ours=new Set([held.id].concat(own?[own]:[]));
-    const next=grown.filter(f=>ours.has(f.grew.id)).sort((a,b)=>b.mtime-a.mtime);
+    const next=grown.filter(f=>ours.has(f.grew.id) && !told.has(f.id)).sort((a,b)=>b.mtime-a.mtime);
     // The newest that the ring vouches for; one question at a time.
     return next.reduce((chain,f)=>chain.then(done=>done||offerListed(f,true)),Promise.resolve(false));
   });
 }
 /* AN EMPTY DESK THAT MADE A CATALOG FROM NOTHING follows that file's lineage alone: a file the ring vouches for that grew
    from this desk's own file of it, which is how the lead's import of the file reaches its author. */
-function offerToLooseAuthor(all){
+function offerToLooseAuthor(all,skip){
   const origin=looseOrigin(false), grown=all.filter(f=>!f.desk && !f.builtIn && f.grew);
   if(!origin || !grown.length) return;
-  const go=()=>eBranchIdentity(false).then(who=>{
+  const go=()=>Promise.all([eBranchIdentity(false),skip||new Set()]).then(([who,told])=>{
     const own=who ? branchFileId(who,origin) : "";
-    const next=grown.filter(f=>own && f.grew.id===own).sort((a,b)=>b.mtime-a.mtime);
+    const next=grown.filter(f=>own && f.grew.id===own && !told.has(f.id)).sort((a,b)=>b.mtime-a.mtime);
     return next.reduce((chain,f)=>chain.then(done=>done||offerListed(f,true)),Promise.resolve(false));
   });
   if(tourDueAtBoot()) afterTour(go); else go();
@@ -1121,5 +1356,6 @@ export {
   loadCatalogFromFolder,
   onCatalogListing,
   listingNoticeFiles,
+  checkAdopted,
   wireHostCatalogWatch
 };

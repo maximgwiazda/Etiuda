@@ -9765,6 +9765,27 @@ ipcMain.handle("etiuda:catalog-leads", (e) => {
   heedTeam();
   return leadsForPage();
 });
+/* THE TEAM'S ADOPTIONS OF THIS DESK'S OWN CATALOGS: the entries of the team file's `adopted` that name this desk, for a catalog the
+   team lists, from a whole file under the lead this desk has pinned for that team. `original` is matched by the page, which alone
+   holds the loose id and the catalogs set aside. [] for anything else. */
+function adoptedForPage() {
+  const doc = folderTeamDoc();
+  if (!doc || !Array.isArray(doc.adopted)) return [];
+  const pin = pinTrusted(doc.id);
+  if (!pin || !doc.lead || pin.keyId !== doc.lead.keyId || pin.public !== doc.lead.public) return []; /* plant:adopted-pin */
+  const me = branchIdentity(false);
+  if (!me) return [];
+  const listed = Array.isArray(doc.catalogs) ? doc.catalogs.map(String) : [];
+  return doc.adopted.filter(a => !!a && typeof a === "object" && typeof a.catalog === "string" && listed.indexOf(a.catalog) >= 0
+      && /^[0-9a-f]{64}$/.test(String(a.original || "")))
+    .filter(a => a.desk === me.id) /* plant:adopted-desk */
+    .map(a => ({ catalog: a.catalog, desk: me.id, original: String(a.original) }));
+}
+ipcMain.handle("etiuda:catalog-adopted", (e) => {
+  if (!fromEngine(e)) return [];
+  heedTeam();
+  return adoptedForPage();
+});
 ipcMain.handle("etiuda:stats-write", (e, text, askId) => {
   if (!fromEngine(e)) return { ok: false };
   return writeStatsAnswer(String(text || ""), typeof askId === "string" ? askId : "");
