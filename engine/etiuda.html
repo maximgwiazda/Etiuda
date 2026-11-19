@@ -29472,6 +29472,7 @@ What is typed here stays in this browser.`;
     return reason === "signin-tenant" || signinManaged(v) && (reason === "signin-notassigned" || reason === "signin-notallowed");
   }
   var signinV = signinRead(null);
+  var signinHasView = false;
   function signinHost() {
     const h = eHost();
     return h && typeof h.signinState === "function" ? h : null;
@@ -29481,29 +29482,33 @@ What is typed here stays in this browser.`;
     if (!h) return signinRead(null);
     try {
       signinV = signinRead(h.signinState());
+      signinHasView = true;
     } catch (e) {
       signinV = signinRead(null);
+      signinHasView = false;
     }
     return signinV;
+  }
+  function deskWorks(v) {
+    if (v === void 0) {
+      if (!signinHost()) return false;
+      if (signinV.works !== true) return false;
+      return true;
+    }
+    if (!v || typeof v !== "object" || v.works !== true) return false;
+    return true;
   }
   function signinShown(v) {
     return !!(v && (v.offered.length || v.signedIn || signinWaiting(v) || signinStranded(v)));
   }
-  var FIRST_SIGNIN_KEY = "eFirstSigninSeen";
-  function firstSigninSeen() {
-    return lsGet(FIRST_SIGNIN_KEY) === "1";
-  }
-  function markFirstSigninSeen() {
-    return lsSet(FIRST_SIGNIN_KEY, "1", true);
-  }
-  function firstSigninDue(v, opts) {
-    const s = v === void 0 ? signinV : signinRead(v);
-    const o = opts && typeof opts === "object" ? opts : null;
-    const seen = o && "seen" in o ? !!o.seen : firstSigninSeen();
-    const policy = o && "policy" in o ? !!o.policy : eCatalogFolderPinned();
-    if (policy) return false;
-    if (signinStranded(s)) return false;
-    return !!(s && s.offered.length && !s.signedIn && !seen);
+  function firstSigninDue(v) {
+    if (v === void 0) {
+      if (!signinHasView) return false;
+      if (!deskWorks()) return true;
+      return false;
+    }
+    if (!v || typeof v !== "object") return false;
+    return !deskWorks(signinRead(v));
   }
   var firstSigninPending = false;
   var firstSigninOpen = false;
@@ -29545,29 +29550,11 @@ What is typed here stays in this browser.`;
     const opening = !doorish && d && d.moment === "before";
     if (doorish || opening) {
       el.innerHTML = firstSigninHtml(signinV, { forceFirst: opening });
+    } else if (!d) {
+      el.innerHTML = firstSigninHtml(signinV, { doorKind: "no-signin" });
     } else {
-      const skipBtn = '<button type="button" class="btn fs-skip-btn" id="firstSigninSkip">' + esc(t("Not now")) + "</button>";
-      const skipLine = '<p class="fs-skip-line">' + esc(t("The desk opens as it is, and Sign in stays in the bar at the top for later.")) + "</p>";
-      let rightBody = "";
-      if (d) {
-        rightBody = signinPanelHtml(Object.assign({}, d, { foot: "" }));
-      }
+      const rightBody = signinPanelHtml(Object.assign({}, d, { foot: "" }));
       el.innerHTML = '<div class="fs-grid"><div class="fs-left"><div class="fs-left-in"><div class="fs-body">' + firstSigninMarkHtml() + '<h1 id="fsHeading">' + esc(t("Sign in to Etiuda")) + '</h1><p class="fs-lede">' + esc(t("Your seat belongs to your account, so it comes with you to any computer you sign in on, up to three.")) + "</p>" + doorStepsHtml() + '</div><p class="fs-foot">' + esc(t("No licence key to keep")) + '</p></div></div><div class="fs-right"><div class="fs-right-in"><h2 class="fs-rh">' + esc(t("Signing in")) + "</h2>" + rightBody + "</div></div></div>";
-      let showSkip = d && d.moment === "refused";
-      if (d && d.moment === "managed-refused") showSkip = true;
-      if (showSkip) {
-        const acts = el.querySelector(".sgn-acts");
-        if (acts) {
-          acts.insertAdjacentHTML("beforeend", skipBtn);
-          acts.insertAdjacentHTML("afterend", skipLine);
-        } else {
-          const rin = el.querySelector(".fs-right-in");
-          if (rin) rin.insertAdjacentHTML("beforeend", '<div class="fs-skip">' + skipBtn + skipLine + "</div>");
-        }
-      } else if (d && d.moment === "stranded") {
-        const rin = el.querySelector(".fs-right-in");
-        if (rin) rin.insertAdjacentHTML("beforeend", '<div class="fs-skip"><button type="button" class="btn primary fs-skip-btn" id="firstSigninSkip">' + esc(t("Continue")) + "</button></div>");
-      }
     }
     if (hadFocus) {
       const first = el.querySelector("button:not(:disabled), input");
@@ -29579,15 +29566,9 @@ What is typed here stays in this browser.`;
     }
     hugDottedGround(el);
   }
-  function skipFirstSignin() {
-    if (!firstSigninPending && !firstSigninOpen) return;
-    if (signinV && signinV.busy) signinCall("signinStop");
-    closeFirstSignin();
-  }
   function openFirstSignin() {
     firstSigninPending = false;
     firstSigninOpen = true;
-    markFirstSigninSeen();
     if (typeof document === "undefined") return;
     document.body.classList.add("e-first-signin");
     const el = $("#firstSignin");
@@ -29785,6 +29766,7 @@ What is typed here stays in this browser.`;
   var ANOTHER_FOR = ["signin-notallowed", "signin-notassigned"];
   function deskDoorState(v) {
     if (!v || !Array.isArray(v.offered)) v = signinRead(v);
+    const works = deskWorks(v);
     const seat = v.holding, seatOn = seat ? seat.on : "";
     const deskEnd = v.trials && v.trials.desk || seatOn === "trial" && seat && seat.ends || 0;
     const studioEnd = v.trials && v.trials.studio || 0;
@@ -29793,20 +29775,21 @@ What is typed here stays in this browser.`;
     const lead = seat && seat.lead || team && team.lead || "";
     const waitingOnLead = !!v.askLead;
     const orgLicence = !!v.licenceManaged;
+    const trialOver = seatOn === "trial" || !seatOn && deskEnd > 0;
     let day = 0;
     if (seatOn === "trial" && deskEnd && v.now) {
       const left = Math.round((deskEnd - v.now) / 864e5);
       day = Math.max(1, Math.min(14, 14 - left));
     }
     let state = "none";
-    if (v.works && v.ended > 0) state = "ended";
-    else if (!v.works && v.signedIn && (v.ended > 0 || v.stoppedAt > 0 && seatOn !== "trial" || seatOn && seatOn !== "trial")) state = "stopped";
-    else if (!v.works && v.signedIn && (seatOn === "trial" || !seatOn && deskEnd > 0) && waitingOnLead) state = "waiting";
-    else if (!v.works && v.signedIn && seatOn === "trial" && orgLicence) state = "trial-over-org";
-    else if (!v.works && v.signedIn && seatOn === "trial") state = "trial-over";
-    else if (v.works && v.signedIn && seatOn) state = "working";
-    else if (!v.signedIn && v.offered.length && !v.online && !signinWaiting(v) && !signinStranded(v)) state = "first-offline";
-    else if (!v.signedIn && v.offered.length && v.registered && v.online && !signinWaiting(v) && !signinStranded(v)) state = "first";
+    if (works && v.ended > 0) state = "ended";
+    else if (!works && v.signedIn && v.stoppedAt > 0) state = "stopped";
+    else if (!works && v.signedIn && trialOver && waitingOnLead) state = "waiting";
+    else if (!works && v.signedIn && trialOver && orgLicence) state = "trial-over-org";
+    else if (!works && v.signedIn && trialOver) state = "trial-over";
+    else if (works && v.signedIn && seatOn) state = "working";
+    else if (!works && !v.signedIn && !v.busy && FAIL_FIRST.indexOf(v.said) < 0 && v.offered.length && v.registered && !v.online && !signinWaiting(v) && !signinStranded(v)) state = "first-offline";
+    else if (!works && !v.signedIn && !v.busy && FAIL_FIRST.indexOf(v.said) < 0 && v.offered.length && v.registered && v.online && !signinWaiting(v) && !signinStranded(v)) state = "first";
     return {
       state,
       lead,
@@ -30263,18 +30246,17 @@ What is typed here stays in this browser.`;
   }
   function signinChanged(v, answered) {
     signinV = signinRead(v);
+    signinHasView = true;
     paintSigninButton();
     if (firstSigninOpen || firstSigninPending) {
-      if (signinV.signedIn) {
-        closeFirstSignin();
+      if (!deskWorks()) {
+        if (firstSigninOpen) paintFirstSignin();
         signinTell();
         return;
       }
-      if (firstSigninOpen) {
-        paintFirstSignin();
-        signinTell();
-        return;
-      }
+      closeFirstSignin();
+      signinTell();
+      return;
     }
     if (answered && signinShown(signinV) && !signinV.busy) signinOpen = true;
     if (signinOpen) paintSigninPanel();
@@ -30714,10 +30696,6 @@ What is typed here stays in this browser.`;
     signinClicks(panel);
     if (fs) {
       signinClicks(fs);
-      fs.addEventListener("click", (e) => {
-        const s = e.target && e.target.closest ? e.target.closest("#firstSigninSkip") : null;
-        if (s) skipFirstSignin();
-      });
     }
     addEventListener("pointerdown", (e) => {
       if (signinOpen && wrap && !wrap.contains(e.target)) closeSigninPanel(false);
@@ -43552,12 +43530,6 @@ What is typed here stays in this browser.`;
         return;
       }
       if (firstSigninOpenNow()) {
-        if (eventMatchesAction(e, "escape") || e.key === "Escape") {
-          e.preventDefault();
-          e.stopPropagation();
-          skipFirstSignin();
-          return;
-        }
         if (e.key === "Tab" && !e.ctrlKey && !e.altKey && !e.metaKey) {
           const to = tabTargetIn($("#firstSignin"), e.shiftKey);
           if (to) {
@@ -43569,6 +43541,10 @@ What is typed here stays in this browser.`;
             }
           }
           return;
+        }
+        if (eventMatchesAction(e, "escape") || e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
         }
         return;
       }
