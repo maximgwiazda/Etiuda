@@ -5175,8 +5175,16 @@ try {
       ["b3a2-p4", "plant:join-admit-door", r => !r.admitHeld, "s.joined auto-loads while door stands"],
       ["b3a2-p5", "plant:join-opens-door", r => !r.opensHeld, "s.opens auto-loads while door stands"],
     ];
+    /* One literal skip per plant, so a static count of the literal skip calls reads them. */
+    if (PLANTS_OFF) {
+      skip("b3a2-p1 lifting plant:join-link-door turns red (etiuda:join# link opens confirm while door stands) (ETIUDA_PLANTS=off)");
+      skip("b3a2-p2 lifting plant:join-paste-door turns red (pasted invitation calls read while door stands) (ETIUDA_PLANTS=off)");
+      skip("b3a2-p3 lifting plant:join-act-door turns red (joinAct(ask) sends while door stands) (ETIUDA_PLANTS=off)");
+      skip("b3a2-p4 lifting plant:join-admit-door turns red (s.joined auto-loads while door stands) (ETIUDA_PLANTS=off)");
+      skip("b3a2-p5 lifting plant:join-opens-door turns red (s.opens auto-loads while door stands) (ETIUDA_PLANTS=off)");
+    }
     for (const [id, tag, judge, desc] of plants) {
-      if (PLANTS_OFF) { skip(id + " lifting " + tag + " turns red (" + desc + ") (ETIUDA_PLANTS=off)"); continue; }
+      if (PLANTS_OFF) continue;
       if (id === "b3a2-p3") {
         const res = await judge();
         check(res.red && res.same, id + " lifting " + tag + " turns red (" + desc + "): red " + res.red + ", tree " + (res.same ? "untouched" : "changed"));
