@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 284;
+const PLANTS = 295;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 203 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 206 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -4280,8 +4280,10 @@ CASES.settleIssued = async (s, swap) => {
     && clockAfterDirect.desk === deskNow && clockAfterDirect.issued === heldCert.issued;
   const rSame = s.signinSettle(held, sameAns, NOW + 27 * DAY_MS, deskNow);
   const rNew = s.signinSettle(held, newerAns, NOW + 27 * DAY_MS, deskNow);
-  const equalNewOk = rSame.cert === sameCert && rSame.ended === undefined && s.signinWorks(rSame, DESK_KEY, deskNow) === true
-    && rNew.cert === newerCert && s.signinWorks(rNew, DESK_KEY, deskNow) === true;
+  const equalNewOk = rSame.cert === sameAns.cert && JSON.stringify(rSame.cert) === JSON.stringify(sameCert)
+    && rSame.ended === undefined && s.signinWorks(rSame, DESK_KEY, deskNow) === true
+    && rNew.cert === newerAns.cert && JSON.stringify(rNew.cert) === JSON.stringify(newerCert)
+    && s.signinWorks(rNew, DESK_KEY, deskNow) === true;
 
   /* Path 1: daily renewal (signinRenewHeld). */
   const ioRenew = Object.assign(renewIo(answer({ id_token: jwt(msClaims(undefined)), refresh_token: "rt-2" }), olderBody), { deskNow: () => deskNow });
@@ -4530,6 +4532,7 @@ CASES.stateKeyRestoreAndTell = (s, swap) => {
 };
 
 /* Fresh copy of signin.js in memory with no swap (or a plant swap), so module state starts clean. */
+let freshSeq = 0;
 async function freshSignin(swap) {
   const dir = pathToFileURL(path.join(ROOT, "src", "modules")).href + "/";
   let text = PAGE;
@@ -4537,7 +4540,7 @@ async function freshSignin(swap) {
     if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in signin.js once: " + swap[0]);
     text = text.replace(swap[0], swap[1]);
   }
-  return import("data:text/javascript;base64," + Buffer.from(text.replace(/from "\.\//g, 'from "' + dir)).toString("base64"));
+  return import("data:text/javascript;base64," + Buffer.from(text.replace(/from "\.\//g, 'from "' + dir) + "\n/* fresh:" + (++freshSeq) + " */").toString("base64"));
 }
 
 /* B-3a1: deskWorks() is the one gate predicate on the page; no host answers false; gate functions call no write to desk.json or storage. */
@@ -4664,6 +4667,396 @@ CASES.doorRule = async (s, page, kdSwap) => {
     storage.lsDel("eFirstSigninSeen");
     if (!hadWin) delete globalThis.window; else globalThis.window = prevWin;
     if (!hadDoc) delete globalThis.document; else globalThis.document = prevDoc;
+  }
+};
+
+/* Fresh copy of any page module in memory, with an optional plant swap; imports point back at src/modules so it shares signin.js state. */
+async function freshPageMod(file, swap) {
+  const dir = pathToFileURL(path.join(ROOT, "src", "modules")).href + "/";
+  let text = fs.readFileSync(path.join(ROOT, "src", "modules", file), "utf8");
+  if (swap) {
+    if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in " + file + " once: " + swap[0]);
+    text = text.replace(swap[0], swap[1]);
+  }
+  return import("data:text/javascript;base64," + Buffer.from(text.replace(/from "\.\//g, 'from "' + dir)).toString("base64"));
+}
+
+/* B-3a2a step 1: while the door stands, every catalog intake channel waits (boot offer with asked:true, listing, host watch file,
+   browser watched file, window drop, importCatalogText) or is ignored (importCatalogHere); when deskWorks() turns true, what waited plays. */
+CASES.offersWait = async (s, swapSpec) => {
+  const SGN = await import(pathToFileURL(path.join(ROOT, "src", "modules", "signin.js")).href);
+  const CO = swapSpec && swapSpec.file === "catalog-offer.js"
+    ? await freshPageMod("catalog-offer.js", swapSpec.swap)
+    : await import(pathToFileURL(path.join(ROOT, "src", "modules", "catalog-offer.js")).href);
+  const CF = swapSpec && swapSpec.file === "catalog-file.js"
+    ? await freshPageMod("catalog-file.js", swapSpec.swap)
+    : await import(pathToFileURL(path.join(ROOT, "src", "modules", "catalog-file.js")).href);
+  const HK = await import(pathToFileURL(path.join(ROOT, "src", "modules", "hooks.js")).href);
+  const ST = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
+  const TJ = await import(pathToFileURL(path.join(ROOT, "src", "modules", "team-join.js")).href);
+  if (swapSpec && swapSpec.file === "signin.js") {
+    const pg = await freshPageMod("signin.js", swapSpec.swap);
+    if (typeof pg.doorHolds !== "function") return false;
+    const hadWin = "window" in globalThis, prevWin = globalThis.window;
+    try {
+      globalThis.window = { E_HOST: { signinState: () => ({ offered: ["microsoft"], signedIn: "", works: false, registered: true, online: true }) } };
+      pg.signinNow();
+      return pg.doorHolds() === true;
+    } finally {
+      if (!hadWin) delete globalThis.window; else globalThis.window = prevWin;
+    }
+  }
+  if (typeof SGN.doorHolds !== "function" || typeof SGN.whenDoorLowers !== "function") return false;
+  const hadWin = "window" in globalThis, prevWin = globalThis.window;
+  const hadDoc = "document" in globalThis, prevDoc = globalThis.document;
+  const hadAdd = "addEventListener" in globalThis, prevAdd = globalThis.addEventListener;
+  const hadRem = "removeEventListener" in globalThis, prevRem = globalThis.removeEventListener;
+  const hadInner = "innerWidth" in globalThis, prevInner = globalThis.innerWidth;
+  const hadInnerH = "innerHeight" in globalThis, prevInnerH = globalThis.innerHeight;
+  const hadIdb = "indexedDB" in globalThis, prevIdb = globalThis.indexedDB;
+  const hadOfferHook = "offerPickedCatalog" in HK.hooks, prevOfferHook = HK.hooks.offerPickedCatalog;
+  const hadRenderHook = "render" in HK.hooks, prevRenderHook = HK.hooks.render;
+  const mkNode = tag => {
+    const kids = [], attrs = {}, cls = new Set();
+    const fakeBtn = { onclick: null, focus() {}, click() {}, remove() {}, insertAdjacentHTML() {}, style: {}, classList: { add() {}, remove() {}, toggle() {}, contains: () => false } };
+    const n = {
+      tagName: String(tag || "DIV").toUpperCase(), id: "", className: "", hidden: false, innerHTML: "", textContent: "",
+      style: {}, isConnected: true, children: kids,
+      classList: { add: c => cls.add(c), remove: c => cls.delete(c), toggle: (c, v) => (v === undefined ? (cls.has(c) ? cls.delete(c) : cls.add(c)) : (v ? cls.add(c) : cls.delete(c))), contains: c => cls.has(c) },
+      setAttribute(k, v) { attrs[k] = String(v); }, getAttribute(k) { return k in attrs ? attrs[k] : null; }, removeAttribute(k) { delete attrs[k]; },
+      appendChild(c) { kids.push(c); c.parentNode = n; return c; }, insertBefore(c) { kids.unshift(c); c.parentNode = n; return c; },
+      remove() { n.isConnected = false; }, contains: () => false, focus() {},
+      addEventListener() {}, removeEventListener() {},
+      querySelector: sel => (sel === "#ecYes" || sel === "#ecNo" || sel === ".tour-actions" ? fakeBtn : null),
+      querySelectorAll: () => [], getBoundingClientRect: () => ({ top: 0, left: 0, width: 100, height: 30, bottom: 30, right: 100 }),
+      offsetHeight: 120,
+    };
+    return n;
+  };
+  const v2Doc = (id, rev, title) => ({
+    format: 2, kind: "etiuda-catalog", id: id, rev: rev, name: title, date: "2026-11-18",
+    langs: [{ code: "en", label: "EN" }],
+    tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers" } }],
+    cards: [{ id: "c-1", shelf: "t-op", bodyShape: "plain", title: { en: title }, body: { en: "Reply body." } }],
+  });
+  try {
+    const unseated = { offered: ["microsoft"], signedIn: "", works: false, online: true, registered: true };
+    const seated = { offered: ["microsoft"], signedIn: "microsoft", code: CODE, works: true, online: true, registered: true,
+      now: NOW, until: NOW + DAY_MS, holding: { on: "trial", ends: NOW + DAY_MS } };
+    let cur = unseated, onFileCb = null, onListCb = null, pickerOpens = 0, droppedCalls = 0, watchGets = 0, notifies = [], pickedOffers = [];
+    const listeners = {};
+    const added = [];
+    const fsEl = mkNode("section"); fsEl.id = "firstSignin";
+    const body = mkNode("body");
+    body.appendChild = c => { added.push(c); c.parentNode = body; return c; };
+    const byId = id => {
+      if (id === "firstSignin") return fsEl;
+      return added.slice().reverse().find(x => x.id === id && x.isConnected) || null;
+    };
+    const clearOffers = () => { added.forEach(x => { if (x.id === "eCatalogOffer") x.isConnected = false; }); };
+    globalThis.document = {
+      body, activeElement: null,
+      getElementById: byId, querySelector: sel => (sel === "#firstSignin" ? fsEl : sel === "#eCatalogOffer" ? byId("eCatalogOffer") : null),
+      querySelectorAll: () => [], createElement: mkNode,
+    };
+    globalThis.innerWidth = 1280; globalThis.innerHeight = 800;
+    globalThis.indexedDB = { open: () => { watchGets++; const r = {}; setTimeout(() => { if (r.onerror) r.onerror(); }, 0); return r; } };
+    globalThis.addEventListener = (k, fn) => { (listeners[k] = listeners[k] || []).push(fn); };
+    globalThis.removeEventListener = (k, fn) => { if (listeners[k]) listeners[k] = listeners[k].filter(x => x !== fn); };
+    const bootDoc = v2Doc("k-boot", 1, "Boot Given");
+    const hostFileText = JSON.stringify(v2Doc("k-watch", 2, "Watch File"));
+    const dropFileText = JSON.stringify(v2Doc("k-drop", 1, "Drop File"));
+    const importTextA = JSON.stringify(v2Doc("k-imp-a", 1, "Import A"));
+    const importTextB = JSON.stringify(v2Doc("k-imp-b", 1, "Import B"));
+    globalThis.window = {
+      E_CATALOG: bootDoc,
+      showOpenFilePicker: () => { pickerOpens++; return Promise.reject(Object.assign(new Error("abort"), { name: "AbortError" })); },
+      E_HOST: {
+        signinState: () => cur,
+        catalogFile: "boot-given.ec", catalogFolder: "C:\\Lab\\Cats", catalogIn: "C:\\Lab\\Cats", openedWith: true,
+        catalogMtime: 1000, catalogFiles: () => Promise.resolve([]), catalogLeads: () => Promise.resolve([]),
+        onCatalogFile: fn => { onFileCb = fn; },
+        onCatalogListing: fn => { onListCb = fn; },
+        notify: o => { notifies.push(o); return true; },
+        pickCatalogFile: () => { pickerOpens++; return Promise.resolve(null); },
+        offerDropped: () => { droppedCalls++; return true; },
+        deskSave: () => true,
+      },
+    };
+    ST.nsDel("Catalog"); ST.nsDel("CatalogOk"); ST.nsDel("CatalogNo"); ST.nsDel("CatalogNoAt"); ST.nsDel("WatchName"); ST.nsDel("WatchSeen"); ST.lsDel("eNotifyCatalogOff");
+    ST.lsSet("eTourDone_v3", "1"); ST.lsSet("eTourInvite_v3", "1");
+    HK.hooks.offerPickedCatalog = (c, name) => { pickedOffers.push({ id: c.id, name }); };
+    HK.hooks.render = () => {};
+    /* Seed one team lead so onCatalogListing tries to emit a new-catalog notification. */
+    TJ.joinTook({ leads: [{ team: "t-1", lead: "Anna", print: "1234", admitted: true, seen: true }] });
+
+    SGN.signinNow();
+    SGN.bootFirstSignin();
+    const standing = SGN.firstSigninOpenNow() === true && SGN.doorHolds() === true;
+
+    /* 1. offerAtBoot with openedWith:true (asked:true) waits behind doorHolds(). */
+    CO.eOfferCatalogAtBoot();
+    const bootHeld = !byId("eCatalogOffer");
+
+    /* 2. onCatalogListing waits behind doorHolds(): no notify while standing, latest plays on lower. */
+    CO.wireHostCatalogWatch();
+    CO.onCatalogListing([{ name: "first.ec", id: "k-list-1", sha: "sha1", rev: 1, mtime: 1, leadSigned: true }]);
+    CO.onCatalogListing([{ name: "second.ec", id: "k-list-2", sha: "sha2", rev: 1, mtime: 2, leadSigned: true }]);
+    const listHeld = notifies.length === 0;
+
+    /* 3. wireHostCatalogWatch onCatalogFile waits behind doorHolds(). */
+    if (onFileCb) onFileCb(hostFileText, "watch-cat.ec", "C:\\Lab\\Cats", true, "", false, "", "");
+    const hostFileHeld = !byId("eCatalogOffer");
+
+    /* 5. wireCatalogDrop holds dropped file without calling offerDropped or reading text while standing. */
+    CF.wireCatalogDrop();
+    let dropPrevented = false, dropTextReads = 0;
+    const fakeFile = { name: "dropped.ec", text: () => { dropTextReads++; return Promise.resolve(dropFileText); } };
+    (listeners.drop || []).forEach(fn => fn({
+      dataTransfer: { types: ["Files"], files: [fakeFile] },
+      preventDefault() { dropPrevented = true; },
+    }));
+    const dropHeld = dropPrevented && droppedCalls === 0 && dropTextReads === 0 && pickedOffers.length === 0;
+
+    /* 6. importCatalogText holds latest without offering while standing. */
+    const imp1 = CF.importCatalogText(importTextA, "imp-a.ec");
+    const imp2 = CF.importCatalogText(importTextB, "imp-b.ec");
+    const impTextHeld = imp1 === false && imp2 === false && pickedOffers.length === 0;
+
+    /* 7. importCatalogHere is ignored while standing (does not open picker). */
+    CF.importCatalogHere();
+    const pickerHeld = pickerOpens === 0;
+
+    /* Lower the door: deskWorks() turns true -> everything that waited plays! */
+    cur = seated;
+    SGN.signinChanged(seated, false);
+    await tick(30);
+    const bootPlayed = !!byId("eCatalogOffer");
+    const listPlayed = notifies.length === 1 && notifies[0].body.indexOf("second") >= 0;
+    const dropPlayed = droppedCalls === 1;
+    const impPlayed = pickedOffers.length === 1 && pickedOffers[0].id === "k-imp-b" && pickedOffers[0].name === "imp-b.ec";
+
+    /* 4. eCheckWatchedFile tested with no #eCatalogOffer on screen: waits while door holds, runs eWatchGet once seated. */
+    clearOffers();
+    cur = unseated;
+    SGN.signinChanged(unseated, false);
+    ST.nsSet("WatchName", "watched.ec");
+    CO.eCheckWatchedFile(false);
+    const watchHeld = watchGets === 0;
+    cur = seated;
+    SGN.signinChanged(seated, false);
+    await tick(20);
+    const watchPlayed = watchGets >= 1;
+
+    /* Working desk control: importCatalogHere opens picker immediately, and a fresh host file offers immediately. */
+    clearOffers();
+    CF.importCatalogHere();
+    const worksPicker = pickerOpens === 1;
+    if (onFileCb) onFileCb(hostFileText, "watch-cat.ec", "C:\\Lab\\Cats", true, "", false, "", "");
+    const worksHostFile = !!byId("eCatalogOffer");
+
+    return standing && bootHeld && listHeld && hostFileHeld && watchHeld && dropHeld && impTextHeld && pickerHeld
+      && bootPlayed && listPlayed && dropPlayed && impPlayed && watchPlayed && worksPicker && worksHostFile;
+  } finally {
+    ST.nsDel("WatchName"); ST.nsDel("WatchSeen"); ST.lsDel("eTourDone_v3"); ST.lsDel("eTourInvite_v3");
+    if (!hadIdb) delete globalThis.indexedDB; else globalThis.indexedDB = prevIdb;
+    if (!hadOfferHook) delete HK.hooks.offerPickedCatalog; else HK.hooks.offerPickedCatalog = prevOfferHook;
+    if (!hadRenderHook) delete HK.hooks.render; else HK.hooks.render = prevRenderHook;
+    if (!hadWin) delete globalThis.window; else globalThis.window = prevWin;
+    if (!hadDoc) delete globalThis.document; else globalThis.document = prevDoc;
+    if (!hadAdd) delete globalThis.addEventListener; else globalThis.addEventListener = prevAdd;
+    if (!hadRem) delete globalThis.removeEventListener; else globalThis.removeEventListener = prevRem;
+    if (!hadInner) delete globalThis.innerWidth; else globalThis.innerWidth = prevInner;
+    if (!hadInnerH) delete globalThis.innerHeight; else globalThis.innerHeight = prevInnerH;
+  }
+};
+
+/* B-3a2a step 3 + floor matter: over the standing door, keyboard answers only the door (Tab/Shift+Tab reach every door control
+   including data-door-save, Enter/Space activate a focused door control natively without firing shortcuts, Escape/Ctrl+Z undo/
+   Ctrl+W/Ctrl+Shift+T/SC_DEFS/typing/capture chords are all blocked; save IPC handlers remain untouched and unguarded). */
+CASES.doorKeyboard = async (s, kdSwap) => {
+  const KD_SRC = fs.readFileSync(path.join(ROOT, "src", "modules", "keydown.js"), "utf8");
+  let kdText = KD_SRC;
+  if (kdSwap) {
+    if (kdText.split(kdSwap[0]).length !== 2) throw new Error("plant anchor not in keydown.js once: " + kdSwap[0]);
+    kdText = kdText.replace(kdSwap[0], kdSwap[1]);
+  }
+  const capSlice = decl(kdText, "function wireCaptureKeydown(");
+  const globSlice = decl(kdText, "function wireGlobalKeydown(");
+  const runWith = (doorOpen) => {
+    const capListeners = [], globListeners = [];
+    let undoCalls = 0, shortcuts = [], focused = null, pageScrolls = 0;
+    const btnSign = { tagName: "BUTTON", id: "signBtn", offsetWidth: 80, offsetHeight: 30, focus() { focused = btnSign; } };
+    const btnSave = { tagName: "BUTTON", id: "saveBtn", dataset: { doorSave: "" }, offsetWidth: 80, offsetHeight: 30, focus() { focused = btnSave; } };
+    const outsideEl = { tagName: "INPUT", id: "intent", value: "", selectionStart: 0, selectionEnd: 0, focus() {}, setSelectionRange() {}, dispatchEvent() {} };
+    const fsEl = {
+      id: "firstSignin",
+      contains: el => el === btnSign || el === btnSave,
+      querySelectorAll: () => [btnSign, btnSave],
+    };
+    const doc = {
+      activeElement: btnSign,
+      body: { classList: { contains: () => false } },
+    };
+    const tabTarget = (card, back) => {
+      if (!card) return null;
+      const els = [btnSign, btnSave];
+      const at = doc.activeElement;
+      if (!card.contains(at)) return back ? els[els.length - 1] : els[0];
+      if (back && at === els[0]) return els[els.length - 1];
+      if (!back && at === els[els.length - 1]) return els[0];
+      return null;
+    };
+    const off = () => false;
+    const own = {
+      window: {}, document: doc,
+      addEventListener: (k, fn, cap) => { if (k === "keydown") (cap ? capListeners : globListeners).push(fn); },
+      $: sel => (sel === "#firstSignin" ? fsEl : null),
+      scCaptureId: "", SC_DEFS: [{ id: "escape", fixed: false, inField: true }, { id: "tabNext", fixed: false, inField: true }, { id: "find", fixed: false, inField: true }],
+      intentEl: outsideEl,
+      tourActive: off, tourHasFocus: off, openCover: () => null, modalFront: off, factsPanelOpen: off,
+      eventMatchesAction: (e, id) => (id === "escape" && e.key === "Escape") || (id === "undo" && e.ctrlKey && e.key === "z")
+        || (id === "tabNext" && e.ctrlKey && e.key === "Tab") || (id === "find" && e.ctrlKey && e.key === "k"),
+      eHost: () => ({}),
+      hooks: { runShortcut: id => { shortcuts.push(id); return true; } },
+      noteUndoTyping: off,
+      takeStandingUndo: () => { undoCalls++; return true; },
+      typingInField: off,
+      firstSigninOpenNow: () => doorOpen,
+      tabTargetIn: tabTarget,
+      pageKeyScroll: () => { pageScrolls++; return true; },
+      lanesPageScroller: () => null,
+      closeLooseOverlays: off,
+      focusRingOn: () => true,
+    };
+    new Function("scope", "with(scope){\n" + capSlice + "\n" + globSlice + "\nwireCaptureKeydown();\nwireGlobalKeydown();\n}")(new Proxy(own, {
+      has: () => true,
+      get: (t, k) => (k === Symbol.unscopables ? undefined : k in t ? t[k] : globalThis[k]),
+    }));
+    const send = (ev) => {
+      const e = Object.assign({
+        key: "", code: "", ctrlKey: false, altKey: false, metaKey: false, shiftKey: false, repeat: false, target: own.window,
+        defaultPrevented: false, stopped: false, immediateStopped: false,
+        preventDefault() { this.defaultPrevented = true; },
+        stopPropagation() { this.stopped = true; },
+        stopImmediatePropagation() { this.immediateStopped = true; this.stopped = true; },
+      }, ev);
+      for (const fn of capListeners) { fn(e); if (e.immediateStopped) break; }
+      if (!e.stopped) { for (const fn of globListeners) fn(e); }
+      return e;
+    };
+    return { doc, btnSign, btnSave, outsideEl, send, state: () => ({ undoCalls, shortcuts: shortcuts.slice(), focused, intentVal: outsideEl.value, pageScrolls }) };
+  };
+
+  /* Door open: Tab / Shift+Tab reach data-door-save, Enter / Space press it without preventDefault, everything else is blocked. */
+  const d = runWith(true);
+  d.doc.activeElement = d.outsideEl;
+  const tabIn = d.send({ key: "Tab" });
+  const landedSign = d.state().focused === d.btnSign && tabIn.defaultPrevented;
+  d.doc.activeElement = d.btnSign;
+  const shiftWrap = d.send({ key: "Tab", shiftKey: true });
+  const reachedSave = d.state().focused === d.btnSave && shiftWrap.defaultPrevented;
+  d.doc.activeElement = d.btnSave;
+  const enterSave = d.send({ key: "Enter", target: d.btnSave });
+  const spaceSave = d.send({ key: " ", target: d.btnSave });
+  const savePressable = !enterSave.defaultPrevented && !spaceSave.defaultPrevented && !enterSave.stopped && !spaceSave.stopped;
+  const undoEv = d.send({ key: "z", ctrlKey: true });
+  const ctrlW = d.send({ key: "w", code: "KeyW", ctrlKey: true });
+  const ctrlShiftT = d.send({ key: "T", code: "KeyT", ctrlKey: true, shiftKey: true });
+  const ctrlTab = d.send({ key: "Tab", code: "Tab", ctrlKey: true });
+  const ctrlK = d.send({ key: "k", code: "KeyK", ctrlKey: true });
+  const escEv = d.send({ key: "Escape" });
+  const typeEv = d.send({ key: "a" });
+  const ctrlMod = d.send({ key: "Control", ctrlKey: true });
+  const outsideTarget = d.send({ key: "Enter", target: d.outsideEl });
+  d.doc.activeElement = d.outsideEl;
+  const enterOutside = d.send({ key: "Enter" });
+  const st = d.state();
+  const allBlocked = st.undoCalls === 0 && st.shortcuts.length === 0 && st.intentVal === "" && st.pageScrolls === 0
+    && undoEv.defaultPrevented && ctrlW.defaultPrevented && ctrlShiftT.defaultPrevented && ctrlTab.defaultPrevented
+    && ctrlK.defaultPrevented && escEv.defaultPrevented && typeEv.defaultPrevented
+    && ctrlMod.immediateStopped && outsideTarget.immediateStopped && enterOutside.defaultPrevented;
+
+  /* Control: door closed -> Ctrl+Z calls undo, Ctrl+W runs tabClose, printable key types into intent. */
+  const c = runWith(false);
+  c.doc.activeElement = null;
+  c.send({ key: "z", ctrlKey: true });
+  c.send({ key: "w", code: "KeyW", ctrlKey: true });
+  c.send({ key: "a" });
+  const cst = c.state();
+  const controlOk = cst.undoCalls === 1 && cst.shortcuts.includes("tabClose") && cst.intentVal === "a";
+
+  /* Floor matter: save IPC handlers stay unguarded and untouched. */
+  const chooseAt = MAIN.indexOf('ipcMain.handle("etiuda:choose-catalog-save",');
+  const writeAt = MAIN.indexOf('ipcMain.handle("etiuda:write-catalog-save",');
+  const chooseBody = chooseAt > 0 ? MAIN.slice(chooseAt, MAIN.indexOf("\n});", chooseAt)) : "";
+  const writeBody = writeAt > 0 ? MAIN.slice(writeAt, MAIN.indexOf("\n});", writeAt)) : "";
+  const saveOpen = chooseBody.length > 0 && writeBody.length > 0
+    && !/signinWorks|deskWorks|pickerWorks/.test(chooseBody + writeBody);
+
+  return landedSign && reachedSave && savePressable && allBlocked && controlOk && saveOpen;
+};
+
+/* B-3a2a step 4 (page side): answerPick refuses every op when deskWorks() is false without reading catalog or layer,
+   returning a refusal shape the picker reads as nothing to show, and answers as before when deskWorks() is true. */
+CASES.pickAskDoor = async (s, pickSwap) => {
+  const SGN = await import(pathToFileURL(path.join(ROOT, "src", "modules", "signin.js")).href);
+  const PKM = pickSwap
+    ? await freshPageMod("pick.js", pickSwap)
+    : await import(pathToFileURL(path.join(ROOT, "src", "modules", "pick.js")).href);
+  const AS = await import(pathToFileURL(path.join(ROOT, "src", "modules", "app-state.js")).href);
+  const PK = await import(pathToFileURL(path.join(ROOT, "src", "modules", "pack.js")).href);
+  const ST = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
+  const DOM = await import(pathToFileURL(path.join(ROOT, "src", "modules", "dom.js")).href);
+  const HK = await import(pathToFileURL(path.join(ROOT, "src", "modules", "hooks.js")).href);
+  const hadWin = "window" in globalThis, prevWin = globalThis.window;
+  const hadDoc = "document" in globalThis, prevDoc = globalThis.document;
+  const hadRailHook = "railDecorate" in HK.hooks, prevRailHook = HK.hooks.railDecorate;
+  const prevCards = AS.cards.slice();
+  const prevUses = Object.assign({}, PK.pack.useCounts || {});
+  try {
+    globalThis.document = {
+      querySelector: sel => (sel === "#pax" || sel === "#roleSel" ? { value: "" } : null),
+      getElementById: id => (id === "pax" || id === "roleSel" ? { value: "" } : null),
+      createElement: () => ({ getContext: () => ({}) }),
+      createRange: () => ({}),
+    };
+    DOM.grabDom();
+    HK.hooks.railDecorate = () => {};
+    AS.putLang("en");
+    AS.setCards([{ id: "c-door", c: "orders", t: "Door card", en: "Secret reply body." }]);
+    ST.lsSet("eNameAsked", "1"); ST.lsSet("eAgent", "Kate");
+    const unseated = { offered: ["microsoft"], signedIn: "", works: false, online: true, registered: true };
+    const seated = { offered: ["microsoft"], signedIn: "microsoft", code: CODE, works: true, online: true, registered: true,
+      now: NOW, until: NOW + DAY_MS, holding: { on: "trial", ends: NOW + DAY_MS } };
+    let cur = unseated;
+    globalThis.window = { E_HOST: { signinState: () => cur } };
+    SGN.signinNow();
+    const usesBefore = (PK.pack.useCounts && PK.pack.useCounts["c-door"]) || 0;
+    const emptyOps = ["find", "who", "tab", "lang", "suggest-take", "suggest-rows"];
+    const nullOps = ["open", "copy", "ask", "suggest-profiles", "suggest-open", "search-shortlist", "search-reorder", "tour"];
+    const emptyOk = emptyOps.every(op => {
+      const r = PKM.answerPick(op, JSON.stringify({ q: "door", id: "c-door", name: "Ana" }));
+      return !!r && Array.isArray(r.rows) && r.rows.length === 0 && r.count === "";
+    });
+    const nullOk = nullOps.every(op => PKM.answerPick(op, JSON.stringify({ id: "c-door", vi: 0, q: "door" })) === null);
+    const noStats = ((PK.pack.useCounts && PK.pack.useCounts["c-door"]) || 0) === usesBefore;
+
+    /* Control: seated view -> answerPick answers with the real card as before. */
+    cur = seated;
+    SGN.signinChanged(seated, false);
+    const found = PKM.answerPick("find", JSON.stringify({ q: "door" }));
+    const copied = PKM.answerPick("copy", JSON.stringify({ id: "c-door", vi: 0 }));
+    const worksOk = !!found && Array.isArray(found.rows) && found.rows.length === 1 && found.rows[0].id === "c-door"
+      && !!copied && typeof copied.text === "string" && copied.text.indexOf("Secret reply body.") >= 0;
+    return emptyOk && nullOk && noStats && worksOk;
+  } finally {
+    AS.setCards(prevCards);
+    PK.pack.useCounts = prevUses;
+    ST.lsDel("eNameAsked"); ST.lsDel("eAgent");
+    if (!hadRailHook) delete HK.hooks.railDecorate; else HK.hooks.railDecorate = prevRailHook;
+    if (!hadDoc) delete globalThis.document; else globalThis.document = prevDoc;
+    if (!hadWin) delete globalThis.window; else globalThis.window = prevWin;
   }
 };
 const LEGS = [
@@ -4858,8 +5251,11 @@ const LEGS = [
   ["dsg2", "stateKeyLate", "B-3a1, finding 2: a first ask before the desk key exists does not cache a stripped state; once the key arrives the view carries the certificate and works, without clockWire's stub"],
   ["dsg3", "deskWorksGate", "B-3a1: deskWorks() is the one gate predicate, answers false with no host, follows works on host views, and gate functions call no write"],
   ["dsg4", "doorRule", "B-3a1: firstSigninDue ignores seen and policy pin and fires when view is read and deskWorks() is false; Not now, Escape, Continue and seen memory are gone; door lowers only when deskWorks() turns true"],
-  ["dsg5", "settleClockIssued", "Argon 51 M1: settle and kept-file path compare against clock.issued so null held cert or older cert in signin.json cannot revive the desk"],
-  ["dsg6", "stateKeyRestoreAndTell", "Argon 51 M2: unopenable key then old key restored keeps works:true and preserves disk cert on tick; key arrival tells the page"],
+  ["dsg5", "offersWait", "B-3a2a: while the door stands, every catalog intake channel (boot offer with asked:true, listing, host watch, browser watch, window drop, importCatalogText) waits and plays when deskWorks() turns true, and importCatalogHere is ignored"],
+  ["dsg6", "doorKeyboard", "B-3a2a: over the standing door, keyboard answers only the door (Tab/Shift+Tab reach data-door-save, Enter/Space press it natively; Escape, Ctrl+Z standing undo, shortcuts, chords and typing are held back; save handlers stay unguarded)"],
+  ["dsg7", "pickAskDoor", "B-3a2a: answerPick refuses every op when deskWorks() is false without reading catalog or layer, returning a nothing-to-show refusal shape, and answers as before when deskWorks() is true"],
+  ["dsg11", "settleClockIssued", "Argon 51 M1: settle and kept-file path compare against clock.issued so null held cert or older cert in signin.json cannot revive the desk"],
+  ["dsg12", "stateKeyRestoreAndTell", "Argon 51 M2: unopenable key then old key restored keeps works:true and preserves disk cert on tick; key arrival tells the page"],
 ];
 for (let [id, name, line] of LEGS) {
   let ok = false;
@@ -5055,7 +5451,7 @@ const outside = outsideNames(MAIN);
    certificate and write the request there (ds11d), and for Buy to carry the sign-in code to the order page (tests/desk-buy.mjs), none
    of which gates anything; and to hand a team's relay its seat on a licence that follows Entra, which the relay judges and nothing
    on the desk waits on (tests/relay-seats.mjs d1a to d3a). */
-const expectOutside = ["signinListen", "armSigninRenew", "signinFlush", "signinFlush", "signinDoorInvite", "signinDoorKept", "signinView", "signinWorksNow",
+const expectOutside = ["signinListen", "armSigninRenew", "signinFlush", "signinFlush", "signinDoorInvite", "signinDoorKept", "signinView", "signinWorksNow", "signinWorksNow",
   "signinRelaySeatIo", "signinRelaySeatIo", "signinPressNow"];
 check(outside.slice().sort().join() === expectOutside.slice().sort().join(),
   "ds5a nothing local is gated: outside its section the shell names the sign-in only to require its loopback, to arm the renewal, to write the seat after a join and to press on Ask again: " + outside.join(" "));
@@ -5537,13 +5933,41 @@ if (!PLANTS_OFF) {
     const r = await plantRed(async () => CASES.doorRule(S, undefined, [from, ""]));
     check(r.red, "dsgp9 plant " + from.trim().slice(0, 50) + " turns doorRule red" + said(r));
   }
+  /* B-3a2a plants: offers/intake, keyboard lock and page askDesk refusal. */
+  const plantMod = async (id, file, swap, name) => {
+    const r = await plantRed(async () => CASES[name](S, { file, swap }));
+    check(r.red, id + " plant " + swap[0].replace(/\s+/g, " ").trim().slice(0, 50) + " turns " + name + " red" + said(r));
+  };
+  await plantMod("dsgp10", "signin.js", ["  if(firstSigninStands() || (signinHasView && !deskWorks())) return true; /* plant:door-holds */\n", ""], "offersWait");
+  await plantMod("dsgp11", "catalog-offer.js", ["  if(doorHolds()){ whenDoorLowers(eOfferCatalogAtBoot); return false; } /* plant:offer-boot-door */\n", ""], "offersWait");
+  await plantMod("dsgp12", "catalog-offer.js", ["  if(doorHolds()){ pendingListing=all; whenDoorLowers(replayPendingListing); return; } /* plant:offer-listing-door */\n", ""], "offersWait");
+  await plantMod("dsgp13", "catalog-offer.js", ["  if(doorHolds()){ pendingHostFile=args; whenDoorLowers(replayPendingHostFile); return; } /* plant:offer-host-file-door */\n", ""], "offersWait");
+  await plantMod("dsgp14", "catalog-offer.js", ["  if(doorHolds()){ pendingWatch=pendingWatch===null?!!interactive:(pendingWatch||!!interactive); whenDoorLowers(replayPendingWatch); return; } /* plant:offer-watch-door */\n", ""], "offersWait");
+  await plantMod("dsgp15", "catalog-file.js", ["    if(doorHolds()){ pendingDrop=f; whenDoorLowers(replayPendingDrop); return; } /* plant:drop-catalog-door */\n", ""], "offersWait");
+  await plantMod("dsgp16", "catalog-file.js", ["  if(doorHolds()){ pendingImport={text:String(text||\"\"), fileName:fileName, offTeam:!!offTeam}; whenDoorLowers(replayPendingImport); return false; } /* plant:import-text-door */\n", ""], "offersWait");
+  await plantMod("dsgp17", "catalog-file.js", ["  if(doorHolds()) return; /* plant:import-picker-door */\n", ""], "offersWait");
+  {
+    const from = "    if(firstSigninOpenNow() && !openCover()) doorLock=true; /* plant:door-key-lock */\n";
+    const r = await plantRed(async () => CASES.doorKeyboard(S, [from, ""]));
+    check(r.red, "dsgp18 plant " + from.trim().slice(0, 50) + " turns doorKeyboard red" + said(r));
+  }
+  {
+    const from = "      if(firstSigninOpenNow() && !openCover()) capLock=true; /* plant:door-capture-lock */\n";
+    const r = await plantRed(async () => CASES.doorKeyboard(S, [from, ""]));
+    check(r.red, "dsgp19 plant " + from.trim().slice(0, 50) + " turns doorKeyboard red" + said(r));
+  }
+  {
+    const from = "  if(!deskWorks()) return PICK_EMPTY_OPS.has(op) ? {rows:[], count:\"\"} : null; /* plant:pick-ask-works */\n";
+    const r = await plantRed(async () => CASES.pickAskDoor(S, [from, ""]));
+    check(r.red, "dsgp20 plant " + from.trim().slice(0, 50) + " turns pickAskDoor red" + said(r));
+  }
   /* Argon 51 M1 and M2 plants: each turns its check red alone. */
-  await plant("dsgp10", ["    const clockFloor = Number.isSafeInteger(clockIssued) && clockIssued > 0 ? clockIssued : 0; /* plant:settle-clock-issued */", "    const clockFloor = 0;"], "settleClockIssued");
-  await plantWire("dsgp11", ["    deskIssued: () => signinClockNow().issued, /* plant:io-desk-issued */\n", ""], "settleClockIssued");
-  await plantWire("dsgp12", ["  const clkIssued = clk && Number.isSafeInteger(clk.issued) ? clk.issued : 0; /* plant:take-clock-issued */", "  const clkIssued = 0;"], "settleClockIssued");
-  await plant("dsgp13", ["  current = !h.cert || !clock || !(clock.issued > 0) || h.cert.issued >= clock.issued; /* plant:file-clock-issued */", "  current = true;"], "settleClockIssued");
-  await plantWire("dsgp14", ["  const keyOk = !signinState._key || key === signinState._key; /* plant:state-key */", "  const keyOk = true;"], "stateKeyRestoreAndTell");
-  await plantWire("dsgp15", ["  if (wasClock && wasKey !== key && key && held && held.cert) tellSignin(); /* plant:clock-key-told */\n", ""], "stateKeyRestoreAndTell");
+  await plant("dsgp27", ["    const clockFloor = Number.isSafeInteger(clockIssued) && clockIssued > 0 ? clockIssued : 0; /* plant:settle-clock-issued */", "    const clockFloor = 0;"], "settleClockIssued");
+  await plantWire("dsgp28", ["    deskIssued: () => signinClockNow().issued, /* plant:io-desk-issued */\n", ""], "settleClockIssued");
+  await plantWire("dsgp29", ["  const clkIssued = clk && Number.isSafeInteger(clk.issued) ? clk.issued : 0; /* plant:take-clock-issued */", "  const clkIssued = 0;"], "settleClockIssued");
+  await plant("dsgp30", ["  current = !h.cert || !clock || !(clock.issued > 0) || h.cert.issued >= clock.issued; /* plant:file-clock-issued */", "  current = true;"], "settleClockIssued");
+  await plantWire("dsgp31", ["  const keyOk = !signinState._key || key === signinState._key; /* plant:state-key */", "  const keyOk = true;"], "stateKeyRestoreAndTell");
+  await plantWire("dsgp32", ["  if (wasClock && wasKey !== key && key && held && held.cert) tellSignin(); /* plant:clock-key-told */\n", ""], "stateKeyRestoreAndTell");
   const gated = MAIN.replace("function writeBranch(stem, text) {\n", "function writeBranch(stem, text) {\n  if (!signinView().signedIn) return { ok: false };\n");
   check(gated !== MAIN && outsideNames(gated).slice().sort().join() !== expectOutside.slice().sort().join(),
     "dsp14 plant a sign-in gate on the desk file's write turns ds5a red");

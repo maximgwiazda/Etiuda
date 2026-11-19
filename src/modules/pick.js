@@ -28,6 +28,7 @@ import { hooks } from "./hooks.js";
 import { dockNow } from "./next-dock.js";
 import { scChord, scChord2 } from "./shortcuts.js";
 import { runShortcut } from "./run-shortcut.js";
+import { deskWorks } from "./signin.js";
 // The picker's answers: the desk's replies as a short list for the window the shell draws over the
 // chat, found by the desk's own search and copied by the desk's own route.
 
@@ -363,7 +364,10 @@ function suggestModel(){
   });
   return cachedModel;
 }
+/* Ops whose refusal shape is an empty reply list, which the picker already paints as nothing to show. */
+const PICK_EMPTY_OPS=new Set(["find","who","tab","lang","suggest-take","suggest-rows"]);
 function answerPick(op,argText){
+  if(!deskWorks()) return PICK_EMPTY_OPS.has(op) ? {rows:[], count:""} : null; /* plant:pick-ask-works */
   let a={};
   try{ a=JSON.parse(String(argText||"{}"))||{}; }catch(e){ a={}; }
   if(op==="open"){

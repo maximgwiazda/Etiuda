@@ -2,7 +2,9 @@
    moment. The shell holds the tokens, the browser, the service and seat.json; the page is told the providers offered, who is
    signed in by provider, the sign-in code and how the seat stands, and shows nothing where no provider is offered, so a desk
    with no registration configured looks as it did. Settings' Account draws the same view with signinParts. */
-import { $ } from "./dom.js";
+import { $ as $dom } from "./dom.js";
+/* The page draws only where there is a document: headless, every handle is none and the paint passes by. */
+const $=s=>typeof document==="undefined" ? null : $dom(s);
 import { eHost, eOpenSetAside } from "./host.js";
 import { esc } from "./esc.js";
 import { t, uiLang, hugDottedGround } from "./ui-lang.js";
@@ -165,10 +167,20 @@ function firstSigninDue(v){
 }
 let firstSigninPending=false, firstSigninOpen=false, firstSigninWaits=[];
 function firstSigninStands(){ return !!(firstSigninPending || firstSigninOpen); }
+/* Whether the door holds offers, intake and invitations: while the door stands, or once a view was read and deskWorks() is false. */
+function doorHolds(){
+  if(firstSigninStands() || (signinHasView && !deskWorks())) return true; /* plant:door-holds */
+  return false;
+}
 function onFirstSigninClosed(fn){
   if(typeof fn!=="function") return;
   if(!firstSigninStands()){ fn(); return; }
   firstSigninWaits.push(fn);
+}
+function whenDoorLowers(fn){
+  if(typeof fn!=="function") return;
+  if(!doorHolds()){ fn(); return; }
+  if(firstSigninWaits.indexOf(fn)<0) firstSigninWaits.push(fn);
 }
 function tellFirstSigninClosed(){
   const w=firstSigninWaits; firstSigninWaits=[];
@@ -800,6 +812,7 @@ function signinChanged(v, answered){
     if(!deskWorks()){ if(firstSigninOpen) paintFirstSignin(); signinTell(); return; } /* plant:door-close-works */
     closeFirstSignin(); signinTell(); return;
   }
+  if(deskWorks() && firstSigninWaits.length) tellFirstSigninClosed();
   if(answered && signinShown(signinV) && !signinV.busy) signinOpen=true;
   if(signinOpen) paintSigninPanel();
   signinTell();
@@ -1130,10 +1143,12 @@ export {
   bootFirstSignin,
   closeFirstSignin,
   deskWorks,
+  doorHolds,
   firstSigninDue,
   firstSigninOpenNow,
   firstSigninStands,
   onFirstSigninClosed,
+  whenDoorLowers,
   paintFirstSignin,
   signinAct,
   signinActsHtml,

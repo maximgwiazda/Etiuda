@@ -39,7 +39,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 164 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 9);
+const EXPECTED = 165 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 11);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -94,6 +94,7 @@ const PK = await import(MOD("pack.js"));
 const ST = await import(MOD("storage.js"));
 const CE = await import(MOD("copy-entry.js"));
 const PICK = await import(MOD("pick.js"));
+const SGN = await import(MOD("signin.js"));
 const SET = await import(MOD("settings.js"));
 const SP = await import(MOD("spell.js"));
 const DS = await import(MOD("desk-stats.js"));
@@ -143,6 +144,11 @@ const pickAnswer = (op, arg) => PICK.answerPick(op, JSON.stringify(arg || {}));
 
 try {
   console.log("[1/7] the desk's side: what the picker is shown and what its copy makes");
+  /* Section 1 drives answerPick directly before the shell starts in section 2; seat signin.js with a working view. */
+  const s1Now = Date.now();
+  const s1View = { offered: ["lab"], signedIn: "lab", code: "ABCDEFGHJKMNPQRS", works: true, now: s1Now, until: s1Now + 86400000, registered: true, holding: { on: "trial", ends: s1Now + 86400000 } };
+  globalThis.window.E_HOST = { signinState: () => s1View };
+  SGN.signinNow();
   ST.lsSet("eNameAsked", "1");
   ST.lsSet("eAgent", "Kate");
 
@@ -520,6 +526,9 @@ try {
     }
   }
   await seatLab.seatDesk(deskAdapter, { force: true, expectWorks: true });
+  globalThis.window.E_HOST = deskPage.E_HOST;
+  deskPage.E_HOST.onSignin(v => SGN.signinChanged(v, false));
+  SGN.signinNow();
 
   /* The hotkey, as Windows would call it. */
   ST.lsSet("eAgent", "Kate");
@@ -875,6 +884,134 @@ try {
     "2s clicking away hides the picker, and neither gives the focus up again nor calls the desk forward: visible " + pw.visible
     + ", calls " + (away.join(" ") || "nothing") + ", desk focus " + (desk.calls.indexOf("focus") > -1));
 
+  /* B-3a2a step 4: a picker opened before a stop cannot read, copy, paste or reword once the desk stops working;
+     closing the picker still works, and the page refuses askDesk directly without reading catalog or bumping stats. */
+  {
+    held.get("Control+Shift+Space")();
+    await until(() => pw.visible);
+    SH.__rw.config(() => ({ provider: "openai", endpoint: "", model: "m", key: "k", managed: {} }));
+    SH.__rw.result("Reworded before stop.");
+    await deskAdapter.ask("etiuda:signin-out");
+    SGN.signinNow();
+    const asksBefore = desk.sent.filter(a => a[0] === "etiuda:pick-ask").length;
+    const clipsBefore = clip.length;
+    const caretBefore = caret.runs.length;
+    const usesBefore = uses("c-lamp");
+    const rFind = JSON.parse(await pickerPage.E_PICK.find("lamp"));
+    const rWho = JSON.parse(await pickerPage.E_PICK.who("Jan", "lamp"));
+    const rTab = JSON.parse(await pickerPage.E_PICK.tab("tabNext"));
+    const rLang = JSON.parse(await pickerPage.E_PICK.lang());
+    const rIntent = JSON.parse(await pickerPage.E_PICK.takeSuggest("i-0", false));
+    const rRows = JSON.parse(await pickerPage.E_PICK.rowsOf("i-0"));
+    const rCopy = await pickerPage.E_PICK.copy(JSON.stringify({ id: "c-lamp", vi: 0 }));
+    const rPut = await pickerPage.E_PICK.put();
+    const rReword = await pickerPage.E_PICK.reword({ act: "spelling", words: "draft" });
+    const asksAfter = desk.sent.filter(a => a[0] === "etiuda:pick-ask").length;
+    const emptyList = o => !!o && Array.isArray(o.rows) && o.rows.length === 0 && o.count === "";
+    const ipcBlocked = pw.visible === true && asksAfter === asksBefore && clip.length === clipsBefore
+      && caret.runs.length === caretBefore && uses("c-lamp") === usesBefore
+      && [rFind, rWho, rTab, rLang, rIntent, rRows].every(emptyList)
+      && rCopy === false && rPut === false && !!rReword && rReword.ok === false;
+    /* Page side directly: answerPick refuses when deskWorks() is false. */
+    const pgFind = pickAnswer("find", { q: "lamp" });
+    const pgCopy = pickAnswer("copy", { id: "c-lamp", vi: 0 });
+    const pgOpen = pickAnswer("open", {});
+    const pageBlocked = emptyList(pgFind) && pgCopy === null && pgOpen === null && uses("c-lamp") === usesBefore;
+    /* Close still works while stopped. */
+    pickerPage.E_PICK.close();
+    const closeWorks = pw.visible === false;
+    SH.__rw.config(() => null);
+    SH.__rw.result("");
+    await seatLab.seatDesk(deskAdapter, { force: true, expectWorks: true });
+    SGN.signinNow();
+    check(ipcBlocked && pageBlocked && closeWorks,
+      "2g1 a picker opened before a stop cannot find, switch, copy, paste or reword once stopped; page refuses askDesk; close still works: "
+      + JSON.stringify({ ipcBlocked, pageBlocked, closeWorks, asks: asksAfter - asksBefore, clips: clip.length - clipsBefore }));
+
+    if (process.env.ETIUDA_PLANTS === "off") {
+      console.log("  SKIP  2g1p1 lifting plant:picker-ipc-works lets a stopped picker copy and find (ETIUDA_PLANTS=off)");
+      console.log("  SKIP  2g1p2 lifting plant:pick-ask-works lets answerPick return cards while stopped (ETIUDA_PLANTS=off)");
+    } else {
+      const mainPath = path.join(ROOT, "shell", "main.js");
+      const mainBytes = fs.readFileSync(mainPath);
+      const mainLines = SRC.split("\n");
+      const pIdx = mainLines.findIndex(l => l.indexOf("plant:picker-ipc-works") >= 0);
+      let ipcTurned = false;
+      if (pIdx >= 0) {
+        const plantedLines = mainLines.slice();
+        plantedLines.splice(pIdx, 1);
+        const udP = path.join(LAB, "picker-ipc-plant");
+        fs.mkdirSync(udP, { recursive: true });
+        fs.writeFileSync(path.join(udP, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: path.join(LAB, "catalogs") } }), "utf8");
+        const winsP = [], onP = {}, invP = {}, clipP = [];
+        const mkW = () => {
+          const w = { calls: [], sent: [], visible: false, destroyed: false, focused: false, on: {} };
+          const wcOnce = {}, wcOn = {};
+          const fire = (ev, ...a) => { (wcOnce[ev] || []).splice(0).forEach(fn => fn(...a)); (wcOn[ev] || []).forEach(fn => fn(...a)); };
+          w.webContents = anything({ id: winsP.length + 1, send: (...a) => { w.sent.push(a); if (w.route) w.route(...a); },
+            on: (ev, fn) => { (wcOn[ev] = wcOn[ev] || []).push(fn); }, once: (ev, fn) => { (wcOnce[ev] = wcOnce[ev] || []).push(fn); },
+            setWindowOpenHandler() {}, getURL: () => "" });
+          w.self = anything({ webContents: w.webContents, on: (ev, fn) => { (w.on[ev] = w.on[ev] || []).push(fn); }, once() {},
+            isDestroyed: () => w.destroyed, isVisible: () => w.visible, isMinimized: () => false, isMaximized: () => false,
+            show: () => { w.visible = true; }, focus: () => { w.focused = true; }, hide: () => { w.visible = false; },
+            blur() {}, destroy: () => { w.destroyed = true; }, restore() {}, center() {}, setBounds() {}, getBounds: () => ({ x: 0, y: 0, width: 600, height: 424 }),
+            loadFile: () => setImmediate(() => fire("did-finish-load")), loadURL: () => setImmediate(() => fire("did-finish-load")) });
+          winsP.push(w);
+          return w.self;
+        };
+        const heldP = new Map();
+        const elP = Object.assign({}, electron, {
+          app: Object.assign({}, electron.app, { getPath: n => (n === "documents" ? DOCS : udP) }),
+          ipcMain: { on: (ch, fn) => { onP[ch] = fn; }, handle: (ch, fn) => { invP[ch] = fn; } },
+          BrowserWindow: new Proxy(function () {}, { construct: () => mkW(),
+            get: (t, k) => k === "fromWebContents" ? () => null : k === "getAllWindows" ? () => winsP.map(x => x.self) : undefined }),
+          clipboard: { writeText: t => clipP.push(t), readText: () => "" },
+          globalShortcut: { register: (a, fn) => { heldP.set(a, fn); return true; }, unregister: a => heldP.delete(a), unregisterAll: () => heldP.clear(), setSuspended() {} },
+          shell: seatLab.labShell(),
+        });
+        seatLab.withSigninLab(() => new Function("require", "__dirname", "__filename", "module", "exports", "console", plantedLines.join("\n"))(
+          n => (n === "electron" ? elP : (n === "node:fs" || n === "fs") ? signinGuard.shellFs : n === "node:child_process" ? cpStub : nodeRequire(n)),
+          path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet));
+        await until(() => winsP.length > 0 && heldP.has("Control+Shift+Space"), 5000);
+        const dP = winsP[0];
+        const dEvP = () => ({ sender: dP.webContents, senderFrame: ENGINE, returnValue: undefined });
+        dP.route = (ch, n, op, arg) => {
+          if (ch === "etiuda:pick-ask") setImmediate(() => onP["etiuda:pick-answer"](dEvP(), n, JSON.stringify(op === "open" ? { rows: [], words: {}, look: {} } : op === "copy" ? { text: "leaked" } : { rows: [{ id: "c-lamp" }], count: "1" })));
+        };
+        const adP = { ud: udP, sync: (ch, ...a) => { const e = dEvP(); if (onP[ch]) onP[ch](e, ...a); return e.returnValue; },
+          ask: (ch, ...a) => Promise.resolve(invP[ch] ? invP[ch](dEvP(), ...a) : undefined) };
+        await seatLab.seatDesk(adP, { force: true, expectWorks: true });
+        heldP.get("Control+Shift+Space")();
+        await until(() => winsP.length > 1, 5000);
+        const pW = winsP[1];
+        const pEvP = () => ({ sender: pW.webContents, senderFrame: { parent: null, url: "data:text/html" }, returnValue: undefined });
+        await adP.ask("etiuda:signin-out");
+        const leakedCopy = await invP["etiuda:pick-copy"](pEvP(), JSON.stringify({ id: "c-lamp", vi: 0 }));
+        ipcTurned = leakedCopy === true && clipP.length === 1;
+      }
+      check(pIdx >= 0 && ipcTurned && fs.readFileSync(mainPath).equals(mainBytes),
+        "2g1p1 lifting plant:picker-ipc-works lets a stopped picker copy through etiuda:pick-copy: " + JSON.stringify({ hit: pIdx >= 0, ipcTurned }));
+
+      const pickPath = path.join(ROOT, "src", "modules", "pick.js");
+      const pickBytes = fs.readFileSync(pickPath);
+      const pickLines = pickBytes.toString("utf8").split("\n");
+      const pkIdx = pickLines.findIndex(l => l.indexOf("plant:pick-ask-works") >= 0);
+      let pkTurned = false;
+      if (pkIdx >= 0) {
+        const pl = pickLines.slice();
+        pl.splice(pkIdx, 1);
+        const dirUrl = pathToFileURL(path.join(ROOT, "src", "modules")).href + "/";
+        const mod = await import("data:text/javascript;base64," + Buffer.from(pl.join("\n").replace(/from "\.\//g, 'from "' + dirUrl)).toString("base64"));
+        SGN.signinChanged({ offered: ["lab"], signedIn: "", works: false, registered: true, online: true }, false);
+        const leaked = mod.answerPick("find", JSON.stringify({ q: "lamp" }));
+        pkTurned = !!leaked && Array.isArray(leaked.rows) && leaked.rows.length > 0;
+        SGN.signinNow();
+      }
+      check(pkIdx >= 0 && pkTurned && fs.readFileSync(pickPath).equals(pickBytes),
+        "2g1p2 lifting plant:pick-ask-works lets answerPick return cards while deskWorks() is false: " + JSON.stringify({ hit: pkIdx >= 0, pkTurned }));
+    }
+  }
+
   /* A desk that answers nothing (a card gone, a page mid-reload) leaves the clipboard as it was. */
   held.get("Control+Shift+Space")();
   await until(() => pw.visible);
@@ -1129,6 +1266,7 @@ try {
     AS.putLang("en");
     LS.cancelLangTail();
     await seatLab.seatDesk(deskAdapter, { force: true, expectWorks: true });
+    SGN.signinNow();
     caret.there = true; caret.front = "4242 " + (process.pid + 1); caret.fail = false;
     await pressHotkey();
     const placed = Object.assign({}, pw.bounds);
@@ -1256,9 +1394,9 @@ try {
       const body = at < 0 || end < 0 ? "" : SRC.slice(SRC.indexOf("{", at) + 1, end);
       const runPut = async src => {
         const ran = [];
-        const fn = new Function("e", "fromPicker", "pickReworded", "pickClipText", "pickSelectedNow", "pickTarget", "noteOwnText", "clipboard", "hidePicker",
+        const fn = new Function("e", "fromPicker", "pickerWorks", "pickReworded", "pickClipText", "pickSelectedNow", "pickTarget", "noteOwnText", "clipboard", "hidePicker",
           "showPickNote", "REWORD_PUT_WAIT_MS", "caretSelection", "caretPaste", src);
-        const got = await fn({}, () => true, RW_OUT, t => t, RW_SEL, "4242", () => {}, { writeText: () => ran.push("write") }, () => ran.push("hide"),
+        const got = await fn({}, () => true, () => true, RW_OUT, t => t, RW_SEL, "4242", () => {}, { writeText: () => ran.push("write") }, () => ran.push("hide"),
           p => ran.push("note " + p), 1, () => Promise.resolve({ words: "a customer's message" }), () => ran.push("paste"));
         return { got, ran };
       };

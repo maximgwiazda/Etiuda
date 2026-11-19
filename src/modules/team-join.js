@@ -30,6 +30,41 @@ let joinLinkSaid=null;            // {en, pl} when a link was refused: the shell
 let joinReads=0;                  // which read an answer belongs to: only the last one asked is shown
 let lapseUp="";                   // "team|step|until" of the lapse notice on screen
 const lapseDismissed=new Set();   // the same keys, dismissed here while the shell's answer is on its way
+let joinGate=null;                // door gate wired from main.js to avoid a signin.js <-> team-join.js import cycle
+let pendingInvite=null;           // latest link or pasted invitation held while the door stands
+let pendingJoinLoad="";           // latest admission/opens catalog file held while the door stands
+function joinDoorHolds(){
+  return !!(joinGate && typeof joinGate.holds==="function" && joinGate.holds());
+}
+function whenJoinDoorOpens(fn){
+  if(joinGate && typeof joinGate.whenOpen==="function"){ joinGate.whenOpen(fn); return; }
+  fn();
+}
+function replayJoinLoad(){
+  if(joinDoorHolds()) return;
+  const file=pendingJoinLoad; pendingJoinLoad="";
+  if(file && (wholeThingEmpty() || nsGet("Sample")==="1")) hooks.loadCatalogFromFolder(file,0);
+}
+function replayPendingInvite(){
+  if(joinDoorHolds()) return;
+  const inv=pendingInvite; pendingInvite=null;
+  if(!inv) return;
+  if(inv.kind==="link" && inv.offer){
+    joinOffer=Object.assign({}, inv.offer);
+    joinRead="link"; joinBlob=""; joinTyped=""; joinWhy=""; joinLinkSaid=null;
+    joinMode="confirm";
+    paintJoin();
+  }else if(inv.kind==="link-refusal" && inv.refusal){
+    dropInvite();
+    joinLinkSaid=Object.assign({}, inv.refusal);
+    joinWhy="link"; joinMode="refused";
+    paintJoin();
+  }else if(inv.kind==="paste" && inv.text){
+    const sent=String(inv.text), n=++joinReads;
+    joinMode="paste"; joinBlob=sent;
+    joinAsk("read",sent,"","",v=>readTook(v,n,sent));
+  }
+}
 function eHasJoin(){
   const h=eHost();
   return !!h && typeof h.teamJoin==="function";
@@ -396,11 +431,20 @@ function joinTook(v,changed){
   /* Admitted: an empty desk loads the catalog the invitation named. A desk that already has one keeps it. */
   if(s.joined && s.joined.file){
     closeJoinBubble();
-    if(wholeThingEmpty() || nsGet("Sample")==="1") hooks.loadCatalogFromFolder(String(s.joined.file),0);
+    if(wholeThingEmpty() || nsGet("Sample")==="1"){
+      let waitAdmit=false;
+      if(joinDoorHolds()){ pendingJoinLoad=String(s.joined.file); whenJoinDoorOpens(replayJoinLoad); waitAdmit=true; } /* plant:join-admit-door */
+      if(!waitAdmit) hooks.loadCatalogFromFolder(String(s.joined.file),0);
+    }
   }
   /* A relay team's catalog the shell can now open, from the invitation's wrap or at admission, opens the same way. */
-  else if(s.opens && typeof s.opens.file==="string" && s.opens.file && (wholeThingEmpty() || nsGet("Sample")==="1"))
-    hooks.loadCatalogFromFolder(s.opens.file,0); /* plant:opens-load */
+  else if(s.opens && typeof s.opens.file==="string" && s.opens.file && (wholeThingEmpty() || nsGet("Sample")==="1")){
+    let waitOpens=false;
+    if(joinDoorHolds()){ pendingJoinLoad=String(s.opens.file); whenJoinDoorOpens(replayJoinLoad); waitOpens=true; } /* plant:join-opens-door */
+    if(!waitOpens){
+      hooks.loadCatalogFromFolder(s.opens.file,0); /* plant:opens-load */
+    }
+  }
   syncJoinDoor();
   syncLapseNotice();
   syncRelayRemoved();
@@ -409,8 +453,10 @@ function joinTook(v,changed){
   syncStrandedNotice();
   const refusal=s.linkRefusal;
   if(refusal && typeof refusal==="object" && typeof refusal.en==="string" && refusal.en){
+    const heldRefusal={en:String(refusal.en), pl:typeof refusal.pl==="string"?String(refusal.pl):""};
+    if(joinDoorHolds()){ pendingInvite={kind:"link-refusal", refusal:heldRefusal}; whenJoinDoorOpens(replayPendingInvite); return joinNow; }
     dropInvite();
-    joinLinkSaid={en:String(refusal.en), pl:typeof refusal.pl==="string"?String(refusal.pl):""};
+    joinLinkSaid=heldRefusal;
     joinWhy="link"; joinMode="refused";
     paintJoin();
     return joinNow;
@@ -426,7 +472,9 @@ function joinTook(v,changed){
   }
   const offer=s.offer;
   if(offer && offer.link===true && typeof offer.relay==="string" && offer.relay){
-    joinOffer={lead:String(offer.lead||""), team:String(offer.team||""), relay:String(offer.relay), link:true, code:"", left:String(offer.left||"")};
+    const heldOffer={lead:String(offer.lead||""), team:String(offer.team||""), relay:String(offer.relay), link:true, code:"", left:String(offer.left||"")};
+    if(joinDoorHolds()){ pendingInvite={kind:"link", offer:heldOffer}; whenJoinDoorOpens(replayPendingInvite); return joinNow; } /* plant:join-link-door */
+    joinOffer=heldOffer;
     joinRead="link"; joinBlob=""; joinTyped=""; joinWhy=""; joinLinkSaid=null;
     joinMode="confirm"; /* plant:link-page */
     paintJoin();
@@ -438,7 +486,8 @@ function joinTook(v,changed){
 function noteCatalogCopy(m){
   toast(m && m.lead===true ? "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team's lead alone." : "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.");
 }
-function wireTeamJoin(){
+function wireTeamJoin(gate){
+  if(gate!==undefined) joinGate=(gate && typeof gate.holds==="function") ? gate : null;
   if(!eHasJoin()) return;
   if(typeof eHost().onTeamJoin==="function") eHost().onTeamJoin(joinTook);
   if(typeof eHost().onCatalogCopy==="function") eOnCatalogCopy(noteCatalogCopy);
@@ -446,6 +495,7 @@ function wireTeamJoin(){
   joinAsk("held");
 }
 function paintJoin(){
+  if(joinDoorHolds()){ closeJoinBubble(); whenJoinDoorOpens(paintJoin); return; }
   if(wholeThingEmpty()){ closeJoinBubble(); hooks.render(); joinPainted(); return; }
   if(teamJoinShown() && JSON.stringify(joinNow)!==joinShut) openJoinBubble();
   else if(!teamJoinShown()) closeJoinBubble();
@@ -477,7 +527,7 @@ function clearJoinAsk(){
 }
 /* One door, from the empty desk, from a sealed catalog, and from Settings, the Library and the Menu. */
 function openJoinPaste(){
-  if(!teamCanJoin()) return;
+  if(!teamCanJoin() || joinDoorHolds()) return;
   dropInvite();
   joinMode="paste";
   repaintJoin();
@@ -701,6 +751,7 @@ function joinParts(){
 }
 function joinAct(act){
   const j=joinNow&&joinNow.join, s=joinNow&&joinNow.sealed;
+  if(joinDoorHolds() && (act==="invite" || act==="ask" || act==="join")) return Promise.resolve(null); /* plant:join-act-door */
   if(act==="join") return Promise.resolve(openJoinPaste());
   if(act==="back"){
     if((joinOffer&&joinOffer.link) || (joinMode==="refused"&&joinWhy==="link"))
@@ -708,7 +759,9 @@ function joinAct(act){
     return Promise.resolve(clearJoinAsk());
   }
   if(act==="read"){
-    const sent=pastedText(), n=++joinReads;
+    const sent=pastedText();
+    if(joinDoorHolds()){ if(String(sent||"").trim()){ pendingInvite={kind:"paste", text:String(sent)}; whenJoinDoorOpens(replayPendingInvite); } return Promise.resolve(null); } /* plant:join-paste-door */
+    const n=++joinReads;
     joinBlob=sent;
     return joinAsk("read",sent,"","",v=>readTook(v,n,sent));
   }
