@@ -22,7 +22,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 145;
+const EXPECTED = 138;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk: its content reaches the lead only if the lead turns on copies of unlisted catalogs in Studio, and this desk is told before anything is sent. A catalog the team does not list can be marked private here, and is then never sent. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, and Studio shows them in the team's totals.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie). Kopię katalogu z listy zespołu Studio lidera może pobrać w każdej chwili, bez pytania tutaj, zapieczętowaną dla zespołu. Każdy inny katalog zostaje na tym stanowisku: jego treść trafi do lidera tylko wtedy, gdy lider włączy w Studiu kopie katalogów spoza listy, a to stanowisko zostanie o tym powiadomione, zanim cokolwiek zostanie wysłane. Katalog spoza listy zespołu można tutaj oznaczyć jako prywatny i wtedy nigdy nie jest wysyłany. Studio lidera wymienia to stanowisko z nazwy, chyba że organizacja wyłączy nazwy, razem z używanym katalogiem, jego wydaniem i okresem zliczania, i wymienia je dalej, gdy przestanie się odzywać. Własne dane stanowiska trafiają do lidera zapieczętowane, a Studio pokazuje je w sumach zespołu.";
@@ -164,13 +164,10 @@ try {
   };
   const RING = { format: 1, kind: "etiuda-ring", keys: [
     { catalog: "north-lamps", keyId: LEAD.keyId, alg: "Ed25519", public: LEAD.public }] };
-  /* The lead's switch for a catalog the team does not list (board 962, stage 0b): on in every team file these legs write, and
-     shown to the agent at the join, unless a leg passes another switch or null for none. */
-  const SWITCH = { format: 1, on: true, by: "Quay lead", at: "2026-11-01T09:00:00.000Z" };
-  const teamFile = (D, id, epoch, roster, catalogs, content) => textOf(sign(Object.assign({
+  const teamFile = (D, id, epoch, roster, catalogs) => textOf(sign({
     format: 1, kind: "etiuda-team", id, catalogs: catalogs || ["not-this"], lead: Object.assign({}, LEAD, { box: BOX }),
     sealed: true, exportsSealed: false, epoch, roster,
-  }, content === null ? {} : { content: content === undefined ? SWITCH : content }), lead.privateKey, LEAD));
+  }, lead.privateKey, LEAD));
   const entry = (D, who, key, team, epoch) => ({
     desk: { id: who.id, key: who.key, box: who.box },
     wrap: D.api.wrapTeamKey(key, who.box, team, epoch, who.id),
@@ -180,14 +177,14 @@ try {
   const fileSha = text => crypto.createHash("sha256").update(Buffer.from(text, "utf8")).digest("hex");
   const tick = () => new Promise(r => setTimeout(r, 30));
   const expAt = () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-  /* Format 2 is an ask made under the lead's switch, naming the team and the switch's at (the one join wrote unless `o` says);
+  /* Format 2 is an ask answered with an unlisted catalog once this desk is told for `team`;
      format 1 is the ask every Studio made before it. */
   const putAsk = (box, id, sha, format, o) => {
     const doc = { format: format || 2, kind: "etiuda-catalog-ask", id: id, desk: box.me.id, sha256: sha, expires: expAt(),
       sig: { alg: "Ed25519", keyId: (o && o.who ? o.who : LEAD).keyId } };
     if (doc.format === 2) {
       doc.team = o && o.team !== undefined ? o.team : box.team;
-      doc.content = o && o.at !== undefined ? o.at : (box.at !== undefined ? box.at : SWITCH.at);
+      if (o && o.content !== undefined) doc.content = o.content;
     }
     doc.sig.value = crypto.sign(null, box.D.api.askSignedBytes(doc), o && o.key ? o.key : lead.privateKey).toString("hex");
     fs.mkdirSync(path.join(box.share, "catalog-asks"), { recursive: true });
@@ -216,11 +213,9 @@ try {
     boxMap.set(share, box);
     return box;
   };
-  const join = (box, epoch, roster, catalogs, content, unsaid) => {
-    put(box.share, "etiuda-team.json", teamFile(box.D, box.team, epoch, roster, catalogs, content));
-    const sw = content === undefined ? SWITCH : content;
-    box.at = sw && typeof sw.at === "string" ? sw.at : "";
-    if (sw && !unsaid) box.D.ask("etiuda:team-join", "content-said", box.team, sw.at);
+  const join = (box, epoch, roster, catalogs, untold) => {
+    put(box.share, "etiuda-team.json", teamFile(box.D, box.team, epoch, roster, catalogs));
+    if (!untold) box.D.ask("etiuda:team-join", "content-said", box.team, "");
   };
   const declOf = (src, marker) => {
     const at = src.indexOf(marker);
@@ -596,11 +591,11 @@ try {
     const pinH = pinOf(held.D, bootedH || "");
     take(held.D, pinH);
     const missing = !fs.existsSync(inUsePath(held.share, held.me.id));
-    /* The switch is shown after the ask lands: saying it at the join would heed the team and name the catalog before the ask. */
-    join(held, 1, [entry(held.D, held.me, held.key, held.team, 1)], undefined, undefined, true);
+    /* The desk is told after the ask lands: telling it at the join would heed the team and name the catalog before the ask. */
+    join(held, 1, [entry(held.D, held.me, held.key, held.team, 1)], undefined, true);
     putAsk(held, "Askjoin1", pinH);
     held.D.api.catalogChanged(held.D.win);
-    await held.D.ask("etiuda:team-join", "content-said", held.team, SWITCH.at);
+    await held.D.ask("etiuda:team-join", "content-said", held.team, "");
     const joined = openSealedDoc(held.D, inUsePath(held.share, held.me.id), held.key);
     const joinedAns = openAnswerDoc(held.D, answerPath(held.share, held.me.id), held.key);
     check(missing && pinH && joined && joined.catalog.source === "folder" && joined.catalog.rev === 2
@@ -967,7 +962,7 @@ try {
     const again = loadDesk(boot.D.ud);
     const bootedAgain = again.sync("etiuda:catalog");
     const againPin = pinOf(again, bootedAgain || "");
-    const askBoot = { format: 2, kind: "etiuda-catalog-ask", id: "Askboot1", desk: boot.me.id, sha256: againPin, team: boot.team, content: SWITCH.at,
+    const askBoot = { format: 2, kind: "etiuda-catalog-ask", id: "Askboot1", desk: boot.me.id, sha256: againPin, team: boot.team,
       expires: expAt(), sig: { alg: "Ed25519", keyId: LEAD.keyId } };
     askBoot.sig.value = crypto.sign(null, again.api.askSignedBytes(askBoot), lead.privateKey).toString("hex");
     fs.mkdirSync(path.join(boot.share, "catalog-asks"), { recursive: true });
@@ -1051,8 +1046,8 @@ try {
     const newerText = textOf(catalog(3, { name: "North lamps new" }));
     const histFile = path.join(hist.share, "board.ec");
     put(hist.share, "board.ec", olderText);
-    /* Not said here: saying the switch heeds the team before this leg keeps its history, and the leg reads the share's. */
-    join(hist, 1, [entry(hist.D, hist.me, hist.key, hist.team, 1)], undefined, undefined, true);
+    /* Untold here: telling the desk heeds the team before this leg keeps its history, and the leg reads the share's. */
+    join(hist, 1, [entry(hist.D, hist.me, hist.key, hist.team, 1)], undefined, true);
     await hist.D.ask("etiuda:catalog-files");
     await tick();
     put(hist.share, "board.ec", newerText);
@@ -1430,12 +1425,12 @@ try {
        one, is answered to nobody, listed or not; a team-key answer is signed by its desk as a box answer is. */
     const B0_MARK = "marker-stage0b-quay-58e4";
     const b0Body = (id) => textOf(catalog(4, { id: id || "quay-held", name: "Quay held", card: B0_MARK }));
-    /* A desk on a team whose file lists `catalogs` under `content` (undefined: SWITCH, said unless `unsaid`), asked for its
+    /* A desk on a team whose file lists `catalogs` (told unless `unsaid`), asked for its
        catalog by an ask of `format` (2 unless given). */
     const b0Ask = async (name, o) => {
       const opt = o || {};
       const box = await arm(name, opt.src);
-      join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], opt.catalogs || ["harbour-board"], opt.content, opt.unsaid);
+      join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], opt.catalogs || ["harbour-board"], opt.unsaid);
       if (opt.private) box.D.ask("etiuda:team-join", "private", opt.private, "on");
       for (const [n, t] of opt.shareFiles || []) put(box.share, n, t);
       const dir = folder(name + "-out");
@@ -1452,59 +1447,10 @@ try {
         again: () => { box.D.api.tryCatalogAsk(box.D.win); return { written: fs.existsSync(ans), lead: openLeadDoc(box.D, ans), team: openSealedDoc(box.D, ans, box.key) }; } };
     };
     {
-      const off = await b0Ask("b0-off", { content: null });
-      const on = await b0Ask("b0-on");
-      /* The lead turns the switch off after the agent was shown it: a newer team file without it, and the ask asked again. */
-      const later = await b0Ask("b0-later");
-      const laterWas = later.written;
-      join(later.box, 1, [entry(later.box.D, later.box.me, later.box.key, later.box.team, 1)], ["harbour-board"], null);
-      touch(path.join(later.box.share, "etiuda-team.json"), Date.now() + 2500);
-      putAsk(later.box, "Asklater2", later.pin);
-      const laterNow = later.again();
-      laterNow.written = !!laterNow.lead && laterNow.lead.ask === "Asklater2";
-      check(!!off.pin && !off.written && on.written && !!on.lead && on.lead.content === SWITCH.at && JSON.stringify(on.lead).indexOf(B0_MARK) >= 0
-          && laterWas && !laterNow.written,
-        "b0a a catalog the team does not list is not answered while the lead's switch is off, and is answered to the lead's box, naming the switch, while it is on; turned off after, it is not answered (off "
-        + off.written + ", on " + on.written + ", turned off " + laterNow.written + ")");
-      if (PLANTS_OFF) skip("b0i lifting plant:s0b-switch turns b0a red: a catalog the team does not list is answered under a switch the agent was not shown");
-      else {
-        const planted = SRC.split("\n").map(l => l.indexOf("plant:s0b-switch") >= 0 ? "  /* plant:s0b-switch */" : l).join("\n");
-        const p = planted !== SRC ? await b0Ask("b0-off-plant", { unsaid: true, src: planted }) : null;
-        check(!!p && p.written && !!p.lead && JSON.stringify(p.lead).indexOf(B0_MARK) >= 0,
-          "b0i lifting plant:s0b-switch turns b0a red: a catalog the team does not list is answered under a switch the agent was not shown ("
-          + (p ? (p.written ? "answered" : "not answered") : "plant not found") + ")");
-      }
-    }
-    {
-      /* The switch is on and not yet shown to the agent: nothing until the screen says it. A switch confirmed again later, at a
-         new time, is said again before it applies, and the page cannot say a switch the team file does not hold. */
-      const u = await b0Ask("b0-unsaid", { unsaid: true });
-      const shownBefore = await u.box.D.ask("etiuda:team-join", "content");
-      const wrong = await u.box.D.ask("etiuda:team-join", "content-said", u.box.team, "2026-11-02T09:00:00.000Z");
-      const wrongNow = u.again();
-      const said = await u.box.D.ask("etiuda:team-join", "content-said", u.box.team, SWITCH.at);
-      const saidNow = u.again();
-      const NEXT = Object.assign({}, SWITCH, { at: "2026-11-03T10:00:00.000Z" });
-      join(u.box, 1, [entry(u.box.D, u.box.me, u.box.key, u.box.team, 1)], ["harbour-board"], NEXT, true);
-      touch(path.join(u.box.share, "etiuda-team.json"), Date.now() + 3500);
-      putAsk(u.box, "Asknext", u.pin);
-      const nextBefore = u.again();
-      nextBefore.written = !!nextBefore.lead && nextBefore.lead.ask === "Asknext";
-      await u.box.D.ask("etiuda:team-join", "content-said", u.box.team, NEXT.at);
-      const nextAfter = u.again();
-      nextAfter.written = !!nextAfter.lead && nextAfter.lead.ask === "Asknext";
-      const kept = u.box.D.envelope().teamContentSaid || {};
-      check(!u.written && shownBefore.on === true && shownBefore.said === false && shownBefore.team === u.box.team && shownBefore.by === "Quay lead"
-          && wrong.said === false && !wrongNow.written && said.said === true && saidNow.written && !!saidNow.lead
-          && !nextBefore.written && nextAfter.written && !!nextAfter.lead && nextAfter.lead.content === NEXT.at && String(kept[u.box.team] || "").split(String.fromCharCode(10)).pop() === NEXT.at,
-        "b0b the switch applies only once the agent was shown it: not before, not for a time the team file does not hold, and a switch confirmed again is shown again before it applies ("
-        + [u.written, wrongNow.written, saidNow.written, nextBefore.written, nextAfter.written].join(",") + ")");
-    }
-    {
       const f1 = await b0Ask("b0-format1", { format: 1 });
       const listed1 = await b0Ask("b0-format1-listed", { format: 1, catalogs: ["quay-held"] });
       check(!!f1.pin && !f1.written && listed1.written && !!listed1.team && JSON.stringify(listed1.team).indexOf(B0_MARK) >= 0,
-        "b0c with the switch on and shown, an ask of format 1 takes no catalog the team does not list; one it lists is answered under the team key as before");
+        "b0c on a told desk, an ask of format 1 takes no catalog the team does not list; one it lists is answered under the team key as before");
     }
     {
       const unlistedP = await b0Ask("b0-private", { private: "quay-held" });
@@ -1534,22 +1480,12 @@ try {
       }
     }
     {
-      /* A switch in a shape this build does not read: a later format, a field it does not know, or `on` not true. */
-      const later = await b0Ask("b0-unknown-format", { content: Object.assign({}, SWITCH, { format: 2 }) });
-      const extra = await b0Ask("b0-unknown-field", { content: Object.assign({}, SWITCH, { scope: "all" }) });
-      const half = await b0Ask("b0-unknown-on", { content: Object.assign({}, SWITCH, { on: "yes" }) });
-      const shown = await later.box.D.ask("etiuda:team-join", "content");
-      check(!later.written && !extra.written && !half.written && shown.on === false && shown.said === false,
-        "b0e a switch this desk cannot read (a later format, a field it does not know, on not true) reads as off, and nothing the team does not list is answered");
-    }
-    {
-      /* A desk older than the switch: askFresh takes format 1 alone, as every desk before stage 0b does. On a tree without the
-         switch the source is that desk itself. */
+      /* A desk older than format 2: askFresh takes format 1 alone. */
       const NEW = "  if ((format !== 1 && format !== ASK_CONTENT_FORMAT) || doc.kind !== ASK_KIND) return null;";
       const old = SRC.indexOf(NEW) >= 0 ? SRC.replace(NEW, "  if (+doc.format !== 1 || doc.kind !== ASK_KIND) return null;") : SRC;
       const o = await b0Ask("b0-old-desk", { src: old });
       check(!!o.pin && !o.written,
-        "b0f a desk whose askFresh takes format 1 alone, as every desk before the switch, answers no ask made under the switch, though its team file holds the switch on");
+        "b0f a desk whose askFresh takes format 1 alone answers no ask of format 2, though the desk was told");
     }
     {
       const l = await b0Ask("b0-listed-signed", { format: 1, catalogs: ["quay-held"] });
@@ -1560,12 +1496,12 @@ try {
       check(keys === "ask,catalog,chain,format,kind,sha256,sig,team" && inner.ask === l.askId && inner.team === l.box.team
           && l.box.D.api.answerLeadGenuine(inner, l.box.me.id, l.box.me.key) && !l.box.D.api.answerLeadGenuine(moved, l.box.me.id, l.box.me.key)
           && !openLeadDoc(l.box.D, l.ans),
-        "b0g an answer under the team key is signed by its desk as a box answer is, over the ask and the team and its chain, and names no switch (got " + keys + ")");
+        "b0g an answer under the team key is signed by its desk as a box answer is, over the ask and the team and its chain, and names no told stamp (got " + keys + ")");
     }
     {
-      /* writeAnswer refuses by itself, whoever calls it: an answer to the lead's box under a switch not shown, and a private catalog. */
+      /* writeAnswer refuses by itself, whoever calls it: an answer to the lead's box on an untold desk, and a private catalog. */
       const box = await arm("b0-write");
-      join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["harbour-board"], undefined, true);
+      join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["harbour-board"], true);
       const use = box.D.api.teamUse();
       const doc = JSON.parse(b0Body());
       const pin = box.D.api.signedSha(doc);
@@ -1574,33 +1510,30 @@ try {
       box.D.ask("etiuda:team-join", "private", "quay-held", "on");
       try { priv = box.D.api.writeAnswer(use, pin, doc, false, "Askwrite2"); } catch (e) { priv = "threw " + e.message; }
       box.D.ask("etiuda:team-join", "private", "quay-held", "off");
-      box.D.ask("etiuda:team-join", "content-said", box.team, SWITCH.at);
+      box.D.ask("etiuda:team-join", "content-said", box.team, "");
       try { shown = box.D.api.writeAnswer(box.D.api.teamUse(), pin, doc, true, "Askwrite3"); } catch (e) { shown = "threw " + e.message; }
       check(toLead === false && priv === false && shown === true && !!openLeadDoc(box.D, answerPath(box.share, box.me.id)),
-        "b0h writeAnswer itself refuses an answer to the lead's box under a switch not shown, and a private catalog's answer (" + [toLead, priv, shown].join(",") + ")");
+        "b0h writeAnswer itself refuses an answer to the lead's box on an untold desk, and a private catalog's answer (" + [toLead, priv, shown].join(",") + ")");
     }
 
-    /* ---- board 962, stage 0b, round two: the test architect's holds on Argon's review, and Claude alpha's ruling of 09:58 ----
-       The consent goes with the switch and the lead it was given for; an older team file put back is not read; an ask under the
-       switch names its team and the switch; the private mark and the switch reach working copies, by the whole grew chain, and
-       what the desk put on the share is withdrawn when the mark is set or the switch goes off. */
+    /* ---- stage 0b, round two: an older team file put back is not read; an ask of format 2 names its team;
+       the private mark and the told gate reach working copies, by the whole grew chain, and what the desk put on the share
+       is withdrawn when the mark is set or the desk is untold. */
     let r2ms = 0;
     const teamText = (box, o) => textOf(sign(Object.assign({
       format: 1, kind: "etiuda-team", id: box.team, catalogs: o.catalogs || ["harbour-board"],
       lead: Object.assign({}, o.lead || LEAD, { box: BOX }), sealed: true, exportsSealed: false, epoch: 1,
       roster: [entry(box.D, box.me, box.key, box.team, 1)], rev: o.rev || 0,
-    }, o.content === null ? {} : { content: o.content || SWITCH }, o.handover ? { handover: o.handover } : {}),
+    }, o.handover ? { handover: o.handover } : {}),
       o.signer || lead.privateKey, o.who || LEAD));
     /* A newer team file at the share, its time later than any before, so the desk heeds it. */
     const relead = (box, o) => {
       put(box.share, "etiuda-team.json", teamText(box, o));
       r2ms += 2000;
       touch(path.join(box.share, "etiuda-team.json"), Date.now() + r2ms);
-      box.at = o.content === null ? "" : (o.content || SWITCH).at;
     };
     const answeredTo = (u, id) => { const r = u.again(); return !!r.lead && r.lead.ask === id; };
-    const say = (u, at) => u.box.D.ask("etiuda:team-join", "content-said", u.box.team, at || SWITCH.at);
-    const consentOf = (u) => (u.box.D.envelope().teamContentSaid || {})[u.box.team];
+    const say = (u) => u.box.D.ask("etiuda:team-join", "content-said", u.box.team, "");
     const branchDoc = (box, tail, grewId, card) => ({
       format: 2, kind: "etiuda-catalog", id: box.me.id + "-" + tail, rev: 1, name: "Quay held, at this desk", date: "2026-04-03",
       langs: [{ code: "en", label: "EN" }], tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers" } }],
@@ -1611,68 +1544,13 @@ try {
     const branchAt = (box, tail) => path.join(ownDir(box.share, box.me.id), "quay-" + tail + ".ec");
     const writeCopy = (box, tail, grewId) => box.D.ask("etiuda:branch-write", "quay-" + tail, JSON.stringify(branchDoc(box, tail, grewId)));
 
-    /* F1: switch on, said, answered; off; on again at the same time; the same switch signed again with another name. */
-    const cycle = async (name, src) => {
-      const a = await b0Ask(name, { src });
-      const first = a.written;
-      relead(a.box, { rev: 1, content: null });
-      a.again();
-      const cleared = consentOf(a) === undefined, withdrawn = !fs.existsSync(a.ans);
-      relead(a.box, { rev: 2 });
-      putAsk(a.box, "Askcycle2", a.pin);
-      const sameBefore = answeredTo(a, "Askcycle2");
-      await say(a);
-      const sameAfter = answeredTo(a, "Askcycle2");
-      relead(a.box, { rev: 3, content: Object.assign({}, SWITCH, { by: "Another lead" }) });
-      putAsk(a.box, "Askcycle3", a.pin);
-      const byBefore = answeredTo(a, "Askcycle3");
-      await say(a);
-      const byAfter = answeredTo(a, "Askcycle3");
-      return { first, cleared, withdrawn, sameBefore, sameAfter, byBefore, byAfter };
-    };
-    {
-      const c = await cycle("r2-cycle");
-      check(c.first && c.cleared && c.withdrawn && !c.sameBefore && c.sameAfter && !c.byBefore && c.byAfter,
-        "r2a the consent goes with the switch: turned off, the consent is forgotten and the answer withdrawn; on again at the same time, or signed again with another name, nothing is answered until the agent is shown it again ("
-        + JSON.stringify(c) + ")");
-      if (PLANTS_OFF) skip("r2i lifting plant:s0b-consent-heed turns r2a red: the switch on again at the same time is answered on the old consent");
-      else {
-        const planted = SRC.split("\n").map(l => l.indexOf("plant:s0b-consent-heed") >= 0 ? "  if (false) {" : l).join("\n");
-        const p = planted !== SRC ? await cycle("r2-cycle-plant", planted) : null;
-        check(!!p && p.sameBefore,
-          "r2i lifting plant:s0b-consent-heed turns r2a red: the switch on again at the same time is answered on the old consent ("
-          + (p ? JSON.stringify(p) : "plant not found") + ")");
-      }
-    }
-    {
-      /* F1: the team handed over to another lead key, the switch copied across: the new lead's ask waits for the agent. */
-      const h = await b0Ask("r2-handover");
-      const other2 = crypto.generateKeyPairSync("ed25519");
-      const LEAD2 = { keyId: "quay-lead-2", public: pubHex(other2.publicKey) };
-      const step = { format: 1, kind: "etiuda-team-handover", team: h.box.team, to: { keyId: LEAD2.keyId, public: LEAD2.public },
-        sig: { alg: "Ed25519", keyId: LEAD.keyId } };
-      step.sig.value = crypto.sign(null, Buffer.concat([Buffer.from("etiuda-team-handover\n", "utf8"), Buffer.from(V2.v2SignedBytes(step))]),
-        lead.privateKey).toString("hex");
-      relead(h.box, { lead: LEAD2, who: LEAD2, signer: other2.privateKey, handover: [step] });
-      h.again();
-      const moved = ((h.box.D.envelope().teamPins || {})[h.box.team] || {}).public === LEAD2.public;
-      const cleared = consentOf(h) === undefined;
-      putAsk(h.box, "Askhand2", h.pin, 2, { who: LEAD2, key: other2.privateKey });
-      const before = answeredTo(h, "Askhand2");
-      const view = await h.box.D.ask("etiuda:team-join", "content");
-      await say(h);
-      const after = answeredTo(h, "Askhand2");
-      check(h.written && moved && cleared && !before && view.on === true && view.said === false && after,
-        "r2b the team handed over to another lead key with the switch copied across: the consent is the old lead's, so the new lead's ask waits until the agent is shown the switch again ("
-        + [h.written, moved, cleared, before, view.on, view.said, after].join(",") + ")");
-    }
     {
       /* F2: an older team file put back where the desk reads it, listing a catalog the lead has since taken off the list. */
       const roll = async (name, src) => {
         const r = await b0Ask(name, { catalogs: ["quay-held"], format: 1, src });
         const mirrorTeam = path.join(syncerMod.folderMirrorOf(r.box.D.ud, r.box.team), "etiuda-team.json");
         const original = fs.readFileSync(mirrorTeam, "utf8");
-        relead(r.box, { rev: 1, catalogs: ["harbour-board"], content: null });
+        relead(r.box, { rev: 1, catalogs: ["harbour-board"] });
         r.again();
         putAsk(r.box, "Askroll2", r.pin, 1);
         fs.writeFileSync(mirrorTeam, original, "utf8");
@@ -1680,11 +1558,11 @@ try {
         touch(mirrorTeam, Date.now() + r2ms);
         const answered = answeredTo(r, "Askroll2") || (!!r.again().team && r.again().team.ask === "Askroll2");
         const view = await r.box.D.ask("etiuda:team-join", "content");
-        return { first: r.written, answered, on: view.on };
+        return { first: r.written, answered, listed: view.listed || [] };
       };
       const r = await roll("r2-rollback");
-      check(r.first && !r.answered && r.on === false,
-        "r2c an older team file put back where the desk reads it is not read: the catalog it listed is not answered, and its switch is not shown as on ("
+      check(r.first && !r.answered && r.listed.indexOf("quay-held") < 0,
+        "r2c an older team file put back where the desk reads it is not read: the catalog it listed is not answered, and its listing is not shown ("
         + JSON.stringify(r) + ")");
       if (PLANTS_OFF) { skip("r2j lifting plant:s0b-floor-use turns r2c red"); skip("r2k lifting plant:s0b-floor-doc turns r2c red"); }
       else {
@@ -1693,34 +1571,32 @@ try {
         check(!!p && p.answered, "r2j lifting plant:s0b-floor-use turns r2c red: the catalog the older file listed is answered (" + (p ? JSON.stringify(p) : "plant not found") + ")");
         const pd = SRC.split("\n").map(l => l.indexOf("plant:s0b-floor-doc") >= 0 ? "  return doc && teamWhole(doc) ? doc : null;" : l).join("\n");
         const q = pd !== SRC ? await roll("r2-rollback-plant-doc", pd) : null;
-        check(!!q && q.on === true, "r2k lifting plant:s0b-floor-doc turns r2c red: the older file's switch is shown as on (" + (q ? JSON.stringify(q) : "plant not found") + ")");
+        check(!!q && q.listed.indexOf("quay-held") >= 0, "r2k lifting plant:s0b-floor-doc turns r2c red: the older file's listing is shown (" + (q ? JSON.stringify(q) : "plant not found") + ")");
       }
     }
     {
-      /* F2 and F5: an ask under the switch names the team and the switch's time it was made under. */
+      /* F2 and F5: an ask of format 2 names the team it asks for. */
       const bound = async (name, src) => {
         const k = await b0Ask(name, { src });
-        putAsk(k.box, "Askbound2", k.pin, 2, { at: "2026-10-01T09:00:00.000Z" });
-        const otherAt = answeredTo(k, "Askbound2");
         putAsk(k.box, "Askbound3", k.pin, 2, { team: "t-" + "0".repeat(16) });
         const otherTeam = answeredTo(k, "Askbound3");
         putAsk(k.box, "Askbound4", k.pin, 2);
         const right = answeredTo(k, "Askbound4");
-        return { first: k.written, otherAt, otherTeam, right };
+        return { first: k.written, otherTeam, right };
       };
       const b = await bound("r2-bound");
-      check(b.first && !b.otherAt && !b.otherTeam && b.right,
-        "r2d an ask under the switch is answered only where it names this team and the switch now: one naming an earlier switch, or another team, is not (" + JSON.stringify(b) + ")");
+      check(b.first && !b.otherTeam && b.right,
+        "r2d an ask of format 2 is answered only where it names this team: one naming another team is not (" + JSON.stringify(b) + ")");
       if (PLANTS_OFF) skip("r2l lifting plant:s0b-ask-bound turns r2d red");
       else {
-        const planted = SRC.split("\n").map(l => l.indexOf("plant:s0b-ask-bound") >= 0 ? "    || false)) return null;" : l).join("\n");
+        const planted = SRC.split("\n").map(l => l.indexOf("plant:s0b-ask-bound") >= 0 ? "  if (false) return null;" : l).join("\n");
         const p = planted !== SRC ? await bound("r2-bound-plant", planted) : null;
-        check(!!p && p.otherAt, "r2l lifting plant:s0b-ask-bound turns r2d red: an ask naming an earlier switch is answered (" + (p ? JSON.stringify(p) : "plant not found") + ")");
+        check(!!p && p.otherTeam, "r2l lifting plant:s0b-ask-bound turns r2d red: an ask naming another team is answered (" + (p ? JSON.stringify(p) : "plant not found") + ")");
       }
     }
     {
       /* F3 and ruling A: where a working copy goes. Grown from a catalog the team lists: as before. Grown from one it does not
-         list: to the lead's box while the switch applies, held otherwise. Private: nowhere. Never in the clear. */
+         list: to the lead's box once told, held while untold. Private: nowhere. Never in the clear. */
       const copies = async (name, src) => {
         const box = await arm(name, src);
         join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["harbour-board"]);
@@ -1732,7 +1608,7 @@ try {
         let inner = null;
         try { inner = JSON.parse(box.D.api.openBranchLead(leadBox.privateKey, env, box.me.id)); } catch { inner = null; }
         const shut = await arm(name + "-shut", src);
-        join(shut, 1, [entry(shut.D, shut.me, shut.key, shut.team, 1)], ["harbour-board"], undefined, true);
+        join(shut, 1, [entry(shut.D, shut.me, shut.key, shut.team, 1)], ["harbour-board"], true);
         const held = await writeCopy(shut, "33333333", "quay-held");
         const priv = await arm(name + "-private", src);
         join(priv, 1, [entry(priv.D, priv.me, priv.key, priv.team, 1)], ["harbour-board"]);
@@ -1748,19 +1624,19 @@ try {
       };
       const c = await copies("r2-copies");
       check(c.listed && c.boxed && c.held && c.withheld,
-        "r2e a working copy grown from a catalog the team lists goes as before; one grown from a catalog it does not list goes to the lead's box alone while the switch applies, and is held while it does not; a private one goes nowhere (" + JSON.stringify(c) + ")");
+        "r2e a working copy grown from a catalog the team lists goes as before; one grown from a catalog it does not list goes to the lead's box alone once the desk is told, and is held while untold; a private one goes nowhere (" + JSON.stringify(c) + ")");
       if (PLANTS_OFF) { skip("r2m lifting plant:s0b-branch-switch turns r2e red"); skip("r2n lifting plant:s0b-branch-private turns r2e red"); }
       else {
         const ps = SRC.split("\n").map(l => l.indexOf("plant:s0b-branch-switch") >= 0 ? "  /* plant:s0b-branch-switch */" : l).join("\n");
         const p = ps !== SRC ? await copies("r2-copies-plant-switch", ps) : null;
-        check(!!p && !p.held, "r2m lifting plant:s0b-branch-switch turns r2e red: a copy is written under a switch the agent was not shown (" + (p ? JSON.stringify(p) : "plant not found") + ")");
+        check(!!p && !p.held, "r2m lifting plant:s0b-branch-switch turns r2e red: a copy is written on an untold desk (" + (p ? JSON.stringify(p) : "plant not found") + ")");
         const pp = SRC.split("\n").map(l => l.indexOf("plant:s0b-branch-private") >= 0 ? "  /* plant:s0b-branch-private */" : l).join("\n");
         const q = pp !== SRC ? await copies("r2-copies-plant-private", pp) : null;
         check(!!q && !q.withheld, "r2n lifting plant:s0b-branch-private turns r2e red: a private copy is written (" + (q ? JSON.stringify(q) : "plant not found") + ")");
       }
     }
     {
-      /* Board 974, condition C5: a copy held while the switch does not apply stays held once the lead takes the desk off the
+      /* Board 974, condition C5: a copy held while untold stays held once the lead takes the desk off the
          roster, the folder still the team's: not written in the clear to the mirror, owed to nobody, nowhere on the share. */
       const holdsText = (dir, mark) => {
         let names = [];
@@ -1773,11 +1649,11 @@ try {
       };
       const dropped = async (name, src) => {
         const box = await arm(name, src);
-        join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["harbour-board"], undefined, true);
+        join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["harbour-board"], true);
         const first = await writeCopy(box, "99999999", "quay-held");
         put(box.share, "etiuda-team.json", textOf(sign({
           format: 1, kind: "etiuda-team", id: box.team, catalogs: ["harbour-board"], lead: Object.assign({}, LEAD, { box: BOX }),
-          sealed: true, exportsSealed: false, epoch: 1, roster: [], rev: 1, content: SWITCH,
+          sealed: true, exportsSealed: false, epoch: 1, roster: [], rev: 1,
         }, lead.privateKey, LEAD)));
         r2ms += 2000;
         touch(path.join(box.share, "etiuda-team.json"), Date.now() + r2ms);
@@ -1794,7 +1670,7 @@ try {
       };
       const g = await dropped("c5-dropped");
       check(g.held && g.left && !g.written && g.owed === 0 && !g.clear,
-        "974f a copy held while the lead's switch does not apply stays held after the roster drops the desk: nothing written to the mirror or the share, nothing owed, no clear text (" + JSON.stringify(g) + ")");
+        "974f a copy held while untold stays held after the roster drops the desk: nothing written to the mirror or the share, nothing owed, no clear text (" + JSON.stringify(g) + ")");
       if (PLANTS_OFF) skip("974g lifting plant:team-write-hold turns 974f red");
       else {
         const pt = SRC.split("\n").map(l => l.indexOf("plant:team-write-hold") >= 0 ? "  /* plant:team-write-hold */" : l).join("\n");
@@ -1803,7 +1679,7 @@ try {
       }
     }
     {
-      /* Ruling B: marked private, or the switch off, the desk withdraws the answer and the working copies it put on the share. */
+      /* Ruling B: marked private, or untold, the desk withdraws the answer and the working copies it put on the share. */
       const withdraw = async (name, src) => {
         const a = await b0Ask(name, { src });
         await writeCopy(a.box, "55555555", "quay-held");
@@ -1812,7 +1688,11 @@ try {
         const privAnswer = !fs.existsSync(a.ans), privCopy = !fs.existsSync(branchAt(a.box, "55555555"));
         const o = await b0Ask(name + "-off", { src });
         await writeCopy(o.box, "66666666", "quay-held");
-        relead(o.box, { rev: 1, content: null });
+        const oEnvPath = path.join(o.box.D.ud, "desk.json");
+        const oEnv = JSON.parse(fs.readFileSync(oEnvPath, "utf8"));
+        delete oEnv.teamContentSaid;
+        fs.writeFileSync(oEnvPath, JSON.stringify(oEnv), "utf8");
+        o.box.D = loadDesk(o.box.D.ud, src);
         o.again();
         const offAnswer = !fs.existsSync(o.ans), offCopy = !fs.existsSync(branchAt(o.box, "66666666"));
         const l = await arm(name + "-listed", src);
@@ -1825,7 +1705,7 @@ try {
       };
       const w = await withdraw("r2-withdraw");
       check(w.first && w.privAnswer && w.privCopy && w.offAnswer && w.offCopy && !w.listedCopy,
-        "r2f marked private, the desk withdraws the answer and the working copies of a catalog the team does not list; a listed one takes no mark and its copy stays (round six); with the switch off, the answer and the copies sealed to the lead's box (" + JSON.stringify(w) + ")");
+        "r2f marked private, the desk withdraws the answer and the working copies of a catalog the team does not list; a listed one takes no mark and its copy stays (round six); on an untold desk, the answer and the copies sealed to the lead's box (" + JSON.stringify(w) + ")");
       if (PLANTS_OFF) { skip("r2o lifting plant:s0b-withdraw-answer turns r2f red"); skip("r2p lifting plant:s0b-withdraw-branch turns r2f red"); }
       else {
         const pa = SRC.split("\n").map(l => l.indexOf("plant:s0b-withdraw-answer") >= 0 ? "  /* plant:s0b-withdraw-answer */" : l).join("\n");
@@ -1930,8 +1810,9 @@ try {
         catch { inner = null; }
         if (!inner) return { written: r && r.ok === true && fs.existsSync(branchAt(box, "23232323")), inner: false };
         const G = (d, at) => typeof box.D.api.branchLeadGenuine === "function" && box.D.api.branchLeadGenuine(d, at || box.me.id, box.me.key);
+        const stamp = (box.D.envelope().teamContentSaid || {})[box.team] || "";
         return {
-          written: true, inner: true, kind: inner.kind, team: inner.team === box.team, content: inner.content === SWITCH.at,
+          written: true, inner: true, kind: inner.kind, team: inner.team === box.team, content: !!stamp && inner.content === stamp,
           chain: JSON.stringify(inner.chain) === JSON.stringify([box.me.id + "-23232323", "quay-held"]), file: !!inner.file && inner.file.id === box.me.id + "-23232323"
             && box.D.api.deskFileGenuine(inner.file, box.me.id),
           genuine: G(inner), switched: G(Object.assign({}, inner, { content: "2026-10-01T09:00:00.000Z" })),
@@ -1941,7 +1822,7 @@ try {
       };
       const o = await said("c3-said");
       check(o.inner && o.kind === "etiuda-branch-lead" && o.team && o.content && o.file && o.genuine && !o.switched && !o.rechained && !o.elsewhere && o.chain,
-        "c3b a working copy sealed to the lead's box opens to the desk's signed statement: its team, the switch it was written under, the chain it was judged by and the desk file; another switch, another chain or another folder does not verify (" + JSON.stringify(o) + ")");
+        "c3b a working copy sealed to the lead's box opens to the desk's signed statement: its team, the told stamp it was written under, the chain it was judged by and the desk file; another stamp, another chain or another folder does not verify (" + JSON.stringify(o) + ")");
       if (PLANTS_OFF) skip("c3b2 lifting plant:s3-branch-said turns c3b red");
       else {
         const NLc = String.fromCharCode(10);
@@ -2014,7 +1895,7 @@ try {
         const parentDoc = catalog(4, { id: "quay-held", name: "Quay held", card: B0_MARK, unsigned: true });
         const copy = catalog(5, { id: "k-0123456789abcdef-56565656", name: "Quay held, grown", card: B0_MARK, unsigned: true });
         copy.grew = { id: "quay-held", rev: 4, sha: pinV2(parentDoc) };
-        const a = await b0Ask(name, { catalogs: ["quay-held"], content: null, body: textOf(copy), src, shareFiles: [["quay-own.ec", textOf(parentDoc)]] });
+        const a = await b0Ask(name, { catalogs: ["quay-held"], unsaid: true, body: textOf(copy), src, shareFiles: [["quay-own.ec", textOf(parentDoc)]] });
         const tail = "57575757";
         const doc = branchDoc(a.box, tail, "quay-held");
         doc.grew.sha = pinV2(parentDoc);
@@ -2023,7 +1904,7 @@ try {
       };
       const h = await firstHop("s5u3");
       check(!h.answered && !h.team && h.held && !h.written,
-        "962s5u3 a copy grown from a catalog that keeps a listed id but is not the lead's signed edition takes no answer under the team key, and with the switch off its working copy is held, not written ("
+        "962s5u3 a copy grown from a catalog that keeps a listed id but is not the lead's signed edition takes no answer under the team key, and while untold its working copy is held, not written ("
         + JSON.stringify(h) + ")");
       if (PLANTS_OFF) skip("962s5u4 lifting plant:s5-first-hop writes the copy's working copy to the share");
       else {
@@ -2189,7 +2070,7 @@ try {
          catalog that names a listed one as its root, the switch off: no team-key answer, no copy in the clear, nothing stored. */
       const claimed = async (name, src) => {
         const box = await arm(name, src);
-        join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["quay-held"], null);
+        join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["quay-held"], true);
         const c = catalog(6, { id: "k-fedcba9876543210-77777777", name: "Claimed copy", card: B0_MARK, unsigned: true });
         c.grew = { id: "harbour-board", rev: 5, sha: "sha256:" + "ef".repeat(32), root: "quay-held" };
         const dir = folder(name + "-out");
@@ -2207,7 +2088,7 @@ try {
       };
       const c = await claimed("r5-claimed");
       check(c.pin && !c.teamAnswer && !c.copyInClear && c.stored === undefined,
-        "r5f a copy grown from an unlisted catalog that names a listed one as its root is not listed: with the switch off no team-key answer, no copy in the clear, and the claim is not stored (" + JSON.stringify(c) + ")");
+        "r5f a copy grown from an unlisted catalog that names a listed one as its root is not listed: while untold no team-key answer, no copy in the clear, and the claim is not stored (" + JSON.stringify(c) + ")");
       if (PLANTS_OFF) skip("r5g letting the root decide listed turns r5f red");
       else {
         const NL = String.fromCharCode(10);
@@ -2292,7 +2173,7 @@ try {
       }
     }
     {
-      /* Edit 2: a box answer this desk has no record of (an earlier build's) goes when the switch no longer applies; a team-key
+      /* Edit 2: a box answer this desk has no record of (an earlier build's) goes when untold; a team-key
          answer stays. */
       const unkept = async (name, src) => {
         const a = await b0Ask(name, { src });
@@ -2301,21 +2182,20 @@ try {
           const envPath = path.join(box.D.ud, "desk.json");
           const env = JSON.parse(fs.readFileSync(envPath, "utf8"));
           delete env.answerKept;
+          delete env.teamContentSaid;
           fs.writeFileSync(envPath, JSON.stringify(env), "utf8");
           box.D = loadDesk(box.D.ud, src);
         };
         forget(a.box); forget(l.box);
         /* The ask an earlier Studio made, format 1, still standing: only the withdrawal takes the box answer back. */
         putAsk(a.box, a.askId, a.pin, 1);
-        relead(a.box, { rev: 1, content: null });
-        relead(l.box, { rev: 1, catalogs: ["quay-held"], content: null });
         a.box.D.api.tryCatalogAsk(a.box.D.win);
         l.box.D.api.tryCatalogAsk(l.box.D.win);
         return { first: a.written && l.written, boxGone: !fs.existsSync(a.ans), teamKept: fs.existsSync(l.ans) };
       };
       const k = await unkept("r5-unkept");
       check(k.first && k.boxGone && k.teamKept,
-        "r5c with the switch off, a box answer this desk holds no record of is withdrawn; a team-key answer stays (" + JSON.stringify(k) + ")");
+        "r5c on an untold desk, a box answer this desk holds no record of is withdrawn; a team-key answer stays (" + JSON.stringify(k) + ")");
       if (PLANTS_OFF) skip("r5d lifting plant:s0b-withdraw-unkept turns r5c red");
       else {
         const planted = SRC.split("\n").map(l => l.indexOf("plant:s0b-withdraw-unkept") >= 0 ? "  /* plant:s0b-withdraw-unkept */" : l).join("\n");
@@ -2324,7 +2204,7 @@ try {
       }
     }
     {
-      /* F6: the agent shown the switch, an ask already waiting is answered then, with nothing else to wake it. */
+      /* F6: once the desk is told, an ask already waiting is answered then, with nothing else to wake it. */
       const waiting = async (name, src) => {
         const u = await b0Ask(name, { unsaid: true, src });
         const before = u.written;
@@ -2334,7 +2214,7 @@ try {
         return { before, after: !!doc && doc.ask === u.askId };
       };
       const w = await waiting("r2-waiting");
-      check(!w.before && w.after, "r2h the agent shown the switch, the ask already waiting is answered at once (" + JSON.stringify(w) + ")");
+      check(!w.before && w.after, "r2h once the desk is told, the ask already waiting is answered at once (" + JSON.stringify(w) + ")");
       if (PLANTS_OFF) skip("r2q lifting plant:s0b-said-ask turns r2h red");
       else {
         const planted = SRC.split("\n").map(l => l.indexOf("plant:s0b-said-ask") >= 0 ? "  /* plant:s0b-said-ask */" : l).join("\n");
@@ -2343,7 +2223,7 @@ try {
       }
     }
 
-    /* ---- board 1014: no switch, the told gate alone (red first on 638fdcdd) ---- */
+    /* ---- board 1014: no switch, the told gate alone ---- */
     {
       const putAskNoSwitch = (box, id, sha) => {
         const doc = { format: 2, kind: "etiuda-catalog-ask", id, desk: box.me.id, sha256: sha, expires: expAt(),
@@ -2355,7 +2235,7 @@ try {
       const toldScene = async (name, opts) => {
         const o = opts || {};
         const box = await arm(name, o.src);
-        join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["harbour-board"], null, true);
+        join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["harbour-board"], true);
         const before = await box.D.ask("etiuda:team-join", "content");
         if (o.priv) await box.D.ask("etiuda:team-join", "private", "quay-held", "on");
         const dir = folder(name + "-out");

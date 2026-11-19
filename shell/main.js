@@ -1745,8 +1745,8 @@ const ANSWER_KIND = "etiuda-catalog-answer", ANSWER_NAME = "catalog-answer.ec";
 const ASK_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/;
 const PIN_RE = /^sha256:[0-9a-f]{64}$/;
 const ASK_TIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
-/* An ask of format 2 is made under the lead's switch (teamContentOf), and only it is answered with a catalog the team does not
-   list; a desk older than the switch takes format 1 alone, so it answers no such ask. */
+/* An ask of format 2 is answered with a catalog the team does not list once this desk has been told for the team; a desk
+   older than format 2 takes format 1 alone, so it answers no such ask. */
 const ASK_CONTENT_FORMAT = 2;
 /* An off-roster file this launch opened, already offered, so a later load of the page does not offer it again. */
 const openedOfferSent = new Set();
@@ -2589,15 +2589,15 @@ function sealBranchLead(box, teamId, keyId, deskId, text) {
   const w = hpkeSeal(Buffer.from(String(box), "hex"), branchLeadInfo(String(teamId), String(deskId)), Buffer.alloc(0), Buffer.from(String(text), "utf8"));
   return { format: 1, kind: BRANCH_LEAD_KIND, team: String(teamId), keyId: String(keyId), enc: w.enc.toString("hex"), ct: w.ct.toString("hex") };
 }
-/* What a box copy holds (board 962, stage 3): the desk file with the team, the `at` of the switch it was written under and the
-   grew chain this desk judged it by, signed under a prefix of its own, so Studio reads it only under that very switch. */
+/* What a box copy holds: the desk file with the team, the told stamp (`content`) it was written under and the grew chain
+   this desk judged it by, signed under a prefix of its own. */
 const BRANCH_LEAD_INNER = "etiuda-branch-lead";
 const BRANCH_LEAD_PREFIX = "etiuda-catalog-branch\n";
 function branchLeadSignedBytes(doc) {
   return Buffer.concat([Buffer.from(BRANCH_LEAD_PREFIX, "utf8"), signedBytesOf(doc)]);
 }
 /* Whether an opened box copy is that folder's own: `keyHex` is the roster's desk.key for the folder's id, and that id, the id the
-   key makes and sig.keyId are one id. Which team, switch and chain it names is the reader's to compare. */
+   key makes and sig.keyId are one id. Which team, told stamp and chain it names is the reader's to compare. */
 function branchLeadGenuine(doc, folder, keyHex) {
   const sig = doc && doc.sig;
   try {
@@ -3358,7 +3358,7 @@ function teamUse() {
   /* A lead.stats that is not 64 hex seals nothing, and the file is taken as it is. */
   const stats = typeof doc.lead.stats === "string" && /^[0-9a-f]{64}$/.test(doc.lead.stats) ? doc.lead.stats : "";
   const catalogs = Array.isArray(doc.catalogs) ? doc.catalogs.map(String) : [];
-  return { member: true, stale: stale, catalogs: catalogs, content: stale ? null : teamContentOf(doc), consent: stale ? "" : consentOf(doc),
+  return { member: true, stale: stale, catalogs: catalogs,
     seal: { team: team, epoch: epoch, key: key, lead: pin, box: box, stats: stats, statsBad: doc.lead.stats !== undefined && !stats } };
 }
 function inUseFile() {
@@ -3610,13 +3610,12 @@ function readAskFile() {
   try { return { doc: JSON.parse(String(text).replace(/^\uFEFF/, "")) }; }
   catch { return { bad: true }; }
 }
-/* `want` is { team, at }: the team asked for and the `at` of its lead's switch now, which an ask of format 2 must name. */
+/* `want` is { team }: the team asked for, which an ask of format 2 must name. */
 function askFresh(doc, me, lead, want) {
   if (!doc || typeof doc !== "object" || Array.isArray(doc) || !me || !lead) return null;
   const format = +doc.format;
   if ((format !== 1 && format !== ASK_CONTENT_FORMAT) || doc.kind !== ASK_KIND) return null;
-  if (format === ASK_CONTENT_FORMAT && (!want || !want.at || String(doc.team || "") !== String(want.team || "")
-    || String(doc.content || "") !== String(want.at))) return null; /* plant:s0b-ask-bound */
+  if (format === ASK_CONTENT_FORMAT && (!want || !want.team || String(doc.team || "") !== String(want.team))) return null; /* plant:s0b-ask-bound */
   const id = String(doc.id || "");
   if (!ASK_ID_RE.test(id) || String(doc.desk || "") !== me.id || !PIN_RE.test(String(doc.sha256 || ""))) return null;
   if (!ASK_TIME_RE.test(String(doc.expires || ""))) return null;
@@ -3642,7 +3641,7 @@ function removeAnswer() {
   if (answerKept) { answerKept = null; persistDeskEnvelope(); }
 }
 /* The answer's text under either seal: the catalog, the ask and the team it answers, the grew chain this desk judged it by
-   (`chain`, lineageOf's ids) and, sealed to the lead's box, the `at` of the lead's switch it was given under, signed by this
+   (`chain`, lineageOf's ids) and, sealed to the lead's box, the told stamp (`content`) it was given under, signed by this
    desk. Throws where it cannot sign. */
 function signedAnswer(me, team, askId, pin, catalogDoc, content, chain) {
   const doc = { format: 1, kind: ANSWER_KIND, ask: String(askId), team: String(team), sha256: pin, catalog: catalogDoc,
@@ -3653,16 +3652,9 @@ function signedAnswer(me, team, askId, pin, catalogDoc, content, chain) {
   if (!/^[0-9a-f]{128}$/.test(String(doc.sig.value))) throw new Error("the answer could not be signed");
   return JSON.stringify(doc);
 }
-/* Whether the lead's switch `sw` (teamUse's content) lets this desk answer `team` with a catalog the team does not list: on, and
-   shown to the agent at that very confirmation (contentSaid), so a switch turned on after the join applies only once said. */
-function contentApplies(team, consent) {
-  return !!consent && !!team && typeof teamContentSaid[team] === "string" && teamContentSaid[team] === consent;
-}
-/* What the agent is shown and consents to: the lead's key and box with the switch's who and when, so a moved lead or a switch
-   confirmed again is a new consent. "" where the file holds no switch. */
-function consentOf(doc) {
-  const sw = doc ? teamContentOf(doc) : null;
-  return sw ? [String(doc.lead.public), String(doc.lead.box || ""), sw.by, sw.at].join("\n") : "";
+/* Whether this desk has been told for `team` (contentSaid): an unlisted catalog is answered or shared only once told. */
+function contentApplies(team) {
+  return !!team && typeof teamContentSaid[team] === "string" && ASK_TIME_RE.test(teamContentSaid[team]) && Number.isFinite(Date.parse(teamContentSaid[team]));
 }
 /* Whether a whole team file is older than one this desk has heeded for its team and lead key, as heedTeam judges it. */
 function teamFileBehind(doc) {
@@ -3816,7 +3808,7 @@ function teamWriteHere() {
   return !!(need && need.mirror); /* plant:team-write-moving */
 }
 /* Where a working copy may go on a team this desk is on: one the team lists as before; a private one nowhere; any other to the lead's
-   box while the lead's switch applies, else held until it does. Not a sealed member where writes reach a team's place: held. Off a
+   box once this desk is told for this team, else held until it is. Not a sealed member where writes reach a team's place: held. Off a
    team, as before but private. */
 function branchGate(doc) {
   const use = teamUse(), onTeam = !!(use.member && use.seal);
@@ -3824,8 +3816,8 @@ function branchGate(doc) {
   if (!onTeam && teamWriteHere()) return { hold: true }; /* plant:team-write-hold */
   if (!onTeam) return {};
   if (teamListedDoc(doc, use)) return {};
-  if (!contentApplies(use.seal.team, use.consent) || !/^[0-9a-f]{64}$/.test(String(use.seal.box || ""))) return { hold: true }; /* plant:s0b-branch-switch */
-  return { box: use.seal, at: use.content ? String(use.content.at) : "" };
+  if (!contentApplies(use.seal.team) || !/^[0-9a-f]{64}$/.test(String(use.seal.box || ""))) return { hold: true }; /* plant:s0b-branch-switch */
+  return { box: use.seal, at: teamContentSaid[use.seal.team] };
 }
 /* The desk's own file for the catalog in use as the page would send it now (branchCatalog): the id this desk's key and the
    grown-from id give it, and grew naming the edition. Null where no edition is held or this desk has no key of its own. */
@@ -3857,8 +3849,8 @@ function branchReach() {
     return branchSealStep(doc, null, root) !== null;
   } finally { lineageAsked = null; }
 }
-/* What this desk put on the share that the lead may no longer read (board 962, stage 0b, Claude alpha's ruling B): an answer to
-   the lead's box once the switch no longer applies, any answer about a catalog now private, and working copies likewise. */
+/* What this desk put on the share that the lead may no longer read: an answer or working copy to the lead's box once this desk
+   is no longer told for this team, and any answer or working copy about a catalog now private. */
 function withdrawClosed() {
   const me = branchIdentity(false);
   const root = sharedFolderForWrite();
@@ -3870,7 +3862,7 @@ function withdrawClosed() {
   if (!answerKept && names.indexOf(ANSWER_NAME) < 0 && !names.some(n => /-[0-9a-f]{8}\.ec$/.test(n))) return;
   const use = teamUse();
   if (!use.member || !use.seal) return;
-  const open = contentApplies(use.seal.team, use.consent);
+  const open = contentApplies(use.seal.team);
   /* Only an answer sealed to the lead's box was about a catalog the team does not list, so only it answers to the private mark. */
   if (answerKept && answerKept.lead && (!open || privateChain(answerKept.ids).some(id => catalogPrivate.has(id)))) removeAnswer(); /* plant:s0b-withdraw-answer */
   /* A box answer this desk has no record of, one an earlier build wrote among them, goes too; a team-key answer stays. */
@@ -3898,10 +3890,10 @@ function writeAnswer(use, pin, catalogDoc, toLead, askId) {
   const seal = use && use.seal;
   if (!me || !seal) return false;
   if (privateHere(catalogDoc, use.catalogs)) return false; /* plant:s0b-private */
-  if (toLead && !contentApplies(seal.team, use.consent)) return false; /* plant:s0b-switch */
+  if (toLead && !contentApplies(seal.team)) return false; /* plant:s0b-switch */
   const root = sharedFolderForWrite();
   if (!folderAnswers(root)) return false;
-  const inner = signedAnswer(me, seal.team, askId, pin, catalogDoc, toLead && use.content ? use.content.at : "", lineageOf(catalogDoc));
+  const inner = signedAnswer(me, seal.team, askId, pin, catalogDoc, toLead ? teamContentSaid[seal.team] : "", lineageOf(catalogDoc));
   const at = branchDest("catalog-answer");
   if (!at) return false;
   for (const dir of [path.join(at.root, "desks"), at.dir]) {
@@ -3970,7 +3962,7 @@ function tryCatalogAsk(win) {
     if (use.away || !use.member) return;
     const me = branchIdentity(false);
     checkWithdrawnAsks(catalogFolder(), me, use.seal && use.seal.lead);
-    const ask = got.bad ? null : askFresh(got.doc, me, use.seal.lead, { team: use.seal.team, at: use.content ? use.content.at : "" });
+    const ask = got.bad ? null : askFresh(got.doc, me, use.seal.lead, { team: use.seal.team });
     if (!ask) { removeAnswer(); return; }
     if (use.stale || !loadedText || catalogAskIds.indexOf(ask.id) >= 0) return;
     const doc = catalogDocIn(loadedText);
@@ -3982,7 +3974,7 @@ function tryCatalogAsk(win) {
     if (ask.sha256 !== pin && !listed) return;
     if (privateHere(doc, use.catalogs)) return; /* plant:s0b-private */
     if (sealedForOther(doc, pin, use.seal.team)) return; /* plant:s0-other-team */
-    if (!listed && !(ask.content && contentApplies(use.seal.team, use.consent))) return; /* plant:s0b-switch */
+    if (!listed && !(ask.content && contentApplies(use.seal.team))) return; /* plant:s0b-switch */
     if (!listed && !/^[0-9a-f]{64}$/.test(String(use.seal.box || ""))) return;
     if (!writeAnswer(use, pin, doc, !listed, ask.id)) { heldAnswer = { id: ask.id }; return; }
     rememberAsk(ask.id);
@@ -4064,7 +4056,7 @@ const teamBarred = new Set();                  // teams whose lead the agent for
 const teamHeldOut = new Set();                 // relay teams a left-behind desk took a new lead's invitation for: its files stay here until "It matches"
 let teamLeft = {};                             // of those, a team the agent left with Leave this team -> when, as an ISO date
 let teamLapseSeen = {};                        // team id -> "<step>:<until>": the lapse notice the agent dismissed, so a renewed grant's next lapse shows again
-let teamContentSaid = {};                      // team id -> the consent the agent was shown (consentOf): the switch applies only then
+let teamContentSaid = {};                      // team id -> ISO timestamp when this desk was told for this team (contentSaid)
 let catalogLineage = {};                       // catalog id -> the id it grew from, each hop this desk has seen
 const catalogLineageSha = {};                  // catalog id -> the signed hash of the edition it grew from (grew.sha); this run only
 let catalogRoots = {};                         // catalog id -> the root it states (grew.root), read for the private mark alone
@@ -4137,18 +4129,6 @@ function relayElsewhereSay(team) {
   if (teamElsewhere.has(team)) return;
   teamElsewhere.add(team); /* plant:elsewhere-fact */
   sendJoin(theWindow);
-}
-/* THE LEAD'S SWITCH FOR READING A CATALOG THE TEAM DOES NOT LIST: the team file's `content`, signed with the rest of it, as
-   {by, at}, or null, which is off. Read in this one shape only, so a field or a format this build does not know reads as off. */
-const CONTENT_SWITCH_FORMAT = 1;
-function teamContentOf(doc) {
-  const c = doc && doc.content;
-  if (!c || typeof c !== "object" || Array.isArray(c) || Object.keys(c).sort().join(",") !== "at,by,format,on") return null;
-  if (c.format !== CONTENT_SWITCH_FORMAT || c.on !== true || typeof c.by !== "string" || typeof c.at !== "string") return null;
-  const by = c.by;
-  if (!by || by.length > 120 || by.trim() !== by || Array.from(by).some(ch => ch.charCodeAt(0) < 32 || ch.charCodeAt(0) === 127)) return null;
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(c.at) || !Number.isFinite(Date.parse(c.at))) return null;
-  return { by: by, at: c.at };
 }
 /* On the relay the ring is the signed file's own `ring`, or none. */
 function teamRingIn(doc) {
@@ -5072,11 +5052,6 @@ function heedTeam() {
   }
   if (r.unbar) { teamBarred.delete(r.team); delete teamLeft[r.team]; }
   let changed = r.changed;
-  /* The consent the agent was shown goes with a heeded file holding another switch or none, and with a lead that moved. */
-  if (r.team && typeof teamContentSaid[r.team] === "string" && teamContentSaid[r.team] !== consentOf(doc)) { /* plant:s0b-consent-heed */
-    delete teamContentSaid[r.team];
-    changed = true;
-  }
   if (r.team && teamPins[r.team]) {
     if (channel && channel.kind === "relay") {
       /* The folder stays beside the host: readRingFile keys on it, so a relay team's folder never has its etiuda-ring.json
@@ -7073,24 +7048,23 @@ function lapseSeen(team, step) {
   if (v && v.step === step && !v.seen) { teamLapseSeen[team] = v.step + ":" + v.until; persistDeskEnvelope(); } /* plant:lapse-seen */
   return joinView();
 }
-/* The lead's switch at this folder's team as the agent is to be shown it, `said` once shown (contentSaid), and the catalogs marked
-   private: what the disclosure at joining, the notice of a changed switch and the private mark's control read. */
+/* Whether this desk was told for this folder's team (contentSaid), and the catalogs marked private: what the joining
+   disclosure, the once-per-team notice and the private mark's control read. */
 function contentView(read) {
   const doc = read === undefined ? folderTeamDoc() : read;
   const pin = doc ? pinTrusted(doc.id) : null;
   const team = pin && pin.keyId === doc.lead.keyId && pin.public === doc.lead.public ? String(doc.id) : "";
-  const sw = team ? teamContentOf(doc) : null;
   /* `listed`: the team's catalogs, which the private mark is never offered on. */
-  return { team: team, on: !!sw, by: sw ? sw.by : "", at: sw ? sw.at : "", said: contentApplies(team, team ? consentOf(doc) : ""),
+  return { team: team, told: contentApplies(team),
     private: Array.from(catalogPrivate).sort(), listed: team && Array.isArray(doc.catalogs) ? doc.catalogs.map(String) : [] };
 }
-/* The agent was shown the switch confirmed at `at`: kept only where it is this team's switch now, so no page says a later one. */
-function contentSaid(team, at) {
+/* This desk was told for `team`: kept with the time it was told, so unlisted catalogs can be answered or shared. */
+function contentSaid(team) {
   const doc = folderTeamDoc(), v = contentView(doc);
-  /* One read: the consent kept is that of the very file whose switch was checked. */
-  if (v.team && v.team === String(team || "") && v.on && v.at === String(at || "")) { teamContentSaid[v.team] = consentOf(doc); persistDeskEnvelope(); } /* plant:s0b-said */
+  if (v.team && v.team === String(team || "") && !contentApplies(v.team)) { teamContentSaid[v.team] = new Date().toISOString(); persistDeskEnvelope(); } /* plant:s0b-said */
   /* An ask already waiting is answered now, not at the next change of the folder. */
   tryCatalogAsk(theWindow); /* plant:s0b-said-ask */
+  tryHeldBranches();
   return contentView();
 }
 /* The agent marks a catalog private by its id, or takes the mark off. */
@@ -8444,8 +8418,7 @@ function readDesk() {
     });
     if (doc && table(doc.teamContentSaid)) Object.keys(doc.teamContentSaid).forEach(t => {
       const v = doc.teamContentSaid[t];
-      const p = typeof v === "string" ? v.split("\n") : [];
-      if (SEALED_TEAM_RE.test(t) && p.length === 4 && /^[0-9a-f]{64}$/.test(p[0]) && /^(?:[0-9a-f]{64})?$/.test(p[1]) && p[2] && ASK_TIME_RE.test(p[3]))
+      if (SEALED_TEAM_RE.test(t) && typeof v === "string" && ASK_TIME_RE.test(v) && Number.isFinite(Date.parse(v)))
         teamContentSaid[t] = v;
     });
     if (doc && table(doc.catalogLineage)) Object.keys(doc.catalogLineage).slice(-LINEAGE_MAX).forEach(c => {
@@ -9793,10 +9766,10 @@ ipcMain.handle("etiuda:shared-write", (e, name, text, sha, create) =>
 // "seen", "forget", "leave", "lapse-seen", "fork-seen" and "stranded-seen" name a team, "lapse-seen" with the step its notice showed, "read" and "invite" carry an invitation's text, and the others name a file; "invite"
 // adds the check code the agent typed, which only a folder invitation needs, and "leads" answers the pinned leads alone. "held" is a link waiting here,
 // "link" is the yes to that link and "link-no" lets it go. The link's text stays in this process.
-// "content" answers the lead's switch and the private marks, "content-said" names the team and the switch's `at` shown, "private" a catalog id and "on" or "off".
+// "content" answers whether this desk was told for its team and the private marks, "content-said" names the team told, "private" a catalog id and "on" or "off".
 ipcMain.handle("etiuda:team-join", (e, op, file, name, check) => (!fromEngine(e) ? null
   : op === "leads" ? { leads: leadsView() }
-  : op === "content" ? contentView() : op === "content-said" ? contentSaid(file, name) : op === "private" ? markPrivate(file, name === "on")
+  : op === "content" ? contentView() : op === "content-said" ? contentSaid(file) : op === "private" ? markPrivate(file, name === "on")
   : op === "ask" ? askJoin(file, name) : op === "cancel" ? cancelJoin() : op === "seen" ? leadSeen(file)
   : op === "lapse-seen" ? lapseSeen(file, name) : op === "fork-seen" ? forkDismissed(file) : op === "stranded-seen" ? strandedDismissed(file)
   : op === "forget" ? forgetLead(file) : op === "leave" ? forgetLead(file, true) : op === "read" ? readInviteLooked(file) : op === "invite" ? takeInvite(file, name, check)
