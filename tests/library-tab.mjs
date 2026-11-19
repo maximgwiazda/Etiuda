@@ -84,6 +84,8 @@ class El {
   set disabled(v) { if (v) this.setAttribute("disabled", ""); else this.removeAttribute("disabled"); }
   get open() { return this.attrs.has("open"); }
   set open(v) { if (v) this.setAttribute("open", ""); else this.removeAttribute("open"); }
+  get checked() { return this._checked !== undefined ? this._checked : this.attrs.has("checked"); }
+  set checked(v) { this._checked = !!v; if (v) this.setAttribute("checked", ""); else this.removeAttribute("checked"); }
   get tabIndex() { return +(this.attrs.get("tabindex") || -1); }
   set tabIndex(v) { this.setAttribute("tabindex", v); }
   get value() { return this._value !== undefined ? this._value : this.tagName === "TEXTAREA" ? this.textContent : (this.attrs.get("value") || ""); }
@@ -322,6 +324,7 @@ doc.body.innerHTML = '<header><div class="row"><div id="tabsWrap"><div id="tabsB
   + '<div id="settingsWrap" class="menu-wrap"><button type="button" id="settingsBtn">Menu</button>'
   + '<div id="settingsMenu" hidden><button type="button" data-act="manage">Library</button>'
   + '<button type="button" data-act="settings">Settings</button></div></div>'
+  + '<div class="cat-now" id="catNow"><span class="cn-name" data-i18n-skip hidden></span><span class="cn-none">No catalog loaded</span></div>'
   + '<div id="moreWrap"><button type="button" id="moreBtn"></button><div id="moreMenu" hidden></div></div></div></header>'
   + '<div id="screenHost" class="screen-host" hidden></div>'
   + '<div class="fills"><input id="pax"><select id="roleSel"></select><input id="intent"></div>'
@@ -1043,6 +1046,156 @@ await checkAsync("L21 searching the Library with plain l finds Polish rows with 
   }
 });
 
+/* Catalog & data list: Private switch on personal rows only, Team catalog label on team rows,
+   dim lock in the list and in the bar, blue bubble on toggle closing on press elsewhere. */
+await checkAsync("L22 Catalog & data shows Private toggle on personal rows only, Team catalog on team rows, and locks in list and bar", async () => {
+  if (wired) return wired;
+  const CAT = await import(MOD("catalog.js"));
+  const CO = await import(MOD("catalog-offer.js"));
+  const TJ = await import(MOD("team-join.js"));
+  const ST = await import(MOD("storage.js"));
+  const RP = await import(MOD("repaint.js"));
+  const hadHost = window.E_HOST;
+  const hadUi = ST.lsGet("eUiLang");
+  const hadCatalog = ST.lsGet("eCatalog");
+  const hadCatalogFile = ST.lsGet("eCatalogFile");
+  let contentState = { team: "", told: true, private: ["cat-priv"], listed: ["cat-team"] };
+  const privCalls = [];
+  const FILES = [
+    { name: "team.ec", mtime: 4000, cards: 2, edition: "edition 1", macros: 2, intents: 1, cats: 1, id: "cat-team", rev: 1, grew: null },
+    { name: "team-fork.ec", mtime: 3500, cards: 2, edition: "rev 1", macros: 2, intents: 1, cats: 1, id: "cat-fork", rev: 1, grew: { id: "cat-team", rev: 1, sha: "a".repeat(64) } },
+    { name: "own.ec", mtime: 3000, cards: 2, edition: "rev 1", macros: 2, intents: 1, cats: 1, id: "cat-own", rev: 1, grew: null },
+    { name: "priv.ec", mtime: 2000, cards: 2, edition: "rev 1", macros: 2, intents: 1, cats: 1, id: "cat-priv", rev: 1, grew: null },
+  ];
+  const MARK_EN = "The team's lead still sees this catalog's name and edition, but its content and this desk's changes to it are never sent. Marking it withdraws what this desk had shared of it; what the team's lead has already opened cannot be taken back.";
+  const UNMARK_EN = "This catalog is no longer private: the team's lead can now see its content and this desk's changes to it.";
+  window.E_HOST = Object.assign({}, hadHost, {
+    catalogFiles: () => Promise.resolve(FILES),
+    branchIdentity: () => Promise.resolve(null),
+    catalogLeads: () => [],
+    teamJoin: (op, a, b) => {
+      if (op === "content") return Promise.resolve(Object.assign({}, contentState, { private: contentState.private.slice(), listed: contentState.listed.slice() }));
+      if (op === "private") {
+        privCalls.push([a, b]);
+        const set = new Set(contentState.private);
+        if (contentState.listed.indexOf(a) < 0) { if (b === "on") set.add(a); else set.delete(a); }
+        contentState = Object.assign({}, contentState, { private: Array.from(set) });
+        return Promise.resolve(Object.assign({}, contentState, { private: contentState.private.slice(), listed: contentState.listed.slice() }));
+      }
+      return Promise.resolve({ sealed: null, join: null, leads: [] });
+    },
+    onTeamJoin: () => {},
+    onCatalogCopy: () => {},
+  });
+  try {
+    ST.lsSet("eUiLang", "en");
+    RP.setUiLang("en");
+    CAT.storeCatalog({ format: 2, kind: "etiuda-catalog", id: "cat-priv", rev: 1, name: "Priv", langs: [{ code: "en", label: "EN" }], tags: [], cards: [] });
+    ST.lsSet("eCatalogFile", "priv.ec");
+    CO.paintCatNow();
+    MG.openManage();
+    await TJ.teamContent();
+    await CO.paintCatalogList();
+    await settle();
+    const box = host().querySelector("#mgCatList");
+    if (!box) return "no #mgCatList";
+    /* Off-team: no switch, no Team catalog label, no lock anywhere. */
+    const offSw = box.querySelectorAll("input[data-ec-private]").length;
+    const offTeamLbl = box.querySelectorAll(".ec-team").length;
+    const offListLock = box.querySelectorAll(".ec-lock").length;
+    const offBarLock = doc.querySelector("#catNow .cn-lock");
+    if (offSw || offTeamLbl || offListLock || offBarLock) {
+      return "off-team showed controls: " + JSON.stringify({ offSw, offTeamLbl, offListLock, offBarLock: !!offBarLock });
+    }
+    /* On-team: team.ec and team-fork.ec have Team catalog and no switch; own.ec has unchecked switch; priv.ec has checked switch + lock; bar has lock. */
+    contentState = { team: "t-lib", told: true, private: ["cat-priv"], listed: ["cat-team"] };
+    await TJ.teamContent();
+    await CO.paintCatalogList();
+    CO.paintCatPrivate();
+    await settle();
+    const rowOf = f => box.querySelector('.ec-row[data-ec-file="' + f + '"]');
+    const rTeam = rowOf("team.ec"), rFork = rowOf("team-fork.ec"), rOwn = rowOf("own.ec"), rPriv = rowOf("priv.ec");
+    if (!rTeam || !rFork || !rOwn || !rPriv) return "missing rows";
+    const teamOk = !!rTeam.querySelector(".ec-team") && rTeam.textContent.indexOf("Team catalog") >= 0 && !rTeam.querySelector("input[data-ec-private]") && !rTeam.querySelector(".ec-lock");
+    const forkOk = !!rFork.querySelector(".ec-team") && rFork.textContent.indexOf("Team catalog") >= 0 && !rFork.querySelector("input[data-ec-private]") && !rFork.querySelector(".ec-lock");
+    const ownSw = rOwn.querySelector('input[data-ec-private="cat-own"]');
+    const privSw = rPriv.querySelector('input[data-ec-private="cat-priv"]');
+    const ownOk = !!ownSw && !ownSw.checked && rOwn.textContent.indexOf("Private") >= 0 && !rOwn.querySelector(".ec-lock");
+    const privOk = !!privSw && privSw.checked && !!rPriv.querySelector(".ec-lock");
+    const barLock1 = doc.querySelector("#catNow .cn-lock");
+    const barOk1 = !!barLock1 && barLock1.getAttribute("title") === "Private";
+    if (!teamOk || !forkOk || !ownOk || !privOk || !barOk1) {
+      return "on-team mismatch: " + JSON.stringify({ teamOk, forkOk, ownOk, privOk, barOk1, barTitle: barLock1 && barLock1.getAttribute("title") });
+    }
+    /* Toggle own.ec ON -> calls private("cat-own", "on"), shows marking bubble & list lock. */
+    ownSw.checked = true;
+    if (typeof ownSw.onchange === "function") ownSw.onchange();
+    await settle();
+    const privBub1 = doc.querySelector("#ePrivateBubble");
+    const rowOwnAfterOn = rowOf("own.ec");
+    const bub1Ok = !!privBub1 && privBub1.classList.contains("bub") && privBub1.classList.contains("e-join-bub") && privBub1.textContent.indexOf(MARK_EN) >= 0;
+    const lockAfterOn = !!(rowOwnAfterOn && rowOwnAfterOn.querySelector(".ec-lock"));
+    /* Press elsewhere closes the bubble. */
+    (doc.listeners.pointerdown || []).slice().forEach(fn => fn({ target: doc.body }));
+    const closedAfterPress = !doc.querySelector("#ePrivateBubble");
+    /* Toggle priv.ec OFF -> calls private("cat-priv", "off"), removes list & bar locks, shows unmarking bubble. */
+    const privSw2 = rowOf("priv.ec").querySelector('input[data-ec-private="cat-priv"]');
+    privSw2.checked = false;
+    if (typeof privSw2.onchange === "function") privSw2.onchange();
+    await settle();
+    const privBub2 = doc.querySelector("#ePrivateBubble");
+    const bub2Ok = !!privBub2 && privBub2.textContent.indexOf(UNMARK_EN) >= 0;
+    const lockAfterOff = !!(rowOf("priv.ec") && rowOf("priv.ec").querySelector(".ec-lock"));
+    const barLock2 = doc.querySelector("#catNow .cn-lock");
+    /* Clean up bubble. */
+    (doc.listeners.pointerdown || []).slice().forEach(fn => fn({ target: doc.body }));
+    const callsOk = privCalls.length === 2 && privCalls[0][0] === "cat-own" && privCalls[0][1] === "on" && privCalls[1][0] === "cat-priv" && privCalls[1][1] === "off";
+    return (bub1Ok && lockAfterOn && closedAfterPress && bub2Ok && !lockAfterOff && !barLock2 && callsOk)
+      || JSON.stringify({ bub1Ok, lockAfterOn, closedAfterPress, bub2Ok, lockAfterOff, barLock2: !!barLock2, callsOk, privCalls });
+  } finally {
+    window.E_HOST = hadHost;
+    try { if (hadCatalog == null) ST.lsDel("eCatalog"); else ST.lsSet("eCatalog", hadCatalog); } catch (e) {}
+    try { if (hadCatalogFile == null) ST.lsDel("eCatalogFile"); else ST.lsSet("eCatalogFile", hadCatalogFile); } catch (e) {}
+    try { if (hadUi == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", hadUi); } catch (e) {}
+    try { RP.setUiLang(hadUi === "pl" ? "pl" : "en"); } catch (e) {}
+  }
+});
+
+/* One-time told notice on a desk already on a team, anchored to #catNow, sending content-said once dismissed. */
+await checkAsync("L23 one-time told notice opens from #catNow once and sends content-said when dismissed", async () => {
+  if (wired) return wired;
+  const TJ = await import(MOD("team-join.js"));
+  const hadHost = window.E_HOST;
+  let told = false;
+  const saidCalls = [];
+  window.E_HOST = Object.assign({}, hadHost, {
+    teamJoin: (op, a) => {
+      if (op === "content") return Promise.resolve({ team: "t-l23", told, private: [], listed: [] });
+      if (op === "content-said") { saidCalls.push(a); told = true; return Promise.resolve({ team: "t-l23", told: true, private: [], listed: [] }); }
+      return Promise.resolve({ sealed: null, join: null, leads: [] });
+    },
+    onTeamJoin: () => {},
+    onCatalogCopy: () => {},
+  });
+  try {
+    await TJ.teamContent();
+    await settle();
+    const bub = doc.querySelector("#eTeamTold");
+    const okBtn = bub && bub.querySelector('[data-join="told-ok"]');
+    if (!bub || !okBtn) return "missing #eTeamTold or button";
+    okBtn.click();
+    await settle();
+    const gone = !doc.querySelector("#eTeamTold");
+    await TJ.teamContent();
+    await settle();
+    const stayedGone = !doc.querySelector("#eTeamTold");
+    return (gone && stayedGone && saidCalls.length === 1 && saidCalls[0] === "t-l23")
+      || JSON.stringify({ gone, stayedGone, saidCalls });
+  } finally {
+    window.E_HOST = hadHost;
+  }
+});
+
 /* ================================================================================================
    THE FAILURE PATHS: each plant lifted in a scratch copy of src/, the leg it guards run there by a child.
    ================================================================================================ */
@@ -1055,6 +1208,9 @@ const PLANTS = [
     lift: src => src.includes('<span class="mg-card-lab" data-i18n-skip>')
       ? src.replace('<span class="mg-card-lab" data-i18n-skip>', '<span class="mg-card-lab">') : null },
   { tag: "l-stroke-fold", file: "words.js", leg: "L21" },
+  { tag: "list-private-personal-only", file: "catalog-offer.js", leg: "L22" },
+  { tag: "bar-private-lock", file: "catalog-offer.js", leg: "L22" },
+  { tag: "told-bubble-said", file: "team-join.js", leg: "L23" },
 ];
 if (childAt < 0) {
   for (const p of PLANTS) {
