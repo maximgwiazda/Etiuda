@@ -1204,8 +1204,13 @@ function ecGroupedRows(tops,under,alone,asideRows,grouped){
    stand as their own row under Personal catalogs; Cancel changes nothing. A loose catalog's layer comes back, and the catalog in use is
    put down by the Library's own Eject. */
 function putBackInUse(r,title){
-  const back=()=>{
-    if(!restorePersonal(r.id)){ toastRefusal(t(ADOPT_REFUSED)); return false; }
+  /* A restore that fails leaves the catalog in use standing, and says where the edits went where they were set aside first. */
+  const back=aside=>{
+    if(!restorePersonal(r.id)){
+      toastRefusal(t("Your own {TITLE} could not be put back in use, so the catalog in use stays in use. It can be tried again.").split("{TITLE}").join(title)
+        +(aside ? " "+t("The changes set aside are under Personal catalogs.") : ""));
+      return false;
+    }
     if(r.loose && catalogLoaded()) ejectCatalog();
     toast(t("Your own {TITLE} is in use again.").split("{TITLE}").join(title));
     paintCatalogList();
@@ -1214,7 +1219,7 @@ function putBackInUse(r,title){
   if(!editsUnexported()) return back();
   askPutBack(title,()=>{
     if(setAsidePersonal()===false){ toastRefusal(t(ADOPT_REFUSED)); return; } /* plant:putback-aside */
-    back();
+    back(true);
   });
   return false;
 }

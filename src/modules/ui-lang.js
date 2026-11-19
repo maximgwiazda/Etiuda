@@ -233,6 +233,8 @@ UI_STRINGS.pl={
   "Your own {TITLE} is in use again.":"Własny katalog {TITLE} znów jest w użyciu.",
   "The catalog in use has changes not yet exported. Put your own {TITLE} back in use? The changes are set aside under Personal catalogs, not lost.":"Katalog w użyciu ma zmiany, których jeszcze nie wyeksportowano. Przywrócić do użycia własny katalog {TITLE}? Zmiany zostaną odłożone w katalogach osobistych i nie przepadną.",
   "The catalog in use could not be set aside safely, so nothing has changed. It can be tried again.":"Nie dało się bezpiecznie odłożyć katalogu w użyciu, więc nic się nie zmieniło. Można spróbować ponownie.",
+  "Your own {TITLE} could not be put back in use, so the catalog in use stays in use. It can be tried again.":"Nie dało się przywrócić do użycia własnego katalogu {TITLE}, więc katalog w użyciu nadal jest w użyciu. Można spróbować ponownie.",
+  "The changes set aside are under Personal catalogs.":"Odłożone zmiany są w katalogach osobistych.",
   "Collapse":"Zwiń",
   "Expand":"Rozwiń",
   "Supporting category, relevant regardless of the intent":"Kategoria wspierająca, przydatna niezależnie od intencji",
