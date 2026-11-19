@@ -62,7 +62,10 @@ function runRelease(dir, homeRoot) {
   note('release --up-to page in ' + path.basename(dir));
   const r = spawnSync(process.execPath, ['tools/release.mjs', '--up-to', 'page'], {
     cwd: dir, env: releaseEnv(homeRoot), encoding: 'utf8', windowsHide: true,
-    maxBuffer: 64 * 1024 * 1024, timeout: 600000,
+    /* THE CEILING IS THE SCAN'S, NOT THE BUILD'S: release's step [3], the name and quote scan over the tracked tree, took 705 s on fold 121
+       and 709 s on main 638fdcdd on 2026-11-19 under load, past the 600 s this was, and its time grows with the tree's lines. The test
+       architect's register holds the real mend: skip or stub that scan here, since it has its own gates. */
+    maxBuffer: 64 * 1024 * 1024, timeout: 1800000,
   });
   const out = (r.stdout || '') + (r.stderr || '');
   return { status: r.status === null ? -1 : r.status, out };
