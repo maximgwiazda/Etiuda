@@ -1720,6 +1720,8 @@ try {
   {
     const J4 = JSON.stringify;
     const runWho = async (pl, selected) => {
+      /* The desk's name field is empty here, as 4w1 says; 2v used to leave it so by blind-calling pick-who, which the desk gate now refuses once 2v signs out. */
+      document.getElementById("pax").value = "";
       SYSTEM[0] = pl ? "pl-PL" : "en-US";
       const opening = pickAnswer("open", {});
       SYSTEM[0] = "en-US";
