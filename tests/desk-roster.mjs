@@ -46,7 +46,8 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
-const EXPECTED = 31;
+const PLANTS = process.env.ETIUDA_PLANTS !== "off";
+const EXPECTED = 31 + (PLANTS ? 4 : 0);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -73,7 +74,7 @@ const inert = new Proxy(function () {}, { get: () => inert, set: () => true, app
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
 const eventFor = () => ({ sender: { id: 1, once: noop }, senderFrame: ENGINE_FRAME, returnValue: undefined });
 
-function loadDesk(ud, opened) {
+function loadDesk(ud, opened, srcText) {
   const said = [], on = {}, invoke = {};
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop, info: noop };
   const safeStorage = {
@@ -101,7 +102,7 @@ function loadDesk(ud, opened) {
   let api;
   try {
     api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
-      SRC + "\nreturn { " + EXPOSE.join(", ") + ", rosterOf: t => teamRoster[t] };")(
+      (srcText || SRC) + "\nreturn { " + EXPOSE.join(", ") + ", rosterOf: t => teamRoster[t] };")(
       n => (n === "electron" ? electron : nodeRequire(n)),
       path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
   } finally { if (opened) process.argv = argv; }
@@ -359,11 +360,60 @@ try {
       "1013c a roster that fails verification changes nothing: epoch " + (badNow && badNow.epoch) + ", entries " + entsOf(C2).length);
     put(SHARE, "etiuda-team.json", team3); touch(path.join(SHARE, "etiuda-team.json"));
     await heed(C2);
-    const C3 = loadDesk(C2.ud), v3b = C3.api.rosterOf(TEAM);
+    const C3 = loadDesk(C2.ud);
+    await C3.ask("etiuda:branch-identity", true); // the desk file is read on first use
+    const v3b = C3.api.rosterOf(TEAM);
     const disk = JSON.parse(fs.readFileSync(C2.envFile, "utf8")).teamRoster || {};
     check(!!v3b && v3b.epoch === 3 && JSON.stringify(entsOf(C3).map(shape).sort()) === JSON.stringify(want) && !!disk[TEAM] && Array.isArray(disk[TEAM].entries),
       "1013d the entries are read back from the desk file after a restart: epoch " + (v3b && v3b.epoch) + ", entries " + entsOf(C3).length
       + ", on disk " + (disk[TEAM] && Array.isArray(disk[TEAM].entries) ? disk[TEAM].entries.length : "none"));
+
+    /* Each deciding line of the roster kept whole, lifted alone from a copy of the source held in memory, turns one check red.
+       The checkout's shell/main.js is never written. */
+    if (!PLANTS) console.log("NOT RUN plant:roster-entries, plant:roster-verify, plant:roster-epoch, plant:roster-readback (ETIUDA_PLANTS=off)");
+    else {
+      let seq = 0;
+      /* A lift is a list of [tag, from, to]: the roster's own line, and any earlier guard that holds the same fact and would hide it. */
+      const lifted = (...lifts) => {
+        const lines = SRC.split("\n");
+        for (const [tag, from, to] of lifts) {
+          const at = lines.findIndex(l => l.indexOf(tag) >= 0);
+          if (at < 0 || lines[at].indexOf(from) < 0) return null;
+          lines[at] = lines[at].replace(from, to);
+        }
+        return lines.join("\n");
+      };
+      const planted = async (src, keepRoster, fileText) => {
+        const ud = path.join(LAB, "plant-" + (++seq));
+        fs.mkdirSync(ud, { recursive: true });
+        const env = JSON.parse(fs.readFileSync(C2.envFile, "utf8"));
+        if (!keepRoster) delete env.teamRoster;
+        fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(env));
+        const P = loadDesk(ud, undefined, src);
+        /* The planted desk reads its own mirror of the folder, so the team file it is to heed is written there. */
+        const mirror = syncerMod.folderMirrorOf(ud, TEAM);
+        fs.mkdirSync(mirror, { recursive: true });
+        for (const f of ["etiuda-ring.json", "board.ec"]) fs.copyFileSync(path.join(SHARE, f), path.join(mirror, f));
+        if (fileText !== null) fs.writeFileSync(path.join(mirror, "etiuda-team.json"), fileText || team3, "utf8"); // null: the desk heeds nothing, only reads its file back
+        await P.ask("etiuda:branch-identity", true);
+        await heed(P);
+        const v = P.api.rosterOf(TEAM);
+        return { epoch: v && v.epoch, n: v && Array.isArray(v.entries) ? v.entries.length : 0 };
+      };
+      const sEntries = lifted(["plant:roster-entries", "return Array.from(byId.values()).sort((p, q) => (p.id < q.id ? -1 : 1));", "return [];"]);
+      const pe = sEntries ? await planted(sEntries, false) : null;
+      check(!!pe && pe.n === 0, "1013e lifting plant:roster-entries leaves the roster with its ids and no entries, so 1013a goes red: " + JSON.stringify(pe));
+      const sVerify = lifted(["plant:roster-verify", "if (!teamWhole(doc)) {", "if (false) {"], ["plant:s0b-floor-doc", "teamWhole(doc) &&", "true &&"]);
+      const pv = sVerify ? await planted(sVerify, true, JSON.stringify(bad)) : null;
+      check(!!pv && pv.epoch === 4, "1013f lifting plant:roster-verify lets the forged epoch 4 roster in, so 1013c goes red: " + JSON.stringify(pv));
+      const sEpoch = lifted(["plant:roster-epoch", "r.epoch >= (teamEpochSeen[r.team] || 0)", "true"], ["plant:epoch-rev", "if (floor && epoch < floor.epoch) return true;", "if (false) return true;"], ["plant:s0b-floor-doc", "!teamFileBehind(doc)", "true"]);
+      const po = sEpoch ? await planted(sEpoch, true, team2) : null;
+      check(!!po && po.epoch === 2, "1013g lifting plant:roster-epoch lets the epoch 2 file replace the epoch 3 roster, so 1013b goes red: " + JSON.stringify(po));
+      const sRead = lifted(["plant:roster-readback", "entries: rosterEntriesChecked(v.entries, ids)", "entries: []"]);
+      const pr = sRead ? await planted(sRead, true, null) : null;
+      check(!!pr && pr.n === 0, "1013h lifting plant:roster-readback reads the roster back without its entries, so 1013d goes red: " + JSON.stringify(pr));
+      put(SHARE, "etiuda-team.json", team3); touch(path.join(SHARE, "etiuda-team.json"));
+    }
   }
 
   /* ---- the page's bridge: the note crosses src/modules/host.js to the page ------------------------------- */

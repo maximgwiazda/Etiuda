@@ -4050,7 +4050,7 @@ const TEAM_MAX = 1024 * 1024;
 let teamPins = {};                             // team id -> {keyId, public}: the lead's key, once trusted
 let teamKeys = {};                             // team id -> {epoch: the team key sealed by safeStorage, base64}
 let teamEpochSeen = {};                        // team id -> the highest epoch heeded, kept when teamKeys is empty
-let teamRoster = {};                           // team id -> {epoch, desks}: the desk ids of the file heeded at that epoch
+let teamRoster = {};                           // team id -> {epoch, desks, entries}: the desk ids, and each desk whole {id, name, box, key}, of the file heeded at that epoch
 let teamRevSeen = {};                          // team id -> {lead public -> {epoch, rev}}: the highest rev heeded at that key's highest epoch; above 0, or 0 where a newer epoch with no rev raised a floor already kept
 let teamChannel = {};                          // team id -> {kind: "relay", rt, url}: the channel of the file heeded; none is the folder
 let teamPinFrom = {};                          // team id -> "invite", "policy" or "answer": what pinned its lead; none is the file's own vouching
@@ -4165,6 +4165,36 @@ function rosterIdsOf(doc) {
   const roster = Array.isArray(doc && doc.roster) ? doc.roster : [];
   return deskIdsOnce(roster.map(x => (x && x.desk && typeof x.desk === "object" ? x.desk.id : "")));
 }
+/* A name the lead or a desk gave: a bounded printable string, else "". */
+function rosterNameOf(v) {
+  return typeof v === "string" && v.length <= 120 && !/[ -]/.test(v) ? v.trim() : "";
+}
+/* Each admitted desk a whole team file's roster lists, whole: its id, its name (the lead's, else the desk's own), its box and its key.
+   A desk whose id, key or box fails today's patterns is left out here, and its id stays in rosterIdsOf. Sorted by id, once each. */
+function rosterEntriesOf(doc) {
+  const roster = Array.isArray(doc && doc.roster) ? doc.roster : [];
+  const byId = new Map();
+  roster.forEach(x => {
+    const d = x && x.desk && typeof x.desk === "object" ? x.desk : null;
+    if (!d || !/^k-[0-9a-f]{16}$/.test(String(d.id)) || !/^[0-9a-f]{64}$/.test(String(d.key)) || !/^[0-9a-f]{64}$/.test(String(d.box))) return;
+    if (byId.has(String(d.id))) return;
+    byId.set(String(d.id), { id: String(d.id), name: rosterNameOf(x.name) || rosterNameOf(d.name), box: String(d.box), key: String(d.key) });
+  });
+  return Array.from(byId.values()).sort((p, q) => (p.id < q.id ? -1 : 1)); /* plant:roster-entries */
+}
+/* Entries read back from the desk file, with the same shape checks, limited to the ids the roster keeps. */
+function rosterEntriesChecked(list, ids) {
+  const out = new Map();
+  (Array.isArray(list) ? list : []).forEach(e => {
+    if (!e || typeof e !== "object" || Array.isArray(e) || ids.indexOf(e.id) < 0 || out.has(e.id)) return;
+    if (!/^[0-9a-f]{64}$/.test(String(e.key)) || !/^[0-9a-f]{64}$/.test(String(e.box)) || typeof e.name !== "string" || rosterNameOf(e.name) !== e.name) return;
+    out.set(e.id, { id: e.id, name: e.name, box: e.box, key: e.key });
+  });
+  return Array.from(out.values()).sort((p, q) => (p.id < q.id ? -1 : 1));
+}
+function rosterEntriesSame(x, y) {
+  return JSON.stringify(x || []) === JSON.stringify(y || []);
+}
 function deskIdsOnce(list) {
   return Array.from(new Set(list.map(String).filter(id => /^k-[0-9a-f]{16}$/.test(id)))).sort();
 }
@@ -4192,7 +4222,7 @@ function memberHeed(doc, state, seen) {
   const said = [];
   const ret = (extra) => Object.assign({ state: out, key: null, said: said, stampClear: false, changed: false,
     stop: false, needKey: false, team: "", epoch: 0, keep: false, unbar: false, pinned: false }, extra);
-  if (!teamWhole(doc)) {
+  if (!teamWhole(doc)) { /* plant:roster-verify */
     said.push(file + " is not a team file whole under its lead's key, so nothing in it is used");
     return ret({ stop: true });
   }
@@ -5102,10 +5132,10 @@ function heedTeam() {
     changed = true;
   }
   // The roster of the epoch accepted: a file at that epoch replaces it, and one below it put back changes nothing.
-  if (r.team && Number.isInteger(r.epoch) && r.epoch >= 1 && r.epoch >= (teamEpochSeen[r.team] || 0)) {
-    const ids = rosterIdsOf(doc), had = teamRoster[r.team];
-    if (!had || had.epoch !== r.epoch || had.desks.join(",") !== ids.join(",")) {
-      teamRoster[r.team] = { epoch: r.epoch, desks: ids };
+  if (r.team && Number.isInteger(r.epoch) && r.epoch >= 1 && r.epoch >= (teamEpochSeen[r.team] || 0)) { /* plant:roster-epoch */
+    const ids = rosterIdsOf(doc), ents = rosterEntriesOf(doc), had = teamRoster[r.team];
+    if (!had || had.epoch !== r.epoch || had.desks.join(",") !== ids.join(",") || !rosterEntriesSame(had.entries, ents)) {
+      teamRoster[r.team] = { epoch: r.epoch, desks: ids, entries: ents };
       changed = true;
     }
     const pinned = teamPins[r.team];
@@ -8403,7 +8433,10 @@ function readDesk() {
     if (doc && table(doc.teamRoster)) Object.keys(doc.teamRoster).forEach(t => {
       const v = doc.teamRoster[t];
       if (!SEALED_TEAM_RE.test(t) || !table(v) || !Number.isInteger(v.epoch) || v.epoch < 1 || !Array.isArray(v.desks)) return;
-      if (v.epoch > (teamRoster[t] ? teamRoster[t].epoch : 0)) teamRoster[t] = { epoch: v.epoch, desks: deskIdsOnce(v.desks) };
+      if (v.epoch > (teamRoster[t] ? teamRoster[t].epoch : 0)) {
+        const ids = deskIdsOnce(v.desks);
+        teamRoster[t] = { epoch: v.epoch, desks: ids, entries: rosterEntriesChecked(v.entries, ids) }; /* plant:roster-readback */
+      }
     });
     // A floor is taken where it is higher, by epoch and then by rev, and never lowered.
     if (doc && table(doc.teamRevSeen)) Object.keys(doc.teamRevSeen).forEach(t => {
