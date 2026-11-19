@@ -4449,7 +4449,7 @@ CASES.doorRule = async (s, page, kdSwap) => {
     const kdSlice = decl(kdText, "function wireGlobalKeydown(");
     const off = () => false;
     const kdOwn = { document: { activeElement: null, body: { classList: { contains: off } } },
-      addEventListener: (k, fn) => { if (k === "keydown") kdListener = fn; }, $: () => null, scCaptureId: "", SC_DEFS: [], intentEl: null,
+      addEventListener: (k, fn) => { if (k === "keydown") kdListener = fn; }, $: () => null, scCaptureId: "", SC_DEFS: [{ id: "escape", fixed: false, inField: true }], intentEl: null,
       tourActive: off, tourHasFocus: off, openCover: () => null, modalFront: off, factsPanelOpen: off,
       eventMatchesAction: (e, id) => id === "escape" && e.key === "Escape", eHost: off, hooks: { runShortcut: () => { escRan++; } },
       noteUndoTyping: off, takeStandingUndo: off, typingInField: off, firstSigninOpenNow: () => true, tabTargetIn: () => null };
