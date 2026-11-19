@@ -35,7 +35,7 @@ const nodeRequire = createRequire(import.meta.url);
    open now asks machine policy whether to keep the desk (section 12), and 77z drives exactly that. Before the shell loads. */
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 160;
+const EXPECTED = 175;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const ASIDE_D6_LOGIN = nodeRequire("./off-windows.cjs").offWindows("D6-login",
   "the shell sets no login item off Windows, so Reset's turn-off has nothing to reach");
@@ -3128,6 +3128,63 @@ try {
       "83f2 Windows device names (CON/PRN/AUX/NUL/COM1-9/LPT1-9, lower-case, trailing dot/space) write safely prefixed and ordinary names stay unchanged (devFails "
       + JSON.stringify(devFails) + ", ordFails " + JSON.stringify(ordFails) + ")");
 
+    // 83i1: one pending save per window. Another window's cancel must not drop the first window's.
+    const ownEv = id => ({ sender: { id, once: noop }, senderFrame: ENGINE_FRAME, returnValue: undefined });
+    const dirTwo = path.join(out83Root, "two-windows");
+    fs.mkdirSync(dirTwo, { recursive: true });
+    dialogOpen = async () => ({ canceled: false, filePaths: [dirTwo] });
+    const chooseA = await invokeHandlers["etiuda:choose-own-save"](ownEv(11), "Window A");
+    const part1 = await invokeHandlers["etiuda:write-own-save"](ownEv(11), "part1.ec", "A1");
+    dialogOpen = async () => ({ canceled: true, filePaths: [] });
+    const chooseB = await invokeHandlers["etiuda:choose-own-save"](ownEv(22), "Window B");
+    const part2 = await invokeHandlers["etiuda:write-own-save"](ownEv(11), "part2.ec", "A2");
+    const writeB = await invokeHandlers["etiuda:write-own-save"](ownEv(22), "partb.ec", "B");
+    const endB = await invokeHandlers["etiuda:end-own-save"](ownEv(22));
+    const part3 = await invokeHandlers["etiuda:write-own-save"](ownEv(11), "part3.ec", "A3");
+    const part2Landed = !!part2 && part2.ok === true && part2.name === "part2.ec"
+      && fs.existsSync(path.join(dirTwo, "part2.ec"))
+      && fs.readFileSync(path.join(dirTwo, "part2.ec"), "utf8") === "A2";
+    const part3Landed = !!part3 && part3.ok === true && part3.name === "part3.ec"
+      && fs.readFileSync(path.join(dirTwo, "part3.ec"), "utf8") === "A3";
+    if (invokeHandlers["etiuda:end-own-save"]) await invokeHandlers["etiuda:end-own-save"](ownEv(11));
+    check(!!chooseA && chooseA.dir === dirTwo && !!part1 && part1.ok === true && part1.name === "part1.ec"
+        && chooseB === null && part2Landed && writeB === null && endB === true && part3Landed,
+      "83i1 a second window's cancelled save leaves the first window's pending save (part2 "
+      + JSON.stringify(part2) + ", writeB " + JSON.stringify(writeB) + ", after B ends " + JSON.stringify(part3) + ")");
+
+    // 83i2-83i13: one check per asked name. A $ or a superscript is judged by the returned name, not the disk.
+    const nameRows = [
+      { tag: "83i2", raw: " NUL.ec", expect: "_ NUL.ec", disk: true },
+      { tag: "83i3", raw: " CON.txt", expect: "_ CON.txt", disk: true },
+      { tag: "83i4", raw: "COM\u00b9.ec", expect: "_COM\u00b9.ec", disk: false },
+      { tag: "83i5", raw: "LPT\u00b2.txt", expect: "_LPT\u00b2.txt", disk: false },
+      { tag: "83i6", raw: "CONIN$.ec", expect: "_CONIN$.ec", disk: false },
+      { tag: "83i7", raw: "CONOUT$.txt", expect: "_CONOUT$.txt", disk: false },
+      { tag: "83i8", raw: "CLOCK$.ec", expect: "_CLOCK$.ec", disk: false },
+      { tag: "83i9", raw: "..ec", expect: "work.ec", disk: true },
+      { tag: "83i10", raw: "...ec", expect: "work.ec", disk: true },
+      { tag: "83i11", raw: " .ec", expect: "work.ec", disk: true },
+      { tag: "83i12", raw: "Notes.ec", expect: "Notes.ec", disk: true },
+      { tag: "83i13", raw: "CONSOLE.ec", expect: "CONSOLE.ec", disk: true },
+    ];
+    for (const row of nameRows) {
+      const dir = path.join(out83Root, "name-" + row.tag);
+      fs.mkdirSync(dir, { recursive: true });
+      dialogOpen = async () => ({ canceled: false, filePaths: [dir] });
+      await invokeHandlers["etiuda:choose-own-save"](ownEv(11), "Names");
+      const got = await invokeHandlers["etiuda:write-own-save"](ownEv(11), row.raw, "body-" + row.tag);
+      let nameOk = !!got && got.name === row.expect;
+      if (nameOk && row.disk) {
+        const at = path.join(dir, got.name);
+        nameOk = got.ok === true && fs.existsSync(at) && fs.readFileSync(at, "utf8") === "body-" + row.tag;
+        if (nameOk && row.raw !== row.expect) nameOk = !fs.existsSync(path.join(dir, row.raw));
+      }
+      const how = row.disk ? "on disk" : "returned name only, not the disk ($ or a superscript may not exist as a file)";
+      check(nameOk, row.tag + " " + JSON.stringify(row.raw) + " is written as " + JSON.stringify(row.expect)
+        + " (" + how + ", got " + JSON.stringify(got) + ")");
+    }
+    if (invokeHandlers["etiuda:end-own-save"]) await invokeHandlers["etiuda:end-own-save"](ownEv(11));
+
     // 83g: EN & PL UI strings
     const enStrings = [
       "Save your own work as files\u2026",
@@ -3192,6 +3249,8 @@ try {
       skip("83h6 lifting plant:way-out-no-overwrite silently overwrites existing file");
       skip("83h7 lifting plant:way-out-from-engine lets stranger frame choose own save folder");
       skip("83h8 lifting plant:way-out-win-device writes a Windows device name unprefixed");
+      skip("83i14 lifting plant:way-out-per-window lets another window's cancel wipe this window's pending save");
+      skip("83i15 lifting plant:way-out-stem-gaps writes a leading-space device name and a dot-only stem as named");
     } else {
       const p1 = await runModulePlant("way-out-no-unedited");
       check(!p1.err && Array.isArray(p1.files) && p1.files.some(f => f.text.indexOf("\"Card b ") >= 0),
@@ -3247,6 +3306,35 @@ try {
       });
       check(!!p8 && !p8.err && !!p8.w && p8.w.name === "NUL.ec" && !p8.prefixedExists,
         "83h8 lifting plant:way-out-win-device writes Windows device name unprefixed (" + JSON.stringify(p8) + ")");
+
+      const pWin = await runMainPlant("way-out-per-window", async inv => {
+        const dirP = path.join(out83Root, "plant-per-window");
+        fs.mkdirSync(dirP, { recursive: true });
+        const ev = id => ({ sender: { id, once: noop }, senderFrame: ENGINE_FRAME, returnValue: undefined });
+        dialogOpen = async () => ({ canceled: false, filePaths: [dirP] });
+        await inv["etiuda:choose-own-save"](ev(11), "A");
+        const first = await inv["etiuda:write-own-save"](ev(11), "part1.ec", "A1");
+        dialogOpen = async () => ({ canceled: true, filePaths: [] });
+        await inv["etiuda:choose-own-save"](ev(22), "B");
+        const second = await inv["etiuda:write-own-save"](ev(11), "part2.ec", "A2");
+        return { first, second };
+      });
+      check(!!pWin && !pWin.err && !!pWin.first && pWin.first.ok === true && pWin.second === null,
+        "83i14 lifting plant:way-out-per-window lets another window's cancel wipe this window's pending save (" + JSON.stringify(pWin) + ")");
+
+      const pGap = await runMainPlant("way-out-stem-gaps", async inv => {
+        const dirG = path.join(out83Root, "plant-stem-gaps");
+        fs.mkdirSync(dirG, { recursive: true });
+        dialogOpen = async () => ({ canceled: false, filePaths: [dirG] });
+        await inv["etiuda:choose-own-save"](eventFor(ENGINE_FRAME), "Test");
+        const spaced = await inv["etiuda:write-own-save"](eventFor(ENGINE_FRAME), " NUL.ec", "GAP");
+        const dots = await inv["etiuda:write-own-save"](eventFor(ENGINE_FRAME), "..ec", "DOT");
+        if (inv["etiuda:end-own-save"]) await inv["etiuda:end-own-save"](eventFor(ENGINE_FRAME));
+        return { spaced, dots };
+      });
+      check(!!pGap && !pGap.err && !!pGap.spaced && pGap.spaced.name === " NUL.ec"
+          && !!pGap.dots && pGap.dots.name === "..ec",
+        "83i15 lifting plant:way-out-stem-gaps writes a leading-space device name and a dot-only stem as named (" + JSON.stringify(pGap) + ")");
     }
   } finally {
     dialogOpen = dialogWas83;
