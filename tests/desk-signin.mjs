@@ -4589,9 +4589,9 @@ CASES.doorRule = async (s, page, kdSwap) => {
   const hadWin = "window" in globalThis, prevWin = globalThis.window;
   const hadDoc = "document" in globalThis, prevDoc = globalThis.document;
   try {
-    /* Before any view is read (no host), firstSigninDue() is false. */
+    /* No host (the browser build): the door holds, as B-3a2b has it (dsg10); a null view is never due. */
     delete globalThis.window;
-    const beforeRead = pg.firstSigninDue() === false && pg.firstSigninDue(null) === false;
+    const beforeRead = pg.firstSigninDue() === true && pg.firstSigninDue(null) === false;
 
     /* Exports retired: FIRST_SIGNIN_KEY, firstSigninSeen, markFirstSigninSeen, skipFirstSignin are gone. */
     const exportsClean = !("FIRST_SIGNIN_KEY" in pg) && !("firstSigninSeen" in pg) && !("markFirstSigninSeen" in pg) && !("skipFirstSignin" in pg);
@@ -4617,6 +4617,8 @@ CASES.doorRule = async (s, page, kdSwap) => {
     globalThis.document = { body: { classList: { add: c => classes.add(c), remove: c => classes.delete(c), contains: c => classes.has(c) } },
       activeElement: null, querySelector: sel => (sel === "#firstSignin" ? fsEl : null) };
     globalThis.window = { E_HOST: { catalogFolderPolicy: "C:\\Policy\\Team", signinState: () => cur } };
+    /* A host, before any view is read: not due. */
+    const hostNoView = pg.firstSigninDue() === false;
     pg.signinNow();
     const dueWithHost = pg.firstSigninDue() === true;
     pg.bootFirstSignin();
@@ -4662,7 +4664,7 @@ CASES.doorRule = async (s, page, kdSwap) => {
       preventDefault() { prevented = true; }, stopPropagation() {} });
     const kdClean = !/\bskipFirstSignin\b/.test(KD_SRC) && !!kdListener && escRan === 0 && prevented === true;
 
-    return beforeRead && exportsClean && directDue && dueWithHost && opened && noSkipOnPaint && stayedOpen && loweredOnWorks && kdClean;
+    return beforeRead && hostNoView && exportsClean && directDue && dueWithHost && opened && noSkipOnPaint && stayedOpen && loweredOnWorks && kdClean;
   } finally {
     storage.lsDel("eFirstSigninSeen");
     if (!hadWin) delete globalThis.window; else globalThis.window = prevWin;
@@ -5609,7 +5611,7 @@ const LEGS = [
   ["dsg1", "settleIssued", "B-3a1, finding 1: signinSettleSeat refuses a certificate issued before the held one across renewal, Check now and sign in, keeping held cert, works and desk clock unchanged; equal issued is taken"],
   ["dsg2", "stateKeyLate", "B-3a1, finding 2: a first ask before the desk key exists does not cache a stripped state; once the key arrives the view carries the certificate and works, without clockWire's stub"],
   ["dsg3", "deskWorksGate", "B-3a1: deskWorks() is the one gate predicate, answers false with no host, follows works on host views, and gate functions call no write"],
-  ["dsg4", "doorRule", "B-3a1: firstSigninDue ignores seen and policy pin and fires when view is read and deskWorks() is false; Not now, Escape, Continue and seen memory are gone; door lowers only when deskWorks() turns true"],
+  ["dsg4", "doorRule", "B-3a1: firstSigninDue ignores seen and policy pin and fires when view is read and deskWorks() is false (with no host it holds, the browser door, and with a host before a view is read it does not); Not now, Escape, Continue and seen memory are gone; door lowers only when deskWorks() turns true"],
   ["dsg5", "offersWait", "B-3a2a: while the door stands, every catalog intake channel (boot offer with asked:true, listing, host watch, browser watch, window drop, importCatalogText) waits and plays when deskWorks() turns true, and importCatalogHere is ignored"],
   ["dsg6", "doorKeyboard", "B-3a2a: over the standing door, keyboard answers only the door (Tab/Shift+Tab reach data-door-save, Enter/Space press it natively; Escape, Ctrl+Z standing undo, shortcuts, chords and typing are held back; save handlers stay unguarded)"],
   ["dsg7", "pickAskDoor", "B-3a2a: answerPick refuses every op when deskWorks() is false without reading catalog or layer, returning a nothing-to-show refusal shape, and answers as before when deskWorks() is true"],
