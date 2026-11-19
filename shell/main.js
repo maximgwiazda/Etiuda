@@ -1946,6 +1946,7 @@ function deskEnvelopeBody(keysText) {
     + (Object.keys(teamLeft).length ? ',"teamLeft":' + JSON.stringify(teamLeft) : "")
     + (Object.keys(teamLapseSeen).length ? ',"teamLapseSeen":' + JSON.stringify(teamLapseSeen) : "")
     + (Object.keys(teamContentSaid).length ? ',"teamContentSaid":' + JSON.stringify(teamContentSaid) : "")
+    + (Object.keys(teamContentLead).length ? ',"teamContentLead":' + JSON.stringify(teamContentLead) : "")
     + (catalogPrivate.size ? ',"catalogPrivate":' + JSON.stringify(Array.from(catalogPrivate).sort()) : "")
     + (Object.keys(catalogLineage).length ? ',"catalogLineage":' + JSON.stringify(catalogLineage) : "")
     + (Object.keys(catalogRoots).length ? ',"catalogRoots":' + JSON.stringify(catalogRoots) : "")
@@ -3654,7 +3655,13 @@ function signedAnswer(me, team, askId, pin, catalogDoc, content, chain) {
 }
 /* Whether this desk has been told for `team` (contentSaid): an unlisted catalog is answered or shared only once told. */
 function contentApplies(team) {
-  return !!team && typeof teamContentSaid[team] === "string" && ASK_TIME_RE.test(teamContentSaid[team]) && Number.isFinite(Date.parse(teamContentSaid[team]));
+  if (!team || typeof teamContentSaid[team] !== "string" || !ASK_TIME_RE.test(teamContentSaid[team]) || !Number.isFinite(Date.parse(teamContentSaid[team]))) return false;
+  return leadKeyOf(team) !== "" && teamContentLead[team] === leadKeyOf(team); /* plant:s0b-told-lead */
+}
+/* The team's current lead key as the desk pins it, as one string; empty where no lead is pinned. */
+function leadKeyOf(team) {
+  const pin = teamPins[team];
+  return pin && typeof pin.keyId === "string" && typeof pin.public === "string" ? pin.keyId + ":" + pin.public : "";
 }
 /* Whether a whole team file is older than one this desk has heeded for its team and lead key, as heedTeam judges it. */
 function teamFileBehind(doc) {
@@ -4056,6 +4063,7 @@ const teamBarred = new Set();                  // teams whose lead the agent for
 const teamHeldOut = new Set();                 // relay teams a left-behind desk took a new lead's invitation for: its files stay here until "It matches"
 let teamLeft = {};                             // of those, a team the agent left with Leave this team -> when, as an ISO date
 let teamLapseSeen = {};                        // team id -> "<step>:<until>": the lapse notice the agent dismissed, so a renewed grant's next lapse shows again
+let teamContentLead = {};                      // team id -> the lead key (keyId:public) the desk was told under; a told stamp without it reads as untold
 let teamContentSaid = {};                      // team id -> ISO timestamp when this desk was told for this team (contentSaid)
 let catalogLineage = {};                       // catalog id -> the id it grew from, each hop this desk has seen
 const catalogLineageSha = {};                  // catalog id -> the signed hash of the edition it grew from (grew.sha); this run only
@@ -7061,7 +7069,7 @@ function contentView(read) {
 /* This desk was told for `team`: kept with the time it was told, so unlisted catalogs can be answered or shared. */
 function contentSaid(team) {
   const doc = folderTeamDoc(), v = contentView(doc);
-  if (v.team && v.team === String(team || "") && !contentApplies(v.team)) { teamContentSaid[v.team] = new Date().toISOString(); persistDeskEnvelope(); } /* plant:s0b-said */
+  if (v.team && v.team === String(team || "") && !contentApplies(v.team)) { teamContentSaid[v.team] = new Date().toISOString(); teamContentLead[v.team] = leadKeyOf(v.team); persistDeskEnvelope(); } /* plant:s0b-said */
   /* An ask already waiting is answered now, not at the next change of the folder. */
   tryCatalogAsk(theWindow); /* plant:s0b-said-ask */
   tryHeldBranches();
@@ -7250,6 +7258,7 @@ function forgetLead(team, left) {
   teamSeen.delete(team);
   delete teamLapseSeen[team];
   delete teamContentSaid[team];
+  delete teamContentLead[team];
   delete teamPauseSeen[team];
   delete teamRelayGone[team];
   delete teamWas[team];
@@ -8420,6 +8429,10 @@ function readDesk() {
       const v = doc.teamContentSaid[t];
       if (SEALED_TEAM_RE.test(t) && typeof v === "string" && ASK_TIME_RE.test(v) && Number.isFinite(Date.parse(v)))
         teamContentSaid[t] = v;
+    });
+    if (doc && table(doc.teamContentLead)) Object.keys(doc.teamContentLead).forEach(t => {
+      const v = doc.teamContentLead[t];
+      if (SEALED_TEAM_RE.test(t) && typeof v === "string" && /^[^:]*:[0-9a-f]{64}$/.test(v)) teamContentLead[t] = v;
     });
     if (doc && table(doc.catalogLineage)) Object.keys(doc.catalogLineage).slice(-LINEAGE_MAX).forEach(c => {
       const g = doc.catalogLineage[c];
