@@ -4362,10 +4362,10 @@ CASES.settleClockIssued = async (s, swap) => {
     { platform: "win32" }, () => "", () => "", false, console, true, () => ({ managed: null }), () => false, () => false, () => {},
     () => ({ key: DESK_KEY, desk: clk.desk, last: c2.until, issued: clk.issued, online: true }));
   const wiredIo = ioFn({ loop: null });
-  const rw = await s.signinRenewHeld(Object.assign({}, renewIo(answer({ id_token: jwt(msClaims(undefined)), refresh_token: "rt-2" }), olderBody),
+  const rw = await s.signinRenewHeld(Object.assign({}, renewIo(answer({ id_token: jwt(msClaims(undefined, deskNow)), refresh_token: "rt-2" }), olderBody),
     { deskNow: () => wiredIo.deskNow(), deskIssued: () => (typeof wiredIo.deskIssued === "function" ? wiredIo.deskIssued() : 0) }),
     MS, DESK_KEY, Object.assign({}, hNoCert, { refresh: "sealed:rt-1", sub: "sealed:s-1" }), () => deskNow);
-  const renewOk = rw.held.cert === null && s.signinWorks(rw.held, DESK_KEY, clk.desk) === false;
+  const renewOk = rw.said === "renewed" && rw.held.cert === null && rw.held.reached === false && s.signinWorks(rw.held, DESK_KEY, clk.desk) === false;
 
   /* Wired signinTake (and side-step: sign-in after Sign out with held: null while clock.issued stays in memory/disk). */
   let takeSrc = decl(MAIN, "function signinTake(");
@@ -4380,8 +4380,8 @@ CASES.settleClockIssued = async (s, swap) => {
     return store.held;
   };
   const takeNullHeld = runTake(hNoCert), takeAfterOut = runTake(null);
-  const takeOk = takeNullHeld.cert === null && s.signinWorks(takeNullHeld, DESK_KEY, clk.desk) === false
-    && takeAfterOut.cert === null && s.signinWorks(takeAfterOut, DESK_KEY, clk.desk) === false;
+  const takeOk = takeNullHeld.cert === null && takeNullHeld.reached === false && s.signinWorks(takeNullHeld, DESK_KEY, clk.desk) === false
+    && takeAfterOut.cert === null && takeAfterOut.reached === false && s.signinWorks(takeAfterOut, DESK_KEY, clk.desk) === false;
 
   /* C4.1: kept-file path with older marked cert (c1) and newer marked clock (c2.issued), via signinView and side-step signinTick. */
   const markedOld = s.signinFileMarkText(s.signinFileText({ held: heldOf({ cert: c1, seated: true, doors: [] }) }), signWith(signKey));
