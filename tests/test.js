@@ -5165,10 +5165,11 @@ function activeStateTests() {
   try {
     const bar = new El("div"); bar.parentElement = new El("div");
     const H = new Function("document", "$", "tabs", "activeTabId", "t", "tabLabel", "drawTabs", "bindTabScroll", "fitTabLabels",
-      "requestAnimationFrame", "tabAddTitle", "ICON_TAB_X", "ICON_TAB_ADD", "tabDrag",
-      slice("tabs.js", "function drawTabsCore(") + "\nreturn drawTabsCore;")(
+      "requestAnimationFrame", "tabAddTitle", "ICON_TAB_X", "ICON_TAB_ADD", "tabDrag", "lang",
+      slice("tabs.js", "function tabLangCode(") + "\n" + slice("tabs.js", "function tabLangText(") + "\n"
+      + slice("tabs.js", "function drawTabsCore(") + "\nreturn drawTabsCore;")(
       doc, s => (s === "#tabsBar" ? bar : null), [{ id: "a", pax: "Anna" }, { id: "b", pax: "" }], "b", s => s, tb => tb.pax || "Tab",
-      {}, () => {}, () => {}, () => {}, () => "", "", "", null);
+      {}, () => {}, () => {}, () => {}, () => "", "", "", null, "en");
     H();
     got = bar.kids.map(k => [k.cls.has("on"), k.kids[0].getAttribute("role"), k.kids[0].getAttribute("aria-selected")]);
   } catch (e) { got = "drawTabsCore did not run: " + e.message; }

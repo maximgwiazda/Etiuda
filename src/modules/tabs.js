@@ -319,6 +319,7 @@ function sayLive(words){
   else out.textContent=words;
 }
 function noteActive(){
+  syncTabLang();
   if(!activeSaid) return;
   clearTimeout(activeSayT);
   activeSayT=setTimeout(sayActive,200);
@@ -402,6 +403,26 @@ function scheduleTabSave(){
   tabSaveTimer=setTimeout(saveTabSession, 250);
   noteActive();
 }
+/* A chat's language as a code: two or three letters, then any regional parts, in lower case; anything else is no language. */
+function tabLangCode(v){
+  return typeof v==="string" && /^[a-z]{2,3}(-[a-z0-9]{2,8})*$/i.test(v) ? v.toLowerCase() : "";
+}
+/* The tag a tab wears: its chat's language in capitals. The tab in front reads the language on screen, which is
+   the one its record takes up at the next snapshot. */
+function tabLangText(tb){
+  const own=tb && tb.id===activeTabId ? lang : tb && tb.lang;
+  return (tabLangCode(own)||tabLangCode(lang)).toUpperCase();
+}
+/** Every drawn tab's language tag, after a change of the language on screen. */
+function syncTabLang(){
+  const bar=$("#tabsBar");
+  if(!bar||typeof bar.querySelectorAll!=="function") return;
+  bar.querySelectorAll(".tab[data-tid]").forEach(el=>{
+    const tag=el.querySelector(".tab-lang");
+    const txt=tabLangText(tabs.find(x=>x.id===el.dataset.tid));
+    if(tag && tag.textContent!==txt) tag.textContent=txt;
+  });
+}
 function loadTabSession(){
   try{
     const data=JSON.parse(ssGet(TAB_KEY)||"null");
@@ -417,9 +438,10 @@ function loadTabSession(){
     const catOk=k=>!!CATS[k];
     const intentOk=i=>Number.isInteger(i)&&i>=0&&i<intentCount();
     tabs=data.tabs.map(t=>Object.assign(blankTab(), t, {
-      // Honour a stored value; a record from before tabs carried a language falls back to the
-      // restored last-used one rather than being forced to English.
-      lang:(t.lang==="pl"||t.lang==="en")?t.lang:lang,
+      // Honour a stored language code (a catalog may hold any pair, so the shape is checked, not a list of two); a record
+      // from before tabs carried a language falls back to the restored last-used one rather than being forced to English.
+      // plant:tab-lang-keep (the line below)
+      lang:tabLangCode(t.lang)||lang,
       intentIdxs:Array.isArray(t.intentIdxs)?t.intentIdxs.filter(intentOk):[],
       cats:Array.isArray(t.cats)?t.cats.filter(catOk):[],
       path:Array.isArray(t.path)?t.path.filter(x=>typeof x==="string"&&x).slice(-TAB_PATH_MAX):[],
@@ -932,6 +954,8 @@ function endTabDrag(){
    category dot's 12px inset: a default title is always said in full. Keep .tab's
    min-width in step. */
 let TAB_FLOOR_W=100;
+/* A tab narrower than this swaps its language tag and its close button, see .tab-lang. */
+const TAB_TAG_W=140;
 /* Scroll state is a MEASUREMENT, never a tab count: four tabs overflow in a narrow window and
    not in a wide one, so asking the pixels is the only version of this that is right at every
    size. EPS absorbs sub-pixel layout, which otherwise leaves an arrow enabled at a hard edge
@@ -1312,6 +1336,13 @@ function fitTabLabels(){
 
   applyTabWidths();
 
+  /* Below 140px a tab has no room for a tag and a close button together: CSS reads this mark, and every width is
+     read before any mark is written. */
+  const wides=tabEls.map(el=>el.getBoundingClientRect().width);
+  tabEls.forEach((el,i)=>{
+    if(wides[i]<TAB_TAG_W) el.dataset.narrow=""; else delete el.dataset.narrow;
+  });
+
   const rows=[];
   tabEls.forEach((el,i)=>{
     const idx=tabs.findIndex(x=>x.id===el.dataset.tid);
@@ -1534,8 +1565,13 @@ function drawTabsCore(){
       x.setAttribute("aria-label", t(tabs.length===1?"Clear tab":"Close tab"));
       x.innerHTML=ICON_TAB_X;
       x.onclick=e=>closeTab(tb.id,e);
-      b.appendChild(lab);
-      b.appendChild(x);
+      const tl=document.createElement("span");
+      tl.className="tab-lang";
+      tl.setAttribute("aria-hidden","true");
+      tl.textContent=tabLangText(tb);
+      [lab,
+        tl, /* plant:tab-lang-tag (this line draws it) */
+        x].forEach(c=>b.appendChild(c));
       b.onpointerdown=e=>{
         if(e.pointerType==="touch") return;   // taps are taps - see the rail rows for the story
         if(e.button!==0) return;
@@ -1636,6 +1672,14 @@ function drawTabList(preserveFocus){
     if(!isScr) label.setAttribute("data-i18n-skip","");
     label.textContent=name;
     item.appendChild(label);
+    if(!isScr){
+      // The same tag as the strip's, after the name, so a row says its chat's language too.
+      const tl=document.createElement("span");
+      tl.className="tab-lang";
+      tl.setAttribute("aria-hidden","true");
+      tl.textContent=tabLangText(tb);
+      item.appendChild(tl);
+    }
     if(on){
       const hold=document.createElement("span");
       hold.innerHTML=checkSvg;
