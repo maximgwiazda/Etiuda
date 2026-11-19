@@ -2619,6 +2619,62 @@ function openBranchLead(skR, doc, deskId) {
     return pt ? pt.toString("utf8") : null;
   } catch { return null; }
 }
+/* ---- a card sealed to one desk's box, signed by the sender (board 1013, piece 3) ---------------------------
+   Base-mode HPKE does not say who sealed, so the card inside is signed by the sender's desk key under a prefix of its own,
+   over the team, both desk ids and the card's bytes. info binds the same three, under a label no other envelope uses, so
+   the file opens as nothing else and for no other desk. Pure like the seals above: the keys are KeyObjects, handed in. */
+const CARD_SEAL_KIND = "etiuda-card-sealed";
+const CARD_SEAL_LABEL = "etiuda-card-to\n";
+const CARD_INNER_KIND = "etiuda-card-inner";
+const CARD_PREFIX = "etiuda-card\n";
+const CARD_MAX_BYTES = 64 * 1024;
+/* The largest ct worth opening: a 64 KB card whose every byte JSON writes as a six-character escape, plus 1 KB for the inner file's other fields and the 16-byte tag. */
+const CARD_MAX_CT_BYTES = CARD_MAX_BYTES * 6 + 1024;
+function cardSealInfo(team, sender, recipient) {
+  return Buffer.from(CARD_SEAL_LABEL + team + "\n" + sender + "\n" + recipient, "utf8");
+}
+function cardSignedBytes(team, sender, recipient, card) {
+  return Buffer.concat([Buffer.from(CARD_PREFIX + team + "\n" + sender + "\n" + recipient + "\n", "utf8"), card]);
+}
+/* `signKey` is the sender desk's Ed25519 private KeyObject. It throws, with a plain reason, on a card above 64 KB or a malformed id. */
+function sealCardTo(box, team, senderId, recipientId, cardText, signKey) {
+  if (!/^[0-9a-f]{64}$/.test(String(box))) throw new Error("card: the recipient's box is 64 lower-case hex characters");
+  if (!SEALED_TEAM_RE.test(String(team))) throw new Error("card: a team id is t- and 16 lower-case hex characters");
+  if (!/^k-[0-9a-f]{16}$/.test(String(senderId)) || !/^k-[0-9a-f]{16}$/.test(String(recipientId))) throw new Error("card: a desk id is k- and 16 lower-case hex characters");
+  if (typeof cardText !== "string") throw new Error("card: a card is sealed as its text");
+  const bytes = Buffer.from(cardText, "utf8");
+  if (bytes.length > CARD_MAX_BYTES) throw new Error("card: a card is at most 64 KB to share, this one is " + bytes.length + " bytes");
+  const sig = crypto.sign(null, cardSignedBytes(String(team), String(senderId), String(recipientId), bytes), signKey).toString("hex");
+  const inner = { format: 1, kind: CARD_INNER_KIND, team: String(team), from: String(senderId), to: String(recipientId), card: cardText,
+    sig: { alg: "Ed25519", keyId: String(senderId), value: sig } };
+  const w = hpkeSeal(Buffer.from(String(box), "hex"), cardSealInfo(String(team), String(senderId), String(recipientId)), Buffer.alloc(0),
+    Buffer.from(JSON.stringify(inner), "utf8"));
+  return { format: 1, kind: CARD_SEAL_KIND, team: String(team), from: String(senderId), enc: w.enc.toString("hex"), ct: w.ct.toString("hex") };
+}
+/* The card's text, or null for anything that is not this desk's, for this team, from the named sender: `boxKey` is this desk's
+   X25519 private KeyObject, `senderKey` the sender's 64-hex public key as the roster has it. */
+function openCardFrom(env, team, recipientId, senderKey, boxKey) {
+  try {
+    if (!env || typeof env !== "object" || Array.isArray(env) || +env.format !== 1 || env.kind !== CARD_SEAL_KIND) return null;
+    if (!SEALED_TEAM_RE.test(String(team)) || String(env.team) !== String(team)) return null;
+    if (!/^k-[0-9a-f]{16}$/.test(String(recipientId)) || !/^k-[0-9a-f]{16}$/.test(String(env.from))) return null;
+    if (!/^[0-9a-f]{64}$/.test(String(senderKey))) return null;
+    const enc = String(env.enc), ct = String(env.ct);
+    if (!/^[0-9a-f]{64}$/.test(enc) || !/^(?:[0-9a-f]{2}){16,}$/.test(ct)) return null;
+    if (ct.length > 2 * CARD_MAX_CT_BYTES) return null; /* plant:card-ct-size */
+    const pt = hpkeOpen(boxKey, Buffer.from(enc, "hex"), cardSealInfo(String(team), String(env.from), String(recipientId)), Buffer.alloc(0), Buffer.from(ct, "hex"));
+    if (!pt) return null;
+    const inner = JSON.parse(pt.toString("utf8"));
+    if (!inner || +inner.format !== 1 || inner.kind !== CARD_INNER_KIND || inner.team !== String(team) || inner.from !== env.from
+      || inner.to !== String(recipientId) || typeof inner.card !== "string" || !inner.sig || inner.sig.alg !== "Ed25519"
+      || inner.sig.keyId !== inner.from || !/^[0-9a-f]{128}$/.test(String(inner.sig.value))) return null;
+    const bytes = Buffer.from(inner.card, "utf8");
+    if (bytes.length > CARD_MAX_BYTES) return null;
+    const pub = crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(String(senderKey), "hex")]), format: "der", type: "spki" });
+    return crypto.verify(null, cardSignedBytes(String(team), inner.from, String(recipientId), bytes), pub, Buffer.from(inner.sig.value, "hex"))
+      ? inner.card : null;
+  } catch { return null; }
+}
 const ANSWER_LEAD_PREFIX = "etiuda-catalog-answer\n";
 function answerLeadSignedBytes(doc) {
   return Buffer.concat([Buffer.from(ANSWER_LEAD_PREFIX, "utf8"), signedBytesOf(doc)]);

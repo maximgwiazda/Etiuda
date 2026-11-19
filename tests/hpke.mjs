@@ -30,7 +30,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 42;
+const EXPECTED = 57;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -81,6 +81,15 @@ const WRAP_DECLS = ["const TEAM_WRAP_LABEL =", "function teamWrapInfo(", "functi
 function wrapFrom(src) {
   const body = HPKE_DECLS.concat(["const SEALED_TEAM_RE ="], WRAP_DECLS).map(m => sliceDecl(src, m)).join("\n");
   return new Function("crypto", "Buffer", body + "\nreturn { teamWrapInfo, wrapTeamKey, unwrapTeamKey };")(crypto, Buffer);
+}
+
+
+/* A card sealed to one desk's box and signed by its sender (board 1013, piece 3): sliced with HPKE, which is all it needs. */
+const CARD_DECLS = ["const SEALED_TEAM_RE =", "const SPKI_ED25519 =", "const CARD_SEAL_KIND =", "const CARD_SEAL_LABEL =", "const CARD_INNER_KIND =",
+  "const CARD_PREFIX =", "const CARD_MAX_BYTES =", "const CARD_MAX_CT_BYTES =", "function cardSealInfo(", "function cardSignedBytes(", "function sealCardTo(", "function openCardFrom("];
+function cardFrom(src, cr = crypto) {
+  const body = HPKE_DECLS.concat(CARD_DECLS).map(m => sliceDecl(src, m)).join("\n");
+  return new Function("crypto", "Buffer", body + "\nreturn { sealCardTo, openCardFrom };")(cr, Buffer);
 }
 
 const VECTOR = {
@@ -276,6 +285,78 @@ function main() {
     .filter(([k, w]) => { try { return W.unwrapTeamKey(k, w, TEAM, 3, DESK) === null; } catch { return false; } }).length;
   check(wrapQuiet === 5, "12Z unwrapping gives null without a throw for no wrap, a string, a short ct, a short enc and a key as"
     + " bytes: " + wrapQuiet + " of 5");
+
+  /* ---- a card sealed to one desk and signed by its sender (board 1013, piece 3) ---- */
+  const plantsOn = process.env.ETIUDA_PLANTS !== "off";
+  let C = null;
+  try { C = cardFrom(SRC); } catch (e) { check(false, "12c0 the card seal's declarations slice and evaluate - " + e.message); }
+  if (!C) return;
+  const sk = crypto.generateKeyPairSync("ed25519"), sk2 = crypto.generateKeyPairSync("ed25519");
+  const edRaw = k => crypto.createPublicKey(k.privateKey).export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
+  const idOf = pubHex => "k-" + crypto.createHash("sha256").update(Buffer.from(pubHex, "hex")).digest("hex").slice(0, 16);
+  const SEND = idOf(edRaw(sk)), SENDK = edRaw(sk), SENDK2 = edRaw(sk2), RECV = "k-fedcba9876543210", RECV2 = "k-0011223344556677";
+  const CARD = JSON.stringify({ title: "A card", n: 1 });
+  /* The label written out, not called, as 12W does for the wrap. */
+  const CARDINFO = (team, from, to) => Buffer.from("etiuda-card-to\n" + team + "\n" + from + "\n" + to, "utf8");
+  const cenv = C.sealCardTo(BOX, TEAM, SEND, RECV, CARD, sk.privateKey);
+  const open = (e, team, rid, key, priv) => { try { return C.openCardFrom(e, team, rid, key, priv); } catch { return "THREW"; } };
+  check(open(cenv, TEAM, RECV, SENDK, box.privateKey) === CARD, "12c1 a card sealed to the recipient desk's box opens with its box key, to the card");
+  check(open(cenv, TEAM, RECV, SENDK, stranger.privateKey) === null, "12c2 another desk's box key opens nothing");
+  check(open(cenv, TEAM, RECV2, SENDK, box.privateKey) === null, "12c3 read as sent to another desk, it does not open");
+  check(open(cenv, "t-0123456789abcdee", RECV, SENDK, box.privateKey) === null, "12c4 read for another team, it does not open");
+  check(open(cenv, TEAM, RECV, SENDK2, box.privateKey) === null && open(cenv, TEAM, RECV, SENDK, box.privateKey) === CARD,
+    "12c5 a wrong sender key gives null");
+  const sealAs = (info, text) => { const w = H.hpkeSeal(Buffer.from(BOX, "hex"), info, Buffer.alloc(0), Buffer.from(text, "utf8"));
+    return Object.assign({}, cenv, { enc: w.enc.toString("hex"), ct: w.ct.toString("hex") }); };
+  const innerOf = (() => { const o = H.hpkeOpen(box.privateKey, Buffer.from(cenv.enc, "hex"), CARDINFO(TEAM, SEND, RECV), Buffer.alloc(0), Buffer.from(cenv.ct, "hex"));
+    return o ? JSON.parse(o.toString("utf8")) : null; })();
+  check(!!innerOf && innerOf.card === CARD && innerOf.team === TEAM && innerOf.from === SEND && innerOf.to === RECV
+    && /^[0-9a-f]{128}$/.test(String(innerOf.sig && innerOf.sig.value)),
+    "12c6 the binding as declared: info is \"etiuda-card-to\\n\" + team + sender + recipient, and the inner file carries the card, both ids, the team and a signature");
+  const innerText = JSON.stringify(innerOf);
+  check(open(sealAs(CARDINFO(TEAM, SEND, RECV), innerText), TEAM, RECV, SENDK, box.privateKey) === CARD
+    && open(sealAs(Buffer.from("etiuda-stats-lead\n" + TEAM + "\n" + SEND + "\n" + RECV, "utf8"), innerText), TEAM, RECV, SENDK, box.privateKey) === null
+    && open(sealAs(Buffer.from("etiuda-catalog-branch-lead\n" + TEAM + "\n" + SEND + "\n" + RECV, "utf8"), innerText), TEAM, RECV, SENDK, box.privateKey) === null,
+    "12c7 the same inner bytes under another envelope kind's label do not open as a card (no replay across kinds)");
+  check(open(sealAs(CARDINFO(TEAM, RECV2, RECV), innerText), TEAM, RECV, SENDK, box.privateKey) === null
+    && open(Object.assign({}, cenv, { ct: hexFlip(cenv.ct, 5) }), TEAM, RECV, SENDK, box.privateKey) === null,
+    "12c8 swapped sender id in info and a tampered ct (a byte flipped) each give null");
+  const forgedCard = JSON.stringify(Object.assign({}, innerOf, { card: "{\"title\":\"changed\"}" }));
+  const forgedTo = JSON.stringify(Object.assign({}, innerOf, { to: RECV2 }));
+  check(open(sealAs(CARDINFO(TEAM, SEND, RECV), forgedCard), TEAM, RECV, SENDK, box.privateKey) === null
+    && open(sealAs(CARDINFO(TEAM, SEND, RECV), forgedTo), TEAM, RECV, SENDK, box.privateKey) === null,
+    "12c9 the inner signature alone refuses a changed card or a changed recipient inside a well-formed envelope");
+  const big = "x".repeat(64 * 1024), bigger = "x".repeat(64 * 1024 + 1);
+  let bigOk = false, bigRefused = false;
+  try { bigOk = C.openCardFrom(C.sealCardTo(BOX, TEAM, SEND, RECV, big, sk.privateKey), TEAM, RECV, SENDK, box.privateKey) === big; } catch { bigOk = false; }
+  try { C.sealCardTo(BOX, TEAM, SEND, RECV, bigger, sk.privateKey); } catch (e) { bigRefused = /64 KB/.test(e.message); }
+  check(bigOk && bigRefused, "12c10 a card of 64 KB seals and opens; one byte more is refused with the reason \"64 KB\"");
+  const cquiet = [[null, TEAM, RECV, SENDK, box.privateKey], [cenv, TEAM, RECV, SENDK, null], [cenv, TEAM, RECV, "zz", box.privateKey],
+    [Object.assign({}, cenv, { kind: "etiuda-sealed" }), TEAM, RECV, SENDK, box.privateKey], [Object.assign({}, cenv, { enc: "00" }), TEAM, RECV, SENDK, box.privateKey]]
+    .filter(a => open(...a) === null).length;
+  check(cquiet === 5, "12c11 opening gives null without a throw for no envelope, no key, a bad sender key, another kind and a short enc: " + cquiet + " of 5");
+  /* A huge envelope is refused before any key agreement: the crypto handed to the slice counts diffieHellman calls. */
+  const counting = () => { const n = { dh: 0 }; return { n, cr: new Proxy(crypto, { get: (t, k) => k === "diffieHellman" ? (...a) => { n.dh++; return t.diffieHellman(...a); } : t[k] }) }; };
+  const hugeCt = "ab".repeat(6 * 64 * 1024 + 1024 + 1), hugeEnv = Object.assign({}, cenv, { ct: hugeCt });
+  const sizeProbe = (P, src) => { const c = counting(); const Q = cardFrom(src || SRC, c.cr); return Q.openCardFrom(hugeEnv, TEAM, RECV, SENDK, box.privateKey) === null && c.n.dh === 0; };
+  const ctl = counting(), Qc = cardFrom(SRC, ctl.cr);
+  check(Qc.openCardFrom(cenv, TEAM, RECV, SENDK, box.privateKey) === CARD && ctl.n.dh === 1 && sizeProbe(), "12c12 a ct over the limit (CARD_MAX_CT_BYTES) is null with no key agreement run; the control, a normal card, opens with one");
+  /* PLANTS: a deciding line altered in a copy of the slices; the check it guards must fail there. */
+  const plant = (name, needle, repl, probe) => {
+    if (!plantsOn) { check(true, "12cP SKIP the plant of " + name + " (ETIUDA_PLANTS=off)"); return; }
+    if (SRC.indexOf(needle) < 0) { check(false, "plant " + name + " missed: " + needle); return; }
+    let P = null;
+    try { P = cardFrom(SRC.replace(needle, repl)); } catch (e) { check(false, "plant " + name + " does not evaluate: " + e.message); return; }
+    let red = false;
+    try { red = !probe(P, SRC.replace(needle, repl)); } catch { red = true; }
+    check(red, "12cP " + name + ": the check that guards it fails under the plant");
+  };
+  plant("the id binding in info", "CARD_SEAL_LABEL + team + \"\\n\" + sender + \"\\n\" + recipient", "CARD_SEAL_LABEL + team",
+    P => { const e = P.sealCardTo(BOX, TEAM, SEND, RECV, CARD, sk.privateKey); return !!H.hpkeOpen(box.privateKey, Buffer.from(e.enc, "hex"), CARDINFO(TEAM, SEND, RECV), Buffer.alloc(0), Buffer.from(e.ct, "hex")); });
+  plant("the inner signature check", "crypto.verify(null, cardSignedBytes(", "(() => true)(null, cardSignedBytes(",
+    P => { const e = P.sealCardTo(BOX, TEAM, SEND, RECV, CARD, sk.privateKey); return P.openCardFrom(e, TEAM, RECV, SENDK2, box.privateKey) === null; });
+  plant("the size line before the open", "if (ct.length > 2 * CARD_MAX_CT_BYTES) return null;", "",
+    (P, src) => sizeProbe(P, src));
 }
 
 try { main(); }
