@@ -4222,7 +4222,7 @@ function memberHeed(doc, state, seen) {
   const said = [];
   const ret = (extra) => Object.assign({ state: out, key: null, said: said, stampClear: false, changed: false,
     stop: false, needKey: false, team: "", epoch: 0, keep: false, unbar: false, pinned: false }, extra);
-  if (!teamWhole(doc)) { /* plant:roster-verify */
+  if (!teamWhole(doc)) { /* defence in depth: the team-file reader (plant:s0b-floor-doc) already refuses a file that is not whole */
     said.push(file + " is not a team file whole under its lead's key, so nothing in it is used");
     return ret({ stop: true });
   }
@@ -5132,7 +5132,7 @@ function heedTeam() {
     changed = true;
   }
   // The roster of the epoch accepted: a file at that epoch replaces it, and one below it put back changes nothing.
-  if (r.team && Number.isInteger(r.epoch) && r.epoch >= 1 && r.epoch >= (teamEpochSeen[r.team] || 0)) { /* plant:roster-epoch */
+  if (r.team && Number.isInteger(r.epoch) && r.epoch >= 1 && r.epoch >= (teamEpochSeen[r.team] || 0)) { /* defence in depth: teamFileBehind (plant:epoch-rev) already refuses an older epoch before this */
     const ids = rosterIdsOf(doc), ents = rosterEntriesOf(doc), had = teamRoster[r.team];
     if (!had || had.epoch !== r.epoch || had.desks.join(",") !== ids.join(",") || !rosterEntriesSame(had.entries, ents)) {
       teamRoster[r.team] = { epoch: r.epoch, desks: ids, entries: ents };

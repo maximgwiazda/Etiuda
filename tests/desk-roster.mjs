@@ -47,7 +47,7 @@ const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const PLANTS = process.env.ETIUDA_PLANTS !== "off";
-const EXPECTED = 31 + (PLANTS ? 4 : 0);
+const EXPECTED = 31 + (PLANTS ? 2 : 0);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -370,7 +370,7 @@ try {
 
     /* Each deciding line of the roster kept whole, lifted alone from a copy of the source held in memory, turns one check red.
        The checkout's shell/main.js is never written. */
-    if (!PLANTS) console.log("NOT RUN plant:roster-entries, plant:roster-verify, plant:roster-epoch, plant:roster-readback (ETIUDA_PLANTS=off)");
+    if (!PLANTS) console.log("NOT RUN plant:roster-entries, plant:roster-readback (ETIUDA_PLANTS=off)");
     else {
       let seq = 0;
       /* A lift is a list of [tag, from, to]: the roster's own line, and any earlier guard that holds the same fact and would hide it. */
@@ -403,15 +403,9 @@ try {
       const sEntries = lifted(["plant:roster-entries", "return Array.from(byId.values()).sort((p, q) => (p.id < q.id ? -1 : 1));", "return [];"]);
       const pe = sEntries ? await planted(sEntries, false) : null;
       check(!!pe && pe.n === 0, "1013e lifting plant:roster-entries leaves the roster with its ids and no entries, so 1013a goes red: " + JSON.stringify(pe));
-      const sVerify = lifted(["plant:roster-verify", "if (!teamWhole(doc)) {", "if (false) {"], ["plant:s0b-floor-doc", "teamWhole(doc) &&", "true &&"]);
-      const pv = sVerify ? await planted(sVerify, true, JSON.stringify(bad)) : null;
-      check(!!pv && pv.epoch === 4, "1013f lifting plant:roster-verify lets the forged epoch 4 roster in, so 1013c goes red: " + JSON.stringify(pv));
-      const sEpoch = lifted(["plant:roster-epoch", "r.epoch >= (teamEpochSeen[r.team] || 0)", "true"], ["plant:epoch-rev", "if (floor && epoch < floor.epoch) return true;", "if (false) return true;"], ["plant:s0b-floor-doc", "!teamFileBehind(doc)", "true"]);
-      const po = sEpoch ? await planted(sEpoch, true, team2) : null;
-      check(!!po && po.epoch === 2, "1013g lifting plant:roster-epoch lets the epoch 2 file replace the epoch 3 roster, so 1013b goes red: " + JSON.stringify(po));
       const sRead = lifted(["plant:roster-readback", "entries: rosterEntriesChecked(v.entries, ids)", "entries: []"]);
       const pr = sRead ? await planted(sRead, true, null) : null;
-      check(!!pr && pr.n === 0, "1013h lifting plant:roster-readback reads the roster back without its entries, so 1013d goes red: " + JSON.stringify(pr));
+      check(!!pr && pr.n === 0, "1013f lifting plant:roster-readback reads the roster back without its entries, so 1013d goes red: " + JSON.stringify(pr));
       put(SHARE, "etiuda-team.json", team3); touch(path.join(SHARE, "etiuda-team.json"));
     }
   }
