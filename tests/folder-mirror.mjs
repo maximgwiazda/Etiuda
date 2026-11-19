@@ -5795,8 +5795,11 @@ async function run() {
     const b3 = bytes();
     out.r4 = call("keepSharedCard", keepOpened(keepCard("c-desk", "Same id as the desk's own")), "lamp-shop");
     out.noWrite4 = bytes().equals(b3);
-    const doc4 = read(); doc4.cards.push(out.r4 && out.r4.card ? out.r4.card : {});
-    out.doc4 = doc4;
+    if (out.r4 && out.r4.ok === true && out.r4.card) {
+      const d4 = read(); d4.cards.push(out.r4.card);
+      d.api.writeBranch(stem, JSON.stringify(d4));
+    }
+    out.doc4 = read();
     out.problems4 = V2.v2Problems(out.doc4);
     const b4 = bytes(), l4 = listing();
     out.r5 = call("keepSharedCard", keepOpened(keepCard("c-other", "Other")), "other-shop");
