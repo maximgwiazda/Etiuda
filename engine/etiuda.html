@@ -1085,6 +1085,8 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .tab[data-narrow]:not(.on):not(:hover):not(:focus-within) .tab-x{display:none}
 .tab[data-narrow]:not(.on):is(:hover,:focus-within) .tab-lang{display:none}
 .tab.on[data-narrow] .tab-lang{display:none}
+/* The tab list behind the chevron: the same tag at the end of the name, in the menu's own ink. */
+.menu .tabs-list-item .tab-lang{margin-left:6px;color:var(--dim);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ink) 35%,transparent)}
 /* No hairline between the last tab and + - if the strip's end ever needs marking again,
    the aperture edges by the arrows (.tabs-nav) are the vocabulary. */
 /* + sits in same height band as tabs; mark matches .tab-x (× inherits weight 600 from .tab) */
@@ -15348,6 +15350,13 @@ What is typed here stays in this browser.`;
       if (!isScr) label2.setAttribute("data-i18n-skip", "");
       label2.textContent = name;
       item.appendChild(label2);
+      if (!isScr) {
+        const tl = document.createElement("span");
+        tl.className = "tab-lang";
+        tl.setAttribute("aria-hidden", "true");
+        tl.textContent = tabLangText(tb);
+        item.appendChild(tl);
+      }
       if (on) {
         const hold = document.createElement("span");
         hold.innerHTML = checkSvg;

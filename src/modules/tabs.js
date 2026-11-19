@@ -1672,6 +1672,14 @@ function drawTabList(preserveFocus){
     if(!isScr) label.setAttribute("data-i18n-skip","");
     label.textContent=name;
     item.appendChild(label);
+    if(!isScr){
+      // The same tag as the strip's, after the name, so a row says its chat's language too.
+      const tl=document.createElement("span");
+      tl.className="tab-lang";
+      tl.setAttribute("aria-hidden","true");
+      tl.textContent=tabLangText(tb);
+      item.appendChild(tl);
+    }
     if(on){
       const hold=document.createElement("span");
       hold.innerHTML=checkSvg;

@@ -27,7 +27,7 @@ const puppeteer = require("puppeteer-core");
 let fails = 0, checks = 0;
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 8, REPS = 5;
+const EXPECTED = 10, REPS = 5;
 const argv = process.argv.slice(2);
 const at = argv.indexOf("--engine");
 const ENGINE = at >= 0 ? path.resolve(argv[at + 1]) : E.ENGINE_PATH;
@@ -103,7 +103,7 @@ try {
   /* ---- tl1 to tl5: each conversation tab says its language ---- */
   const CODES = ["en", "pl", "de", "cs", "es-mx", "pl", "en", "de", "pl", "en"];
   const rawHtml = fs.readFileSync(ENGINE, "utf8");
-  const langRun = async (html, tag) => {
+  const langRun = async (html, tag, codes = CODES) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-tab-lang-" + tag + "-"));
     fs.writeFileSync(path.join(dir, "etiuda.html"), html);
     fs.copyFileSync(path.join(lab, "etiuda-catalog.js"), path.join(dir, "etiuda-catalog.js"));
@@ -117,9 +117,9 @@ try {
           const tabs = codes.map((l, i) => ({ id: "tb" + (i + 1), lang: l, customName: "Chat " + (i + 1), pax: "", paxNamed: false }));
           sessionStorage.setItem("eSessionTabs", JSON.stringify({ tabs, activeTabId: "tb1" }));
         } catch (e) {}
-      }, CODES);
+      }, codes);
       await q.goto("file:///" + path.join(dir, "etiuda.html").replace(/\\/g, "/"), { waitUntil: "load", timeout: 60000 });
-      await q.waitForFunction(() => document.querySelectorAll("#tabsBar .tab[data-tid]").length >= 10, { timeout: 30000 });
+      await q.waitForFunction((n) => document.querySelectorAll("#tabsBar .tab[data-tid]").length >= n, { timeout: 30000 }, codes.length);
       if (await q.$("#ecYes")) await q.click("#ecYes");
       await sleep(1500);
       const read = () => q.evaluate(() => Array.from(document.querySelectorAll("#tabsBar .tab[data-tid]")).map((el) => {
@@ -132,7 +132,8 @@ try {
           order: !!tag && kids.indexOf(lab) < kids.indexOf(tag) && kids.indexOf(tag) < kids.indexOf(x) };
       }));
       const rows = await read();
-      return { rows, page: q, dir, read };
+      const over = await q.evaluate(() => document.querySelector("#tabsWrap").classList.contains("tabs-over"));
+      return { rows, page: q, dir, read, over };
     } catch (e) { await q.close().catch(() => {}); return { err: String(e && e.message || e) }; }
   };
   const tl1 = (rows) => rows.length === CODES.length && rows.every((r, i) => r.text === CODES[i].toUpperCase() && r.hidden === "true"
@@ -157,7 +158,25 @@ try {
     && narrowRows.filter((r) => r.on).every((r) => !r.tagShown && r.xShown) && swap;
   check(mark, "tl2 narrow tabs (" + narrowRows.length + " of " + real.rows.length + ", widths " + narrowRows.map((r) => r.w).join(",")
     + "): unselected shows its tag in the close button's place, selected drops its tag, hover swaps them back");
+  /* tl6 the tab list behind the chevron says each chat's language too: sixteen tabs overflow the strip */
   await real.page.close();
+  const LIST = ["en", "pl", "de", "cs", "es-mx", "pl", "en", "de", "pl", "en", "it", "pl", "de", "en", "pl", "cs"];
+  const lr = await langRun(rawHtml, "list", LIST);
+  if (lr.err) throw new Error("the list run: " + lr.err);
+  let listTags = [];
+  if (lr.over) {
+    await lr.page.click("#tabsListBtn"); await sleep(400);
+    listTags = await lr.page.evaluate(() => Array.from(document.querySelectorAll("#tabsListRows .tabs-list-row")).map((r) => {
+      const t = r.querySelector(".tab-lang"); return t ? t.textContent + (t.getAttribute("aria-hidden") === "true" ? "" : "!") : "-"; }));
+  }
+  await lr.page.close();
+  check(lr.over && listTags.join(" ") === LIST.map((c) => c.toUpperCase()).join(" "), "tl6 the tab list behind the chevron (strip overflowing: " + lr.over + ") shows each row's code: " + listTags.join(" "));
+  /* tl7 a tab of 140px or more shows both the tag and its close button */
+  const wide = await langRun(rawHtml, "wide", ["en", "pl", "de", "cs"]);
+  if (wide.err) throw new Error("the wide run: " + wide.err);
+  await wide.page.close();
+  check(wide.rows.length === 4 && wide.rows.every((r) => r.w >= 140 && !r.narrow && r.tagShown && r.xShown && r.order),
+    "tl7 with four tabs (widths " + wide.rows.map((r) => r.w).join(",") + ") each shows both its tag and its close button, selected included");
   const srcLines = rawHtml.split("\n");
   const plantTag = srcLines.findIndex((l) => l.includes("plant:tab-lang-tag")) - 1;
   const plantKeep = srcLines.findIndex((l) => l.includes("plant:tab-lang-keep")) + 1;
