@@ -11184,6 +11184,7 @@ function signinSettle(held, ans, now, deskNow) {
 }
 function signinSettleSeat(held, ans, now, deskNow) {
   if (ans.ok) {
+    if (ans.cert && held && held.cert && ans.cert.issued < held.cert.issued) return Object.assign({}, held, { checked: now, reached: false }); /* plant:settle-issued */
     const keep = !ans.cert && !!held && !!held.cert; /* plant:keep-none */
     const ended = ans.cert ? 0 : !keep ? 0 : held.ended > 0 ? held.ended : Number.isSafeInteger(deskNow) && deskNow > 0 ? deskNow : now; /* plant:ended-first */
     const out = Object.assign({}, held, { code: ans.code, cert: ans.cert || (keep ? held.cert : null), doors: ans.cert ? (ans.doors || []) : [], doorsSig: ans.cert ? String(ans.doorsSig || "") : "", at: now, checked: now, reached: true,
@@ -11429,12 +11430,14 @@ function signinState() {
   } catch { text = ""; }
   signinStore = signinFileRead(text, SIGNIN_DESK_PACKED); /* plant:door-file-packed */
   const me = branchIdentity(false);
+  const rawHeld = signinStore.held;
   signinStore = signinFileHeld(signinStore, text, me ? me.key : ""); /* plant:file-held */
   SIGNIN_PROVIDERS = pinned; /* plant:pin-taken */
   signinPinStamp = stamp;
   signinStore.managed = managed;
   /* Whether this build holds any provider's registration, whatever machine policy pins: unwritten, beside `managed`. */
   signinStore.registered = signinOffered(signinTableBase).length > 0; /* plant:registered-base */
+  if (!(me && me.key) && rawHeld && (rawHeld.cert || rawHeld.code)) { const stripped = signinStore; signinStore = undefined; return stripped; } /* plant:state-no-key */
   return signinStore;
 }
 function signinSave() {
