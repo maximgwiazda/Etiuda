@@ -1521,11 +1521,16 @@ export function windowKind(abs) {
   return "node";
 }
 
+/* PRODUCERS ARE NOT GATES (the test architect, 2026-11-19): a script that starts the app, builds it, packages an installer or makes a
+ * release produces something and judges nothing, and a brief that runs "every node gate gates-for names" ran tools/package.mjs and built
+ * a 118 MB installer (B-3b's legs). Its node steps are not gates; the scripts that judge, the window kinds included, still are. */
+export const PRODUCER_SCRIPT = /^(pre|post)?(start|build|release|package)(:.*)?$/;
 function discover(root) {
   const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
   const scripts = pkg.scripts || {};
   const byRel = new Map();
   for (const name of Object.keys(scripts)) {
+    if (PRODUCER_SCRIPT.test(name)) continue; /* plant:gf-producers */
     const cmd = String(scripts[name] || "");
     for (const part of cmd.split("&&")) {
       const m = /^\s*node\s+(\S+)(.*)$/.exec(part.trim());

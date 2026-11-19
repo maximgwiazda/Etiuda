@@ -19,7 +19,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
 const TOOL = path.join(ROOT, "tools", "gates-for.mjs");
-const EXPECTED = 37;  /* 23, +2 main's desk-trust ceiling and subject paths (gf24, gf25), +6 relay-channel-split (gf26 to gf31), +1 a fail-closed plan keeps the mapped legs (gf32), +1 and runs no packaging tool (gf33), +4 a change to what the page is built from names its readers (gf34 to gf37) */
+const EXPECTED = 39;  /* 23, +2 main's desk-trust ceiling and subject paths (gf24, gf25), +6 relay-channel-split (gf26 to gf31), +1 a fail-closed plan keeps the mapped legs (gf32), +1 and runs no packaging tool (gf33), +4 a change to what the page is built from names its readers (gf34 to gf37), +2 a producer script's step is no gate (gf38, gf39) */
 
 /* GIT-ENV: git must use the throwaway tree, never a GIT_DIR the caller exported. */
 function gitEnv() {
@@ -576,6 +576,43 @@ try {
         + " lifting plant:built-scan drops the scan: " + JSON.stringify(steps) + " planted " + JSON.stringify(plantedSteps));
     } finally {
       try { fs.rmSync(lab3, { recursive: true, force: true }); } catch (e) { /* the built plant's own directory */ }
+    }
+  }
+
+  /* PRODUCERS ARE NOT GATES (the test architect, 2026-11-19): a brief that ran every node gate gates-for named built a 118 MB installer
+     through tools/package.mjs. A script that starts, builds, packages or releases names no gate; a judging script's step still does. */
+  {
+    const lab4 = fs.mkdtempSync(path.join(os.tmpdir(), "gates-for-producers-"));
+    try {
+      const put = (rel, text) => { fs.mkdirSync(path.dirname(path.join(lab4, rel)), { recursive: true }); fs.writeFileSync(path.join(lab4, rel), text); };
+      put("package.json", JSON.stringify({ scripts: { test: "node tests/judge.mjs", package: "node tools/package.mjs", "package:linux": "node tools/package-linux.mjs",
+        release: "node tools/release.mjs", build: "node tools/build-it.mjs", prestart: "node tools/pre.mjs" } }));
+      const reads = "import \"../src/x.js\";\n";
+      put("src/x.js", "export const x = 1;\n");
+      for (const f of ["tests/judge.mjs", "tools/package.mjs", "tools/package-linux.mjs", "tools/release.mjs", "tools/build-it.mjs", "tools/pre.mjs"]) put(f, reads);
+      fs.copyFileSync(TOOL, path.join(lab4, "tools", "gates-for.mjs"));
+      git(["init", "-q"], lab4);
+      git(["add", "--", "package.json", "src", "tools", "tests"], lab4);
+      const gatesOf = () => {
+        const res = spawnSync(process.execPath, ["tools/gates-for.mjs", "src/x.js"], { cwd: lab4, encoding: "utf8" });
+        let json = null;
+        try { json = JSON.parse((String(res.stdout || "").trim().split(/\r?\n/).pop() || "")); } catch (e) { json = null; }
+        return { status: res.status, gates: (json && json.gates || []).map(g => g.gate).sort() };
+      };
+      const got = gatesOf();
+      check(got.status === 0 && got.gates.join() === "tests/judge.mjs",
+        "gf38 a change read by a judging script and by start, build, package and release scripts names the judging script's step alone: "
+        + JSON.stringify(got));
+      const gfLab = path.join(lab4, "tools", "gates-for.mjs");
+      const gfText = fs.readFileSync(gfLab, "utf8");
+      const gfPlanted = gfText.split("\n").map(l => l.includes("/* plant:gf-producers */") ? "" : l).join("\n");
+      fs.writeFileSync(gfLab, gfPlanted);
+      const lifted = gatesOf();
+      fs.writeFileSync(gfLab, gfText);
+      check(gfPlanted !== gfText && lifted.gates.includes("tools/package.mjs") && lifted.gates.includes("tools/release.mjs"),
+        "gf39 plant: lifting plant:gf-producers names the producers again, so gf38 would go red: " + JSON.stringify(lifted));
+    } finally {
+      try { fs.rmSync(lab4, { recursive: true, force: true }); } catch (e) { /* the producers lab's own directory */ }
     }
   }
 
