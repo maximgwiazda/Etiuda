@@ -395,6 +395,8 @@ function deskDoorState(v){
   const waitingOnLead=!!v.askLead; /* B-3a feeds this */
   const orgLicence=!!v.licenceManaged; /* B-3a feeds this */
   const trialOver=seatOn==="trial" || (!seatOn && deskEnd>0); /* plant:door-trial-over */
+  /* The ask is read before a stop. A trial with no seat held is read before a stop; a trial seat that has stopped is the stop. */
+  const trialOpen=trialOver && !(seatOn && v.stoppedAt>0); /* plant:door-trial-open */
   let day=0;
   if(seatOn==="trial" && deskEnd && v.now){
     const left=Math.round((deskEnd-v.now)/86400000);
@@ -402,10 +404,10 @@ function deskDoorState(v){
   }
   let state="none";
   if(works && v.ended>0) state="ended"; /* plant:door-state-ended */
-  else if(!works && v.signedIn && v.stoppedAt>0) state="stopped"; /* plant:door-state-stopped */
   else if(!works && v.signedIn && trialOver && waitingOnLead) state="waiting"; /* plant:door-state-waiting */
-  else if(!works && v.signedIn && trialOver && orgLicence) state="trial-over-org";
-  else if(!works && v.signedIn && trialOver) state="trial-over";
+  else if(!works && v.signedIn && trialOpen && orgLicence) state="trial-over-org";
+  else if(!works && v.signedIn && trialOpen) state="trial-over";
+  else if(!works && v.signedIn && v.stoppedAt>0) state="stopped"; /* plant:door-state-stopped */
   else if(works && v.signedIn && seatOn) state="working";
   else if(!works && !v.signedIn && !v.busy && FAIL_FIRST.indexOf(v.said)<0 && v.offered.length && v.registered && !v.online && !signinWaiting(v) && !signinStranded(v)) state="first-offline"; /* plant:door-first-offline */
   else if(!works && !v.signedIn && !v.busy && FAIL_FIRST.indexOf(v.said)<0 && v.offered.length && v.registered && v.online && !signinWaiting(v) && !signinStranded(v)) state="first";
