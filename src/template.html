@@ -2683,11 +2683,11 @@ html.raildrag #intentRailList{margin-top:0}
    would simply lose the pencil, the eye and the star. */
 @media (hover:hover){
   .chead .cacts{opacity:0;transition:opacity var(--m-tone) ease}
-  .card:hover>.chead .cacts,.card:focus-within>.chead .cacts,.card:has([data-act=flag][aria-expanded=true])>.chead .cacts,.card:has([data-act=reword][aria-expanded=true])>.chead .cacts{opacity:1}
+  .card:hover>.chead .cacts,.card:focus-within>.chead .cacts,.card:has([data-act=flag][aria-expanded=true])>.chead .cacts,.card:has([data-act=share][aria-expanded=true])>.chead .cacts,.card:has([data-act=reword][aria-expanded=true])>.chead .cacts{opacity:1}
   /* While a bubble from a card's button stands (the flag's, Reword's menu, its waiting line, its refusal) the card keeps its buttons out, with the
      pointer or the keyboard anywhere, so the bubble points at a visible button; closed, they go back to waiting. While they wait they take no width, so the title runs the whole row and recedes when they
      come. The cut pass reads their width from here (cut-text.js, cut-rh). */
-  body:not(.tour-cacts) .card:not(:hover,:focus-within,.is-hidden):not(:has([data-act=flag][aria-expanded=true])):not(:has([data-act=reword][aria-expanded=true]))>.chead .cacts{
+  body:not(.tour-cacts) .card:not(:hover,:focus-within,.is-hidden):not(:has([data-act=flag][aria-expanded=true])):not(:has([data-act=share][aria-expanded=true])):not(:has([data-act=reword][aria-expanded=true]))>.chead .cacts{
     width:0;overflow:hidden;margin-left:calc(-1*var(--chead-gap))}
 }
 /* A tour has no pointer, so a step showcasing the star, the eye or the pencil was pointing at
@@ -2911,6 +2911,28 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
 .cbadge{font:600 11px var(--sans);letter-spacing:0;padding:1px 7px;border-radius:6px;
   background:var(--accent-soft);color:var(--accent);text-transform:none}
 .cbadge.ed{background-color:var(--bg);background-image:linear-gradient(var(--ed-soft),var(--ed-soft));color:var(--ed)}
+.cbadge.from{background:var(--bg);color:var(--muted);border:1px solid var(--edge)}
+.e-share-bub .e-share-sub,.e-share-in-bub .e-share-in-sub{margin:0 0 10px;font-size:13px;line-height:1.45;color:var(--bub-dim)}
+.e-share-bub .e-share-find,.e-share-bub .e-share-note{display:block;box-sizing:border-box;width:100%;height:34px;margin:2px 0 8px;padding:0 10px;border:0;border-radius:8px;background:#fff;color:#0f172a;font:13.5px var(--sans);outline:none}
+.e-share-bub .e-share-find:focus,.e-share-bub .e-share-note:focus{box-shadow:inset 0 -2px 0 0 var(--accent-fill)}
+.e-share-list{display:flex;flex-direction:column;gap:4px;max-height:180px;overflow:auto;margin:2px 0 8px}
+.e-share-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;color:var(--bub-ink);font-size:13.5px}
+.e-share-row:hover,.e-share-row.on{background:rgba(0,0,0,.16)}
+.e-share-row.dim{opacity:.72}
+.e-share-av{width:24px;height:24px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:rgba(255,255,255,.18);font:600 11px var(--sans);flex:0 0 auto}
+.e-share-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.e-share-tag{font:600 11px var(--sans);padding:2px 7px;border-radius:999px;background:rgba(0,0,0,.22);color:#fff;white-space:nowrap}
+.e-share-rline,.e-share-in-note{margin:0 0 8px;font-size:13px;line-height:1.45;color:var(--bub-ink)}
+.bub-ask.e-share-bub .e-share-why,.bub-ask.e-share-in-bub .e-share-in-why{margin:0 0 10px;font-size:12.5px;color:var(--bub-ink)}
+.e-share-in-row{display:flex;align-items:center;gap:8px;padding:8px 12px;margin:0 0 10px;border-radius:10px;background:var(--panel);border:1px solid var(--edge);font:13px var(--sans);color:var(--ink)}
+.e-share-dot{width:8px;height:8px;border-radius:999px;background:var(--accent);flex:0 0 auto}
+.e-share-row-t{flex:1 1 auto;min-width:0}
+.e-share-show{flex:0 0 auto;height:26px;padding:0 10px;font-size:12.5px}
+.e-share-preview{margin:0 0 10px;padding:10px;border-radius:8px;background:rgba(0,0,0,.16);color:var(--bub-ink)}
+.e-share-phead{display:flex;align-items:center;gap:8px;margin:0 0 6px;font:600 13.5px var(--sans)}
+.e-share-pshelf{margin-left:auto;font:500 11px var(--sans);opacity:.85}
+.e-share-pbody{font:13px/1.45 var(--sans);color:var(--bub-ink);white-space:pre-wrap}
+.e-share-pbody .tag{display:inline-block;margin-right:6px;padding:1px 5px;border-radius:4px;background:rgba(255,255,255,.18);font:600 10px var(--mono)}
 .modal{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:16px}
 /* A keyframe, not a transition - the element returns from display:none with no previous
    value. The way out is a copy on the dismiss tier (.e-gone), which the next surface to open
