@@ -39,7 +39,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 165 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 11);
+const EXPECTED = 166 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 12);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -891,8 +891,11 @@ try {
     await until(() => pw.visible);
     SH.__rw.config(() => ({ provider: "openai", endpoint: "", model: "m", key: "k", managed: {} }));
     SH.__rw.result("Reworded before stop.");
+    const stopCallsAt = pw.calls.length;
     await deskAdapter.ask("etiuda:signin-out");
     SGN.signinNow();
+    const stopCalls = pw.calls.slice(stopCallsAt);
+    const hiddenOnStop = pw.visible === false && stopCalls.join(" ") === "hide";
     const asksBefore = desk.sent.filter(a => a[0] === "etiuda:pick-ask").length;
     const clipsBefore = clip.length;
     const caretBefore = caret.runs.length;
@@ -908,7 +911,7 @@ try {
     const rReword = await pickerPage.E_PICK.reword({ act: "spelling", words: "draft" });
     const asksAfter = desk.sent.filter(a => a[0] === "etiuda:pick-ask").length;
     const emptyList = o => !!o && Array.isArray(o.rows) && o.rows.length === 0 && o.count === "";
-    const ipcBlocked = pw.visible === true && asksAfter === asksBefore && clip.length === clipsBefore
+    const ipcBlocked = hiddenOnStop && asksAfter === asksBefore && clip.length === clipsBefore
       && caret.runs.length === caretBefore && uses("c-lamp") === usesBefore
       && [rFind, rWho, rTab, rLang, rIntent, rRows].every(emptyList)
       && rCopy === false && rPut === false && !!rReword && rReword.ok === false;
@@ -925,12 +928,38 @@ try {
     await seatLab.seatDesk(deskAdapter, { force: true, expectWorks: true });
     SGN.signinNow();
     check(ipcBlocked && pageBlocked && closeWorks,
-      "2g1 a picker opened before a stop cannot find, switch, copy, paste or reword once stopped; page refuses askDesk; close still works: "
-      + JSON.stringify({ ipcBlocked, pageBlocked, closeWorks, asks: asksAfter - asksBefore, clips: clip.length - clipsBefore }));
+      "2g1 a picker opened before a stop hides without forcing focus, cannot find, switch, copy, paste or reword once stopped; page refuses askDesk; close still works: "
+      + JSON.stringify({ hiddenOnStop, stopCalls, ipcBlocked, pageBlocked, closeWorks, asks: asksAfter - asksBefore, clips: clip.length - clipsBefore }));
+
+    /* B-3a2b check 6: stop push hides a visible picker with hidePicker(false) (no blur), leaves a hidden picker untouched,
+       and a working-desk push leaves a visible picker open. */
+    const hidAt = pw.calls.length;
+    await deskAdapter.ask("etiuda:signin-out");
+    const hiddenUnchanged = pw.visible === false && pw.calls.slice(hidAt).length === 0;
+    await seatLab.seatDesk(deskAdapter, { force: true, expectWorks: true });
+    SGN.signinNow();
+    held.get("Control+Shift+Space")();
+    await until(() => pw.visible);
+    const workAt = pw.calls.length;
+    await deskAdapter.ask("etiuda:signin-check");
+    const workingUnchanged = pw.visible === true && pw.calls.slice(workAt).length === 0;
+    const visAt = pw.calls.length;
+    desk.calls.length = 0;
+    await deskAdapter.ask("etiuda:signin-out");
+    const visCalls = pw.calls.slice(visAt);
+    const visHidden = pw.visible === false && visCalls.join(" ") === "hide" && desk.calls.indexOf("focus") < 0;
+    const afterFind = JSON.parse(await pickerPage.E_PICK.find("lamp"));
+    const afterRefused = emptyList(afterFind);
+    await seatLab.seatDesk(deskAdapter, { force: true, expectWorks: true });
+    SGN.signinNow();
+    check(hiddenUnchanged && workingUnchanged && visHidden && afterRefused,
+      "2g2 B-3a2b: stop push hides visible picker with hidePicker(false) without blur and later pick IPC refuses; hidden picker and working desk see no change: "
+      + JSON.stringify({ hiddenUnchanged, workingUnchanged, visHidden, visCalls, afterRefused }));
 
     if (process.env.ETIUDA_PLANTS === "off") {
       console.log("  SKIP  2g1p1 lifting plant:picker-ipc-works lets a stopped picker copy and find (ETIUDA_PLANTS=off)");
       console.log("  SKIP  2g1p2 lifting plant:pick-ask-works lets answerPick return cards while stopped (ETIUDA_PLANTS=off)");
+      console.log("  SKIP  2g2p1 lifting plant:stop-hide-picker leaves a visible picker open after stop (ETIUDA_PLANTS=off)");
     } else {
       const mainPath = path.join(ROOT, "shell", "main.js");
       const mainBytes = fs.readFileSync(mainPath);
@@ -1009,6 +1038,60 @@ try {
       }
       check(pkIdx >= 0 && pkTurned && fs.readFileSync(pickPath).equals(pickBytes),
         "2g1p2 lifting plant:pick-ask-works lets answerPick return cards while deskWorks() is false: " + JSON.stringify({ hit: pkIdx >= 0, pkTurned }));
+
+      const hIdx = mainLines.findIndex(l => l.indexOf("plant:stop-hide-picker") >= 0);
+      let hideTurned = false;
+      if (hIdx >= 0) {
+        const plantedLines = mainLines.slice();
+        plantedLines.splice(hIdx, 1);
+        const udH = path.join(LAB, "picker-hide-plant");
+        fs.mkdirSync(udH, { recursive: true });
+        fs.writeFileSync(path.join(udH, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: path.join(LAB, "catalogs") } }), "utf8");
+        const winsH = [], onH = {}, invH = {};
+        const mkWH = () => {
+          const w = { calls: [], sent: [], visible: false, destroyed: false, focused: false, on: {} };
+          const wcOnce = {}, wcOn = {};
+          const fire = (ev, ...a) => { (wcOnce[ev] || []).splice(0).forEach(fn => fn(...a)); (wcOn[ev] || []).forEach(fn => fn(...a)); };
+          w.webContents = anything({ id: winsH.length + 1, send: (...a) => { w.sent.push(a); if (w.route) w.route(...a); },
+            on: (ev, fn) => { (wcOn[ev] = wcOn[ev] || []).push(fn); }, once: (ev, fn) => { (wcOnce[ev] = wcOnce[ev] || []).push(fn); },
+            setWindowOpenHandler() {}, getURL: () => "" });
+          w.self = anything({ webContents: w.webContents, on: (ev, fn) => { (w.on[ev] = w.on[ev] || []).push(fn); }, once() {},
+            isDestroyed: () => w.destroyed, isVisible: () => w.visible, isMinimized: () => false, isMaximized: () => false,
+            show: () => { w.visible = true; }, focus: () => { w.focused = true; }, hide: () => { w.visible = false; },
+            blur() {}, destroy: () => { w.destroyed = true; }, restore() {}, center() {}, setBounds() {}, getBounds: () => ({ x: 0, y: 0, width: 600, height: 424 }),
+            loadFile: () => setImmediate(() => fire("did-finish-load")), loadURL: () => setImmediate(() => fire("did-finish-load")) });
+          winsH.push(w);
+          return w.self;
+        };
+        const heldH = new Map();
+        const elH = Object.assign({}, electron, {
+          app: Object.assign({}, electron.app, { getPath: n => (n === "documents" ? DOCS : udH) }),
+          ipcMain: { on: (ch, fn) => { onH[ch] = fn; }, handle: (ch, fn) => { invH[ch] = fn; } },
+          BrowserWindow: new Proxy(function () {}, { construct: () => mkWH(),
+            get: (t, k) => k === "fromWebContents" ? () => null : k === "getAllWindows" ? () => winsH.map(x => x.self) : undefined }),
+          clipboard: { writeText() {}, readText: () => "" },
+          globalShortcut: { register: (a, fn) => { heldH.set(a, fn); return true; }, unregister: a => heldH.delete(a), unregisterAll: () => heldH.clear(), setSuspended() {} },
+          shell: seatLab.labShell(),
+        });
+        seatLab.withSigninLab(() => new Function("require", "__dirname", "__filename", "module", "exports", "console", plantedLines.join("\n"))(
+          n => (n === "electron" ? elH : (n === "node:fs" || n === "fs") ? signinGuard.shellFs : n === "node:child_process" ? cpStub : nodeRequire(n)),
+          path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet));
+        await until(() => winsH.length > 0 && heldH.has("Control+Shift+Space"), 5000);
+        const dH = winsH[0];
+        const dEvH = () => ({ sender: dH.webContents, senderFrame: ENGINE, returnValue: undefined });
+        dH.route = (ch, n, op) => {
+          if (ch === "etiuda:pick-ask") setImmediate(() => onH["etiuda:pick-answer"](dEvH(), n, JSON.stringify({ rows: [], words: {}, look: {} })));
+        };
+        const adH = { ud: udH, sync: (ch, ...a) => { const e = dEvH(); if (onH[ch]) onH[ch](e, ...a); return e.returnValue; },
+          ask: (ch, ...a) => Promise.resolve(invH[ch] ? invH[ch](dEvH(), ...a) : undefined) };
+        await seatLab.seatDesk(adH, { force: true, expectWorks: true });
+        heldH.get("Control+Shift+Space")();
+        await until(() => winsH.length > 1 && winsH[1].visible, 5000);
+        await adH.ask("etiuda:signin-out");
+        hideTurned = winsH[1].visible === true;
+      }
+      check(hIdx >= 0 && hideTurned && fs.readFileSync(mainPath).equals(mainBytes),
+        "2g2p1 lifting plant:stop-hide-picker leaves a visible picker open after stop: " + JSON.stringify({ hit: hIdx >= 0, hideTurned }));
     }
   }
 

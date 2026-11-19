@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 289;
+const PLANTS = 295;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 204 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 207 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -4843,6 +4843,357 @@ CASES.pickAskDoor = async (s, pickSwap) => {
     if (!hadWin) delete globalThis.window; else globalThis.window = prevWin;
   }
 };
+
+/* B-3a2b checks 1 to 5: at the stop's instant on a live working page, pending writes flush once before the door rises,
+   a failed or throwing flush still raises the door with pending retry state intact, half-written reply fields and unsaved edits
+   stay untouched, the way-out button is reachable and pressable by keyboard at the instant, a returning seat lowers the door and
+   plays waiting callbacks once, a working view raises/flushes nothing and a second stopped view repaints without flushing again. */
+CASES.stopInstant = async (s, swap) => {
+  const dir = pathToFileURL(path.join(ROOT, "src", "modules")).href + "/";
+  const ST_SRC = fs.readFileSync(path.join(ROOT, "src", "modules", "storage.js"), "utf8");
+  const KD_SRC = fs.readFileSync(path.join(ROOT, "src", "modules", "keydown.js"), "utf8");
+  const HK = await import(dir + "hooks.js");
+  let sgnText = PAGE;
+  if (swap) {
+    if (sgnText.split(swap[0]).length !== 2) throw new Error("plant anchor not in signin.js once: " + swap[0]);
+    sgnText = sgnText.replace(swap[0], swap[1]);
+  }
+  const hadWin = "window" in globalThis, prevWin = globalThis.window;
+  const hadDoc = "document" in globalThis, prevDoc = globalThis.document;
+  const hadSyncNotice = "syncSaveNotice" in HK.hooks, prevSyncNotice = HK.hooks.syncSaveNotice;
+  const hadThrowCalls = "__b3a2bFlushThrows" in globalThis, prevThrowCalls = globalThis.__b3a2bFlushThrows;
+  try {
+    HK.hooks.syncSaveNotice = () => {};
+    const events = [], patches = [], classes = new Set();
+    let onSigninCb = null, closePickerCalls = 0, failPatch = false;
+    const seatedView = {
+      offered: ["microsoft", "google"], signedIn: "microsoft", code: CODE, seat: "held",
+      works: true, registered: true, online: true, now: NOW, until: NOW + DAY_MS, ended: 0, stoppedAt: 0,
+      holding: { on: "own", ends: NOW + 30 * DAY_MS },
+    };
+    const stillWorkingView = Object.assign({}, seatedView, { ended: NOW + 100 });
+    const stoppedView = {
+      offered: ["microsoft", "google"], signedIn: "microsoft", code: CODE, seat: "lapsed",
+      works: false, registered: true, online: true, now: NOW + DAY_MS + 1000, until: NOW + DAY_MS, ended: 0, stoppedAt: NOW + DAY_MS,
+      holding: { on: "own", ends: NOW + DAY_MS },
+    };
+    const stoppedAgainView = Object.assign({}, stoppedView, { said: "unreached" });
+    let cur = seatedView;
+    const replyField = { tagName: "TEXTAREA", id: "replyDraft", value: "Half-written reply to customer" };
+    let fsHidden = true;
+    const fsEl = {
+      id: "firstSignin",
+      innerHTML: "",
+      attrs: {},
+      get hidden() { return fsHidden; },
+      set hidden(v) {
+        const next = !!v;
+        if (fsHidden && !next) events.push("door");
+        fsHidden = next;
+      },
+      setAttribute(k, v) { this.attrs[k] = v; },
+      contains: () => false,
+      querySelector: () => null,
+    };
+    globalThis.document = {
+      visibilityState: "visible",
+      activeElement: replyField,
+      body: { classList: { add: c => classes.add(c), remove: c => classes.delete(c), contains: c => classes.has(c) } },
+      addEventListener() {},
+      removeEventListener() {},
+      querySelector: sel => (sel === "#firstSignin" ? fsEl : sel === "#replyDraft" ? replyField : null),
+    };
+    globalThis.window = {
+      addEventListener() {},
+      removeEventListener() {},
+      E_HOST: {
+        deskRead: () => "{}",
+        deskSave: () => true,
+        deskPatch: (json, all) => {
+          events.push("flush");
+          if (failPatch) throw new Error("disk full");
+          patches.push({ data: JSON.parse(json), all: !!all });
+          return true;
+        },
+        signinState: () => cur,
+        onSignin: fn => { onSigninCb = fn; },
+        closePicker: () => { closePickerCalls++; },
+      },
+    };
+    const storageUrl = "data:text/javascript;base64," + Buffer.from(ST_SRC.replace(/from "\.\//g, 'from "' + dir)).toString("base64");
+    const ST = await import(storageUrl);
+    const signinUrl = "data:text/javascript;base64," + Buffer.from(
+      sgnText.replace(/from "\.\/storage\.js"/g, 'from "' + storageUrl + '"').replace(/from "\.\//g, 'from "' + dir)
+    ).toString("base64");
+    const pg = await import(signinUrl);
+
+    pg.wireSignin();
+    pg.bootFirstSignin();
+    const startsWorking = pg.deskWorks() === true && pg.firstSigninStands() === false && fsEl.hidden === true && typeof onSigninCb === "function";
+
+    /* Check 4a: view staying works:true raises nothing and flushes nothing. */
+    ST.lsSet("ePendingEdit", "unsaved-value-1");
+    cur = stillWorkingView;
+    onSigninCb(stillWorkingView);
+    const workingQuiet = events.length === 0 && patches.length === 0 && pg.firstSigninStands() === false && fsEl.hidden === true;
+
+    /* Check 1: stop instant flushes pending edit once BEFORE raising door; reply field and edit stay intact. */
+    cur = stoppedView;
+    onSigninCb(stoppedView);
+    const flushBeforeDoor = events.length === 2 && events[0] === "flush" && events[1] === "door"
+      && patches.length === 1 && patches[0].data.ePendingEdit === "unsaved-value-1" && patches[0].all === true;
+    const doorStood = pg.firstSigninStands() === true && pg.firstSigninOpenNow() === true && fsEl.hidden === false
+      && classes.has("e-first-signin") && closePickerCalls === 1;
+    const workUntouched = replyField.value === "Half-written reply to customer" && ST.lsGet("ePendingEdit") === "unsaved-value-1";
+
+    /* Check 4b: second stopped view while door stands repaints and does not flush again. */
+    cur = stoppedAgainView;
+    onSigninCb(stoppedAgainView);
+    const noDoubleFlush = patches.length === 1 && events.length === 2 && pg.firstSigninOpenNow() === true;
+
+    /* Check 5: way-out button is in the stopped door and reachable + pressable by keyboard (Tab, Enter/Space). */
+    const hasWayOut = fsEl.innerHTML.includes("data-door-save");
+    let wayOutKbdOk = false;
+    {
+      const capSlice = decl(KD_SRC, "function wireCaptureKeydown(");
+      const globSlice = decl(KD_SRC, "function wireGlobalKeydown(");
+      const capLs = [], globLs = [];
+      let focused = null;
+      const btnBuy = { tagName: "BUTTON", id: "buyBtn", focus() { focused = btnBuy; } };
+      const btnSave = { tagName: "BUTTON", id: "saveBtn", dataset: { doorSave: "" }, focus() { focused = btnSave; } };
+      const doorEl = { id: "firstSignin", contains: el => el === btnBuy || el === btnSave };
+      const kDoc = { activeElement: replyField, body: { classList: { contains: () => false } } };
+      const tabT = (card, back) => {
+        const els = [btnBuy, btnSave];
+        const at = kDoc.activeElement;
+        if (!card || !card.contains(at)) return back ? els[1] : els[0];
+        return back ? (at === els[0] ? els[1] : els[0]) : (at === els[1] ? els[0] : els[1]);
+      };
+      const off = () => false;
+      const own = {
+        window: {}, document: kDoc,
+        addEventListener: (k, fn, cap) => { if (k === "keydown") (cap ? capLs : globLs).push(fn); },
+        $: sel => (sel === "#firstSignin" ? doorEl : null),
+        scCaptureId: "", SC_DEFS: [{ id: "escape", fixed: false, inField: true }], intentEl: replyField,
+        tourActive: off, tourHasFocus: off, openCover: () => null, modalFront: off, factsPanelOpen: off,
+        eventMatchesAction: (e, id) => id === "escape" && e.key === "Escape", eHost: () => ({}),
+        hooks: { runShortcut: () => true }, noteUndoTyping: off, takeStandingUndo: off, typingInField: off,
+        firstSigninOpenNow: () => pg.firstSigninOpenNow(), tabTargetIn: tabT,
+        pageKeyScroll: off, lanesPageScroller: () => null, closeLooseOverlays: off, focusRingOn: () => true,
+      };
+      new Function("scope", "with(scope){\n" + capSlice + "\n" + globSlice + "\nwireCaptureKeydown();\nwireGlobalKeydown();\n}")(
+        new Proxy(own, { has: () => true, get: (t, k) => (k === Symbol.unscopables ? undefined : k in t ? t[k] : globalThis[k]) })
+      );
+      const fire = ev => {
+        const e = Object.assign({
+          key: "", code: "", ctrlKey: false, altKey: false, metaKey: false, shiftKey: false, repeat: false, target: own.window,
+          defaultPrevented: false, stopped: false, immediateStopped: false,
+          preventDefault() { this.defaultPrevented = true; },
+          stopPropagation() { this.stopped = true; },
+          stopImmediatePropagation() { this.immediateStopped = true; this.stopped = true; },
+        }, ev);
+        for (const fn of capLs) { fn(e); if (e.immediateStopped) break; }
+        if (!e.stopped) for (const fn of globLs) fn(e);
+        return e;
+      };
+      fire({ key: "Tab" });
+      kDoc.activeElement = focused;
+      fire({ key: "Tab" });
+      kDoc.activeElement = focused;
+      const enterEv = fire({ key: "Enter", target: btnSave });
+      const spaceEv = fire({ key: " ", target: btnSave });
+      const escEv = fire({ key: "Escape", target: btnSave });
+      wayOutKbdOk = focused === btnSave && !enterEv.defaultPrevented && !spaceEv.defaultPrevented
+        && !enterEv.stopped && !spaceEv.stopped && escEv.defaultPrevented;
+    }
+
+    /* Check 3: returning seat (works:true) lowers the door, keeps ended & fields unchanged, and plays waiting callbacks once. */
+    let waited = 0;
+    pg.whenDoorLowers(() => { waited++; });
+    const heldWhileStopped = waited === 0;
+    cur = seatedView;
+    onSigninCb(seatedView);
+    onSigninCb(seatedView);
+    const returnedOk = heldWhileStopped && waited === 1 && pg.firstSigninStands() === false && pg.firstSigninOpenNow() === false
+      && fsEl.hidden === true && !classes.has("e-first-signin")
+      && pg.deskDoorState(pg.signinNow()).ended === 0
+      && replyField.value === "Half-written reply to customer" && ST.lsGet("ePendingEdit") === "unsaved-value-1";
+
+    /* Check 2a: failed flush (deskPatch throws) still raises door and keeps pending edit in storage's own retry. */
+    events.length = 0;
+    failPatch = true;
+    ST.lsSet("ePendingEdit2", "unsaved-retry");
+    cur = stoppedView;
+    onSigninCb(stoppedView);
+    const failedStorageFlushOk = events.length === 2 && events[0] === "flush" && events[1] === "door"
+      && pg.firstSigninStands() === true && fsEl.hidden === false
+      && ST.eSaveTrouble() !== null && ST.lsGet("ePendingEdit2") === "unsaved-retry"
+      && replyField.value === "Half-written reply to customer";
+
+    /* Check 2b: eDeskFlush itself throwing does not stop the door from rising. */
+    globalThis.__b3a2bFlushThrows = 0;
+    const throwStorageUrl = "data:text/javascript;base64," + Buffer.from(
+      'export function eDeskFlush(){ globalThis.__b3a2bFlushThrows++; throw new Error("flush exploded"); }\n'
+    ).toString("base64");
+    const throwSigninUrl = "data:text/javascript;base64," + Buffer.from(
+      sgnText.replace(/from "\.\/storage\.js"/g, 'from "' + throwStorageUrl + '"').replace(/from "\.\//g, 'from "' + dir)
+    ).toString("base64");
+    const pgThrow = await import(throwSigninUrl);
+    fsHidden = true; classes.clear();
+    let cb2 = null, cur2 = seatedView;
+    globalThis.window.E_HOST = { signinState: () => cur2, onSignin: fn => { cb2 = fn; } };
+    pgThrow.wireSignin();
+    cur2 = stoppedView;
+    cb2(stoppedView);
+    const throwFlushOk = globalThis.__b3a2bFlushThrows === 1 && pgThrow.firstSigninStands() === true
+      && fsEl.hidden === false && replyField.value === "Half-written reply to customer";
+
+    return startsWorking && workingQuiet && flushBeforeDoor && doorStood && workUntouched
+      && noDoubleFlush && hasWayOut && wayOutKbdOk && returnedOk && failedStorageFlushOk && throwFlushOk;
+  } finally {
+    if (!hadSyncNotice) delete HK.hooks.syncSaveNotice; else HK.hooks.syncSaveNotice = prevSyncNotice;
+    if (!hadThrowCalls) delete globalThis.__b3a2bFlushThrows; else globalThis.__b3a2bFlushThrows = prevThrowCalls;
+    if (!hadWin) delete globalThis.window; else globalThis.window = prevWin;
+    if (!hadDoc) delete globalThis.document; else globalThis.document = prevDoc;
+  }
+};
+
+/* B-3a2b check 6 (shell side): tellSignin hides a visible picker with hidePicker(false) (focus not forced) when
+   signinWorksNow() is false, leaves a hidden picker untouched, and does not touch a visible picker when working. */
+CASES.stopHidePickerShell = (s, swap) => {
+  let text = decl(MAIN, "function tellSignin(") + "\n" + decl(MAIN, "function hidePicker(");
+  if (swap) {
+    if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in tellSignin once: " + swap[0]);
+    text = text.replace(swap[0], swap[1]);
+  }
+  const run = (works, visible) => {
+    const sent = [], pickCalls = [];
+    let isVis = visible;
+    const pickWin = {
+      isDestroyed: () => false,
+      isVisible: () => isVis,
+      blur: () => { pickCalls.push("blur"); },
+      hide: () => { pickCalls.push("hide"); isVis = false; },
+    };
+    const theWindow = {
+      isDestroyed: () => false,
+      webContents: { send: (ch, v) => { sent.push([ch, v]); } },
+    };
+    const fn = new Function("theWindow", "signinView", "signinWorksNow", "pickWin", "pickTour", "pickTourGo", "askDesk",
+      text + "\ntellSignin();");
+    fn(theWindow, () => ({ works }), () => works, pickWin, false, "", () => {});
+    return { sent, pickCalls, visible: isVis };
+  };
+  const stoppedVis = run(false, true);
+  const stoppedHid = run(false, false);
+  const workingVis = run(true, true);
+  return stoppedVis.visible === false && stoppedVis.pickCalls.join() === "hide" && stoppedVis.sent.length === 1 && stoppedVis.sent[0][1].works === false
+    && stoppedHid.visible === false && stoppedHid.pickCalls.length === 0 && stoppedHid.sent.length === 1
+    && workingVis.visible === true && workingVis.pickCalls.length === 0 && workingVis.sent.length === 1 && workingVis.sent[0][1].works === true;
+};
+
+/* B-3a2b check 7: the browser build's door. With no host, deskWorks() is false, firstSigninDue() and doorHolds() are true,
+   bootFirstSignin raises the door in EN and PL with no provider buttons, no Not now, no Escape bypass and data-door-save kept
+   inert; offers and keyboard hold; document/field contents stay untouched; with a seated host stand-in the page works as on 1f141580. */
+CASES.browserDoor = async (s, swap) => {
+  const dir = pathToFileURL(path.join(ROOT, "src", "modules")).href + "/";
+  const ST = await import(dir + "storage.js");
+  const KD_SRC = fs.readFileSync(path.join(ROOT, "src", "modules", "keydown.js"), "utf8");
+  const pg = await freshSignin(swap);
+  const hadWin = "window" in globalThis, prevWin = globalThis.window;
+  const hadDoc = "document" in globalThis, prevDoc = globalThis.document;
+  const prevLang = ST.lsGet("eUiLang");
+  try {
+    const classes = new Set();
+    const field = { tagName: "TEXTAREA", value: "kept text" };
+    const fsEl = { hidden: true, innerHTML: "", attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, contains: () => false, querySelector: () => null };
+    globalThis.document = {
+      activeElement: null,
+      body: { classList: { add: c => classes.add(c), remove: c => classes.delete(c), contains: c => classes.has(c) } },
+      querySelector: sel => (sel === "#firstSignin" ? fsEl : null),
+    };
+
+    /* No window / no E_HOST / host without signinState: deskWorks false, firstSigninDue true, doorHolds true before boot. */
+    delete globalThis.window;
+    const noWinOk = pg.deskWorks() === false && pg.firstSigninDue() === true && pg.doorHolds() === true;
+    globalThis.window = {};
+    const noHostOk = pg.deskWorks() === false && pg.firstSigninDue() === true && pg.doorHolds() === true;
+    globalThis.window = { E_HOST: {} };
+    const bareHostOk = pg.deskWorks() === false && pg.firstSigninDue() === true && pg.doorHolds() === true;
+
+    /* Offers wait behind doorHolds(); boot raises the browser door. */
+    delete globalThis.window;
+    let waitedCalls = 0;
+    pg.whenDoorLowers(() => { waitedCalls++; });
+    pg.wireSignin();
+    pg.bootFirstSignin();
+    const opened = pg.firstSigninOpenNow() === true && pg.firstSigninStands() === true && fsEl.hidden === false
+      && classes.has("e-first-signin") && waitedCalls === 0;
+
+    /* Words in both EN and PL through t(), no providers, no Not now, data-door-save kept inert. */
+    ST.lsSet("eUiLang", "en");
+    pg.paintFirstSignin();
+    const enHtml = fsEl.innerHTML;
+    const enOk = enHtml.includes("Etiuda works in its desktop app.") && enHtml.includes("In a browser, no catalog opens.")
+      && enHtml.includes("Save your own work as files") && enHtml.includes("data-door-save") && /\bdisabled\b/.test(enHtml)
+      && !enHtml.includes("sgn-provs") && !enHtml.includes("data-e-provider")
+      && !enHtml.includes("firstSigninSkip") && !enHtml.includes("Not now") && !enHtml.includes("fs-skip");
+
+    ST.lsSet("eUiLang", "pl");
+    pg.paintFirstSignin();
+    const plHtml = fsEl.innerHTML;
+    const plOk = plHtml.includes("Etiuda dzia\u0142a w aplikacji na komputer.") && plHtml.includes("W przegl\u0105darce \u017caden katalog si\u0119 nie otwiera.")
+      && plHtml.includes("Zapisz w\u0142asn\u0105 prac\u0119 jako pliki") && plHtml.includes("data-door-save") && /\bdisabled\b/.test(plHtml)
+      && !plHtml.includes("sgn-provs") && !plHtml.includes("data-e-provider")
+      && !plHtml.includes("firstSigninSkip") && !plHtml.includes("Nie teraz") && !plHtml.includes("fs-skip");
+
+    /* Pushing a working view with no host still keeps the door standing; field content untouched. */
+    pg.signinChanged({ offered: ["microsoft"], signedIn: "microsoft", works: true }, false);
+    const holdsWithoutHost = pg.deskWorks() === false && pg.firstSigninOpenNow() === true && waitedCalls === 0 && field.value === "kept text";
+
+    /* Keyboard blocks Escape while browser door stands. */
+    let escBlocked = false;
+    {
+      const globSlice = decl(KD_SRC, "function wireGlobalKeydown(");
+      let kdListener = null, escRan = 0;
+      const off = () => false;
+      const own = {
+        document: { activeElement: null, body: { classList: { contains: off } } },
+        addEventListener: (k, fn) => { if (k === "keydown") kdListener = fn; },
+        $: sel => (sel === "#firstSignin" ? fsEl : null), scCaptureId: "", SC_DEFS: [{ id: "escape", fixed: false, inField: true }],
+        intentEl: null, tourActive: off, tourHasFocus: off, openCover: () => null, modalFront: off, factsPanelOpen: off,
+        eventMatchesAction: (e, id) => id === "escape" && e.key === "Escape", eHost: off, hooks: { runShortcut: () => { escRan++; } },
+        noteUndoTyping: off, takeStandingUndo: off, typingInField: off, firstSigninOpenNow: () => pg.firstSigninOpenNow(), tabTargetIn: () => null,
+      };
+      new Function("scope", "with(scope){\n" + globSlice + "\nwireGlobalKeydown();\n}")(
+        new Proxy(own, { has: () => true, get: (t, k) => (k === Symbol.unscopables ? undefined : k in t ? t[k] : globalThis[k]) })
+      );
+      let prevented = false;
+      if (kdListener) kdListener({ key: "Escape", ctrlKey: false, altKey: false, metaKey: false, shiftKey: false, repeat: false,
+        preventDefault() { prevented = true; }, stopPropagation() {} });
+      escBlocked = prevented === true && escRan === 0;
+    }
+
+    /* Seated host stand-in control: fresh module behaves as on 1f141580 (no door raised, offers play). */
+    const pgSeated = await freshSignin(swap);
+    const seated = { offered: ["microsoft"], signedIn: "microsoft", code: CODE, works: true, registered: true, online: true,
+      now: NOW, until: NOW + DAY_MS, holding: { on: "trial", ends: NOW + DAY_MS } };
+    fsEl.hidden = true; fsEl.innerHTML = ""; classes.clear();
+    globalThis.window = { E_HOST: { signinState: () => seated } };
+    pgSeated.signinNow();
+    pgSeated.bootFirstSignin();
+    let ranAtOnce = 0;
+    pgSeated.whenDoorLowers(() => { ranAtOnce++; });
+    const seatedOk = pgSeated.deskWorks() === true && pgSeated.firstSigninDue() === false && pgSeated.doorHolds() === false
+      && pgSeated.firstSigninStands() === false && fsEl.hidden === true && ranAtOnce === 1;
+
+    return noWinOk && noHostOk && bareHostOk && opened && enOk && plOk && holdsWithoutHost && escBlocked && seatedOk;
+  } finally {
+    if (prevLang === null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", prevLang);
+    if (!hadWin) delete globalThis.window; else globalThis.window = prevWin;
+    if (!hadDoc) delete globalThis.document; else globalThis.document = prevDoc;
+  }
+};
 const LEGS = [
   ["ds1a", "offered", "as shipped no client id is configured and nothing is offered; a configured table offers what it configures, in order"],
   ["ds1b", "noHintStart", "an invitation naming providers carries no sign-in hint: the team's start is retired"],
@@ -5037,6 +5388,9 @@ const LEGS = [
   ["dsg5", "offersWait", "B-3a2a: while the door stands, every catalog intake channel (boot offer with asked:true, listing, host watch, browser watch, window drop, importCatalogText) waits and plays when deskWorks() turns true, and importCatalogHere is ignored"],
   ["dsg6", "doorKeyboard", "B-3a2a: over the standing door, keyboard answers only the door (Tab/Shift+Tab reach data-door-save, Enter/Space press it natively; Escape, Ctrl+Z standing undo, shortcuts, chords and typing are held back; save handlers stay unguarded)"],
   ["dsg7", "pickAskDoor", "B-3a2a: answerPick refuses every op when deskWorks() is false without reading catalog or layer, returning a nothing-to-show refusal shape, and answers as before when deskWorks() is true"],
+  ["dsg8", "stopInstant", "B-3a2b: at the stop's instant pending writes flush once before the door rises (failed/throwing flush still raises door with retry intact), fields stay untouched, way-out is reachable by keyboard, return lowers door and plays waits once, working push and second stop do not flush again"],
+  ["dsg9", "stopHidePickerShell", "B-3a2b: shell tellSignin hides a visible picker with hidePicker(false) (focus not forced) when signinWorksNow() is false, leaving hidden picker and working desk unchanged"],
+  ["dsg10", "browserDoor", "B-3a2b: plain browser build with no host has deskWorks false, firstSigninDue and doorHolds true, raises browser door in EN and PL with inert data-door-save and no provider/Not now/Escape, and seated host stand-in works as before"],
 ];
 for (let [id, name, line] of LEGS) {
   let ok = false;
@@ -5738,6 +6092,13 @@ if (!PLANTS_OFF) {
     const r = await plantRed(async () => CASES.pickAskDoor(S, [from, ""]));
     check(r.red, "dsgp20 plant " + from.trim().slice(0, 50) + " turns pickAskDoor red" + said(r));
   }
+  /* B-3a2b plants: stop's instant flush and door raise, shell picker hide, and browser build's door. */
+  await plantWire("dsgp21", ["    try{ eDeskFlush(); }catch(e){} /* plant:stop-flush */\n", ""], "stopInstant");
+  await plantWire("dsgp22", ["    openFirstSignin(); /* plant:stop-raise-door */\n", ""], "stopInstant");
+  await plantWire("dsgp23", ["  if (!signinWorksNow()) hidePicker(false); /* plant:stop-hide-picker */\n", ""], "stopHidePickerShell");
+  await plantWire("dsgp24", ["    if(!signinHost()) return true; /* plant:door-due-browser */\n", ""], "browserDoor");
+  await plantWire("dsgp25", ["  if(!signinHost()) return true; /* plant:door-holds-browser */\n", ""], "browserDoor");
+  await plantWire("dsgp26", ["  if(!signinHost()){ el.innerHTML=doorBrowserHtml(); hugDottedGround(el); return; } /* plant:door-paint-browser */\n", ""], "browserDoor");
   const gated = MAIN.replace("function writeBranch(stem, text) {\n", "function writeBranch(stem, text) {\n  if (!signinView().signedIn) return { ok: false };\n");
   check(gated !== MAIN && outsideNames(gated).slice().sort().join() !== expectOutside.slice().sort().join(),
     "dsp14 plant a sign-in gate on the desk file's write turns ds5a red");
