@@ -18,7 +18,7 @@ const SETTINGS_PATH = path.join(ROOT, "src", "modules", "settings.js");
 const TEMPLATE_PATH = path.join(ROOT, "src", "template.html");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
-const CHECKS = 32, PLANTS = 23;
+const CHECKS = 32, PLANTS = 24;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -694,6 +694,9 @@ if (!PLANTS_OFF) {
     "noName");
   await plant("ddp15", SIGNIN_PATH,
     ["if(d.getFullYear()!==new Date(now>0?now:Date.now()).getFullYear()) opt.year=\"numeric\"; /* plant:door-day-year */", "if(false) opt.year=\"numeric\"; /* plant:door-day-year */"],
+    "doorDates");
+  await plant("ddp24", SIGNIN_PATH,
+    ["const opt={day:\"numeric\", month:\"long\"};", "const opt={day:\"numeric\", month:\"short\"};"],
     "doorDates");
   /* The no-name forms: each ternary on the lead's name, put back to the named sentence alone. */
   await plant("ddp20", SIGNIN_PATH,
