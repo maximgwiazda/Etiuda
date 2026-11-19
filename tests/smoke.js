@@ -1359,7 +1359,11 @@ const t0 = Date.now();
      The subject is the retreat, so the sweep starts above every rung and walks down. */
   await sized(p, 1500, 950, "the second row's shed, wide first", 30000);
   let shedAt = 0, roomy = null, pinch = null;
-  for (let w = 620; w >= 470 && !shedAt; w -= 2) {
+  /* FROM 900px, not 620: the seated desk carries the sign-in button in this row, 40px more than the
+     unseated page, so its ladder has already retreated by 620px and a sweep starting there never
+     sees a roomy width. Wider, the sweep finds the width the seated desk is roomy at. The relations
+     below are unchanged. */
+  for (let w = 900; w >= 470 && !shedAt; w -= 2) {
     await sized(p, w, 950, "the second row's shed sweep", 30000);
     const r = await rowShed();
     if (r.theme && r.facts) roomy = Object.assign({ w }, r);
