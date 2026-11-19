@@ -3333,15 +3333,16 @@ function writeBranch(stem, text) {
     return branchHold(stem, text);
   }
 }
-/* A card this desk has opened (board 1013, piece 4), kept as its own. `opened` is {from, team, card}: the sender's desk id, the team,
-   and the card's text as openCardFrom gave it. It goes into this desk's own file for the catalog it belongs to (`catalogId` is
-   that catalog's id, the one the file's grew names), through writeBranch, so it is signed by this desk and sealed or sent
-   as any of its files are. The card carries from {desk: the sender, card: the card's id there}: a card field the catalog
+/* The verdict on keeping a card this desk has opened (board 1013, piece 4). It WRITES NOTHING: the page is the one writer of the desk's
+   file, so this says whether the card may be kept and what it would be, and the page writes it. `opened` is {from, team, card}: the sender's desk id, the team,
+   and the card's text as openCardFrom gave it. It would go into this desk's own file for the catalog it belongs to (`catalogId` is
+   that catalog's id, the one the file's grew names), and the page writes it through writeBranch. The card carries from {desk: the sender, card: the card's id there}: a card field the catalog
    format carries untouched (catalog-v2 v2Problems has no rule against an unknown card field, and the desk's signature covers the
    whole file), so the file still reads clean and Studio, which reads the file and its grew, groups kept cards by from. A card whose
    id this file already uses is kept under a new id of the desk's own. Refused, with a reason and nothing written: not a card; no
-   key of its own; no file of its own for that catalog; a catalog marked private; a file that cannot be written here now.
-   A card already kept is not kept twice. Nothing is placed in the page's catalog: that is the page's. */
+   key of its own; no file of its own for that catalog; a catalog marked private; a file that cannot be written here now; a card
+   already kept (reason, with already: true). The verdict is {ok: true, card}, the card as it would be kept (from mark, any id
+   change applied), or {ok: false, reason}. */
 function keepSharedCard(opened, catalogId) {
   const no = why => ({ ok: false, reason: why });
   const sender = opened && typeof opened === "object" ? String(opened.from || "") : "";
@@ -3361,7 +3362,7 @@ function keepSharedCard(opened, catalogId) {
   const gate = branchGate(doc);
   if (gate.none) return no("card: that catalog is private on this desk, so a shared card is not kept in it"); /* plant:keep-private */
   if (gate.hold) return no("card: this desk cannot write that catalog's file just now");
-  if (doc.cards.some(c => !!c && !!c.from && c.from.desk === sender && c.from.card === card.id)) return { ok: true, already: true }; /* plant:keep-twice */
+  if (doc.cards.some(c => !!c && !!c.from && c.from.desk === sender && c.from.card === card.id)) return { ok: false, already: true, reason: "card: this card is already kept in that catalog" }; /* plant:keep-twice */
   /* The file must still read clean, and the format has no card without a shelf, so a card whose shelf or request tags this catalog
      lacks, or with no words in the primary language, is refused rather than written (catalog-v2 v2Problems says each of these). */
   const tagKind = {};
@@ -3376,10 +3377,7 @@ function keepSharedCard(opened, catalogId) {
   for (let n = 2; taken.has(local); n++) local = card.id + "-" + n;
   const mine = Object.assign({}, card, { id: local });
   mine.from = { desk: sender, card: card.id }; /* plant:keep-from */
-  doc.cards.push(mine);
-  const r = writeBranch(path.basename(held.file, ".ec"), JSON.stringify(doc));
-  if (!r || r.ok !== true || r.withheld || r.removed) return no("card: this desk's file for that catalog could not be written, so the card was not kept");
-  return { ok: true, kept: true, id: local, rev: r.rev };
+  return { ok: true, card: mine };
 }
 /* A card declined is not kept, and nothing is written or sent. */
 function declineSharedCard(opened) {

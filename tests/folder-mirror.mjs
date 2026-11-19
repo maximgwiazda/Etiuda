@@ -5746,10 +5746,10 @@ async function run() {
 
 
   /* -------------------------------------------------------------------------------------------------
-   * 1013k (board 1013, piece 4, the recipient's side): a card the desk has opened is kept into the desk's own file for the
-   * catalog it belongs to, signed by the desk, with a `from` mark naming the sender and the card; a decline writes nothing;
-   * a catalog the desk does not hold, an unreadable card and a private catalog are refused with a reason and nothing written;
-   * a card kept twice is kept once. The scene is a plain desk over a folder of its own, and each plant is lifted in a copy.
+   * 1013k (board 1013, piece 4, the recipient's side): the shell gives a VERDICT on a card the desk has opened and writes nothing
+   * (the page is the one writer of the desk's file): yes carries the card as it would be kept, with a `from` mark naming the
+   * sender and the card; a decline writes nothing; a catalog the desk does not hold, an unreadable card and a private catalog
+   * are refused with a reason; a card kept twice is kept once (the scene plays the page and writes the yes, as the page does). The scene is a plain desk over a folder of its own, and each plant is lifted in a copy.
    * ----------------------------------------------------------------------------------------------- */
   let keepN = 0;
   const KEEP_SENDER = "k-" + "ab".repeat(8), KEEP_TEAM = "t-" + "cd".repeat(8);
@@ -5774,7 +5774,14 @@ async function run() {
     const fromOf = (doc, cardId) => (doc.cards || []).filter(c => c && c.from && c.from.card === cardId && c.from.desk === KEEP_SENDER);
     const out = { wrote: !!wrote && wrote.ok === true, me: me.id, grew: LAMP_GREW };
     out.rev0 = read().rev;
+    const b0 = bytes(), l0 = listing();
     out.r1 = call("keepSharedCard", keepOpened(keepCard("c-shared", "Shared")), "lamp-shop");
+    out.noWrite1 = bytes().equals(b0) && listing() === l0;
+    /* the page's part: it writes the card the verdict named, into the file the verdict was about */
+    if (out.r1 && out.r1.ok === true && out.r1.card) {
+      const d1 = read(); d1.cards.push(out.r1.card);
+      d.api.writeBranch(stem, JSON.stringify(d1));
+    }
     out.doc1 = read();
     out.genuine1 = !!out.doc1.sig && d.api.branchGenuine(out.doc1) === true && out.doc1.sig.keyId === me.id;
     out.problems1 = V2.v2Problems(out.doc1);
@@ -5783,9 +5790,13 @@ async function run() {
     out.twice = fromOf(read(), "c-shared").length;
     out.twiceSame = bytes().equals(b1);
     const dec = call("declineSharedCard", keepOpened(keepCard("c-declined", "Declined")));
+    out.listing3 = listing();
     out.decline = { r: dec, same: bytes().equals(b1), listing: listing() };
+    const b3 = bytes();
     out.r4 = call("keepSharedCard", keepOpened(keepCard("c-desk", "Same id as the desk's own")), "lamp-shop");
-    out.doc4 = read();
+    out.noWrite4 = bytes().equals(b3);
+    const doc4 = read(); doc4.cards.push(out.r4 && out.r4.card ? out.r4.card : {});
+    out.doc4 = doc4;
     out.problems4 = V2.v2Problems(out.doc4);
     const b4 = bytes(), l4 = listing();
     out.r5 = call("keepSharedCard", keepOpened(keepCard("c-other", "Other")), "other-shop");
@@ -5806,24 +5817,25 @@ async function run() {
   {
     const k = keepScene();
     const c1 = (k.doc1.cards || []).filter(c => c && c.id === "c-shared")[0] || {};
-    check(k.wrote && k.r1 && k.r1.ok === true && k.r1.kept === true && JSON.stringify(c1.from) === JSON.stringify({ desk: KEEP_SENDER, card: "c-shared" })
-      && c1.title && c1.title.en === "Shared" && k.doc1.desk.id === k.me && JSON.stringify(k.doc1.grew) === JSON.stringify(k.grew),
-      "1013k-a a card kept lands in the recipient's own file for that catalog, carrying from {desk: the sender, card: the card's id}, its words as sent, and the file keeps its grew: " + JSON.stringify(k.r1) + ", from " + JSON.stringify(c1.from));
-    check(k.genuine1 && k.problems1.length === 0 && k.doc1.rev === k.rev0 + 1 && k.doc1.cards.length === 2 && k.doc1.cards[0].id === "c-desk",
-      "1013k-b the file stands signed by the recipient and the engine's reader finds no problem in it with the from mark on a card, its rev raised once and the desk's own card still there (rev " + k.rev0 + " to " + k.doc1.rev + ", problems " + JSON.stringify(k.problems1) + ")");
-    check(k.r2 && k.r2.ok === true && k.r2.already === true && k.twice === 1 && k.twiceSame,
-      "1013k-c a card kept twice is kept once, and the second keep writes nothing (" + JSON.stringify(k.r2) + ", cards from that sender and card " + k.twice + ")");
-    check(k.decline.r && k.decline.r.ok === true && k.decline.r.kept === false && k.decline.same,
-      "1013k-d a decline writes nothing: the file's bytes are as they were (" + JSON.stringify(k.decline.r) + ")");
+    const v1 = (k.r1 && k.r1.card) || {};
+    check(k.wrote && k.r1 && k.r1.ok === true && k.noWrite1 && JSON.stringify(v1.from) === JSON.stringify({ desk: KEEP_SENDER, card: "c-shared" })
+      && v1.title && v1.title.en === "Shared" && v1.id === "c-shared",
+      "1013k-a the verdict on a card that may be kept says yes with the card as it would be kept, carrying from {desk: the sender, card: the card's id} and its words as sent, and writes nothing (the file's bytes and folder are as they were): " + JSON.stringify(k.r1));
+    check(k.genuine1 && k.problems1.length === 0 && k.doc1.rev === k.rev0 + 1 && k.doc1.cards.length === 2 && k.doc1.cards[0].id === "c-desk" && JSON.stringify(c1.from) === JSON.stringify({ desk: KEEP_SENDER, card: "c-shared" }) && JSON.stringify(k.doc1.grew) === JSON.stringify(k.grew),
+      "1013k-b the file as the page writes it from the yes stands signed by the recipient and the engine's reader finds no problem in it with the from mark on a card, its rev raised once, its grew kept and the desk's own card still there (rev " + k.rev0 + " to " + k.doc1.rev + ", problems " + JSON.stringify(k.problems1) + ")");
+    check(k.r2 && k.r2.ok === false && k.r2.already === true && /already/.test(String(k.r2.reason)) && k.twice === 1 && k.twiceSame,
+      "1013k-c a card whose yes has been written is not given a second yes: the verdict refuses it as already kept and writes nothing (" + JSON.stringify(k.r2) + ", cards from that sender and card " + k.twice + ")");
+    check(k.decline.r && k.decline.r.ok === true && k.decline.r.kept === false && k.decline.same && k.decline.listing === k.listing3,
+      "1013k-d a decline stays a no-op and writes nothing: the file's bytes are as they were (" + JSON.stringify(k.decline.r) + ")");
     const ids4 = (k.doc4.cards || []).map(c => c.id), c4 = (k.doc4.cards || []).filter(c => c && c.from && c.from.card === "c-desk")[0] || {};
-    check(k.r4 && k.r4.ok === true && ids4.length === new Set(ids4).size && ids4.length === 3 && !!c4.from && c4.from.desk === KEEP_SENDER && c4.id !== "c-desk" && k.problems4.length === 0 && ids4.indexOf("c-desk") === 0,
-      "1013k-e a shared card whose id the desk already uses is kept under a new id of the desk's own, its from mark still naming the sender's card id, and the file still reads clean (" + JSON.stringify(ids4) + ", " + JSON.stringify(k.problems4) + ")");
+    check(k.r4 && k.r4.ok === true && k.noWrite4 && ids4.length === new Set(ids4).size && ids4.length === 3 && !!c4.from && c4.from.desk === KEEP_SENDER && c4.id !== "c-desk" && k.problems4.length === 0 && ids4.indexOf("c-desk") === 0,
+      "1013k-e the verdict on a shared card whose id the desk already uses names a new id of the desk's own and writes nothing, its from mark still naming the sender's card id, and the file with that card added still reads clean (" + JSON.stringify(ids4) + ", " + JSON.stringify(k.problems4) + ")");
     check(k.r5 && k.r5.ok === false && /holds no catalog/.test(String(k.r5.reason)) && k.unheld.same && k.unheld.listing,
-      "1013k-f a card for a catalog the recipient does not hold is refused with a plain reason and nothing is written (" + JSON.stringify(k.r5) + ")");
+      "1013k-f the verdict on a card for a catalog the recipient does not hold is a refusal with a plain reason, and nothing is written (" + JSON.stringify(k.r5) + ")");
     check(k.r6 && k.r6.ok === false && k.r6b && k.r6b.ok === false && /not a card/.test(String(k.r6.reason)) && k.unreadable.same && k.unreadable.listing,
       "1013k-g text that is not a card, and a card with no id, are refused with a reason and nothing is written (" + JSON.stringify([k.r6, k.r6b]) + ")");
     check(k.r7 && k.r7.ok === false && /private/.test(String(k.r7.reason)) && k.priv.same && k.priv.has === 0,
-      "1013k-h a card for a catalog marked private is refused with a plain reason, and the file keeps its bytes (" + JSON.stringify(k.r7) + ")");
+      "1013k-h the verdict on a card for a catalog marked private is a refusal with a plain reason, and the file keeps its bytes (" + JSON.stringify(k.r7) + ")");
   }
   {
     const k = keepScene();
@@ -5839,9 +5851,9 @@ async function run() {
   };
   await keepPlant("keep-private", "p1", k => !(k.r7 && k.r7.ok === false && /private/.test(String(k.r7.reason)) && k.priv.same));
   await keepPlant("keep-unheld", "p2", k => !(k.r5 && k.r5.ok === false && k.unheld.same && k.unheld.listing));
-  await keepPlant("keep-twice", "p3", k => k.twice !== 1 || !k.twiceSame);
+  await keepPlant("keep-twice", "p3", k => !(k.r2 && k.r2.ok === false && k.r2.already === true && k.twiceSame));
   await keepPlant("keep-shelf", "p5", k => !(k.r8 && k.r8.ok === false && k.misfit.same && k.misfit.problems.length === 0));
-  await keepPlant("keep-from", "p4", k => !((k.doc1.cards || []).some(c => c && c.id === "c-shared" && c.from && c.from.desk === KEEP_SENDER && c.from.card === "c-shared")));
+  await keepPlant("keep-from", "p4", k => !(k.r1 && k.r1.card && k.r1.card.from && k.r1.card.from.desk === KEEP_SENDER && k.r1.card.from.card === "c-shared"));
 
   if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") {
     syncerMod.stopAllFolderSyncers();
