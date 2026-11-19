@@ -2253,6 +2253,7 @@ try {
         const stamp = (box.D.envelope().teamContentSaid || {})[box.team] || "";
         putAskNoSwitch(box, "Ask1014b", pin);
         box.D.api.tryCatalogAsk(box.D.win);
+        const ansWritten = fs.existsSync(ans);
         const toldAns = openLeadDoc(box.D, ans);
         const toldTeam = openSealedDoc(box.D, ans, box.key);
         const toldCopy = await writeCopy(box, "b2b2b2b2", "quay-held");
@@ -2266,7 +2267,7 @@ try {
           freedAns = openLeadDoc(box.D, ans);
         }
         return {
-          before, after, stamp, untoldAns, untoldCopy, ansWritten: fs.existsSync(ans),
+          before, after, stamp, untoldAns, untoldCopy, ansWritten,
           toldAns, toldTeam, toldCopy, copyInner, freedAns,
           ansGenuine: !!toldAns && box.D.api.answerLeadGenuine(toldAns, box.me.id, box.me.key),
           copyGenuine: !!copyInner && box.D.api.branchLeadGenuine(copyInner, box.me.id, box.me.key),

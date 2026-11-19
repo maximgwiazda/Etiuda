@@ -3252,10 +3252,10 @@ function writeBranch(stem, text) {
     const signed = JSON.stringify(doc, null, 1) + "\n";
     let boxed = "";
     if (toLead) {
-      const said = { format: 1, kind: BRANCH_LEAD_INNER, team: String(toLead.team), content: toLeadAt, chain: lineageOf(doc), file: doc,
+      const said = { format: 1, kind: BRANCH_LEAD_INNER, team: String(toLead.team), content: toLeadAt || "", chain: lineageOf(doc), file: doc,
         sig: { alg: "Ed25519", keyId: me.id } };
       said.sig.value = branchSign(said, branchLeadSignedBytes); /* plant:s3-branch-said */
-      if (!toLeadAt || !/^[0-9a-f]{128}$/.test(String(said.sig.value))) return branchHold(stem, text);
+      if (!/^[0-9a-f]{128}$/.test(String(said.sig.value))) return branchHold(stem, text);
       boxed = JSON.stringify(said);
     }
     const written = toLead ? JSON.stringify(sealBranchLead(toLead.box, toLead.team, String(toLead.lead.keyId), me.id, boxed), null, 1) + "\n"
@@ -3817,7 +3817,7 @@ function branchGate(doc) {
   if (!onTeam) return {};
   if (teamListedDoc(doc, use)) return {};
   if (!contentApplies(use.seal.team) || !/^[0-9a-f]{64}$/.test(String(use.seal.box || ""))) return { hold: true }; /* plant:s0b-branch-switch */
-  return { box: use.seal, at: teamContentSaid[use.seal.team] };
+  return { box: use.seal, at: teamContentSaid[use.seal.team] || "" };
 }
 /* The desk's own file for the catalog in use as the page would send it now (branchCatalog): the id this desk's key and the
    grown-from id give it, and grew naming the edition. Null where no edition is held or this desk has no key of its own. */
