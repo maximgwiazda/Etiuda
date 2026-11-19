@@ -2,7 +2,9 @@
    moment. The shell holds the tokens, the browser, the service and seat.json; the page is told the providers offered, who is
    signed in by provider, the sign-in code and how the seat stands, and shows nothing where no provider is offered, so a desk
    with no registration configured looks as it did. Settings' Account draws the same view with signinParts. */
-import { $ } from "./dom.js";
+import { $ as $dom } from "./dom.js";
+/* The page draws only where there is a document: headless, every handle is none and the paint passes by. */
+const $=s=>typeof document==="undefined" ? null : $dom(s);
 import { eHost, eOpenSetAside } from "./host.js";
 import { esc } from "./esc.js";
 import { t, uiLang, hugDottedGround } from "./ui-lang.js";
