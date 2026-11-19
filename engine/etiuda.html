@@ -3913,6 +3913,23 @@ body.e-first-signin .stage>.dotfield{content-visibility:hidden}
 .fs-right-in .sgn-acts{margin-top:16px}
 .fs-skip{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
 .fs-skip-line{margin:10px 0 0;font:12.5px/1.45 var(--sans);color:var(--dim)}
+/* The desk's door (B-3b): the band under the header, the dot, the offline box and the way out. */
+.door-band{display:flex;align-items:center;gap:8px;box-sizing:border-box;width:100%;flex:0 0 30px;min-height:30px;height:30px;/* plant:door-band-fixed */padding:0 16px;background:color-mix(in srgb,#d98a1f 14%,var(--panel));border-bottom:1px solid color-mix(in srgb,#d98a1f 32%,transparent);color:var(--ink);font:13px/1.3 var(--sans)}
+.door-band[hidden]{display:none}
+.door-band-dot{width:8px;height:8px;border-radius:50%;background:#d98a1f;flex:none}
+.signin-wrap .sgn-btn{position:relative}
+.door-btn-dot{position:absolute;right:-2px;top:-2px;width:8px;height:8px;border-radius:50%;background:#d98a1f;box-shadow:0 0 0 2px var(--header-bg)}
+.door-seat-dot{position:absolute;left:-14px;top:7px;width:8px;height:8px;border-radius:50%;background:#d98a1f}
+.set-label:has(.door-seat-dot){position:relative}
+.door-off{display:flex;gap:10px;align-items:flex-start;border:1px dashed var(--line);border-radius:8px;font:14px/1.45 var(--sans);padding:12px 14px;color:var(--ink)}
+.door-off-glyph{flex:none;margin-top:1px;opacity:.7}
+.door-acts{margin-top:18px}
+.door-on-row{display:flex;gap:8px;flex-wrap:nowrap;margin-top:14px}
+/* The way on stays filled. Hover and focus restate the fill; the page's focus ring stays outside the press. */
+.door-acts .btn.primary,.sgn-panel[data-moment="ended"] .btn.primary,.door-acts .btn.primary:focus-visible,.door-acts .btn.primary:hover,.sgn-panel[data-moment="ended"] .btn.primary:hover,.sgn-panel[data-moment="ended"] .btn.primary:focus-visible{background:var(--accent);color:#fff;border-color:var(--accent)} /* plant:door-on-fill */
+.door-quiet{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:12px}
+.door-text{background:none;border:0;padding:0;cursor:pointer;font:13px/1.4 var(--sans);color:var(--accent)}
+.door-out{margin-top:22px;padding-top:18px;border-top:1px solid var(--line)} /* plant:door-out-gap */
 @media (max-width:780px){
   .fs-grid{grid-template-columns:1fr;grid-template-rows:auto 1fr}
   .fs-left{padding:26px 22px 18px}
@@ -5191,6 +5208,7 @@ body.e-host .row .win-btn:focus-visible{outline-offset:-2px}
   </div>
   <div class="pills-probe" id="pillsProbe" aria-hidden="true"></div>
 </header>
+<div id="doorBand" class="door-band" hidden aria-hidden="true" data-i18n-skip></div>
 
 <div id="railHit" title="Hover here or hold Ctrl to show the intent panel" aria-hidden="true"></div>
 <div class="stage" id="main">
@@ -9507,11 +9525,11 @@ What is typed here stays in this browser.`;
     "Led by {LEAD}": "Prowadzi {LEAD}",
     "No team yet": "Jeszcze bez zespołu",
     "Seat": "Miejsce w licencji",
-    "Held by this account": "Przypisane do tego konta",
     "On up to three computers; this is one of them.": "Na najwyżej trzech komputerach; to jeden z nich.",
     "Last checked": "Ostatnie sprawdzenie",
     "Sign out": "Wyloguj się",
-    "This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account.": "To stanowisko loguje się kontem Microsoft lub Google, aby zajmować swoje miejsce w licencji, i zleca sprawdzenie logowania na etiuda.dev. Lider zespołu nie widzi imienia, nazwiska ani adresu z tego konta.",
+    "This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name, address and picture, and shows them only to the leads and administrator of the licence it asks to join.": "To stanowisko loguje się kontem Microsoft lub Google, aby zajmować swoje miejsce w licencji, i zleca sprawdzenie logowania na etiuda.dev. Usługa licencji przechowuje imię i nazwisko, adres e-mail i zdjęcie z tego konta i pokazuje je tylko liderom i administratorowi licencji, do której konto prosi o dołączenie.",
+    "This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The leads and administrator of the licence it joins see the account's name, address and picture.": "To stanowisko loguje się kontem Microsoft lub Google, aby zajmować swoje miejsce w licencji, i zleca sprawdzenie logowania na etiuda.dev. Liderzy i administrator licencji, do której dołącza, widzą imię i nazwisko, adres e-mail i zdjęcie z tego konta.",
     "Signing out ends this computer's sign-in and frees its place among the account's three; the seat stays the account's. The team's catalog and personal cards stay on the computer.": "Wylogowanie kończy logowanie na tym komputerze i zwalnia jego miejsce wśród trzech komputerów konta; miejsce w licencji zostaje przy koncie. Katalog zespołu i własne karty zostają na komputerze.",
     "today, {TIME}": "dziś, {TIME}",
     "No seat is free on the organisation's licence just now.": "W licencji organizacji nie ma teraz wolnego miejsca.",
@@ -9696,7 +9714,49 @@ What is typed here stays in this browser.`;
     "The name on this desk": "Imię na tym stanowisku",
     "{NAME} comes from your account: the first name and the first letter of the surname. Replies that sign with your name use it, and the team's lead sees this desk by it. It can be changed here at any time.": "{NAME} pochodzi z konta: to imię i pierwsza litera nazwiska. Ta nazwa trafia do odpowiedzi podpisywanych imieniem, a lider zespołu widzi pod nią to stanowisko. Można ją zmienić tutaj w dowolnej chwili.",
     "{NAME} is the name on your account. Replies that sign with your name use it, and the team's lead sees this desk by it. It can be changed here at any time.": "{NAME} to nazwa z konta. Ta nazwa trafia do odpowiedzi podpisywanych imieniem, a lider zespołu widzi pod nią to stanowisko. Można ją zmienić tutaj w dowolnej chwili.",
+    "Ask {LEAD}": "Poproś: {LEAD}",
+    "Ask a team's lead…": "Poproś lidera zespołu…",
+    "Etiuda starts with a sign-in.": "Etiuda zaczyna się od zalogowania.",
+    "Signing in with Microsoft or Google gives this computer a seat: the team's, where its lead has admitted this account, or else a trial of fourteen days. Catalogs open once the seat is here.": "Zalogowanie kontem Microsoft lub Google daje temu komputerowi miejsce w licencji: w zespole, jeśli lider przyjął to konto, a w przeciwnym razie czternastodniowy okres próbny. Katalogi otwierają się, gdy miejsce już jest.",
+    "Signing in needs an internet connection. The buttons appear here by themselves once this computer is online.": "Logowanie wymaga połączenia z internetem. Przyciski pojawią się tu same, gdy komputer będzie online.",
+    "The request to join is waiting.": "Prośba o dołączenie czeka.",
+    "Catalogs open here again once {LEAD}, the team's lead, accepts it. Etiuda's own fourteen days ended on {DESK_END}.": "Katalogi znów otworzą się tutaj, gdy {LEAD}, lider zespołu, ją przyjmie. Własne czternaście dni Etiudy skończyły się {DESK_END}.",
+    "Catalogs open here again once the team's lead accepts it. Etiuda's own fourteen days ended on {DESK_END}.": "Katalogi znów otworzą się tutaj, gdy lider zespołu ją przyjmie. Własne czternaście dni Etiudy skończyły się {DESK_END}.",
+    "Etiuda's trial has ended.": "Okres próbny Etiudy się skończył.",
+    "It ended on {DESK_END}. This account's organisation holds an Etiuda licence, so a team's lead can admit this account; buying a licence opens the catalogs again too.": "Skończył się {DESK_END}. Organizacja tego konta ma licencję Etiudy, więc lider zespołu może przyjąć to konto; katalogi otworzy też zakup licencji.",
+    "It ended on {DESK_END}. Buying a licence opens the catalogs again.": "Skończył się {DESK_END}. Katalogi otworzy ponownie zakup licencji.",
+    "This account's seat ended on {ENDED}.": "Miejsce tego konta w licencji wygasło {ENDED}.",
+    "Etiuda keeps working on this computer until {DATE}, when its last confirmation runs out, and then stops. A purchase, or a team's lead admitting this account, brings the seat back.": "Etiuda działa na tym komputerze do {DATE}, kiedy wygasa jej ostatnie potwierdzenie, a potem się zatrzyma. Miejsce przywróci zakup albo przyjęcie tego konta przez lidera zespołu.",
+    "Seat ended {ENDED} · Etiuda stops {DATE}": "Miejsce wygasło {ENDED} · Etiuda zatrzyma się {DATE}",
+    "This account's seat has ended; Etiuda stops on {DATE}.": "Miejsce tego konta wygasło; Etiuda zatrzyma się {DATE}.",
+    "Etiuda has stopped on this computer.": "Etiuda zatrzymała się na tym komputerze.",
+    "It stopped on {DATE}: {WHY}. Signing in with an account that has a seat, a purchase, or a team's lead admitting this account starts it again.": "Zatrzymała się {DATE}: {WHY}. Etiudę uruchomi ponownie zalogowanie się kontem, które ma miejsce w licencji, zakup albo przyjęcie tego konta przez lidera zespołu.",
+    "its trial ended": "skończył się jej okres próbny",
+    "the Etiuda Studio trial that covered it ended": "skończył się okres próbny Etiudy Studio, który ją obejmował",
+    "the licence ended": "wygasła licencja",
+    "the seat on the team {LEAD} leads ended": "wygasło miejsce w zespole, który prowadzi {LEAD}",
+    "the seat on the team ended": "wygasło miejsce w zespole",
+    "the organisation's licence no longer gives this account a seat": "licencja organizacji nie daje już temu kontu miejsca",
+    "Etiuda's own trial is running.": "Trwa własny okres próbny Etiudy.",
+    "Day {N} of 14, until {DATE}, on up to three computers.": "Dzień {N} z 14, do {DATE}, najwyżej na trzech komputerach.",
+    "Day {N} of 14, until {DESK_END}. The request to join waits for {LEAD}, and Etiuda works meanwhile.": "Dzień {N} z 14, do {DESK_END}. Prośba o dołączenie czeka na odpowiedź, której udzieli {LEAD}, a Etiuda w tym czasie działa.",
+    "Day {N} of 14, until {DESK_END}. The request to join waits for the team's lead, and Etiuda works meanwhile.": "Dzień {N} z 14, do {DESK_END}. Prośba o dołączenie czeka na odpowiedź lidera zespołu, a Etiuda w tym czasie działa.",
+    "Etiuda now runs on the Etiuda Studio trial.": "Etiuda działa teraz w okresie próbnym Etiudy Studio.",
+    "Etiuda's own fourteen days ended on {DESK_END}. The Etiuda Studio trial on this account began later and covers Etiuda too, until {STUDIO_END}.": "Własne czternaście dni Etiudy skończyły się {DESK_END}. Okres próbny Etiudy Studio na tym koncie zaczął się później i obejmuje także Etiudę, do {STUDIO_END}.",
+    "This account holds an Etiuda licence.": "To konto ma licencję Etiudy.",
+    "Paid until {ENDS}, on up to three computers.": "Opłacona do {ENDS}, najwyżej na trzech komputerach.",
+    "This account has a seat on the team {LEAD} leads.": "To konto ma miejsce w zespole, który prowadzi {LEAD}.",
+    "This account has a seat on a team.": "To konto ma miejsce w zespole.",
+    "It renews by itself; the team's licence runs until {ENDS}.": "Odnawia się samo; licencja zespołu obowiązuje do {ENDS}.",
+    "This account has a seat on its organisation's licence.": "To konto ma miejsce w licencji swojej organizacji.",
+    "It renews by itself; the licence runs until {ENDS}.": "Odnawia się samo; licencja obowiązuje do {ENDS}.",
     "Save your own work as files…": "Zapisz własną pracę jako pliki…",
+    "What this account made here can still be saved as files, in a folder of your choice: its own cards, its edits to a catalog's cards, and the flags it raised. Catalogs themselves are not saved.": "To, co powstało tu na tym koncie, można jeszcze zapisać jako pliki w wybranym folderze: własne karty, zmiany w kartach katalogu i zgłoszenia. Same katalogi nie są zapisywane.",
+    "This build of Etiuda cannot sign in.": "Ta wersja Etiudy nie umożliwia logowania.",
+    "It was made without a way to sign in, so no catalog opens here.": "Zbudowano ją bez możliwości logowania, więc żaden katalog się tu nie otwiera.",
+    "Etiuda works in its desktop app.": "Etiuda działa w aplikacji na komputer.",
+    "In a browser, no catalog opens.": "W przeglądarce żaden katalog się nie otwiera.",
+    "This computer cannot keep a sign-in, so Etiuda asks for one again when the seat renews, at most every thirty days.": "Ten komputer nie może przechować logowania, więc Etiuda poprosi o nie ponownie przy odnowieniu miejsca, najwyżej co trzydzieści dni.",
     "There is nothing of yours here to save: no cards of your own, no edits and no flags.": "Nie ma tu nic do zapisania: żadnych własnych kart, zmian ani zgłoszeń.",
     "Saving to files works only in the desktop app.": "Zapis do plików działa tylko w aplikacji na komputer.",
     "Files saved in {FOLDER}: {N}.": "Pliki zapisane w folderze {FOLDER}: {N}."
@@ -12650,7 +12710,7 @@ What is typed here stays in this browser.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-11-18";
+  var E_BUILT = "2026-11-19";
 
   // src/modules/affinity.js
   var affinity_exports = {};
@@ -18929,6 +18989,7 @@ What is typed here stays in this browser.`;
     inviteHeld: () => inviteHeld,
     joinDoorButton: () => joinDoorButton,
     joinStands: () => joinStands,
+    joinTook: () => joinTook,
     keySignHtml: () => keySignHtml,
     keyTipHtml: () => keyTipHtml,
     lapseNote: () => lapseNote,
@@ -18966,6 +19027,52 @@ What is typed here stays in this browser.`;
   var joinReads = 0;
   var lapseUp = "";
   var lapseDismissed = /* @__PURE__ */ new Set();
+  var joinGate = null;
+  var pendingInvite = null;
+  var pendingJoinLoad = "";
+  function joinDoorHolds() {
+    return !!(joinGate && typeof joinGate.holds === "function" && joinGate.holds());
+  }
+  function whenJoinDoorOpens(fn) {
+    if (joinGate && typeof joinGate.whenOpen === "function") {
+      joinGate.whenOpen(fn);
+      return;
+    }
+    fn();
+  }
+  function replayJoinLoad() {
+    if (joinDoorHolds()) return;
+    const file = pendingJoinLoad;
+    pendingJoinLoad = "";
+    if (file && (wholeThingEmpty() || nsGet("Sample") === "1")) hooks.loadCatalogFromFolder(file, 0);
+  }
+  function replayPendingInvite() {
+    if (joinDoorHolds()) return;
+    const inv = pendingInvite;
+    pendingInvite = null;
+    if (!inv) return;
+    if (inv.kind === "link" && inv.offer) {
+      joinOffer = Object.assign({}, inv.offer);
+      joinRead = "link";
+      joinBlob = "";
+      joinTyped = "";
+      joinWhy = "";
+      joinLinkSaid = null;
+      joinMode = "confirm";
+      paintJoin();
+    } else if (inv.kind === "link-refusal" && inv.refusal) {
+      dropInvite();
+      joinLinkSaid = Object.assign({}, inv.refusal);
+      joinWhy = "link";
+      joinMode = "refused";
+      paintJoin();
+    } else if (inv.kind === "paste" && inv.text) {
+      const sent = String(inv.text), n = ++joinReads;
+      joinMode = "paste";
+      joinBlob = sent;
+      joinAsk("read", sent, "", "", (v) => readTook(v, n, sent));
+    }
+  }
   function eHasJoin() {
     const h = eHost();
     return !!h && typeof h.teamJoin === "function";
@@ -19392,9 +19499,26 @@ What is typed here stays in this browser.`;
     };
     if (s.joined && s.joined.file) {
       closeJoinBubble();
-      if (wholeThingEmpty() || nsGet("Sample") === "1") hooks.loadCatalogFromFolder(String(s.joined.file), 0);
-    } else if (s.opens && typeof s.opens.file === "string" && s.opens.file && (wholeThingEmpty() || nsGet("Sample") === "1"))
-      hooks.loadCatalogFromFolder(s.opens.file, 0);
+      if (wholeThingEmpty() || nsGet("Sample") === "1") {
+        let waitAdmit = false;
+        if (joinDoorHolds()) {
+          pendingJoinLoad = String(s.joined.file);
+          whenJoinDoorOpens(replayJoinLoad);
+          waitAdmit = true;
+        }
+        if (!waitAdmit) hooks.loadCatalogFromFolder(String(s.joined.file), 0);
+      }
+    } else if (s.opens && typeof s.opens.file === "string" && s.opens.file && (wholeThingEmpty() || nsGet("Sample") === "1")) {
+      let waitOpens = false;
+      if (joinDoorHolds()) {
+        pendingJoinLoad = String(s.opens.file);
+        whenJoinDoorOpens(replayJoinLoad);
+        waitOpens = true;
+      }
+      if (!waitOpens) {
+        hooks.loadCatalogFromFolder(s.opens.file, 0);
+      }
+    }
     syncJoinDoor();
     syncLapseNotice();
     syncRelayRemoved();
@@ -19403,8 +19527,14 @@ What is typed here stays in this browser.`;
     syncStrandedNotice();
     const refusal = s.linkRefusal;
     if (refusal && typeof refusal === "object" && typeof refusal.en === "string" && refusal.en) {
+      const heldRefusal = { en: String(refusal.en), pl: typeof refusal.pl === "string" ? String(refusal.pl) : "" };
+      if (joinDoorHolds()) {
+        pendingInvite = { kind: "link-refusal", refusal: heldRefusal };
+        whenJoinDoorOpens(replayPendingInvite);
+        return joinNow;
+      }
       dropInvite();
-      joinLinkSaid = { en: String(refusal.en), pl: typeof refusal.pl === "string" ? String(refusal.pl) : "" };
+      joinLinkSaid = heldRefusal;
       joinWhy = "link";
       joinMode = "refused";
       paintJoin();
@@ -19421,7 +19551,13 @@ What is typed here stays in this browser.`;
     }
     const offer = s.offer;
     if (offer && offer.link === true && typeof offer.relay === "string" && offer.relay) {
-      joinOffer = { lead: String(offer.lead || ""), team: String(offer.team || ""), relay: String(offer.relay), link: true, code: "", left: String(offer.left || "") };
+      const heldOffer = { lead: String(offer.lead || ""), team: String(offer.team || ""), relay: String(offer.relay), link: true, code: "", left: String(offer.left || "") };
+      if (joinDoorHolds()) {
+        pendingInvite = { kind: "link", offer: heldOffer };
+        whenJoinDoorOpens(replayPendingInvite);
+        return joinNow;
+      }
+      joinOffer = heldOffer;
       joinRead = "link";
       joinBlob = "";
       joinTyped = "";
@@ -19437,7 +19573,8 @@ What is typed here stays in this browser.`;
   function noteCatalogCopy(m) {
     toast(m && m.lead === true ? "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team's lead alone." : "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.");
   }
-  function wireTeamJoin() {
+  function wireTeamJoin(gate) {
+    if (gate !== void 0) joinGate = gate && typeof gate.holds === "function" ? gate : null;
     if (!eHasJoin()) return;
     if (typeof eHost().onTeamJoin === "function") eHost().onTeamJoin(joinTook);
     if (typeof eHost().onCatalogCopy === "function") eOnCatalogCopy(noteCatalogCopy);
@@ -19445,6 +19582,11 @@ What is typed here stays in this browser.`;
     joinAsk("held");
   }
   function paintJoin() {
+    if (joinDoorHolds()) {
+      closeJoinBubble();
+      whenJoinDoorOpens(paintJoin);
+      return;
+    }
     if (wholeThingEmpty()) {
       closeJoinBubble();
       hooks.render();
@@ -19484,7 +19626,7 @@ What is typed here stays in this browser.`;
     repaintJoin();
   }
   function openJoinPaste() {
-    if (!teamCanJoin()) return;
+    if (!teamCanJoin() || joinDoorHolds()) return;
     dropInvite();
     joinMode = "paste";
     repaintJoin();
@@ -19697,6 +19839,7 @@ What is typed here stays in this browser.`;
   }
   function joinAct(act) {
     const j = joinNow && joinNow.join, s = joinNow && joinNow.sealed;
+    if (joinDoorHolds() && (act === "invite" || act === "ask" || act === "join")) return Promise.resolve(null);
     if (act === "join") return Promise.resolve(openJoinPaste());
     if (act === "back") {
       if (joinOffer && joinOffer.link || joinMode === "refused" && joinWhy === "link")
@@ -19707,7 +19850,15 @@ What is typed here stays in this browser.`;
       return Promise.resolve(clearJoinAsk());
     }
     if (act === "read") {
-      const sent = pastedText(), n = ++joinReads;
+      const sent = pastedText();
+      if (joinDoorHolds()) {
+        if (String(sent || "").trim()) {
+          pendingInvite = { kind: "paste", text: String(sent) };
+          whenJoinDoorOpens(replayPendingInvite);
+        }
+        return Promise.resolve(null);
+      }
+      const n = ++joinReads;
       joinBlob = sent;
       return joinAsk("read", sent, "", "", (v) => readTook(v, n, sent));
     }
@@ -29343,6 +29494,7 @@ What is typed here stays in this browser.`;
   }
 
   // src/modules/signin.js
+  var $2 = (s) => typeof document === "undefined" ? null : $(s);
   var SIGNIN_NAMES = { microsoft: "Microsoft", google: "Google", lab: "Lab" };
   function signinRead(v) {
     const o = v && typeof v === "object" ? v : {};
@@ -29379,7 +29531,7 @@ What is typed here stays in this browser.`;
       /* Machine policy (decision 49), only where it sets anything: {on, shared, personal, provider, closed, contact}. */
       managed: signinManagedRead(o.managed),
       /* Whether the desk works, judged by the shell on its own clock: that clock, the held certificate's end, the last one's where it
-         stopped (each a time in ms, 0 for none), and whether the system has a network. Kept as the shell judged them; no moment reads them. */
+         stopped (each a time in ms, 0 for none), and whether the system has a network. Kept as the shell judged them. deskDoorState reads them. */
       works: o.works === true,
       /* plant:read-works */
       now: signinTimeRead(o.now),
@@ -29389,7 +29541,7 @@ What is typed here stays in this browser.`;
       online: o.online !== false,
       /* plant:read-online */
       /* When the service first said none while a certificate ran, the seat and trials it last named, and whether this build can sign in
-         at all; kept as the shell said them, words for the page that no moment reads yet. */
+         at all; kept as the shell said them. deskDoorState reads them. */
       ended: signedIn ? signinTimeRead(o.ended) : 0,
       /* plant:read-ended */
       holding: signedIn ? signinHoldingRead(o.holding) : null,
@@ -29477,6 +29629,7 @@ What is typed here stays in this browser.`;
     return reason === "signin-tenant" || signinManaged(v) && (reason === "signin-notassigned" || reason === "signin-notallowed");
   }
   var signinV = signinRead(null);
+  var signinHasView = false;
   function signinHost() {
     const h = eHost();
     return h && typeof h.signinState === "function" ? h : null;
@@ -29486,35 +29639,45 @@ What is typed here stays in this browser.`;
     if (!h) return signinRead(null);
     try {
       signinV = signinRead(h.signinState());
+      signinHasView = true;
     } catch (e) {
       signinV = signinRead(null);
+      signinHasView = false;
     }
     return signinV;
+  }
+  function deskWorks(v) {
+    if (v === void 0) {
+      if (!signinHost()) return false;
+      if (signinV.works !== true) return false;
+      return true;
+    }
+    if (!v || typeof v !== "object" || v.works !== true) return false;
+    return true;
   }
   function signinShown(v) {
     return !!(v && (v.offered.length || v.signedIn || signinWaiting(v) || signinStranded(v)));
   }
-  var FIRST_SIGNIN_KEY = "eFirstSigninSeen";
-  function firstSigninSeen() {
-    return lsGet(FIRST_SIGNIN_KEY) === "1";
-  }
-  function markFirstSigninSeen() {
-    return lsSet(FIRST_SIGNIN_KEY, "1", true);
-  }
-  function firstSigninDue(v, opts) {
-    const s = v === void 0 ? signinV : signinRead(v);
-    const o = opts && typeof opts === "object" ? opts : null;
-    const seen = o && "seen" in o ? !!o.seen : firstSigninSeen();
-    const policy = o && "policy" in o ? !!o.policy : eCatalogFolderPinned();
-    if (policy) return false;
-    if (signinStranded(s)) return false;
-    return !!(s && s.offered.length && !s.signedIn && !seen);
+  function firstSigninDue(v) {
+    if (v === void 0) {
+      if (!signinHost()) return true;
+      if (!signinHasView) return false;
+      if (!deskWorks()) return true;
+      return false;
+    }
+    if (!v || typeof v !== "object") return false;
+    return !deskWorks(signinRead(v));
   }
   var firstSigninPending = false;
   var firstSigninOpen = false;
   var firstSigninWaits = [];
   function firstSigninStands() {
     return !!(firstSigninPending || firstSigninOpen);
+  }
+  function doorHolds() {
+    if (!signinHost()) return true;
+    if (firstSigninStands() || signinHasView && !deskWorks()) return true;
+    return false;
   }
   function onFirstSigninClosed(fn) {
     if (typeof fn !== "function") return;
@@ -29523,6 +29686,14 @@ What is typed here stays in this browser.`;
       return;
     }
     firstSigninWaits.push(fn);
+  }
+  function whenDoorLowers(fn) {
+    if (typeof fn !== "function") return;
+    if (!doorHolds()) {
+      fn();
+      return;
+    }
+    if (firstSigninWaits.indexOf(fn) < 0) firstSigninWaits.push(fn);
   }
   function tellFirstSigninClosed() {
     const w = firstSigninWaits;
@@ -29541,33 +29712,25 @@ What is typed here stays in this browser.`;
   }
   function paintFirstSignin() {
     if (!firstSigninOpen || typeof document === "undefined") return;
-    const el = $("#firstSignin");
+    const el = $2("#firstSignin");
     if (!el) return;
+    if (!signinHost()) {
+      el.innerHTML = doorBrowserHtml();
+      hugDottedGround(el);
+      return;
+    }
     const hadFocus = el.contains(document.activeElement);
     const d = signinDoor(signinV);
-    const skipBtn = '<button type="button" class="btn fs-skip-btn" id="firstSigninSkip">' + esc(t("Not now")) + "</button>";
-    const skipLine = '<p class="fs-skip-line">' + esc(t("The desk opens as it is, and Sign in stays in the bar at the top for later.")) + "</p>";
-    let rightBody = "";
-    if (d && d.moment === "before") {
-      rightBody = signinPanelHtml(Object.assign({}, d, { heading: "", line: "", privacy: "", foot: "" })) + '<p class="sgn-lede fs-right-note">' + esc(t("Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.")) + "</p>" + (d.privacy ? '<p class="sgn-cap fs-privacy">' + esc(d.privacy) + "</p>" : "") + '<div class="fs-skip">' + skipBtn + skipLine + "</div>";
-    } else if (d) {
-      rightBody = signinPanelHtml(Object.assign({}, d, { foot: "" }));
-    }
-    el.innerHTML = '<div class="fs-grid"><div class="fs-left"><div class="fs-left-in"><div class="fs-body">' + firstSigninMarkHtml() + '<h1 id="fsHeading">' + esc(t("Sign in to Etiuda")) + '</h1><p class="fs-lede">' + esc(t("Your seat belongs to your account, so it comes with you to any computer you sign in on, up to three.")) + '</p><h2 class="fs-steps-h">' + esc(t("What happens")) + '</h2><ol class="fs-steps"><li><span class="fs-step-n" aria-hidden="true">1</span><span>' + esc(t("The browser opens the sign-in page")) + '</span></li><li><span class="fs-step-n" aria-hidden="true">2</span><span>' + esc(t("You choose your account there")) + '</span></li><li><span class="fs-step-n" aria-hidden="true">3</span><span>' + esc(t("Etiuda carries on here by itself")) + '</span></li></ol></div><p class="fs-foot">' + esc(t("No licence key to keep")) + '</p></div></div><div class="fs-right"><div class="fs-right-in"><h2 class="fs-rh">' + esc(t("Signing in")) + "</h2>" + rightBody + "</div></div></div>";
-    let showSkip = d && d.moment === "refused";
-    if (d && d.moment === "managed-refused") showSkip = true;
-    if (showSkip) {
-      const acts = el.querySelector(".sgn-acts");
-      if (acts) {
-        acts.insertAdjacentHTML("beforeend", skipBtn);
-        acts.insertAdjacentHTML("afterend", skipLine);
-      } else {
-        const rin = el.querySelector(".fs-right-in");
-        if (rin) rin.insertAdjacentHTML("beforeend", '<div class="fs-skip">' + skipBtn + skipLine + "</div>");
-      }
-    } else if (d && d.moment === "stranded") {
-      const rin = el.querySelector(".fs-right-in");
-      if (rin) rin.insertAdjacentHTML("beforeend", '<div class="fs-skip"><button type="button" class="btn primary fs-skip-btn" id="firstSigninSkip">' + esc(t("Continue")) + "</button></div>");
+    const ds = deskDoorState(signinV);
+    const doorish = ds.state === "waiting" || ds.state === "trial-over-org" || ds.state === "trial-over" || ds.state === "stopped" || ds.state === "first" || ds.state === "first-offline";
+    const opening = !doorish && d && d.moment === "before";
+    if (doorish || opening) {
+      el.innerHTML = firstSigninHtml(signinV, { forceFirst: opening });
+    } else if (!d) {
+      el.innerHTML = firstSigninHtml(signinV, { doorKind: "no-signin" });
+    } else {
+      const rightBody = signinPanelHtml(Object.assign({}, d, { foot: "" }));
+      el.innerHTML = '<div class="fs-grid"><div class="fs-left"><div class="fs-left-in"><div class="fs-body">' + firstSigninMarkHtml() + '<h1 id="fsHeading">' + esc(t("Sign in to Etiuda")) + '</h1><p class="fs-lede">' + esc(t("Your seat belongs to your account, so it comes with you to any computer you sign in on, up to three.")) + "</p>" + doorStepsHtml() + '</div><p class="fs-foot">' + esc(t("No licence key to keep")) + '</p></div></div><div class="fs-right"><div class="fs-right-in"><h2 class="fs-rh">' + esc(t("Signing in")) + "</h2>" + rightBody + "</div></div></div>";
     }
     if (hadFocus) {
       const first = el.querySelector("button:not(:disabled), input");
@@ -29579,18 +29742,12 @@ What is typed here stays in this browser.`;
     }
     hugDottedGround(el);
   }
-  function skipFirstSignin() {
-    if (!firstSigninPending && !firstSigninOpen) return;
-    if (signinV && signinV.busy) signinCall("signinStop");
-    closeFirstSignin();
-  }
   function openFirstSignin() {
     firstSigninPending = false;
     firstSigninOpen = true;
-    markFirstSigninSeen();
     if (typeof document === "undefined") return;
     document.body.classList.add("e-first-signin");
-    const el = $("#firstSignin");
+    const el = $2("#firstSignin");
     if (el) {
       el.hidden = false;
       el.setAttribute("aria-hidden", "false");
@@ -29611,7 +29768,7 @@ What is typed here stays in this browser.`;
     firstSigninOpen = false;
     if (typeof document !== "undefined") {
       document.body.classList.remove("e-first-signin");
-      const el = $("#firstSignin");
+      const el = $2("#firstSignin");
       if (el) {
         el.hidden = true;
         el.setAttribute("aria-hidden", "true");
@@ -29621,8 +29778,9 @@ What is typed here stays in this browser.`;
     tellFirstSigninClosed();
   }
   function bootFirstSignin(land) {
-    if (!firstSigninPending && !firstSigninDue()) return;
+    if (!firstSigninPending && !firstSigninOpen && !firstSigninDue()) return;
     if (!firstSigninDue()) {
+      if (firstSigninOpen) closeFirstSignin();
       firstSigninPending = false;
       tellFirstSigninClosed();
       return;
@@ -29643,6 +29801,12 @@ What is typed here stays in this browser.`;
   }
   function signinDay(at) {
     return new Date(at).toLocaleDateString(uiLang() === "pl" ? "pl-PL" : "en-GB", { day: "numeric", month: "short" });
+  }
+  function doorDay(at, now) {
+    const d = new Date(at), lang2 = uiLang() === "pl" ? "pl-PL" : "en-GB";
+    const opt = { day: "numeric", month: "long" };
+    if (d.getFullYear() !== new Date(now > 0 ? now : Date.now()).getFullYear()) opt.year = "numeric";
+    return d.toLocaleDateString(lang2, opt);
   }
   function signinWhen(at) {
     if (!at) return "";
@@ -29777,6 +29941,225 @@ What is typed here stays in this browser.`;
   FAIL_FIRST.push("signin-notassigned", "signin-tenant", "signin-other");
   FAIL_FIRST.push("signin-switch-out", "signin-switch-unmade");
   var ANOTHER_FOR = ["signin-notallowed", "signin-notassigned"];
+  function deskDoorState(v) {
+    if (!v || !Array.isArray(v.offered)) v = signinRead(v);
+    const works = deskWorks(v);
+    const seat = v.holding, seatOn = seat ? seat.on : "";
+    const deskEnd = v.trials && v.trials.desk || seatOn === "trial" && seat && seat.ends || 0;
+    const studioEnd = v.trials && v.trials.studio || 0;
+    const ends = seat && seat.ends ? seat.ends : 0;
+    const team = signinTeam();
+    const lead = seat && seat.lead || team && team.lead || "";
+    const waitingOnLead = !!(v.askLead || signinNoSeat(v));
+    const orgLicence = !!v.licenceManaged;
+    const trialOver = seatOn === "trial" || !seatOn && deskEnd > 0;
+    const trialOpen = trialOver && !(seatOn && v.stoppedAt > 0);
+    let day = 0;
+    if (seatOn === "trial" && deskEnd && v.now) {
+      const left = Math.round((deskEnd - v.now) / 864e5);
+      day = Math.max(1, Math.min(14, 14 - left));
+    }
+    let state = "none";
+    if (works && v.ended > 0) state = "ended";
+    else if (!works && v.signedIn && waitingOnLead && (trialOver || !seatOn && !(v.stoppedAt > 0))) state = "waiting";
+    else if (!works && v.signedIn && trialOpen && orgLicence) state = "trial-over-org";
+    else if (!works && v.signedIn && trialOpen) state = "trial-over";
+    else if (!works && v.signedIn) state = "stopped";
+    else if (works && v.signedIn && seatOn) state = "working";
+    else if (!works && !v.signedIn && !v.busy && FAIL_FIRST.indexOf(v.said) < 0 && v.offered.length && v.registered && !v.online && !signinWaiting(v) && !signinStranded(v)) state = "first-offline";
+    else if (!works && !v.signedIn && !v.busy && FAIL_FIRST.indexOf(v.said) < 0 && v.offered.length && v.registered && v.online && !signinWaiting(v) && !signinStranded(v)) state = "first";
+    return {
+      state,
+      lead,
+      deskEnd,
+      studioEnd,
+      ended: v.ended || 0,
+      until: v.until || 0,
+      stoppedAt: v.stoppedAt || 0,
+      why: seatOn,
+      seatOn,
+      ends,
+      day,
+      waitingOnLead,
+      orgLicence,
+      online: v.online !== false,
+      now: v.now || 0
+    };
+  }
+  function deskWhySentence(on, lead) {
+    if (on === "trial") return t("its trial ended");
+    if (on === "studio-trial") return t("the Etiuda Studio trial that covered it ended");
+    if (on === "own") return t("the licence ended");
+    if (on === "team") return lead ? named(t("the seat on the team {LEAD} leads ended"), "{LEAD}", lead) : t("the seat on the team ended");
+    if (on === "org") return t("the organisation's licence no longer gives this account a seat");
+    return "";
+  }
+  function deskDoorLines(ds) {
+    const lead = ds.lead || "", n = String(ds.day || 0), dayAt = (at) => at ? doorDay(at, ds.now) : "";
+    const desk = dayAt(ds.deskEnd), studio = dayAt(ds.studioEnd);
+    const ends = dayAt(ds.ends), ended = dayAt(ds.ended), until = dayAt(ds.until);
+    const stopped = dayAt(ds.stoppedAt);
+    const fill2 = (s, map) => Object.keys(map).reduce((a, k) => a.split(k).join(map[k]), s);
+    if (ds.state === "first" || ds.state === "first-offline") return [
+      t("Etiuda starts with a sign-in."),
+      t("Signing in with Microsoft or Google gives this computer a seat: the team's, where its lead has admitted this account, or else a trial of fourteen days. Catalogs open once the seat is here.")
+    ];
+    if (ds.state === "waiting") return [
+      t("The request to join is waiting."),
+      lead ? fill2(t("Catalogs open here again once {LEAD}, the team's lead, accepts it. Etiuda's own fourteen days ended on {DESK_END}."), { "{LEAD}": lead, "{DESK_END}": desk }) : fill2(t("Catalogs open here again once the team's lead accepts it. Etiuda's own fourteen days ended on {DESK_END}."), { "{DESK_END}": desk })
+    ];
+    if (ds.state === "trial-over-org") return [
+      t("Etiuda's trial has ended."),
+      fill2(t("It ended on {DESK_END}. This account's organisation holds an Etiuda licence, so a team's lead can admit this account; buying a licence opens the catalogs again too."), { "{DESK_END}": desk })
+    ];
+    if (ds.state === "trial-over") return [
+      t("Etiuda's trial has ended."),
+      fill2(t("It ended on {DESK_END}. Buying a licence opens the catalogs again."), { "{DESK_END}": desk })
+    ];
+    if (ds.state === "ended") return [
+      fill2(t("This account's seat ended on {ENDED}."), { "{ENDED}": ended }),
+      fill2(t("Etiuda keeps working on this computer until {DATE}, when its last confirmation runs out, and then stops. A purchase, or a team's lead admitting this account, brings the seat back."), { "{DATE}": until })
+    ];
+    if (ds.state === "stopped") return [
+      t("Etiuda has stopped on this computer."),
+      fill2(
+        t("It stopped on {DATE}: {WHY}. Signing in with an account that has a seat, a purchase, or a team's lead admitting this account starts it again."),
+        { "{DATE}": stopped, "{WHY}": deskWhySentence(ds.why, lead) }
+      )
+    ];
+    if (ds.state === "working" && ds.seatOn === "studio-trial") return [
+      t("Etiuda now runs on the Etiuda Studio trial."),
+      fill2(t("Etiuda's own fourteen days ended on {DESK_END}. The Etiuda Studio trial on this account began later and covers Etiuda too, until {STUDIO_END}."), { "{DESK_END}": desk, "{STUDIO_END}": studio })
+    ];
+    if (ds.state === "working" && ds.seatOn === "own") return [
+      t("This account holds an Etiuda licence."),
+      fill2(t("Paid until {ENDS}, on up to three computers."), { "{ENDS}": ends })
+    ];
+    if (ds.state === "working" && ds.seatOn === "team") return [
+      lead ? fill2(t("This account has a seat on the team {LEAD} leads."), { "{LEAD}": lead }) : t("This account has a seat on a team."),
+      fill2(t("It renews by itself; the team's licence runs until {ENDS}."), { "{ENDS}": ends })
+    ];
+    if (ds.state === "working" && ds.seatOn === "org") return [
+      t("This account has a seat on its organisation's licence."),
+      fill2(t("It renews by itself; the licence runs until {ENDS}."), { "{ENDS}": ends })
+    ];
+    if (ds.state === "working" && ds.waitingOnLead) return [
+      t("Etiuda's own trial is running."),
+      lead ? fill2(t("Day {N} of 14, until {DESK_END}. The request to join waits for {LEAD}, and Etiuda works meanwhile."), { "{N}": n, "{DESK_END}": desk, "{LEAD}": lead }) : fill2(t("Day {N} of 14, until {DESK_END}. The request to join waits for the team's lead, and Etiuda works meanwhile."), { "{N}": n, "{DESK_END}": desk })
+    ];
+    if (ds.state === "working") return [
+      t("Etiuda's own trial is running."),
+      fill2(t("Day {N} of 14, until {DATE}, on up to three computers."), { "{N}": n, "{DATE}": desk })
+    ];
+    return ["", ""];
+  }
+  function doorBandState(v) {
+    const ds = deskDoorState(v);
+    if (ds.state !== "ended") return { shown: false, dot: false, text: "", tip: "" };
+    const ended = doorDay(ds.ended, ds.now), until = doorDay(ds.until, ds.now);
+    return {
+      shown: true,
+      dot: true,
+      text: named(named(t("Seat ended {ENDED} · Etiuda stops {DATE}"), "{ENDED}", ended), "{DATE}", until),
+      tip: named(t("This account's seat has ended; Etiuda stops on {DATE}."), "{DATE}", until)
+    };
+  }
+  function doorAskLabel(lead) {
+    if (!lead) return t("Ask a team's lead…");
+    return named(t("Ask {LEAD}"), "{LEAD}", lead);
+  }
+  function doorPress(label2, solid, act) {
+    const buy = act === "buy" ? ' data-e-open="buy"' : "";
+    return '<button type="button" class="btn' + (solid ? " primary" : "") + '" data-signin-act="' + esc(act) + '"' + buy + ">" + esc(label2) + "</button>";
+  }
+  function doorTextPress(label2, act) {
+    return '<button type="button" class="door-text" data-signin-act="' + esc(act) + '">' + esc(label2) + "</button>";
+  }
+  function doorScreen(leftBody, rightInner, foot) {
+    return '<div class="fs-grid"><div class="fs-left"><div class="fs-left-in"><div class="fs-body">' + firstSigninMarkHtml() + leftBody + "</div>" + (foot || "") + '</div></div><div class="fs-right"><div class="fs-right-in">' + rightInner + "</div></div></div>";
+  }
+  function doorBrowserHtml() {
+    return doorScreen(
+      '<h1 id="fsHeading">' + esc(t("Etiuda works in its desktop app.")) + '</h1><p class="fs-lede">' + esc(t("In a browser, no catalog opens.")) + "</p>",
+      '<div class="door-out"><button type="button" class="btn" data-door-save disabled>' + esc(t("Save your own work as files…")) + "</button></div>",
+      ""
+    );
+  }
+  function doorBare(heading, line) {
+    return doorScreen('<h1 id="fsHeading">' + esc(heading) + '</h1><p class="fs-lede">' + esc(line) + "</p>", "", "");
+  }
+  function doorStepsHtml() {
+    return '<h2 class="fs-steps-h">' + esc(t("What happens")) + '</h2><ol class="fs-steps"><li><span class="fs-step-n" aria-hidden="true">1</span><span>' + esc(t("The browser opens the sign-in page")) + '</span></li><li><span class="fs-step-n" aria-hidden="true">2</span><span>' + esc(t("You choose your account there")) + '</span></li><li><span class="fs-step-n" aria-hidden="true">3</span><span>' + esc(t("Etiuda carries on here by itself")) + "</span></li></ol>";
+  }
+  function firstSigninHtml(v, opts) {
+    const o = opts && typeof opts === "object" ? opts : {};
+    if (o.doorKind === "no-signin") return doorBare(
+      t("This build of Etiuda cannot sign in."),
+      t("It was made without a way to sign in, so no catalog opens here.")
+    );
+    if (o.doorKind === "browser") return doorBare(t("Etiuda works in its desktop app."), t("In a browser, no catalog opens."));
+    if (!v) return "";
+    const ds = deskDoorState(v);
+    if (ds.state === "waiting" || ds.state === "trial-over-org" || ds.state === "trial-over" || ds.state === "stopped") return doorLaterHtml(v, ds);
+    if (ds.state === "first" || ds.state === "first-offline" || o.forceFirst) return doorFirstHtml(v, ds);
+    return "";
+  }
+  var DOOR_OFF_GLYPH = '<svg class="door-off-glyph" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true" focusable="false"><path d="M2 8.8a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M8.5 16.1a5 5 0 0 1 7 0"/><circle cx="12" cy="19.5" r="1" fill="currentColor" stroke="none"/><path d="M3 3l18 18"/></svg>';
+  function doorFirstHtml(v, ds) {
+    const drawn = ds.state === "first" || ds.state === "first-offline" ? ds : Object.assign({}, ds, { state: ds.online ? "first" : "first-offline" });
+    const pair = deskDoorLines(drawn.state === "first" || drawn.state === "first-offline" ? drawn : Object.assign({}, drawn, { state: "first" }));
+    const door = signinDoor(v) || { moment: "" };
+    const d = { state: ds.state, moment: door.moment || "" };
+    const showSkip = d.state === "none" && (d.moment === "refused" || d.moment === "managed-refused");
+    const offline = drawn.state === "first-offline" || ds.state === "first-offline";
+    const priv = t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The leads and administrator of the licence it joins see the account's name, address and picture.");
+    let right = '<h2 class="fs-rh">' + esc(t("Signing in")) + "</h2>";
+    if (offline) right += '<div class="door-off">' + DOOR_OFF_GLYPH + "<span>" + esc(t("Signing in needs an internet connection. The buttons appear here by themselves once this computer is online.")) + "</span></div>";
+    else if (v.offered && v.offered.length) right += signinProvidersHtml(v.offered, false);
+    if (signinCapHolds(v)) right += '<p class="sgn-cap">' + esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.")) + "</p>";
+    right += '<p class="sgn-cap fs-privacy">' + esc(priv) + "</p>";
+    if (v.keeps === false) right += '<p class="sgn-cap">' + esc(t("This computer cannot keep a sign-in, so Etiuda asks for one again when the seat renews, at most every thirty days.")) + "</p>";
+    if (showSkip) right += '<div class="fs-skip"><button type="button" class="btn fs-skip-btn" id="firstSigninSkip">' + esc(t("Not now")) + '</button><p class="fs-skip-line">' + esc(t("The desk opens as it is, and Sign in stays in the bar at the top for later.")) + "</p></div>";
+    const left = '<h1 id="fsHeading">' + esc(pair[0]) + '</h1><p class="fs-lede">' + esc(pair[1]) + "</p>" + doorStepsHtml();
+    const foot = '<p class="fs-foot">' + esc(t("No licence key to keep")) + "</p>";
+    return doorScreen(left, right, foot);
+  }
+  function doorLaterHtml(v, ds) {
+    const pair = deskDoorLines(ds);
+    const askable = ds.state === "trial-over-org" || ds.state === "stopped" && (ds.orgLicence || ds.seatOn === "team");
+    const checkFilled = ds.state === "waiting";
+    let acts = "";
+    if (checkFilled) acts += doorPress(t("Check now"), true, "check");
+    else if (askable) acts += doorPress(doorAskLabel(ds.lead), true, "ask");
+    else acts += doorPress(t("Buy"), true, "buy");
+    if (checkFilled || askable) acts += doorPress(t("Buy"), false, "buy");
+    const quiet = [];
+    if (!checkFilled) quiet.push(doorTextPress(t("Check now"), "check"));
+    quiet.push(doorTextPress(t("Use another account"), "another"));
+    quiet.push(doorTextPress(t("Sign out"), "out"));
+    const out = ds.state !== "waiting";
+    const wayOut = out ? '<div class="door-out"><button type="button" class="btn" data-door-save>' + esc(t("Save your own work as files…")) + '</button><p class="sgn-cap">' + esc(t("What this account made here can still be saved as files, in a folder of your choice: its own cards, its edits to a catalog's cards, and the flags it raised. Catalogs themselves are not saved.")) + "</p></div>" : "";
+    const p = signinParts(v);
+    const right = signinIdentHtml({ initial: p.initial, name: p.name, sub: p.sub, off: p.off }) + '<div class="sgn-acts door-acts">' + acts + '</div><div class="door-quiet">' + quiet.join("") + "</div>" + wayOut;
+    const left = '<h1 id="fsHeading">' + esc(pair[0]) + '</h1><p class="fs-lede">' + esc(pair[1]) + "</p>";
+    return doorScreen(left, right, "");
+  }
+  function paintDoorBand() {
+    const band = doorBandState(signinV);
+    const el = $2("#doorBand");
+    if (el) {
+      el.hidden = !band.shown;
+      el.setAttribute("aria-hidden", band.shown ? "false" : "true");
+      el.innerHTML = band.shown ? '<span class="door-band-dot" aria-hidden="true"></span><span>' + esc(band.text) + "</span>" : "";
+    }
+    const btn = $2("#signinBtn");
+    if (!btn || typeof btn.querySelector !== "function") return;
+    let dot = btn.querySelector(".door-btn-dot");
+    if (band.dot) {
+      if (!dot) btn.insertAdjacentHTML("beforeend", '<span class="door-btn-dot" aria-hidden="true"></span>');
+      btn.title = band.tip;
+    } else if (dot) dot.remove();
+  }
   function signinDoor(v) {
     const d = signinDoorOf(v);
     if (d && v.signedIn && signinDoorRefused) {
@@ -29823,8 +30206,8 @@ What is typed here stays in this browser.`;
         line: t("Your seat belongs to your account, so it comes with you to any computer you sign in on, up to three."),
         providers: v.offered,
         cap: signinCapHolds(v) ? t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.") : "",
-        privacy: t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account."),
-        foot: t("Etiuda for personal use, outside work, needs no sign-in.")
+        privacy: t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name, address and picture, and shows them only to the leads and administrator of the licence it asks to join."),
+        foot: ""
       };
     }
     const told = signinTold(v), toldDoor = () => ({ moment: told.kind, ident, say: told.say, providers: told.providers ? v.offered : void 0, acts: told.acts.concat([acct]) });
@@ -29840,6 +30223,20 @@ What is typed here stays in this browser.`;
     if (v.ask) return { moment: "ask", ident, say: signinSay("ask", v), providers: v.offered, acts: [acct] };
     if (told) return toldDoor();
     if (signinNoSeat(v)) return { moment: "noseat", ident, say: signinSay(v.refused, v, p), acts: [{ act: "check", label: t("Check now"), solid: true }, acct] };
+    const ds = deskDoorState(v);
+    if (ds.state === "ended") {
+      const endedPair = deskDoorLines(ds);
+      const ask2 = !!(ds.orgLicence || ds.seatOn === "team");
+      const acts = [];
+      if (ask2) acts.push({ act: "ask", label: doorAskLabel(ds.lead), solid: true });
+      else acts.push({ act: "check", label: t("Check now"), solid: true });
+      acts.push({ act: "buy", label: t("Buy") });
+      if (ask2) acts.push({ act: "check", label: t("Check now") });
+      acts.push(acct);
+      return { moment: "ended", ident, heading: endedPair[0], line: endedPair[1], acts };
+    }
+    const pair = deskDoorLines(ds);
+    if (ds.state === "working") return { moment: "working", ident, heading: pair[0], line: pair[1], acts: [{ act: "check", label: t("Check now") }, acct] };
     if (v.askLead) return {
       moment: "asklead",
       ident,
@@ -29925,6 +30322,11 @@ What is typed here stays in this browser.`;
   function signinActsHtml(acts) {
     return '<div class="sgn-acts">' + acts.map((a) => '<button type="button" class="btn' + (a.solid ? " primary" : "") + '" data-signin-act="' + esc(a.act) + '">' + esc(a.label) + "</button>").join("") + "</div>";
   }
+  function signinEndedActsHtml(acts) {
+    const on = acts.filter((a) => a.solid || a.act === "buy"), rest = acts.filter((a) => !(a.solid || a.act === "buy"));
+    const btn = (a) => '<button type="button" class="btn' + (a.solid ? " primary" : "") + '" data-signin-act="' + esc(a.act) + '">' + esc(a.label) + "</button>";
+    return '<div class="door-on-row">' + on.map(btn).join("") + '</div><div class="sgn-acts">' + rest.map(btn).join("") + "</div>";
+  }
   function signinPreviewHtml(v) {
     return v && v.preview ? '<p class="sgn-cap sgn-preview" data-signin-preview><b>' + esc(t("Preview only.")) + "</b> <span>" + esc(t("Sign-in is not set up yet, so nothing here is sent.")) + "</span></p>" : "";
   }
@@ -29946,7 +30348,10 @@ What is typed here stays in this browser.`;
     if (d.providers && d.providers.length) h += signinProvidersHtml(d.providers, false);
     if (d.cap) h += '<p class="sgn-cap">' + esc(d.cap) + "</p>";
     if (d.privacy) h += '<p class="sgn-cap">' + esc(d.privacy) + "</p>";
-    if (d.acts && d.acts.length) h += signinActsHtml(d.acts);
+    if (d.acts && d.acts.length) {
+      if (d.moment === "ended") h += signinEndedActsHtml(d.acts);
+      else h += signinActsHtml(d.acts);
+    }
     if (d.own) h += '<p class="sgn-say sgn-own"><b>' + esc(d.own[0]) + "</b><span>" + esc(d.own[1]) + "</span></p>";
     if (d.link) h += signinLinkHtml(d.link);
     if (d.foot) h += '<p class="sgn-ft">' + esc(d.foot) + "</p>";
@@ -29968,7 +30373,7 @@ What is typed here stays in this browser.`;
     });
   }
   function paintSigninButton() {
-    const wrap = $("#signinWrap"), btn = $("#signinBtn");
+    const wrap = $2("#signinWrap"), btn = $2("#signinBtn");
     if (!wrap || !btn) return;
     const v = signinV, show = signinShown(v);
     wrap.hidden = !show;
@@ -29987,9 +30392,10 @@ What is typed here stays in this browser.`;
       btn.setAttribute("aria-label", word);
       btn.title = word;
     }
+    paintDoorBand();
   }
   function paintSigninPanel() {
-    const panel = $("#signinPanel");
+    const panel = $2("#signinPanel");
     if (!panel) return;
     const d = signinChoosing && !signinV.busy ? signinDoor(Object.assign({}, signinV, { signedIn: "", said: "" })) : signinDoor(signinV);
     if (!d) {
@@ -30004,11 +30410,11 @@ What is typed here stays in this browser.`;
     signinOpen = true;
     paintSigninPanel();
     paintSigninButton();
-    const btn = $("#signinBtn");
+    const btn = $2("#signinBtn");
     if (btn) btn.setAttribute("aria-expanded", "true");
   }
   function closeSigninPanel(back) {
-    const panel = $("#signinPanel"), btn = $("#signinBtn");
+    const panel = $2("#signinPanel"), btn = $2("#signinBtn");
     const was = signinOpen;
     signinOpen = false;
     signinChoosing = false;
@@ -30024,20 +30430,36 @@ What is typed here stays in this browser.`;
     }
   }
   function signinChanged(v, answered) {
+    const wasWorking = signinHasView && deskWorks();
     signinV = signinRead(v);
+    signinHasView = true;
     paintSigninButton();
     if (firstSigninOpen || firstSigninPending) {
-      if (signinV.signedIn) {
-        closeFirstSignin();
+      if (!deskWorks()) {
+        if (firstSigninOpen) paintFirstSignin();
         signinTell();
         return;
       }
-      if (firstSigninOpen) {
-        paintFirstSignin();
-        signinTell();
-        return;
-      }
+      closeFirstSignin();
+      signinTell();
+      return;
     }
+    if (wasWorking && !deskWorks()) {
+      try {
+        eDeskFlush();
+      } catch (e) {
+      }
+      try {
+        const h = eHost();
+        if (h && typeof h.closePicker === "function") h.closePicker();
+      } catch (e) {
+      }
+      if (signinOpen) closeSigninPanel(false);
+      openFirstSignin();
+      signinTell();
+      return;
+    }
+    if (deskWorks() && firstSigninWaits.length) tellFirstSigninClosed();
     if (answered && signinShown(signinV) && !signinV.busy) signinOpen = true;
     if (signinOpen) paintSigninPanel();
     signinTell();
@@ -30290,16 +30712,16 @@ What is typed here stays in this browser.`;
     if (choice !== "mine" && choice !== "start" && choice !== "kept") return;
     const off = !!view && view.shown === true && view.on === false;
     if (off && choice === "mine") return;
-    const btn = $("#signinBtn");
+    const btn = $2("#signinBtn");
     if (!btn || !btn.getClientRects().length) return;
     const tpl = choice === "mine" ? t("Syncing now, with what was already on this desk.") : choice === "kept" ? t(`Starting from your account did not finish, and nothing was lost. What could not be put back is kept on this computer, in Etiuda's "Set aside" folder, and is never uploaded. The question about what is on this desk still waits for your answer.`) : t(`This desk now has your account's content. What was here before is kept on this computer, in Etiuda's "Set aside" folder, and is never uploaded.`);
     const i = tpl.indexOf(". "), rest = off && choice === "start" && i >= 0 ? tpl.slice(i + 2) : tpl;
     const j = rest.indexOf(". ");
     const head = j < 0 ? rest : rest.slice(0, j + 1), tail = j < 0 ? "" : " " + rest.slice(j + 2);
     const extra = choice !== "mine" ? { label: t("Open this folder"), onClick: () => eOpenSetAside() } : null;
-    const d = syncNoticeBubble("eSyncChoiceNote", head, tail, () => $("#signinBtn"), true, () => {
+    const d = syncNoticeBubble("eSyncChoiceNote", head, tail, () => $2("#signinBtn"), true, () => {
       const said2 = document.getElementById("eSyncSaid");
-      if (said2) hangBubble(said2, () => $("#signinBtn"));
+      if (said2) hangBubble(said2, () => $2("#signinBtn"));
     }, extra);
     const said = document.getElementById("eSyncSaid");
     if (said) hangBubble(said, d);
@@ -30326,7 +30748,7 @@ What is typed here stays in this browser.`;
       syncWhoseShut(false);
       syncWhoseShut = null;
     }
-    const target = origin || (() => $("#signinBtn"));
+    const target = origin || (() => $2("#signinBtn"));
     const anchor = typeof target === "function" ? target() : target;
     if (!anchor || !anchor.getClientRects().length) return;
     const el = document.createElement("div");
@@ -30398,7 +30820,7 @@ What is typed here stays in this browser.`;
     const wantAsk = s.line === "ask" && s.askNow && !document.getElementById("eSyncWhose");
     const wantSay = !!s.say && !document.getElementById("eSyncSaid");
     if (!wantAsk && !wantSay) return;
-    const btn = $("#signinBtn"), panel = $("#signinPanel");
+    const btn = $2("#signinBtn"), panel = $2("#signinPanel");
     if (!btn || !btn.getClientRects().length) return;
     if (panel && !panel.hidden) {
       if (syncWaiting) return;
@@ -30417,7 +30839,7 @@ What is typed here stays in this browser.`;
     const words = s.say === "on" ? t("Your catalogs, edits and settings now follow you to every computer you sign in on. You can turn this off in Account.") : syncUnavailable(s.say, signinV.signedIn, true);
     const i = words.indexOf(". ");
     const tail = i < 0 || s.say === "on" && s.held === true ? "" : " " + words.slice(i + 2);
-    syncNoticeBubble("eSyncSaid", i < 0 ? words : words.slice(0, i + 1), tail, () => document.getElementById("eSyncChoiceNote") || $("#signinBtn"), false);
+    syncNoticeBubble("eSyncSaid", i < 0 ? words : words.slice(0, i + 1), tail, () => document.getElementById("eSyncChoiceNote") || $2("#signinBtn"), false);
     const h = eHost();
     try {
       if (h && typeof h.storeSaid === "function") h.storeSaid();
@@ -30470,7 +30892,7 @@ What is typed here stays in this browser.`;
     firstSigninPending = firstSigninDue();
     if (typeof h.onSignin === "function") h.onSignin((v) => signinChanged(v, false));
     if (typeof h.onStore === "function") h.onStore(() => syncChanged());
-    const btn = $("#signinBtn"), panel = $("#signinPanel"), wrap = $("#signinWrap"), fs = $("#firstSignin");
+    const btn = $2("#signinBtn"), panel = $2("#signinPanel"), wrap = $2("#signinWrap"), fs = $2("#firstSignin");
     if (btn) btn.onclick = (e) => {
       e.stopPropagation();
       if (signinOpen) closeSigninPanel(true);
@@ -30479,10 +30901,6 @@ What is typed here stays in this browser.`;
     signinClicks(panel);
     if (fs) {
       signinClicks(fs);
-      fs.addEventListener("click", (e) => {
-        const s = e.target && e.target.closest ? e.target.closest("#firstSigninSkip") : null;
-        if (s) skipFirstSignin();
-      });
     }
     addEventListener("pointerdown", (e) => {
       if (signinOpen && wrap && !wrap.contains(e.target)) closeSigninPanel(false);
@@ -33896,7 +34314,18 @@ What is typed here stays in this browser.`;
       return null;
     }
   }
+  var pendingImport = null;
+  function replayPendingImport() {
+    const p = pendingImport;
+    pendingImport = null;
+    if (p) importCatalogText(p.text, p.fileName, p.offTeam);
+  }
   function importCatalogText(text, fileName, offTeam) {
+    if (doorHolds()) {
+      pendingImport = { text: String(text || ""), fileName, offTeam: !!offTeam };
+      whenDoorLowers(replayPendingImport);
+      return false;
+    }
     const c = catalogFromFileText(String(text || ""), fileName);
     if (!c) return false;
     hooks.offerPickedCatalog(c, fileName, () => eWatchClear().then(() => activateCatalog(c, { from: fileName })), !!offTeam);
@@ -33913,6 +34342,7 @@ What is typed here stays in this browser.`;
     });
   }
   function importCatalogHere() {
+    if (doorHolds()) return;
     if (eHasCatalogPicker()) importCatalogHosted();
     else if (eWatchSupported()) importCatalogPicked();
     else importCatalogFile();
@@ -33937,6 +34367,12 @@ What is typed here stays in this browser.`;
     const dt = e.dataTransfer;
     return !!dt && Array.prototype.indexOf.call(dt.types || [], "Files") > -1;
   }
+  var pendingDrop = null;
+  function replayPendingDrop() {
+    const f = pendingDrop;
+    pendingDrop = null;
+    if (f) handleDroppedFile(f);
+  }
   function wireCatalogDrop() {
     addEventListener("dragover", (e) => {
       if (!isFileDrag(e)) return;
@@ -33948,16 +34384,43 @@ What is typed here stays in this browser.`;
       e.preventDefault();
       const f = e.dataTransfer.files && e.dataTransfer.files[0];
       if (!f) return;
-      if (!/[.](ec|json|js)$/i.test(f.name)) {
-        toastRefusal(t("{FILE} is not a catalog file Etiuda can read.").split("{FILE}").join(f.name));
+      if (doorHolds()) {
+        pendingDrop = f;
+        whenDoorLowers(replayPendingDrop);
         return;
       }
-      const h = eHost();
-      if (h && typeof h.offerDropped === "function" && /[.]ec$/i.test(f.name) && h.offerDropped(f)) return;
-      f.text().then(
-        (text) => importCatalogText(text, f.name),
-        () => toastRefusal(fileReadLine(f.name, ""))
-      );
+      handleDroppedFile(f);
+    });
+  }
+  function handleDroppedFile(f) {
+    if (!/[.](ec|json|js)$/i.test(f.name)) {
+      toastRefusal(t("{FILE} is not a catalog file Etiuda can read.").split("{FILE}").join(f.name));
+      return;
+    }
+    const h = eHost();
+    if (h && typeof h.offerDropped === "function" && /[.]ec$/i.test(f.name) && h.offerDropped(f)) return;
+    f.text().then(
+      (text) => importCatalogText(text, f.name),
+      () => toastRefusal(fileReadLine(f.name, ""))
+    );
+  }
+  var pendingPicked = null;
+  function replayPendingPicked() {
+    const p = pendingPicked;
+    pendingPicked = null;
+    if (p) takePickedFile(p.handle, p.file);
+  }
+  function takePickedFile(handle, f) {
+    return f.text().then((text) => {
+      const c = catalogFromFileText(text, f.name);
+      if (!c) return null;
+      hooks.offerPickedCatalog(c, f.name, () => {
+        nsSet("WatchName", f.name);
+        nsSet("WatchSeen", String(f.lastModified || 0));
+        nsDel("WatchNo");
+        return eWatchPut(handle).then(() => activateCatalog(c, { from: f.name }));
+      });
+      return null;
     });
   }
   function importCatalogPicked() {
@@ -33971,17 +34434,12 @@ What is typed here stays in this browser.`;
     }).then((f) => {
       if (!f) return null;
       picked = f.name;
-      return f.text().then((text) => {
-        const c = catalogFromFileText(text, f.name);
-        if (!c) return null;
-        hooks.offerPickedCatalog(c, f.name, () => {
-          nsSet("WatchName", f.name);
-          nsSet("WatchSeen", String(f.lastModified || 0));
-          nsDel("WatchNo");
-          return eWatchPut(handle).then(() => activateCatalog(c, { from: f.name }));
-        });
+      if (doorHolds()) {
+        pendingPicked = { handle, file: f };
+        whenDoorLowers(replayPendingPicked);
         return null;
-      });
+      }
+      return takePickedFile(handle, f);
     }).catch((e) => {
       if (e && e.name === "AbortError") return;
       toastRefusal(t("The catalog file could not be loaded:") + " " + (picked || e && e.name || ""));
@@ -37553,13 +38011,13 @@ What is typed here stays in this browser.`;
     });
   }
   function offerAtBoot() {
+    if (doorHolds()) {
+      whenDoorLowers(eOfferCatalogAtBoot);
+      return false;
+    }
     const at = +(nsGet("CatalogNoAt") || 0), mt = eCatalogMtime(), asked = eOpenedWith();
     if (!asked && tourDueAtBoot()) {
       afterTour(eOfferCatalogAtBoot);
-      return false;
-    }
-    if (!asked && firstSigninStands()) {
-      onFirstSigninClosed(eOfferCatalogAtBoot);
       return false;
     }
     const found = eCatalog(), held = storedCatalog();
@@ -38244,7 +38702,18 @@ What is typed here stays in this browser.`;
       none.hidden = !!shown2;
     }
   }
+  var pendingWatch = null;
+  function replayPendingWatch() {
+    const iv = pendingWatch;
+    pendingWatch = null;
+    if (iv !== null) eCheckWatchedFile(iv);
+  }
   function eCheckWatchedFile(interactive) {
+    if (doorHolds()) {
+      pendingWatch = pendingWatch === null ? !!interactive : pendingWatch || !!interactive;
+      whenDoorLowers(replayPendingWatch);
+      return;
+    }
     if (!eWatchSupported()) return;
     if (document.getElementById("eCatalogOffer")) return;
     eWatchGet().then((h) => {
@@ -38325,7 +38794,18 @@ What is typed here stays in this browser.`;
   function listingNoticeFiles(all, held) {
     return (all || []).filter((f) => !f.desk && !f.builtIn && !f.sample && f.id && !(held && held.id === f.id)).filter((f) => f.leadSigned === true);
   }
+  var pendingListing = null;
+  function replayPendingListing() {
+    const all = pendingListing;
+    pendingListing = null;
+    if (all) onCatalogListing(all);
+  }
   function onCatalogListing(all) {
+    if (doorHolds()) {
+      pendingListing = all;
+      whenDoorLowers(replayPendingListing);
+      return;
+    }
     let flipped = false;
     try {
       flipped = noteCatalogFolderHold(all);
@@ -38428,53 +38908,72 @@ What is typed here stays in this browser.`;
     }
     toastRefusal(t("{FILE} is not a catalog file Etiuda can read.").split("{FILE}").join(String(name || "")));
   }
+  var pendingHostFile = null;
+  function replayPendingHostFile() {
+    const args = pendingHostFile;
+    pendingHostFile = null;
+    if (args) takeHostCatalogFile(args);
+  }
+  function takeHostCatalogFile(args) {
+    if (doorHolds()) {
+      pendingHostFile = args;
+      whenDoorLowers(replayPendingHostFile);
+      return;
+    }
+    const [text, name, where, asked, why, builtIn, notOnTeam, code] = args;
+    paintCatalogList();
+    let c = null;
+    try {
+      if (!why) c = parseCatalogFile(text);
+    } catch (e) {
+      c = null;
+    }
+    if (!c && !why) {
+      refuseAskedFile(name, "parse");
+      const next = eRefuseCatalogFile(name);
+      let n = null;
+      try {
+        n = next ? parseCatalogFile(String(next.json)) : null;
+      } catch (e) {
+        n = null;
+      }
+      if (n && !asked) eOfferCatalog(n, String(next.file || ""), String(next.in || ""), false, false, !!next.builtIn);
+      return;
+    }
+    if (!c) {
+      if (asked) refuseAskedFile(name, why || "parse", code);
+      return;
+    }
+    eOfferCatalog(c, name, where, !!asked, !!asked, builtIn, notOnTeam === "off-roster");
+  }
   function wireHostCatalogWatch() {
     const h = typeof window !== "undefined" && window.E_HOST || null;
     if (!h || typeof h.onCatalogFile !== "function") return;
     eCatalog();
     const cold = eOpenedRefused() || (eCatalogRefusedNames().length ? { name: eCatalogRefusedNames()[0], why: "parse" } : null);
     if (cold) setTimeout(() => {
-      try {
-        refuseAskedFile(cold.name, cold.why);
-      } catch (e) {
-      }
+      whenDoorLowers(() => {
+        try {
+          refuseAskedFile(cold.name, cold.why);
+        } catch (e) {
+        }
+      });
     }, 1400);
     const newer = h.catalogNewer;
     if (newer && newer.version) setTimeout(() => {
-      try {
-        toastRefusal(eNeedsNewerLine(newer.version));
-      } catch (e) {
-      }
+      whenDoorLowers(() => {
+        try {
+          toastRefusal(eNeedsNewerLine(newer.version));
+        } catch (e) {
+        }
+      });
     }, cold ? 2800 : 1400);
     if (typeof h.onCatalogNewer === "function") h.onCatalogNewer((v) => {
-      if (v && v.version) toastRefusal(eNeedsNewerLine(v.version));
+      if (v && v.version) whenDoorLowers(() => toastRefusal(eNeedsNewerLine(v.version)));
     });
     eOnCatalogListing(onCatalogListing);
     h.onCatalogFile((text, name, where, asked, why, builtIn, notOnTeam, code) => {
-      paintCatalogList();
-      let c = null;
-      try {
-        if (!why) c = parseCatalogFile(text);
-      } catch (e) {
-        c = null;
-      }
-      if (!c && !why) {
-        refuseAskedFile(name, "parse");
-        const next = eRefuseCatalogFile(name);
-        let n = null;
-        try {
-          n = next ? parseCatalogFile(String(next.json)) : null;
-        } catch (e) {
-          n = null;
-        }
-        if (n && !asked) eOfferCatalog(n, String(next.file || ""), String(next.in || ""), false, false, !!next.builtIn);
-        return;
-      }
-      if (!c) {
-        if (asked) refuseAskedFile(name, why || "parse", code);
-        return;
-      }
-      eOfferCatalog(c, name, where, !!asked, !!asked, builtIn, notOnTeam === "off-roster");
+      takeHostCatalogFile([text, name, where, asked, why, builtIn, notOnTeam, code]);
     });
   }
 
@@ -40600,7 +41099,7 @@ What is typed here stays in this browser.`;
   }
   function rowHtml(r) {
     if (r.html != null) return r.html;
-    return '<div class="set-row" data-row="' + esc(r.key) + '">' + sxIcon(r.icon) + '<div class="set-label">' + esc(r.title) + (r.hint ? "<small>" + esc(r.hint) + "</small>" : "") + '</div><div class="set-ctl">' + r.ctl + "</div></div>";
+    return '<div class="set-row" data-row="' + esc(r.key) + '">' + sxIcon(r.icon) + '<div class="set-label">' + (r.dot ? '<span class="door-seat-dot" aria-hidden="true"></span>' : "") + esc(r.title) + (r.hint ? "<small>" + esc(r.hint) + "</small>" : "") + '</div><div class="set-ctl">' + r.ctl + "</div></div>";
   }
   function rowWords(r) {
     if (r.html != null) return String(r.html).replace(/<[^>]*>/g, " ").replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
@@ -40666,14 +41165,10 @@ What is typed here stays in this browser.`;
     if (failed) {
       const s = signinSay(v.said, v);
       h += signinIdentHtml({ initial: "", name: s[0], sub: s[1] });
-    } else h += signinIdentHtml({
-      initial: "",
-      name: t("Not signed in"),
-      sub: v.offered.length ? t("Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.") : ""
-    });
+    } else h += signinIdentHtml({ initial: "", name: t("Not signed in"), sub: "" });
     h += accountManagedHtml(v);
     if (v.outOwed) h += '<p class="sgn-cap" data-signin-out-owed>' + esc(t("This computer is signed out. Its place among the account's three computers is freed by itself as soon as the sign-in service can be reached.")) + "</p>";
-    if (v.offered.length) h += "<div>" + (v.said === "signin-preview" ? "" : signinPreviewHtml(v)) + signinProvidersHtml(v.offered, true) + (signinCapHolds(v) ? '<p class="sgn-cap">' + esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.")) + "</p>" : "") + '<p class="sgn-cap">' + esc(t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account.")) + "</p></div>";
+    if (v.offered.length) h += "<div>" + (v.said === "signin-preview" ? "" : signinPreviewHtml(v)) + signinProvidersHtml(v.offered, true) + (signinCapHolds(v) ? '<p class="sgn-cap">' + esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.")) + "</p>" : "") + '<p class="sgn-cap">' + esc(t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name, address and picture, and shows them only to the leads and administrator of the licence it asks to join.")) + "</p></div>";
     if (choosing && v.signedIn) h += '<span class="sgn-acts"><button type="button" class="btn" data-signin-act="keep">' + esc(t("Cancel")) + "</button></span>";
     return h + "</div>";
   }
@@ -40706,7 +41201,8 @@ What is typed here stays in this browser.`;
     if (!stranded && v.signedIn && !signinChoosingNow()) {
       const p = signinParts(v), val = (x) => '<span class="sgn-val">' + esc(x) + "</span>", join = (pair) => pair[0] + " " + pair[1];
       const doorSaid = signinDoorRefusedNow() ? signinSay("door", v)[0] : "";
-      rows.push(p.team ? row("team", "people", t("Team"), doorSaid || (p.team.lead ? t("Led by {LEAD}").split("{LEAD}").join(p.team.lead) : ""), val(p.teamName)) : v.doors.length && v.seat === "held" ? row("team", "people", t("A team on this licence"), doorSaid || t("This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation."), signinDoorsHtml(v.doors)) : v.deskOnly && v.seat === "held" ? row("team", "people", t("Working without a team"), doorSaid || t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed."), "") : row("team", "people", t("No team yet"), doorSaid || (signinManaged(v) ? t("No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself.") : t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself.")), ""));
+      const teamNamed = teamLeads().find((x) => x && !x.removed && x.team) || {};
+      rows.push(p.team ? row("team", "people", t("Team"), doorSaid || (p.team.lead ? t("Led by {LEAD}").split("{LEAD}").join(p.team.lead) : ""), val(teamNamed.team || p.teamName)) : v.doors.length && v.seat === "held" ? row("team", "people", t("A team on this licence"), doorSaid || t("This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation."), signinDoorsHtml(v.doors)) : v.deskOnly && v.seat === "held" ? row("team", "people", t("Working without a team"), doorSaid || t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed."), "") : row("team", "people", t("No team yet"), doorSaid || (signinManaged(v) ? t("No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself.") : t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself.")), ""));
       if (v.managed && v.managed.provider) rows.push(row("signin", "user", t("Sign-in"), "", lockedHtml(signinHeldTo(v.managed))));
       if (v.code && !signinManaged(v)) rows.push(row(
         "code",
@@ -40716,9 +41212,21 @@ What is typed here stays in this browser.`;
         t("Not a secret. It tells a team's lead which account is yours."),
         '<code class="sgn-mono">' + esc(signinCodeText(v.code)) + "</code>" + signinCopyHtml("copy")
       ));
-      if (signinNoSeat(v)) rows.push(row("seat", "check", t("Seat"), join(signinSay(v.refused, v, p)), ""));
+      const ds = deskDoorState(v);
+      if (ds.state === "ended" || ds.state === "working") {
+        const seatPair = deskDoorLines(ds);
+        rows.push({
+          key: "seat",
+          icon: "check",
+          dot: ds.state === "ended",
+          /* plant:account-seat-dot */
+          title: seatPair[0],
+          hint: seatPair[1],
+          ctl: ""
+        });
+      } else if (signinNoSeat(v)) rows.push(row("seat", "check", t("Seat"), join(signinSay(v.refused, v, p)), ""));
       else if (v.seat === "none") rows.push(row("seat", "check", t("Seat"), join(signinSay("nolicence", v)), ""));
-      else rows.push(row("seat", "check", t("Seat"), v.seat === "lapsed" ? join(signinSay("lapsed", v)) : t("On up to three computers; this is one of them."), val(t("Held by this account"))));
+      else rows.push(row("seat", "check", t("Seat"), v.seat === "lapsed" ? join(signinSay("lapsed", v)) : t("On up to three computers; this is one of them."), ""));
       if (cause) rows.push(row("cause", "check", t("Licence"), cause, ""));
       if (buy) rows.push(buyRow(v));
       else if (held) rows.push(held);
@@ -43519,7 +44027,26 @@ What is typed here stays in this browser.`;
   function wireCaptureKeydown() {
     addEventListener("keydown", (e) => {
       if (scCaptureId && !modalFront() && !scListShown()) scStopCapture();
-      if (!scCaptureId) return;
+      if (!scCaptureId) {
+        let capLock = false;
+        if (firstSigninOpenNow() && !openCover()) capLock = true;
+        if (capLock) {
+          const fs = $("#firstSignin"), act = document.activeElement;
+          const targetOutside = !!(e.target && e.target !== window && e.target !== document && e.target !== document.body && e.target !== document.documentElement && (!fs || typeof fs.contains !== "function" || !fs.contains(e.target)));
+          const inDoor = !targetOutside && !!(fs && act && typeof fs.contains === "function" && fs.contains(act));
+          const doorTab = e.key === "Tab" && !e.ctrlKey && !e.altKey && !e.metaKey;
+          const doorPress2 = inDoor && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && (e.key === "Enter" || e.key === " ");
+          const doorEsc = e.key === "Escape" || eventMatchesAction(e, "escape");
+          const doorCopy = inDoor && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (act.tagName || "").toLowerCase() === "input" && (e.key === "c" || e.key === "C" || e.key === "a" || e.key === "A");
+          const doorQuit = e.altKey && e.key === "F4";
+          if (!doorTab && !doorPress2 && !doorEsc && !doorCopy && !doorQuit && (e.key === "Control" || e.key === "Meta" || targetOutside)) {
+            e.preventDefault();
+            if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+            else e.stopPropagation();
+          }
+        }
+        return;
+      }
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
@@ -43568,6 +44095,33 @@ What is typed here stays in this browser.`;
     }, true);
     addEventListener("keydown", (e) => {
       if (scCaptureId) return;
+      let doorLock = false;
+      if (firstSigninOpenNow() && !openCover()) doorLock = true;
+      if (doorLock) {
+        if (e.key === "Tab" && !e.ctrlKey && !e.altKey && !e.metaKey) {
+          const to = tabTargetIn($("#firstSignin"), e.shiftKey);
+          if (to) {
+            e.preventDefault();
+            try {
+              to.focus({ preventScroll: true });
+            } catch (x) {
+              to.focus();
+            }
+          }
+          return;
+        }
+        const fs = $("#firstSignin"), act = document.activeElement;
+        const targetOutside = !!(e.target && e.target !== window && e.target !== document && e.target !== document.body && e.target !== document.documentElement && (!fs || typeof fs.contains !== "function" || !fs.contains(e.target)));
+        const inDoor = !targetOutside && !!(fs && act && typeof fs.contains === "function" && fs.contains(act));
+        const doorPress2 = inDoor && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && (e.key === "Enter" || e.key === " ");
+        const doorCopy = inDoor && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (act.tagName || "").toLowerCase() === "input" && (e.key === "c" || e.key === "C" || e.key === "a" || e.key === "A");
+        const doorQuit = e.altKey && e.key === "F4";
+        if (!doorPress2 && !doorCopy && !doorQuit) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        return;
+      }
       if (tourActive() && tourHasFocus()) {
         if (e.target && e.target.id === "tourName" && e.key !== "Escape") return;
         if (e.key === "Escape" || eventMatchesAction(e, "escape")) {
@@ -43602,27 +44156,6 @@ What is typed here stays in this browser.`;
               to.focus();
             }
           }
-        }
-        return;
-      }
-      if (firstSigninOpenNow()) {
-        if (eventMatchesAction(e, "escape") || e.key === "Escape") {
-          e.preventDefault();
-          e.stopPropagation();
-          skipFirstSignin();
-          return;
-        }
-        if (e.key === "Tab" && !e.ctrlKey && !e.altKey && !e.metaKey) {
-          const to = tabTargetIn($("#firstSignin"), e.shiftKey);
-          if (to) {
-            e.preventDefault();
-            try {
-              to.focus({ preventScroll: true });
-            } catch (x) {
-              to.focus();
-            }
-          }
-          return;
         }
         return;
       }
@@ -45131,7 +45664,9 @@ What is typed here stays in this browser.`;
     });
     return cachedModel;
   }
+  var PICK_EMPTY_OPS = /* @__PURE__ */ new Set(["find", "who", "tab", "lang", "suggest-take", "suggest-rows"]);
   function answerPick(op, argText) {
+    if (!deskWorks()) return PICK_EMPTY_OPS.has(op) ? { rows: [], count: "" } : null;
     let a = {};
     try {
       a = JSON.parse(String(argText || "{}")) || {};
@@ -45596,7 +46131,7 @@ What is typed here stays in this browser.`;
     syncSampleMark();
     paintCatNow();
     eOfferCatalogAtBoot();
-    wireTeamJoin();
+    wireTeamJoin({ holds: doorHolds, whenOpen: whenDoorLowers });
     syncRoleWheel();
     maybeStartTour();
     wireHostCatalogWatch();
