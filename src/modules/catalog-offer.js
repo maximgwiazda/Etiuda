@@ -995,7 +995,7 @@ function dropOffersLeft(all){
 /* ---- THE TEAM TOOK UP THIS DESK'S OWN CATALOG (board 1015). The shell hands the trusted team file's entries naming this desk; the
    page matches each `original`, the SHA-256 of a desk file's own id, against the files this desk wrote: the one of the catalog in
    use and those of the catalogs set aside. Told once, in a bubble at the catalog's name; the choice stays open in the Library. ---- */
-const ADOPT_REFUSED="Everything stays as it was, and this can be tried again.";
+const ADOPT_REFUSED="The catalog in use could not be set aside safely, so nothing has changed. It can be tried again.";
 function adoptedMatches(list,me,held,looseId,aside){
   if(!me || !me.id) return [];
   const own=[];

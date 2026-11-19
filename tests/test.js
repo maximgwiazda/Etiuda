@@ -1483,7 +1483,7 @@ function adoptedTests() {
     listing(api, w, ME, listFor(ME), [ROW]);
     const r0 = snap(w.kv), rb = bubble(w);
     rb.buttons["#ecYes"].onclick();
-    chk("a refused Switch changes nothing, keeps the bubble, and says so in a line", [snap(w.kv) === r0, rb.isConnected, /Everything stays as it was/.test(rb.warn),
+    chk("a refused Switch changes nothing, keeps the bubble, and says so in a line", [snap(w.kv) === r0, rb.isConnected, /The catalog in use could not be set aside safely, so nothing has changed\./.test(rb.warn),
       !!(JSON.parse(w.kv.get("eAdoptedSeen") || "{}")["team-1"] || {}).done], [true, true, true, false]);
     /* condition (c): a teammate, and the author's id with an original that is not one of its files */
     w = author(); api = build(oSrc, fileSrc, w);
