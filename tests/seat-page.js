@@ -15,10 +15,6 @@ const { createSeatLab } = require("./seat-lab.mjs");
 
 const SPKI_ED25519 = Buffer.from("302a300506032b6570032100", "hex");
 
-/* Page-booting legs whose subject is the unseated door, kept off seatPage by name. */
-const DOOR_LEGS = Object.freeze({
-  "tests/desk-first-signin.mjs": "its subject is the first-opening sign-in door, its refusal states, provider hand-offs and door-due rule",
-});
 
 function canonJson(v) {
   if (Array.isArray(v)) return "[" + v.map(canonJson).join(",") + "]";
@@ -152,4 +148,4 @@ async function seatPage(page, opts) {
   return view;
 }
 
-module.exports = { DOOR_LEGS, seatedView, seatPage, verifySeatCert };
+module.exports = { seatedView, seatPage, verifySeatCert };
