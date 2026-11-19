@@ -5243,6 +5243,16 @@ CASES.stopInstant = async (s, swap) => {
       && pg.deskDoorState(pg.signinNow()).ended === 0
       && replyField.value === "Half-written reply to customer" && ST.lsGet("ePendingEdit") === "unsaved-value-1";
 
+    /* Check 3b: seated, then Sign out (works false, signedIn "", door state "first"): the door raises as at a stop; the next seated view lowers it. */
+    const signedOutView = { offered: ["microsoft", "google"], signedIn: "", works: false, registered: true, online: true, now: NOW + DAY_MS + 2000, ended: 0, stoppedAt: 0 };
+    cur = signedOutView;
+    onSigninCb(signedOutView);
+    const signedOutRaises = pg.firstSigninStands() === true && pg.firstSigninOpenNow() === true && fsEl.hidden === false && classes.has("e-first-signin")
+      && pg.deskDoorState(pg.signinNow()).state === "first" && replyField.value === "Half-written reply to customer";
+    cur = seatedView;
+    onSigninCb(seatedView);
+    const signedOutLowers = pg.firstSigninStands() === false && fsEl.hidden === true && !classes.has("e-first-signin");
+
     /* Check 2a: failed flush (deskPatch throws) still raises door and keeps pending edit in storage's own retry. */
     events.length = 0;
     failPatch = true;
@@ -5273,7 +5283,7 @@ CASES.stopInstant = async (s, swap) => {
       && fsEl.hidden === false && replyField.value === "Half-written reply to customer";
 
     return startsWorking && workingQuiet && flushBeforeDoor && doorStood && workUntouched
-      && noDoubleFlush && hasWayOut && wayOutKbdOk && returnedOk && failedStorageFlushOk && throwFlushOk;
+      && noDoubleFlush && hasWayOut && wayOutKbdOk && returnedOk && signedOutRaises && signedOutLowers && failedStorageFlushOk && throwFlushOk;
   } finally {
     if (!hadSyncNotice) delete HK.hooks.syncSaveNotice; else HK.hooks.syncSaveNotice = prevSyncNotice;
     if (!hadThrowCalls) delete globalThis.__b3a2bFlushThrows; else globalThis.__b3a2bFlushThrows = prevThrowCalls;
@@ -5615,7 +5625,7 @@ const LEGS = [
   ["dsg5", "offersWait", "B-3a2a: while the door stands, every catalog intake channel (boot offer with asked:true, listing, host watch, browser watch, window drop, importCatalogText) waits and plays when deskWorks() turns true, and importCatalogHere is ignored"],
   ["dsg6", "doorKeyboard", "B-3a2a: over the standing door, keyboard answers only the door (Tab/Shift+Tab reach data-door-save, Enter/Space press it natively; Escape, Ctrl+Z standing undo, shortcuts, chords and typing are held back; save handlers stay unguarded)"],
   ["dsg7", "pickAskDoor", "B-3a2a: answerPick refuses every op when deskWorks() is false without reading catalog or layer, returning a nothing-to-show refusal shape, and answers as before when deskWorks() is true"],
-  ["dsg8", "stopInstant", "B-3a2b: at the stop's instant pending writes flush once before the door rises (failed/throwing flush still raises door with retry intact), fields stay untouched, way-out is reachable by keyboard, return lowers door and plays waits once, working push and second stop do not flush again"],
+  ["dsg8", "stopInstant", "B-3a2b: at the stop's instant pending writes flush once before the door rises (failed/throwing flush still raises door with retry intact), fields stay untouched, way-out is reachable by keyboard, return lowers door and plays waits once, a Sign out from a working seat (works false, signed out, door state first) raises it the same way and the next seated view lowers it, working push and second stop do not flush again"],
   ["dsg9", "stopHidePickerShell", "B-3a2b: shell tellSignin hides a visible picker with hidePicker(false) (focus not forced) when signinWorksNow() is false, leaving hidden picker and working desk unchanged"],
   ["dsg10", "browserDoor", "B-3a2b: plain browser build with no host has deskWorks false, firstSigninDue and doorHolds true, raises browser door in EN and PL with inert data-door-save and no provider/Not now/Escape, and seated host stand-in works as before"],
   ["dsg11", "settleClockIssued", "Argon 51 M1: settle and kept-file path compare against clock.issued so null held cert or older cert in signin.json cannot revive the desk"],
