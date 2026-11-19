@@ -22,7 +22,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 138;
+const EXPECTED = 145;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk: its content reaches the lead only if the lead turns on copies of unlisted catalogs in Studio, and this desk is told before anything is sent. A catalog the team does not list can be marked private here, and is then never sent. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, and Studio shows them in the team's totals.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie). Kopię katalogu z listy zespołu Studio lidera może pobrać w każdej chwili, bez pytania tutaj, zapieczętowaną dla zespołu. Każdy inny katalog zostaje na tym stanowisku: jego treść trafi do lidera tylko wtedy, gdy lider włączy w Studiu kopie katalogów spoza listy, a to stanowisko zostanie o tym powiadomione, zanim cokolwiek zostanie wysłane. Katalog spoza listy zespołu można tutaj oznaczyć jako prywatny i wtedy nigdy nie jest wysyłany. Studio lidera wymienia to stanowisko z nazwy, chyba że organizacja wyłączy nazwy, razem z używanym katalogiem, jego wydaniem i okresem zliczania, i wymienia je dalej, gdy przestanie się odzywać. Własne dane stanowiska trafiają do lidera zapieczętowane, a Studio pokazuje je w sumach zespołu.";
@@ -2340,6 +2340,93 @@ try {
         const planted = SRC.split("\n").map(l => l.indexOf("plant:s0b-said-ask") >= 0 ? "  /* plant:s0b-said-ask */" : l).join("\n");
         const p = planted !== SRC ? await waiting("r2-waiting-plant", planted) : null;
         check(!!p && !p.after, "r2q lifting plant:s0b-said-ask turns r2h red: the waiting ask stays unanswered (" + (p ? JSON.stringify(p) : "plant not found") + ")");
+      }
+    }
+
+    /* ---- board 1014: no switch, the told gate alone (red first on 638fdcdd) ---- */
+    {
+      const putAskNoSwitch = (box, id, sha) => {
+        const doc = { format: 2, kind: "etiuda-catalog-ask", id, desk: box.me.id, sha256: sha, expires: expAt(),
+          team: box.team, sig: { alg: "Ed25519", keyId: LEAD.keyId } };
+        doc.sig.value = crypto.sign(null, box.D.api.askSignedBytes(doc), lead.privateKey).toString("hex");
+        fs.mkdirSync(path.join(box.share, "catalog-asks"), { recursive: true });
+        put(box.share, path.join("catalog-asks", box.me.id + ".json"), JSON.stringify(doc));
+      };
+      const toldScene = async (name, opts) => {
+        const o = opts || {};
+        const box = await arm(name, o.src);
+        join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["harbour-board"], null, true);
+        const before = await box.D.ask("etiuda:team-join", "content");
+        if (o.priv) await box.D.ask("etiuda:team-join", "private", "quay-held", "on");
+        const dir = folder(name + "-out");
+        put(dir, "held.ec", b0Body());
+        box.D.api.offerFile(box.D.win, path.join(dir, "held.ec"));
+        const off = box.D.sent.filter(a => a[0] === "etiuda:catalog-file").pop();
+        const pin = pinOf(box.D, off ? off[1] : "");
+        take(box.D, pin);
+        putAskNoSwitch(box, "Ask1014a", pin);
+        box.D.api.tryCatalogAsk(box.D.win);
+        const ans = answerPath(box.share, box.me.id);
+        const untoldAns = fs.existsSync(ans);
+        const untoldCopy = await writeCopy(box, "a1a1a1a1", "quay-held");
+        const after = o.tell === false ? null : await box.D.ask("etiuda:team-join", "content-said", box.team, "");
+        const stamp = (box.D.envelope().teamContentSaid || {})[box.team] || "";
+        putAskNoSwitch(box, "Ask1014b", pin);
+        box.D.api.tryCatalogAsk(box.D.win);
+        const toldAns = openLeadDoc(box.D, ans);
+        const toldTeam = openSealedDoc(box.D, ans, box.key);
+        const toldCopy = await writeCopy(box, "b2b2b2b2", "quay-held");
+        let copyInner = null;
+        try { copyInner = JSON.parse(box.D.api.openBranchLead(leadBox.privateKey, JSON.parse(fs.readFileSync(branchAt(box, "b2b2b2b2"), "utf8")), box.me.id)); } catch { copyInner = null; }
+        let freedAns = null;
+        if (o.priv && o.tell !== false) {
+          await box.D.ask("etiuda:team-join", "private", "quay-held", "off");
+          putAskNoSwitch(box, "Ask1014c", pin);
+          box.D.api.tryCatalogAsk(box.D.win);
+          freedAns = openLeadDoc(box.D, ans);
+        }
+        return {
+          before, after, stamp, untoldAns, untoldCopy, ansWritten: fs.existsSync(ans),
+          toldAns, toldTeam, toldCopy, copyInner, freedAns,
+          ansGenuine: !!toldAns && box.D.api.answerLeadGenuine(toldAns, box.me.id, box.me.key),
+          copyGenuine: !!copyInner && box.D.api.branchLeadGenuine(copyInner, box.me.id, box.me.key),
+        };
+      };
+      const t = await toldScene("b1014-main");
+      const timeOk = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(t.stamp) && Number.isFinite(Date.parse(t.stamp));
+      check(!!t.before && t.before.told === false && t.before.on === undefined && t.before.by === undefined && t.before.at === undefined && t.before.said === undefined
+          && !!t.after && t.after.told === true && t.after.on === undefined && t.after.by === undefined && t.after.at === undefined && t.after.said === undefined
+          && timeOk && !t.untoldAns && t.untoldCopy.held === true && !t.toldTeam
+          && !!t.toldAns && t.toldAns.ask === "Ask1014b" && t.toldAns.content === t.stamp && t.ansGenuine && JSON.stringify(t.toldAns).indexOf(B0_MARK) >= 0
+          && !!t.toldCopy && t.toldCopy.ok === true && !!t.copyInner && t.copyInner.content === t.stamp && t.copyGenuine,
+        "b1014a with no switch in the team file, content gives told, an untold desk answers nothing and holds copies, and once told it answers and seals copies with the told stamp ("
+        + JSON.stringify({ before: t.before, after: t.after, untoldAns: t.untoldAns, untoldHeld: t.untoldCopy.held, ansContent: t.toldAns && t.toldAns.content, copyContent: t.copyInner && t.copyInner.content }) + ")");
+      const pv = await toldScene("b1014-priv", { priv: true });
+      check(!pv.ansWritten && pv.toldCopy.withheld === true && !!pv.freedAns && pv.freedAns.ask === "Ask1014c",
+        "b1014b a catalog marked private never leaves a told desk with no switch, and once unmarked is answered");
+      const lift = (tag) => SRC.split("\n").map(l => l.indexOf(tag) >= 0 ? "  /* " + tag + " */" : l).join("\n");
+      if (PLANTS_OFF) {
+        skip("b1014p1 lifting plant:s0b-said turns b1014a red");
+        skip("b1014p2 lifting plant:s0b-switch turns b1014a red");
+        skip("b1014p3 lifting plant:s0b-branch-switch turns b1014a red");
+        skip("b1014p4 lifting plant:s0b-private turns b1014b red");
+        skip("b1014p5 lifting plant:s0b-branch-private turns b1014b red");
+      } else {
+        const ps = lift("plant:s0b-said");
+        const rs = ps !== SRC ? await toldScene("b1014-plant-said", { src: ps }) : null;
+        check(!!rs && rs.after && rs.after.told === false && !rs.toldAns, "b1014p1 lifting plant:s0b-said turns b1014a red");
+        const pw = lift("plant:s0b-switch");
+        const rw = pw !== SRC ? await toldScene("b1014-plant-switch", { src: pw, tell: false }) : null;
+        check(!!rw && rw.untoldAns, "b1014p2 lifting plant:s0b-switch turns b1014a red: untold desk answers");
+        const pb = lift("plant:s0b-branch-switch");
+        const rb = pb !== SRC ? await toldScene("b1014-plant-branch-switch", { src: pb, tell: false }) : null;
+        check(!!rb && !rb.untoldCopy.held, "b1014p3 lifting plant:s0b-branch-switch turns b1014a red: untold desk writes copy");
+        const pp = lift("plant:s0b-private");
+        const rp = pp !== SRC ? await toldScene("b1014-plant-priv", { src: pp, priv: true }) : null;
+        check(!!rp && !!rp.toldAns, "b1014p4 lifting plant:s0b-private turns b1014b red: private catalog answered");
+        const pbp = lift("plant:s0b-branch-private");
+        const rbp = pbp !== SRC ? await toldScene("b1014-plant-branch-priv", { src: pbp, priv: true }) : null;
+        check(!!rbp && rbp.toldCopy.withheld !== true, "b1014p5 lifting plant:s0b-branch-private turns b1014b red: private copy written");
       }
     }
   }
