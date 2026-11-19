@@ -48,7 +48,7 @@
      desk as it is. */
   /* THE PERSON'S OWN LAYER OF A CATALOG (e<ns>~Pack: the cards they wrote and changed, their stars) is
      theirs, not a setting: a Reset clears settings and the session and keeps it (board D7b, 2026-11-10). */
-  function ownLayer(k){ return /^e[0-9a-z]+~Pack$/.test(k); }
+  function ownLayer(k){ return /^e[0-9a-z]+~Pack$/.test(k) || k==="eAsidePersonal"; } /* and the personal catalogs set aside (board 1015) */
   function clearState(withDesk){
     /* A Reset hands the desk to the app's storage where it loaded (eResetClear), before anything is
        cleared; a page leaving would otherwise send the app's copy back over this. */
@@ -6728,6 +6728,7 @@ What is typed here stays in this browser.`;
   // src/modules/storage.js
   var storage_exports = {};
   __export(storage_exports, {
+    E_ASIDE_KEY: () => E_ASIDE_KEY,
     E_KEY_RE: () => E_KEY_RE,
     E_LS_OK: () => E_LS_OK,
     E_NS: () => E_NS,
@@ -6748,6 +6749,7 @@ What is typed here stays in this browser.`;
     eLayers: () => eLayers,
     eNsFor: () => eNsFor,
     eResetClear: () => eResetClear,
+    eResetKey: () => eResetKey,
     eSaveTrouble: () => eSaveTrouble,
     layerNsOf: () => layerNsOf,
     lsDel: () => lsDel,
@@ -6849,6 +6851,10 @@ What is typed here stays in this browser.`;
 
   // src/modules/storage.js
   var E_KEY_RE = /^e(?:[A-Z]|[0-9a-z]+~)/;
+  var E_ASIDE_KEY = "eAsidePersonal";
+  function eResetKey(k) {
+    return E_KEY_RE.test(k) && k !== E_ASIDE_KEY;
+  }
   function eNsFor(seed) {
     const s = String(seed);
     let h = 5381;
@@ -7123,7 +7129,7 @@ What is typed here stays in this browser.`;
     eWiping = true;
     if (!E_DESK) return false;
     Object.keys(E_DESK.map).forEach((k) => {
-      if (E_KEY_RE.test(k) && !/^e[0-9a-z]+~Pack$/.test(k)) {
+      if (eResetKey(k) && !/^e[0-9a-z]+~Pack$/.test(k)) {
         delete E_DESK.map[k];
         eDeskOwed.add(k);
       }
@@ -10617,7 +10623,7 @@ What is typed here stays in this browser.`;
       null,
       { label: t("Reset personal data"), run: () => {
         try {
-          lsKeys().filter((k) => E_KEY_RE.test(k)).forEach((k) => lsDel(k));
+          lsKeys().filter(eResetKey).forEach((k) => lsDel(k));
         } catch (e) {
         }
         try {
@@ -33716,7 +33722,7 @@ What is typed here stays in this browser.`;
     }
     return true;
   }
-  var ASIDE_KEY = "eAsidePersonal";
+  var ASIDE_KEY = E_ASIDE_KEY;
   function asideStore() {
     try {
       const v = JSON.parse(lsGet(ASIDE_KEY) || "{}");

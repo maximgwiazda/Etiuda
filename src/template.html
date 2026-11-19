@@ -48,7 +48,7 @@
      desk as it is. */
   /* THE PERSON'S OWN LAYER OF A CATALOG (e<ns>~Pack: the cards they wrote and changed, their stars) is
      theirs, not a setting: a Reset clears settings and the session and keeps it (board D7b, 2026-11-10). */
-  function ownLayer(k){ return /^e[0-9a-z]+~Pack$/.test(k); }
+  function ownLayer(k){ return /^e[0-9a-z]+~Pack$/.test(k) || k==="eAsidePersonal"; } /* and the personal catalogs set aside (board 1015) */
   function clearState(withDesk){
     /* A Reset hands the desk to the app's storage where it loaded (eResetClear), before anything is
        cleared; a page leaving would otherwise send the app's copy back over this. */

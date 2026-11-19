@@ -1227,7 +1227,7 @@ function personalAsideTests() {
   const NAMES = ["Pack", "Stats", "Days", "CatOrder", "IntentOrder", "IntentsAside", "LinksAside", "RequestsAside", "Exported", "LooseId", "Shared", "SharedOwn", "SharedFile", "EditionMarks", "Flags", "FlagEnds"];
   const build = (src, world) => {
     const kv = world.kv;
-    const own = { LAYER_KEYS: NAMES, E_NS: "e", pack: {}, hooks: { restartDesk() {}, flushPillState() {} },
+    const own = { LAYER_KEYS: NAMES, E_NS: "e", E_ASIDE_KEY: "eAsidePersonal", pack: {}, hooks: { restartDesk() {}, flushPillState() {} },
       carryCardLayer: () => new Set(), pinned: c => c, looseUnexported: () => false, newCatalogId: () => "loose-new", t: x => x,
       lsGet: k => (kv.has(k) ? kv.get(k) : null),
       lsSet: (k, v) => { if (world.failKey && k === world.failKey) return !!world.lie; kv.set(k, String(v)); return true; },
@@ -1247,6 +1247,17 @@ function personalAsideTests() {
       "function asideStore(", "function setAsidePersonal(", "function listPersonalAside(", "function restorePersonal(", "function switchToAdopted("];
     return new Function("scope", "with(scope){\n" + decls.map(d => extractDecl(src, d)).join("\n") + "\nreturn {setAsidePersonal, listPersonalAside, restorePersonal, switchToAdopted};\n}")(scope);
   };
+  const stFile = fs.readFileSync(path.join(E.ROOT, "src", "modules", "storage.js"), "utf8");
+  /* the desk's Reset itself (eResetClear) over a desk map, sliced out of storage.js */
+  const resetIn = (stSrc, desk) => {
+    const own = { E_DESK: desk, deskSave: () => true, eDeskOwed: new Set() };
+    const scope = new Proxy({}, {
+      has: (o, k) => typeof k === "string",
+      get: (o, k) => k === Symbol.unscopables ? undefined : k in own ? own[k] : k in globalThis ? globalThis[k] : () => undefined,
+      set: (o, k, v) => { own[k] = v; return true; }
+    });
+    return new Function("scope", "with(scope){\n" + ["const E_KEY_RE=", "const E_ASIDE_KEY=", "function eResetKey(", "function eResetClear("].map(d => extractDecl(stSrc, d)).join("\n") + "\nreturn eResetClear;\n}")(scope)();
+  };
   const snap = kv => JSON.stringify(Array.from(kv.entries()).sort());
   const TEAM = { id: "team-1", cards: [{ id: "t1" }] };
   const PACK = "{\"overrides\":{\"c1\":{\"en\":\"mine\"}}}";
@@ -1256,7 +1267,8 @@ function personalAsideTests() {
     return { mine, ns: "emine~", kv: new Map([["eCatalog", mine], ["eCatalogFile", "mine.ec"], ["eCatalogFileAt", "77"], ["eCatalogFrom", "mine.ec"], ["emine~Pack", "{\"favourites\":[\"a\"]}"], ["emine~Days", "{\"d\":1}"]]) };
   };
   /* every leg, as [label, got, want] so a plant can be read for red */
-  const run = (src) => {
+  const run = (src, stSrc) => {
+    stSrc = stSrc || stFile;
     const out = [];
     const chk = (l, g, w) => out.push([l, JSON.stringify(g), JSON.stringify(w)]);
     let api, w;
@@ -1293,6 +1305,15 @@ function personalAsideTests() {
     chk("interrupted: the original is untouched and already set aside whole", [threw, w.kv.get("eCatalog"), api.listPersonalAside().map(r => r.id), w.kv.get("emine~Pack")], [true, w.mine, ["mine-1"], "{\"favourites\":[\"a\"]}"]);
     w.closed = false; w.kv.set("eCatalog", "{\"id\":\"other\",\"cards\":[]}"); api.restorePersonal("mine-1");
     chk("interrupted: and it stands again exactly", [w.kv.get("eCatalog"), w.kv.get("eCatalogFile")], [w.mine, "mine.ec"]);
+    /* a Reset leaves the set-aside catalogs: listed after it, and restored whole */
+    w = onTeam(); api = build(src, w);
+    api.switchToAdopted(TEAM, { from: "team.ec" });
+    const desk = { map: Object.fromEntries(w.kv) };
+    try { resetIn(stSrc, desk); } catch (e) { chk("reset runs", e.message, "ran"); }
+    w.kv = new Map(Object.entries(desk.map)); w.ns = "e"; api = build(src, w); /* the desk starts again on the empty desk, its layer the loose one */
+    chk("reset: the original is still listed", api.listPersonalAside().map(r => r.id), ["mine-1"]);
+    api.restorePersonal("mine-1");
+    chk("reset: and restores whole, catalog, file and every layer key", [w.kv.get("eCatalog"), w.kv.get("eCatalogFile"), w.kv.get("emine~Pack"), w.kv.get("emine~Days")], [w.mine, "mine.ec", "{\"favourites\":[\"a\"]}", "{\"d\":1}"]);
     /* a take that fails leaves the catalog in use as it was */
     w = onTeam(); w.failStore = true; api = build(src, w);
     chk("failed take: refused, the catalog in use unchanged", [api.switchToAdopted(TEAM, {}), w.kv.get("eCatalog")], [false, w.mine]);
@@ -1302,9 +1323,11 @@ function personalAsideTests() {
   real.forEach(([l, g, w]) => { if (g === w) PASS++; else { FAIL++; console.error("  FAIL personal set-aside " + l + "\n       got  " + g + "\n       want " + w); } });
   if (process.env.ETIUDA_PLANTS === "off") { console.log("  SKIP  lifting plant:aside-snapshot and plant:aside-stops, the set-aside legs must go red"); return; }
   [["plant:aside-snapshot", /const aside=setAsidePersonal\(\);\s*\/\* plant:aside-snapshot \*\//, "const aside=\"\";"],
-   ["plant:aside-stops", /if\(aside===false\) return false;\s*\/\* plant:aside-stops \*\//, ""]].forEach(([name, re, to]) => {
-    if (!re.test(fileSrc)) { eq("the " + name + " marker is in catalog-file.js", false, true); return; }
-    const red = run(fileSrc.replace(re, to)).filter(([, g, w]) => g !== w).length;
+   ["plant:aside-stops", /if\(aside===false\) return false;\s*\/\* plant:aside-stops \*\//, ""],
+   ["plant:aside-survives-reset", /&& k!==E_ASIDE_KEY; \} \/\* plant:aside-survives-reset \*\//, "; }", true]].forEach(([name, re, to, inStorage]) => {
+    const base = inStorage ? stFile : fileSrc;
+    if (!re.test(base)) { eq("the " + name + " marker is in its source", false, true); return; }
+    const red = (inStorage ? run(fileSrc, stFile.replace(re, to)) : run(fileSrc.replace(re, to))).filter(([, g, w]) => g !== w).length;
     eq("lifting " + name + " turns the set-aside legs red", red > 0, true);
   });
 }

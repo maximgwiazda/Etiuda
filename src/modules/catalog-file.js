@@ -13,7 +13,7 @@ import { CAT_LABELS_PL, CAT_LABELS_BY_LANG } from "./icons.js";
 import { fill } from "./intent-text.js";
 import { cardToExportPlain } from "./macros-json.js";
 import { FACTS, normWhoList } from "./stock.js";
-import { E_NS, lsGet, lsSet, ssGet, ssSet, ssDel, nsGet, nsSet, nsDel, LAYER_KEYS, layerNsOf, eLayer, eLayers, lyGet, lySet, lyDel, eDeskHome, eHomeless } from "./storage.js";
+import { E_NS, E_ASIDE_KEY, lsGet, lsSet, ssGet, ssSet, ssDel, nsGet, nsSet, nsDel, LAYER_KEYS, layerNsOf, eLayer, eLayers, lyGet, lySet, lyDel, eDeskHome, eHomeless } from "./storage.js";
 import { cutLeaves, dismissNode } from "./motion.js";
 import { esc } from "./esc.js";
 import { newCatalogId } from "./ids.js";
@@ -708,7 +708,7 @@ function takeCatalog(c,opts){
    switch to it. The catalog in use is then the team's, and the one the person made stays here, SET ASIDE, whole: the catalog
    itself, every layer key it would need to stand again, and the file it came from, keyed by its id. Nothing existing is
    deleted by any of this. A loose desk has no catalog of its own, so its layer is what is kept, under the loose id. ---- */
-const ASIDE_KEY="eAsidePersonal";
+const ASIDE_KEY=E_ASIDE_KEY;
 /* The whole store as an object, or null where what is held cannot be read: a store that cannot be read is never written over. */
 function asideStore(){
   try{

@@ -1,6 +1,6 @@
 import { CATS, intentCount, SW_IDS } from "./content-model.js";
 import { M, WHO_BASE, normWhoList } from "./stock.js";
-import { E_KEY_RE, lsDel, lsKeys, ssDel, lyGet, lySet, lyDel,
+import { eResetKey, lsDel, lsKeys, ssDel, lyGet, lySet, lyDel,
   eSaveTrouble, eDeskNewer, eDeskRefused, eDeskRefusedSeen, eHomeless, eDeskHome } from "./storage.js";
 import { t, toast, fileStamp } from "./ui-lang.js";
 import { hooks } from "./hooks.js";
@@ -74,7 +74,7 @@ function showPackMigrationWarning(){
   eNotice("eMigrateWarn", lead,
     t("This version stores the arrangement in a new way, and the copy kept here could not be converted. The catalog is untouched and Etiuda runs as usual; only the card order, hidden cards and favourites kept here are affected. Reset personal data clears them and starts afresh."),
     null, {label:t("Reset personal data"), run:()=>{
-      try{ lsKeys().filter(k=>E_KEY_RE.test(k)).forEach(k=>lsDel(k)); }catch(e){}
+      try{ lsKeys().filter(eResetKey).forEach(k=>lsDel(k)); }catch(e){}
       try{ ssDel("eSessionTabs"); }catch(e){}
       location.replace(location.href.split("#")[0]);
     }});
