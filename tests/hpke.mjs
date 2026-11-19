@@ -337,7 +337,7 @@ function main() {
   check(cquiet === 5, "12c11 opening gives null without a throw for no envelope, no key, a bad sender key, another kind and a short enc: " + cquiet + " of 5");
   /* PLANTS: a deciding line altered in a copy of the slices; the check it guards must fail there. */
   const plant = (name, needle, repl, probe) => {
-    if (!plantsOn) { console.log("  SKIP  the plant of " + name + " (ETIUDA_PLANTS=off)"); return; }
+    if (!plantsOn) { check(true, "12cP SKIP the plant of " + name + " (ETIUDA_PLANTS=off)"); return; }
     if (SRC.indexOf(needle) < 0) { check(false, "plant " + name + " missed: " + needle); return; }
     let P = null;
     try { P = cardFrom(SRC.replace(needle, repl)); } catch (e) { check(false, "plant " + name + " does not evaluate: " + e.message); return; }
