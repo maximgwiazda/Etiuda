@@ -35,11 +35,11 @@ const toldDismissed=new Set();    // teams whose one-time told notice was dismis
 const contentHeard=[];
 function onContentChanged(fn){ if(contentHeard.indexOf(fn)<0) contentHeard.push(fn); }
 function contentChanged(){ contentHeard.slice().forEach(fn=>{ try{ fn(contentNow); }catch(e){} }); }
-/* Today's shell returns `said` rather than `told`: read `told` and fall back to `said`. */
+/* The shell's answer carries `told`; nothing else is read for it. */
 function normalizeContent(v){
   if(!v || typeof v!=="object") return null;
   const team=typeof v.team==="string"?v.team:"";
-  const told=v.told!==undefined ? v.told===true : v.said===true;
+  const told=v.told===true;
   return {
     team:team,
     told:told,

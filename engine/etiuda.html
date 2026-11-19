@@ -19009,7 +19009,7 @@ What is typed here stays in this browser.`;
   function normalizeContent(v) {
     if (!v || typeof v !== "object") return null;
     const team = typeof v.team === "string" ? v.team : "";
-    const told = v.told !== void 0 ? v.told === true : v.said === true;
+    const told = v.told === true;
     return {
       team,
       told,

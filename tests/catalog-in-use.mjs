@@ -1186,7 +1186,7 @@ try {
     check(shown(confirm1014).indexOf(JOIN_EN) >= 0 && saidAtJoin,
       "1014b joining confirmation carries the joining words and sends content-said when the desk joins");
 
-    /* One-time told notice as a blue bubble when already on a team, reading told and falling back to said. */
+    /* One-time told notice as a blue bubble when already on a team, reading told only. */
     const made1014 = [];
     const savedDoc1014 = globalThis.document;
     const mkEl1014 = tag => {
@@ -1278,8 +1278,8 @@ try {
     if (okBtn && okBtn.onclick) okBtn.onclick();
     await new Promise(r => setTimeout(r, 25));
     const bubAfterDismiss = made1014.find(n => n.id === "eTeamTold");
-    /* Fallback to `said` (today's shell) when `told` is absent. */
-    toldResp = { team: "t-told2", said: false, private: [], listed: [] };
+    /* Told only: a lone `said` is not read, so a desk with `said: true` and no `told` is still shown the notice. */
+    toldResp = { team: "t-told2", said: true, private: [], listed: [] };
     TJ.wireTeamJoin();
     await new Promise(r => setTimeout(r, 25));
     const bubFallback = made1014.find(n => n.id === "eTeamTold");
@@ -1288,7 +1288,7 @@ try {
       if (ok2 && ok2.onclick) ok2.onclick();
       await new Promise(r => setTimeout(r, 25));
     }
-    toldResp = { team: "t-told2", said: true, private: [], listed: [] };
+    toldResp = { team: "t-told2", told: true, private: [], listed: [] };
     TJ.wireTeamJoin();
     await new Promise(r => setTimeout(r, 25));
     const bubWhenSaidTrue = made1014.find(n => n.id === "eTeamTold");
@@ -1297,7 +1297,7 @@ try {
         && bub1Btns.length === 1 && bub1Btns[0].textContent === "Understood"
         && !bubAfterDismiss && toldSaid.indexOf("t-told1") >= 0
         && !!bubFallback && toldSaid.indexOf("t-told2") >= 0 && !bubWhenSaidTrue,
-      "1014c one-time told notice opens as a blue bubble once, falls back from told to said, and dismissing sends content-said: "
+      "1014c one-time told notice opens as a blue bubble once, ignores a lone said, and dismissing sends content-said: "
       + JSON.stringify({ bub1: !!bub1, btns: bub1Btns.map(b => b.textContent), bubAfterDismiss: !!bubAfterDismiss, toldSaid, bubFallback: !!bubFallback, bubWhenSaidTrue: !!bubWhenSaidTrue }));
 
     if (PLANTS_OFF) skip("1014d lifting plant:join-confirm-said drops content-said on join confirmation");
@@ -1306,11 +1306,13 @@ try {
       const at = lines.findIndex(l => l.indexOf("plant:join-confirm-said") >= 0);
       let turned = false;
       if (at >= 0) {
-        lines[at] = "/* plant:join-confirm-said */";
+        lines[at] = "if(team){} /* plant:join-confirm-said */";
         const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-1014-plant-"));
         try {
           fs.cpSync(path.join(ROOT, "src"), path.join(scratch, "src"), { recursive: true });
           fs.writeFileSync(path.join(scratch, "src", "modules", "team-join.js"), lines.join("\n"));
+          const HKp = await import(pathToFileURL(path.join(scratch, "src", "modules", "hooks.js")).href);
+          HKp.hooks.render = noop; HKp.hooks.loadCatalogFromFolder = noop; HKp.hooks.flushPillState = noop; HKp.hooks.restartDesk = noop;
           const TJp = await import(pathToFileURL(path.join(scratch, "src", "modules", "team-join.js")).href + "?p=" + Date.now());
           const pCalls = [];
           globalThis.window.E_HOST.teamJoin = (op, a) => {
