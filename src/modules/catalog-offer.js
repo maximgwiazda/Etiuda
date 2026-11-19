@@ -14,7 +14,7 @@ import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalog
 import { ejectCatalog } from "./local-memory.js";
 import { lsGet, lsSet, nsGet, nsSet } from "./storage.js";
 import { tourDueAtBoot, afterTour } from "./tour.js";
-import { firstSigninStands, onFirstSigninClosed } from "./signin.js";
+import { doorHolds, whenDoorLowers } from "./signin.js";
 import { placeBubble } from "./bubble.js";
 import { markCut, markCutText } from "./cut-text.js";
 import { cutLeaves, dismissNode, mgReduceMotion, M_MS, E_EASE, E_SPRING } from "./motion.js";
@@ -105,12 +105,12 @@ function eOfferCatalogAtBoot(){
   const settled=settleHeldTrust(eCatalog(),storedCatalog());
   if(offerAtBoot()) settled.then(lowered=>{ if(lowered) offerAtBoot(); });
 }
-/* The boot's offer itself; false where it waits for the tour instead. */
+/* The boot's offer itself; false where it waits for the door or the tour instead. */
 function offerAtBoot(){
+  if(doorHolds()){ whenDoorLowers(eOfferCatalogAtBoot); return false; } /* plant:offer-boot-door */
   const at=+(nsGet("CatalogNoAt")||0), mt=eCatalogMtime(), asked=eOpenedWith();
   // A first run's tour asks for a catalog in its own step, so a found file waits for it to end.
   if(!asked && tourDueAtBoot()){ afterTour(eOfferCatalogAtBoot); return false; }
-  if(!asked && firstSigninStands()){ onFirstSigninClosed(eOfferCatalogAtBoot); return false; }
   /* THE SAMPLE NEVER ASKS TO REPLACE A CATALOG THE PERSON CHOSE: it is found at every launch where
      Etiuda is installed and waits in the Library. Only an edition of the sample itself asks. */
   const found=eCatalog(), held=storedCatalog();
@@ -909,7 +909,13 @@ function paintCatNow(){
 /* The watched file. Silent at boot and only while the browser still holds permission:
    re-granting needs a user gesture, which is what `interactive` supplies. The stored edit
    time is a skip, not the answer - the signature decides whether anything really changed. */
+let pendingWatch=null;
+function replayPendingWatch(){
+  const iv=pendingWatch; pendingWatch=null;
+  if(iv!==null) eCheckWatchedFile(iv);
+}
 function eCheckWatchedFile(interactive){
+  if(doorHolds()){ pendingWatch=pendingWatch===null?!!interactive:(pendingWatch||!!interactive); whenDoorLowers(replayPendingWatch); return; } /* plant:offer-watch-door */
   if(!eWatchSupported()) return;
   if(document.getElementById("eCatalogOffer")) return;
   eWatchGet().then(h=>{
@@ -990,7 +996,13 @@ function listingNoticeFiles(all,held){
   return (all||[]).filter(f=>!f.desk && !f.builtIn && !f.sample && f.id && !(held && held.id===f.id))
     .filter(f=>f.leadSigned===true); /* plant:listing-lead-signed */
 }
+let pendingListing=null;
+function replayPendingListing(){
+  const all=pendingListing; pendingListing=null;
+  if(all) onCatalogListing(all);
+}
 function onCatalogListing(all){
+  if(doorHolds()){ pendingListing=all; whenDoorLowers(replayPendingListing); return; } /* plant:offer-listing-door */
   /* The empty desk's folder line follows whether this listing holds a catalog. Only a change, and
      only while that desk is what is on screen, draws it again. */
   let flipped=false;
@@ -1074,6 +1086,30 @@ function refuseAskedFile(name,why,code){
   }
   toastRefusal(t("{FILE} is not a catalog file Etiuda can read.").split("{FILE}").join(String(name||"")));
 }
+let pendingHostFile=null;
+function replayPendingHostFile(){
+  const args=pendingHostFile; pendingHostFile=null;
+  if(args) takeHostCatalogFile(args);
+}
+function takeHostCatalogFile(args){
+  if(doorHolds()){ pendingHostFile=args; whenDoorLowers(replayPendingHostFile); return; } /* plant:offer-host-file-door */
+  const [text,name,where,asked,why,builtIn,notOnTeam,code]=args;
+  /* The list first, and whatever this text turns out to be: the folder has changed, so a
+     Library standing open is out of date whether or not the file is one it can offer. */
+  paintCatalogList();
+  let c=null;
+  try{ if(!why) c=parseCatalogFile(text); }catch(e){ c=null; }
+  if(!c && !why){
+    refuseAskedFile(name,"parse");
+    const next=eRefuseCatalogFile(name);
+    let n=null;
+    try{ n=next?parseCatalogFile(String(next.json)):null; }catch(e){ n=null; }
+    if(n && !asked) eOfferCatalog(n,String(next.file||""),String(next.in||""),false,false,!!next.builtIn);
+    return;
+  }
+  if(!c){ if(asked) refuseAskedFile(name,why||"parse",code); return; }
+  eOfferCatalog(c,name,where,!!asked,!!asked,builtIn,notOnTeam==="off-roster");
+}
 function wireHostCatalogWatch(){
   const h=(typeof window!=="undefined" && window.E_HOST)||null;
   if(!h || typeof h.onCatalogFile!=="function") return;
@@ -1083,29 +1119,15 @@ function wireHostCatalogWatch(){
   eCatalog();
   const cold=eOpenedRefused()||(eCatalogRefusedNames().length?{name:eCatalogRefusedNames()[0],why:"parse"}:null);
   // Deferred with the same hand as the boot's other toasts: no toast host exists this early.
-  if(cold) setTimeout(()=>{ try{ refuseAskedFile(cold.name,cold.why); }catch(e){} },1400);
+  if(cold) setTimeout(()=>{ whenDoorLowers(()=>{ try{ refuseAskedFile(cold.name,cold.why); }catch(e){} }); },1400);
   /* AN EDITION IN THE FOLDER WAITS FOR A NEWER ETIUDA: said at boot with the same hand, and again whenever the host finds
      another. The edition in use stays; the host has not handed the waiting one over. */
   const newer=h.catalogNewer;
-  if(newer && newer.version) setTimeout(()=>{ try{ toastRefusal(eNeedsNewerLine(newer.version)); }catch(e){} },cold?2800:1400);
-  if(typeof h.onCatalogNewer==="function") h.onCatalogNewer(v=>{ if(v && v.version) toastRefusal(eNeedsNewerLine(v.version)); });
+  if(newer && newer.version) setTimeout(()=>{ whenDoorLowers(()=>{ try{ toastRefusal(eNeedsNewerLine(newer.version)); }catch(e){} }); },cold?2800:1400);
+  if(typeof h.onCatalogNewer==="function") h.onCatalogNewer(v=>{ if(v && v.version) whenDoorLowers(()=>toastRefusal(eNeedsNewerLine(v.version))); });
   eOnCatalogListing(onCatalogListing);
   h.onCatalogFile((text,name,where,asked,why,builtIn,notOnTeam,code)=>{
-    /* The list first, and whatever this text turns out to be: the folder has changed, so a
-       Library standing open is out of date whether or not the file is one it can offer. */
-    paintCatalogList();
-    let c=null;
-    try{ if(!why) c=parseCatalogFile(text); }catch(e){ c=null; }
-    if(!c && !why){
-      refuseAskedFile(name,"parse");
-      const next=eRefuseCatalogFile(name);
-      let n=null;
-      try{ n=next?parseCatalogFile(String(next.json)):null; }catch(e){ n=null; }
-      if(n && !asked) eOfferCatalog(n,String(next.file||""),String(next.in||""),false,false,!!next.builtIn);
-      return;
-    }
-    if(!c){ if(asked) refuseAskedFile(name,why||"parse",code); return; }
-    eOfferCatalog(c,name,where,!!asked,!!asked,builtIn,notOnTeam==="off-roster");
+    takeHostCatalogFile([text,name,where,asked,why,builtIn,notOnTeam,code]);
   });
 }
 export {

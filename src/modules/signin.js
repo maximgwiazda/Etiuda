@@ -165,10 +165,20 @@ function firstSigninDue(v){
 }
 let firstSigninPending=false, firstSigninOpen=false, firstSigninWaits=[];
 function firstSigninStands(){ return !!(firstSigninPending || firstSigninOpen); }
+/* Whether the door holds offers, intake and invitations: while the door stands, or once a view was read and deskWorks() is false. */
+function doorHolds(){
+  if(firstSigninStands() || (signinHasView && !deskWorks())) return true; /* plant:door-holds */
+  return false;
+}
 function onFirstSigninClosed(fn){
   if(typeof fn!=="function") return;
   if(!firstSigninStands()){ fn(); return; }
   firstSigninWaits.push(fn);
+}
+function whenDoorLowers(fn){
+  if(typeof fn!=="function") return;
+  if(!doorHolds()){ fn(); return; }
+  if(firstSigninWaits.indexOf(fn)<0) firstSigninWaits.push(fn);
 }
 function tellFirstSigninClosed(){
   const w=firstSigninWaits; firstSigninWaits=[];
@@ -798,6 +808,7 @@ function signinChanged(v, answered){
     if(!deskWorks()){ if(firstSigninOpen) paintFirstSignin(); signinTell(); return; } /* plant:door-close-works */
     closeFirstSignin(); signinTell(); return;
   }
+  if(deskWorks() && firstSigninWaits.length) tellFirstSigninClosed();
   if(answered && signinShown(signinV) && !signinV.busy) signinOpen=true;
   if(signinOpen) paintSigninPanel();
   signinTell();
@@ -1127,10 +1138,12 @@ export {
   bootFirstSignin,
   closeFirstSignin,
   deskWorks,
+  doorHolds,
   firstSigninDue,
   firstSigninOpenNow,
   firstSigninStands,
   onFirstSigninClosed,
+  whenDoorLowers,
   paintFirstSignin,
   signinAct,
   signinActsHtml,

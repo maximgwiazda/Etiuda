@@ -33,6 +33,7 @@ import { hooks } from "./hooks.js";
 import { flagFileList, flagHolds, settleFlags } from "./card-flag.js";
 import { edCatalogTaken, modalFront } from "./dialog.js";
 import { recordCatalogTrust } from "./catalog-trust.js";
+import { doorHolds, whenDoorLowers } from "./signin.js";
 
 /* ---- one catalog format, one export, one import -----------------------------------------
    A catalog carries everything Etiuda has no content of its own for: cards, intents,
@@ -878,7 +879,13 @@ function catalogFromFileText(text,fileName){
 /* THE READING HALF OF IMPORT, wherever the bytes came from - a browser's file input, the
    shell's dialog - so that a file the folder scan accepts is a file this accepts. The picker
    route below keeps its own tail, because it has a handle to store before the reload. */
+let pendingImport=null;
+function replayPendingImport(){
+  const p=pendingImport; pendingImport=null;
+  if(p) importCatalogText(p.text,p.fileName,p.offTeam);
+}
 function importCatalogText(text,fileName,offTeam){
+  if(doorHolds()){ pendingImport={text:String(text||""), fileName:fileName, offTeam:!!offTeam}; whenDoorLowers(replayPendingImport); return false; } /* plant:import-text-door */
   const c=catalogFromFileText(String(text||""),fileName);
   if(!c) return false;
   hooks.offerPickedCatalog(c,fileName,()=>eWatchClear().then(()=>activateCatalog(c,{from:fileName})),!!offTeam);
@@ -899,6 +906,7 @@ function importCatalogHosted(){
 /* THE import route, wherever it is offered from. The picker where there is one: it is the only
    route that yields a handle, so choosing it here is what makes the watch available at all. */
 function importCatalogHere(){
+  if(doorHolds()) return; /* plant:import-picker-door */
   if(eHasCatalogPicker()) importCatalogHosted();
   else if(eWatchSupported()) importCatalogPicked();
   else importCatalogFile();
@@ -925,6 +933,11 @@ function isFileDrag(e){
   const dt=e.dataTransfer;
   return !!dt && Array.prototype.indexOf.call(dt.types||[],"Files")>-1;
 }
+let pendingDrop=null;
+function replayPendingDrop(){
+  const f=pendingDrop; pendingDrop=null;
+  if(f) handleDroppedFile(f);
+}
 function wireCatalogDrop(){
   addEventListener("dragover",e=>{
     if(!isFileDrag(e)) return;
@@ -936,19 +949,41 @@ function wireCatalogDrop(){
     e.preventDefault();
     const f=e.dataTransfer.files && e.dataTransfer.files[0];
     if(!f) return;
-    if(!/[.](ec|json|js)$/i.test(f.name)){
-      toastRefusal(t("{FILE} is not a catalog file Etiuda can read.").split("{FILE}").join(f.name));
-      return;
-    }
-    const h=eHost();
-    if(h && typeof h.offerDropped==="function" && /[.]ec$/i.test(f.name) && h.offerDropped(f)) return;
-    f.text().then(text=>importCatalogText(text,f.name),
-      ()=>toastRefusal(fileReadLine(f.name, "")));
+    if(doorHolds()){ pendingDrop=f; whenDoorLowers(replayPendingDrop); return; } /* plant:drop-catalog-door */
+    handleDroppedFile(f);
   });
+}
+function handleDroppedFile(f){
+  if(!/[.](ec|json|js)$/i.test(f.name)){
+    toastRefusal(t("{FILE} is not a catalog file Etiuda can read.").split("{FILE}").join(f.name));
+    return;
+  }
+  const h=eHost();
+  if(h && typeof h.offerDropped==="function" && /[.]ec$/i.test(f.name) && h.offerDropped(f)) return;
+  f.text().then(text=>importCatalogText(text,f.name),
+    ()=>toastRefusal(fileReadLine(f.name, "")));
 }
 /* The picker returns a HANDLE - the same dialog to the user, but what comes back can be
    kept and re-read later, which is the whole update channel. Cancelling rejects with
    AbortError rather than resolving empty, so the catch is also the cancel path. */
+let pendingPicked=null;
+function replayPendingPicked(){
+  const p=pendingPicked; pendingPicked=null;
+  if(p) takePickedFile(p.handle, p.file);
+}
+function takePickedFile(handle, f){
+  return f.text().then(text=>{
+    const c=catalogFromFileText(text,f.name);
+    if(!c) return null;
+    hooks.offerPickedCatalog(c,f.name,()=>{
+      nsSet("WatchName",f.name);
+      nsSet("WatchSeen",String(f.lastModified||0));
+      nsDel("WatchNo");
+      return eWatchPut(handle).then(()=>activateCatalog(c,{from:f.name}));
+    });
+    return null;
+  });
+}
 function importCatalogPicked(){
   let handle=null, picked="";
   window.showOpenFilePicker({
@@ -960,17 +995,8 @@ function importCatalogPicked(){
   }).then(f=>{
     if(!f) return null;
     picked=f.name;
-    return f.text().then(text=>{
-      const c=catalogFromFileText(text,f.name);
-      if(!c) return null;
-      hooks.offerPickedCatalog(c,f.name,()=>{
-        nsSet("WatchName",f.name);
-        nsSet("WatchSeen",String(f.lastModified||0));
-        nsDel("WatchNo");
-        return eWatchPut(handle).then(()=>activateCatalog(c,{from:f.name}));
-      });
-      return null;
-    });
+    if(doorHolds()){ pendingPicked={handle:handle, file:f}; whenDoorLowers(replayPendingPicked); return null; }
+    return takePickedFile(handle, f);
   }).catch(e=>{
     if(e && e.name==="AbortError") return;
     /* The browser's own sentence is English whatever the interface speaks, so the line names the
