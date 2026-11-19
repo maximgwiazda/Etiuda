@@ -14725,6 +14725,7 @@ let pickAskN = 0;
 /* A QUESTION TO THE DESK'S PAGE, answered as JSON text on etiuda:pick-answer and parsed here; null
    where the page did not answer in time, which a desk mid-reload or hung is. */
 function askDesk(op, arg) {
+  if (op === "suggest-take" && !pickerWorks()) return Promise.resolve({ rows: [], count: "" });
   const win = theWindow;
   if (!win || win.isDestroyed()) return Promise.resolve(null);
   const n = ++pickAskN;
@@ -14737,6 +14738,11 @@ function askDesk(op, arg) {
 function fromPicker(e) {
   return !!pickWin && !pickWin.isDestroyed() && !!e.sender && e.sender.id === pickWin.webContents.id
     && !!e.senderFrame && e.senderFrame.parent === null;
+}
+/* A picker opened before a stop still answers nothing of a reply library: close stays open, every read, copy, paste or reword refuses. */
+function pickerWorks() {
+  if (!signinWorksNow()) return false; /* plant:picker-ipc-works */
+  return true;
 }
 /* Made at the first press rather than at launch, and kept hidden between presses. */
 function ensurePicker() {
@@ -14929,6 +14935,7 @@ function rewordHost(c) {
 let pickRewordOn = false, pickSelectedNow = "", pickReworded = "", pickRewordN = 0;
 ipcMain.handle("etiuda:pick-reword", (e, a) => {
   if (!fromPicker(e)) return { ok: false, why: "off" };
+  if (!pickerWorks()) return { ok: false, why: "unavailable" };
   if (!pickRewordOn || !rewordWanted()) return { ok: false, why: rewordSwitchWhy() || "unavailable" }; /* plant:reword-switch-door-pick */
   const n = ++pickRewordN;
   return deskReword.ask(rewordArg(a)).then(rewordShown).then(r => {
@@ -14942,6 +14949,7 @@ ipcMain.handle("etiuda:pick-reword", (e, a) => {
 const REWORD_PUT_WAIT_MS = 150;
 ipcMain.handle("etiuda:pick-put", (e) => {
   if (!fromPicker(e) || !pickReworded) return false;
+  if (!pickerWorks()) { pickReworded = ""; return false; }
   const text = pickClipText(pickReworded, process.platform), was = pickSelectedNow, target = pickTarget;
   pickReworded = "";
   noteOwnText(text);
@@ -14957,7 +14965,7 @@ ipcMain.handle("etiuda:pick-put", (e) => {
 });
 /* The reworder alone grows once its result stands, its top kept and its foot inside the work area. */
 ipcMain.on("etiuda:pick-grow", (e) => {
-  if (!fromPicker(e) || !pickWin.isVisible()) return;
+  if (!fromPicker(e) || !pickWin.isVisible() || !pickerWorks()) return;
   const b = pickWin.getBounds();
   if (b.height >= REWORD_TALL) return;
   let area = null;
@@ -15210,18 +15218,22 @@ ipcMain.on("etiuda:pick-show", (e) => {
 });
 ipcMain.handle("etiuda:pick-find", (e, q) => {
   if (!fromPicker(e)) return "null";
+  if (!pickerWorks()) return '{"rows":[],"count":""}';
   return askDesk("find", { q: String(q || "").slice(0, 200) }).then(v => JSON.stringify(v));
 });
 ipcMain.handle("etiuda:pick-who", (e, name, q) => {
   if (!fromPicker(e)) return "null";
+  if (!pickerWorks()) return '{"rows":[],"count":""}';
   return askDesk("who", { name: String(name || "").slice(0, 100), q: String(q || "").slice(0, 200) }).then(v => JSON.stringify(v));
 });
 ipcMain.handle("etiuda:pick-tab", (e, id) => {
   if (!fromPicker(e)) return "null";
+  if (!pickerWorks()) return '{"rows":[],"count":""}';
   return askDesk("tab", { id: String(id || "").slice(0, 20) }).then(v => JSON.stringify(v));
 });
 ipcMain.handle("etiuda:pick-lang", (e) => {
   if (!fromPicker(e)) return "null";
+  if (!pickerWorks()) return '{"rows":[],"count":""}';
   return askDesk("lang", {}).then(v => JSON.stringify(v));
 });
 ipcMain.handle("etiuda:pick-intent", (e, id, multi) => {
@@ -15231,6 +15243,7 @@ ipcMain.handle("etiuda:pick-intent", (e, id, multi) => {
 /* THE REPLIES OF A SUGGESTION, asked for and not taken: the desk answers the rows alone and changes nothing. */
 ipcMain.handle("etiuda:pick-rows", (e, id) => {
   if (!fromPicker(e)) return "null";
+  if (!pickerWorks()) return '{"rows":[],"count":""}';
   return askDesk("suggest-rows", { id: String(id || "").slice(0, 80) }).then(v => JSON.stringify(v));
 });
 /* THE COPY. The desk's page makes the text by its own route and counts it, in the other language for `other`; this
@@ -15239,6 +15252,7 @@ ipcMain.handle("etiuda:pick-rows", (e, id) => {
    A reply that signs with a name nobody has given yet is asked in the desk's own window instead. */
 ipcMain.handle("etiuda:pick-copy", (e, what) => {
   if (!fromPicker(e)) return false;
+  if (!pickerWorks()) return false;
   let pick = {};
   try { pick = JSON.parse(String(what || "")) || {}; } catch { pick = {}; }
   const arg = pick.last ? { last: true } : { id: String(pick.id || ""), vi: pick.vi | 0 };

@@ -55,7 +55,27 @@ function wireCaptureKeydown(){
   addEventListener("keydown",e=>{
     /* A capture whose list has left the screen ends here, or every key after it would be swallowed. */
     if(scCaptureId && !modalFront() && !scListShown()) scStopCapture();
-    if(!scCaptureId) return;
+    if(!scCaptureId){
+      let capLock=false;
+      if(firstSigninOpenNow() && !openCover()) capLock=true; /* plant:door-capture-lock */
+      if(capLock){
+        const fs=$("#firstSignin"), act=document.activeElement;
+        const inDoor=!!(fs && act && typeof fs.contains==="function" && fs.contains(act));
+        const doorTab=e.key==="Tab" && !e.ctrlKey && !e.altKey && !e.metaKey;
+        const doorPress=inDoor && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && (e.key==="Enter" || e.key===" ");
+        const doorEsc=e.key==="Escape" || eventMatchesAction(e,"escape");
+        const doorCopy=inDoor && (e.ctrlKey||e.metaKey) && !e.altKey && !e.shiftKey && (act.tagName||"").toLowerCase()==="input" && (e.key==="c"||e.key==="C"||e.key==="a"||e.key==="A");
+        const doorQuit=e.altKey && e.key==="F4";
+        const targetOutside=!!(e.target && e.target!==window && e.target!==document && e.target!==document.body && e.target!==document.documentElement
+          && (!fs || typeof fs.contains!=="function" || !fs.contains(e.target)));
+        if(!doorTab && !doorPress && !doorEsc && !doorCopy && !doorQuit && (e.key==="Control" || e.key==="Meta" || targetOutside)){
+          e.preventDefault();
+          if(typeof e.stopImmediatePropagation==="function") e.stopImmediatePropagation();
+          else e.stopPropagation();
+        }
+      }
+      return;
+    }
     if(e.key==="Escape"){
       e.preventDefault(); e.stopPropagation();
       scStopCapture();
@@ -105,6 +125,25 @@ function wireGlobalKeydown(){
   addEventListener("keydown",e=>{
     if(scCaptureId) return;
 
+    /* THE DOOR HOLDS THE KEYBOARD: Tab walks #firstSignin's controls and Enter/Space reach a focused one as the
+       browser gives them; Escape, Ctrl+Z's standing undo and every action key or chord are held back here. */
+    let doorLock=false;
+    if(firstSigninOpenNow() && !openCover()) doorLock=true; /* plant:door-key-lock */
+    if(doorLock){
+      if(e.key==="Tab" && !e.ctrlKey && !e.altKey && !e.metaKey){
+        const to=tabTargetIn($("#firstSignin"), e.shiftKey);
+        if(to){ e.preventDefault(); try{ to.focus({preventScroll:true}); }catch(x){ to.focus(); } }
+        return;
+      }
+      const fs=$("#firstSignin"), act=document.activeElement;
+      const inDoor=!!(fs && act && typeof fs.contains==="function" && fs.contains(act));
+      const doorPress=inDoor && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && (e.key==="Enter" || e.key===" ");
+      const doorCopy=inDoor && (e.ctrlKey||e.metaKey) && !e.altKey && !e.shiftKey && (act.tagName||"").toLowerCase()==="input" && (e.key==="c"||e.key==="C"||e.key==="a"||e.key==="A");
+      const doorQuit=e.altKey && e.key==="F4";
+      if(!doorPress && !doorCopy && !doorQuit){ e.preventDefault(); e.stopPropagation(); }
+      return; /* plant:door-no-escape */
+    }
+
     /* THE TOUR'S KEYS ARE ITS OWN only while the keyboard is inside its bubble; everywhere else the
        page keeps every key, since the page stays usable under the tour. Its name field keeps the
        arrows and Enter. */
@@ -145,16 +184,6 @@ function wireGlobalKeydown(){
         if(to){ e.preventDefault(); try{ to.focus({preventScroll:true}); }catch(x){ to.focus(); } }
       }
       return;
-    }
-
-    if(firstSigninOpenNow()){
-      if(e.key==="Tab" && !e.ctrlKey && !e.altKey && !e.metaKey){
-        const to=tabTargetIn($("#firstSignin"), e.shiftKey);
-        if(to){ e.preventDefault(); try{ to.focus({preventScroll:true}); }catch(x){ to.focus(); } }
-        return;
-      }
-      if(eventMatchesAction(e,"escape") || e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); }
-      return; /* plant:door-no-escape */
     }
 
     /* A resting editor holds no key: the desk in front has them all. */
