@@ -429,6 +429,7 @@ try {
     const calls = [];
     globalThis.E_HOST = {
       catalogFolder: "C:/quay",
+      signinState: () => nodeRequire("./seat-page.js").seatedView(), /* the desk gate: a listing is read only once the desk works */
       onCatalogFile: () => {},
       onCatalogListing: fn => { listingFn = fn; },
       readCatalogFile: name => { calls.push(String(name)); return Promise.resolve({ name: String(name), text: files[name] || "" }); },
