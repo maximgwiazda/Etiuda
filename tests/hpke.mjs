@@ -343,7 +343,7 @@ function main() {
     try { P = cardFrom(SRC.replace(needle, repl)); } catch (e) { check(false, "plant " + name + " does not evaluate: " + e.message); return; }
     let red = false;
     try { red = !probe(P); } catch { red = true; }
-    check(red, "12cP " + name + ": the declared-binding check (12c6) fails under the plant");
+    check(red, "12cP " + name + ": the check that guards it fails under the plant");
   };
   plant("the id binding in info", "CARD_SEAL_LABEL + team + \"\\n\" + sender + \"\\n\" + recipient", "CARD_SEAL_LABEL + team",
     P => { const e = P.sealCardTo(BOX, TEAM, SEND, RECV, CARD, sk.privateKey); return !!H.hpkeOpen(box.privateKey, Buffer.from(e.enc, "hex"), CARDINFO(TEAM, SEND, RECV), Buffer.alloc(0), Buffer.from(e.ct, "hex")); });
