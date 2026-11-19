@@ -18,7 +18,7 @@ const SETTINGS_PATH = path.join(ROOT, "src", "modules", "settings.js");
 const TEMPLATE_PATH = path.join(ROOT, "src", "template.html");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
-const CHECKS = 34, PLANTS = 25;
+const CHECKS = 34, PLANTS = 30;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -802,6 +802,22 @@ if (!PLANTS_OFF) {
   await plant("ddp15", SIGNIN_PATH,
     ["if(d.getFullYear()!==new Date(now>0?now:Date.now()).getFullYear()) opt.year=\"numeric\"; /* plant:door-day-year */", "if(false) opt.year=\"numeric\"; /* plant:door-day-year */"],
     "doorDates");
+  await plant("ddp24", SIGNIN_PATH,
+    ["const opt={day:\"numeric\", month:\"long\"};", "const opt={day:\"numeric\", month:\"short\"};"],
+    "doorDates");
+  /* The no-name forms: each ternary on the lead's name, put back to the named sentence alone. */
+  await plant("ddp20", SIGNIN_PATH,
+    ["if(on===\"team\") return lead ? named(", "if(on===\"team\") return true ? named("],
+    "noName");
+  await plant("ddp21", SIGNIN_PATH,
+    ["    lead ? fill(t(\"Catalogs open here again once {LEAD}", "    true ? fill(t(\"Catalogs open here again once {LEAD}"],
+    "noName");
+  await plant("ddp22", SIGNIN_PATH,
+    ["return [lead ? fill(t(\"This account has a seat on the team {LEAD} leads.\")", "return [true ? fill(t(\"This account has a seat on the team {LEAD} leads.\")"],
+    "noName");
+  await plant("ddp23", SIGNIN_PATH,
+    ["    lead ? fill(t(\"Day {N} of 14, until {DESK_END}. The request to join waits for {LEAD}", "    true ? fill(t(\"Day {N} of 14, until {DESK_END}. The request to join waits for {LEAD}"],
+    "noName");
   plantText("ddp19", TEMPLATE_PATH,
     [".door-out{margin-top:22px;padding-top:18px;border-top:1px solid var(--line)} /* plant:door-out-gap */", ".door-out{margin-top:18px;padding-top:18px;border-top:1px solid var(--line)} /* plant:door-out-gap */"],
     "css");
