@@ -35,7 +35,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 189;
+const EXPECTED = 191;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const { offWindows } = nodeRequire("./off-windows.cjs");
@@ -5793,6 +5793,11 @@ async function run() {
     out.r6 = call("keepSharedCard", { from: KEEP_SENDER, team: KEEP_TEAM, card: "not a card" }, "lamp-shop");
     out.r6b = call("keepSharedCard", { from: KEEP_SENDER, team: KEEP_TEAM, card: JSON.stringify({ title: { en: "No id" } }) }, "lamp-shop");
     out.unreadable = { same: bytes().equals(b4), listing: listing() === l4 };
+    out.r8 = call("keepSharedCard", keepOpened(Object.assign(keepCard("c-noshelf", "No shelf"), { shelf: "t-missing" })), "lamp-shop");
+    out.r8b = call("keepSharedCard", keepOpened(Object.assign(keepCard("c-noreq", "No request"), { requests: ["t-missing"] })), "lamp-shop");
+    const noBody = keepCard("c-nobody", "No body"); delete noBody.body;
+    out.r8c = call("keepSharedCard", keepOpened(noBody), "lamp-shop");
+    out.misfit = { same: bytes().equals(b4), problems: V2.v2Problems(read()) };
     call("markPrivate", "lamp-shop", true);
     out.r7 = call("keepSharedCard", keepOpened(keepCard("c-priv", "Private")), "lamp-shop");
     out.priv = { same: bytes().equals(b4), has: fromOf(read(), "c-priv").length };
@@ -5820,6 +5825,13 @@ async function run() {
     check(k.r7 && k.r7.ok === false && /private/.test(String(k.r7.reason)) && k.priv.same && k.priv.has === 0,
       "1013k-h a card for a catalog marked private is refused with a plain reason, and the file keeps its bytes (" + JSON.stringify(k.r7) + ")");
   }
+  {
+    const k = keepScene();
+    const why = r => String(r && r.reason);
+    check(k.r8 && k.r8.ok === false && /shelf/.test(why(k.r8)) && k.r8b && k.r8b.ok === false && /request/.test(why(k.r8b)) && k.r8c && k.r8c.ok === false && /words/.test(why(k.r8c))
+      && k.misfit.same && k.misfit.problems.length === 0,
+      "1013k-i a card whose shelf or request tag the recipient's catalog lacks, or that has no words in its primary language, is refused (the format has no card without a shelf) and the file keeps its bytes and still reads clean (" + JSON.stringify([k.r8, k.r8b, k.r8c]) + ", " + JSON.stringify(k.misfit.problems) + ")");
+  }
   const keepPlant = async (tag, label, red) => {
     if (PLANTS_OFF) { skip("1013k-" + label + " lifting plant:" + tag + " turns the leg red (ETIUDA_PLANTS=off)"); return; }
     const r = await testPlant(tag, mainFile, async scratchMain => red(keepScene(fs.readFileSync(scratchMain, "utf8"))));
@@ -5828,6 +5840,7 @@ async function run() {
   await keepPlant("keep-private", "p1", k => !(k.r7 && k.r7.ok === false && /private/.test(String(k.r7.reason)) && k.priv.same));
   await keepPlant("keep-unheld", "p2", k => !(k.r5 && k.r5.ok === false && k.unheld.same && k.unheld.listing));
   await keepPlant("keep-twice", "p3", k => k.twice !== 1 || !k.twiceSame);
+  await keepPlant("keep-shelf", "p5", k => !(k.r8 && k.r8.ok === false && k.misfit.same && k.misfit.problems.length === 0));
   await keepPlant("keep-from", "p4", k => !((k.doc1.cards || []).some(c => c && c.id === "c-shared" && c.from && c.from.desk === KEEP_SENDER && c.from.card === "c-shared")));
 
   if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") {

@@ -3359,6 +3359,15 @@ function keepSharedCard(opened, catalogId) {
   if (gate.none) return no("card: that catalog is private on this desk, so a shared card is not kept in it"); /* plant:keep-private */
   if (gate.hold) return no("card: this desk cannot write that catalog's file just now");
   if (doc.cards.some(c => !!c && !!c.from && c.from.desk === sender && c.from.card === card.id)) return { ok: true, already: true }; /* plant:keep-twice */
+  /* The file must still read clean, and the format has no card without a shelf, so a card whose shelf or request tags this catalog
+     lacks, or with no words in the primary language, is refused rather than written (catalog-v2 v2Problems says each of these). */
+  const tagKind = {};
+  (Array.isArray(doc.tags) ? doc.tags : []).forEach(t => { if (t && typeof t.id === "string") tagKind[t.id] = t.kind; });
+  const primary = (Array.isArray(doc.langs) && doc.langs[0] && String(doc.langs[0].code || "")) || "en";
+  const words = f => !!card[f] && typeof card[f] === "object" && typeof card[f][primary] === "string" && !!card[f][primary].trim();
+  if (tagKind[card.shelf] !== "shelf") return no("card: its shelf is not one this catalog has, so it has nowhere to sit"); /* plant:keep-shelf */
+  if ((Array.isArray(card.requests) ? card.requests : []).some(r => tagKind[r] !== "request")) return no("card: it names a request this catalog does not have");
+  if (!words("title") || !words("body")) return no("card: it has no words in this catalog's first language");
   const taken = new Set(doc.cards.map(c => (c ? c.id : "")));
   let local = card.id;
   for (let n = 2; taken.has(local); n++) local = card.id + "-" + n;
