@@ -18,7 +18,7 @@ import { closeNotePane } from "./note-pane.js";
 import { eHost } from "./host.js";
 import { closeMoreMenu, closeSettingsMenu } from "./header-menus.js";
 import { closeTabList } from "./tabs.js";
-import { firstSigninOpenNow, skipFirstSignin } from "./signin.js";
+import { firstSigninOpenNow } from "./signin.js";
 import { hooks } from "./hooks.js";
 
 /* Reaching for the search box dismisses the loose overlays: quick facts and the settings
@@ -148,15 +148,13 @@ function wireGlobalKeydown(){
     }
 
     if(firstSigninOpenNow()){
-      if(eventMatchesAction(e,"escape") || e.key==="Escape"){
-        e.preventDefault(); e.stopPropagation(); skipFirstSignin(); return;
-      }
       if(e.key==="Tab" && !e.ctrlKey && !e.altKey && !e.metaKey){
         const to=tabTargetIn($("#firstSignin"), e.shiftKey);
         if(to){ e.preventDefault(); try{ to.focus({preventScroll:true}); }catch(x){ to.focus(); } }
         return;
       }
-      return;
+      if(eventMatchesAction(e,"escape") || e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); }
+      return; /* plant:door-no-escape */
     }
 
     /* A resting editor holds no key: the desk in front has them all. */

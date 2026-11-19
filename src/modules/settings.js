@@ -33,7 +33,8 @@ import { orgModel, orgRanks, orgSaid, rewordSent, syncOrgMark } from "./org-mode
 import { rewordState, rewordSwitchSet } from "./card-reword.js";
 import { SIGNIN_NAMES, signinNow, signinShown, signinParts, signinSay, signinNoSeat, signinTold, signinActsHtml, signinWhen, signinProvidersHtml, signinIdentHtml, signinCodeText, signinChoosingNow, signinDoorsHtml, signinDoorRefusedNow,
   signinAct, signinStart, signinOnChange, signinPreviewHtml, signinLinkHtml, signinLinkSelect, signinCopyHtml, signinManaged, signinKeepsAccount,
-  signinCapHolds, signinStranded, signinStrandedWords, signinWaiting, signinWaitingWords, syncNow, syncLine, syncSet, syncOnChange, syncOpened, syncConsent, askSyncWhose } from "./signin.js";
+  signinCapHolds, signinStranded, signinStrandedWords, signinWaiting, signinWaitingWords, syncNow, syncLine, syncSet, syncOnChange, syncOpened, syncConsent, askSyncWhose,
+  deskDoorState, deskDoorLines } from "./signin.js";
 import { hangBubble } from "./bubble.js";
 
 /* THE SETTINGS SCREEN, a screen tab. Opening it shows every section on one page, under its name,
@@ -253,7 +254,8 @@ function onoff(name,on,tipOn,tipOff){
 function row(key,icon,title,hint,ctl){ return {key, icon, title, hint:hint||"", ctl}; }
 function rowHtml(r){
   if(r.html!=null) return r.html;
-  return '<div class="set-row" data-row="'+esc(r.key)+'">'+sxIcon(r.icon)+'<div class="set-label">'+esc(r.title)
+  return '<div class="set-row" data-row="'+esc(r.key)+'">'+sxIcon(r.icon)+'<div class="set-label">'
+    +(r.dot?'<span class="door-seat-dot" aria-hidden="true"></span>':'')+esc(r.title)
     +(r.hint?'<small>'+esc(r.hint)+'</small>':'')+'</div><div class="set-ctl">'+r.ctl+'</div></div>';
 }
 function rowWords(r){
@@ -325,13 +327,12 @@ function accountCardHtml(v){
   }
   const failed=v.said && v.said!=="signin-done" && v.said!=="signin-cancelled" && !v.signedIn;
   if(failed){ const s=signinSay(v.said, v); h+=signinIdentHtml({initial:"", name:s[0], sub:s[1]}); }
-  else h+=signinIdentHtml({initial:"", name:t("Not signed in"),
-    sub:v.offered.length ? t("Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.") : ""});
+  else h+=signinIdentHtml({initial:"", name:t("Not signed in"), sub:""});
   h+=accountManagedHtml(v);
   if(v.outOwed) h+='<p class="sgn-cap" data-signin-out-owed>'+esc(t("This computer is signed out. Its place among the account's three computers is freed by itself as soon as the sign-in service can be reached."))+'</p>';
   if(v.offered.length) h+='<div>'+(v.said==="signin-preview" ? "" : signinPreviewHtml(v))+signinProvidersHtml(v.offered, true)
     +(signinCapHolds(v) ? '<p class="sgn-cap">'+esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account."))+'</p>' : '') /* plant:card-cap */
-    +'<p class="sgn-cap">'+esc(t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account."))+'</p></div>';
+    +'<p class="sgn-cap">'+esc(t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name, address and picture, and shows them only to the leads and administrator of the licence it asks to join."))+'</p></div>'; /* plant:account-privacy-full */
   if(choosing && v.signedIn) h+='<span class="sgn-acts"><button type="button" class="btn" data-signin-act="keep">'+esc(t("Cancel"))+'</button></span>';
   return h+'</div>';
 }
@@ -362,7 +363,8 @@ function accountGroups(){
     const p=signinParts(v), val=x=>'<span class="sgn-val">'+esc(x)+'</span>', join=pair=>pair[0]+" "+pair[1];
     /* A press at a door the shell refused is said on the team's row, where it was pressed. */
     const doorSaid=signinDoorRefusedNow() ? signinSay("door", v)[0] : "";
-    rows.push(p.team ? row("team","people",t("Team"),doorSaid||(p.team.lead?t("Led by {LEAD}").split("{LEAD}").join(p.team.lead):""),val(p.teamName))
+    const teamNamed=(teamLeads().find(x=>x && !x.removed && x.team)||{});
+    rows.push(p.team ? row("team","people",t("Team"),doorSaid||(p.team.lead?t("Led by {LEAD}").split("{LEAD}").join(p.team.lead):""),val(teamNamed.team||p.teamName))
       : v.doors.length && v.seat==="held" ? row("team","people",t("A team on this licence"),doorSaid||t("This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation."),signinDoorsHtml(v.doors))
       : v.deskOnly && v.seat==="held" ? row("team","people",t("Working without a team"),doorSaid||t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed."),"") /* plant:account-desk-only */
       : row("team","people",t("No team yet"),doorSaid||(signinManaged(v)?t("No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself."):t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself.")),"")); /* plant:no-team-managed */
@@ -370,9 +372,15 @@ function accountGroups(){
     if(v.managed && v.managed.provider) rows.push(row("signin","user",t("Sign-in"),"",lockedHtml(signinHeldTo(v.managed))));
     if(v.code && !signinManaged(v)) rows.push(row("code","code",t("Your sign-in code"), /* plant:code-row-managed */t("Not a secret. It tells a team's lead which account is yours."),
       '<code class="sgn-mono">'+esc(signinCodeText(v.code))+'</code>'+signinCopyHtml("copy")));
-    if(signinNoSeat(v)) rows.push(row("seat","check",t("Seat"),join(signinSay(v.refused, v, p)),""));
+    const ds=deskDoorState(v);
+    if(ds.state==="ended" || ds.state==="working"){ /* plant:account-seat-state */
+      const seatPair=deskDoorLines(ds);
+      rows.push({key:"seat", icon:"check", dot:ds.state==="ended", /* plant:account-seat-dot */
+        title:seatPair[0], hint:seatPair[1], ctl:""});
+    }
+    else if(signinNoSeat(v)) rows.push(row("seat","check",t("Seat"),join(signinSay(v.refused, v, p)),""));
     else if(v.seat==="none") rows.push(row("seat","check",t("Seat"),join(signinSay("nolicence", v)),""));
-    else rows.push(row("seat","check",t("Seat"),v.seat==="lapsed" ? join(signinSay("lapsed", v)) : t("On up to three computers; this is one of them."),val(t("Held by this account"))));
+    else rows.push(row("seat","check",t("Seat"),v.seat==="lapsed" ? join(signinSay("lapsed", v)) : t("On up to three computers; this is one of them."),""));
     if(cause) rows.push(row("cause","check",t("Licence"),cause,""));
     if(buy) rows.push(buyRow(v));
     else if(held) rows.push(held);

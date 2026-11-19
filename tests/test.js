@@ -579,7 +579,7 @@ function lanePageKeyTests() {
     $: s => (s === "#lanes" ? lanesBox : null), scCaptureId: "", SC_DEFS: [], intentEl: null,
     tourActive: off, tourHasFocus: off, openCover: () => null, modalOpen: off, modalFront: off, edToDesk: off, factsPanelOpen: off,
     eventMatchesAction: off, eHost: off, hooks: { runShortcut: off }, mgReduceMotion: off,
-    firstSigninOpenNow: off, skipFirstSignin: off /* a desk past the first-opening sign-in: no screen is up */ };
+    firstSigninOpenNow: off /* a desk past the first-opening sign-in: no screen is up */ };
   Object.defineProperty(own, "lanesOn", { get: () => world.open });
   const scope = new Proxy({}, {
     has: (o, k) => typeof k === "string",
@@ -2952,14 +2952,21 @@ function markLab(o) {
   sb.window = sb;
   if (o && o.host) sb.E_HOST = o.host;
   if (o && o.signin) {
-    /* The real gate-to-screen sequence (signin.js's own state and its five movers) over a due flag the lab owns; the screen's
-       drawing is a stand-in, since what is asked is when the desk's boot waits, speaks and takes focus around it. */
+    /* The real gate-to-screen sequence (signin.js's own state, deskWorks, firstSigninDue, signinChanged and its movers)
+       over a view flag the lab owns; the screen's drawing is a stand-in, since what is asked is when the desk's boot
+       waits, speaks and takes focus around it. */
     const sg = read("signin.js");
     ["let firstSigninPending=", "function firstSigninStands(", "function onFirstSigninClosed(", "function tellFirstSigninClosed(",
-      "function skipFirstSignin(", "function openFirstSignin(", "function closeFirstSignin(", "function bootFirstSignin("]
+      "function deskWorks(", "function firstSigninDue(", "function openFirstSignin(", "function closeFirstSignin(",
+      "function bootFirstSignin(", "function signinChanged("]
       .forEach(m => slices.push(extractDecl(sg, m)));
-    sb.firstSigninDue = () => !!o.signin.due && !sb.seenMark; sb.markFirstSigninSeen = () => { sb.seenMark = true; };
-    sb.paintFirstSignin = () => {}; sb.signinV = null; sb.signinCall = () => {}; sb.$ = () => null;
+    sb.signinHasView = true;
+    sb.signinV = { works: !o.signin.due };
+    sb.signinHost = () => ({});
+    sb.signinRead = v => Object.assign({ offered: [], signedIn: "", works: false }, v || {});
+    sb.paintSigninButton = () => {}; sb.paintFirstSignin = () => {}; sb.signinTell = () => {};
+    sb.signinShown = () => false; sb.paintSigninPanel = () => {}; sb.signinOpen = false;
+    sb.signinCall = () => {}; sb.$ = () => null;
   }
   require("vm").runInNewContext(mark + "\n" + slices.join("\n") + "\n", sb);
   const timersTo = t => {
@@ -3123,16 +3130,17 @@ function markClockTests() {
 
   /* A FIRST OPENING WITH THE SIGN-IN SCREEN: the six boot rules above are held by a desk past the screen; here the screen
      stands. Its first paint is the chrome in its own language and no screen yet (a launch) or the screen at once (none);
-     the warm copy keeps its 900 ms; the empty desk's focus waits for the answer and takes the desk when the screen is
-     answered or skipped; a desk with no screen due takes it at the landing as before. */
+     the warm copy keeps its 900 ms; an unseated view leaves the screen standing and the empty desk's focus waits until a
+     working view lowers it; a desk with no screen due takes it at the landing as before. */
   try {
     const snap = w => [w.bodyClasses.has("e-first-signin"), w.sb.firstSigninStands(), w.focuses.slice(), w.warms.slice(), w.log.slice()];
     const c = markLab({ signin: { due: true } }); c.make(); c.sb.wireOnOpen(); c.frame(10); c.frame(20);
     const bootC = snap(c);
     c.land(1700); c.timersTo(4000);
-    const heldC = snap(c); c.sb.skipFirstSignin(); const doneC = snap(c);
+    c.sb.signinChanged({ works: false });
+    const heldC = snap(c); c.sb.signinChanged({ works: true }); const doneC = snap(c);
     const n = markLab({ signin: { due: true } }); n.sb.wireOnOpen(); n.frame(10); n.frame(20); n.timersTo(4000);
-    const heldN = snap(n); n.sb.skipFirstSignin(); const doneN = snap(n);
+    const heldN = snap(n); n.sb.signinChanged({ works: true }); const doneN = snap(n);
     const k = markLab({ signin: { due: false } }); k.make(); k.sb.wireOnOpen(); k.frame(10); k.frame(20); k.land(1700); k.timersTo(4000);
     got = [bootC, heldC, doneC, heldN, doneN, snap(k)];
   } catch (e) { got = "the lab threw: " + e.message; }

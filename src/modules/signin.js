@@ -3,11 +3,10 @@
    signed in by provider, the sign-in code and how the seat stands, and shows nothing where no provider is offered, so a desk
    with no registration configured looks as it did. Settings' Account draws the same view with signinParts. */
 import { $ } from "./dom.js";
-import { eHost, eOpenSetAside, eCatalogFolderPinned } from "./host.js";
+import { eHost, eOpenSetAside } from "./host.js";
 import { esc } from "./esc.js";
 import { t, uiLang, hugDottedGround } from "./ui-lang.js";
 import { agentName } from "./agent.js";
-import { lsGet, lsSet } from "./storage.js";
 import { teamLeads } from "./team-join.js";
 import { hooks } from "./hooks.js";
 import { catalogLoaded } from "./catalog-boot.js";
@@ -53,14 +52,14 @@ function signinRead(v){
     /* Machine policy (decision 49), only where it sets anything: {on, shared, personal, provider, closed, contact}. */
     managed: signinManagedRead(o.managed),
     /* Whether the desk works, judged by the shell on its own clock: that clock, the held certificate's end, the last one's where it
-       stopped (each a time in ms, 0 for none), and whether the system has a network. Kept as the shell judged them; no moment reads them. */
+       stopped (each a time in ms, 0 for none), and whether the system has a network. Kept as the shell judged them. deskDoorState reads them. */
     works: o.works===true, /* plant:read-works */
     now: signinTimeRead(o.now),
     until: signinTimeRead(o.until),
     stoppedAt: signinTimeRead(o.stoppedAt), /* plant:read-stopped */
     online: o.online!==false, /* plant:read-online */
     /* When the service first said none while a certificate ran, the seat and trials it last named, and whether this build can sign in
-       at all; kept as the shell said them, words for the page that no moment reads yet. */
+       at all; kept as the shell said them. deskDoorState reads them. */
     ended: signedIn ? signinTimeRead(o.ended) : 0, /* plant:read-ended */
     holding: signedIn ? signinHoldingRead(o.holding) : null,
     trials: signedIn ? signinTrialsRead(o.trials) : null,
@@ -131,7 +130,7 @@ function signinWaitingWords(){ /* plant:waiting-words */
 function signinRefusedHere(reason, v){
   return reason==="signin-tenant" || (signinManaged(v) && (reason==="signin-notassigned" || reason==="signin-notallowed")); /* plant:refused-here */
 }
-let signinV=signinRead(null);
+let signinV=signinRead(null), signinHasView=false;
 function signinHost(){
   const h=eHost();
   return h && typeof h.signinState==="function" ? h : null;
@@ -139,26 +138,30 @@ function signinHost(){
 function signinNow(){
   const h=signinHost();
   if(!h) return signinRead(null);
-  try{ signinV=signinRead(h.signinState()); }catch(e){ signinV=signinRead(null); }
+  try{ signinV=signinRead(h.signinState()); signinHasView=true; }catch(e){ signinV=signinRead(null); signinHasView=false; }
   return signinV;
+}
+/* THE DESK'S ONE GATE ON THE PAGE: reads the shell view's works (shell/main.js signinWorksOf). No host answers false. */
+function deskWorks(v){
+  if(v===undefined){
+    if(!signinHost()) return false; /* plant:desk-works-host */
+    if(signinV.works!==true) return false; /* plant:desk-works */
+    return true;
+  }
+  if(!v || typeof v!=="object" || v.works!==true) return false; /* plant:desk-works-arg */
+  return true;
 }
 /* Whether the door exists: a provider offered, somebody signed in, or the wait for machine policy to say. */
 function signinShown(v){ return !!(v && (v.offered.length || v.signedIn || signinWaiting(v) || signinStranded(v))); } /* plant:shown-waiting */
-/* FIRST-OPENING SIGN-IN GATE AND MEMORY: shown once on a desk that offers a provider, has
-   nobody signed in, has never shown the screen before, and is not pinned by policy (a policy
-   desk joins its team from HKLM policy without asking first). Written when the screen opens
-   so stopping mid-screen never traps the person behind it again while Sign in stays in the bar. */
-const FIRST_SIGNIN_KEY="eFirstSigninSeen";
-function firstSigninSeen(){ return lsGet(FIRST_SIGNIN_KEY)==="1"; }
-function markFirstSigninSeen(){ return lsSet(FIRST_SIGNIN_KEY,"1",true); }
-function firstSigninDue(v, opts){
-  const s=v===undefined ? signinV : signinRead(v);
-  const o=opts && typeof opts==="object" ? opts : null;
-  const seen=o && "seen" in o ? !!o.seen : firstSigninSeen();
-  const policy=o && "policy" in o ? !!o.policy : eCatalogFolderPinned();
-  if(policy) return false; /* plant:first-signin-gate */
-  if(signinStranded(s)) return false; /* plant:first-signin-stranded */
-  return !!(s && s.offered.length && !s.signedIn && !seen);
+/* THE DOOR RULE: due whenever a view has been read and deskWorks() is false. No seen memory and no policy-pin exemption. */
+function firstSigninDue(v){
+  if(v===undefined){
+    if(!signinHasView) return false; /* plant:door-due-read */
+    if(!deskWorks()) return true; /* plant:door-due-works */
+    return false;
+  }
+  if(!v || typeof v!=="object") return false;
+  return !deskWorks(signinRead(v));
 }
 let firstSigninPending=false, firstSigninOpen=false, firstSigninWaits=[];
 function firstSigninStands(){ return !!(firstSigninPending || firstSigninOpen); }
@@ -186,47 +189,26 @@ function paintFirstSignin(){
   const el=$("#firstSignin"); if(!el) return;
   const hadFocus=el.contains(document.activeElement);
   const d=signinDoor(signinV);
-  const skipBtn='<button type="button" class="btn fs-skip-btn" id="firstSigninSkip">'+esc(t("Not now"))+'</button>';
-  const skipLine='<p class="fs-skip-line">'+esc(t("The desk opens as it is, and Sign in stays in the bar at the top for later."))+'</p>';
-  let rightBody="";
-  if(d && d.moment==="before"){
-    rightBody=signinPanelHtml(Object.assign({}, d, {heading:"", line:"", privacy:"", foot:""}))
-      +'<p class="sgn-lede fs-right-note">'+esc(t("Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in."))+'</p>'
-      +(d.privacy ? '<p class="sgn-cap fs-privacy">'+esc(d.privacy)+'</p>' : "")
-      +'<div class="fs-skip">'+skipBtn+skipLine+'</div>';
-  }else if(d){
-    rightBody=signinPanelHtml(Object.assign({}, d, {foot:""}));
-  }
-  el.innerHTML='<div class="fs-grid">'
-    +'<div class="fs-left"><div class="fs-left-in"><div class="fs-body">'
-      +firstSigninMarkHtml()
-      +'<h1 id="fsHeading">'+esc(t("Sign in to Etiuda"))+'</h1>'
-      +'<p class="fs-lede">'+esc(t("Your seat belongs to your account, so it comes with you to any computer you sign in on, up to three."))+'</p>'
-      +'<h2 class="fs-steps-h">'+esc(t("What happens"))+'</h2>'
-      +'<ol class="fs-steps">'
-        +'<li><span class="fs-step-n" aria-hidden="true">1</span><span>'+esc(t("The browser opens the sign-in page"))+'</span></li>'
-        +'<li><span class="fs-step-n" aria-hidden="true">2</span><span>'+esc(t("You choose your account there"))+'</span></li>'
-        +'<li><span class="fs-step-n" aria-hidden="true">3</span><span>'+esc(t("Etiuda carries on here by itself"))+'</span></li>'
-      +'</ol>'
-    +'</div><p class="fs-foot">'+esc(t("No licence key to keep"))+'</p></div></div>'
-    +'<div class="fs-right"><div class="fs-right-in">'
-      +'<h2 class="fs-rh">'+esc(t("Signing in"))+'</h2>'
-      +rightBody
-    +'</div></div></div>';
-  let showSkip=d && d.moment==="refused";
-  if(d && d.moment==="managed-refused") showSkip=true; /* plant:first-signin-managed-skip */
-  if(showSkip){
-    const acts=el.querySelector(".sgn-acts");
-    if(acts){
-      acts.insertAdjacentHTML("beforeend", skipBtn);
-      acts.insertAdjacentHTML("afterend", skipLine);
-    }else{
-      const rin=el.querySelector(".fs-right-in");
-      if(rin) rin.insertAdjacentHTML("beforeend", '<div class="fs-skip">'+skipBtn+skipLine+'</div>');
-    }
-  }else if(d && d.moment==="stranded"){
-    const rin=el.querySelector(".fs-right-in");
-    if(rin) rin.insertAdjacentHTML("beforeend", '<div class="fs-skip"><button type="button" class="btn primary fs-skip-btn" id="firstSigninSkip">'+esc(t("Continue"))+'</button></div>'); /* plant:first-signin-stranded-btn */
+  const ds=deskDoorState(signinV);
+  const doorish=ds.state==="waiting"||ds.state==="trial-over-org"||ds.state==="trial-over"||ds.state==="stopped"||ds.state==="first"||ds.state==="first-offline";
+  const opening=!doorish && d && d.moment==="before";
+  if(doorish || opening){
+    el.innerHTML=firstSigninHtml(signinV, {forceFirst:opening});
+  }else if(!d){
+    el.innerHTML=firstSigninHtml(signinV, {doorKind:"no-signin"});
+  }else{
+    const rightBody=signinPanelHtml(Object.assign({}, d, {foot:""}));
+    el.innerHTML='<div class="fs-grid">'
+      +'<div class="fs-left"><div class="fs-left-in"><div class="fs-body">'
+        +firstSigninMarkHtml()
+        +'<h1 id="fsHeading">'+esc(t("Sign in to Etiuda"))+'</h1>'
+        +'<p class="fs-lede">'+esc(t("Your seat belongs to your account, so it comes with you to any computer you sign in on, up to three."))+'</p>'
+        +doorStepsHtml()
+      +'</div><p class="fs-foot">'+esc(t("No licence key to keep"))+'</p></div></div>'
+      +'<div class="fs-right"><div class="fs-right-in">'
+        +'<h2 class="fs-rh">'+esc(t("Signing in"))+'</h2>'
+        +rightBody
+      +'</div></div></div>';
   }
   if(hadFocus){
     const first=el.querySelector("button:not(:disabled), input");
@@ -234,15 +216,9 @@ function paintFirstSignin(){
   }
   hugDottedGround(el); /* plant:first-signin-dots */
 }
-function skipFirstSignin(){
-  if(!firstSigninPending && !firstSigninOpen) return;
-  if(signinV && signinV.busy) signinCall("signinStop");
-  closeFirstSignin();
-}
 function openFirstSignin(){
   firstSigninPending=false;
   firstSigninOpen=true;
-  markFirstSigninSeen(); /* plant:first-signin-mark */
   if(typeof document==="undefined") return;
   document.body.classList.add("e-first-signin");
   const el=$("#firstSignin");
@@ -279,6 +255,13 @@ function signinCodeText(code){ return String(code||"").replace(/(.{4})(?=.)/g,"$
 /* A day as the panel says one: "27 Nov". */
 function signinDay(at){
   return new Date(at).toLocaleDateString(uiLang()==="pl" ? "pl-PL" : "en-GB",{day:"numeric", month:"short"});
+}
+/* A day as the door's lines say one: "1 December", with the year when the date is in another year. */
+function doorDay(at, now){
+  const d=new Date(at), lang=uiLang()==="pl" ? "pl-PL" : "en-GB";
+  const opt={day:"numeric", month:"long"};
+  if(d.getFullYear()!==new Date(now>0?now:Date.now()).getFullYear()) opt.year="numeric"; /* plant:door-day-year */
+  return d.toLocaleDateString(lang, opt);
 }
 function signinWhen(at){
   if(!at) return "";
@@ -398,6 +381,188 @@ FAIL_FIRST.push("signin-notassigned","signin-tenant","signin-other");
 FAIL_FIRST.push("signin-switch-out","signin-switch-unmade"); /* plant:switch-unmade-first */
 /* The refusals whose way on is another account, where the computer offers one. */
 const ANOTHER_FOR=["signin-notallowed","signin-notassigned"];
+/* THE DESK'S DOOR, judged through deskWorks() and the view fields B-2b keeps; every painter reads this one value.
+   Two facts stay on their nearest fields until the service carries `asked`, marked below. */
+function deskDoorState(v){
+  if(!v || !Array.isArray(v.offered)) v=signinRead(v);
+  const works=deskWorks(v);
+  const seat=v.holding, seatOn=seat?seat.on:"";
+  const deskEnd=(v.trials&&v.trials.desk)||(seatOn==="trial"&&seat&&seat.ends)||0;
+  const studioEnd=(v.trials&&v.trials.studio)||0;
+  const ends=seat&&seat.ends?seat.ends:0;
+  const team=signinTeam();
+  const lead=(seat&&seat.lead)||(team&&team.lead)||"";
+  const waitingOnLead=!!(v.askLead || signinNoSeat(v)); /* B-3a feeds this */ /* plant:door-waiting-noseat */
+  const orgLicence=!!v.licenceManaged; /* B-3a feeds this */
+  const trialOver=seatOn==="trial" || (!seatOn && deskEnd>0); /* plant:door-trial-over */
+  /* The ask is read before a stop. A trial with no seat held is read before a stop; a trial seat that has stopped is the stop. */
+  const trialOpen=trialOver && !(seatOn && v.stoppedAt>0); /* plant:door-trial-open */
+  let day=0;
+  if(seatOn==="trial" && deskEnd && v.now){
+    const left=Math.round((deskEnd-v.now)/86400000);
+    day=Math.max(1, Math.min(14, 14-left));
+  }
+  let state="none";
+  if(works && v.ended>0) state="ended"; /* plant:door-state-ended */
+  else if(!works && v.signedIn && waitingOnLead && (trialOver || (!seatOn && !(v.stoppedAt>0)))) state="waiting"; /* plant:door-state-waiting */
+  else if(!works && v.signedIn && trialOpen && orgLicence) state="trial-over-org";
+  else if(!works && v.signedIn && trialOpen) state="trial-over";
+  else if(!works && v.signedIn) state="stopped"; /* plant:door-state-stopped */
+  else if(works && v.signedIn && seatOn) state="working";
+  else if(!works && !v.signedIn && !v.busy && FAIL_FIRST.indexOf(v.said)<0 && v.offered.length && v.registered && !v.online && !signinWaiting(v) && !signinStranded(v)) state="first-offline"; /* plant:door-first-offline */
+  else if(!works && !v.signedIn && !v.busy && FAIL_FIRST.indexOf(v.said)<0 && v.offered.length && v.registered && v.online && !signinWaiting(v) && !signinStranded(v)) state="first";
+  return {state:state, lead:lead, deskEnd:deskEnd, studioEnd:studioEnd, ended:v.ended||0, until:v.until||0,
+    stoppedAt:v.stoppedAt||0, why:seatOn, seatOn:seatOn, ends:ends, day:day, waitingOnLead:waitingOnLead,
+    orgLicence:orgLicence, online:v.online!==false, now:v.now||0};
+}
+function deskWhySentence(on, lead){
+  if(on==="trial") return t("its trial ended");
+  if(on==="studio-trial") return t("the Etiuda Studio trial that covered it ended");
+  if(on==="own") return t("the licence ended");
+  if(on==="team") return lead ? named(t("the seat on the team {LEAD} leads ended"),"{LEAD}",lead) : t("the seat on the team ended");
+  if(on==="org") return t("the organisation's licence no longer gives this account a seat");
+  return "";
+}
+/* Heading and line for the state the door, the panel and the Seat row all read. */
+function deskDoorLines(ds){
+  const lead=ds.lead||"", n=String(ds.day||0), dayAt=(at)=>at?doorDay(at, ds.now):"";
+  const desk=dayAt(ds.deskEnd), studio=dayAt(ds.studioEnd);
+  const ends=dayAt(ds.ends), ended=dayAt(ds.ended), until=dayAt(ds.until);
+  const stopped=dayAt(ds.stoppedAt);
+  const fill=(s, map)=>Object.keys(map).reduce((a,k)=>a.split(k).join(map[k]), s);
+  if(ds.state==="first" || ds.state==="first-offline") return [t("Etiuda starts with a sign-in."),
+    t("Signing in with Microsoft or Google gives this computer a seat: the team's, where its lead has admitted this account, or else a trial of fourteen days. Catalogs open once the seat is here.")];
+  if(ds.state==="waiting") return [t("The request to join is waiting."),
+    lead ? fill(t("Catalogs open here again once {LEAD}, the team's lead, accepts it. Etiuda's own fourteen days ended on {DESK_END}."), {"{LEAD}":lead, "{DESK_END}":desk})
+      : fill(t("Catalogs open here again once the team's lead accepts it. Etiuda's own fourteen days ended on {DESK_END}."), {"{DESK_END}":desk})];
+  if(ds.state==="trial-over-org") return [t("Etiuda's trial has ended."),
+    fill(t("It ended on {DESK_END}. This account's organisation holds an Etiuda licence, so a team's lead can admit this account; buying a licence opens the catalogs again too."), {"{DESK_END}":desk})];
+  if(ds.state==="trial-over") return [t("Etiuda's trial has ended."),
+    fill(t("It ended on {DESK_END}. Buying a licence opens the catalogs again."), {"{DESK_END}":desk})];
+  if(ds.state==="ended") return [fill(t("This account's seat ended on {ENDED}."), {"{ENDED}":ended}),
+    fill(t("Etiuda keeps working on this computer until {DATE}, when its last confirmation runs out, and then stops. A purchase, or a team's lead admitting this account, brings the seat back."), {"{DATE}":until})];
+  if(ds.state==="stopped") return [t("Etiuda has stopped on this computer."),
+    fill(t("It stopped on {DATE}: {WHY}. Signing in with an account that has a seat, a purchase, or a team's lead admitting this account starts it again."),
+      {"{DATE}":stopped, "{WHY}":deskWhySentence(ds.why, lead)})];
+  if(ds.state==="working" && ds.seatOn==="studio-trial") return [t("Etiuda now runs on the Etiuda Studio trial."),
+    fill(t("Etiuda's own fourteen days ended on {DESK_END}. The Etiuda Studio trial on this account began later and covers Etiuda too, until {STUDIO_END}."), {"{DESK_END}":desk, "{STUDIO_END}":studio})];
+  if(ds.state==="working" && ds.seatOn==="own") return [t("This account holds an Etiuda licence."),
+    fill(t("Paid until {ENDS}, on up to three computers."), {"{ENDS}":ends})];
+  if(ds.state==="working" && ds.seatOn==="team") return [lead ? fill(t("This account has a seat on the team {LEAD} leads."), {"{LEAD}":lead}) : t("This account has a seat on a team."),
+    fill(t("It renews by itself; the team's licence runs until {ENDS}."), {"{ENDS}":ends})];
+  if(ds.state==="working" && ds.seatOn==="org") return [t("This account has a seat on its organisation's licence."),
+    fill(t("It renews by itself; the licence runs until {ENDS}."), {"{ENDS}":ends})];
+  if(ds.state==="working" && ds.waitingOnLead) return [t("Etiuda's own trial is running."),
+    lead ? fill(t("Day {N} of 14, until {DESK_END}. The request to join waits for {LEAD}, and Etiuda works meanwhile."), {"{N}":n, "{DESK_END}":desk, "{LEAD}":lead})
+      : fill(t("Day {N} of 14, until {DESK_END}. The request to join waits for the team's lead, and Etiuda works meanwhile."), {"{N}":n, "{DESK_END}":desk})];
+  if(ds.state==="working") return [t("Etiuda's own trial is running."),
+    fill(t("Day {N} of 14, until {DATE}, on up to three computers."), {"{N}":n, "{DATE}":desk})];
+  return ["", ""];
+}
+function doorBandState(v){
+  const ds=deskDoorState(v);
+  if(ds.state!=="ended") return {shown:false, dot:false, text:"", tip:""}; /* plant:door-band-ended */
+  const ended=doorDay(ds.ended, ds.now), until=doorDay(ds.until, ds.now);
+  return {shown:true, dot:true,
+    text:named(named(t("Seat ended {ENDED} · Etiuda stops {DATE}"),"{ENDED}",ended),"{DATE}",until),
+    tip:named(t("This account's seat has ended; Etiuda stops on {DATE}."),"{DATE}",until)};
+}
+function doorAskLabel(lead){
+  if(!lead) return t("Ask a team's lead…"); /* plant:door-ask-noname */
+  return named(t("Ask {LEAD}"),"{LEAD}",lead);
+}
+function doorPress(label, solid, act){
+  const buy=act==="buy"?' data-e-open="buy"':'';
+  return '<button type="button" class="btn'+(solid?" primary":"")+'" data-signin-act="'+esc(act)+'"'+buy+'>'+esc(label)+'</button>';
+}
+function doorTextPress(label, act){
+  return '<button type="button" class="door-text" data-signin-act="'+esc(act)+'">'+esc(label)+'</button>';
+}
+function doorScreen(leftBody, rightInner, foot){
+  return '<div class="fs-grid"><div class="fs-left"><div class="fs-left-in"><div class="fs-body">'
+    +firstSigninMarkHtml()+leftBody+'</div>'+(foot||"")+'</div></div>'
+    +'<div class="fs-right"><div class="fs-right-in">'+rightInner+'</div></div></div>';
+}
+function doorBare(heading, line){
+  return doorScreen('<h1 id="fsHeading">'+esc(heading)+'</h1><p class="fs-lede">'+esc(line)+'</p>', "", "");
+}
+function doorStepsHtml(){
+  return '<h2 class="fs-steps-h">'+esc(t("What happens"))+'</h2><ol class="fs-steps">'
+    +'<li><span class="fs-step-n" aria-hidden="true">1</span><span>'+esc(t("The browser opens the sign-in page"))+'</span></li>'
+    +'<li><span class="fs-step-n" aria-hidden="true">2</span><span>'+esc(t("You choose your account there"))+'</span></li>'
+    +'<li><span class="fs-step-n" aria-hidden="true">3</span><span>'+esc(t("Etiuda carries on here by itself"))+'</span></li>'
+    +'</ol>';
+}
+/* The full screen for the state `v` is told, or for sentences (b) and (c) when opts.doorKind says so. "" when nothing stands. */
+function firstSigninHtml(v, opts){
+  const o=opts && typeof opts==="object" ? opts : {};
+  if(o.doorKind==="no-signin") return doorBare(t("This build of Etiuda cannot sign in."),
+    t("It was made without a way to sign in, so no catalog opens here."));
+  if(o.doorKind==="browser") return doorBare(t("Etiuda works in its desktop app."), t("In a browser, no catalog opens."));
+  if(!v) return "";
+  const ds=deskDoorState(v);
+  if(ds.state==="waiting" || ds.state==="trial-over-org" || ds.state==="trial-over" || ds.state==="stopped") return doorLaterHtml(v, ds);
+  if(ds.state==="first" || ds.state==="first-offline" || o.forceFirst) return doorFirstHtml(v, ds);
+  return "";
+}
+const DOOR_OFF_GLYPH='<svg class="door-off-glyph" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true" focusable="false"><path d="M2 8.8a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M8.5 16.1a5 5 0 0 1 7 0"/><circle cx="12" cy="19.5" r="1" fill="currentColor" stroke="none"/><path d="M3 3l18 18"/></svg>';
+function doorFirstHtml(v, ds){
+  const drawn=ds.state==="first" || ds.state==="first-offline" ? ds : Object.assign({}, ds, {state:ds.online?"first":"first-offline"});
+  const pair=deskDoorLines(drawn.state==="first" || drawn.state==="first-offline" ? drawn : Object.assign({}, drawn, {state:"first"}));
+  const door=signinDoor(v)||{moment:""};
+  const d={state:ds.state, moment:door.moment||""};
+  const showSkip=(d.state==="none") && (d.moment==="refused" || d.moment==="managed-refused"); /* plant:door-no-skip */
+  const offline=drawn.state==="first-offline" || ds.state==="first-offline";
+  const priv=t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The leads and administrator of the licence it joins see the account's name, address and picture."); /* plant:door-privacy-short */
+  let right='<h2 class="fs-rh">'+esc(t("Signing in"))+'</h2>';
+  if(offline) right+='<div class="door-off">'+DOOR_OFF_GLYPH+'<span>'+esc(t("Signing in needs an internet connection. The buttons appear here by themselves once this computer is online."))+'</span></div>'; /* plant:door-off-glyph */
+  else if(v.offered && v.offered.length) right+=signinProvidersHtml(v.offered, false);
+  if(signinCapHolds(v)) right+='<p class="sgn-cap">'+esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account."))+'</p>';
+  right+='<p class="sgn-cap fs-privacy">'+esc(priv)+'</p>';
+  if(v.keeps===false) right+='<p class="sgn-cap">'+esc(t("This computer cannot keep a sign-in, so Etiuda asks for one again when the seat renews, at most every thirty days."))+'</p>';
+  if(showSkip) right+='<div class="fs-skip"><button type="button" class="btn fs-skip-btn" id="firstSigninSkip">'+esc(t("Not now"))+'</button>'
+    +'<p class="fs-skip-line">'+esc(t("The desk opens as it is, and Sign in stays in the bar at the top for later."))+'</p></div>';
+  const left='<h1 id="fsHeading">'+esc(pair[0])+'</h1><p class="fs-lede">'+esc(pair[1])+'</p>'+doorStepsHtml();
+  const foot='<p class="fs-foot">'+esc(t("No licence key to keep"))+'</p>';
+  return doorScreen(left, right, foot);
+}
+function doorLaterHtml(v, ds){
+  const pair=deskDoorLines(ds);
+  const askable=ds.state==="trial-over-org" || (ds.state==="stopped" && (ds.orgLicence || ds.seatOn==="team"));
+  const checkFilled=ds.state==="waiting";
+  let acts="";
+  if(checkFilled) acts+=doorPress(t("Check now"), true, "check");
+  else if(askable) acts+=doorPress(doorAskLabel(ds.lead), true, "ask");
+  else acts+=doorPress(t("Buy"), true, "buy");
+  if(checkFilled || askable) acts+=doorPress(t("Buy"), false, "buy");
+  const quiet=[];
+  if(!checkFilled) quiet.push(doorTextPress(t("Check now"), "check"));
+  quiet.push(doorTextPress(t("Use another account"), "another"));
+  quiet.push(doorTextPress(t("Sign out"), "out"));
+  const out=ds.state!=="waiting";
+  const wayOut=out ? '<div class="door-out"><button type="button" class="btn" data-door-save>'+esc(t("Save your own work as files…"))+'</button><p class="sgn-cap">'+esc(t("What this account made here can still be saved as files, in a folder of your choice: its own cards, its edits to a catalog's cards, and the flags it raised. Catalogs themselves are not saved."))+'</p></div>' : "";
+  const p=signinParts(v);
+  const right=signinIdentHtml({initial:p.initial, name:p.name, sub:p.sub, off:p.off})
+    +'<div class="sgn-acts door-acts">'+acts+'</div><div class="door-quiet">'+quiet.join("")+'</div>'+wayOut;
+  const left='<h1 id="fsHeading">'+esc(pair[0])+'</h1><p class="fs-lede">'+esc(pair[1])+'</p>';
+  return doorScreen(left, right, "");
+}
+function paintDoorBand(){
+  const band=doorBandState(signinV);
+  const el=$("#doorBand");
+  if(el){
+    el.hidden=!band.shown;
+    el.setAttribute("aria-hidden", band.shown ? "false" : "true");
+    el.innerHTML=band.shown ? '<span class="door-band-dot" aria-hidden="true"></span><span>'+esc(band.text)+'</span>' : "";
+  }
+  const btn=$("#signinBtn");
+  if(!btn || typeof btn.querySelector!=="function") return; /* plant:door-band-dot */
+  let dot=btn.querySelector(".door-btn-dot");
+  if(band.dot){
+    if(!dot) btn.insertAdjacentHTML("beforeend", '<span class="door-btn-dot" aria-hidden="true"></span>');
+    btn.title=band.tip;
+  }else if(dot) dot.remove();
+}
 /* THE DOOR'S CONTENT for the view `v`, whatever form draws it: {moment, ident, heading, line, say, calm, code, providers, cap, privacy, foot,
    acts: [{act, label, solid}]}; null where there is no door. The shell is separate from what it does: signinPanelHtml is the one
    form drawn today (a button in the header with a panel under it), and another form takes the same content. */
@@ -432,8 +597,8 @@ function signinDoorOf(v){
     }
     return {moment:"before", heading:t("Sign in to Etiuda"),
       line:t("Your seat belongs to your account, so it comes with you to any computer you sign in on, up to three."),
-      providers:v.offered, cap:signinCapHolds(v) ? t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.") : "", privacy:t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account."),
-      foot:t("Etiuda for personal use, outside work, needs no sign-in.")};
+      providers:v.offered, cap:signinCapHolds(v) ? t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.") : "", privacy:t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name, address and picture, and shows them only to the leads and administrator of the licence it asks to join."),
+      foot:""};
   }
   const told=signinTold(v), toldDoor=()=>({moment:told.kind, ident, say:told.say, providers:told.providers ? v.offered : undefined, acts:told.acts.concat([acct])});
   if(told && told.kind==="pressed") return toldDoor();
@@ -443,6 +608,21 @@ function signinDoorOf(v){
   if(v.ask) return {moment:"ask", ident, say:signinSay("ask", v), providers:v.offered, acts:[acct]};
   if(told) return toldDoor();
   if(signinNoSeat(v)) return {moment:"noseat", ident, say:signinSay(v.refused, v, p), acts:[{act:"check", label:t("Check now"), solid:true}, acct]};
+  /* The door's states 4 and 6, read from the one value. A refusal, a relay and a renewal still say what they said above. */
+  const ds=deskDoorState(v);
+  if(ds.state==="ended"){
+    const endedPair=deskDoorLines(ds);
+    const ask=!!(ds.orgLicence || ds.seatOn==="team");
+    const acts=[];
+    if(ask) acts.push({act:"ask", label:doorAskLabel(ds.lead), solid:true});
+    else acts.push({act:"check", label:t("Check now"), solid:true});
+    acts.push({act:"buy", label:t("Buy")});
+    if(ask) acts.push({act:"check", label:t("Check now")});
+    acts.push(acct);
+    return {moment:"ended", ident, heading:endedPair[0], line:endedPair[1], acts:acts};
+  }
+  const pair=deskDoorLines(ds);
+  if(ds.state==="working") return {moment:"working", ident, heading:pair[0], line:pair[1], acts:[{act:"check", label:t("Check now")}, acct]}; /* plant:door-panel-working */
   /* ASK YOUR LEAD: the organisation's licence seats the people its
      leads add, so the code is given to a lead; beside it, never in its place, the person's own trial where it runs, which the service
      started at the sign-in. */
@@ -511,6 +691,12 @@ function signinDoorsHtml(doors){
 function signinActsHtml(acts){
   return '<div class="sgn-acts">'+acts.map(a=>'<button type="button" class="btn'+(a.solid?' primary':'')+'" data-signin-act="'+esc(a.act)+'">'+esc(a.label)+'</button>').join("")+'</div>';
 }
+/* State 4: the way on and Buy on their own row, then the quiet presses under the rule. */
+function signinEndedActsHtml(acts){
+  const on=acts.filter(a=>a.solid||a.act==="buy"), rest=acts.filter(a=>!(a.solid||a.act==="buy"));
+  const btn=a=>'<button type="button" class="btn'+(a.solid?' primary':'')+'" data-signin-act="'+esc(a.act)+'">'+esc(a.label)+'</button>';
+  return '<div class="door-on-row">'+on.map(btn).join("")+'</div><div class="sgn-acts">'+rest.map(btn).join("")+'</div>';
+}
 /* The preview's line, as the panel and Account draw it, its first sentence the bold one; "" outside the preview. */
 function signinPreviewHtml(v){
   return v && v.preview ? '<p class="sgn-cap sgn-preview" data-signin-preview><b>'+esc(t("Preview only."))+'</b> <span>'
@@ -541,7 +727,10 @@ function signinPanelHtml(d){
   if(d.providers && d.providers.length) h+=signinProvidersHtml(d.providers, false);
   if(d.cap) h+='<p class="sgn-cap">'+esc(d.cap)+'</p>';
   if(d.privacy) h+='<p class="sgn-cap">'+esc(d.privacy)+'</p>';
-  if(d.acts && d.acts.length) h+=signinActsHtml(d.acts);
+  if(d.acts && d.acts.length){
+    if(d.moment==="ended") h+=signinEndedActsHtml(d.acts); /* plant:door-panel-rows */
+    else h+=signinActsHtml(d.acts);
+  }
   if(d.own) h+='<p class="sgn-say sgn-own"><b>'+esc(d.own[0])+'</b><span>'+esc(d.own[1])+'</span></p>';
   if(d.link) h+=signinLinkHtml(d.link);
   if(d.foot) h+='<p class="sgn-ft">'+esc(d.foot)+'</p>';
@@ -573,6 +762,7 @@ function paintSigninButton(){
     btn.setAttribute("aria-label", word);
     btn.title=word;
   }
+  paintDoorBand();
 }
 function paintSigninPanel(){
   const panel=$("#signinPanel");
@@ -604,10 +794,11 @@ function closeSigninPanel(back){
    answer comes back, never at start. */
 function signinChanged(v, answered){
   signinV=signinRead(v);
+  signinHasView=true;
   paintSigninButton();
   if(firstSigninOpen || firstSigninPending){
-    if(signinV.signedIn){ closeFirstSignin(); signinTell(); return; }
-    if(firstSigninOpen){ paintFirstSignin(); signinTell(); return; }
+    if(!deskWorks()){ if(firstSigninOpen) paintFirstSignin(); signinTell(); return; } /* plant:door-close-works */
+    closeFirstSignin(); signinTell(); return;
   }
   if(answered && signinShown(signinV) && !signinV.busy) signinOpen=true;
   if(signinOpen) paintSigninPanel();
@@ -925,10 +1116,6 @@ function wireSignin(){
   signinClicks(panel);
   if(fs){
     signinClicks(fs);
-    fs.addEventListener("click", e=>{
-      const s=e.target && e.target.closest ? e.target.closest("#firstSigninSkip") : null;
-      if(s) skipFirstSignin();
-    });
   }
   addEventListener("pointerdown", e=>{ if(signinOpen && wrap && !wrap.contains(e.target)) closeSigninPanel(false); });
   addEventListener("keydown", e=>{
@@ -939,19 +1126,16 @@ function wireSignin(){
 }
 
 export {
-  FIRST_SIGNIN_KEY,
   SIGNIN_NAMES,
   bootFirstSignin,
   closeFirstSignin,
+  deskWorks,
   firstSigninDue,
   firstSigninOpenNow,
-  firstSigninSeen,
   firstSigninStands,
-  markFirstSigninSeen,
   onFirstSigninClosed,
   paintFirstSignin,
   signinAct,
-  skipFirstSignin,
   signinActsHtml,
   signinChanged,
   signinChoosingNow,
@@ -961,6 +1145,10 @@ export {
   signinCopyHtml,
   SIGNIN_COPIED_MS,
   signinDoor,
+  deskDoorState,
+  deskDoorLines,
+  doorBandState,
+  firstSigninHtml,
   signinDoorRefusedNow,
   signinIdentHtml,
   signinLinkHtml,

@@ -3913,6 +3913,23 @@ body.e-first-signin .stage>.dotfield{content-visibility:hidden}
 .fs-right-in .sgn-acts{margin-top:16px}
 .fs-skip{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
 .fs-skip-line{margin:10px 0 0;font:12.5px/1.45 var(--sans);color:var(--dim)}
+/* The desk's door (B-3b): the band under the header, the dot, the offline box and the way out. */
+.door-band{display:flex;align-items:center;gap:8px;box-sizing:border-box;width:100%;flex:0 0 30px;min-height:30px;height:30px;/* plant:door-band-fixed */padding:0 16px;background:color-mix(in srgb,#d98a1f 14%,var(--panel));border-bottom:1px solid color-mix(in srgb,#d98a1f 32%,transparent);color:var(--ink);font:13px/1.3 var(--sans)}
+.door-band[hidden]{display:none}
+.door-band-dot{width:8px;height:8px;border-radius:50%;background:#d98a1f;flex:none}
+.signin-wrap .sgn-btn{position:relative}
+.door-btn-dot{position:absolute;right:-2px;top:-2px;width:8px;height:8px;border-radius:50%;background:#d98a1f;box-shadow:0 0 0 2px var(--header-bg)}
+.door-seat-dot{position:absolute;left:-14px;top:7px;width:8px;height:8px;border-radius:50%;background:#d98a1f}
+.set-label:has(.door-seat-dot){position:relative}
+.door-off{display:flex;gap:10px;align-items:flex-start;border:1px dashed var(--line);border-radius:8px;font:14px/1.45 var(--sans);padding:12px 14px;color:var(--ink)}
+.door-off-glyph{flex:none;margin-top:1px;opacity:.7}
+.door-acts{margin-top:18px}
+.door-on-row{display:flex;gap:8px;flex-wrap:nowrap;margin-top:14px}
+/* The way on stays filled. Hover and focus restate the fill; the page's focus ring stays outside the press. */
+.door-acts .btn.primary,.sgn-panel[data-moment="ended"] .btn.primary,.door-acts .btn.primary:focus-visible,.door-acts .btn.primary:hover,.sgn-panel[data-moment="ended"] .btn.primary:hover,.sgn-panel[data-moment="ended"] .btn.primary:focus-visible{background:var(--accent);color:#fff;border-color:var(--accent)} /* plant:door-on-fill */
+.door-quiet{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:12px}
+.door-text{background:none;border:0;padding:0;cursor:pointer;font:13px/1.4 var(--sans);color:var(--accent)}
+.door-out{margin-top:22px;padding-top:18px;border-top:1px solid var(--line)} /* plant:door-out-gap */
 @media (max-width:780px){
   .fs-grid{grid-template-columns:1fr;grid-template-rows:auto 1fr}
   .fs-left{padding:26px 22px 18px}
@@ -5191,6 +5208,7 @@ body.e-host .row .win-btn:focus-visible{outline-offset:-2px}
   </div>
   <div class="pills-probe" id="pillsProbe" aria-hidden="true"></div>
 </header>
+<div id="doorBand" class="door-band" hidden aria-hidden="true" data-i18n-skip></div>
 
 <div id="railHit" title="Hover here or hold Ctrl to show the intent panel" aria-hidden="true"></div>
 <div class="stage" id="main">
