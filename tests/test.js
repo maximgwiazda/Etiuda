@@ -1539,6 +1539,20 @@ function adoptedTests() {
     w.edited = false; w.asked = null;
     api.putBackInUse(api.listPersonalAside().find(r => r.id === "mine-1"), "Gift orders");
     chk("Put back in use with nothing unexported asks nothing and puts it back", [w.asked, JSON.parse(w.kv.get("eCatalog")).id], [null, "mine-1"]);
+    /* a restore that fails: the copywriter's line for it, its second sentence only where the edits were set aside first */
+    const FAILED = "Your own Gift orders could not be put back in use, so the catalog in use stays in use. It can be tried again.";
+    [w, api] = switched();
+    w.edited = false; w.asked = null; w.failStore = true; w.refused = [];
+    api.putBackInUse(api.listPersonalAside().find(r => r.id === "mine-1"), "Gift orders");
+    chk("a failing restore with nothing set aside says the restore line alone, and the catalog in use is unchanged",
+      [w.refused, JSON.parse(w.kv.get("eCatalog")).id], [[FAILED], "team-1"]);
+    [w, api] = switched();
+    w.failStore = true; w.refused = [];
+    api.putBackInUse(api.listPersonalAside().find(r => r.id === "mine-1"), "Gift orders");
+    w.asked.go();
+    chk("a failing restore after the edits were set aside adds where they are, and the catalog in use is unchanged",
+      [w.refused, JSON.parse(w.kv.get("eCatalog")).id, api.listPersonalAside().map(r => r.id).sort()],
+      [[FAILED + " The changes set aside are under Personal catalogs."], "team-1", ["mine-1", "team-1"]]);
     }
   };
   /* A leg that throws is a leg that failed, named by what it threw. */
