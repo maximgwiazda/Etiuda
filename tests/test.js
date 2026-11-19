@@ -1171,10 +1171,10 @@ function catNowTests() {
   try {
     paint = new Function("document", "storedCatalog", "nsGet", "eLoadedCatalogFile", "markCut", "t", "catalogLoaded",
       extractDecl(fileSrc, "function catalogFileName(") + "\n" + extractDecl(src, "function paintCatNow(") + "\nreturn paintCatNow;");
-    importText = new Function("catalogFromFileText", "hooks", "eWatchClear", "activateCatalog",
+    importText = new Function("catalogFromFileText", "hooks", "eWatchClear", "activateCatalog", "doorHolds", "whenDoorLowers",
       extractDecl(fileSrc, "function importCatalogText(") + "\nreturn importCatalogText;")(
       () => ({ name: "Invented shop" }), { offerPickedCatalog: (c, name, accept) => accept() },
-      () => ({ then: fn => fn() }), (c, opts) => { world.opts = opts; return true; });
+      () => ({ then: fn => fn() }), (c, opts) => { world.opts = opts; return true; }, () => false, fn => fn());
   } catch (e) { eq("catalog-offer.js carries the top bar's painter", e.message, "sliced"); return; }
   const bar = (ns, held, applied, file) => {
     const own = el("cn-name"), none = el("cn-none");
