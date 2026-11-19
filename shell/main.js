@@ -3333,6 +3333,58 @@ function writeBranch(stem, text) {
     return branchHold(stem, text);
   }
 }
+/* A card this desk has opened (board 1013, piece 4), kept as its own. `opened` is {from, team, card}: the sender's desk id, the team,
+   and the card's text as openCardFrom gave it. It goes into this desk's own file for the catalog it belongs to (`catalogId` is
+   that catalog's id, the one the file's grew names), through writeBranch, so it is signed by this desk and sealed or sent
+   as any of its files are. The card carries from {desk: the sender, card: the card's id there}: a card field the catalog
+   format carries untouched (catalog-v2 v2Problems has no rule against an unknown card field, and the desk's signature covers the
+   whole file), so the file still reads clean and Studio, which reads the file and its grew, groups kept cards by from. A card whose
+   id this file already uses is kept under a new id of the desk's own. Refused, with a reason and nothing written: not a card; no
+   key of its own; no file of its own for that catalog; a catalog marked private; a file that cannot be written here now.
+   A card already kept is not kept twice. Nothing is placed in the page's catalog: that is the page's. */
+function keepSharedCard(opened, catalogId) {
+  const no = why => ({ ok: false, reason: why });
+  const sender = opened && typeof opened === "object" ? String(opened.from || "") : "";
+  let card = null;
+  try { card = JSON.parse(opened.card); } catch { card = null; }
+  if (!/^k-[0-9a-f]{16}$/.test(sender) || !card || typeof card !== "object" || Array.isArray(card) || typeof card.id !== "string" || !card.id) {
+    return no("card: this is not a card this desk can keep");
+  }
+  const me = branchIdentity(false);
+  if (!me) return no("card: this desk has no key of its own to sign with yet");
+  const id = me.id + "-" + crypto.createHash("sha256").update(String(catalogId || "")).digest("hex").slice(0, 8);
+  const held = ownFilesWithId(path.join(sharedFolderForWrite(), "desks", me.id), id).filter(e => e.doc && branchGenuine(e.doc))
+    .sort((a, b) => (+b.doc.rev || 0) - (+a.doc.rev || 0))[0] || null;
+  if (!held) return no("card: this desk holds no catalog of its own for that one, so there is nowhere to keep the card"); /* plant:keep-unheld */
+  const doc = JSON.parse(JSON.stringify(held.doc));
+  if (!Array.isArray(doc.cards)) return no("card: that catalog's file has no list of cards");
+  const gate = branchGate(doc);
+  if (gate.none) return no("card: that catalog is private on this desk, so a shared card is not kept in it"); /* plant:keep-private */
+  if (gate.hold) return no("card: this desk cannot write that catalog's file just now");
+  if (doc.cards.some(c => !!c && !!c.from && c.from.desk === sender && c.from.card === card.id)) return { ok: true, already: true }; /* plant:keep-twice */
+  /* The file must still read clean, and the format has no card without a shelf, so a card whose shelf or request tags this catalog
+     lacks, or with no words in the primary language, is refused rather than written (catalog-v2 v2Problems says each of these). */
+  const tagKind = {};
+  (Array.isArray(doc.tags) ? doc.tags : []).forEach(t => { if (t && typeof t.id === "string") tagKind[t.id] = t.kind; });
+  const primary = (Array.isArray(doc.langs) && doc.langs[0] && String(doc.langs[0].code || "")) || "en";
+  const words = f => !!card[f] && typeof card[f] === "object" && typeof card[f][primary] === "string" && !!card[f][primary].trim();
+  if (tagKind[card.shelf] !== "shelf") return no("card: its shelf is not one this catalog has, so it has nowhere to sit"); /* plant:keep-shelf */
+  if ((Array.isArray(card.requests) ? card.requests : []).some(r => tagKind[r] !== "request")) return no("card: it names a request this catalog does not have");
+  if (!words("title") || !words("body")) return no("card: it has no words in this catalog's first language");
+  const taken = new Set(doc.cards.map(c => (c ? c.id : "")));
+  let local = card.id;
+  for (let n = 2; taken.has(local); n++) local = card.id + "-" + n;
+  const mine = Object.assign({}, card, { id: local });
+  mine.from = { desk: sender, card: card.id }; /* plant:keep-from */
+  doc.cards.push(mine);
+  const r = writeBranch(path.basename(held.file, ".ec"), JSON.stringify(doc));
+  if (!r || r.ok !== true || r.withheld || r.removed) return no("card: this desk's file for that catalog could not be written, so the card was not kept");
+  return { ok: true, kept: true, id: local, rev: r.rev };
+}
+/* A card declined is not kept, and nothing is written or sent. */
+function declineSharedCard(opened) {
+  return { ok: true, kept: false };
+}
 /* What a folder that did not answer is still owed, asked again when it may have come back: the catalog
    folder changing and the page finishing a load both call this. */
 function tryHeldBranches() {
