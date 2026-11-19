@@ -3013,10 +3013,14 @@ const t0 = Date.now();
     const wasNoAt = nsGet("CatalogNoAt");
     const wasId = String(held.id || "");
     let deliver = null;
+    /* The seat is carried across: the offer is held while the desk does not work (deskWorks() false,
+       doorHolds() true), which is what a host with no signinState reads as. Measured on the seated
+       page: with the seat 'works' true and the door open, with this fake alone false and held. */
     window.E_HOST = {
       teamJoin: () => Promise.resolve({ sealed: null, join: null, leads: [] }),
       onTeamJoin: fn => { deliver = fn; },
-      readCatalogFile: () => Promise.resolve({ name: file, text: JSON.stringify(doc) })
+      readCatalogFile: () => Promise.resolve({ name: file, text: JSON.stringify(doc) }),
+      signinState: wasHost && wasHost.signinState
     };
     const restore = () => {
       if (wasSample == null) nsDel("Sample"); else nsSet("Sample", wasSample);
