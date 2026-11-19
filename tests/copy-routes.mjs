@@ -125,6 +125,11 @@ const PK = await import(MOD("pack.js"));
 const ST = await import(MOD("storage.js"));
 const CE = await import(MOD("copy-entry.js"));
 const PICK = await import(MOD("pick.js"));
+const SGN = await import(MOD("signin.js"));
+/* The desk gate: answerPick refuses an ask while the desk has no seat, so this desk holds one (tests/seat-page.js), in whatever host the leg puts up. */
+const SEATED = nodeRequire("./seat-page.js").seatedView();
+globalThis.window.E_HOST = { signinState: () => SEATED };
+SGN.signinNow();
 const TB = await import(MOD("tabs.js"));
 const V2 = await import(MOD("catalog-v2.js"));
 const CT = await import(MOD("catalog.js"));
@@ -238,7 +243,7 @@ try {
       check(ok7(r.e, false), "2e control: the click copy of a card that does not commit, toast not stamped: " + JSON.stringify(r.e));
       check(ok7(r.f, false), "2f control: the picker's ask copy of a card that does not commit, toast not stamped: " + JSON.stringify(r.f));
       const HINT = "Next time, Ctrl+Shift+Space opens Quick replies over any window and pastes the one chosen.";
-      globalThis.window.E_HOST = { hotkeyState: () => ({ accel: "Control+Shift+Space", held: true }), openPicker: () => {} };
+      globalThis.window.E_HOST = { signinState: () => SEATED, hotkeyState: () => ({ accel: "Control+Shift+Space", held: true }), openPicker: () => {} };
       ST.nsDel("PickerHint");
       const hadToastHtml = Object.getOwnPropertyDescriptor(toastEl, "innerHTML");
       Object.defineProperty(toastEl, "innerHTML", { get() { return this._html || this._text; }, set(h) { this._html = h; }, configurable: true });
@@ -256,12 +261,12 @@ try {
       const manualAfterSaw = toastEl.innerHTML.includes(HINT);
       check(clickSaw && !manualAfterSaw, "2h a click copy first shows the hint (and a manual copy after it does not): " + JSON.stringify({ clickSaw, manualAfterSaw }));
       ST.nsDel("PickerHint");
-      globalThis.window.E_HOST = { hotkeyState: () => ({ accel: "Control+Alt+Space", held: true }), openPicker: () => {} };
+      globalThis.window.E_HOST = { signinState: () => SEATED, hotkeyState: () => ({ accel: "Control+Alt+Space", held: true }), openPicker: () => {} };
       route("key", "c-loose");
       const altHint = "Next time, Ctrl+Alt+Space opens Quick replies over any window and pastes the one chosen.";
       const altSaw = toastEl.innerHTML.includes(altHint);
       check(altSaw, "2i the hint names a non-default hotkey when the host holds one: " + JSON.stringify({ altSaw, toast: toastEl.innerHTML }));
-      delete globalThis.window.E_HOST;
+      globalThis.window.E_HOST = { signinState: () => SEATED };
       ST.nsDel("PickerHint");
       if (hadToastHtml) Object.defineProperty(toastEl, "innerHTML", hadToastHtml); else delete toastEl.innerHTML;
     } finally {
