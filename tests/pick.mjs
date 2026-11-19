@@ -950,6 +950,7 @@ try {
     const visHidden = pw.visible === false && visCalls.join(" ") === "hide" && desk.calls.indexOf("focus") < 0;
     const afterFind = JSON.parse(await pickerPage.E_PICK.find("lamp"));
     const afterRefused = emptyList(afterFind);
+    if (pw.visible) pickerPage.E_PICK.close();
     await seatLab.seatDesk(deskAdapter, { force: true, expectWorks: true });
     SGN.signinNow();
     check(hiddenUnchanged && workingUnchanged && visHidden && afterRefused,

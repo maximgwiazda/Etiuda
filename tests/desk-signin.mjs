@@ -4860,9 +4860,13 @@ CASES.stopInstant = async (s, swap) => {
   }
   const hadWin = "window" in globalThis, prevWin = globalThis.window;
   const hadDoc = "document" in globalThis, prevDoc = globalThis.document;
+  const hadAdd = "addEventListener" in globalThis, prevAdd = globalThis.addEventListener;
+  const hadRem = "removeEventListener" in globalThis, prevRem = globalThis.removeEventListener;
   const hadSyncNotice = "syncSaveNotice" in HK.hooks, prevSyncNotice = HK.hooks.syncSaveNotice;
   const hadThrowCalls = "__b3a2bFlushThrows" in globalThis, prevThrowCalls = globalThis.__b3a2bFlushThrows;
   try {
+    globalThis.addEventListener = () => {};
+    globalThis.removeEventListener = () => {};
     HK.hooks.syncSaveNotice = () => {};
     const events = [], patches = [], classes = new Set();
     let onSigninCb = null, closePickerCalls = 0, failPatch = false;
@@ -4892,6 +4896,8 @@ CASES.stopInstant = async (s, swap) => {
         fsHidden = next;
       },
       setAttribute(k, v) { this.attrs[k] = v; },
+      addEventListener() {},
+      removeEventListener() {},
       contains: () => false,
       querySelector: () => null,
     };
@@ -5053,6 +5059,8 @@ CASES.stopInstant = async (s, swap) => {
   } finally {
     if (!hadSyncNotice) delete HK.hooks.syncSaveNotice; else HK.hooks.syncSaveNotice = prevSyncNotice;
     if (!hadThrowCalls) delete globalThis.__b3a2bFlushThrows; else globalThis.__b3a2bFlushThrows = prevThrowCalls;
+    if (!hadAdd) delete globalThis.addEventListener; else globalThis.addEventListener = prevAdd;
+    if (!hadRem) delete globalThis.removeEventListener; else globalThis.removeEventListener = prevRem;
     if (!hadWin) delete globalThis.window; else globalThis.window = prevWin;
     if (!hadDoc) delete globalThis.document; else globalThis.document = prevDoc;
   }
