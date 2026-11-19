@@ -17,6 +17,7 @@
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
+const { seatPage } = require("./seat-page.js");
 const puppeteer = require("puppeteer-core");
 
 if (!process.env.ETIUDA_FIXTURES) process.env.ETIUDA_FIXTURES = "C:/Users/maxim/Workspace/etiuda-fixtures";
@@ -44,6 +45,7 @@ async function boot(width) {
       for (const [k, v] of [["eTourDone_v3", "1"], ["eTourInvite_v3", "1"], ["eFirstSigninSeen", "1"], ["eAgent", "Bench Agent"], ["eNameAsked", "1"], ["eTheme", "light"], ["eRail", "1"], ["eRailLock", "1"]]) localStorage.setItem(k, v);
     } catch (e) {}
   });
+  await seatPage(page);
   await page.goto(RUN.url, { waitUntil: "load", timeout: 60000 });
   await require("./launch-wait.js").waitLaunchGone(page, { who: "tests/rail-side.mjs" });
   await page.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });

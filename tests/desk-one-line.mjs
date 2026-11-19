@@ -62,6 +62,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
+const { seatPage } = require("./seat-page.js");
 const puppeteer = require("puppeteer-core");
 
 if (!process.env.ETIUDA_FIXTURES) process.env.ETIUDA_FIXTURES = "C:/Users/maxim/Workspace/etiuda-fixtures";
@@ -178,6 +179,7 @@ async function bootPage(browser, url, width, height, dpr) {
       for (const [k, v] of base) localStorage.setItem(k, v);
     } catch (e) {}
   });
+  await seatPage(page);
   await page.goto(url, { waitUntil: "load", timeout: 60000 });
   await require("./launch-wait.js").waitLaunchGone(page, { who: "tests/desk-one-line.mjs" });
   await page.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });

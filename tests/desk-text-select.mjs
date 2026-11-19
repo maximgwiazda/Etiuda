@@ -14,6 +14,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
+const { seatPage } = require("./seat-page.js");
 const puppeteer = require("puppeteer-core");
 
 const PRIO = E.belowNormal();
@@ -108,6 +109,7 @@ async function newDeskPage(pageUrl, opts = {}) {
       teamLeads: () => [],
     };
   }, opts);
+  if (!opts.firstOpening && !opts.signinState) await seatPage(page);
   await page.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
   if (opts.firstOpening) {
     await page.waitForFunction(() => { const f = document.getElementById("firstSignin"); return !!f && !f.hidden && f.textContent.trim().length > 0; }, { timeout: 30000 });

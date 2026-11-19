@@ -30,6 +30,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
+const { seatPage } = require("./seat-page.js");
 const puppeteer = require("puppeteer-core");
 
 const PRIO = E.belowNormal();
@@ -96,6 +97,7 @@ async function desk(o) {
   await seed.evaluateOnNewDocument(() => {
     try { for (const [k, v] of [["eTourDone_v3", "1"], ["eTourInvite_v3", "1"], ["eAgent", "Bench Agent"], ["eNameAsked", "1"], ["eFirstSigninSeen", "1"]]) localStorage.setItem(k, v); } catch (e) {}
   });
+  await seatPage(seed);
   await seed.goto(opts.url, { waitUntil: "load", timeout: 60000 });
   await seed.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   if (await seed.$("#ecYes")) await seed.click("#ecYes");
@@ -125,6 +127,7 @@ async function desk(o) {
     window.E_HOST = new Proxy(base, { get: (t, k) => k in t ? t[k] : undefined });
     try { Object.defineProperty(navigator, "clipboard", { value: { writeText: async s => { window.__clip.push(s); } }, configurable: true }); } catch (e) {}
   }, opts);
+  await seatPage(page);
   await page.goto(opts.url, { waitUntil: "load", timeout: 60000 });
   await page.waitForFunction(() => document.querySelectorAll("#list .card").length > 0 && !document.querySelector(".e-launch-veil"), { timeout: 30000 });
   await page.evaluate(() => { document.documentElement.classList.add("e-still"); });

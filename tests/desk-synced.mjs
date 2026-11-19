@@ -29,6 +29,7 @@ import crypto from "node:crypto";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
+const { seatPage } = require("./seat-page.js");
 const puppeteer = require("puppeteer-core");
 
 const PRIO = E.belowNormal();
@@ -83,6 +84,7 @@ async function boot(name = "etiuda.html") {
       onDeskSynced: fn => { window.__desk.tell = fn; },
     };
   });
+  await seatPage(page);
   await page.goto(urlOf(name), { waitUntil: "load", timeout: 60000 });
   await page.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   if (await page.$("#ecYes")) {
@@ -190,7 +192,8 @@ async function deskUnread(name) {
         onDeskSynced: () => {},
       };
     });
-    await page.goto(urlOf(name), { waitUntil: "load", timeout: 60000 });
+    await seatPage(page);
+  await page.goto(urlOf(name), { waitUntil: "load", timeout: 60000 });
     await sleep(1500);
     const r = await page.evaluate(() => {
       const set = window.lsSet("eTheme", "dark");

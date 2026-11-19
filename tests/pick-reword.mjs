@@ -30,6 +30,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
+const { seatPage } = require("./seat-page.js");
 const puppeteer = require("puppeteer-core");
 
 const PRIO = E.belowNormal();
@@ -97,6 +98,7 @@ async function deskOpen(lang, theme, url) {
     window.E_HOST = { hotkeyState: () => ({ accel: "Control+Shift+Space", held: true, taken: false }), onPickAsk: fn => { window.__pick = fn; },
       openPicker() {}, signinState: () => st, signIn: async () => st, signinCheck: async () => st };
   }, lang, theme);
+  await seatPage(page);
   await page.goto(url || deskUrl, { waitUntil: "load", timeout: 60000 });
   await page.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   if (await page.$("#ecYes")) await page.click("#ecYes");

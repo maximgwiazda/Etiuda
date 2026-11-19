@@ -28,6 +28,7 @@ import crypto from "node:crypto";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
+const { seatedView } = require("./seat-page.js");
 const puppeteer = require("puppeteer-core");
 
 const PRIO = E.belowNormal();
@@ -60,14 +61,15 @@ const ON = { shown: true, line: "on", on: true, held: false, why: "", since: 0, 
 async function boot({ lang = "en", theme = "light", page: name = "etiuda.html", view = ON, width = 1280, height = 860 } = {}) {
   const page = await browser.newPage();
   await page.setViewport({ width, height, deviceScaleFactor: 1 });
-  await page.evaluateOnNewDocument((lang, theme, view) => {
+  const seat = seatedView({ offered: ["microsoft", "google"], signedIn: "microsoft" });
+  await page.evaluateOnNewDocument((lang, theme, view, seat) => {
     try {
       for (const [k, v] of [["eTourDone_v3", "1"], ["eTourInvite_v3", "1"], ["eFirstSigninSeen", "1"], ["eAgent", "Bench Agent"], ["eNameAsked", "1"],
         ["eTheme", theme], ["eUiLang", lang], ["eStill", "1"], ["eRail", "1"]]) localStorage.setItem(k, v);
     } catch (e) {}
     /* The shell's store as the page sees it: the view, what was said, the switch's presses. */
     window.__st = { view: view, said: 0, sets: [], answers: [], openAsideCalls: [], openAsideResult: true, tell: null };
-    window.__sgn = { offered: ["microsoft", "google"], signedIn: "microsoft", code: "7K3MQ9TV2XRBHN4W", seat: "held", at: Date.now(), reached: true };
+    window.__sgn = Object.assign({}, seat);
     window.E_HOST = {
       signinState: () => window.__sgn,
       onSignin: fn => { window.__sgnTell = fn; },
@@ -87,7 +89,7 @@ async function boot({ lang = "en", theme = "light", page: name = "etiuda.html", 
       storeConsent: async () => { window.__st.sets.push("consent"); return "asked"; },
       onStore: fn => { window.__st.tell = fn; },
     };
-  }, lang, theme, view);
+  }, lang, theme, view, seat);
   await page.goto(urlOf(name), { waitUntil: "load", timeout: 60000 });
   await page.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   if (await page.$("#ecYes")) await page.click("#ecYes");

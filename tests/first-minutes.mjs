@@ -13,6 +13,7 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
+const { seatPage } = require("./seat-page.js");
 const puppeteer = require("puppeteer-core");
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
@@ -85,6 +86,7 @@ async function bootCatalogTour(browser, pageUrl, { lang = "en", stepId = "cards"
       }
     } catch (e) {}
   }, { lang, stepId });
+  await seatPage(p);
   await p.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
   await p.waitForFunction(
     () => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0,
@@ -188,6 +190,7 @@ async function bootEmptyWithHost(browser, pageUrl, { lang = "en", files = [], ho
       "older-team.ec": TEAM_TEXT
     }
   });
+  await seatPage(p);
   await p.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
   await p.waitForFunction(() => !!document.querySelector("#tourRoot.on") && !!document.querySelector(".empty-desk"), { timeout: 30000 });
   const atName = await p.evaluate(() => !!document.getElementById("tourName"));
@@ -480,7 +483,8 @@ try {
           return id;
         };
       }, lang);
-      await p.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
+      await seatPage(p);
+  await p.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
       await p.waitForFunction(
         () => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0,
         { timeout: 30000 }
@@ -623,7 +627,8 @@ try {
           localStorage.setItem("eFirstSigninSeen", "1");
         } catch (e) {}
       });
-      await p.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
+      await seatPage(p);
+  await p.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
       await p.waitForFunction(
         () => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0,
         { timeout: 30000 }
@@ -710,7 +715,8 @@ try {
           sessionStorage.setItem("eTourAt", "name");
         } catch (e) {}
       }, lang);
-      await p.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
+      await seatPage(p);
+  await p.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
       await p.waitForFunction(() => !!document.querySelector("#tourRoot.on") && !!document.getElementById("tourName"), { timeout: 20000 });
       await sleep(150);
       const emptyPrev = await p.evaluate(() => {
@@ -830,6 +836,7 @@ try {
           session: () => null
         };
       }, lang);
+      await seatPage(p);
       await p.goto(cleanSampleUrl, { waitUntil: "load", timeout: 60000 });
       await p.waitForFunction(
         () => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0,

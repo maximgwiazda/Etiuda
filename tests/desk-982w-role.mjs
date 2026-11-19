@@ -20,6 +20,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
+const { seatPage } = require("./seat-page.js");
 const puppeteer = require("puppeteer-core");
 
 const PRIO = E.belowNormal();
@@ -56,6 +57,7 @@ async function boot(viewport = { width: 1280, height: 900 }) {
       ]) localStorage.setItem(k, v);
     } catch (e) {}
   });
+  await seatPage(page);
   await page.goto(url, { waitUntil: "load", timeout: 60000 });
   await page.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   const yes = await page.$("#ecYes");

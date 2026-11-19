@@ -38,6 +38,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
+const { seatPage } = require("./seat-page.js");
 const puppeteer = require("puppeteer-core");
 
 const PRIO = E.belowNormal();
@@ -117,6 +118,7 @@ async function boot(pageUrl, { lang = "en", theme = "light", offered = true } = 
     };
     window.__booted = 1;
   }, lang, theme, offered);
+  await seatPage(p);
   await p.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
   await p.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   if (await p.$("#ecYes")) await p.click("#ecYes");

@@ -31,6 +31,7 @@ process.on("warning", () => {});
 
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
+const { seatPage } = require("./seat-page.js");
 const puppeteer = require("puppeteer-core");
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -116,6 +117,7 @@ async function boot(dir) {
         ["eNameAsked", "1"], ["eTheme", "light"], ["eRail", "1"]]) localStorage.setItem(k, v);
     } catch (e) {}
   });
+  await seatPage(page);
   await page.goto("file:///" + path.join(dir, "etiuda.html").replace(/\\/g, "/"), { waitUntil: "load", timeout: 60000 });
   await page.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   const yes = await page.$("#ecYes");

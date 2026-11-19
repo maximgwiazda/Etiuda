@@ -34,6 +34,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
+const { seatPage } = require("./seat-page.js");
 const puppeteer = require("puppeteer-core");
 
 const PRIO = E.belowNormal();
@@ -64,6 +65,7 @@ async function boot({ lang = "en", theme = "light", viewport = { width: 1280, he
         ["eTheme", theme], ["eUiLang", lang], ["eStill", "1"], ["eRail", "1"]]) localStorage.setItem(k, v);
     } catch (e) {}
   }, lang, theme);
+  await seatPage(page);
   await page.goto(url, { waitUntil: "load", timeout: 60000 });
   await page.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   if (await page.$("#ecYes")) await page.click("#ecYes");
@@ -362,6 +364,7 @@ async function runRescue(label) {
   await page.evaluateOnNewDocument(() => {
     Object.defineProperty(window, "localStorage", { get() { throw new DOMException("refused", "SecurityError"); } });
   });
+  await seatPage(page);
   await page.goto(url, { waitUntil: "load", timeout: 60000 });
   let r;
   try {
@@ -431,6 +434,7 @@ async function runQuickReplies(lang, theme) {
   }, lang, theme);
   let r = null;
   try {
+    await seatPage(desk);
     await desk.goto(url, { waitUntil: "load", timeout: 60000 });
     await desk.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
     if (await desk.$("#ecYes")) await desk.click("#ecYes");

@@ -35,6 +35,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
+const { seatPage, seatedView } = require("./seat-page.js");
 const puppeteer = require("puppeteer-core");
 
 const PRIO = E.belowNormal();
@@ -75,6 +76,7 @@ async function boot(viewport = { width: 1280, height: 900 }, more = [], pageUrl 
       ]) localStorage.setItem(k, v);
     } catch (e) {}
   }, more);
+  await seatPage(page);
   await page.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
   await page.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   const yes = await page.$("#ecYes");
@@ -559,11 +561,12 @@ try {
      second line if it must; the captions wrap." The sign-in's view is a stand-in host's, as the shell would give it. */
   const SGN = { offered: ["microsoft", "google"] }, SGN_IN = { ...SGN, signedIn: "microsoft", code: "7K3MQ9TV2XRBHN4W", seat: "held", at: Date.now(), reached: true };
   const s12bad = [];
+  const s12Seat = seatedView();
   const sp = await browser.newPage();
-  await sp.evaluateOnNewDocument(() => {
+  await sp.evaluateOnNewDocument((seat) => {
     try { for (const [k, v] of [["eTourDone_v3", "1"], ["eTourInvite_v3", "1"], ["eFirstSigninSeen", "1"], ["eNameAsked", "1"], ["eTheme", "dark"], ["eUiLang", "pl"]]) localStorage.setItem(k, v); } catch (e) {}
-    window.E_HOST = { signinState: () => window.sgnView || { offered: [] }, signIn: async () => window.sgnView };
-  });
+    window.E_HOST = { signinState: () => window.sgnView || seat, signIn: async () => window.sgnView || seat };
+  }, s12Seat);
   await sp.setViewport({ width: 560, height: 900, deviceScaleFactor: 1 });
   await sp.goto(url, { waitUntil: "load", timeout: 60000 });
   await sp.waitForFunction(() => typeof openSettings === "function" && !!document.getElementById("list"), { timeout: 30000 });
