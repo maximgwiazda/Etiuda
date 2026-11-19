@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 633;
+const EXPECTED = 644;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -8149,6 +8149,104 @@ async function main() {
       const p = await liftCore("plant:" + tag, turns);
       check(base[leg] && p.turned && p.back, "pg1" + String.fromCharCode(101 + n++) + " lifting plant:" + tag + " turns " + leg + " red (" + say
         + "), and the product file is never written: " + how(p));
+    }
+  }
+
+  /* ---- 1013b: an addressed place, to:<desk id> (board 1013, piece 2) ---- */
+  {
+    const how = p => p.detail.split("\n")[0] + ", sha " + (p.back ? "unchanged" : "CHANGED");
+    const CAP = C.ADDRESSED_MAX || 50, MAXB = 64 * 1024;
+    const listed = (r, id) => r.status === 200 && Array.isArray(r.json) && r.json.some(e => e.meta && e.meta.id === id);
+    const put2 = (w, tok, who, to, counter, extra) => {
+      const b = sealAs(w, who, "desks/x/note.json", counter, extra);
+      b.place = to;
+      return put(w, tok, b).then(r => ({ r, b }));
+    };
+    async function toScene(opts) {
+      const w = await world(opts);
+      const third = keyPair(true), cId = "k-" + hex(8);
+      const dev3 = await devices(w, w.devs.concat([{ id: third.keyId, pub: third.pub, desk: cId }]));
+      const sA = await sessionOf(w, w.desk), sB = await sessionOf(w, w.other), sC = await sessionOf(w, third), sL = await sessionOf(w, w.lead);
+      const toB = "to:" + w.otherId, toC = "to:" + cId;
+      const out = { dev3: dev3.status };
+      const sent = await put2(w, sA, w.desk, toB, 1);
+      out.sent = sent.r.status;
+      out.listB = listed(await since(w, sB), sent.b.id);
+      out.listC = listed(await since(w, sC), sent.b.id);
+      out.listL = listed(await since(w, sL), sent.b.id);
+      out.listA = listed(await since(w, sA), sent.b.id);
+      const rB = await getBlob(w, sB, sent.b.id);
+      out.readB = rB.status === 200 && !!rB.meta && rB.meta.place === toB;
+      out.readC = await getBlob(w, sC, sent.b.id);
+      out.readL = await getBlob(w, sL, sent.b.id);
+      out.readA = await getBlob(w, sA, sent.b.id);
+      /* over 64 KB, a recipient that is not on the team, one that is the writer itself, and the lead writing there */
+      out.big = (await put2(w, sA, w.desk, toB, 2, { body: "x".repeat(MAXB + 1000) })).r;
+      out.stranger = (await put2(w, sA, w.desk, "to:k-" + hex(8), 3)).r;
+      out.self = (await put2(w, sA, w.desk, "to:" + w.deskId, 4)).r;
+      const leadB = sealAs(w, w.lead, "x.json", 1); leadB.place = toB;
+      out.lead = await put(w, sL, leadB);
+      /* a writer holding no seat opens no session */
+      out.seatless = await helloAs(w, w.desk, { seat: null });
+      /* a non-addressee cannot remove it; the addressee can */
+      const cDel = sealAs(w, third, "x.json", 1, { kind: "delete", supersedes: sent.b.id }); cDel.place = toB;
+      out.delC = await put(w, sC, cDel);
+      const bDel = sealAs(w, w.other, "x.json", 1, { kind: "delete", supersedes: sent.b.id }); bDel.place = toB;
+      out.delB = await put(w, sB, bDel);
+      const after = await since(w, sB);
+      out.goneB = !listed(after, sent.b.id);
+      out.tombC = listed(await since(w, sC), bDel.id) || listed(await since(w, sL), bDel.id);
+      out.readAfter = (await getBlob(w, sB, sent.b.id)).status !== 200;
+      /* the cap: A and B send half each to C, the next is refused, and room comes back when C removes one */
+      let ca = 10, cb = 10, ok = 0, first = null;
+      for (let i = 0; i < CAP; i++) {
+        const r = i % 2 ? await put2(w, sA, w.desk, toC, ca++) : await put2(w, sB, w.other, toC, cb++);
+        if (r.r.status === 200) { ok++; if (!first) first = r.b; }
+      }
+      out.filled = ok;
+      out.full = (await put2(w, sA, w.desk, toC, ca++)).r;
+      const free = first ? sealAs(w, third, "x.json", 2, { kind: "delete", supersedes: first.id }) : null;
+      if (free) { free.place = toC; out.freed = (await put(w, sC, free)).status; }
+      out.again = (await put2(w, sA, w.desk, toC, ca++)).r.status;
+      return out;
+    }
+    const sc = await toScene();
+    const goodSc = o => o.dev3 === 200 && o.sent === 200 && o.listB && !o.listC && !o.listL && !o.listA && o.readB;
+    check(goodSc(sc) && refused(sc.readC, "missing") && refused(sc.readL, "missing") && refused(sc.readA, "missing"),
+      "1013ba a member's blob at to:B is listed to B's session alone and served to B alone: the lead, a third member and the writer are told missing and see nothing in their lists: "
+      + JSON.stringify({ sent: sc.sent, listB: sc.listB, listC: sc.listC, listL: sc.listL, listA: sc.listA, readB: sc.readB, readC: sc.readC && sc.readC.status, readL: sc.readL && sc.readL.status }));
+    check(refused(sc.big, "blob-size") && refused(sc.stranger, "not-enrolled") && refused(sc.self, "outside-place") && refused(sc.lead, "outside-place"),
+      "1013bb a blob over 64 KB is refused blob-size, one to a desk not on the team not-enrolled, one to the writer itself and one from the lead outside-place: "
+      + JSON.stringify([sc.big, sc.stranger, sc.self, sc.lead].map(r => r.json && r.json.error)));
+    check(sc.filled === CAP && refused(sc.full, "recipient-full") && sc.freed === 200 && sc.again === 200 && C.ADDRESSED_MAX === 50
+      && B.REASONS["recipient-full"] === "That desk already has as many items waiting as the relay holds.",
+    "1013bc a desk with " + CAP + " items waiting is refused the next, recipient-full, and room comes back when it removes one: " + JSON.stringify({ filled: sc.filled, full: sc.full && sc.full.json, freed: sc.freed, again: sc.again }));
+    check(refused(sc.seatless, "seat-lapsed"), "1013bd a writer holding no seat opens no session, so writes nothing: " + (sc.seatless.json && sc.seatless.json.error));
+    check(refused(sc.delC, "outside-place") && sc.delB === 200 && sc.goneB && !sc.tombC && sc.readAfter,
+      "1013be the addressee removes an item once read, nobody else can, and the removal is listed to the addressee alone: " + JSON.stringify({ delC: sc.delC.json && sc.delC.json.error, delB: sc.delB, goneB: sc.goneB, tombC: sc.tombC }));
+    let sealed = false, sealedPlace = null;
+    const k0 = keyPair(true);
+    try {
+      sealedPlace = B.seal({ relayTeamId: hex(16), epoch: 1, teamKey: crypto.randomBytes(32), writer: { keyId: k0.keyId, privateKey: k0.privateKey },
+        path: "x.json", body: "b", counter: 1, place: "to:k-" + hex(8), kind: "file" }).place;
+      sealed = true;
+    } catch { sealed = false; }
+    check(sealed && /^to:k-/.test(sealedPlace) && !!B.TO_PLACE_RE && B.TO_PLACE_RE.test("to:k-abcdef12") && !B.TO_PLACE_RE.test("to:") && !B.TO_PLACE_RE.test("desk:k-abcdef12"),
+      "1013bf the desk's sealer takes a place of to:<desk id> and the place pattern names no other: " + sealedPlace);
+    {
+      const LIFTS = [
+        ["to-since", "the list shows it to every session", async () => { const o = await toScene(); return o.listC === true || o.listL === true; }],
+        ["to-blob", "any member reads it", async () => { const o = await toScene(); return o.readC.status === 200 || o.readL.status === 200; }],
+        ["to-recipient", "a desk not on the team is written to", async () => { const o = await toScene(); return o.stranger.status === 200; }],
+        ["to-cap", "the desk is never full", async () => { const o = await toScene(); return o.full.status === 200; }],
+        ["to-size", "the 64 KB limit is the team's", async () => { const o = await toScene(); return o.big.status === 200; }],
+      ];
+      let n = 0;
+      for (const [tag, say, turns] of LIFTS) {
+        if (PLANTS_OFF) { skip("1013bg" + String.fromCharCode(97 + n++) + " lifting plant:" + tag + " turns the 1013b legs red"); continue; }
+        const p = await liftCore("plant:" + tag, turns);
+        check(goodSc(sc) && p.turned && p.back, "1013bg" + String.fromCharCode(97 + n++) + " lifting plant:" + tag + " turns the 1013b legs red (" + say + "), and the product file is never written: " + how(p));
+      }
     }
   }
 
