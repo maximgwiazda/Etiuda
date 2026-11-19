@@ -5864,7 +5864,7 @@ function askedHeldOk(r, c, s) {
   return r.ok === true && bare.ok === true && r.cert === null && r.askLead === true && r.code === c.body.code
     && !("asked" in r) && !("asked" in h) && !("asked" in v)
     && JSON.stringify(r) === JSON.stringify(bare) && JSON.stringify(h) === JSON.stringify(hBare) && JSON.stringify(v) === JSON.stringify(vBare)
-    && h.said === "" && h.askLead === true && h.cert === null && h.refresh === "sealed:rt"
+    && h.said === "" && h.askLead === true && !!h.cert && JSON.stringify(h.cert) === JSON.stringify(HELD_BEFORE().cert) && h.ended > 0 && h.refresh === "sealed:rt"
     && !!door && door.moment === "asklead" && html.length > 0 && html === htmlBare && html.indexOf(stamp) < 0;
 }
 CASES.askedHeld = s => {
