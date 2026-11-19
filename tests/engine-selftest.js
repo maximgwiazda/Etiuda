@@ -1769,6 +1769,7 @@ Module.prototype._compile = function (content, filename) {
     "plants-tree.mjs": "the scratch copy the planting gates re-run themselves in, not a gate; its use is held by tests/plant-hold.mjs and tests/plant-compare.mjs",
     "lab-owner.mjs": "the shared owner file and sweep the lab-using legs (relay-channel, desk-roster, folder-mirror) import, not a gate; its use is held by tests/relay-channel-clean.mjs",
     "seat-lab.mjs": "the shared sign-in lab helper required by relay-channel, pick and desk-ipc, not a gate",
+    "seat-page.js": "the shared browser-boot seating helper required by page-booting browser legs, not a gate",
   };
   const CHAIN_SCRIPTS = ["test", "split-guard", "nightly"];
   function reachOf(scripts, releaseSrc, nightlyLegs) {
