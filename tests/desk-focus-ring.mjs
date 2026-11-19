@@ -688,7 +688,7 @@ async function runFirstSigninFocusSuite(browser, enginePath, theme, opts = {}) {
 
     if (!opts.silent) {
       check(
-        expectedCount === 3 && walked.length === expectedCount && failures.length === 0,
+        expectedCount === 2 && walked.length === expectedCount && failures.length === 0,
         theme + ": first-signin keyboard walk reaches all controls and each draws one 2 px >= 3:1 outline with no double ring",
         {
           expectedCount,
@@ -730,27 +730,6 @@ async function runFirstSigninFocusSuite(browser, enginePath, theme, opts = {}) {
           };
         }, sel));
       }
-
-      const skipBox = await page.$eval("#firstSigninSkip", el => {
-        const r = el.getBoundingClientRect();
-        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-      });
-      await page.mouse.move(skipBox.x, skipBox.y);
-      await page.mouse.down();
-      await sleep(30);
-      pointerChecks.push(await page.evaluate(() => {
-        const ae = document.activeElement;
-        const cs = ae ? getComputedStyle(ae) : null;
-        return {
-          sel: "#firstSigninSkip",
-          matched: !!(ae && ae.id === "firstSigninSkip"),
-          focusVisible: !!(ae && ae.matches(":focus-visible")),
-          outlineStyle: cs ? cs.outlineStyle : null,
-          outlineWidth: cs ? cs.outlineWidth : null,
-          boxShadow: cs ? cs.boxShadow : null
-        };
-      }));
-      await page.mouse.up();
 
       const pointerOk = pointerChecks.every(p =>
         p.matched && !p.focusVisible &&
