@@ -65,6 +65,9 @@ const SLOTS = [
   "restartDesk",
   "takeSyncedDesk",
   "scheduleDeskBranch",
+  "writeDeskBranch",
+  "currentCatalog",
+  "storedCatalog",
   "saveOwnWork",
 ];
 

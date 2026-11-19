@@ -90,6 +90,12 @@ const SPKI_ED25519 = Buffer.from("302a300506032b6570032100", "hex");
 const INVITE_PLACE = /^invite:[0-9a-f]{32}$/;
 /* The one blob an uploaded invitation may fetch. Its id is the invitation's, and no list serves it. */
 const ANSWER_PLACE = /^answer:[0-9a-f]{32}$/;
+/* An addressed place, to:<desk id> (board 1013): what one enrolled member desk leaves for another on the same team. Listed to the
+   addressee's session alone and served to it alone, never to the lead or any other member; the addressee may remove it once read. At
+   most ADDRESSED_MAX items wait for one desk, and none is larger than ADDRESSED_BYTES of ciphertext. */
+const ADDRESSED_MAX = 50;
+const ADDRESSED_BYTES = 64 * 1024;
+const toOf = m => (m && typeof m.place === "string" && m.place.startsWith("to:") && isId(m.place.slice(3)) ? m.place.slice(3) : null);
 
 const is = (re, v) => typeof v === "string" && re.test(v);
 const isCount = v => Number.isSafeInteger(v) && v >= 1;
@@ -716,7 +722,8 @@ function parseMeta(header) {
     out.channel = { kind: m.channel.kind };
   }
   const placed = out.place === "root" || INVITE_PLACE.test(String(out.place)) || ANSWER_PLACE.test(String(out.place))
-    || (typeof out.place === "string" && out.place.startsWith("desk:") && isId(out.place.slice(5)));
+    || (typeof out.place === "string" && out.place.startsWith("desk:") && isId(out.place.slice(5)))
+    || toOf(out) !== null;
   if (!is(HEX32, out.id) || (out.supersedes !== null && (!is(HEX32, out.supersedes) || out.supersedes === out.id))
     || !isCount(out.epoch) || !isId(out.writer) || !isCount(out.counter) || typeof out.del !== "boolean"
     || !is(HEX128, out.sig) || !is(HEX24, out.nonce) || !placed || (out.pub !== null && !is(HEX64, out.pub))) return null;
@@ -1854,6 +1861,12 @@ function createCore(deps) {
     return null;
   }
 
+  /* The desk id a session's key is enrolled under; the lead's session has none. */
+  function deskOfKey(key) {
+    const d = key ? store.get("dev:" + key) : undefined;
+    return d && d.desk ? d.desk : null;
+  }
+
   function isAnswer(m) {
     return !!(m && ANSWER_PLACE.test(String(m.place || "")) && m.id === String(m.place).slice(7));
   }
@@ -1874,7 +1887,7 @@ function createCore(deps) {
     if (answerOnly(s)) return no("not-enrolled");
     const lapsedSince = lapseGate(false);
     if (lapsedSince) return lapsedSince; /* plant:lapse-since */
-    const now = clock(), items = [];
+    const now = clock(), items = [], me = deskOfKey(s.key);
     /* A FULL PAGE OR THE LAST: a row left out (an answer, an expired deletion) is read past, as many rows again as items are still
        wanted, so a page short of sinceMax items holds every item left, which is how the client reads a short page. `last` is the
        last row read; `ended`, that no row follows it. */
@@ -1890,14 +1903,16 @@ function createCore(deps) {
         read++;
         last = Number(k.slice(4));
         const m = store.get("blob:" + id);
-        if (m && !expired(m, now) && !isAnswer(m)) items.push({ seq: m.seq, meta: served(m) });
+        let mine = true;
+        mine = toOf(m) === null || toOf(m) === me; /* plant:to-since */
+        if (m && !expired(m, now) && !isAnswer(m) && mine) items.push({ seq: m.seq, meta: served(m) });
       }
       if (!fill) break;
     }
     if (!readsHeld(s)) return { ok: true, items, lapse: told() };
     /* A removed desk's blobs hold no seq row, so they join the lead's page in seq order, and never past a full page's last row. */
     const top = ended ? Infinity : last, rows = items.length;
-    for (const [, h] of store.list("held:")) if (h && h.seq > after && h.seq <= top && heldLive(h, now)) items.push({ seq: h.seq, meta: served(h) });
+    for (const [, h] of store.list("held:")) if (h && h.seq > after && h.seq <= top && heldLive(h, now) && toOf(h) === null) items.push({ seq: h.seq, meta: served(h) });
     if (items.length === rows) return { ok: true, items, lapse: told() };
     items.sort((x, y) => x.seq - y.seq);
     return { ok: true, items: items.slice(0, sinceMax), lapse: told() };
@@ -1915,6 +1930,10 @@ function createCore(deps) {
     if (!s.quiet && answerOnly(s) && id !== s.inv) return no("not-enrolled"); /* plant:answer-same */
     if (s.quiet && id !== s.inv) return no("removed");
     const m = is(HEX32, id) ? store.get("blob:" + id) : undefined;
+    /* An addressed blob is the addressee's alone: any other session, the lead's included, is told it is missing, expired or not. */
+    let hidden = false;
+    hidden = !!m && toOf(m) !== null && toOf(m) !== deskOfKey(s.key); /* plant:to-blob */
+    if (hidden) return no("missing");
     if (m && expired(m, now)) return no("expired");
     /* The lead's answer to its own request reaches even a desk rejoining after its removal (the quiet session of board
        918): after its one upload it reads that answer and nothing else, as board 922 rules for every invitation. */
@@ -1929,7 +1948,7 @@ function createCore(deps) {
     if (m && isAnswer(m)) return no("missing");
     if (m) return { ok: true, meta: served(m), obj: m.obj };
     const h = is(HEX32, id) && readsHeld(s) ? store.get("held:" + id) : undefined;
-    if (h && heldLive(h, now)) return { ok: true, meta: served(h), obj: h.obj };
+    if (h && heldLive(h, now) && toOf(h) === null) return { ok: true, meta: served(h), obj: h.obj };
     const tomb = is(HEX32, id) ? store.get("tomb:" + id) : undefined;
     if (tomb && now <= tomb.until) return no(tomb.why);
     return no("missing");
@@ -1952,6 +1971,17 @@ function createCore(deps) {
     const lead = m.writer === team.lead.keyId;
     const dev = lead ? null : store.get("dev:" + m.writer);
     if (!lead && !dev) return no("removed");
+    const to = lead ? null : toOf(m);
+    if (to !== null) {
+      /* A deletion by the addressee takes its own item away. Anything else to oneself is outside the place. */
+      if (to === dev.desk && !(m.del === true && m.supersedes !== null)) return no("outside-place");
+      let enrolled = false;
+      for (const [, d] of store.list("dev:")) if (d && d.desk === to) enrolled = true;
+      if (!enrolled) return no("not-enrolled"); /* plant:to-recipient */
+      let toMax = B.BLOB_MAX;
+      toMax = ADDRESSED_BYTES; /* plant:to-size */
+      return { ok: true, team, s, max: toMax, pub: dev.pub, lead: false, invite: null, to };
+    }
     if (lead && ANSWER_PLACE.test(String(m.place))) {
       if (m.id !== String(m.place).slice(7)) return no("outside-place");
       if ((store.get("inv:" + m.id) || {}).withdrawn === true) return no("withdrawn"); /* plant:e4-answer */
@@ -2046,6 +2076,15 @@ function createCore(deps) {
     if (!(a.withdraw && ct.length === 0) && ct.length < BLOB_MIN) return no("blob-size"); /* plant:blob-min */
     const prior = m.supersedes === null ? undefined : store.get("blob:" + m.supersedes);
     const adding = prior ? 0 : 1;
+    /* A desk's room for addressed items: those waiting for it and those reserved for it, a replacement of its own item aside. */
+    if (a.to !== undefined && !m.del && !prior) {
+      const at = clock();
+      let waiting = [...pending].filter(h => h !== own && h.place === m.place).length;
+      for (const [, b] of store.list("blob:")) if (b && !b.del && b.place === m.place && !expired(b, at)) waiting++;
+      let room = true;
+      room = waiting < ADDRESSED_MAX; /* plant:to-cap */
+      if (!room) return no("recipient-full");
+    }
     const heldCount = store.get("blobs");
     const liveCount = typeof heldCount === "number" ? heldCount : store.list("blob:").length;
     const others = heldBesides(own);
@@ -2066,7 +2105,9 @@ function createCore(deps) {
     }
     if (store.get("blob:" + m.id) !== undefined || store.get("tomb:" + m.id) !== undefined || store.get("held:" + m.id) !== undefined) return no("replay-counter"); /* plant:put-id */
     const owner = m.supersedes === null ? null : chainOwner(m.supersedes);
-    if (owner !== null && owner !== m.writer && !a.lead) return no("outside-place"); /* plant:put-chain */
+    /* The addressee may take away an item addressed to it, whoever wrote it. */
+    const removal = a.to !== undefined && m.del === true && m.supersedes !== null && a.to === deskOfKey(m.writer) && toOf(store.get("blob:" + m.supersedes)) === a.to;
+    if (owner !== null && owner !== m.writer && !a.lead && !removal) return no("outside-place"); /* plant:put-chain */
     if (m.supersedes !== null && store.get("tomb:" + m.supersedes) !== undefined) return no("superseded"); /* plant:put-tomb */
     /* A withdrawal carries no body, so it is taken at the epoch its request was sealed at, however far the team has moved since. A
        door request is sealed to the lead's box under no team key, and its desk cannot list the team, so it goes at any epoch from 1. */
@@ -2093,7 +2134,7 @@ function createCore(deps) {
   function reserve(rt, token, m, pathId, ct) {
     const j = judge(rt, token, m, pathId, ct, null);
     if (!j.ok) return j;
-    const hold = { writer: m.writer, at: clock(), bytes: Math.max(0, ct.length - (j.old ? j.old.size : 0)), adds: j.old ? 0 : 1, obj: null };
+    const hold = { writer: m.writer, place: m.place, at: clock(), bytes: Math.max(0, ct.length - (j.old ? j.old.size : 0)), adds: j.old ? 0 : 1, obj: null };
     pending.add(hold); /* plant:reserve-hold */
     return Object.assign({}, j, { hold });
   }
@@ -2145,7 +2186,7 @@ function createCore(deps) {
       if (j.a.invite) rec.pub = j.a.pub;
       /* The box its door hello bound, served beside the request so the lead can make the key it is sealed under. */
       if (j.a.door && is(HEX64, j.a.inv.box)) rec.box = j.a.inv.box;
-      if (INVITE_PLACE.test(m.place) || ANSWER_PLACE.test(String(m.place))) rec.place = m.place;
+      if (INVITE_PLACE.test(m.place) || ANSWER_PLACE.test(String(m.place)) || toOf(m) !== null) rec.place = m.place;
       store.put("blob:" + m.id, rec);
       noteBlobs(1);
       store.del("put:" + obj);
@@ -2397,7 +2438,7 @@ function createCore(deps) {
 }
 
 module.exports = {
-  CHALLENGE_MS, CHALLENGE_SHARE, SESSION_MS, CALL_SKEW_MS, DELEGATION_MAX_MS, KEEP_MS, REMOVED_KEEP_MS, GONE_KEEP_MS, SWEPT_KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, BLOB_MIN, BLOBS_MAX,
+  ADDRESSED_MAX, ADDRESSED_BYTES, CHALLENGE_MS, CHALLENGE_SHARE, SESSION_MS, CALL_SKEW_MS, DELEGATION_MAX_MS, KEEP_MS, REMOVED_KEEP_MS, GONE_KEEP_MS, SWEPT_KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, BLOB_MIN, BLOBS_MAX,
   SESSIONS_MAX, SESSION_SHARE, KEYS_MAX, SINCE_MAX, SINCE_ROWS_MAX, ROOT_PUB, GRANT_MAX_MS, WORK_AFTER_MS, READ_AFTER_MS, TRIAL_KEEP_MS, STORE_KEEP_PAID_MS, STORE_KEEP_TRIAL_MS, lapseOf, keptGrant, canon, createBytes, create2Bytes, devicesBytes, invitesBytes, helloBytes,
   LEAD_PREFIX, leadBytes, judgeLead,
   DOOR_REFS_MAX, DOOR_CERT_MAX, DOOR_LIVE_MAX, DOOR_PER_PERSON, DOOR_RATE_MAX, DOOR_RATE_MS, DOOR_TRY_SHARE, CERT_SPAN_MS, SEAT_MARGIN_MS, POOLED_GRACE_MS, SEAT_QUIET_MS, FREED_MAX,

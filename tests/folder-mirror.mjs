@@ -35,7 +35,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 177;
+const EXPECTED = 191;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const { offWindows } = nodeRequire("./off-windows.cjs");
@@ -65,7 +65,7 @@ fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true }
 function getShellSrc() {
   return fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 }
-const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "catalogFolder", "writeBranch", "branchDest", "branchIdentity", "deskRows", "settleFolder", "rawCatalogFolder", "sharedFolderForWrite", "folderSyncerRun", "heedTeam", "readAskFile", "checkInviteRefusal", "tryCatalogAsk", "teamKeyAt", "readDesk", "deskTrustChecks", "resumeFromSleep", "folderAnswers", "folderTeamHere", "awaitFolderPrime", "folderMirrorHere", "watchedFolder", "createWindow", "signedSha", "askSignedBytes", "sealAnswerLead", "writeReplacing", "leadsView"];
+const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "catalogFolder", "writeBranch", "branchDest", "branchIdentity", "deskRows", "settleFolder", "rawCatalogFolder", "sharedFolderForWrite", "folderSyncerRun", "heedTeam", "readAskFile", "checkInviteRefusal", "tryCatalogAsk", "teamKeyAt", "readDesk", "deskTrustChecks", "resumeFromSleep", "folderAnswers", "folderTeamHere", "awaitFolderPrime", "folderMirrorHere", "watchedFolder", "createWindow", "signedSha", "askSignedBytes", "sealAnswerLead", "writeReplacing", "leadsView", "keepSharedCard", "declineSharedCard", "markPrivate", "branchGenuine"];
 const noop = () => {};
 const inert = new Proxy(function () {}, {
   get: (target, prop) => {
@@ -5745,6 +5745,120 @@ async function run() {
     });
     check(planted.ok, "b2b lifting plant:syncer-drop-refused copies dropped files again at every scan: " + JSON.stringify(planted));
   }
+
+
+  /* -------------------------------------------------------------------------------------------------
+   * 1013k (board 1013, piece 4, the recipient's side): the shell gives a VERDICT on a card the desk has opened and writes nothing
+   * (the page is the one writer of the desk's file): yes carries the card as it would be kept, with a `from` mark naming the
+   * sender and the card; a decline writes nothing; a catalog the desk does not hold, an unreadable card and a private catalog
+   * are refused with a reason; a card kept twice is kept once (the scene plays the page and writes the yes, as the page does). The scene is a plain desk over a folder of its own, and each plant is lifted in a copy.
+   * ----------------------------------------------------------------------------------------------- */
+  let keepN = 0;
+  const KEEP_SENDER = "k-" + "ab".repeat(8), KEEP_TEAM = "t-" + "cd".repeat(8);
+  const keepCard = (id, title) => ({ id: id, shelf: "t-op", bodyShape: "plain", title: { en: title }, body: { en: title + ", the body." } });
+  const keepOpened = card => ({ from: KEEP_SENDER, team: KEEP_TEAM, card: JSON.stringify(card) });
+  const keepScene = src => {
+    const n = ++keepN, share = folder("keep-share-" + n), ud = path.join(LAB, "keep-desk-" + n);
+    fs.mkdirSync(ud, { recursive: true });
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: share, eUiLang: "en" } }), "utf8");
+    const d = loadDesk(ud, src ? { src: src } : {});
+    const me = d.api.branchIdentity(true);
+    const tail = crypto.createHash("sha256").update("lamp-shop").digest("hex").slice(0, 8), stem = "lamps-" + tail;
+    const dir = path.join(share, "desks", me.id), file = path.join(dir, stem + ".ec");
+    const base = { format: 2, kind: "etiuda-catalog", id: me.id + "-" + tail, rev: 0, name: "Lamp notes, at this desk",
+      langs: [{ code: "en", label: "EN" }], tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers" } }],
+      cards: [keepCard("c-desk", "Desk")], desk: { id: me.id, key: me.key, box: me.box }, grew: LAMP_GREW };
+    const wrote = d.api.writeBranch(stem, JSON.stringify(base));
+    const read = () => { try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return {}; } };
+    const bytes = () => { try { return fs.readFileSync(file); } catch { return Buffer.alloc(0); } };
+    const listing = () => { try { return fs.readdirSync(dir).sort().join(); } catch { return ""; } };
+    const call = (f, ...a) => { try { return d.api[f](...a); } catch (e) { return { ok: true, threw: String(e && e.message) }; } };
+    const fromOf = (doc, cardId) => (doc.cards || []).filter(c => c && c.from && c.from.card === cardId && c.from.desk === KEEP_SENDER);
+    const out = { wrote: !!wrote && wrote.ok === true, me: me.id, grew: LAMP_GREW };
+    out.rev0 = read().rev;
+    const b0 = bytes(), l0 = listing();
+    out.r1 = call("keepSharedCard", keepOpened(keepCard("c-shared", "Shared")), "lamp-shop");
+    out.noWrite1 = bytes().equals(b0) && listing() === l0;
+    /* the page's part: it writes the card the verdict named, into the file the verdict was about */
+    if (out.r1 && out.r1.ok === true && out.r1.card) {
+      const d1 = read(); d1.cards.push(out.r1.card);
+      d.api.writeBranch(stem, JSON.stringify(d1));
+    }
+    out.doc1 = read();
+    out.genuine1 = !!out.doc1.sig && d.api.branchGenuine(out.doc1) === true && out.doc1.sig.keyId === me.id;
+    out.problems1 = V2.v2Problems(out.doc1);
+    const b1 = bytes();
+    out.r2 = call("keepSharedCard", keepOpened(keepCard("c-shared", "Shared")), "lamp-shop");
+    out.twice = fromOf(read(), "c-shared").length;
+    out.twiceSame = bytes().equals(b1);
+    const dec = call("declineSharedCard", keepOpened(keepCard("c-declined", "Declined")));
+    out.listing3 = listing();
+    out.decline = { r: dec, same: bytes().equals(b1), listing: listing() };
+    const b3 = bytes();
+    out.r4 = call("keepSharedCard", keepOpened(keepCard("c-desk", "Same id as the desk's own")), "lamp-shop");
+    out.noWrite4 = bytes().equals(b3);
+    if (out.r4 && out.r4.ok === true && out.r4.card) {
+      const d4 = read(); d4.cards.push(out.r4.card);
+      d.api.writeBranch(stem, JSON.stringify(d4));
+    }
+    out.doc4 = read();
+    out.problems4 = V2.v2Problems(out.doc4);
+    const b4 = bytes(), l4 = listing();
+    out.r5 = call("keepSharedCard", keepOpened(keepCard("c-other", "Other")), "other-shop");
+    out.unheld = { same: bytes().equals(b4), listing: listing() === l4 };
+    out.r6 = call("keepSharedCard", { from: KEEP_SENDER, team: KEEP_TEAM, card: "not a card" }, "lamp-shop");
+    out.r6b = call("keepSharedCard", { from: KEEP_SENDER, team: KEEP_TEAM, card: JSON.stringify({ title: { en: "No id" } }) }, "lamp-shop");
+    out.unreadable = { same: bytes().equals(b4), listing: listing() === l4 };
+    out.r8 = call("keepSharedCard", keepOpened(Object.assign(keepCard("c-noshelf", "No shelf"), { shelf: "t-missing" })), "lamp-shop");
+    out.r8b = call("keepSharedCard", keepOpened(Object.assign(keepCard("c-noreq", "No request"), { requests: ["t-missing"] })), "lamp-shop");
+    const noBody = keepCard("c-nobody", "No body"); delete noBody.body;
+    out.r8c = call("keepSharedCard", keepOpened(noBody), "lamp-shop");
+    out.misfit = { same: bytes().equals(b4), problems: V2.v2Problems(read()) };
+    call("markPrivate", "lamp-shop", true);
+    out.r7 = call("keepSharedCard", keepOpened(keepCard("c-priv", "Private")), "lamp-shop");
+    out.priv = { same: bytes().equals(b4), has: fromOf(read(), "c-priv").length };
+    return out;
+  };
+  {
+    const k = keepScene();
+    const c1 = (k.doc1.cards || []).filter(c => c && c.id === "c-shared")[0] || {};
+    const v1 = (k.r1 && k.r1.card) || {};
+    check(k.wrote && k.r1 && k.r1.ok === true && k.noWrite1 && JSON.stringify(v1.from) === JSON.stringify({ desk: KEEP_SENDER, card: "c-shared" })
+      && v1.title && v1.title.en === "Shared" && v1.id === "c-shared",
+      "1013k-a the verdict on a card that may be kept says yes with the card as it would be kept, carrying from {desk: the sender, card: the card's id} and its words as sent, and writes nothing (the file's bytes and folder are as they were): " + JSON.stringify(k.r1));
+    check(k.genuine1 && k.problems1.length === 0 && k.doc1.rev === k.rev0 + 1 && k.doc1.cards.length === 2 && k.doc1.cards[0].id === "c-desk" && JSON.stringify(c1.from) === JSON.stringify({ desk: KEEP_SENDER, card: "c-shared" }) && JSON.stringify(k.doc1.grew) === JSON.stringify(k.grew),
+      "1013k-b the file as the page writes it from the yes stands signed by the recipient and the engine's reader finds no problem in it with the from mark on a card, its rev raised once, its grew kept and the desk's own card still there (rev " + k.rev0 + " to " + k.doc1.rev + ", problems " + JSON.stringify(k.problems1) + ")");
+    check(k.r2 && k.r2.ok === false && k.r2.already === true && /already/.test(String(k.r2.reason)) && k.twice === 1 && k.twiceSame,
+      "1013k-c a card whose yes has been written is not given a second yes: the verdict refuses it as already kept and writes nothing (" + JSON.stringify(k.r2) + ", cards from that sender and card " + k.twice + ")");
+    check(k.decline.r && k.decline.r.ok === true && k.decline.r.kept === false && k.decline.same && k.decline.listing === k.listing3,
+      "1013k-d a decline stays a no-op and writes nothing: the file's bytes are as they were (" + JSON.stringify(k.decline.r) + ")");
+    const ids4 = (k.doc4.cards || []).map(c => c.id), c4 = (k.doc4.cards || []).filter(c => c && c.from && c.from.card === "c-desk")[0] || {};
+    check(k.r4 && k.r4.ok === true && k.noWrite4 && ids4.length === new Set(ids4).size && ids4.length === 3 && !!c4.from && c4.from.desk === KEEP_SENDER && c4.id !== "c-desk" && k.problems4.length === 0 && ids4.indexOf("c-desk") === 0,
+      "1013k-e the verdict on a shared card whose id the desk already uses names a new id of the desk's own and writes nothing, its from mark still naming the sender's card id, and the file with that card added still reads clean (" + JSON.stringify(ids4) + ", " + JSON.stringify(k.problems4) + ")");
+    check(k.r5 && k.r5.ok === false && /holds no catalog/.test(String(k.r5.reason)) && k.unheld.same && k.unheld.listing,
+      "1013k-f the verdict on a card for a catalog the recipient does not hold is a refusal with a plain reason, and nothing is written (" + JSON.stringify(k.r5) + ")");
+    check(k.r6 && k.r6.ok === false && k.r6b && k.r6b.ok === false && /not a card/.test(String(k.r6.reason)) && k.unreadable.same && k.unreadable.listing,
+      "1013k-g text that is not a card, and a card with no id, are refused with a reason and nothing is written (" + JSON.stringify([k.r6, k.r6b]) + ")");
+    check(k.r7 && k.r7.ok === false && /private/.test(String(k.r7.reason)) && k.priv.same && k.priv.has === 0,
+      "1013k-h the verdict on a card for a catalog marked private is a refusal with a plain reason, and the file keeps its bytes (" + JSON.stringify(k.r7) + ")");
+  }
+  {
+    const k = keepScene();
+    const why = r => String(r && r.reason);
+    check(k.r8 && k.r8.ok === false && /shelf/.test(why(k.r8)) && k.r8b && k.r8b.ok === false && /request/.test(why(k.r8b)) && k.r8c && k.r8c.ok === false && /words/.test(why(k.r8c))
+      && k.misfit.same && k.misfit.problems.length === 0,
+      "1013k-i a card whose shelf or request tag the recipient's catalog lacks, or that has no words in its primary language, is refused (the format has no card without a shelf) and the file keeps its bytes and still reads clean (" + JSON.stringify([k.r8, k.r8b, k.r8c]) + ", " + JSON.stringify(k.misfit.problems) + ")");
+  }
+  const keepPlant = async (tag, label, red) => {
+    if (PLANTS_OFF) { skip("1013k-" + label + " lifting plant:" + tag + " turns the leg red (ETIUDA_PLANTS=off)"); return; }
+    const r = await testPlant(tag, mainFile, async scratchMain => red(keepScene(fs.readFileSync(scratchMain, "utf8"))));
+    check(r.ok, "1013k-" + label + " lifting plant:" + tag + " turns the leg red: " + JSON.stringify(r));
+  };
+  await keepPlant("keep-private", "p1", k => !(k.r7 && k.r7.ok === false && /private/.test(String(k.r7.reason)) && k.priv.same));
+  await keepPlant("keep-unheld", "p2", k => !(k.r5 && k.r5.ok === false && k.unheld.same && k.unheld.listing));
+  await keepPlant("keep-twice", "p3", k => !(k.r2 && k.r2.ok === false && k.r2.already === true && k.twiceSame));
+  await keepPlant("keep-shelf", "p5", k => !(k.r8 && k.r8.ok === false && k.misfit.same && k.misfit.problems.length === 0));
+  await keepPlant("keep-from", "p4", k => !(k.r1 && k.r1.card && k.r1.card.from && k.r1.card.from.desk === KEEP_SENDER && k.r1.card.from.card === "c-shared"));
 
   if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") {
     syncerMod.stopAllFolderSyncers();

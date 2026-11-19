@@ -5398,6 +5398,70 @@ const CARD_B = {
       () => eq([replyNames, ["edit", "fav", "note", "hide"].map(a => (cb[a].pressed || []).join()).join(","), copied.join(";")].join("|"),
         "Copy|Copy the PL version|-|Edit this card|Remove from Favourites|Show the note|Put this card away|click,click,click,click|copy:Your parcel is on its way back.;copy:Paczka do nas wraca."));
 
+    {
+      const TJ2 = await import(MOD("team-join.js"));
+      const V2m = await import(MOD("catalog-v2.js"));
+      const Jm = await import(MOD("macros-json.js"));
+      const CFm = await import(MOD("card-fields.js"));
+      const wasHost2 = window.E_HOST;
+      let onJoin2 = null;
+      window.E_HOST = Object.assign({}, wasHost2 || {}, {
+        onTeamJoin: fn => { onJoin2 = fn; },
+        teamJoin: op => Promise.resolve((op === "state" || op === "held")
+          ? { sealed: null, join: null, leads: [], share: { team: "t-0123456789abcdef", teammates: [{ id: "k-1111111111111111", name: "Ewa Nowak" }] } }
+          : { ok: true, items: [] }),
+      });
+      TJ2.wireTeamJoin();
+      if (onJoin2) onJoin2({ sealed: null, join: null, leads: [], share: { team: "t-0123456789abcdef", teammates: [{ id: "k-1111111111111111", name: "Ewa Nowak" }] } });
+      await new Promise(r => setTimeout(r, 10));
+      AS.setCards([
+        { id: "c-cx", c: "gen", t: "Lost parcel", en: "Your parcel is on its way back.", pl: "Paczka do nas wraca." },
+        { id: "u:own", c: "gen", t: "Own", en: "Own body.", _custom: 1 },
+        { id: "c-ov", c: "gen", t: "Changed", en: "Changed body.", _overridden: 1 },
+      ]);
+      const ownCard = node({}, { dataset: { id: "u:own" }, classList: on(new Set()), querySelector: () => null });
+      const ownBlock = node({ "#list .card[data-id]": ownCard, ".txt[data-v]": null }, { dataset: { v: "0" } });
+      ownBlock.up[".txt[data-v]"] = ownBlock;
+      const ovCard = node({}, { dataset: { id: "c-ov" }, classList: on(new Set()), querySelector: () => null });
+      const ovBlock = node({ "#list .card[data-id]": ovCard, ".txt[data-v]": null }, { dataset: { v: "0" } });
+      ovBlock.up[".txt[data-v]"] = ovBlock;
+      const baseMenu = names(CX.ctxRowsFor(block));
+      const ownMenu = names(CX.ctxRowsFor(ownBlock));
+      const ovMenu = names(CX.ctxRowsFor(ovBlock));
+      if (onJoin2) onJoin2({ sealed: null, join: null, leads: [] });
+      const offMenu = names(CX.ctxRowsFor(ownBlock));
+      window.E_HOST = wasHost2;
+      TJ2.wireTeamJoin();
+      check("context-menu.js", "1013m1 card menu offers Share with… under Edit this card only on own or changed cards and only while on a sealed team",
+        () => eq([
+          baseMenu.indexOf("Share with…") < 0,
+          ownMenu.indexOf("Edit this card|Share with…") >= 0,
+          ovMenu.indexOf("Edit this card|Share with…") >= 0,
+          offMenu.indexOf("Share with…") < 0,
+        ].join(","), "true,true,true,true"));
+
+      const fromMark = { desk: "k-1111111111111111", card: "u:orig" };
+      const sampleRt = {
+        id: "t-shop", rev: 1, langs: [{ code: "en", label: "EN" }],
+        categories: { gen: "General" }, intents: {},
+        cards: [{ id: "u:kept", c: "gen", t: "Kept", en: "Kept body.", from: fromMark }],
+      };
+      const v2 = V2m.catalogToV2(sampleRt);
+      const backV2 = V2m.catalogFromV2(v2);
+      const plainOut = Jm.cardToExportPlain(sampleRt.cards[0]);
+      const parsedBack = Jm.parseMacrosData({ format: 1, kind: "playbook-cards", cards: [plainOut] });
+      const carried = CFm.carryUnwritten({ id: "u:kept" }, { from: fromMark, fromName: "Ewa Nowak", fromAt: "2026-11-19T12:00:00.000Z" });
+      check("catalog-v2.js", "1013m2 from mark survives catalogToV2, catalogFromV2, cardToExportPlain, parseMacrosData and carryUnwritten",
+        () => eq(JSON.stringify([
+          v2.cards[0].from,
+          backV2.cards[0].from,
+          plainOut.from,
+          parsedBack[0].from,
+          carried.from,
+        ]), JSON.stringify([fromMark, fromMark, fromMark, fromMark, fromMark])));
+      AS.setCards([{ id: "c-cx", c: "gen", t: "Lost parcel", en: "Your parcel is on its way back.", pl: "Paczka do nas wraca." }]);
+    }
+
     const fold = (k) => node({}, { attrs: { "data-fold-key": k } });
     const folds = [fold("cx-a"), fold("cx-b")];
     const wasFolds = folds.map(f => COL.isCollapsed(f.attrs["data-fold-key"]));

@@ -1322,6 +1322,13 @@ function createProgram(opts) {
     if (!blob) { dropSaid("a file from the relay", R("bad-signature")); return null; }
     const floors = it.floor !== undefined ? floorsWith(floors0, m.writer, m.epoch, it.floor) : floors0;
     if (typeof m.place === "string" && m.place.startsWith("invite:")) return openInvited(it, blob, floors, ctx);
+    /* An item another desk left at this desk's addressed place is no file of the folder: the mirror passes over it,
+       while notifying the channel that an addressed item arrived for this desk. */
+    if (typeof m.place === "string" && m.place.startsWith("to:")) {
+      unpend(m.id);
+      if (!m.del && ctx && B.addressedTo(m, ctx.mine) && typeof ctx.onAddressed === "function") ctx.onAddressed(m);
+      return null;
+    }
     /* A request a desk joining by invitation sent, its key carried beside it (the relay marks only an invitation's upload so):
        the lead's to open; any other program passes over it and says nothing, as it passes over an invitation's place. */
     if (typeof m.pub === "string" && !isLeadKey(m.writer) && !(ctx && Array.isArray(ctx.inviteKeys))
@@ -1722,7 +1729,8 @@ function createProgram(opts) {
     let held = null;
     held = op.byInvite ? lostBlob(op.inviteId) : null; /* plant:lost-id */
     const blob = B.seal({ relayTeamId: pin.rt, epoch: sealing.epoch, teamKey: sealing.key, writer: { keyId: me.keyId, privateKey: me.privateKey },
-      path: op.rel, body: op.body, counter: nextCounter(), place: op.place ? null : me.place, kind: op.kind, supersedes: was ? was.id : null,
+      path: op.rel, body: op.body, counter: nextCounter(), place: op.place ? null : me.place, kind: op.kind,
+      supersedes: op.supersedes !== undefined ? op.supersedes : (was ? was.id : null),
       id: op.id || held || null });
     if (op.place) blob.place = op.place;
     if (op.rel === TEAM_NAME && typeof op.body === "string") {
@@ -2165,6 +2173,7 @@ function createChannel(opts) {
         .filter(k => table(k) && HEX32.test(String(k.id)) && toBytes(k.key) && toBytes(k.key).length === 32)
         .map(k => ({ id: k.id, key: toBytes(k.key) })) : null,
       onTeam: () => { if (typeof o.onTeam === "function") o.onTeam(); },
+      onAddressed: m => { if (typeof o.onAddressed === "function") o.onAddressed(m); },
     };
   }
   const me = () => (typeof o.me === "function" ? o.me() : null);
@@ -3062,6 +3071,78 @@ function createChannel(opts) {
     return why;
   }
 
+  /* Addressed desk-to-desk items (board 1013): sealed under the team key to place to:<recipientId>, listed and read
+     only by the addressee, and removed by the addressee with a deletion superseding the blob id. */
+  async function putAddressed(op, sealing) {
+    const who = me();
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const blob = prog.sealOut(op, who, sealing);
+      if (op.kind === "file" && blob.ciphertext.length > 64 * 1024) return R("blob-size");
+      const meta = { v: 1, id: blob.id, supersedes: blob.supersedes, epoch: blob.epoch, writer: blob.writerKeyId, counter: blob.counter,
+        del: blob.deletion, sig: blob.signature, nonce: blob.nonce, place: blob.place };
+      const r = await authed("PUT", "b/" + blob.id, { meta, bytes: blob.ciphertext });
+      if (r.status === 200) return { ok: true, id: blob.id };
+      const why = r.refused || refusalOf(r);
+      if (why && why.reason === "replay-counter" && attempt === 0 && takeFloor(why.floor)) continue;
+      return why;
+    }
+    return R("replay-counter");
+  }
+  function addressedSealing() {
+    const who = me();
+    if (!who || !who.privateKey) return { err: R("not-enrolled") };
+    const floor = prog.teamEpoch();
+    const named = typeof o.sealEpoch === "function" ? o.sealEpoch() : null;
+    const epoch = isCount(named) ? named : null;
+    const key = epoch && typeof o.keyFor === "function" ? o.keyFor(epoch) : null;
+    if (!key || epoch < floor) return { err: R("not-enrolled") };
+    return { who, sealing: { epoch, key } };
+  }
+  async function writeTo(recipientId, bodyText) {
+    const place = B.toPlace(recipientId);
+    const s = addressedSealing();
+    if (s.err) return s.err;
+    if (!place || String(recipientId) === s.who.keyId || typeof bodyText !== "string") return R("outside-place");
+    return putAddressed({ rel: "desks/" + s.who.keyId + "/to/" + recipientId, kind: "file", body: bodyText, sha: null, place, supersedes: null }, s.sealing);
+  }
+  async function listTo(writerKeyFor) {
+    const who = me();
+    if (!who || !who.keyId) return { ok: false, reason: "not-enrolled", items: [] };
+    const all = await listedWhole();
+    if (!all) return { ok: false, reason: "network", items: [] };
+    const items = [];
+    for (const e of all) {
+      const m = e && e.meta;
+      if (!B.addressedTo(m, who.keyId) || m.del) continue;
+      const got = await authed("GET", "b/" + m.id);
+      if (got.status !== 200) continue;
+      let gm = table(got.meta) && got.meta.id === m.id ? got.meta : null;
+      if (gm && !envelopeOf({ meta: gm, ct: got.bytes })) gm = null;
+      gm = gm || m;
+      const writerKey = typeof writerKeyFor === "function" ? writerKeyFor(gm.writer) : null;
+      const tKey = typeof o.keyFor === "function" ? o.keyFor(gm.epoch) : null;
+      if (!writerKey || !tKey) continue;
+      const blob = { id: gm.id, epoch: gm.epoch, supersedes: gm.supersedes == null ? null : gm.supersedes,
+        writerKeyId: gm.writer, counter: gm.counter, nonce: gm.nonce, signature: gm.sig, ciphertext: toBytes(got.bytes) };
+      const opened = B.openBlob({ blob, relayTeamId: o.rt, epoch: gm.epoch, teamKey: tKey,
+        trust: { desks: [{ deskId: gm.writer, keyId: gm.writer, public: writerKey }] }, counters: {} });
+      if (!opened || !opened.ok || opened.kind !== "file") continue;
+      items.push({ id: gm.id, seq: e.seq, writer: gm.writer, epoch: gm.epoch, body: opened.body });
+    }
+    return { ok: true, items };
+  }
+  async function dropTo(blobId) {
+    if (!HEX32.test(String(blobId))) return R("bad-path");
+    const s = addressedSealing();
+    if (s.err) return s.err;
+    const place = B.toPlace(s.who.keyId);
+    if (!place) return R("outside-place");
+    const r = await putAddressed({ rel: "desks/" + s.who.keyId + "/to/" + s.who.keyId, kind: "delete", body: "", sha: null, place, supersedes: String(blobId) }, s.sealing);
+    if (r && r.ok) return { ok: true };
+    if (r && (r.reason === "superseded" || r.reason === "missing" || r.reason === "expired")) return { ok: true };
+    return r;
+  }
+
   /* The request withdrawn: where this desk's own request is owed as a deletion after its one upload, that deletion goes on
      the invitation's session under the invitation's key, superseding the request, and the invitation counts as not asked.
      Null where none is owed. */
@@ -3292,6 +3373,9 @@ function createChannel(opts) {
     /* The push socket is down while the asks are answered, so updates come with each poll's ask. */
     pushDown,
     writeAnswer,
+    writeTo,
+    listTo,
+    dropTo,
     lapse: lapseView,
     fork: () => prog.fork(),
     stranded: () => prog.stranded(),

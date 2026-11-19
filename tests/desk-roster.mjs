@@ -46,7 +46,8 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
-const EXPECTED = 27;
+const PLANTS = process.env.ETIUDA_PLANTS !== "off";
+const EXPECTED = 31 + (PLANTS ? 2 : 0);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -73,7 +74,7 @@ const inert = new Proxy(function () {}, { get: () => inert, set: () => true, app
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
 const eventFor = () => ({ sender: { id: 1, once: noop }, senderFrame: ENGINE_FRAME, returnValue: undefined });
 
-function loadDesk(ud, opened) {
+function loadDesk(ud, opened, srcText) {
   const said = [], on = {}, invoke = {};
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop, info: noop };
   const safeStorage = {
@@ -101,7 +102,7 @@ function loadDesk(ud, opened) {
   let api;
   try {
     api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
-      SRC + "\nreturn { " + EXPOSE.join(", ") + " };")(
+      (srcText || SRC) + "\nreturn { " + EXPOSE.join(", ") + ", rosterOf: t => teamRoster[t] };")(
       n => (n === "electron" ? electron : nodeRequire(n)),
       path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
   } finally { if (opened) process.argv = argv; }
@@ -323,13 +324,91 @@ try {
     + ", handed rev " + facts(back2Read.text || "").rev);
 
   /* ---- let in again at epoch 3: its files are handed again ----------------------------------------------- */
-  put(SHARE, "etiuda-team.json", teamFile(3, [entry(A, a, K3, 3), entry(A, c, K3, 3), entry(A, r, K3, 3)]));
+  const named3 = [Object.assign(entry(A, a, K3, 3), { name: "Ana, the lead's name" }),
+    (() => { const e = entry(A, c, K3, 3); e.desk.name = "Colleague's own name"; return e; })(), entry(A, r, K3, 3)];
+  const team3 = teamFile(3, named3);
+  put(SHARE, "etiuda-team.json", team3);
   touch(path.join(SHARE, "etiuda-team.json"));
   await heed(C2);
   const again = await lists(C2, r.id), againRead = facts((await unasked(C2, r.id)).text || "");
   check(again.length === 1 && againRead.rev === 2,
     "889o THE CONTROL: a desk the team lets in again at a newer epoch is listed and handed again: "
     + (again.join(",") || "not listed") + ", rev " + againRead.rev);
+
+
+  /* ---- board 1013: the desk keeps the newest verified roster whole, beside the ids ----------------------- */
+  {
+    const entsOf = D => { const v = D.api.rosterOf(TEAM); return v && Array.isArray(v.entries) ? v.entries : []; };
+    const shape = e => e.id + "|" + e.name + "|" + e.box + "|" + e.key;
+    const want = [[a, "Ana, the lead's name"], [c, "Colleague's own name"], [r, ""]]
+      .map(([w, n]) => shape({ id: w.id, name: n, box: w.box, key: w.key })).sort();
+    const got3 = entsOf(C2), v3 = C2.api.rosterOf(TEAM);
+    check(!!v3 && v3.epoch === 3 && JSON.stringify(got3.map(shape).sort()) === JSON.stringify(want)
+      && JSON.stringify(v3.desks) === JSON.stringify([a.id, c.id, r.id].sort()),
+      "1013a the desk keeps each admitted desk of the newest roster whole, the lead's name else the desk's own, with its box and key, and the ids as before: "
+      + JSON.stringify({ epoch: v3 && v3.epoch, entries: got3.map(shape), desks: v3 && v3.desks }));
+    put(SHARE, "etiuda-team.json", team2); touch(path.join(SHARE, "etiuda-team.json"));
+    await heed(C2);
+    const old = C2.api.rosterOf(TEAM);
+    check(!!old && old.epoch === 3 && JSON.stringify(entsOf(C2).map(shape).sort()) === JSON.stringify(want),
+      "1013b an older epoch's file put back does not replace the newer roster's entries: epoch " + (old && old.epoch) + ", entries " + entsOf(C2).length);
+    const bad = JSON.parse(team3); bad.epoch = 4; bad.roster[0].name = "Forged"; // the lead's signature no longer covers it
+    put(SHARE, "etiuda-team.json", JSON.stringify(bad)); touch(path.join(SHARE, "etiuda-team.json"));
+    await heed(C2);
+    const badNow = C2.api.rosterOf(TEAM);
+    check(!!badNow && badNow.epoch === 3 && JSON.stringify(entsOf(C2).map(shape).sort()) === JSON.stringify(want),
+      "1013c a roster that fails verification changes nothing: epoch " + (badNow && badNow.epoch) + ", entries " + entsOf(C2).length);
+    put(SHARE, "etiuda-team.json", team3); touch(path.join(SHARE, "etiuda-team.json"));
+    await heed(C2);
+    const C3 = loadDesk(C2.ud);
+    await C3.ask("etiuda:branch-identity", true); // the desk file is read on first use
+    const v3b = C3.api.rosterOf(TEAM);
+    const disk = JSON.parse(fs.readFileSync(C2.envFile, "utf8")).teamRoster || {};
+    check(!!v3b && v3b.epoch === 3 && JSON.stringify(entsOf(C3).map(shape).sort()) === JSON.stringify(want) && !!disk[TEAM] && Array.isArray(disk[TEAM].entries),
+      "1013d the entries are read back from the desk file after a restart: epoch " + (v3b && v3b.epoch) + ", entries " + entsOf(C3).length
+      + ", on disk " + (disk[TEAM] && Array.isArray(disk[TEAM].entries) ? disk[TEAM].entries.length : "none"));
+
+    /* Each deciding line of the roster kept whole, lifted alone from a copy of the source held in memory, turns one check red.
+       The checkout's shell/main.js is never written. */
+    if (!PLANTS) console.log("NOT RUN plant:roster-entries, plant:roster-readback (ETIUDA_PLANTS=off)");
+    else {
+      let seq = 0;
+      /* A lift is a list of [tag, from, to]: the roster's own line, and any earlier guard that holds the same fact and would hide it. */
+      const lifted = (...lifts) => {
+        const lines = SRC.split("\n");
+        for (const [tag, from, to] of lifts) {
+          const at = lines.findIndex(l => l.indexOf(tag) >= 0);
+          if (at < 0 || lines[at].indexOf(from) < 0) return null;
+          lines[at] = lines[at].replace(from, to);
+        }
+        return lines.join("\n");
+      };
+      const planted = async (src, keepRoster, fileText) => {
+        const ud = path.join(LAB, "plant-" + (++seq));
+        fs.mkdirSync(ud, { recursive: true });
+        const env = JSON.parse(fs.readFileSync(C2.envFile, "utf8"));
+        if (!keepRoster) delete env.teamRoster;
+        fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(env));
+        const P = loadDesk(ud, undefined, src);
+        /* The planted desk reads its own mirror of the folder, so the team file it is to heed is written there. */
+        const mirror = syncerMod.folderMirrorOf(ud, TEAM);
+        fs.mkdirSync(mirror, { recursive: true });
+        for (const f of ["etiuda-ring.json", "board.ec"]) fs.copyFileSync(path.join(SHARE, f), path.join(mirror, f));
+        if (fileText !== null) fs.writeFileSync(path.join(mirror, "etiuda-team.json"), fileText || team3, "utf8"); // null: the desk heeds nothing, only reads its file back
+        await P.ask("etiuda:branch-identity", true);
+        await heed(P);
+        const v = P.api.rosterOf(TEAM);
+        return { epoch: v && v.epoch, n: v && Array.isArray(v.entries) ? v.entries.length : 0 };
+      };
+      const sEntries = lifted(["plant:roster-entries", "return Array.from(byId.values()).sort((p, q) => (p.id < q.id ? -1 : 1));", "return [];"]);
+      const pe = sEntries ? await planted(sEntries, false) : null;
+      check(!!pe && pe.n === 0, "1013e lifting plant:roster-entries leaves the roster with its ids and no entries, so 1013a goes red: " + JSON.stringify(pe));
+      const sRead = lifted(["plant:roster-readback", "entries: rosterEntriesChecked(v.entries, ids)", "entries: []"]);
+      const pr = sRead ? await planted(sRead, true, null) : null;
+      check(!!pr && pr.n === 0, "1013f lifting plant:roster-readback reads the roster back without its entries, so 1013d goes red: " + JSON.stringify(pr));
+      put(SHARE, "etiuda-team.json", team3); touch(path.join(SHARE, "etiuda-team.json"));
+    }
+  }
 
   /* ---- the page's bridge: the note crosses src/modules/host.js to the page ------------------------------- */
   {

@@ -289,6 +289,8 @@ const ICON_TEAM=_svg("ic",catIconInner("people"));
 const ICON_STAMP='<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
   +'<path d="M10.2 12.5l.6-4.2a2.6 2.6 0 1 1 3.4 0l.6 4.2"/><path d="M5 17v-2.5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2V17z" fill="currentColor"/>'
   +'<path d="M6 20.5h13"/></svg>';
+/* Forward arrow for sharing a card with a teammate (board 1013). */
+const ICON_SHARE=_svg("ic",'<path d="M12.2 4.5l5.3 5-5.3 5"/><path d="M17.5 9.5H8.8a4.6 4.6 0 0 0-4.6 4.6v1.7"/>');
 
 export {
   ICON_CLEAR_TEXT,
@@ -298,5 +300,5 @@ export {
   CAT_ICON_HINTS, ICON_STAR_ON, ICON_STAR_OFF, ICON_FLAG, ICON_INTENT_LINK, ICON_PLUS, fillProseIcons,
   ICON_CHEVRON_R, ICON_X, ICON_LOCK, ICON_LOCK_OPEN, ICON_TAB_X, ICON_TAB_ADD,
   ICON_AWAITING, ICON_LINT_WARNING, ICON_SUCCESS, ICON_LOAD, ICON_EJECT, ICON_KEY,
-  ICON_TEAM, ICON_STAMP, ICON_DESK, ICON_LOOK,
+  ICON_TEAM, ICON_STAMP, ICON_DESK, ICON_LOOK, ICON_SHARE,
 };

@@ -2620,6 +2620,62 @@ function openBranchLead(skR, doc, deskId) {
     return pt ? pt.toString("utf8") : null;
   } catch { return null; }
 }
+/* ---- a card sealed to one desk's box, signed by the sender (board 1013, piece 3) ---------------------------
+   Base-mode HPKE does not say who sealed, so the card inside is signed by the sender's desk key under a prefix of its own,
+   over the team, both desk ids and the card's bytes. info binds the same three, under a label no other envelope uses, so
+   the file opens as nothing else and for no other desk. Pure like the seals above: the keys are KeyObjects, handed in. */
+const CARD_SEAL_KIND = "etiuda-card-sealed";
+const CARD_SEAL_LABEL = "etiuda-card-to\n";
+const CARD_INNER_KIND = "etiuda-card-inner";
+const CARD_PREFIX = "etiuda-card\n";
+const CARD_MAX_BYTES = 64 * 1024;
+/* The largest ct worth opening: a 64 KB card whose every byte JSON writes as a six-character escape, plus 1 KB for the inner file's other fields and the 16-byte tag. */
+const CARD_MAX_CT_BYTES = CARD_MAX_BYTES * 6 + 1024;
+function cardSealInfo(team, sender, recipient) {
+  return Buffer.from(CARD_SEAL_LABEL + team + "\n" + sender + "\n" + recipient, "utf8");
+}
+function cardSignedBytes(team, sender, recipient, card) {
+  return Buffer.concat([Buffer.from(CARD_PREFIX + team + "\n" + sender + "\n" + recipient + "\n", "utf8"), card]);
+}
+/* `signKey` is the sender desk's Ed25519 private KeyObject. It throws, with a plain reason, on a card above 64 KB or a malformed id. */
+function sealCardTo(box, team, senderId, recipientId, cardText, signKey) {
+  if (!/^[0-9a-f]{64}$/.test(String(box))) throw new Error("card: the recipient's box is 64 lower-case hex characters");
+  if (!SEALED_TEAM_RE.test(String(team))) throw new Error("card: a team id is t- and 16 lower-case hex characters");
+  if (!/^k-[0-9a-f]{16}$/.test(String(senderId)) || !/^k-[0-9a-f]{16}$/.test(String(recipientId))) throw new Error("card: a desk id is k- and 16 lower-case hex characters");
+  if (typeof cardText !== "string") throw new Error("card: a card is sealed as its text");
+  const bytes = Buffer.from(cardText, "utf8");
+  if (bytes.length > CARD_MAX_BYTES) throw new Error("card: a card is at most 64 KB to share, this one is " + bytes.length + " bytes");
+  const sig = crypto.sign(null, cardSignedBytes(String(team), String(senderId), String(recipientId), bytes), signKey).toString("hex");
+  const inner = { format: 1, kind: CARD_INNER_KIND, team: String(team), from: String(senderId), to: String(recipientId), card: cardText,
+    sig: { alg: "Ed25519", keyId: String(senderId), value: sig } };
+  const w = hpkeSeal(Buffer.from(String(box), "hex"), cardSealInfo(String(team), String(senderId), String(recipientId)), Buffer.alloc(0),
+    Buffer.from(JSON.stringify(inner), "utf8"));
+  return { format: 1, kind: CARD_SEAL_KIND, team: String(team), from: String(senderId), enc: w.enc.toString("hex"), ct: w.ct.toString("hex") };
+}
+/* The card's text, or null for anything that is not this desk's, for this team, from the named sender: `boxKey` is this desk's
+   X25519 private KeyObject, `senderKey` the sender's 64-hex public key as the roster has it. */
+function openCardFrom(env, team, recipientId, senderKey, boxKey) {
+  try {
+    if (!env || typeof env !== "object" || Array.isArray(env) || +env.format !== 1 || env.kind !== CARD_SEAL_KIND) return null;
+    if (!SEALED_TEAM_RE.test(String(team)) || String(env.team) !== String(team)) return null;
+    if (!/^k-[0-9a-f]{16}$/.test(String(recipientId)) || !/^k-[0-9a-f]{16}$/.test(String(env.from))) return null;
+    if (!/^[0-9a-f]{64}$/.test(String(senderKey))) return null;
+    const enc = String(env.enc), ct = String(env.ct);
+    if (!/^[0-9a-f]{64}$/.test(enc) || !/^(?:[0-9a-f]{2}){16,}$/.test(ct)) return null;
+    if (ct.length > 2 * CARD_MAX_CT_BYTES) return null; /* plant:card-ct-size */
+    const pt = hpkeOpen(boxKey, Buffer.from(enc, "hex"), cardSealInfo(String(team), String(env.from), String(recipientId)), Buffer.alloc(0), Buffer.from(ct, "hex"));
+    if (!pt) return null;
+    const inner = JSON.parse(pt.toString("utf8"));
+    if (!inner || +inner.format !== 1 || inner.kind !== CARD_INNER_KIND || inner.team !== String(team) || inner.from !== env.from
+      || inner.to !== String(recipientId) || typeof inner.card !== "string" || !inner.sig || inner.sig.alg !== "Ed25519"
+      || inner.sig.keyId !== inner.from || !/^[0-9a-f]{128}$/.test(String(inner.sig.value))) return null;
+    const bytes = Buffer.from(inner.card, "utf8");
+    if (bytes.length > CARD_MAX_BYTES) return null;
+    const pub = crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(String(senderKey), "hex")]), format: "der", type: "spki" });
+    return crypto.verify(null, cardSignedBytes(String(team), inner.from, String(recipientId), bytes), pub, Buffer.from(inner.sig.value, "hex"))
+      ? inner.card : null;
+  } catch { return null; }
+}
 const ANSWER_LEAD_PREFIX = "etiuda-catalog-answer\n";
 function answerLeadSignedBytes(doc) {
   return Buffer.concat([Buffer.from(ANSWER_LEAD_PREFIX, "utf8"), signedBytesOf(doc)]);
@@ -3277,6 +3333,71 @@ function writeBranch(stem, text) {
     console.error("etiuda: the desk's own catalog file could not be written - " + e.message);
     return branchHold(stem, text);
   }
+}
+/* The verdict on keeping a card this desk has opened (board 1013, piece 4). It WRITES NOTHING: the page is the one writer of the desk's
+   file, so this says whether the card may be kept and what it would be, and the page writes it. `opened` is {from, team, card}: the sender's desk id, the team,
+   and the card's text as openCardFrom gave it. It would go into this desk's own file for the catalog it belongs to (`catalogId` is
+   that catalog's id, the one the file's grew names), and the page writes it through writeBranch. The card carries from {desk: the sender, card: the card's id there}: a card field the catalog
+   format carries untouched (catalog-v2 v2Problems has no rule against an unknown card field, and the desk's signature covers the
+   whole file), so the file still reads clean and Studio, which reads the file and its grew, groups kept cards by from. A card whose
+   id this file already uses is kept under a new id of the desk's own. Refused, with a reason and nothing written: not a card; no
+   key of its own; no file of its own for that catalog; a catalog marked private; a file that cannot be written here now; a card
+   already kept (reason, with already: true). The verdict is {ok: true, card}, the card as it would be kept (from mark, any id
+   change applied), or {ok: false, reason}. */
+function keepSharedCard(opened, catalogId) {
+  const no = why => ({ ok: false, reason: why });
+  const sender = opened && typeof opened === "object" ? String(opened.from || "") : "";
+  let card = null;
+  try { card = JSON.parse(opened.card); } catch { card = null; }
+  if (!/^k-[0-9a-f]{16}$/.test(sender) || !card || typeof card !== "object" || Array.isArray(card) || typeof card.id !== "string" || !card.id) {
+    return no("card: this is not a card this desk can keep");
+  }
+  const me = branchIdentity(false);
+  if (!me) return no("card: this desk has no key of its own to sign with yet");
+  const id = me.id + "-" + crypto.createHash("sha256").update(String(catalogId || "")).digest("hex").slice(0, 8);
+  const held = ownFilesWithId(path.join(sharedFolderForWrite(), "desks", me.id), id).filter(e => e.doc && branchGenuine(e.doc))
+    .sort((a, b) => (+b.doc.rev || 0) - (+a.doc.rev || 0))[0] || null;
+  let doc = held ? JSON.parse(JSON.stringify(held.doc)) : null;
+  if (!doc) {
+    const edition = catalogDocIn(loadedText || (typeof catalogJson === "string" ? catalogJson : ""));
+    if (edition && edition.kind === "etiuda-catalog" && String(edition.id || "") === String(catalogId || "")) {
+      let pin = "";
+      try { pin = signedSha(edition); } catch { pin = ""; }
+      doc = { format: 2, kind: "etiuda-catalog", id: id, rev: 1, langs: edition.langs, tags: edition.tags, cards: edition.cards,
+        desk: { id: me.id, key: me.key, box: me.box } };
+      if (PIN_RE.test(pin)) doc.grew = { id: edition.id, rev: +edition.rev || 0, sha: pin };
+      if (edition.grew && typeof edition.grew === "object" && (edition.grew.root || edition.grew.id)) {
+        doc.grew = doc.grew || {};
+        doc.grew.root = String(edition.grew.root || edition.grew.id);
+      }
+      if (edition.private !== undefined) doc.private = edition.private;
+    }
+  }
+  if (!doc) return no("card: this desk holds no catalog of its own for that one, so there is nowhere to keep the card"); /* plant:keep-unheld */
+  if (!Array.isArray(doc.cards)) return no("card: that catalog's file has no list of cards");
+  const gate = branchGate(doc);
+  if (gate.none) return no("card: that catalog is private on this desk, so a shared card is not kept in it"); /* plant:keep-private */
+  if (gate.hold) return no("card: this desk cannot write that catalog's file just now");
+  if (doc.cards.some(c => !!c && !!c.from && c.from.desk === sender && c.from.card === card.id)) return { ok: false, already: true, reason: "card: this card is already kept in that catalog" }; /* plant:keep-twice */
+  /* The file must still read clean, and the format has no card without a shelf, so a card whose shelf or request tags this catalog
+     lacks, or with no words in the primary language, is refused rather than written (catalog-v2 v2Problems says each of these). */
+  const tagKind = {};
+  (Array.isArray(doc.tags) ? doc.tags : []).forEach(t => { if (t && typeof t.id === "string") tagKind[t.id] = t.kind; });
+  const primary = (Array.isArray(doc.langs) && doc.langs[0] && String(doc.langs[0].code || "")) || "en";
+  const words = f => !!card[f] && typeof card[f] === "object" && typeof card[f][primary] === "string" && !!card[f][primary].trim();
+  if (tagKind[card.shelf] !== "shelf") return no("card: its shelf is not one this catalog has, so it has nowhere to sit"); /* plant:keep-shelf */
+  if ((Array.isArray(card.requests) ? card.requests : []).some(r => tagKind[r] !== "request")) return no("card: it names a request this catalog does not have");
+  if (!words("title") || !words("body")) return no("card: it has no words in this catalog's first language");
+  const taken = new Set(doc.cards.map(c => (c ? c.id : "")));
+  let local = card.id;
+  for (let n = 2; taken.has(local); n++) local = card.id + "-" + n;
+  const mine = Object.assign({}, card, { id: local });
+  mine.from = { desk: sender, card: card.id }; /* plant:keep-from */
+  return { ok: true, card: mine };
+}
+/* A card declined is not kept, and nothing is written or sent. */
+function declineSharedCard(opened) {
+  return { ok: true, kept: false };
 }
 /* What a folder that did not answer is still owed, asked again when it may have come back: the catalog
    folder changing and the page finishing a load both call this. */
@@ -4049,7 +4170,7 @@ const TEAM_MAX = 1024 * 1024;
 let teamPins = {};                             // team id -> {keyId, public}: the lead's key, once trusted
 let teamKeys = {};                             // team id -> {epoch: the team key sealed by safeStorage, base64}
 let teamEpochSeen = {};                        // team id -> the highest epoch heeded, kept when teamKeys is empty
-let teamRoster = {};                           // team id -> {epoch, desks}: the desk ids of the file heeded at that epoch
+let teamRoster = {};                           // team id -> {epoch, desks, entries}: the desk ids, and each desk whole {id, name, box, key}, of the file heeded at that epoch
 let teamRevSeen = {};                          // team id -> {lead public -> {epoch, rev}}: the highest rev heeded at that key's highest epoch; above 0, or 0 where a newer epoch with no rev raised a floor already kept
 let teamChannel = {};                          // team id -> {kind: "relay", rt, url}: the channel of the file heeded; none is the folder
 let teamPinFrom = {};                          // team id -> "invite", "policy" or "answer": what pinned its lead; none is the file's own vouching
@@ -4153,6 +4274,36 @@ function rosterIdsOf(doc) {
   const roster = Array.isArray(doc && doc.roster) ? doc.roster : [];
   return deskIdsOnce(roster.map(x => (x && x.desk && typeof x.desk === "object" ? x.desk.id : "")));
 }
+/* A name the lead or a desk gave: a bounded printable string, else "". */
+function rosterNameOf(v) {
+  return typeof v === "string" && v.length <= 120 && !/[ -]/.test(v) ? v.trim() : "";
+}
+/* Each admitted desk a whole team file's roster lists, whole: its id, its name (the lead's, else the desk's own), its box and its key.
+   A desk whose id, key or box fails today's patterns is left out here, and its id stays in rosterIdsOf. Sorted by id, once each. */
+function rosterEntriesOf(doc) {
+  const roster = Array.isArray(doc && doc.roster) ? doc.roster : [];
+  const byId = new Map();
+  roster.forEach(x => {
+    const d = x && x.desk && typeof x.desk === "object" ? x.desk : null;
+    if (!d || !/^k-[0-9a-f]{16}$/.test(String(d.id)) || !/^[0-9a-f]{64}$/.test(String(d.key)) || !/^[0-9a-f]{64}$/.test(String(d.box))) return;
+    if (byId.has(String(d.id))) return;
+    byId.set(String(d.id), { id: String(d.id), name: rosterNameOf(x.name) || rosterNameOf(d.name), box: String(d.box), key: String(d.key) });
+  });
+  return Array.from(byId.values()).sort((p, q) => (p.id < q.id ? -1 : 1)); /* plant:roster-entries */
+}
+/* Entries read back from the desk file, with the same shape checks, limited to the ids the roster keeps. */
+function rosterEntriesChecked(list, ids) {
+  const out = new Map();
+  (Array.isArray(list) ? list : []).forEach(e => {
+    if (!e || typeof e !== "object" || Array.isArray(e) || ids.indexOf(e.id) < 0 || out.has(e.id)) return;
+    if (!/^[0-9a-f]{64}$/.test(String(e.key)) || !/^[0-9a-f]{64}$/.test(String(e.box)) || typeof e.name !== "string" || rosterNameOf(e.name) !== e.name) return;
+    out.set(e.id, { id: e.id, name: e.name, box: e.box, key: e.key });
+  });
+  return Array.from(out.values()).sort((p, q) => (p.id < q.id ? -1 : 1));
+}
+function rosterEntriesSame(x, y) {
+  return JSON.stringify(x || []) === JSON.stringify(y || []);
+}
 function deskIdsOnce(list) {
   return Array.from(new Set(list.map(String).filter(id => /^k-[0-9a-f]{16}$/.test(id)))).sort();
 }
@@ -4180,7 +4331,7 @@ function memberHeed(doc, state, seen) {
   const said = [];
   const ret = (extra) => Object.assign({ state: out, key: null, said: said, stampClear: false, changed: false,
     stop: false, needKey: false, team: "", epoch: 0, keep: false, unbar: false, pinned: false }, extra);
-  if (!teamWhole(doc)) {
+  if (!teamWhole(doc)) { /* defence in depth: the team-file reader (plant:s0b-floor-doc) already refuses a file that is not whole */
     said.push(file + " is not a team file whole under its lead's key, so nothing in it is used");
     return ret({ stop: true });
   }
@@ -5085,10 +5236,10 @@ function heedTeam() {
     changed = true;
   }
   // The roster of the epoch accepted: a file at that epoch replaces it, and one below it put back changes nothing.
-  if (r.team && Number.isInteger(r.epoch) && r.epoch >= 1 && r.epoch >= (teamEpochSeen[r.team] || 0)) {
-    const ids = rosterIdsOf(doc), had = teamRoster[r.team];
-    if (!had || had.epoch !== r.epoch || had.desks.join(",") !== ids.join(",")) {
-      teamRoster[r.team] = { epoch: r.epoch, desks: ids };
+  if (r.team && Number.isInteger(r.epoch) && r.epoch >= 1 && r.epoch >= (teamEpochSeen[r.team] || 0)) { /* defence in depth: teamFileBehind (plant:epoch-rev) already refuses an older epoch before this */
+    const ids = rosterIdsOf(doc), ents = rosterEntriesOf(doc), had = teamRoster[r.team];
+    if (!had || had.epoch !== r.epoch || had.desks.join(",") !== ids.join(",") || !rosterEntriesSame(had.entries, ents)) {
+      teamRoster[r.team] = { epoch: r.epoch, desks: ids, entries: ents };
       changed = true;
     }
     const pinned = teamPins[r.team];
@@ -6444,6 +6595,14 @@ function joinView() {
   }
   view.sealed = sealedOutside();
   view.leads = leadsView();
+  const shareHere = relayHere();
+  if (shareHere && !shareHere.joining && teamPinStands(shareHere.team) && me && deskBranch) {
+    const roster = teamRoster[shareHere.team];
+    const teammates = (roster && Array.isArray(roster.entries) ? roster.entries : [])
+      .filter(e => e && e.id && e.id !== me.id)
+      .map(e => ({ id: e.id, name: e.name || e.id }));
+    view.share = { team: shareHere.team, teammates, inbox: shareInboxSeq };
+  }
   return view;
 }
 function sendJoin(win) {
@@ -7563,7 +7722,7 @@ function relaySocket(url, headers, on) {
   ws.onerror = () => {};
   return { opens: true, send: t => { if (ws.readyState === 1) ws.send(t); }, close: () => { try { ws.close(); } catch { /* gone */ } } };
 }
-let relayChannel = null, relayAt = "", relayAtPin = "", relaySaidFor = new Set(), relayTimer = null, relayProbeTimer = null;
+let relayChannel = null, relayAt = "", relayAtPin = "", relaySaidFor = new Set(), relayTimer = null, relayProbeTimer = null, shareInboxSeq = 0;
 function relaySoon() {
   clearTimeout(relayTimer);
   relayTimer = setTimeout(() => { relayTimer = null; relayRun(); }, 0);
@@ -7685,6 +7844,7 @@ function relayRun() {
     onDoor: id => { signinDoorKept(team, mirror, id); }, /* plant:door-on */
     /* Every hello for this desk's own key carries its seat certificate (seatHello in shell/relay/channel.cjs): the call that
        wraps these options adds the seat's three and walls them by the channel's address. */
+    onAddressed: () => { shareInboxSeq++; sendJoin(theWindow); },
     onTeam: () => {
       const j = teamJoin;
       if (j && j.team === team && j.invite && j.invite.relay && (j.invite.relay.withdrawing === true || j.invite.relay.withdrawn === true)) return;
@@ -8386,7 +8546,10 @@ function readDesk() {
     if (doc && table(doc.teamRoster)) Object.keys(doc.teamRoster).forEach(t => {
       const v = doc.teamRoster[t];
       if (!SEALED_TEAM_RE.test(t) || !table(v) || !Number.isInteger(v.epoch) || v.epoch < 1 || !Array.isArray(v.desks)) return;
-      if (v.epoch > (teamRoster[t] ? teamRoster[t].epoch : 0)) teamRoster[t] = { epoch: v.epoch, desks: deskIdsOnce(v.desks) };
+      if (v.epoch > (teamRoster[t] ? teamRoster[t].epoch : 0)) {
+        const ids = deskIdsOnce(v.desks);
+        teamRoster[t] = { epoch: v.epoch, desks: ids, entries: rosterEntriesChecked(v.entries, ids) }; /* plant:roster-readback */
+      }
     });
     // A floor is taken where it is higher, by epoch and then by rev, and never lowered.
     if (doc && table(doc.teamRevSeen)) Object.keys(doc.teamRevSeen).forEach(t => {
@@ -9800,9 +9963,86 @@ ipcMain.handle("etiuda:shared-write", (e, name, text, sha, create) =>
 // "seen", "forget", "leave", "lapse-seen", "fork-seen" and "stranded-seen" name a team, "lapse-seen" with the step its notice showed, "read" and "invite" carry an invitation's text, and the others name a file; "invite"
 // adds the check code the agent typed, which only a folder invitation needs, and "leads" answers the pinned leads alone. "held" is a link waiting here,
 // "link" is the yes to that link and "link-no" lets it go. The link's text stays in this process.
+function shareActiveContext() {
+  const here = relayHere();
+  if (!here || here.joining || !teamPinStands(here.team) || !relayChannel) return null;
+  const me = branchIdentity(false);
+  if (!me || !deskBranch) return null;
+  const roster = teamRoster[here.team];
+  const entries = roster && Array.isArray(roster.entries) ? roster.entries : [];
+  return { team: here.team, me, entries };
+}
+async function shareToCard(recipientId, cardJson, note) {
+  const ctx = shareActiveContext();
+  if (!ctx) return { ok: false, reason: "not-on-team" };
+  const recipient = ctx.entries.find(e => e && e.id === String(recipientId || "") && e.id !== ctx.me.id) || null;
+  if (!recipient) return { ok: false, reason: "not-on-team" }; /* plant:share-roster */
+  let card = null;
+  try { card = JSON.parse(String(cardJson || "")); } catch { card = null; }
+  if (!card || typeof card !== "object" || Array.isArray(card) || typeof card.id !== "string" || !card.id) {
+    return { ok: false, reason: "bad-card" };
+  }
+  const noteStr = typeof note === "string" ? note.trim().slice(0, 500) : "";
+  const payloadText = noteStr ? JSON.stringify({ kind: "etiuda-card-share", card, note: noteStr }) : JSON.stringify(card);
+  let env = null;
+  try {
+    env = sealCardTo(recipient.box, ctx.team, ctx.me.id, recipient.id, payloadText, openPrivate(deskBranch.sign.priv)); /* plant:share-seal-to */
+  } catch (e) {
+    return { ok: false, reason: /64 KB/.test(String(e && e.message)) ? "too-large" : "bad-card" };
+  }
+  const r = await relayChannel.writeTo(recipient.id, JSON.stringify(env));
+  if (r && r.ok) return { ok: true, id: r.id };
+  const why = (r && r.reason) || "failed";
+  if (why === "blob-size") return { ok: false, reason: "too-large" };
+  if (why === "seat-lapsed") return { ok: false, reason: "seat-lapsed" };
+  if (why === "not-enrolled" || why === "outside-place") return { ok: false, reason: "not-on-team" };
+  if (why === "recipient-full") return { ok: false, reason: "recipient-full" };
+  return { ok: false, reason: why };
+}
+async function shareInbox() {
+  const ctx = shareActiveContext();
+  if (!ctx) return { ok: true, items: [] };
+  const byId = new Map(ctx.entries.map(e => [e.id, e]));
+  const listed = await relayChannel.listTo(id => (byId.has(id) ? byId.get(id).key : null));
+  if (!listed || !listed.ok) return { ok: false, reason: (listed && listed.reason) || "network", items: [] };
+  const boxKey = openPrivate(deskBranch.box.priv);
+  const items = [];
+  for (const item of listed.items || []) {
+    const sender = byId.get(item.writer);
+    if (!sender) continue;
+    let env = null;
+    try { env = JSON.parse(item.body); } catch { env = null; }
+    if (!env || env.from !== sender.id) continue;
+    const openedText = openCardFrom(env, ctx.team, ctx.me.id, sender.key, boxKey); /* plant:share-open-from */
+    if (!openedText) continue;
+    let parsed = null;
+    try { parsed = JSON.parse(openedText); } catch { parsed = null; }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) continue;
+    const isWrap = parsed.kind === "etiuda-card-share" && parsed.card && typeof parsed.card === "object";
+    const card = isWrap ? parsed.card : parsed;
+    const note = isWrap && typeof parsed.note === "string" ? parsed.note : "";
+    if (!card || typeof card !== "object" || Array.isArray(card) || typeof card.id !== "string" || !card.id) continue;
+    items.push({ id: item.id, from: sender.id, fromName: sender.name || sender.id, team: ctx.team, card, note });
+  }
+  return { ok: true, items };
+}
+function shareKeep(openedJson, catalogId) {
+  let opened = null;
+  try { opened = JSON.parse(String(openedJson || "")); } catch { opened = null; }
+  return keepSharedCard(opened, catalogId);
+}
+async function shareDrop(blobId) {
+  declineSharedCard(null);
+  if (!relayChannel || typeof relayChannel.dropTo !== "function") return { ok: false, reason: "not-on-team" };
+  return relayChannel.dropTo(blobId);
+}
 // "content" answers whether this desk was told for its team and the private marks, "content-said" names the team told, "private" a catalog id and "on" or "off".
 ipcMain.handle("etiuda:team-join", (e, op, file, name, check) => (!fromEngine(e) ? null
   : op === "leads" ? { leads: leadsView() }
+  : op === "share-to" ? shareToCard(file, name, check)
+  : op === "share-inbox" ? shareInbox()
+  : op === "share-keep" ? shareKeep(file, name)
+  : op === "share-drop" ? shareDrop(file)
   : op === "content" ? contentView() : op === "content-said" ? contentSaid(file) : op === "private" ? markPrivate(file, name === "on")
   : op === "ask" ? askJoin(file, name) : op === "cancel" ? cancelJoin() : op === "seen" ? leadSeen(file)
   : op === "lapse-seen" ? lapseSeen(file, name) : op === "fork-seen" ? forkDismissed(file) : op === "stranded-seen" ? strandedDismissed(file)

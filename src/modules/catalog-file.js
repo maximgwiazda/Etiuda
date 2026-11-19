@@ -1419,6 +1419,7 @@ export {
   deskBranchHolds,
   writeDeskBranch,
   scheduleDeskBranch,
+  currentCatalog,
   sharedOwnPin,
   sharedOwnWrite,
   ownWorkFiles,
