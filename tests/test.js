@@ -560,6 +560,7 @@ function runUnitTests() {
   catNowTests();
   deskMarkTests();
   libraryHeadTests();
+  personalAsideTests();
   lanePageKeyTests();
 }
 
@@ -1214,6 +1215,98 @@ function catNowTests() {
   eq("activateCatalog records the file a route names, its folder file where that is all it names, and blanks it for a route that names none",
     [wrote({ from: "Spring team.ec" }), wrote({ file: "team.ec" }), wrote({})],
     ["Spring team.ec", "team.ec", ""]);
+}
+
+/* THE PERSONAL CATALOG IS SET ASIDE WHOLE BEFORE A TEAM CATALOG TAKES ITS PLACE (board 1015). The store's functions, activateCatalog
+   and takeCatalog are sliced out of catalog-file.js and run over an in-memory store in a scope whose every other name is a no-op.
+   Whole means: the catalog's bytes, every layer key under its namespace, and the file it came from. Snapshot first, read back, and
+   only then take; a snapshot that fails, or lies, leaves the desk as it was. Each plant is lifted in a scratch copy of the source
+   and the same legs must go red there. */
+function personalAsideTests() {
+  const fileSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "catalog-file.js"), "utf8");
+  const NAMES = ["Pack", "Stats", "Days", "CatOrder", "IntentOrder", "IntentsAside", "LinksAside", "RequestsAside", "Exported", "LooseId", "Shared", "SharedOwn", "SharedFile", "EditionMarks", "Flags", "FlagEnds"];
+  const build = (src, world) => {
+    const kv = world.kv;
+    const own = { LAYER_KEYS: NAMES, E_NS: "e", pack: {}, hooks: { restartDesk() {}, flushPillState() {} },
+      carryCardLayer: () => new Set(), pinned: c => c, looseUnexported: () => false, newCatalogId: () => "loose-new", t: x => x,
+      lsGet: k => (kv.has(k) ? kv.get(k) : null),
+      lsSet: (k, v) => { if (world.failKey && k === world.failKey) return !!world.lie; kv.set(k, String(v)); return true; },
+      lsDel: k => { kv.delete(k); },
+      nsGet: n => (kv.has("e" + n) ? kv.get("e" + n) : null), nsSet: (n, v) => { kv.set("e" + n, String(v)); return true; }, nsDel: n => { kv.delete("e" + n); },
+      eLayer: () => world.ns, layerNsOf: c => (c && c.id ? "ez" + c.id + "~" : "e"),
+      lyGet: n => (kv.has(world.ns + n) ? kv.get(world.ns + n) : null), lySet: (n, v) => { kv.set(world.ns + n, String(v)); return true; }, lyDel: n => { kv.delete(world.ns + n); },
+      storedCatalog: () => { const v = kv.get("eCatalog"); return v ? JSON.parse(v) : null; },
+      catalogLoaded: () => kv.has("eCatalog"),
+      storeCatalog: c => { if (world.closed) throw new Error("the desk closed"); if (world.failStore) return false; kv.set("eCatalog", JSON.stringify(c)); return true; } };
+    const scope = new Proxy({}, {
+      has: (o, k) => typeof k === "string",
+      get: (o, k) => k === Symbol.unscopables ? undefined : k in own ? own[k] : k in globalThis ? globalThis[k] : () => undefined,
+      set: (o, k, v) => { own[k] = v; return true; }
+    });
+    const decls = ["const ASIDE_KEY=", "function looseOrigin(", "function deskMarkOf(", "function flushLayer(", "function activateCatalog(", "function takeCatalog(",
+      "function asideStore(", "function setAsidePersonal(", "function listPersonalAside(", "function restorePersonal(", "function switchToAdopted("];
+    return new Function("scope", "with(scope){\n" + decls.map(d => extractDecl(src, d)).join("\n") + "\nreturn {setAsidePersonal, listPersonalAside, restorePersonal, switchToAdopted};\n}")(scope);
+  };
+  const snap = kv => JSON.stringify(Array.from(kv.entries()).sort());
+  const TEAM = { id: "team-1", cards: [{ id: "t1" }] };
+  const PACK = "{\"overrides\":{\"c1\":{\"en\":\"mine\"}}}";
+  const loose = () => ({ kv: new Map([["ePack", PACK], ["eStats", "{\"n\":3}"], ["eLooseId", "k-loose-1"], ["eFlags", "[1]"]]), ns: "e" });
+  const onTeam = () => {
+    const mine = JSON.stringify({ id: "mine-1", cards: [{ id: "a" }, { id: "b" }], private: true });
+    return { mine, ns: "emine~", kv: new Map([["eCatalog", mine], ["eCatalogFile", "mine.ec"], ["eCatalogFileAt", "77"], ["eCatalogFrom", "mine.ec"], ["emine~Pack", "{\"favourites\":[\"a\"]}"], ["emine~Days", "{\"d\":1}"]]) };
+  };
+  /* every leg, as [label, got, want] so a plant can be read for red */
+  const run = (src) => {
+    const out = [];
+    const chk = (l, g, w) => out.push([l, JSON.stringify(g), JSON.stringify(w)]);
+    let api, w;
+    try { api = build(src, { kv: new Map(), ns: "e" }); } catch (e) { return [["the set-aside functions are in catalog-file.js", e.message, "sliced"]]; }
+    /* a loose desk */
+    w = loose(); api = build(src, w);
+    chk("loose: switching takes the team catalog", api.switchToAdopted(TEAM, { from: "team.ec" }), true);
+    chk("loose: the original is listed, loose, once", api.listPersonalAside().map(r => [r.loose, r.id]), [[true, "k-loose-1"]]);
+    chk("loose: the team catalog is the one in use", JSON.parse(w.kv.get("eCatalog")).id, "team-1");
+    w.ns = "eztteam-1~";
+    api.restorePersonal("k-loose-1");
+    chk("loose: restored, every layer key stands as it was", ["ePack", "eStats", "eLooseId", "eFlags"].map(k => w.kv.get(k)), [PACK, "{\"n\":3}", "k-loose-1", "[1]"]);
+    /* a desk on a team */
+    w = onTeam(); api = build(src, w);
+    chk("team desk: switching takes the team catalog", api.switchToAdopted(TEAM, { from: "team.ec" }), true);
+    chk("team desk: the original is listed, not loose", api.listPersonalAside().map(r => [r.loose, r.id]), [[false, "mine-1"]]);
+    chk("team desk: nothing existing was deleted, its layer stands", ["emine~Pack", "emine~Days"].map(k => w.kv.has(k)), [true, true]);
+    api.restorePersonal("mine-1");
+    chk("team desk: restored, the catalog is byte for byte whole, Private mark and all", w.kv.get("eCatalog"), w.mine);
+    chk("team desk: restored, its file and its layer as they were", [w.kv.get("eCatalogFile"), w.kv.get("eCatalogFrom"), w.kv.get("emine~Pack"), w.kv.get("emine~Days")], ["mine.ec", "mine.ec", "{\"favourites\":[\"a\"]}", "{\"d\":1}"]);
+    /* Keep both: nothing runs; listing is a read */
+    w = onTeam(); const kept = snap(w.kv); api = build(src, w);
+    chk("keep both: nothing has changed at all", [api.listPersonalAside(), snap(w.kv)], [[], kept]);
+    /* a snapshot that cannot be written stops the switch */
+    w = onTeam(); w.failKey = "eAsidePersonal"; const f1 = snap(w.kv); api = build(src, w);
+    chk("failed snapshot: the switch is refused and nothing changed", [api.switchToAdopted(TEAM, {}), snap(w.kv)], [false, f1]);
+    /* a snapshot that claims success and is not there is read back and refused */
+    w = onTeam(); w.failKey = "eAsidePersonal"; w.lie = true; const f2 = snap(w.kv); api = build(src, w);
+    chk("lying snapshot: read back, refused, nothing changed", [api.switchToAdopted(TEAM, {}), snap(w.kv)], [false, f2]);
+    /* the desk closes between the snapshot and the take */
+    w = onTeam(); w.closed = true; api = build(src, w);
+    let threw = false;
+    try { api.switchToAdopted(TEAM, {}); } catch (e) { threw = true; }
+    chk("interrupted: the original is untouched and already set aside whole", [threw, w.kv.get("eCatalog"), api.listPersonalAside().map(r => r.id), w.kv.get("emine~Pack")], [true, w.mine, ["mine-1"], "{\"favourites\":[\"a\"]}"]);
+    w.closed = false; w.kv.set("eCatalog", "{\"id\":\"other\",\"cards\":[]}"); api.restorePersonal("mine-1");
+    chk("interrupted: and it stands again exactly", [w.kv.get("eCatalog"), w.kv.get("eCatalogFile")], [w.mine, "mine.ec"]);
+    /* a take that fails leaves the catalog in use as it was */
+    w = onTeam(); w.failStore = true; api = build(src, w);
+    chk("failed take: refused, the catalog in use unchanged", [api.switchToAdopted(TEAM, {}), w.kv.get("eCatalog")], [false, w.mine]);
+    return out;
+  };
+  const real = run(fileSrc);
+  real.forEach(([l, g, w]) => { if (g === w) PASS++; else { FAIL++; console.error("  FAIL personal set-aside " + l + "\n       got  " + g + "\n       want " + w); } });
+  if (process.env.ETIUDA_PLANTS === "off") { console.log("  SKIP  lifting plant:aside-snapshot and plant:aside-stops, the set-aside legs must go red"); return; }
+  [["plant:aside-snapshot", /const aside=setAsidePersonal\(\);\s*\/\* plant:aside-snapshot \*\//, "const aside=\"\";"],
+   ["plant:aside-stops", /if\(aside===false\) return false;\s*\/\* plant:aside-stops \*\//, ""]].forEach(([name, re, to]) => {
+    if (!re.test(fileSrc)) { eq("the " + name + " marker is in catalog-file.js", false, true); return; }
+    const red = run(fileSrc.replace(re, to)).filter(([, g, w]) => g !== w).length;
+    eq("lifting " + name + " turns the set-aside legs red", red > 0, true);
+  });
 }
 
 /* THE LIBRARY'S HEADING NAMES THE FILE THE TOP BAR NAMES, never the name a stored copy still carries inside it, as
