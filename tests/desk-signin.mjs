@@ -4305,8 +4305,8 @@ CASES.settleIssued = async (s, swap) => {
   const wWire = loadWire(wst);
   const chkSlice = (() => { const a = WIRING.indexOf('ipcMain.handle("etiuda:signin-check",'); return WIRING.slice(a, WIRING.indexOf("\n});", a) + 4); })();
   let chkFn = null;
-  new Function("ipcMain", "fromEngine", "signinRenewNow", "signinView", "SIGNIN_CHECK_GAP_MS", "Date", "let signinCheckAt = 0;\n" + chkSlice)(
-    { handle: (ch, fn) => { chkFn = fn; } }, () => true, () => wWire.signinRenewNow(), () => s.signinViewOf(wst.store.held, viewFacts({ deskNow: clockNow0.desk })), 10000, Date);
+  new Function("ipcMain", "fromEngine", "signinRenewNow", "signinPressNow", "signinView", "SIGNIN_CHECK_GAP_MS", "Date", "let signinCheckAt = 0;\n" + chkSlice)(
+    { handle: (ch, fn) => { chkFn = fn; } }, () => true, () => wWire.signinRenewNow(), async renew => { if (renew) await wWire.signinRenewNow(); return true; }, () => s.signinViewOf(wst.store.held, viewFacts({ deskNow: clockNow0.desk })), 10000, Date);
   const chkView = await chkFn({});
   const clockAfterCheck = s.signinClockObserve(clockNow0, tNow, 500 + 10 * DAY_MS, wst.store.held, DESK_KEY);
   const checkOk = wst.store.held.cert === cHeldNow && wst.store.held.ended === hNow.ended && chkView.works === false
