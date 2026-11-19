@@ -561,6 +561,7 @@ function runUnitTests() {
   deskMarkTests();
   libraryHeadTests();
   personalAsideTests();
+  adoptedTests();
   lanePageKeyTests();
 }
 
@@ -1329,6 +1330,229 @@ function personalAsideTests() {
     if (!re.test(base)) { eq("the " + name + " marker is in its source", false, true); return; }
     const red = (inStorage ? run(fileSrc, stFile.replace(re, to)) : run(fileSrc.replace(re, to))).filter(([, g, w]) => g !== w).length;
     eq("lifting " + name + " turns the set-aside legs red", red > 0, true);
+  });
+}
+
+/* THE TEAM TOOK UP THIS DESK'S OWN CATALOG: TOLD ONCE, SWITCH OR KEEP BOTH, AND THE LIBRARY'S TWO GROUPS (board 1015). The page's half is
+   sliced out of catalog-offer.js, over the store's real functions sliced out of catalog-file.js, in one scope over an in-memory store
+   whose every other name is a no-op; promises there answer at once, and the bubble is driven over a page of a few elements. `original`
+   is computed here with node's own SHA-256, as Studio writes it: the hash of the id of the desk file this desk writes for a catalog.
+   Each plant is lifted in a scratch copy of the source and the same legs must go red there. */
+function adoptedTests() {
+  const crypto = require("crypto");
+  const offerSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "catalog-offer.js"), "utf8");
+  const fileSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "catalog-file.js"), "utf8");
+  const NAMES = ["Pack", "Stats", "Days", "CatOrder", "IntentOrder", "IntentsAside", "LinksAside", "RequestsAside", "Exported", "LooseId", "Shared", "SharedOwn", "SharedFile", "EditionMarks", "Flags", "FlagEnds"];
+  const sha = s => crypto.createHash("sha256").update(Buffer.from(String(s), "utf8")).digest("hex");
+  const ME = { id: "k-0123456789abcdef" }, MATE = { id: "k-fedcba9876543210" };
+  const fileIdOf = (who, id) => who.id + "-" + sha(id).slice(0, 8);
+  const sync = v => ({ then(f) { try { const r = f ? f(v) : v; return r && typeof r.then === "function" ? r : sync(r); } catch (e) { return failed(e); } }, catch() { return this; } });
+  const failed = e => ({ then() { return this; }, catch(f) { return sync(f(e)); } });
+  const htmlEsc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const build = (oSrc, fSrc, world) => {
+    const kv = world.kv;
+    const page = { shown: [], win: {} };
+    world.page = page;
+    const element = () => {
+      const e = { id: "", className: "", attrs: {}, html: "", warn: "", isConnected: false, keys: [], buttons: {},
+        setAttribute(k, v) { this.attrs[k] = v; },
+        set innerHTML(h) { this.html = h; },
+        get innerHTML() { return this.html; },
+        querySelector(sel) {
+          if (sel === ".ec-warn") return this.warn ? { text: this.warn } : null;
+          if (sel === ".tour-actions") { const self = this; return { insertAdjacentHTML: (p, h) => { self.warn = h; } }; }
+          if (sel[0] === "#" && this.html.indexOf('id="' + sel.slice(1) + '"') >= 0) {
+            if (!this.buttons[sel]) this.buttons[sel] = { onclick: null, focus() {} };
+            return this.buttons[sel];
+          }
+          return null;
+        },
+        contains(n) { return n === this; },
+        addEventListener(k, fn) { this.keys.push(fn); } };
+      return e;
+    };
+    const own = { LAYER_KEYS: NAMES, E_NS: "e", E_ASIDE_KEY: "eAsidePersonal", E_ADOPTED_KEY: "eAdoptedSeen", E_CATALOG_KEY: "eCatalogAccepted",
+      pack: {}, hooks: { restartDesk() {}, flushPillState() {} }, adoptedOpen: false, offerStanding: null,
+      carryCardLayer: () => new Set(), pinned: c => c, looseUnexported: () => false, newCatalogId: () => "loose-new",
+      t: x => x, esc: htmlEsc, uiLang: () => "en", teamLeads: () => world.leads || [], ICON_TEAM: "<i-team>", ICON_LOAD: "<i-load>",
+      catalogStamp: (e, m, r) => (r != null ? "rev " + r : ""), catalogCountsLine: (k, c) => c + " cards",
+      catalogMacroCount: () => 0, catalogIntentCount: () => 0, catalogEdited: () => !!world.edited,
+      lsGet: k => (kv.has(k) ? kv.get(k) : null),
+      lsSet: (k, v) => { if (world.failKey && k === world.failKey) return false; kv.set(k, String(v)); return true; },
+      lsDel: k => { kv.delete(k); },
+      nsGet: n => (kv.has("e" + n) ? kv.get("e" + n) : null), nsSet: (n, v) => { kv.set("e" + n, String(v)); return true; }, nsDel: n => { kv.delete("e" + n); },
+      eLayer: () => world.ns, layerNsOf: c => (c && c.id ? "ez" + c.id + "~" : "e"),
+      lyGet: n => (kv.has(world.ns + n) ? kv.get(world.ns + n) : null), lySet: (n, v) => { kv.set(world.ns + n, String(v)); return true; }, lyDel: n => { kv.delete(world.ns + n); },
+      storedCatalog: () => { const v = kv.get("eCatalog"); return v ? JSON.parse(v) : null; },
+      catalogLoaded: () => kv.has("eCatalog"),
+      storeCatalog: c => { if (world.failStore) return false; kv.set("eCatalog", JSON.stringify(c)); return true; },
+      eReadCatalogFile: name => sync(world.read && world.read[name] ? { text: world.read[name] } : null),
+      parseCatalogFile: text => JSON.parse(text), whenTrusted: () => sync(world.trust || "valid"), V2_SIG_VALID: "valid",
+      eCatalogSignature: c => "sig:" + c.id,
+      askPutBack: (title, go) => { world.asked = { title, go }; },
+      toast: s => { (world.toasts = world.toasts || []).push(s); }, toastRefusal: s => { (world.refused = world.refused || []).push(s); },
+      ejectCatalog: () => { world.ejected = (world.ejected || 0) + 1; kv.delete("eCatalog"); world.ns = "e"; },
+      paintCatalogList: () => {}, cutLeaves: () => {}, placeBubble: () => {}, innerWidth: 1000,
+      dismissNode: el => { el.isConnected = false; },
+      addEventListener: (k, fn) => { page.win[k] = fn; }, removeEventListener: k => { delete page.win[k]; },
+      tourDueAtBoot: () => false, afterTour: f => f(),
+      document: { createElement: element, body: { appendChild: el => { el.isConnected = true; page.shown.push(el); } },
+        getElementById: id => page.shown.find(e => e.id === id && e.isConnected) || null },
+      Promise: { resolve: v => (v && typeof v.then === "function" ? v : sync(v)), all: a => sync(a.map(x => { let o; x.then(v => { o = v; }); return o; })) } };
+    const scope = new Proxy({}, {
+      has: (o, k) => typeof k === "string",
+      get: (o, k) => k === Symbol.unscopables ? undefined : k in own ? own[k] : k in globalThis ? globalThis[k] : () => undefined,
+      set: (o, k, v) => { own[k] = v; return true; }
+    });
+    const fromFile = ["const ASIDE_KEY=", "function looseOrigin(", "function deskMarkOf(", "function flushLayer(", "function activateCatalog(", "function takeCatalog(",
+      "function asideStore(", "function setAsidePersonal(", "function listPersonalAside(", "function restorePersonal(", "function switchToAdopted(",
+      "const SHA_K=", "function sha256Hex(", "function branchHex(", "function branchFileId(", "const LOOSE_FIELDS=", "function looseMark(",
+      "function editsUnexported(", "function catalogNameOfFile("];
+    const fromOffer = ["const ADOPT_REFUSED=", "function adoptedMatches(", "function adoptedRow(", "function adoptedSeen(", "function adoptedMark(",
+      "function adoptedArrived(", "function adoptedDue(", "function adoptedLead(", "function adoptedEdition(", "function adoptedDate(", "function adoptedFill(",
+      "function adoptedBubbleHtml(", "function adoptedSwitch(", "function adoptedBubble(", "function asideTitle(", "function ecAdoptLineHtml(",
+      "function adoptedNoteHtml(", "function adoptedMadeHtml(", "function ecActHtml(", "function ecAsideRowHtml(", "function adoptedListParts(",
+      "function ecGroupHtml(", "function ecGroupedRows(", "function putBackInUse("];
+    return new Function("scope", "with(scope){\n" + fromFile.map(d => extractDecl(fSrc, d)).join("\n") + "\n" + fromOffer.map(d => extractDecl(oSrc, d)).join("\n")
+      + "\nreturn {adoptedMatches, adoptedDue, adoptedSeen, adoptedBubble, adoptedListParts, ecGroupedRows, putBackInUse, listPersonalAside, storedCatalog, setAsidePersonal};\n}")(scope);
+  };
+  const snap = kv => JSON.stringify(Array.from(kv.entries()).filter(([k]) => k !== "eAdoptedSeen").sort());
+  const MINE = JSON.stringify({ id: "mine-1", cards: [{ id: "a" }, { id: "b" }] });
+  const TEAM = JSON.stringify({ id: "team-1", cards: [{ id: "t1" }] });
+  const ROW = { name: "Gift orders.ec", id: "team-1", rev: 1, edition: "", mtime: 5, leadSigned: true };
+  const author = () => ({ kv: new Map([["eCatalog", MINE], ["eCatalogFile", "mine.ec"], ["eCatalogFileAt", "7"], ["eCatalogFrom", "Gift orders.ec"], ["emine~Pack", "{\"favourites\":[\"a\"]}"]]),
+    ns: "emine~", read: { "Gift orders.ec": TEAM }, leads: [{ lead: "Jan Kowalski" }] });
+  const listFor = (who, original) => [{ catalog: "team-1", desk: who.id, original: original || sha(fileIdOf(ME, "mine-1")) }];
+  /* one listing as the page reads it: the matches, and the bubble for the one due */
+  const listing = (api, w, me, list, files) => {
+    const st = api.storedCatalog(), lo = w.kv.get("eLooseId") || "";
+    const ms = api.adoptedMatches(list, me, st, st ? "" : lo, api.listPersonalAside());
+    const due = api.adoptedDue(ms, files, api.adoptedSeen());
+    if (due) api.adoptedBubble(due, files.find(f => f.id === due.catalog));
+    return { ms, due: !!due, shown: w.page.shown.filter(e => e.isConnected).length };
+  };
+  const bubble = w => w.page.shown.find(e => e.isConnected) || null;
+  const parts = (api, w, me, list) => {
+    const st = api.storedCatalog(), lo = w.kv.get("eLooseId") || "";
+    return api.adoptedListParts(list, me, st, st ? "" : lo, api.listPersonalAside(), [ROW], "Gift orders");
+  };
+  const run = oSrc => {
+    const out = [];
+    const chk = (l, g, want) => out.push([l, JSON.stringify(g), JSON.stringify(want)]);
+    let api, w;
+    try { w = author(); api = build(oSrc, fileSrc, w); } catch (e) { return [["the adopted-catalog functions are in catalog-offer.js", e.message, "sliced"]]; }
+    try { legs(); } catch (e) { out.push(["the adopted legs ran through", JSON.stringify(e.message), JSON.stringify("ran")]); }
+    return out;
+    function legs() {
+    /* told once, with the copywriter's words */
+    const first = listing(api, w, ME, listFor(ME), [ROW]);
+    const b = bubble(w);
+    chk("the author's desk is told once, at the arrival: one bubble", [first.due, first.shown], [true, 1]);
+    chk("the bubble's heading, line and buttons are the copywriter's", !!b && [
+      b.html.indexOf("The team has taken up this catalog") >= 0,
+      b.html.indexOf("Jan Kowalski made <b data-i18n-skip>Gift orders</b> a team catalog, edition 1, so everyone on the team now works from it.") >= 0,
+      b.html.indexOf("Your own <b data-i18n-skip>Gift orders</b> stays on this desk, under personal catalogs, whichever you choose.") >= 0,
+      /id="ecNo">Keep both</.test(b.html), /id="ecYes">Switch to the team&#39;s<|id="ecYes">Switch to the team's</.test(b.html)], [true, true, true, true, true]);
+    const second = listing(api, w, ME, listFor(ME), [ROW]);
+    chk("a second listing while it stands opens no second bubble", second.shown, 1);
+    /* Keep both: nothing but the seen mark */
+    const before = snap(w.kv);
+    b.buttons["#ecNo"].onclick();
+    chk("Keep both closes it and changes nothing but the seen mark", [b.isConnected, snap(w.kv) === before, JSON.parse(w.kv.get("eAdoptedSeen"))["team-1"].done], [false, true, true]);
+    chk("after Keep both a further listing does not tell it again", listing(api, w, ME, listFor(ME), [ROW]).due, false);
+    const again = build(oSrc, fileSrc, w);
+    chk("after Keep both a restart does not tell it again", listing(again, w, ME, listFor(ME), [ROW]).due, false);
+    /* Keep both leaves the note on the original in use, and the team row's line */
+    const pk = parts(again, w, ME, listFor(ME));
+    chk("after Keep both the original in use carries the note, and the team's row the Made from line", [
+      /The team now publishes this catalog as &quot;Gift orders&quot;, edition 1, since \d+ \w+\./.test(pk.adoptFor("mine-1", true, false)),
+      pk.adoptFor("team-1", false, true).indexOf("Made from your own Gift orders by Jan Kowalski") >= 0, pk.grouped], [true, true, true]);
+    /* Switch */
+    w = author(); api = build(oSrc, fileSrc, w);
+    listing(api, w, ME, listFor(ME), [ROW]);
+    const s = bubble(w);
+    s.buttons["#ecYes"].onclick();
+    chk("Switch puts the team catalog in use and closes the bubble", [JSON.parse(w.kv.get("eCatalog")).id, s.isConnected, w.kv.get("eCatalogAccepted")], ["team-1", false, "sig:team-1"]);
+    chk("Switch sets the original aside, listed", api.listPersonalAside().map(r => r.id), ["mine-1"]);
+    const ps = parts(api, w, ME, listFor(ME));
+    chk("after Switch the original is a Personal row with its note and Put back in use", [ps.asideRows.length, /The team now publishes this catalog as &quot;Gift orders&quot;/.test(ps.asideRows[0] || ""),
+      /data-ec-restore="0"[^>]*title="Put back in use"/.test(ps.asideRows[0] || ""), ps.grouped], [1, true, true, true]);
+    chk("after Switch a further listing does not tell it again", listing(api, w, ME, listFor(ME), [ROW]).due, false);
+    /* a refused Switch: nothing changes and the bubble stays with a line */
+    w = author(); w.trust = "invalid"; api = build(oSrc, fileSrc, w);
+    listing(api, w, ME, listFor(ME), [ROW]);
+    const r0 = snap(w.kv), rb = bubble(w);
+    rb.buttons["#ecYes"].onclick();
+    chk("a refused Switch changes nothing, keeps the bubble, and says so in a line", [snap(w.kv) === r0, rb.isConnected, /Everything stays as it was/.test(rb.warn),
+      !!(JSON.parse(w.kv.get("eAdoptedSeen") || "{}")["team-1"] || {}).done], [true, true, true, false]);
+    /* condition (c): a teammate, and the author's id with an original that is not one of its files */
+    w = author(); api = build(oSrc, fileSrc, w);
+    const mate = listing(api, w, MATE, listFor(ME), [ROW]);
+    const pm = parts(api, w, MATE, listFor(ME));
+    chk("(c) a teammate's desk sees no bubble, no note and no Made from line", [mate.due, mate.shown, pm.adoptFor("team-1", false, true), pm.adoptFor("mine-1", true, false), pm.grouped], [false, 0, "", "", false]);
+    w = author(); api = build(oSrc, fileSrc, w);
+    const wrongHash = listFor(ME, sha(fileIdOf(ME, "someone-else")));
+    const odd = listing(api, w, ME, wrongHash, [ROW]);
+    const po = parts(api, w, ME, wrongHash);
+    chk("(c) the author's id with an original not of its own files: no bubble, no note, no Made from line", [odd.due, odd.shown, po.adoptFor("team-1", false, true), po.adoptFor("mine-1", true, false), po.grouped], [false, 0, "", "", false]);
+    /* a team catalog not yet in the listing, or not signed by the lead, is not told */
+    w = author(); api = build(oSrc, fileSrc, w);
+    chk("a team catalog not yet in the listing, or not the lead's, is not told", [listing(api, w, ME, listFor(ME), []).due,
+      listing(api, w, ME, listFor(ME), [Object.assign({}, ROW, { leadSigned: false })]).due], [false, false]);
+    /* the loose desk is matched by its loose id's desk file */
+    w = { kv: new Map([["ePack", "{\"custom\":[1]}"], ["eLooseId", "k-loose-1"]]), ns: "e", read: { "Gift orders.ec": TEAM }, leads: [] };
+    api = build(oSrc, fileSrc, w);
+    const lz = listing(api, w, ME, listFor(ME, sha(fileIdOf(ME, "k-loose-1"))), [ROW]);
+    chk("a loose desk is matched by its own file's id, and told with the nameless line", [lz.due, /Gift orders<\/b> is now a team catalog, edition 1, so everyone on the team works from it\./.test((bubble(w) || {}).html || "")], [true, true]);
+    /* the Library's groups */
+    const top = (html, team) => ({ html, team });
+    chk("the Library groups Team catalogs and Personal catalogs, set-aside rows under Personal, desks alone at the foot", api.ecGroupedRows(
+      [top("T1", true), top("P1", false), top("T2", true)], [["d1"], [], []], ["alone"], ["A1"], true),
+      ["<div class=\"ec-group\">Team catalogs</div>", "T1", "d1", "T2", "<div class=\"ec-group\">Personal catalogs</div>", "P1", "A1", "alone"]);
+    chk("with nothing set aside and nothing adopted the list is as it always was", api.ecGroupedRows([top("T1", true), top("P1", false)], [["d1"], []], ["alone"], [], false),
+      ["T1", "d1", "P1", "alone"]);
+    /* class B: Put back in use over edits not yet exported */
+    const switched = () => {
+      const x = author(); const a = build(oSrc, fileSrc, x);
+      listing(a, x, ME, listFor(ME), [ROW]);
+      bubble(x).buttons["#ecYes"].onclick();
+      x.ns = "ezteam-1~";
+      x.kv.set("ezteam-1~Pack", "{\"overrides\":{\"t1\":\"mine\"}}");
+      x.edited = true;
+      return [x, a];
+    };
+    [w, api] = switched();
+    const c0 = snap(w.kv);
+    api.putBackInUse(api.listPersonalAside().find(r => r.id === "mine-1"), "Gift orders");
+    chk("class B: Put back in use over edits not yet exported asks first, with the title", !!w.asked && w.asked.title, "Gift orders");
+    chk("class B: Cancel changes nothing", snap(w.kv) === c0, true);
+    w.asked.go();
+    chk("class B: on yes the original is in use again, and said", [JSON.parse(w.kv.get("eCatalog")).id, w.kv.get("eCatalogFile"), (w.toasts || []).pop()], ["mine-1", "mine.ec", "Your own Gift orders is in use again."]);
+    chk("class B: the edits were set aside first, as their own row", api.listPersonalAside().map(r => r.id).sort(), ["mine-1", "team-1"]);
+    const pb = parts(api, w, ME, listFor(ME));
+    chk("class B: the set-aside edits are a Personal row, and the original in use is not listed twice", pb.asideShown.map(r => r.id), ["team-1"]);
+    w.edited = false;
+    api.putBackInUse(api.listPersonalAside().find(r => r.id === "team-1"), "Gift orders");
+    chk("class B: the set-aside edits come back whole", [JSON.parse(w.kv.get("eCatalog")).id, w.kv.get("ezteam-1~Pack")], ["team-1", "{\"overrides\":{\"t1\":\"mine\"}}"]);
+    /* no edits: no question */
+    [w, api] = switched();
+    w.edited = false; w.asked = null;
+    api.putBackInUse(api.listPersonalAside().find(r => r.id === "mine-1"), "Gift orders");
+    chk("Put back in use with nothing unexported asks nothing and puts it back", [w.asked, JSON.parse(w.kv.get("eCatalog")).id], [null, "mine-1"]);
+    }
+  };
+  /* A leg that throws is a leg that failed, named by what it threw. */
+  const runAll = oSrc => { try { return run(oSrc); } catch (e) { return [["the adopted legs ran through", e.message, "ran"]]; } };
+  const real = runAll(offerSrc);
+  real.forEach(([l, g, want]) => { if (g === want) PASS++; else { FAIL++; console.error("  FAIL adopted catalog " + l + "\n       got  " + g + "\n       want " + want); } });
+  if (process.env.ETIUDA_PLANTS === "off") { console.log("  SKIP  lifting plant:adopted-original, plant:adopted-seen and plant:putback-aside, the adopted legs must go red"); return; }
+  [["plant:adopted-original", /const o=own\.find\(x=>hashOf\(x\.fileId\)===a\.original\); \/\* plant:adopted-original \*\//, "const o=own[0];"],
+   ["plant:adopted-seen", /return !\(s && s\.done\); \/\* plant:adopted-seen \*\//, "return true;"],
+   ["plant:putback-aside", /if\(setAsidePersonal\(\)===false\)\{ toastRefusal\(t\(ADOPT_REFUSED\)\); return; \} \/\* plant:putback-aside \*\//, ""]].forEach(([name, re, to]) => {
+    if (!re.test(offerSrc)) { eq("the " + name + " marker is in its source", false, true); return; }
+    const reds = runAll(offerSrc.replace(re, to)).filter(([, g, want]) => g !== want).map(([l]) => l);
+    console.log("  " + name + " lifted, red: " + reds.join("; "));
+    eq("lifting " + name + " turns the adopted legs red", reds.length > 0, true);
   });
 }
 
