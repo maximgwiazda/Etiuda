@@ -140,8 +140,7 @@ async function boot(pageUrl, { lang = "en", theme = "light", onTeam = true, inbo
       onTeamJoin: (fn) => { window.__joinCb = fn; },
       teamJoin: (op, a, b, c) => {
         window.__calls.push({ op, a, b, c });
-        if (op === "state") return Promise.resolve({ sealed: null, join: null, leads: [], share: window.__shareState });
-        if (op === "held") return Promise.resolve({ sealed: null, join: null, leads: [] });
+        if (op === "state" || op === "held") return Promise.resolve({ sealed: null, join: null, leads: [], share: window.__shareState });
         if (op === "share-to") {
           if (window.__shareMode === "too-large") return Promise.resolve({ ok: false, reason: "too-large" });
           if (window.__shareMode === "seat-lapsed") return Promise.resolve({ ok: false, reason: "seat-lapsed" });
@@ -240,6 +239,7 @@ try {
       "1013u2 (" + lang + "/" + theme + ") Share button after Edit and menu row appear only on own/changed cards", res);
 
     /* 3. Picker bubble, search filter, whole-send refusals keeping bubble & typed note, 2r per-person refusals, and toast on send */
+    await p.hover('.card[data-id="u:own-1"]');
     await p.click('.card[data-id="u:own-1"] .cacts button[data-act="share"]');
     await p.waitForSelector(".e-share-bub", { timeout: 5000 });
     const openInfo = await p.evaluate(() => {
@@ -298,6 +298,7 @@ try {
     await sleep(60);
 
     /* Clean send -> closes bubble + shows toast */
+    await p.hover('.card[data-id="u:own-1"]');
     await p.click('.card[data-id="u:own-1"] .cacts button[data-act="share"]');
     await p.waitForSelector(".e-share-bub", { timeout: 5000 });
     await p.evaluate(() => { window.__shareMode = "ok"; });
@@ -446,7 +447,7 @@ try {
       if (!m) return null;
       return copyFiles(path.join(lab, "plant-" + tag), RAW.replace(re, rep));
     };
-    const u1 = plant("verdict-first", /if \(!res \|\| res\.ok !== true \|\| !res\.card\) \{[\s\S]*?return;\s*\}/, "if (false) {}");
+    const u1 = plant("verdict-first", /const res = await shareKeepCard\(opened, catalogId\);/, "const res = { ok: true, card: Object.assign({}, cur.card, { from: { desk: cur.from, card: cur.card.id } }) };");
     let red1 = null;
     if (u1) {
       const inbox = [{
