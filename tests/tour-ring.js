@@ -10,6 +10,7 @@
  */
 "use strict";
 const E = require("./engine.js");
+const { seatPage } = require("./seat-page.js");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const AIR = 4;
@@ -32,6 +33,7 @@ function main() {
     await page.setViewport({ width: 1120, height: 760, deviceScaleFactor: 1 });
     const errs = [];
     page.on("pageerror", e => errs.push(String(e && e.message || e)));
+    await seatPage(page);
     await page.goto(run.url, { waitUntil: "load", timeout: 90000 });
     await require("./launch-wait.js").waitLaunchGone(page, { who: "tests/tour-ring.js" });
     await reachNewCard(page);

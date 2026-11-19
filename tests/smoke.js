@@ -23,6 +23,7 @@ const fs = require("fs");
 const os = require("os");
 const zlib = require("zlib");
 const E = require("./engine.js");
+const { seatPage } = require("./seat-page.js");
 const MOTION = require("./motion.js");
 const TW = require("./tour-walk.js");
 const BADGE = require("./badge-room.js");
@@ -294,6 +295,7 @@ const BOOT_SKIP = /skip|not now|close|pomi/;
  *  conditions that timed out, empty on a clean boot. */
 async function bootAndDismiss(pg, url, label) {
   const late = [];
+  await seatPage(pg);
   await pg.goto(url, { waitUntil: "load", timeout: 90000 });
   await require("./launch-wait.js").waitLaunchGone(pg, { who: "tests/smoke.js bootAndDismiss " + label });
   /* The page is up when it has drawn something: the cards, the offer to load the sibling
@@ -2137,8 +2139,9 @@ const t0 = Date.now();
   const trim = await p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const read = async (folder) => {
+      const wasHost = window.E_HOST;
       window.E_HOST = { catalogFolder: folder, catalogFile: "", openCatalogFolder: () => true,
-                        catalogFiles: () => [] };
+                        catalogFiles: () => [], signinState: wasHost && wasHost.signinState };
       closeScreenTab("library"); await wait(350);
       document.querySelector('[data-act="manage"]').click(); await wait(800);
       /* The path lives on the Catalog and data page. Open that page before measuring it. */
@@ -2157,7 +2160,7 @@ const t0 = Date.now();
     const long = await read("C:\\Users\\x\\Documents\\Company catalogues and archives 2026 and later, kept for every desk of the support team"
       + " in each of its offices\\Etiuda live desk for the whole team and every colleague who answers by telephone, by chat and by mail");
     closeScreenTab("library"); await wait(300);
-    delete window.E_HOST;
+    window.E_HOST = wasHost;
     return { short, long };
   });
   check(!!trim.long && trim.long.over > 0 && trim.long.dir === "rtl" && trim.long.ell !== "ellipsis" && trim.long.fade
@@ -3590,6 +3593,7 @@ const t0 = Date.now();
     const missing = [];
     q.on("requestfailed", r => missing.push(r.url().split("/").pop()));
     step("loading the public copy");
+    await seatPage(q);
     await q.goto("file:///" + path.join(pub, "etiuda.html").replace(/\\/g, "/"), { waitUntil: "load", timeout: 90000 });
     await require("./launch-wait.js").waitLaunchGone(q, { who: "tests/smoke.js public first run" });
     await sleep(2400);
@@ -3744,7 +3748,9 @@ const t0 = Date.now();
     const offerDir = await q.evaluate(async () => {
       const dir = ["C:", "Users", "Invented Person", "Documents", "Etiuda"].join(String.fromCharCode(92));
       let opened = 0;
-      window.E_HOST = { catalogFolder: dir, catalogIn: dir, catalogFile: "invented.ec", openCatalogFolder() { opened++; return true; } };
+      const wasHost = window.E_HOST;
+      window.E_HOST = { catalogFolder: dir, catalogIn: dir, catalogFile: "invented.ec", openCatalogFolder() { opened++; return true; },
+        signinState: wasHost && wasHost.signinState };
       try {
         const c = JSON.parse(JSON.stringify(storedCatalog())); c.id = "invented-other";
         eOfferCatalog(c, "invented.ec", dir, true, true);
@@ -3758,7 +3764,7 @@ const t0 = Date.now();
           lines: new Set([...r.getClientRects()].map(x => Math.round(x.top))).size, cursor: getComputedStyle(f).cursor, opened };
         w.remove();
         return got;
-      } finally { delete window.E_HOST; }
+      } finally { if (wasHost) window.E_HOST = wasHost; else delete window.E_HOST; }
     });
     check(offerDir.found && offerDir.short && offerDir.full && offerDir.lines === 1 && offerDir.cursor === "default" && offerDir.opened === 1,
       "quiet-12 the catalog offer names its folder short on one line, the full path on hover, and opens it under the arrow ("
@@ -3792,6 +3798,7 @@ const t0 = Date.now();
     q.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
     if (done) await q.evaluateOnNewDocument(() => { try { localStorage.setItem("eTourDone_v3", "1"); localStorage.setItem("eTourInvite_v3", "1"); localStorage.setItem("eFirstSigninSeen", "1"); } catch (x) {} });
     if (pre) await pre(q);
+    await seatPage(q);
     await q.goto(huntUrl(dir), { waitUntil: "load", timeout: 90000 });
     await require("./launch-wait.js").waitLaunchGone(q, { who: "tests/smoke.js huntPage" });
     return q;
@@ -3998,6 +4005,7 @@ const t0 = Date.now();
           Object.defineProperty(Navigator.prototype, "languages", { get: () => l, configurable: true });
           Object.defineProperty(Navigator.prototype, "language", { get: () => l[0], configurable: true });
         }, list);
+        await seatPage(s);
         await s.goto(RUN.url, { waitUntil: "load", timeout: 60000 });
         await require("./launch-wait.js").waitLaunchGone(s, { who: "tests/smoke.js bySystem" });
         await sleep(1800);
@@ -4041,6 +4049,7 @@ const t0 = Date.now();
     const o = await orderCtx.newPage();
     await hookInstall(o);
     o.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
+    await seatPage(o);
     await o.goto(RUN.url, { waitUntil: "load", timeout: 90000 });
     await require("./launch-wait.js").waitLaunchGone(o, { who: "tests/smoke.js comment language" });
     const base = {

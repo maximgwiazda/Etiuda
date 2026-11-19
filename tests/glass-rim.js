@@ -55,6 +55,7 @@
 "use strict";
 const puppeteer = require("puppeteer-core");
 const E = require("./engine.js");
+const { seatPage } = require("./seat-page.js");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const PRIO = E.belowNormal();
@@ -85,6 +86,7 @@ const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ")
 const errs = [];
 
 async function bootAndDismiss(pg, url) {
+  await seatPage(pg);
   await pg.goto(url, { waitUntil: "load", timeout: 90000 });
   await require("./launch-wait.js").waitLaunchGone(pg, { who: "tests/glass-rim.js bootAndDismiss" });
   const press = (rx, sc) => pg.evaluate((r, s) => {

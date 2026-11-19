@@ -36,6 +36,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
+const { seatPage } = require("./seat-page.js");
 const puppeteer = require("puppeteer-core");
 
 let fails = 0, checks = 0;
@@ -120,6 +121,7 @@ try {
         localStorage.setItem("eAgent", "Invented Agent"); localStorage.setItem("eNameAsked", "1"); localStorage.setItem("eTheme", t);
       } catch (x) {}
     }, th);
+    await seatPage(r);
     await r.goto(url, { waitUntil: "load", timeout: 60000 });
     await require("./launch-wait.js").waitLaunchGone(r, { who: "tests/theme-fade.mjs palette" });
     await settled(r);
@@ -155,6 +157,7 @@ try {
       const c = document.documentElement.classList; if (c.contains("theme-swap") || c.contains("theme-fade")) window.__cut++;
     }).observe(document.documentElement, { attributes: true, attributeFilter: ["class"] }));
   });
+  await seatPage(q);
   await q.goto(url, { waitUntil: "load", timeout: 60000 });
   await require("./launch-wait.js").waitLaunchGone(q, { who: "tests/theme-fade.mjs tf1" });
   await settled(q);

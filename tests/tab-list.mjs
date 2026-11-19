@@ -19,6 +19,7 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
+const { seatPage } = require("./seat-page.js");
 const puppeteer = require("puppeteer-core");
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "..");
@@ -80,6 +81,7 @@ async function openDesk(browser, { width = 1280, height = 800, theme = "light", 
       }
     } catch (_) {}
   }, theme, uiLang, seedTabs);
+  await seatPage(page);
   await page.goto(lab.url, { waitUntil: "load" });
   await page.waitForFunction(() => document.querySelectorAll("#tabsBar .tab").length >= 1, { timeout: 15000 });
   await sleep(160);

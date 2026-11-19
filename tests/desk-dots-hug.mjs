@@ -48,6 +48,7 @@ import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
+const { seatPage } = require("./seat-page.js");
 const puppeteer = require("puppeteer-core");
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
@@ -93,6 +94,7 @@ async function boot(browser, pageUrl, theme, lang, withCatalog, vp) {
       localStorage.setItem("eAgent", "Bench Agent");
     } catch (e) {}
   }, theme, lang);
+  await seatPage(p);
   await p.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
   if (withCatalog) {
     await p.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });

@@ -42,6 +42,7 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const E = require("./engine.js");
+const { seatPage } = require("./seat-page.js");
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let failed = 0, asserted = 0, notRun = 0;
@@ -365,6 +366,7 @@ async function boot(lang) {
       onAiRanking: fn => window.__ai.listeners.push(fn),
     };
   }, BUILTIN, lang || "en");
+  await seatPage(page);
   await page.goto(url, { waitUntil: "load", timeout: 60000 });
   await page.waitForFunction(() => typeof openSettings === "function" && !!document.getElementById("orgMark")
     && !document.querySelector(".e-launch-veil"), { timeout: 30000 });

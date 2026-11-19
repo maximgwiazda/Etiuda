@@ -22,6 +22,7 @@ import { createRequire } from "node:module";
 import { quietOrRefuse } from "./quiet-lane.mjs";
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
+const { seatPage } = require("./seat-page.js");
 const puppeteer = require("puppeteer-core");
 
 if (!process.env.ETIUDA_FIXTURES) {
@@ -67,6 +68,7 @@ try {
     } catch (e) {}
   });
 
+  await seatPage(page);
   await page.goto(RUN.url, { waitUntil: "load", timeout: 60000 });
   await require("./launch-wait.js").waitLaunchGone(page, { who: "tests/theme-roll.mjs" });
 

@@ -18,6 +18,7 @@ import puppeteer from "puppeteer-core";
 
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
+const { seatedView } = require("./seat-page.js");
 E.ensureOutputs();
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -312,13 +313,14 @@ async function launchDeskPage(browser, cfg) {
   const page = await ctx.newPage();
   await page.setViewport({ width: cfg.width || 1280, height: cfg.height || 860, deviceScaleFactor: 1 });
   await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
-  await page.evaluateOnNewDocument(c => {
+  const seat = seatedView({ offered: ["microsoft"], signedIn: "microsoft" });
+  await page.evaluateOnNewDocument((c, seat) => {
     window.__deskStore = Object.assign({
       eTourDone_v3: "1",
       eTourInvite_v3: "1",
       eFirstSigninSeen: "1",
     }, c.desk || {});
-    window.__signinState = Object.assign({ offered: ["microsoft"], signedIn: "microsoft", code: "7K3MQ9TV2XRBHN4W", seat: "held", reached: true }, c.signin || {});
+    window.__signinState = Object.assign({}, seat, c.signin || {});
     window.E_HOST = {
       shown: true,
       lang: c.lang || "en",
@@ -328,7 +330,7 @@ async function launchDeskPage(browser, cfg) {
       onSignin: () => () => {},
       onDeskSynced: fn => { window.__onDeskSynced = fn; },
     };
-  }, cfg);
+  }, cfg, seat);
   await page.goto(cfg.url || ENGINE_URL, { waitUntil: "load", timeout: 30000 });
   await page.waitForFunction(() => !!document.getElementById("settingsBtn"), { timeout: 15000 });
   return { ctx, page };

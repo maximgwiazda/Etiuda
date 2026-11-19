@@ -14,6 +14,7 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
+const { seatPage } = require("./seat-page.js");
 const puppeteer = require("puppeteer-core");
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
@@ -76,6 +77,7 @@ async function openDesk(browser, url, theme) {
       localStorage.setItem("eTourDone", "1");
     } catch (_) {}
   }, theme);
+  await seatPage(page);
   await page.goto(url, { waitUntil: "load" });
   await page.waitForSelector("#list .card", { timeout: 10000 }).catch(() => null);
   await sleep(120);

@@ -249,6 +249,7 @@ async function track(p, kind, ms, act) {
 
 /* A compact boot for the standalone run: through the offer and the tour to a page with cards. */
 async function boot(p, url) {
+  await require("./seat-page.js").seatPage(p);
   await p.goto(url, { waitUntil: "load", timeout: 90000 });
   await require("./launch-wait.js").waitLaunchGone(p, { who: "tests/motion.js boot" });
   await p.waitForFunction(() => document.querySelectorAll(".card").length > 0 || !!document.querySelector("#eCatalogOffer")

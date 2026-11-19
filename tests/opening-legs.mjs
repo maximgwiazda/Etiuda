@@ -24,6 +24,7 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
+const { seatPage } = require("./seat-page.js");
 E.ensureOutputs(); /* the outputs are this source's first (tests/engine.js ensureOutputs) */
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -88,6 +89,7 @@ async function run() {
       const ctl = await browser.newPage();
       await ctl.setViewport({ width: W, height: 768 });
       await ctl.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
+      await seatPage(ctl);
       await ctl.goto("file://" + ENGINE_HTML);
       await waitLaunchGone(ctl);
       const control = await ctl.evaluate(() => {
@@ -99,6 +101,7 @@ async function run() {
       const page = await browser.newPage();
       await page.setViewport({ width: W, height: 768 });
       // Navigate to engine
+      await seatPage(page);
       await page.goto("file://" + ENGINE_HTML);
 
       // Check early frame while opening is playing (e.g. after 400ms)
@@ -169,6 +172,7 @@ async function run() {
     {
       const page = await browser.newPage();
       await page.setViewport({ width: 1024, height: 768 });
+      await seatPage(page);
       await page.goto("file://" + ENGINE_HTML);
 
       // Check the opening landing state at 2.90s (last frame of flight)
@@ -219,6 +223,7 @@ async function run() {
     {
       // Test key skip
       const pageKey = await browser.newPage();
+      await seatPage(pageKey);
       await pageKey.goto("file://" + ENGINE_HTML);
       await sleep(500);
       await pageKey.keyboard.press("Escape");
@@ -235,6 +240,7 @@ async function run() {
 
       // Test click skip
       const pageClick = await browser.newPage();
+      await seatPage(pageClick);
       await pageClick.goto("file://" + ENGINE_HTML);
       await sleep(500);
       await pageClick.mouse.click(500, 400);
@@ -249,6 +255,7 @@ async function run() {
 
       // Test wheel skip
       const pageWheel = await browser.newPage();
+      await seatPage(pageWheel);
       await pageWheel.goto("file://" + ENGINE_HTML);
       await sleep(500);
       await pageWheel.mouse.wheel({ deltaY: 100 });
@@ -271,6 +278,7 @@ async function run() {
     {
       const page = await browser.newPage();
       await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
+      await seatPage(page);
       await page.goto("file://" + ENGINE_HTML);
 
       // Under reduced motion: no opening, window shows as soon as ready (~200ms)
@@ -297,6 +305,7 @@ async function run() {
      * ------------------------------------------------------------------------- */
     {
       const page = await browser.newPage();
+      await seatPage(page);
       await page.goto("file://" + ENGINE_HTML);
       await sleep(3500); // Wait for opening to finish
 
@@ -397,6 +406,7 @@ async function run() {
           return origStroke.apply(this, args);
         };
       });
+      await seatPage(page);
       await page.goto("file://" + ENGINE_HTML);
       await sleep(400);
       const res = await page.evaluate(() => {
@@ -419,6 +429,7 @@ async function run() {
       await page.evaluateOnNewDocument(() => {
         window.__stubNoFramesAndNeverReady = true;
       });
+      await seatPage(page);
       await page.goto("file://" + ENGINE_HTML);
       await sleep(3800);
       const beforeFailsafe = await page.evaluate(() => {
@@ -450,6 +461,7 @@ async function run() {
       await page.evaluateOnNewDocument(() => {
         window.__stubNoFramesAndNeverReady = true;
       });
+      await seatPage(page);
       await page.goto("file://" + ENGINE_HTML);
       await sleep(3800);
       const beforeFailsafe = await page.evaluate(() => {
@@ -481,7 +493,8 @@ async function run() {
       for (const dpr of [1, 1.5]) {
         const page = await browser.newPage();
         await page.setViewport({ width: 1024, height: 768, deviceScaleFactor: dpr });
-        await page.goto("file://" + ENGINE_HTML);
+        await seatPage(page);
+      await page.goto("file://" + ENGINE_HTML);
         const gone = await waitLaunchGone(page);
         await sleep(400);
         const m = await page.evaluate(() => {
@@ -525,6 +538,7 @@ async function run() {
           openCatalogFolder: () => Promise.resolve(true)
         };
       });
+      await seatPage(page);
       await page.goto("file://" + ENGINE_HTML);
       const t0 = Date.now();
       let ready = false;

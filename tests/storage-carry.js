@@ -34,6 +34,7 @@
 "use strict";
 const puppeteer = require("puppeteer-core");
 const E = require("./engine.js");
+const { seatPage } = require("./seat-page.js");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 /* A 1.16.7 desk, as `node tests/storage-keys.js` inventories it: preferences bare, this
@@ -149,6 +150,7 @@ const t0 = Date.now();
   console.log("CHROME  " + RUN.url);
   console.log("  engine/etiuda.html sha256 " + RUN.engineSha + (RUN.engineSha === RUN.copySha ? "" : "  COPY DIFFERS: " + RUN.copySha));
 
+  await seatPage(p);
   await p.goto(RUN.url, { waitUntil: "load", timeout: 90000 });
   await require("./launch-wait.js").waitLaunchGone(p, { who: "tests/storage-carry.js" });
   await sleep(2000);
@@ -245,6 +247,7 @@ const t0 = Date.now();
         }).observe(el, { attributes: true, attributeFilter: ["class"], childList: true, characterData: true, subtree: true });
       });
     }, Object.assign({ [CATALOG_KEY]: JSON.stringify(catalog) }, seed));
+    await seatPage(pg);
     await pg.goto(RUN.url, { waitUntil: "load", timeout: 90000 });
     await require("./launch-wait.js").waitLaunchGone(pg, { who: "tests/storage-carry.js wake" });
     await sleep(2400);

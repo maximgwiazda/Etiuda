@@ -17,6 +17,7 @@ import { OPTIONS } from "../tools/bundler-probe/build.mjs";
 
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
+const { seatPage } = require("./seat-page.js");
 const puppeteer = require("puppeteer-core");
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
@@ -67,6 +68,7 @@ async function launchWithProfile(userDataDir) {
 async function openDesk(browser, url) {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 860, deviceScaleFactor: 1 });
+  await seatPage(page);
   await page.goto(url, { waitUntil: "load", timeout: 60000 });
   await page.waitForFunction(() => !document.querySelector(".e-launch-veil"), { timeout: 30000 }).catch(() => {});
   return page;

@@ -34,6 +34,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
+const { seatPage } = require("./seat-page.js");
 const puppeteer = require("puppeteer-core");
 
 let fails = 0, checks = 0;
@@ -194,6 +195,7 @@ async function page() {
   let navs = 0;
   q.on("framenavigated", f => { if (f === q.mainFrame()) navs++; });
   q.navs = () => navs;
+  await seatPage(q);
   await q.goto(url, { waitUntil: "load", timeout: 60000 });
   await require("./launch-wait.js").waitLaunchGone(q, { who: "tests/swap.mjs page" });
   await q.evaluate(() => {
