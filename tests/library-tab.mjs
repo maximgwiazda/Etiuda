@@ -108,6 +108,15 @@ class El {
   _drop(n) { const i = this.childNodes.indexOf(n); if (i > -1) this.childNodes.splice(i, 1); n.parentNode = null; }
   removeChild(n) { this._drop(n); return n; }
   remove() { if (this.parentNode) this.parentNode._drop(this); }
+  insertAdjacentHTML(where, frag) {
+    const holder = new El("div", this.ownerDocument);
+    holder.innerHTML = frag;
+    const kids = holder.childNodes.slice();
+    const p = this.parentNode;
+    if (!p) { kids.forEach(c => this.appendChild(c)); return; }
+    const ref = where === "afterend" ? this.nextSibling : this;
+    kids.forEach(c => p.insertBefore(c, ref));
+  }
   get firstChild() { return this.childNodes[0] || null; }
   get nextSibling() {
     if (!this.parentNode) return null;
@@ -823,6 +832,7 @@ await checkAsync("L17 the Library has no footer, and Catalog and data holds Load
   } finally {
     delete window.E_HOST.pickCatalogFile;
     delete window.E_HOST.teamJoin;
+    doc.querySelectorAll('[data-join="hide"]').forEach(b => b.click());
     doc.querySelectorAll("[data-join]").forEach(n => { const b = n.closest(".bub"); if (b) b.remove(); });
   }
 });

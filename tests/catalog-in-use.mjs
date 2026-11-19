@@ -1211,6 +1211,7 @@ try {
         get id() { return attrs.id || ""; },
         set id(v) { attrs.id = String(v); el.setAttribute("id", v); },
         setAttribute(k, v) { attrs[k] = String(v); if (k === "class") cls = String(v); },
+        removeAttribute(k) { delete attrs[k]; if (k === "class") cls = ""; },
         getAttribute(k) { return Object.prototype.hasOwnProperty.call(attrs, k) ? attrs[k] : null; },
         hasAttribute(k) { return Object.prototype.hasOwnProperty.call(attrs, k); },
         appendChild(n) { if (n) { n.parentNode = el; n.isConnected = el.isConnected; ch.push(n); } return n; },
@@ -1233,7 +1234,7 @@ try {
             ch.push(b);
           }
         },
-        get textContent() { return txt || html.replace(/<[^>]*>/g, ""); },
+        get textContent() { return txt || html.replace(/<[^>]*>/g, "").replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&"); },
         set textContent(v) { txt = String(v || ""); },
         querySelector(s) { return el.querySelectorAll(s)[0] || null; },
         querySelectorAll(s) {
@@ -1264,6 +1265,8 @@ try {
       querySelectorAll: () => [],
       body: { classList: classList(), isConnected: true, appendChild(n) { n.isConnected = true; made1014.push(n); return n; } },
     };
+    const savedMotion1014 = mem.eMotionOff;
+    mem.eMotionOff = "1";
     let toldResp = { team: "t-told1", told: false, private: [], listed: [] };
     const toldSaid = [];
     globalThis.window.E_HOST.teamJoin = (op, a) => {
@@ -1299,7 +1302,8 @@ try {
         && bub1Btns.length === 1 && bub1Btns[0].textContent === "Understood"
         && !bubAfterDismiss && toldSaid.indexOf("t-told1") >= 0
         && !!bubFallback && toldSaid.indexOf("t-told2") >= 0 && !bubWhenSaidTrue,
-      "1014c one-time told notice opens as a blue bubble once, falls back from told to said, and dismissing sends content-said");
+      "1014c one-time told notice opens as a blue bubble once, falls back from told to said, and dismissing sends content-said: "
+      + JSON.stringify({ bub1: !!bub1, btns: bub1Btns.map(b => b.textContent), bubAfterDismiss: !!bubAfterDismiss, toldSaid, bubFallback: !!bubFallback, bubWhenSaidTrue: !!bubWhenSaidTrue }));
 
     if (PLANTS_OFF) skip("1014d lifting plant:join-confirm-said drops content-said on join confirmation");
     else {
@@ -1336,6 +1340,7 @@ try {
       check(turned, "1014d lifting plant:join-confirm-said stops sending content-said at join");
     }
 
+    if (savedMotion1014 === undefined) delete mem.eMotionOff; else mem.eMotionOff = savedMotion1014;
     globalThis.document = savedDoc1014;
     globalThis.window.E_HOST.teamJoin = savedTJ;
 
