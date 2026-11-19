@@ -801,12 +801,20 @@ function closeSigninPanel(back){
 /* The view changed: the button, the open panel, and Settings where it is open. The panel opens by itself only when a sign-in's
    answer comes back, never at start. */
 function signinChanged(v, answered){
+  const wasWorking=signinHasView && deskWorks();
   signinV=signinRead(v);
   signinHasView=true;
   paintSigninButton();
   if(firstSigninOpen || firstSigninPending){
     if(!deskWorks()){ if(firstSigninOpen) paintFirstSignin(); signinTell(); return; } /* plant:door-close-works */
     closeFirstSignin(); signinTell(); return;
+  }
+  if(wasWorking && !deskWorks()){
+    try{ eDeskFlush(); }catch(e){} /* plant:stop-flush */
+    try{ const h=eHost(); if(h && typeof h.closePicker==="function") h.closePicker(); }catch(e){}
+    if(signinOpen) closeSigninPanel(false);
+    openFirstSignin(); /* plant:stop-raise-door */
+    signinTell(); return;
   }
   if(deskWorks() && firstSigninWaits.length) tellFirstSigninClosed();
   if(answered && signinShown(signinV) && !signinV.busy) signinOpen=true;

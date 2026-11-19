@@ -11667,6 +11667,7 @@ function signinWorksNow() {
   return signinWorksOf(signinState().held, signinOffered(), c.key, c.desk);
 }
 function tellSignin() {
+  if (!signinWorksNow()) hidePicker(false); /* plant:stop-hide-picker */
   const win = theWindow;
   if (win && !win.isDestroyed()) win.webContents.send("etiuda:signin", signinView());
 }

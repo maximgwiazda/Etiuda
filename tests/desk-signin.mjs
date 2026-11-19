@@ -4883,7 +4883,7 @@ CASES.stopInstant = async (s, swap) => {
     };
     const stoppedAgainView = Object.assign({}, stoppedView, { said: "unreached" });
     let cur = seatedView;
-    const replyField = { tagName: "TEXTAREA", id: "replyDraft", value: "Half-written reply to customer" };
+    const replyField = { tagName: "TEXTAREA", id: "replyDraft", value: "Half-written reply to customer", selectionStart: 0, selectionEnd: 0, focus() {}, setSelectionRange() {}, dispatchEvent() {} };
     let fsHidden = true;
     const fsEl = {
       id: "firstSignin",
