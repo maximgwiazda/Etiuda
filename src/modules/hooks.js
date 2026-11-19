@@ -27,6 +27,7 @@ const SLOTS = [
   "render",
   "closeSettingsMenu",
   "syncSettingsMenu",
+  "paintCatPrivate",
   "tourMenuState",
   "endTour",
   "startTour",

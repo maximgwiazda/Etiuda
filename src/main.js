@@ -262,6 +262,7 @@ function boot(){
     tourActive: tour.tourActive,
     closeSettingsMenu: headerMenus.closeSettingsMenu,
     syncSettingsMenu: headerMenus.syncSettingsMenu,
+    paintCatPrivate: catalogOffer.paintCatPrivate,
     tourMenuState: tour.tourMenuState,
     render: render.render,
     rebuildCards: rebuild.rebuildCards,
