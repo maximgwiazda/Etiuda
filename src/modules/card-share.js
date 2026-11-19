@@ -422,6 +422,7 @@ function openInboxBubble(){
 function isBusyTypingOrCopied(){
   const a=typeof document!=="undefined" ? document.activeElement : null;
   if(a && (a.tagName==="INPUT" || a.tagName==="TEXTAREA" || a.tagName==="SELECT" || a.isContentEditable)) return true;
+  if(typeof document!=="undefined" && document.querySelector("#ecYes, .e-offer, .e-launch-veil, .modal:not([hidden])")) return true;
   return Date.now()-lastCopyAt < 2000;
 }
 
@@ -430,7 +431,7 @@ function scheduleInboxOpen(){
   const first=inboxItems[0];
   if(!first || inboxBubOpen || closeShareOut || deferredIds.has(first.id) || seenInboxIds.has(first.id)) return;
   if(isBusyTypingOrCopied()){
-    inboxWaitTimer=setTimeout(scheduleInboxOpen, 1000);
+    inboxWaitTimer=setTimeout(scheduleInboxOpen, 300);
     return;
   }
   openInboxBubble();
