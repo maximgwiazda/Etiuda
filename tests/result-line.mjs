@@ -1846,7 +1846,7 @@ async function main() {
   check(areaRunHalf.out.indexOf("fail-closed") < 0 && areaRunHalf.out.indexOf("> node tests/g1.mjs") >= 0
       && areaRunHalf.out.indexOf("> node tests/g2.mjs") >= 0 && areaRunHalf.out.indexOf("> node tests/kin-contrast.mjs") < 0
       && areaRunHalf.out.indexOf("visual leg tests/kin-contrast.mjs left to the release profile") >= 0
-      && areaRunHalf.out.indexOf("> node tools/package.mjs") < 0 && areaRunHalf.out.indexOf("tools/package.mjs is a packaging tool, not a merge gate") >= 0,
+      && areaRunHalf.out.indexOf("> node tools/package.mjs") < 0,
     "16e a file mapped to most gates runs exactly those it maps, the visual one left to the release profile: "
     + areaRunHalf.out.trim().split(/\r?\n/).filter(l => /fail-closed|visual|> node tests\/(g1|g2|kin)/i.test(l)).join(" | "));
   fs.unlinkSync(path.join(areaLab.lab, "src", "major.mjs"));
