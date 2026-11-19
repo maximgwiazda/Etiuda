@@ -2402,6 +2402,8 @@ try {
 
   const CO = await import(PLAIN("catalog-offer.js"));
   const TJ = await import(PLAIN("team-join.js"));
+  /* The desk gate: a listing is read only once the page has read a working desk, and the shell was seated at D8, so the page reads its view now. */
+  (await import(PLAIN("signin.js"))).signinNow();
   const d7LeadPair = crypto.generateKeyPairSync("ed25519");
   const d7PubHex = d7LeadPair.publicKey.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
   const d7KeyId = "lead-key-1";
