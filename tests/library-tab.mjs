@@ -24,8 +24,10 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL, fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 
 const SELF = fileURLToPath(import.meta.url);
+const { seatedView } = createRequire(import.meta.url)("./seat-page.js");
 const ROOT = path.resolve(path.dirname(SELF), "..");
 const argv = process.argv.slice(2);
 const childAt = argv.indexOf("--child");
@@ -382,7 +384,8 @@ Dom.grabDom();
 /* The host keeps one saved copy, so the Library offers Earlier versions; it reads nothing else. */
 const SAVED = [{ path: "C:/lab/invented.ec", sha: "aa11", name: "invented.ec", place: "other", dir: "C:/lab",
   first: 1767225600000, rev: 3, cards: 2, macros: 2, intents: 1, cats: 1, put: false, current: true }];
-window.E_HOST = { historyList: () => SAVED, historyRead: () => null, historyPut: () => ({ ok: false }), catalogFolder: "C:/lab/catalogs" };
+const SEATED = seatedView(); /* the desk gate: a desk without a seat does not work, so this host holds a seat */
+window.E_HOST = { historyList: () => SAVED, historyRead: () => null, historyPut: () => ({ ok: false }), catalogFolder: "C:/lab/catalogs", signinState: () => SEATED };
 
 const $ = s => doc.querySelector(s);
 const host = () => $("#screenHost");
