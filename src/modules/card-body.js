@@ -15,6 +15,7 @@ import { railActive } from "./rail-panel.js";
 import { t } from "./ui-lang.js";
 import { entrySel, lang, intentIdxs, editionView } from "./app-state.js";
 import { flagButtonHtml, flagMarkHtml } from "./card-flag-desk.js";
+import { shareButtonHtml, shareFromBadgeHtml } from "./card-share.js";
 import { rewordButtonHtml, rewordChipHtml, rewordAnswersHtml } from "./card-reword.js";
 
 /* The card body, extracted so a language flip can rebuild one card at a time - the
@@ -47,6 +48,7 @@ function cardBodyHtml(m,i,ctx){
        the catalog shipped, even though its words do not. So does a card of your own. */
     if(m._custom || m._overridden || movedCardIds().has(m.id))
       cardH+='<span class="cbadge ed" title="'+esc(t("Changed or added by you, not what the catalog shipped"))+'">'+esc(t("mod"))+'</span>';
+    cardH+=shareFromBadgeHtml(m);
     // What the loaded edition brought, worn until the card is next copied (edition-marks.js).
     const edMark=editionMarkOf(m.id);
     if(edMark) cardH+='<span class="cbadge edn" title="'+esc(edMark.k==="new" ? editionSaid(edMark,t("New in rev {R}"),t("New in edition {E}"))
@@ -64,6 +66,7 @@ function cardBodyHtml(m,i,ctx){
     cardH+='<span class="cacts">'+rewordButtonHtml()
       +(_note ? '<button type="button" data-act="note" title="'+esc(t("Internal note"))+'" aria-label="'+esc(t("Internal note"))+'" aria-expanded="false">'+_svg("ic",_NOTE)+'</button>' : '')
       +'<button type="button" data-act="edit" title="'+esc(t("Edit this card"))+'" aria-label="'+esc(t("Edit this card"))+'">'+ICON_EDIT+'</button>'
+      +shareButtonHtml(m)
       +flagButtonHtml(String(m.id||""))
       +'<button type="button" class="'+(m._hidden?"":"danger")+'" data-act="hide" title="'+esc(hideTip)+'" aria-label="'+esc(hideTip)+'">'+(m._hidden?ICON_EYE_SHUT:ICON_EYE_OPEN)+'</button>'
       +'<button type="button" class="star-btn'+(fav?" on":"")+'" data-act="fav" title="'+esc(favTip)+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(fav?"true":"false")+'">'+(fav?ICON_STAR_ON:ICON_STAR_OFF)+'</button>'

@@ -9,6 +9,7 @@ import { isFavourite, ePackEpoch } from "./pack.js";
 import { cardFillKey } from "./rail-list.js";
 import { editionMarkSig } from "./edition-marks.js";
 import { flagSig } from "./card-flag-desk.js";
+import { shareSig } from "./card-share.js";
 import { t, uiLang } from "./ui-lang.js";
 import { list, cardTpl } from "./dom.js";
 import { cards, lang, intentIdxs, entrySel } from "./app-state.js";
@@ -80,7 +81,7 @@ function rebuildCardInPlace(id,near){
   const fresh=parseCardHtml(b.cardH);
   if(!fresh) return;
   fresh.__sig=ePackEpoch+"|"+renderKey+"|"+cardFillKey(m)
-    +"|"+(entrySel&&entrySel.id===m.id?entrySel.vi:-1)+"|"+editionMarkSig(m.id)+"|"+flagSig(String(m.id||""))+"|"+rewordSig(m.id);
+    +"|"+(entrySel&&entrySel.id===m.id?entrySel.vi:-1)+"|"+editionMarkSig(m.id)+"|"+flagSig(String(m.id||""))+"|"+rewordSig(m.id)+"|"+shareSig(m);
   const ord=el.getAttribute("data-ord");
   if(ord!=null) fresh.setAttribute("data-ord",ord);
   deckUnobserve(el);

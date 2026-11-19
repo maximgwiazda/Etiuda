@@ -46,7 +46,7 @@ const CARD_FLAGS=["firstOnly","allIntents","intentTop"];
    modified are named so they are never carried: an export re-makes them. So is name, which the
    format no longer has and no file of this build may give back. */
 const V2_CARD_NAMED=["id","shelf","title","body","note","bodyShape","k","firstOnly","allIntents","intentTop",
-  "paxVoc","paxOwn","address","lockLang","requests","retired","next","commits","changedAt"];
+  "paxVoc","paxOwn","address","lockLang","requests","retired","next","commits","changedAt","from"];
 const V2_HEAD_NAMED=["format","kind","id","rev","date","langs","commentLang","tags","cards","role","facts",
   "greet","stop","sample","evaluation","modified","hash","sig","notes","grew","desk","name","variables",
   "flags","answered"]; /* plant:flag-named */
@@ -688,6 +688,7 @@ function catalogFromV2(data){
     if(v2ChangedAt(c.changedAt)) m.changedAt=c.changedAt;
     // The entries whole, so a key a later build adds to one survives; a 2.0 reader acts on `to` alone.
     if(Array.isArray(c.next)&&c.next.length) m.next=v2Copy(c.next);
+    if(c.from&&typeof c.from==="object"&&!Array.isArray(c.from)) m.from=v2Copy(c.from);
     const more=v2Extra(c,V2_CARD_NAMED); if(more) m.ext=more;
     return m;
   });
@@ -810,6 +811,7 @@ function catalogToV2(c,opts){
     if(m.retired) card.retired=true;
     if(m.commits) card.commits=true;
     if(v2ChangedAt(m.changedAt)) card.changedAt=m.changedAt;
+    if(m.from&&typeof m.from==="object"&&!Array.isArray(m.from)) card.from=v2Copy(m.from);
     v2Restore(card,m.ext,V2_CARD_NAMED);
     return card;
   });

@@ -416,6 +416,15 @@ function joinTook(v,changed){
     return joinNow;
   }
   if(s.onRelay===true) joinNow.onRelay=true;
+  if(s.share && typeof s.share==="object" && s.share.team){
+    joinNow.share={
+      team:String(s.share.team),
+      inbox:Number(s.share.inbox)||0,
+      teammates:Array.isArray(s.share.teammates)
+        ? s.share.teammates.filter(x=>x&&x.id).map(x=>({id:String(x.id), name:String(x.name||x.id)}))
+        : [],
+    };
+  }
   const hadAskWhy=askWhy;
   if(s.askRefused || s.refused==="no-identity" || s.refused==="folder-not-answering" || s.refused==="folder-not-writable"){
     askWhy=s.askRefused || s.refused;
@@ -829,4 +838,28 @@ function pickMovedFolder(team,then){
   });
 }
 
-export { lapseNote, shareRefusedNotes, relayElsewhereNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, teamPolicySaid, relayDesk, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, openJoinPaste, joinDoorButton, teamCanJoin, inviteHeld, noteCatalogCopy };
+function teamShareState(){
+  return (joinNow && joinNow.share) ? joinNow.share : null;
+}
+function shareToTeammate(recipientId, cardJson, note){
+  if(!eHasJoin()) return Promise.resolve({ok:false, reason:"not-on-team"});
+  try{ return Promise.resolve(eHost().teamJoin("share-to", String(recipientId||""), String(cardJson||""), String(note||""))).catch(()=>({ok:false, reason:"failed"})); }
+  catch(e){ return Promise.resolve({ok:false, reason:"failed"}); }
+}
+function shareInboxList(){
+  if(!eHasJoin()) return Promise.resolve({ok:true, items:[]});
+  try{ return Promise.resolve(eHost().teamJoin("share-inbox")).catch(()=>({ok:false, items:[]})); }
+  catch(e){ return Promise.resolve({ok:false, items:[]}); }
+}
+function shareKeepCard(openedJson, catalogId){
+  if(!eHasJoin()) return Promise.resolve({ok:false, reason:"not-on-team"});
+  try{ return Promise.resolve(eHost().teamJoin("share-keep", String(openedJson||""), String(catalogId||""))).catch(()=>({ok:false, reason:"failed"})); }
+  catch(e){ return Promise.resolve({ok:false, reason:"failed"}); }
+}
+function shareDropItem(blobId){
+  if(!eHasJoin()) return Promise.resolve({ok:false});
+  try{ return Promise.resolve(eHost().teamJoin("share-drop", String(blobId||""))).catch(()=>({ok:false})); }
+  catch(e){ return Promise.resolve({ok:false}); }
+}
+
+export { lapseNote, shareRefusedNotes, relayElsewhereNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, teamPolicySaid, relayDesk, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, openJoinPaste, joinDoorButton, teamCanJoin, inviteHeld, noteCatalogCopy, teamShareState, shareToTeammate, shareInboxList, shareKeepCard, shareDropItem };

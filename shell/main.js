@@ -3356,8 +3356,23 @@ function keepSharedCard(opened, catalogId) {
   const id = me.id + "-" + crypto.createHash("sha256").update(String(catalogId || "")).digest("hex").slice(0, 8);
   const held = ownFilesWithId(path.join(sharedFolderForWrite(), "desks", me.id), id).filter(e => e.doc && branchGenuine(e.doc))
     .sort((a, b) => (+b.doc.rev || 0) - (+a.doc.rev || 0))[0] || null;
-  if (!held) return no("card: this desk holds no catalog of its own for that one, so there is nowhere to keep the card"); /* plant:keep-unheld */
-  const doc = JSON.parse(JSON.stringify(held.doc));
+  let doc = held ? JSON.parse(JSON.stringify(held.doc)) : null;
+  if (!doc) {
+    const edition = catalogDocIn(loadedText || (typeof catalogJson === "string" ? catalogJson : ""));
+    if (edition && edition.kind === "etiuda-catalog" && String(edition.id || "") === String(catalogId || "")) {
+      let pin = "";
+      try { pin = signedSha(edition); } catch { pin = ""; }
+      doc = { format: 2, kind: "etiuda-catalog", id: id, rev: 1, langs: edition.langs, tags: edition.tags, cards: edition.cards,
+        desk: { id: me.id, key: me.key, box: me.box } };
+      if (PIN_RE.test(pin)) doc.grew = { id: edition.id, rev: +edition.rev || 0, sha: pin };
+      if (edition.grew && typeof edition.grew === "object" && (edition.grew.root || edition.grew.id)) {
+        doc.grew = doc.grew || {};
+        doc.grew.root = String(edition.grew.root || edition.grew.id);
+      }
+      if (edition.private !== undefined) doc.private = edition.private;
+    }
+  }
+  if (!doc) return no("card: this desk holds no catalog of its own for that one, so there is nowhere to keep the card"); /* plant:keep-unheld */
   if (!Array.isArray(doc.cards)) return no("card: that catalog's file has no list of cards");
   const gate = branchGate(doc);
   if (gate.none) return no("card: that catalog is private on this desk, so a shared card is not kept in it"); /* plant:keep-private */
@@ -6597,6 +6612,14 @@ function joinView() {
   }
   view.sealed = sealedOutside();
   view.leads = leadsView();
+  const shareHere = relayHere();
+  if (shareHere && !shareHere.joining && teamPinStands(shareHere.team) && me && deskBranch) {
+    const roster = teamRoster[shareHere.team];
+    const teammates = (roster && Array.isArray(roster.entries) ? roster.entries : [])
+      .filter(e => e && e.id && e.id !== me.id)
+      .map(e => ({ id: e.id, name: e.name || e.id }));
+    view.share = { team: shareHere.team, teammates, inbox: shareInboxSeq };
+  }
   return view;
 }
 function sendJoin(win) {
@@ -7716,7 +7739,7 @@ function relaySocket(url, headers, on) {
   ws.onerror = () => {};
   return { opens: true, send: t => { if (ws.readyState === 1) ws.send(t); }, close: () => { try { ws.close(); } catch { /* gone */ } } };
 }
-let relayChannel = null, relayAt = "", relayAtPin = "", relaySaidFor = new Set(), relayTimer = null, relayProbeTimer = null;
+let relayChannel = null, relayAt = "", relayAtPin = "", relaySaidFor = new Set(), relayTimer = null, relayProbeTimer = null, shareInboxSeq = 0;
 function relaySoon() {
   clearTimeout(relayTimer);
   relayTimer = setTimeout(() => { relayTimer = null; relayRun(); }, 0);
@@ -7838,6 +7861,7 @@ function relayRun() {
     onDoor: id => { signinDoorKept(team, mirror, id); }, /* plant:door-on */
     /* Every hello for this desk's own key carries its seat certificate (seatHello in shell/relay/channel.cjs): the call that
        wraps these options adds the seat's three and walls them by the channel's address. */
+    onAddressed: () => { shareInboxSeq++; sendJoin(theWindow); },
     onTeam: () => {
       const j = teamJoin;
       if (j && j.team === team && j.invite && j.invite.relay && (j.invite.relay.withdrawing === true || j.invite.relay.withdrawn === true)) return;
@@ -9933,8 +9957,85 @@ ipcMain.handle("etiuda:shared-write", (e, name, text, sha, create) =>
 // adds the check code the agent typed, which only a folder invitation needs, and "leads" answers the pinned leads alone. "held" is a link waiting here,
 // "link" is the yes to that link and "link-no" lets it go. The link's text stays in this process.
 // "content" answers the lead's switch and the private marks, "content-said" names the team and the switch's `at` shown, "private" a catalog id and "on" or "off".
+function shareActiveContext() {
+  const here = relayHere();
+  if (!here || here.joining || !teamPinStands(here.team) || !relayChannel) return null;
+  const me = branchIdentity(false);
+  if (!me || !deskBranch) return null;
+  const roster = teamRoster[here.team];
+  const entries = roster && Array.isArray(roster.entries) ? roster.entries : [];
+  return { team: here.team, me, entries };
+}
+async function shareToCard(recipientId, cardJson, note) {
+  const ctx = shareActiveContext();
+  if (!ctx) return { ok: false, reason: "not-on-team" };
+  const recipient = ctx.entries.find(e => e && e.id === String(recipientId || "") && e.id !== ctx.me.id) || null;
+  if (!recipient) return { ok: false, reason: "not-on-team" }; /* plant:share-roster */
+  let card = null;
+  try { card = JSON.parse(String(cardJson || "")); } catch { card = null; }
+  if (!card || typeof card !== "object" || Array.isArray(card) || typeof card.id !== "string" || !card.id) {
+    return { ok: false, reason: "bad-card" };
+  }
+  const noteStr = typeof note === "string" ? note.trim().slice(0, 500) : "";
+  const payloadText = noteStr ? JSON.stringify({ kind: "etiuda-card-share", card, note: noteStr }) : JSON.stringify(card);
+  let env = null;
+  try {
+    env = sealCardTo(recipient.box, ctx.team, ctx.me.id, recipient.id, payloadText, openPrivate(deskBranch.sign.priv)); /* plant:share-seal-to */
+  } catch (e) {
+    return { ok: false, reason: /64 KB/.test(String(e && e.message)) ? "too-large" : "bad-card" };
+  }
+  const r = await relayChannel.writeTo(recipient.id, JSON.stringify(env));
+  if (r && r.ok) return { ok: true, id: r.id };
+  const why = (r && r.reason) || "failed";
+  if (why === "blob-size") return { ok: false, reason: "too-large" };
+  if (why === "seat-lapsed") return { ok: false, reason: "seat-lapsed" };
+  if (why === "not-enrolled" || why === "outside-place") return { ok: false, reason: "not-on-team" };
+  if (why === "recipient-full") return { ok: false, reason: "recipient-full" };
+  return { ok: false, reason: why };
+}
+async function shareInbox() {
+  const ctx = shareActiveContext();
+  if (!ctx) return { ok: true, items: [] };
+  const byId = new Map(ctx.entries.map(e => [e.id, e]));
+  const listed = await relayChannel.listTo(id => (byId.has(id) ? byId.get(id).key : null));
+  if (!listed || !listed.ok) return { ok: false, reason: (listed && listed.reason) || "network", items: [] };
+  const boxKey = openPrivate(deskBranch.box.priv);
+  const items = [];
+  for (const item of listed.items || []) {
+    const sender = byId.get(item.writer);
+    if (!sender) continue;
+    let env = null;
+    try { env = JSON.parse(item.body); } catch { env = null; }
+    if (!env || env.from !== sender.id) continue;
+    const openedText = openCardFrom(env, ctx.team, ctx.me.id, sender.key, boxKey); /* plant:share-open-from */
+    if (!openedText) continue;
+    let parsed = null;
+    try { parsed = JSON.parse(openedText); } catch { parsed = null; }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) continue;
+    const isWrap = parsed.kind === "etiuda-card-share" && parsed.card && typeof parsed.card === "object";
+    const card = isWrap ? parsed.card : parsed;
+    const note = isWrap && typeof parsed.note === "string" ? parsed.note : "";
+    if (!card || typeof card !== "object" || Array.isArray(card) || typeof card.id !== "string" || !card.id) continue;
+    items.push({ id: item.id, from: sender.id, fromName: sender.name || sender.id, team: ctx.team, card, note });
+  }
+  return { ok: true, items };
+}
+function shareKeep(openedJson, catalogId) {
+  let opened = null;
+  try { opened = JSON.parse(String(openedJson || "")); } catch { opened = null; }
+  return keepSharedCard(opened, catalogId);
+}
+async function shareDrop(blobId) {
+  declineSharedCard(null);
+  if (!relayChannel || typeof relayChannel.dropTo !== "function") return { ok: false, reason: "not-on-team" };
+  return relayChannel.dropTo(blobId);
+}
 ipcMain.handle("etiuda:team-join", (e, op, file, name, check) => (!fromEngine(e) ? null
   : op === "leads" ? { leads: leadsView() }
+  : op === "share-to" ? shareToCard(file, name, check)
+  : op === "share-inbox" ? shareInbox()
+  : op === "share-keep" ? shareKeep(file, name)
+  : op === "share-drop" ? shareDrop(file)
   : op === "content" ? contentView() : op === "content-said" ? contentSaid(file, name) : op === "private" ? markPrivate(file, name === "on")
   : op === "ask" ? askJoin(file, name) : op === "cancel" ? cancelJoin() : op === "seen" ? leadSeen(file)
   : op === "lapse-seen" ? lapseSeen(file, name) : op === "fork-seen" ? forkDismissed(file) : op === "stranded-seen" ? strandedDismissed(file)

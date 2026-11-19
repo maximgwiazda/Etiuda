@@ -43,6 +43,7 @@ function cardToExportPlain(m){
   if(m.commits) o.commits=1;
   if(Array.isArray(m.next)&&m.next.length) o.next=plainCopy(m.next);
   if(v2ChangedAt(m.changedAt)) o.changedAt=m.changedAt;
+  if(m.from&&typeof m.from==="object"&&!Array.isArray(m.from)) o.from=plainCopy(m.from);
   // Fields this build does not name, carried whole: see V2_CARD_NAMED in catalog-v2.js.
   if(m.ext&&typeof m.ext==="object"&&Object.keys(m.ext).length) o.ext=plainCopy(m.ext);
   return o;
@@ -132,6 +133,7 @@ function parseMacrosData(data){
     if(truthyFlag(rawM.retired)) entry.retired=1;
     if(truthyFlag(rawM.commits)) entry.commits=1;
     if(v2ChangedAt(rawM.changedAt)) entry.changedAt=rawM.changedAt;
+    if(rawM.from&&typeof rawM.from==="object"&&!Array.isArray(rawM.from)) entry.from=plainCopy(rawM.from);
     if(Array.isArray(rawM.next)){
       const next=rawM.next.filter(e=>e&&typeof e==="object"&&!Array.isArray(e)&&String(e.to==null?"":e.to).trim());
       if(next.length) entry.next=plainCopy(next);

@@ -24,6 +24,7 @@ import { isFavourite, pack } from "./pack.js";
 import { intentPickedLine } from "./intent-text.js";
 import { screenOn } from "./screen-tabs.js";
 import { toggleFavourite } from "./favourites.js";
+import { shareOfferedNow, cardIsShareable, sharePressed } from "./card-share.js";
 
 let ctxEl=null, ctxBack=null;
 
@@ -115,6 +116,7 @@ function replyRows(id, target, o){
   const note=btn("note"), edit=btn("edit"), fav=btn("fav"), hide=btn("hide");
   rows.push("-");
   rows.push({ label:label(edit, t("Edit this card")), act:pressOr(edit, null, ()=>hooks.openCardEditor(id)), key:"F2" });
+  if(shareOfferedNow() && cardIsShareable(m)) rows.push({ label:t("Share with…"), act:()=>sharePressed(id, o.anchor || anchor) });
   rows.push({ label:label(fav, t(isFavourite(id) ? "Remove from Favourites" : "Add to Favourites")), act:pressOr(fav, null, ()=>toggleFavourite(id)) });
   if(note && o.note!==false) rows.push({ label:t("Show the note"), act:()=>press(note) });
   rows.push({ label:t(m._hidden ? "Show this card again" : "Put this card away"), act:pressOr(hide, null, ()=>hooks.hideCard(id)) });

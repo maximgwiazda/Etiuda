@@ -32,7 +32,7 @@ const CARD_FLAGS=Object.keys(CARD_FLAG_BOX);
 const CARD_UNBOXED_FLAGS=["commits"];
 /* Fields no editor writes yet. A whole entry replaced by a save takes them from the entry it replaces,
    or the save would drop them. Text fields are never carried: an emptied one stays empty. */
-const CARD_UNWRITTEN_FIELDS=["retired","ext"];
+const CARD_UNWRITTEN_FIELDS=["retired","from","fromName","fromAt","ext"];
 function carryUnwritten(entry,was){
   if(was) CARD_UNWRITTEN_FIELDS.forEach(f=>{ if(was[f]!=null) entry[f]=was[f]; });
   return entry;

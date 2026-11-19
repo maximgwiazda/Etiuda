@@ -21,6 +21,7 @@ import { withAgentName } from "./agent.js";
 import { activeHeard, tabPathStep } from "./tabs.js";
 import { useEditionMark } from "./edition-marks.js";
 import { flagPressed, showFlagAnswer } from "./card-flag-desk.js";
+import { sharePressed, openInboxBubble } from "./card-share.js";
 import { eHost, eHotkey, eHotkeyLabel } from "./host.js";
 import { nsGet, nsSet } from "./storage.js";
 import { openRewordMenu, approveReword, revertReword } from "./card-reword.js";
@@ -416,6 +417,8 @@ function wireListPointer(){
       if(id){ if(rwBtn.dataset.rw==="approve") approveReword(id); else revertReword(id); }
       return;
     }
+    const shareShow=e.target.closest("#eShareShow");
+    if(shareShow){ e.preventDefault(); e.stopPropagation(); openInboxBubble(); return; }
     const actBtn=e.target.closest(".cacts button");
     if(actBtn){
       e.preventDefault(); e.stopPropagation();
@@ -427,6 +430,7 @@ function wireListPointer(){
       else if(act==="edit") hooks.openCardEditor(id);
       else if(act==="note") toggleNotePane(actBtn, id);
       else if(act==="flag"){ if(id) flagPressed(id); }
+      else if(act==="share"){ if(id) sharePressed(id, actBtn); }
       else if(act==="reword") openRewordMenu(actBtn, id);
       else if(act==="hide") flipCardsAround(()=>hooks.hideCard(id), card.classList.contains("is-hidden") ? null : {leave:id});
       return;

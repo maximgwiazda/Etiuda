@@ -13,6 +13,7 @@ import * as greeting from "./modules/greeting.js";
 import * as cardFields from "./modules/card-fields.js";
 import * as cardFlag from "./modules/card-flag.js";
 import * as cardFlagDesk from "./modules/card-flag-desk.js";
+import * as cardShare from "./modules/card-share.js";
 import * as catRoles from "./modules/cat-roles.js";
 import * as env from "./modules/env.js";
 import * as cardModel from "./modules/card-model.js";
@@ -132,7 +133,7 @@ import * as screenTabs from "./modules/screen-tabs.js";
 import * as searchMeaning from "./modules/search-meaning.js";
 import * as orgModelMod from "./modules/org-model.js";
 import * as proxyAsk from "./modules/proxy-ask.js";
-Object.assign(globalThis, bubble, icons, stock, polish, contentModel, words, greeting, cardFields, cardFlag, cardFlagDesk, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, catalogV2, collapse, tour, editors, catalogFile, cardCarry, langTabs, cardEditor, cardMargin, cardChain, macrosJson, tabs, motion, fifth, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, searchMarks, emptyMark, launchMarkMod, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, catalogHistory, catalogMerge, teamJoin, editionChangesMod, editionPanel, deskLook, catalogTrustMod, pops, recency, onOpen, localMemory, shortcutsList, pillState, catIdentity, catRelevance, about, pillNavPeek, cardIntent, pageScroll, entryWalk, intentId, cssEsc, pillWalk, catalogBoot, catSet, esc, copyEntry, cardNode, intentClear, escapeLadder, cardBody, pool, roleDrum, roleTurn, variables, genderDrum, genderTurn, fieldClear, cutText, dom, theme, cardCounts, rebuild, render, mark, intentPick, notePane, cardReword, deck, pillsBar, langSeg, repaint, pillsBox, agent, ids, browserSuggest, runShortcut, appState, host, hookSlots, restart, pick, nextDock, lanes, editionMarksMod, screenTabs, searchMeaning, orgModelMod, proxyAsk);
+Object.assign(globalThis, bubble, icons, stock, polish, contentModel, words, greeting, cardFields, cardFlag, cardFlagDesk, cardShare, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, catalogV2, collapse, tour, editors, catalogFile, cardCarry, langTabs, cardEditor, cardMargin, cardChain, macrosJson, tabs, motion, fifth, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, searchMarks, emptyMark, launchMarkMod, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, catalogHistory, catalogMerge, teamJoin, editionChangesMod, editionPanel, deskLook, catalogTrustMod, pops, recency, onOpen, localMemory, shortcutsList, pillState, catIdentity, catRelevance, about, pillNavPeek, cardIntent, pageScroll, entryWalk, intentId, cssEsc, pillWalk, catalogBoot, catSet, esc, copyEntry, cardNode, intentClear, escapeLadder, cardBody, pool, roleDrum, roleTurn, variables, genderDrum, genderTurn, fieldClear, cutText, dom, theme, cardCounts, rebuild, render, mark, intentPick, notePane, cardReword, deck, pillsBar, langSeg, repaint, pillsBox, agent, ids, browserSuggest, runShortcut, appState, host, hookSlots, restart, pick, nextDock, lanes, editionMarksMod, screenTabs, searchMeaning, orgModelMod, proxyAsk);
 
 /* These are replaced wholesale rather than filled in place, so the monolith has to read the
    binding rather than the copy taken above, before any catalog existed. A name mutated in place
@@ -277,6 +278,9 @@ function boot(){
     mgCardsIn: manage.mgCardsIn,
     syncSampleMark: catalogFile.syncSampleMark,
     scheduleDeskBranch: catalogFile.scheduleDeskBranch,
+    writeDeskBranch: catalogFile.writeDeskBranch,
+    currentCatalog: catalogFile.currentCatalog,
+    storedCatalog: catalog.storedCatalog,
     syncSaveNotice: personalPack.syncSaveNotice,
     importCatalogHere: catalogFile.importCatalogHere,
     loadCatalogFromFolder: catalogOffer.loadCatalogFromFolder,
@@ -465,6 +469,7 @@ function boot(){
   catalogOffer.eOfferCatalogAtBoot();
   // A sealed catalog in the folder this desk cannot open, and any request to join its team
   teamJoin.wireTeamJoin();
+  cardShare.wireCardShare();
   // The role wheel, which waits on the sample until a reply names somebody
   agent.syncRoleWheel();
   /* A FIRST RUN OPENS ON THE EMPTY DESK and the tour starts by itself once the logo has formed; it

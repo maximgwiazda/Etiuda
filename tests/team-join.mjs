@@ -5137,10 +5137,9 @@ try {
         kind: "etiuda-desk", schema: 1,
         keys: { eCatalogFolder: shareDir, eUiLang: "en" },
         teamPins: { [TEAM_S]: S_LEAD },
-        teamPinFrom: { [TEAM_S]: "policy" },
+        teamPinFrom: { [TEAM_S]: "invite" },
         teamShown: { [TEAM_S]: { lead: "Lamp lead", folder: shareDir } },
         teamKeys: { [TEAM_S]: { 1: keptK } },
-        teamChannel: chMap,
         teamSeen: [TEAM_S],
       }), "utf8");
       const wasLab = process.env.ETIUDA_SIGNIN_LAB;
@@ -5183,8 +5182,8 @@ try {
     const devT = R.clock.now;
     const devRes = await relayFetchS("https://relay.test/relay/v1/t/" + RT_S + "/devices", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: Buffer.from(JSON.stringify({ add: sDevices, drop: [], t: devT,
-        sig: crypto.sign(null, core.devicesBytes(RT_S, devT, sDevices, []), sLead.privateKey).toString("hex") }), "utf8"),
+      body: Buffer.from(JSON.stringify({ keys: sDevices, rev: 1, t: devT,
+        sig: crypto.sign(null, core.devicesBytes(RT_S, 1, devT, sDevices), sLead.privateKey).toString("hex") }), "utf8"),
     });
     const teamDoc1 = signS({
       format: 1, kind: "etiuda-team", id: TEAM_S, catalogs: ["lamp-shop"],
@@ -5207,12 +5206,41 @@ try {
         { desk: { id: dC.me.id, key: dC.me.key, box: dC.me.box }, name: "Marek Wójcik" },
       ],
     });
-    put(shareFolder, "etiuda-team.json", JSON.stringify(teamDoc1, null, 1));
-    put(shareFolder, "lamp-shop.ec", sealedShareCat);
-    dA.api.relayRun(); dB.api.relayRun(); dC.api.relayRun();
+    const studioMirror = folder("share-1013-studio");
+    const studioCh = RelayChannel().createChannel({
+      rt: RT_S, url: URL_S, mirror: studioMirror, stateFile: path.join(LAB, "share-studio-state.json"),
+      pin: () => ({ teamId: TEAM_S, rt: RT_S, lead: { keyId: S_LEAD.keyId, public: S_LEAD.public } }),
+      me: () => ({ keyId: S_LEAD.keyId, public: S_LEAD.public, privateKey: sLead.privateKey, place: "root" }),
+      keyFor: e => (e === 1 ? KEY_S : null),
+      sealEpoch: () => 1,
+      request: async (method, url, headers, body) => {
+        const res = await relayFetchS(url, { method, headers, body });
+        const bytes = Buffer.from(await res.arrayBuffer());
+        return { status: res.status, header: n => res.headers.get(n), bytes };
+      },
+      connect: () => null,
+      pollMs: 1e9,
+    });
+    put(studioMirror, "etiuda-team.json", JSON.stringify(teamDoc2, null, 1));
+    put(studioMirror, "lamp-shop.ec", sealedShareCat);
+    studioCh.start();
+    await untilS(() => {
+      const m = fs.existsSync(path.join(studioMirror, "..", "share-studio-state.json"))
+        ? JSON.parse(fs.readFileSync(path.join(studioMirror, "..", "share-studio-state.json"), "utf8")) : null;
+      return !!(m && m.sent && m.sent["etiuda-team.json"] && m.sent["lamp-shop.ec"]);
+    }, 5000);
+    await studioCh.idle();
+    await studioCh.stop();
+
     put(shareFolder, "etiuda-team.json", JSON.stringify(teamDoc2, null, 1));
+    put(shareFolder, "lamp-shop.ec", sealedShareCat);
+    for (const d of [dA, dB, dC]) { await d.join("state"); d.api.relayRun(); }
     for (const d of [dA, dB, dC]) {
       await untilS(() => d.chans.some(c => c.enrolled()), 5000);
+      await untilS(() => {
+        const m = d.api.rawCatalogFolder();
+        return !!m && fs.existsSync(path.join(m, "etiuda-team.json")) && fs.existsSync(path.join(m, "lamp-shop.ec"));
+      }, 5000);
       await d.join("state");
     }
 
@@ -5223,7 +5251,7 @@ try {
       && matesA.some(x => x.id === dB.me.id && x.name === "Tom Lis")
       && matesA.some(x => x.id === dC.me.id && x.name === "Marek Wójcik")
       && !matesA.some(x => x.id === dA.me.id) && !matesA.some(x => x.id === dRemId),
-      "1013s1 joinView().share.teammates lists only newest roster teammates by name and never this desk or removed desks: " + JSON.stringify(matesA));
+      "1013s1 joinView().share.teammates lists only newest roster teammates by name and never this desk or removed desks: " + JSON.stringify({ matesA, enr: dA.chans.map(c => c.enrolled()), said: dA.said.slice(-5) }));
 
     const sharedCard = { id: "u:shared-1", shelf: "t-op", requests: ["t-req"], bodyShape: "plain",
       title: { en: "Warm shared" }, body: { en: "Hello from Ada." } };
@@ -5287,9 +5315,30 @@ try {
         lines[at] = lines[at].replace(/if\s*\([^)]*\)\s*return[^;]*;/, "if (false) ;").replace(/openCardFrom\([^)]*\)/, "JSON.stringify(env)");
         return fn(lines.join("\n"));
       };
+      const loadFromCopy = async (tag, baseUd, src) => {
+        const ud = path.join(LAB, "share-" + tag);
+        fs.cpSync(baseUd, ud, { recursive: true });
+        const wasLab = process.env.ETIUDA_SIGNIN_LAB;
+        process.env.ETIUDA_SIGNIN_LAB = signinLabPath;
+        const chans = [];
+        const chanWrap = { ...RelayChannel(), createChannel: opts => { const ch = RelayChannel().createChannel(opts); chans.push(ch); return ch; } };
+        let d;
+        try {
+          d = loadDesk(ud, src, {
+            net: { fetch: (url, init) => labFetch(url, init, R.clock.now) || relayFetchS(url, init) },
+            session: directSession, shell: labShell, relayChannel: chanWrap,
+          });
+        } finally {
+          if (wasLab === undefined) delete process.env.ETIUDA_SIGNIN_LAB; else process.env.ETIUDA_SIGNIN_LAB = wasLab;
+        }
+        d.me = await d.ask("etiuda:branch-identity", false);
+        d.chans = chans;
+        d.api.relayRun();
+        await untilS(() => d.chans.some(c => c.enrolled()), 5000);
+        return d;
+      };
       const p7 = await liftSharePlant("share-roster", async src => {
-        const dP = await loadShareDesk("p7-" + hexS(3), shareFolder, src);
-        await untilS(() => dP.chans.some(c => c.enrolled()), 5000);
+        const dP = await loadFromCopy("p7-" + hexS(3), dA.ud, src);
         const r = await dP.join("share-to", dRemId, JSON.stringify(sharedCard), "");
         for (const c of dP.chans) await c.stop().catch(() => {});
         return r;
@@ -5299,9 +5348,8 @@ try {
       const p8 = await liftSharePlant("share-seal-to", async src => {
         const lines = SRC.split("\n"), at = lines.findIndex(l => l.includes("/* plant:share-seal-to */"));
         if (at < 0) return { missing: true };
-        lines[at] = "const env = { format: 1, kind: \"raw\", card: payloadText }; /* unsealed */";
-        const dP = await loadShareDesk("p8-" + hexS(3), shareFolder, lines.join("\n"));
-        await untilS(() => dP.chans.some(c => c.enrolled()), 5000);
+        lines[at] = "const env = { format: 1, kind: \"raw\", from: ctx.me.id, card: payloadText }; /* unsealed */";
+        const dP = await loadFromCopy("p8-" + hexS(3), dA.ud, lines.join("\n"));
         await dP.join("share-to", dB.me.id, JSON.stringify(sharedCard), "");
         const got = await dB.join("share-inbox");
         for (const c of dP.chans) await c.stop().catch(() => {});
@@ -5310,18 +5358,14 @@ try {
       check(!p8.missing && p8 && Array.isArray(p8.items) && p8.items.length === 0,
         "1013s8 lifting plant:share-seal-to sends unsealed envelope rejected by share-inbox: " + JSON.stringify(p8));
       const p9 = await liftSharePlant("share-open-from", async src => {
-        const lines = SRC.split("\n"), at = lines.findIndex(l => l.includes("/* plant:share-open-from */"));
-        if (at < 0) return { missing: true };
-        lines[at] = "const openedText = env && env.card ? env.card : null;";
-        const dP = await loadShareDesk("p9-" + hexS(3), shareFolder, lines.join("\n"));
-        await untilS(() => dP.chans.some(c => c.enrolled()), 5000);
-        const fakeSent = await dA.join("share-to", dC.me.id, JSON.stringify(sharedCard), "");
-        const got = await dC.join("share-inbox");
+        const dP = await loadFromCopy("p9-" + hexS(3), dB.ud, src);
+        const got = await dP.join("share-inbox");
+        for (const it of (got && got.items) || []) await dP.join("share-drop", it.id);
         for (const c of dP.chans) await c.stop().catch(() => {});
-        return { fakeSent, got };
+        return { got };
       });
-      check(!p9.missing && p9 && p9.got && Array.isArray(p9.got.items) && p9.got.items.length === 0,
-        "1013s9 lifting plant:share-open-from fails to open sealed card: " + JSON.stringify(p9));
+      check(!p9.missing && p9 && p9.got && Array.isArray(p9.got.items) && p9.got.items.length === 1,
+        "1013s9 lifting plant:share-open-from accepts an unverified card envelope: " + JSON.stringify(p9));
     }
     for (const d of [dA, dB, dC]) for (const c of d.chans) await c.stop().catch(() => {});
   }
