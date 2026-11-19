@@ -48,7 +48,7 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 295;
+const PLANTS = 296;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
@@ -5484,6 +5484,31 @@ answersWatched = false;
 /* A held certificate issued before every recorded answer in tests/signin-answers.json, standing in for what the desk kept before. */
 const HELD_BEFORE = () => ({ provider: "microsoft", refresh: "sealed:rt", sub: "sealed:s", seed: "6".repeat(64), code: CODE, cert: cert({ issued: VIA_FROM, until: VIA_FROM + 30 * 86400000 }), at: 1, checked: 1, reached: true, said: "", ask: false });
 const unreached = r => r.ok === false && r.reason === "unreached";
+/* `asked`, an open join request beside an answer, is not kept. The desk reads that answer as the same answer without the list. */
+function askedHeldOk(r, c, s) {
+  if (!c || !c.body || !Array.isArray(c.body.asked) || c.body.asked.length === 0 || !P) return false;
+  const bareBody = JSON.parse(JSON.stringify(c.body));
+  delete bareBody.asked;
+  const desk = c.body.certificate ? c.body.certificate.desk : DESK_KEY;
+  const bare = s.signinAnswer({ status: c.status, bytes: Buffer.from(JSON.stringify(bareBody)) }, desk, true);
+  const h = s.signinSettle(HELD_BEFORE(), r, NOW), hBare = s.signinSettle(HELD_BEFORE(), bare, NOW);
+  const viewOf = held => s.signinViewOf(Object.assign({ provider: "microsoft" }, held), viewFacts());
+  const v = viewOf(h), vBare = viewOf(hBare);
+  const panelOf = viewIn => { const d = P.signinDoor(P.signinRead(viewIn)); return d ? P.signinPanelHtml(d) : ""; };
+  const html = panelOf(v), htmlBare = panelOf(vBare), stamp = String(c.body.asked[0].at);
+  const door = P.signinDoor(P.signinRead(v));
+  return r.ok === true && bare.ok === true && r.cert === null && r.askLead === true && r.code === c.body.code
+    && !("asked" in r) && !("asked" in h) && !("asked" in v)
+    && JSON.stringify(r) === JSON.stringify(bare) && JSON.stringify(h) === JSON.stringify(hBare) && JSON.stringify(v) === JSON.stringify(vBare)
+    && h.said === "" && h.askLead === true && h.cert === null && h.refresh === "sealed:rt"
+    && !!door && door.moment === "asklead" && html.length > 0 && html === htmlBare && html.indexOf(stamp) < 0;
+}
+CASES.askedHeld = s => {
+  const c = ANSWER_CASES.find(x => x.case === "asked");
+  if (!c) return false;
+  const desk = c.body && c.body.certificate ? c.body.certificate.desk : DESK_KEY;
+  return askedHeldOk(s.signinAnswer({ status: c.status, bytes: Buffer.from(JSON.stringify(c.body)) }, desk, true), c, s);
+};
 const DESK_READS = {
   "seated": (r, c, s) => r.ok === true && !!r.cert && r.cert.desk === c.body.certificate.desk && r.code === c.body.code && r.doors.length === 0
     && s.signinSettle(HELD_BEFORE(), r, NOW).cert === r.cert,
@@ -5508,6 +5533,7 @@ const DESK_READS = {
   "ask-lead-trial": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && !!r.cert && r.cert.deskOnly === true && r.askLead === true
     && r.code === c.body.code && h.askLead === true && h.said === ""; },
   "ask-lead": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && r.cert === null && r.askLead === true && h.askLead === true && h.said === ""; },
+  "asked": (r, c, s) => askedHeldOk(r, c, s),
   /* The seat and trials beside an answer (B-1), read since B-2b as `holding` and `trials` and kept with the certificate they came with;
      an answer of none keeps the certificate held before it, `ended` stamped, and the seat it last named. */
   "trial": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && !!r.cert && r.cert.deskOnly === true && r.code === c.body.code
@@ -5695,6 +5721,8 @@ if (!PLANTS_OFF) {
   await plant("dsp80", ["said: ans.waiting === true ? \"waiting\" : \"\", ask: false, askLead: ans.askLead === true, managed: ans.managed === true, cause: ans.managed === true ? ans.cause || \"\" : \"\",",
     "said: \"\", ask: false, askLead: ans.askLead === true, managed: ans.managed === true, cause: ans.managed === true ? ans.cause || \"\" : \"\","], "waitRead");
   await plant("dsp80b", ["askLead: h.askLead === true, /* plant:file-ask-lead */", "askLead: false,"], "askLeadFile");
+  await plant("dsa1", ["if (j.certificate === null) return Object.assign({ ok: true, code: String(j.code), cert: null, doors: [], waiting: j.reason === \"waiting\", askLead, storeOffer }, signinManagedOf(j)); /* plant:wait-read */",
+    "if (j.certificate === null) return Object.assign({ ok: true, code: String(j.code), cert: null, doors: [], waiting: j.reason === \"waiting\", askLead, storeOffer, asked: j.asked }, signinManagedOf(j));"], "askedHeld");
   await plantWire("dsp93", ["  if (Object.keys(teamPins).some(teamPinStands)) return []; /* plant:door-pin-stands */\n", ""], "doorPins");
   await plantWire("dsp94", ["    if (inviteDoor({ lead: { public: d.lead } })) return null; /* plant:door-policy */\n", ""], "doorPolicy");
   await plantWire("dsp95", ["    if (pin && (pin.keyId !== d.keyId || pin.public !== d.lead)) return null; /* plant:door-pinned */\n", ""], "doorPins");
