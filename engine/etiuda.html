@@ -12650,7 +12650,7 @@ What is typed here stays in this browser.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-11-18";
+  var E_BUILT = "2026-11-19";
 
   // src/modules/affinity.js
   var affinity_exports = {};
@@ -32302,16 +32302,20 @@ What is typed here stays in this browser.`;
     importCatalogHere: () => importCatalogHere,
     importCatalogText: () => importCatalogText,
     isCatalogUpdate: () => isCatalogUpdate,
+    listPersonalAside: () => listPersonalAside,
     looseOrigin: () => looseOrigin,
     nameHeldCatalog: () => nameHeldCatalog,
     ownWorkFiles: () => ownWorkFiles,
     pinStoredFrom: () => pinStoredFrom,
+    restorePersonal: () => restorePersonal,
     sampleUntouched: () => sampleUntouched,
     saveOwnWork: () => saveOwnWork,
     scheduleDeskBranch: () => scheduleDeskBranch,
+    setAsidePersonal: () => setAsidePersonal,
     sha256Hex: () => sha256Hex,
     sharedOwnPin: () => sharedOwnPin,
     sharedOwnWrite: () => sharedOwnWrite,
+    switchToAdopted: () => switchToAdopted,
     syncSampleMark: () => syncSampleMark,
     tellTaken: () => tellTaken,
     todayEdition: () => todayEdition,
@@ -33711,6 +33715,71 @@ What is typed here stays in this browser.`;
     } catch (e) {
     }
     return true;
+  }
+  var ASIDE_KEY = "eAsidePersonal";
+  function asideStore() {
+    try {
+      const v = JSON.parse(lsGet(ASIDE_KEY) || "{}");
+      return v && typeof v === "object" && !Array.isArray(v) ? v : null;
+    } catch (e) {
+      return null;
+    }
+  }
+  function setAsidePersonal() {
+    const all = asideStore();
+    if (!all) return false;
+    flushLayer();
+    const held = storedCatalog(), ns = eLayer();
+    const layer = {};
+    LAYER_KEYS.forEach((n) => {
+      const v = lsGet(ns + n);
+      if (v != null) layer[n] = v;
+    });
+    if (!held && !Object.keys(layer).length) return "";
+    let id = "";
+    if (held) id = String(held.id || "").trim() || "unnamed";
+    else {
+      const o = looseOrigin(true);
+      if (!o) return false;
+      id = o.id;
+      layer.LooseId = o.id;
+    }
+    all[id] = {
+      id,
+      loose: !held,
+      at: Date.now(),
+      ns,
+      catalog: held || null,
+      layer,
+      file: nsGet("CatalogFile") || "",
+      fileAt: nsGet("CatalogFileAt") || "",
+      from: nsGet("CatalogFrom") || ""
+    };
+    const s = JSON.stringify(all);
+    if (!lsSet(ASIDE_KEY, s, true) || lsGet(ASIDE_KEY) !== s) return false;
+    return id;
+  }
+  function listPersonalAside() {
+    const all = asideStore() || {};
+    return Object.keys(all).map((k) => {
+      const r = all[k] || {};
+      return { id: k, loose: !!r.loose, at: +r.at || 0, file: String(r.file || ""), cards: r.catalog && Array.isArray(r.catalog.cards) ? r.catalog.cards.length : 0 };
+    }).sort((a, b) => a.at - b.at);
+  }
+  function restorePersonal(id) {
+    const all = asideStore(), r = all && all[id];
+    if (!r) return false;
+    const ns = String(r.ns || "e");
+    for (const n of LAYER_KEYS) {
+      if (r.layer && r.layer[n] != null && !lsSet(ns + n, r.layer[n], true)) return false;
+    }
+    if (!r.catalog) return true;
+    return takeCatalog(r.catalog, { file: r.file, fileAt: +r.fileAt || 0, from: r.from });
+  }
+  function switchToAdopted(c, opts) {
+    const aside = setAsidePersonal();
+    if (aside === false) return false;
+    return activateCatalog(c, opts);
   }
   function sampleUntouched() {
     const p = pack || {};
