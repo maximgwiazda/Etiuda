@@ -156,6 +156,7 @@ function signinShown(v){ return !!(v && (v.offered.length || v.signedIn || signi
 /* THE DOOR RULE: due whenever a view has been read and deskWorks() is false. No seen memory and no policy-pin exemption. */
 function firstSigninDue(v){
   if(v===undefined){
+    if(!signinHost()) return true; /* plant:door-due-browser */
     if(!signinHasView) return false; /* plant:door-due-read */
     if(!deskWorks()) return true; /* plant:door-due-works */
     return false;
@@ -167,6 +168,7 @@ let firstSigninPending=false, firstSigninOpen=false, firstSigninWaits=[];
 function firstSigninStands(){ return !!(firstSigninPending || firstSigninOpen); }
 /* Whether the door holds offers, intake and invitations: while the door stands, or once a view was read and deskWorks() is false. */
 function doorHolds(){
+  if(!signinHost()) return true; /* plant:door-holds-browser */
   if(firstSigninStands() || (signinHasView && !deskWorks())) return true; /* plant:door-holds */
   return false;
 }
@@ -197,6 +199,7 @@ function firstSigninMarkHtml(){
 function paintFirstSignin(){
   if(!firstSigninOpen || typeof document==="undefined") return;
   const el=$("#firstSignin"); if(!el) return;
+  if(!signinHost()){ el.innerHTML=doorBrowserHtml(); hugDottedGround(el); return; } /* plant:door-paint-browser */
   const hadFocus=el.contains(document.activeElement);
   const d=signinDoor(signinV);
   const ds=deskDoorState(signinV);
@@ -251,8 +254,8 @@ function closeFirstSignin(){
   tellFirstSigninClosed();
 }
 function bootFirstSignin(land){
-  if(!firstSigninPending && !firstSigninDue()) return;
-  if(!firstSigninDue()){ firstSigninPending=false; tellFirstSigninClosed(); return; }
+  if(!firstSigninPending && !firstSigninOpen && !firstSigninDue()) return;
+  if(!firstSigninDue()){ if(firstSigninOpen) closeFirstSignin(); firstSigninPending=false; tellFirstSigninClosed(); return; }
   firstSigninPending=true;
   const run=()=>{
     if(!firstSigninDue()){ closeFirstSignin(); return; }
@@ -490,6 +493,11 @@ function doorScreen(leftBody, rightInner, foot){
   return '<div class="fs-grid"><div class="fs-left"><div class="fs-left-in"><div class="fs-body">'
     +firstSigninMarkHtml()+leftBody+'</div>'+(foot||"")+'</div></div>'
     +'<div class="fs-right"><div class="fs-right-in">'+rightInner+'</div></div></div>';
+}
+/* A plain browser build has no desk: the door says so, with the way out held inert (there is no host to save through). */
+function doorBrowserHtml(){
+  return doorScreen('<h1 id="fsHeading">'+esc(t("Etiuda works in its desktop app."))+'</h1><p class="fs-lede">'+esc(t("In a browser, no catalog opens."))+'</p>',
+    '<div class="door-out"><button type="button" class="btn" data-door-save disabled>'+esc(t("Save your own work as files…"))+'</button></div>', "");
 }
 function doorBare(heading, line){
   return doorScreen('<h1 id="fsHeading">'+esc(heading)+'</h1><p class="fs-lede">'+esc(line)+'</p>', "", "");
