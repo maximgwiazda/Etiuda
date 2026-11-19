@@ -422,7 +422,7 @@ function openInboxBubble(){
 function isBusyTypingOrCopied(){
   const a=typeof document!=="undefined" ? document.activeElement : null;
   if(a && (a.tagName==="INPUT" || a.tagName==="TEXTAREA" || a.tagName==="SELECT" || a.isContentEditable)) return true;
-  if(typeof document!=="undefined" && document.querySelector("#ecYes, .e-offer, .e-launch-veil, .modal:not([hidden])")) return true;
+  if(typeof document!=="undefined" && document.querySelector("#ecYes, .e-offer, .e-launch-veil")) return true;
   return Date.now()-lastCopyAt < 2000;
 }
 

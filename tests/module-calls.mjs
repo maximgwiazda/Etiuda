@@ -5400,7 +5400,7 @@ const CARD_B = {
       let onJoin2 = null;
       window.E_HOST = Object.assign({}, wasHost2 || {}, {
         onTeamJoin: fn => { onJoin2 = fn; },
-        teamJoin: op => Promise.resolve(op === "state"
+        teamJoin: op => Promise.resolve((op === "state" || op === "held")
           ? { sealed: null, join: null, leads: [], share: { team: "t-0123456789abcdef", teammates: [{ id: "k-1111111111111111", name: "Ewa Nowak" }] } }
           : { ok: true, items: [] }),
       });
