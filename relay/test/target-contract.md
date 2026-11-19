@@ -157,6 +157,7 @@ The relay and the program each apply the blob, team and rate limits. An incoming
 | `outside-place` | That file sits outside its writer's place, so it was left out. |
 | `bad-path` | That path stays outside the team folder. |
 | `blob-size` | That file is larger than the relay accepts. |
+| `recipient-full` | That desk already has as many items waiting as the relay holds. |
 | `team-size` | The team has reached the space the relay keeps. |
 | `team-count` | This signing key already holds as many teams as the relay allows. |
 | `rate` | That many uploads in a minute is more than the relay accepts. |

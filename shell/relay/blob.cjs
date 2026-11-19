@@ -38,6 +38,7 @@ const REASONS = Object.freeze({
   "outside-place": "That file sits outside its writer's place, so it was left out.",
   "bad-path": "That path stays outside the team folder.",
   "blob-size": "That file is larger than the relay accepts.",
+  "recipient-full": "That desk already has as many items waiting as the relay holds.",
   "team-size": "The team has reached the space the relay keeps.",
   "team-count": "This signing key already holds as many teams as the relay allows.",
   "rate": "That many uploads in a minute is more than the relay accepts.",
@@ -60,6 +61,12 @@ function refusal(reason) {
   return { ok: false, reason: reason, said: REASONS[reason], served: false };
 }
 
+/* An addressed place: what one member desk leaves for another, at most 64 KB a blob (the relay's ADDRESSED_BYTES), 50 waiting for one desk
+   (its ADDRESSED_MAX). The relay lists and serves it to the addressee alone. */
+const TO_PLACE_RE = /^to:[a-z0-9][a-z0-9-]{2,63}$/;
+const toPlace = deskId => (typeof deskId === "string" && TO_PLACE_RE.test("to:" + deskId) ? "to:" + deskId : null);
+/* Whether a listed blob's meta is one addressed to this desk. */
+const addressedTo = (meta, deskId) => !!meta && typeof meta.place === "string" && TO_PLACE_RE.test(meta.place) && meta.place === toPlace(deskId);
 const HEX16 = /^[0-9a-f]{16}$/;
 const HEX32 = /^[0-9a-f]{32}$/;
 const HEX24 = /^[0-9a-f]{24}$/;
@@ -199,8 +206,8 @@ function seal(opts) {
   if ((kind !== "file" && kind !== "delete") || typeof o.path !== "string" || typeof body !== "string")
     throw new TypeError("relay blob: seal takes a kind of file or delete, a path and a body as text");
   if (!key || key.length !== KEY_BYTES || !priv) throw new TypeError("relay blob: seal takes a 32-byte team key and an Ed25519 writer");
-  if (place !== null && place !== "root" && !(typeof place === "string" && place.startsWith("desk:") && isId(place.slice(5))))
-    throw new TypeError("relay blob: a place is root or desk:<desk id>");
+  if (place !== null && place !== "root" && !(typeof place === "string" && (place.startsWith("desk:") || place.startsWith("to:")) && isId(place.slice(place.indexOf(":") + 1))))
+    throw new TypeError("relay blob: a place is root, desk:<desk id> or to:<desk id>");
   const nonce = crypto.randomBytes(NONCE_BYTES);
   const cipher = crypto.createCipheriv("aes-256-gcm", key, nonce, { authTagLength: TAG_BYTES });
   cipher.setAAD(aad);
@@ -1046,6 +1053,7 @@ function inviteRefusedGenuine(doc, lead) {
 
 module.exports = {
   BLOB_MAX, TEAM_MAX, RATE_MAX, RATE_WINDOW_MS, PAD_FLOOR, NONCE_BYTES, TAG_BYTES, KEY_BYTES, AAD_LABEL, UPLOAD_PREFIX,
+  TO_PLACE_RE, toPlace, addressedTo,
   REASONS, refusal, isId, isDeskId, aadOf, padStep, frame, unframe, uploadBytes, signUpload, verifyUpload, verifySigned, seal, openBlob,
   INVITE_WRAP_INFO, INVITE_FOLDER_WRAP_INFO, REFUSED_PREFIX, REFUSED_KIND,
   inviteWrapKey, inviteWrapAad, sealInviteWrap, openInviteWrap, openWrap, inviteRefusedSignedBytes, inviteRefusedGenuine,

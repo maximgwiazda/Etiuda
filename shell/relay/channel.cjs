@@ -1322,6 +1322,8 @@ function createProgram(opts) {
     if (!blob) { dropSaid("a file from the relay", R("bad-signature")); return null; }
     const floors = it.floor !== undefined ? floorsWith(floors0, m.writer, m.epoch, it.floor) : floors0;
     if (typeof m.place === "string" && m.place.startsWith("invite:")) return openInvited(it, blob, floors, ctx);
+    /* An item another desk left at this desk's addressed place is no file of the folder: the mirror passes over it. */
+    if (typeof m.place === "string" && m.place.startsWith("to:")) { unpend(m.id); return null; }
     /* A request a desk joining by invitation sent, its key carried beside it (the relay marks only an invitation's upload so):
        the lead's to open; any other program passes over it and says nothing, as it passes over an invitation's place. */
     if (typeof m.pub === "string" && !isLeadKey(m.writer) && !(ctx && Array.isArray(ctx.inviteKeys))
