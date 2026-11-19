@@ -22,7 +22,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 138;
+const EXPECTED = 139;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk: its content reaches the lead only if the lead turns on copies of unlisted catalogs in Studio, and this desk is told before anything is sent. A catalog the team does not list can be marked private here, and is then never sent. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, and Studio shows them in the team's totals.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie). Kopię katalogu z listy zespołu Studio lidera może pobrać w każdej chwili, bez pytania tutaj, zapieczętowaną dla zespołu. Każdy inny katalog zostaje na tym stanowisku: jego treść trafi do lidera tylko wtedy, gdy lider włączy w Studiu kopie katalogów spoza listy, a to stanowisko zostanie o tym powiadomione, zanim cokolwiek zostanie wysłane. Katalog spoza listy zespołu można tutaj oznaczyć jako prywatny i wtedy nigdy nie jest wysyłany. Studio lidera wymienia to stanowisko z nazwy, chyba że organizacja wyłączy nazwy, razem z używanym katalogiem, jego wydaniem i okresem zliczania, i wymienia je dalej, gdy przestanie się odzywać. Własne dane stanowiska trafiają do lidera zapieczętowane, a Studio pokazuje je w sumach zespołu.";
@@ -1758,6 +1758,37 @@ try {
         const q = pp !== SRC ? await copies("r2-copies-plant-private", pp) : null;
         check(!!q && !q.withheld, "r2n lifting plant:s0b-branch-private turns r2e red: a private copy is written (" + (q ? JSON.stringify(q) : "plant not found") + ")");
       }
+    }
+    {
+      /* Board 1015: the private mark is the shell's, keyed by the catalog's id, and the page's set-aside never touches it. A personal
+         catalog marked private is still private by the shell's own answer (catalogMarkedPrivate, reached through the branch write, the
+         way r2e reaches it) while it is set aside, after the switch to a team catalog is told to the shell, and after it is restored. */
+      const kept = async (name) => {
+        const box = await arm(name);
+        join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["harbour-board"]);
+        await box.D.ask("etiuda:team-join", "private", "quay-held", "on");
+        const stage = async (tail) => {
+          const w = await writeCopy(box, tail, "quay-held");
+          return w.ok === true && w.withheld === true && !fs.existsSync(branchAt(box, tail))
+            && (box.D.envelope().catalogPrivate || []).indexOf("quay-held") >= 0;
+        };
+        const whileAside = await stage("55555551");
+        const dir = folder(name + "-out");
+        put(dir, "team.ec", textOf(catalog(4, { id: "harbour-board", name: "Harbour board", card: "x" })));
+        box.D.api.offerFile(box.D.win, path.join(dir, "team.ec"));
+        const offT = box.D.sent.filter(a => a[0] === "etiuda:catalog-file").pop();
+        take(box.D, pinOf(box.D, offT ? offT[1] : ""));
+        const afterSwitch = await stage("55555552");
+        put(dir, "held.ec", b0Body());
+        box.D.api.offerFile(box.D.win, path.join(dir, "held.ec"));
+        const offH = box.D.sent.filter(a => a[0] === "etiuda:catalog-file").pop();
+        take(box.D, pinOf(box.D, offH ? offH[1] : ""));
+        const afterRestore = await stage("55555553");
+        return { whileAside, afterSwitch, afterRestore };
+      };
+      const k = await kept("r2-aside-private");
+      check(k.whileAside && k.afterSwitch && k.afterRestore,
+        "r2z a catalog marked private stays private by the shell's own answer while it is set aside, after the switch to a team catalog, and after it is restored (" + JSON.stringify(k) + ")");
     }
     {
       /* Board 974, condition C5: a copy held while the switch does not apply stays held once the lead takes the desk off the
