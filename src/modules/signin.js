@@ -3,11 +3,10 @@
    signed in by provider, the sign-in code and how the seat stands, and shows nothing where no provider is offered, so a desk
    with no registration configured looks as it did. Settings' Account draws the same view with signinParts. */
 import { $ } from "./dom.js";
-import { eHost, eOpenSetAside, eCatalogFolderPinned } from "./host.js";
+import { eHost, eOpenSetAside } from "./host.js";
 import { esc } from "./esc.js";
 import { t, uiLang, hugDottedGround } from "./ui-lang.js";
 import { agentName } from "./agent.js";
-import { lsGet, lsSet } from "./storage.js";
 import { teamLeads } from "./team-join.js";
 import { hooks } from "./hooks.js";
 import { catalogLoaded } from "./catalog-boot.js";
@@ -131,7 +130,7 @@ function signinWaitingWords(){ /* plant:waiting-words */
 function signinRefusedHere(reason, v){
   return reason==="signin-tenant" || (signinManaged(v) && (reason==="signin-notassigned" || reason==="signin-notallowed")); /* plant:refused-here */
 }
-let signinV=signinRead(null);
+let signinV=signinRead(null), signinHasView=false;
 function signinHost(){
   const h=eHost();
   return h && typeof h.signinState==="function" ? h : null;
@@ -139,26 +138,30 @@ function signinHost(){
 function signinNow(){
   const h=signinHost();
   if(!h) return signinRead(null);
-  try{ signinV=signinRead(h.signinState()); }catch(e){ signinV=signinRead(null); }
+  try{ signinV=signinRead(h.signinState()); signinHasView=true; }catch(e){ signinV=signinRead(null); signinHasView=false; }
   return signinV;
+}
+/* THE DESK'S ONE GATE ON THE PAGE: reads the shell view's works (shell/main.js signinWorksOf). No host answers false. */
+function deskWorks(v){
+  if(v===undefined){
+    if(!signinHost()) return false; /* plant:desk-works-host */
+    if(signinV.works!==true) return false; /* plant:desk-works */
+    return true;
+  }
+  if(!v || typeof v!=="object" || v.works!==true) return false; /* plant:desk-works-arg */
+  return true;
 }
 /* Whether the door exists: a provider offered, somebody signed in, or the wait for machine policy to say. */
 function signinShown(v){ return !!(v && (v.offered.length || v.signedIn || signinWaiting(v) || signinStranded(v))); } /* plant:shown-waiting */
-/* FIRST-OPENING SIGN-IN GATE AND MEMORY: shown once on a desk that offers a provider, has
-   nobody signed in, has never shown the screen before, and is not pinned by policy (a policy
-   desk joins its team from HKLM policy without asking first). Written when the screen opens
-   so stopping mid-screen never traps the person behind it again while Sign in stays in the bar. */
-const FIRST_SIGNIN_KEY="eFirstSigninSeen";
-function firstSigninSeen(){ return lsGet(FIRST_SIGNIN_KEY)==="1"; }
-function markFirstSigninSeen(){ return lsSet(FIRST_SIGNIN_KEY,"1",true); }
-function firstSigninDue(v, opts){
-  const s=v===undefined ? signinV : signinRead(v);
-  const o=opts && typeof opts==="object" ? opts : null;
-  const seen=o && "seen" in o ? !!o.seen : firstSigninSeen();
-  const policy=o && "policy" in o ? !!o.policy : eCatalogFolderPinned();
-  if(policy) return false; /* plant:first-signin-gate */
-  if(signinStranded(s)) return false; /* plant:first-signin-stranded */
-  return !!(s && s.offered.length && !s.signedIn && !seen);
+/* THE DOOR RULE: due whenever a view has been read and deskWorks() is false. No seen memory and no policy-pin exemption. */
+function firstSigninDue(v){
+  if(v===undefined){
+    if(!signinHasView) return false; /* plant:door-due-read */
+    if(!deskWorks()) return true; /* plant:door-due-works */
+    return false;
+  }
+  if(!v || typeof v!=="object") return false;
+  return !deskWorks(signinRead(v));
 }
 let firstSigninPending=false, firstSigninOpen=false, firstSigninWaits=[];
 function firstSigninStands(){ return !!(firstSigninPending || firstSigninOpen); }
@@ -191,39 +194,21 @@ function paintFirstSignin(){
   const opening=!doorish && d && d.moment==="before";
   if(doorish || opening){
     el.innerHTML=firstSigninHtml(signinV, {forceFirst:opening});
+  }else if(!d){
+    el.innerHTML=firstSigninHtml(signinV, {doorKind:"no-signin"});
   }else{
-  const skipBtn='<button type="button" class="btn fs-skip-btn" id="firstSigninSkip">'+esc(t("Not now"))+'</button>';
-  const skipLine='<p class="fs-skip-line">'+esc(t("The desk opens as it is, and Sign in stays in the bar at the top for later."))+'</p>';
-  let rightBody="";
-  if(d){
-    rightBody=signinPanelHtml(Object.assign({}, d, {foot:""}));
-  }
-  el.innerHTML='<div class="fs-grid">'
-    +'<div class="fs-left"><div class="fs-left-in"><div class="fs-body">'
-      +firstSigninMarkHtml()
-      +'<h1 id="fsHeading">'+esc(t("Sign in to Etiuda"))+'</h1>'
-      +'<p class="fs-lede">'+esc(t("Your seat belongs to your account, so it comes with you to any computer you sign in on, up to three."))+'</p>'
-      +doorStepsHtml()
-    +'</div><p class="fs-foot">'+esc(t("No licence key to keep"))+'</p></div></div>'
-    +'<div class="fs-right"><div class="fs-right-in">'
-      +'<h2 class="fs-rh">'+esc(t("Signing in"))+'</h2>'
-      +rightBody
-    +'</div></div></div>';
-  let showSkip=d && d.moment==="refused";
-  if(d && d.moment==="managed-refused") showSkip=true; /* plant:first-signin-managed-skip */
-  if(showSkip){
-    const acts=el.querySelector(".sgn-acts");
-    if(acts){
-      acts.insertAdjacentHTML("beforeend", skipBtn);
-      acts.insertAdjacentHTML("afterend", skipLine);
-    }else{
-      const rin=el.querySelector(".fs-right-in");
-      if(rin) rin.insertAdjacentHTML("beforeend", '<div class="fs-skip">'+skipBtn+skipLine+'</div>');
-    }
-  }else if(d && d.moment==="stranded"){
-    const rin=el.querySelector(".fs-right-in");
-    if(rin) rin.insertAdjacentHTML("beforeend", '<div class="fs-skip"><button type="button" class="btn primary fs-skip-btn" id="firstSigninSkip">'+esc(t("Continue"))+'</button></div>'); /* plant:first-signin-stranded-btn */
-  }
+    const rightBody=signinPanelHtml(Object.assign({}, d, {foot:""}));
+    el.innerHTML='<div class="fs-grid">'
+      +'<div class="fs-left"><div class="fs-left-in"><div class="fs-body">'
+        +firstSigninMarkHtml()
+        +'<h1 id="fsHeading">'+esc(t("Sign in to Etiuda"))+'</h1>'
+        +'<p class="fs-lede">'+esc(t("Your seat belongs to your account, so it comes with you to any computer you sign in on, up to three."))+'</p>'
+        +doorStepsHtml()
+      +'</div><p class="fs-foot">'+esc(t("No licence key to keep"))+'</p></div></div>'
+      +'<div class="fs-right"><div class="fs-right-in">'
+        +'<h2 class="fs-rh">'+esc(t("Signing in"))+'</h2>'
+        +rightBody
+      +'</div></div></div>';
   }
   if(hadFocus){
     const first=el.querySelector("button:not(:disabled), input");
@@ -231,15 +216,9 @@ function paintFirstSignin(){
   }
   hugDottedGround(el); /* plant:first-signin-dots */
 }
-function skipFirstSignin(){
-  if(!firstSigninPending && !firstSigninOpen) return;
-  if(signinV && signinV.busy) signinCall("signinStop");
-  closeFirstSignin();
-}
 function openFirstSignin(){
   firstSigninPending=false;
   firstSigninOpen=true;
-  markFirstSigninSeen(); /* plant:first-signin-mark */
   if(typeof document==="undefined") return;
   document.body.classList.add("e-first-signin");
   const el=$("#firstSignin");
@@ -402,10 +381,11 @@ FAIL_FIRST.push("signin-notassigned","signin-tenant","signin-other");
 FAIL_FIRST.push("signin-switch-out","signin-switch-unmade"); /* plant:switch-unmade-first */
 /* The refusals whose way on is another account, where the computer offers one. */
 const ANOTHER_FOR=["signin-notallowed","signin-notassigned"];
-/* THE DESK'S DOOR, as the page is told to show it (piece B-3b). One value, from the fields signinRead already keeps.
-   B-3a replaces this body with the gate and leaves every painter. Two facts are the nearest field, marked below. */
+/* THE DESK'S DOOR, judged through deskWorks() and the view fields B-2b keeps; every painter reads this one value.
+   Two facts stay on their nearest fields until the service carries `asked`, marked below. */
 function deskDoorState(v){
   if(!v || !Array.isArray(v.offered)) v=signinRead(v);
+  const works=deskWorks(v);
   const seat=v.holding, seatOn=seat?seat.on:"";
   const deskEnd=(v.trials&&v.trials.desk)||(seatOn==="trial"&&seat&&seat.ends)||0;
   const studioEnd=(v.trials&&v.trials.studio)||0;
@@ -414,20 +394,21 @@ function deskDoorState(v){
   const lead=(seat&&seat.lead)||(team&&team.lead)||"";
   const waitingOnLead=!!v.askLead; /* B-3a feeds this */
   const orgLicence=!!v.licenceManaged; /* B-3a feeds this */
+  const trialOver=seatOn==="trial" || (!seatOn && deskEnd>0); /* plant:door-trial-over */
   let day=0;
   if(seatOn==="trial" && deskEnd && v.now){
     const left=Math.round((deskEnd-v.now)/86400000);
     day=Math.max(1, Math.min(14, 14-left));
   }
   let state="none";
-  if(v.works && v.ended>0) state="ended"; /* plant:door-state-ended */
-  else if(!v.works && v.signedIn && (v.ended>0 || (v.stoppedAt>0 && seatOn!=="trial") || (seatOn && seatOn!=="trial"))) state="stopped"; /* plant:door-state-stopped */
-  else if(!v.works && v.signedIn && (seatOn==="trial" || (!seatOn && deskEnd>0)) && waitingOnLead) state="waiting"; /* plant:door-state-waiting */
-  else if(!v.works && v.signedIn && seatOn==="trial" && orgLicence) state="trial-over-org";
-  else if(!v.works && v.signedIn && seatOn==="trial") state="trial-over";
-  else if(v.works && v.signedIn && seatOn) state="working";
-  else if(!v.signedIn && v.offered.length && !v.online && !signinWaiting(v) && !signinStranded(v)) state="first-offline"; /* plant:door-first-offline */
-  else if(!v.signedIn && v.offered.length && v.registered && v.online && !signinWaiting(v) && !signinStranded(v)) state="first";
+  if(works && v.ended>0) state="ended"; /* plant:door-state-ended */
+  else if(!works && v.signedIn && v.stoppedAt>0) state="stopped"; /* plant:door-state-stopped */
+  else if(!works && v.signedIn && trialOver && waitingOnLead) state="waiting"; /* plant:door-state-waiting */
+  else if(!works && v.signedIn && trialOver && orgLicence) state="trial-over-org";
+  else if(!works && v.signedIn && trialOver) state="trial-over";
+  else if(works && v.signedIn && seatOn) state="working";
+  else if(!works && !v.signedIn && !v.busy && FAIL_FIRST.indexOf(v.said)<0 && v.offered.length && v.registered && !v.online && !signinWaiting(v) && !signinStranded(v)) state="first-offline"; /* plant:door-first-offline */
+  else if(!works && !v.signedIn && !v.busy && FAIL_FIRST.indexOf(v.said)<0 && v.offered.length && v.registered && v.online && !signinWaiting(v) && !signinStranded(v)) state="first";
   return {state:state, lead:lead, deskEnd:deskEnd, studioEnd:studioEnd, ended:v.ended||0, until:v.until||0,
     stoppedAt:v.stoppedAt||0, why:seatOn, seatOn:seatOn, ends:ends, day:day, waitingOnLead:waitingOnLead,
     orgLicence:orgLicence, online:v.online!==false, now:v.now||0};
@@ -811,10 +792,11 @@ function closeSigninPanel(back){
    answer comes back, never at start. */
 function signinChanged(v, answered){
   signinV=signinRead(v);
+  signinHasView=true;
   paintSigninButton();
   if(firstSigninOpen || firstSigninPending){
-    if(signinV.signedIn){ closeFirstSignin(); signinTell(); return; }
-    if(firstSigninOpen){ paintFirstSignin(); signinTell(); return; }
+    if(!deskWorks()){ if(firstSigninOpen) paintFirstSignin(); signinTell(); return; } /* plant:door-close-works */
+    closeFirstSignin(); signinTell(); return;
   }
   if(answered && signinShown(signinV) && !signinV.busy) signinOpen=true;
   if(signinOpen) paintSigninPanel();
@@ -1131,10 +1113,6 @@ function wireSignin(){
   signinClicks(panel);
   if(fs){
     signinClicks(fs);
-    fs.addEventListener("click", e=>{
-      const s=e.target && e.target.closest ? e.target.closest("#firstSigninSkip") : null;
-      if(s) skipFirstSignin();
-    });
   }
   addEventListener("pointerdown", e=>{ if(signinOpen && wrap && !wrap.contains(e.target)) closeSigninPanel(false); });
   addEventListener("keydown", e=>{
@@ -1145,19 +1123,16 @@ function wireSignin(){
 }
 
 export {
-  FIRST_SIGNIN_KEY,
   SIGNIN_NAMES,
   bootFirstSignin,
   closeFirstSignin,
+  deskWorks,
   firstSigninDue,
   firstSigninOpenNow,
-  firstSigninSeen,
   firstSigninStands,
-  markFirstSigninSeen,
   onFirstSigninClosed,
   paintFirstSignin,
   signinAct,
-  skipFirstSignin,
   signinActsHtml,
   signinChanged,
   signinChoosingNow,
