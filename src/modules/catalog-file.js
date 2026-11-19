@@ -13,7 +13,7 @@ import { CAT_LABELS_PL, CAT_LABELS_BY_LANG } from "./icons.js";
 import { fill } from "./intent-text.js";
 import { cardToExportPlain } from "./macros-json.js";
 import { FACTS, normWhoList } from "./stock.js";
-import { E_NS, lsGet, ssGet, ssSet, ssDel, nsGet, nsSet, nsDel, LAYER_KEYS, layerNsOf, eLayer, eLayers, lyGet, lySet, lyDel, eDeskHome, eHomeless } from "./storage.js";
+import { E_NS, E_ASIDE_KEY, lsGet, lsSet, ssGet, ssSet, ssDel, nsGet, nsSet, nsDel, LAYER_KEYS, layerNsOf, eLayer, eLayers, lyGet, lySet, lyDel, eDeskHome, eHomeless } from "./storage.js";
 import { cutLeaves, dismissNode } from "./motion.js";
 import { esc } from "./esc.js";
 import { newCatalogId } from "./ids.js";
@@ -705,6 +705,108 @@ function takeCatalog(c,opts){
   }catch(e){}
   return true;
 }
+/* ---- THE PERSONAL CATALOG SET ASIDE (board 1015). When the lead adopts a member's own catalog as the team's, this desk may
+   switch to it. The catalog in use is then the team's, and the one the person made stays here, SET ASIDE, whole: the catalog
+   itself, every layer key it would need to stand again, and the file it came from, keyed by its id. Nothing existing is
+   deleted by any of this. A loose desk has no catalog of its own, so its layer is what is kept, under the loose id. ---- */
+const ASIDE_KEY=E_ASIDE_KEY;
+/* The whole store as an object, or null where what is held cannot be read: a store that cannot be read is never written over. */
+function asideStore(){
+  try{
+    const v=JSON.parse(lsGet(ASIDE_KEY)||"{}");
+    return (v && typeof v==="object" && !Array.isArray(v)) ? v : null;
+  }catch(e){ return null; }
+}
+/** Keep the catalog in use, with its edits, in the personal store, and read it back. Returns its id; "" where this desk holds
+ *  nothing of its own to keep; false where it could not be kept, and nothing has changed. */
+function setAsidePersonal(){
+  const all=asideStore();
+  if(!all) return false;
+  flushLayer();
+  const held=storedCatalog(), ns=eLayer();
+  const layer={};
+  LAYER_KEYS.forEach(n=>{ const v=lsGet(ns+n); if(v!=null) layer[n]=v; });
+  if(!held && !Object.keys(layer).length) return "";
+  let id="";
+  if(held) id=String(held.id||"").trim()||"unnamed";
+  else{
+    const o=looseOrigin(true);
+    if(!o) return false;
+    id=o.id;
+    layer.LooseId=o.id;
+  }
+  all[id]={ id:id, loose:!held, at:Date.now(), ns:ns, catalog:held||null, layer:layer,
+    file:nsGet("CatalogFile")||"", fileAt:nsGet("CatalogFileAt")||"", from:nsGet("CatalogFrom")||"" };
+  const s=JSON.stringify(all);
+  /* CHECKED, NOT ATTEMPTED: the value is read back, because a write that reports success and is not there is the failure that lies cheapest. */
+  if(!lsSet(ASIDE_KEY,s,true) || lsGet(ASIDE_KEY)!==s) return false;
+  return id;
+}
+/** What is set aside, oldest first, for the Library's list. */
+function listPersonalAside(){
+  const all=asideStore()||{};
+  return Object.keys(all).map(k=>{
+    const r=all[k]||{};
+    const c=r.catalog&&typeof r.catalog==="object"?r.catalog:null;
+    return { id:k, loose:!!r.loose, at:+r.at||0, file:String(r.file||""), cards:(c&&Array.isArray(c.cards))?c.cards.length:0,
+      from:String(r.from||""), rev:c&&c.rev!=null?c.rev:null, edition:c?String(c.version||""):"",
+      macros:c?catalogMacroCount(c):-1, intents:c?catalogIntentCount(c):-1, cats:c&&c.categories?Object.keys(c.categories).length:-1 };
+  }).sort((a,b)=>a.at-b.at);
+}
+/** Bring a set-aside catalog back exactly: its layer is written back under its own namespace and its catalog is taken again, with the
+ *  file it came from. A loose desk's layer is written back and no catalog is taken, so the caller puts the catalog in use down. */
+function restorePersonal(id){
+  const all=asideStore(), r=all && all[id];
+  if(!r) return false;
+  const ns=String(r.ns||"e");
+  for(const n of LAYER_KEYS){
+    if(r.layer && r.layer[n]!=null && !lsSet(ns+n,r.layer[n],true)) return false;
+  }
+  if(!r.catalog) return true;
+  return takeCatalog(r.catalog,{file:r.file,fileAt:+r.fileAt||0,from:r.from});
+}
+/** Make an adopted team catalog the one in use. The personal one is set aside and read back FIRST, and only then taken; a
+ *  snapshot that fails stops the switch with everything as it was, and one that holds survives a desk closed before the take. */
+function switchToAdopted(c,opts){
+  const aside=setAsidePersonal(); /* plant:aside-snapshot */
+  if(aside===false) return false; /* plant:aside-stops */
+  /* The empty desk's content is set aside already, so the question askLoose asks before erasing it would be untrue here. */
+  return takeCatalog(c,opts);
+}
+/** Whether the catalog in use carries edits of this desk's own that no export holds: the loose desk's as looseUnexported reads them,
+ *  and a loaded catalog's layer, which records no export, whenever it holds any. */
+function editsUnexported(){
+  return catalogEdited() && lyGet("Exported")!==looseMark();
+}
+/* PUT BACK IN USE OVER EDITS NOT YET EXPORTED asks first, from the press: yes sets those edits aside and puts the catalog back,
+   Cancel and Escape do nothing. */
+function askPutBack(title,go){
+  const a=document.activeElement;
+  const from=originOf(a && a.tagName==="BUTTON" ? a : null, ()=>document.getElementById("catNow"));
+  const was=document.getElementById("ePutBack");
+  if(was) was.remove();
+  const el=document.createElement("div");
+  el.className="bub bub-ask e-undo";
+  el.id="ePutBack";
+  el.setAttribute("role","alertdialog");
+  el.setAttribute("data-side","none");
+  el.innerHTML='<p>'+esc(t("The catalog in use has changes not yet exported. Put your own {TITLE} back in use? The changes are set aside under Personal catalogs, not lost.")
+      .split("{TITLE}").join(String(title||"")))+'</p>'
+    +'<div class="tour-actions">'
+    +'<button type="button" class="btn" id="ePutBackNo">'+esc(t("Cancel"))+'</button>'
+    +'<button type="button" class="btn primary" id="ePutBackYes">'+esc(t("Put back in use"))+'</button></div>';
+  cutLeaves();
+  document.body.appendChild(el);
+  hangBubble(el, from);
+  const close=()=>dismissNode(el);
+  el.querySelector("#ePutBackNo").onclick=close;
+  el.querySelector("#ePutBackYes").onclick=()=>{ close(); go(); };
+  el.addEventListener("keydown",e=>{
+    if(e.key!=="Escape") return;
+    e.preventDefault(); e.stopPropagation(); close();
+  });
+  el.querySelector("#ePutBackYes").focus();
+}
 /** True while the sample is still, word for word, the one that shipped. The test is
  *  "would an export differ from the sample?" - edits, additions, deletions, renames,
  *  role and quick-facts changes all clear the watermark: you have started making it
@@ -1294,6 +1396,12 @@ export {
   catalogEditionOlder,
   todayEdition,
   activateCatalog,
+  setAsidePersonal,
+  listPersonalAside,
+  restorePersonal,
+  switchToAdopted,
+  editsUnexported,
+  askPutBack,
   askLoose,
   catalogEdited,
   sampleUntouched,

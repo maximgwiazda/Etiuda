@@ -7,6 +7,12 @@ import { hooks } from "./hooks.js";
    take a neighbouring page's keys with it. The boot script in the template carries the same
    shape as a literal, because it shares nothing with this file. */
 const E_KEY_RE=/^e(?:[A-Z]|[0-9a-z]+~)/;
+/* The personal catalogs set aside (board 1015) are the one key a Reset leaves: what a person made, kept where a team catalog took its place. */
+const E_ASIDE_KEY="eAsidePersonal";
+/* The team's adoptions of this desk's own catalogs it has told and been answered about, by team catalog id (board 1015). */
+const E_ADOPTED_KEY="eAdoptedSeen";
+/* Whether a Reset clears this key. */
+function eResetKey(k){ return E_KEY_RE.test(k) && k!==E_ASIDE_KEY; } /* plant:aside-survives-reset */
 /* THE CATALOG'S ID, NEVER ITS SHAPE. Seeding this on the
    card/intent/category counts meant every edition that added a single card moved every agent
    to a fresh namespace, and their own cards, stars and ordering went with it - invisibly,
@@ -250,7 +256,7 @@ function eResetClear(){
   eWiping=true;
   if(!E_DESK) return false;
   /* The person's own layer of a catalog (e<ns>~Pack, their cards and stars) stays: a Reset clears settings (board D7b). */
-  Object.keys(E_DESK.map).forEach(k=>{ if(E_KEY_RE.test(k) && !/^e[0-9a-z]+~Pack$/.test(k)){ delete E_DESK.map[k]; eDeskOwed.add(k); } });
+  Object.keys(E_DESK.map).forEach(k=>{ if(eResetKey(k) && !/^e[0-9a-z]+~Pack$/.test(k)){ delete E_DESK.map[k]; eDeskOwed.add(k); } });
   return deskSave();
 }
 /* Returns whether the value actually landed. Swallowing the quota throw is right for the
@@ -396,6 +402,9 @@ export {
   eNsFor,
   E_NS,
   E_KEY_RE,
+  E_ASIDE_KEY,
+  E_ADOPTED_KEY,
+  eResetKey,
   E_LS_OK,
   E_SS_OK
 };

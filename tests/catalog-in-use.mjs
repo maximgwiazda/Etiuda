@@ -22,7 +22,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 144;
+const EXPECTED = 148;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see the catalogs it uses, their content included, and this desk's changes to them. The lead's Studio can take a copy of any of them at any time, without asking here: of a team catalog, one the lead publishes to the team, sealed for the team; of a personal catalog, any other on this desk, sealed for the lead alone. A personal catalog can be marked Private in the Library, under Catalog & data, and is then never sent, though the lead still sees its name and edition. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, and Studio shows them in the team's totals.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi katalogi, których używa to stanowisko, razem z ich treścią, oraz zmiany wprowadzone w nich na tym stanowisku. Studio lidera może w każdej chwili, bez pytania tutaj, pobrać kopię każdego z nich: katalogu zespołowego, czyli publikowanego przez lidera dla zespołu, zapieczętowaną dla zespołu, a katalogu osobistego, czyli każdego innego na tym stanowisku, zapieczętowaną wyłącznie dla lidera. Katalog osobisty można oznaczyć jako Prywatny w Bibliotece, w części Katalog i dane, i wtedy nigdy nie jest wysyłany, choć lider nadal widzi jego nazwę i wydanie. Studio lidera wymienia to stanowisko z nazwy, chyba że organizacja wyłączy nazwy, razem z używanym katalogiem, jego wydaniem i okresem zliczania, i wymienia je dalej, gdy przestanie się odzywać. Własne dane stanowiska trafiają do lidera zapieczętowane, a Studio pokazuje je w sumach zespołu.";
@@ -1867,6 +1867,81 @@ try {
         const pp = SRC.split("\n").map(l => l.indexOf("plant:s0b-branch-private") >= 0 ? "  /* plant:s0b-branch-private */" : l).join("\n");
         const q = pp !== SRC ? await copies("r2-copies-plant-private", pp) : null;
         check(!!q && !q.withheld, "r2n lifting plant:s0b-branch-private turns r2e red: a private copy is written (" + (q ? JSON.stringify(q) : "plant not found") + ")");
+      }
+    }
+    {
+      /* Board 1015: the private mark is the shell's, keyed by the catalog's id, and the page's set-aside never touches it. A personal
+         catalog marked private is still private by the shell's own answer (catalogMarkedPrivate, reached through the branch write, the
+         way r2e reaches it) while it is set aside, after the switch to a team catalog is told to the shell, and after it is restored. */
+      const kept = async (name) => {
+        const box = await arm(name);
+        join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["harbour-board"]);
+        await box.D.ask("etiuda:team-join", "private", "quay-held", "on");
+        const stage = async (tail) => {
+          const w = await writeCopy(box, tail, "quay-held");
+          return w.ok === true && w.withheld === true && !fs.existsSync(branchAt(box, tail))
+            && (box.D.envelope().catalogPrivate || []).indexOf("quay-held") >= 0;
+        };
+        const whileAside = await stage("55555551");
+        const dir = folder(name + "-out");
+        put(dir, "team.ec", textOf(catalog(4, { id: "harbour-board", name: "Harbour board", card: "x" })));
+        box.D.api.offerFile(box.D.win, path.join(dir, "team.ec"));
+        const offT = box.D.sent.filter(a => a[0] === "etiuda:catalog-file").pop();
+        take(box.D, pinOf(box.D, offT ? offT[1] : ""));
+        const afterSwitch = await stage("55555552");
+        put(dir, "held.ec", b0Body());
+        box.D.api.offerFile(box.D.win, path.join(dir, "held.ec"));
+        const offH = box.D.sent.filter(a => a[0] === "etiuda:catalog-file").pop();
+        take(box.D, pinOf(box.D, offH ? offH[1] : ""));
+        const afterRestore = await stage("55555553");
+        return { whileAside, afterSwitch, afterRestore };
+      };
+      const k = await kept("r2-aside-private");
+      check(k.whileAside && k.afterSwitch && k.afterRestore,
+        "r2z a catalog marked private stays private by the shell's own answer while it is set aside, after the switch to a team catalog, and after it is restored (" + JSON.stringify(k) + ")");
+    }
+    {
+      /* Board 1015: the team file's `adopted` reaches the page only for this desk. The author's desk is handed its own entry; a
+         teammate on the same team file is handed none; an entry for a catalog the team does not list, a malformed original, and a
+         team file under a lead this desk has not pinned are handed to nobody. */
+      const H = n => crypto.createHash("sha256").update(String(n)).digest("hex");
+      const adopted = async (name, src) => {
+        const author = await arm(name, src);
+        const mate = { D: newDesk(name + "-mate", author.share, src) };
+        mate.me = await mate.D.ask("etiuda:branch-identity", true);
+        const roster = [entry(author.D, author.me, author.key, author.team, 1), entry(mate.D, mate.me, author.key, author.team, 1)];
+        const list = [{ catalog: "harbour-board", desk: author.me.id, original: H(author.me.id + "-aaaaaaaa") },
+          { catalog: "not-listed", desk: author.me.id, original: H("x") }, { catalog: "harbour-board", desk: author.me.id, original: "short" },
+          { catalog: "harbour-board", desk: "k-" + "0".repeat(16), original: H("y") }];
+        const signed = (who, team, rows) => textOf(sign({ format: 1, kind: "etiuda-team", id: team, catalogs: ["harbour-board"],
+          lead: Object.assign({}, who, { box: BOX }), sealed: true, exportsSealed: false, epoch: 1, roster,
+          content: SWITCH, adopted: rows }, who === OTHER ? other.privateKey : lead.privateKey, who));
+        put(author.share, "etiuda-team.json", signed(LEAD, author.team, list));
+        /* the teammate's own mirror of the same share, synced as the author's is */
+        syncMirror({ D: mate.D, team: author.team, share: author.share, key: author.key });
+        await author.D.ask("etiuda:team-join", "content-said", author.team, SWITCH.at);
+        await mate.D.ask("etiuda:team-join", "content-said", author.team, SWITCH.at);
+        const mine = await author.D.ask("etiuda:catalog-adopted");
+        const theirs = await mate.D.ask("etiuda:catalog-adopted");
+        /* the same entries under another lead's key, in a fresh folder this desk never pinned */
+        const stranger = await arm(name + "-stranger", src);
+        put(stranger.share, "etiuda-team.json", signed(OTHER, stranger.team, [{ catalog: "harbour-board", desk: stranger.me.id, original: H("z") }]));
+        const unpinned = await stranger.D.ask("etiuda:catalog-adopted");
+        return { mine, theirs, unpinned, me: author.me.id };
+      };
+      const a = await adopted("1015-adopted");
+      check(JSON.stringify(a.mine) === JSON.stringify([{ catalog: "harbour-board", desk: a.me, original: H(a.me + "-aaaaaaaa") }])
+          && Array.isArray(a.theirs) && a.theirs.length === 0 && Array.isArray(a.unpinned) && a.unpinned.length === 0,
+        "1015a the team file's adoptions reach the author's desk alone: its own entry for a catalog the team lists, none for a teammate, none from a lead it has not pinned ("
+        + JSON.stringify({ mine: a.mine.length, theirs: a.theirs, unpinned: a.unpinned }) + ")");
+      if (PLANTS_OFF) { skip("1015b lifting plant:adopted-desk turns 1015a red"); skip("1015c lifting plant:adopted-pin turns 1015a red"); }
+      else {
+        const pd = SRC.split("\n").map(l => l.indexOf("plant:adopted-desk") >= 0 ? "    /* plant:adopted-desk */" : l).join("\n");
+        const p = pd !== SRC ? await adopted("1015-adopted-plant-desk", pd) : null;
+        check(!!p && p.theirs.length > 0, "1015b lifting plant:adopted-desk turns 1015a red: a teammate is handed the author's adoption (" + (p ? JSON.stringify(p.theirs) : "plant not found") + ")");
+        const pp = SRC.split("\n").map(l => l.indexOf("plant:adopted-pin") >= 0 ? "  /* plant:adopted-pin */" : l).join("\n");
+        const q = pp !== SRC ? await adopted("1015-adopted-plant-pin", pp) : null;
+        check(!!q && q.unpinned.length > 0, "1015c lifting plant:adopted-pin turns 1015a red: a team file under a lead this desk never pinned is heeded (" + (q ? JSON.stringify(q.unpinned) : "plant not found") + ")");
       }
     }
     {
