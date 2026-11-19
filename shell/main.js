@@ -3658,9 +3658,9 @@ function contentApplies(team) {
   if (!team || typeof teamContentSaid[team] !== "string" || !ASK_TIME_RE.test(teamContentSaid[team]) || !Number.isFinite(Date.parse(teamContentSaid[team]))) return false;
   return leadKeyOf(team) !== "" && teamContentLead[team] === leadKeyOf(team); /* plant:s0b-told-lead */
 }
-/* The team's current lead key as the desk pins it, as one string; empty where no lead is pinned. */
+/* The team's current lead key as pinTrusted reads it, as one string; empty where none is trusted. */
 function leadKeyOf(team) {
-  const pin = teamPins[team];
+  const pin = pinTrusted(team);
   return pin && typeof pin.keyId === "string" && typeof pin.public === "string" ? pin.keyId + ":" + pin.public : "";
 }
 /* Whether a whole team file is older than one this desk has heeded for its team and lead key, as heedTeam judges it. */
