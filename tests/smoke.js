@@ -2145,8 +2145,9 @@ const t0 = Date.now();
      same read with a short path, which must not be trimmed at all. */
   const trim = await p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
+    /* The seated page's own host, taken once out here: the restore below stands outside read(). */
+    const wasHost = window.E_HOST;
     const read = async (folder) => {
-      const wasHost = window.E_HOST;
       window.E_HOST = { catalogFolder: folder, catalogFile: "", openCatalogFolder: () => true,
                         catalogFiles: () => [], signinState: wasHost && wasHost.signinState };
       closeScreenTab("library"); await wait(350);
