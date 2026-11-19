@@ -2691,10 +2691,10 @@ const t0 = Date.now();
   const offered = blankFile.offered || {};
   check(blankFile.btn && !blankFile.asked && blankFile.saved === 1 && blankFile.cards > 0
         && blankFile.kind === "etiuda-catalog" && blankFile.format === 2 && blankFile.name == null
-        && !!blankFile.loadedFile && offered.name === blankFile.loadedFile.replace(/\.(ec|json|js)$/i, "") + ".ec"
+        && offered.name === (blankFile.loadedFile ? blankFile.loadedFile.replace(/\.(ec|json|js)$/i, "") + ".ec" : "Etiuda catalog.ec")
         && offered.types.indexOf('".ec"') > -1 && offered.types.indexOf('".js"') < 0,
     "Manage > Export catalog goes straight to the save dialog, which offers the loaded catalog's own file"
-    + " as an .ec (" + JSON.stringify(offered.name) + " for " + JSON.stringify(blankFile.loadedFile) + ", accepting " + offered.types
+    + " as an .ec, or \"Etiuda catalog.ec\" where a seated desk holds the catalog with no file of its own (" + JSON.stringify(offered.name) + " for " + JSON.stringify(blankFile.loadedFile) + ", accepting " + offered.types
     + "), and writes the .ec document with no name inside it: "
     + blankFile.bytes + " bytes, " + blankFile.cards + " cards, name " + JSON.stringify(blankFile.name)
     + ", a name dialog " + (blankFile.asked ? "shown" : "never shown"));
