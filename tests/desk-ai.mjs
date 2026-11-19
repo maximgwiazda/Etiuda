@@ -92,7 +92,8 @@ const chatSaying = text => JSON.stringify({ choices: [{ message: { role: "assist
 /* ---- the shell, electron stubbed, a desk window and a picker made here --------------------------------------------- */
 const MAIN_SRC = fs.readFileSync(path.join(SHELL, "main.js"), "utf8");
 /* Each name of the stage is read only where main.js has it, so a tree without it says which legs fail rather than stopping. */
-const MAIN_TAIL = "\n__test.setWindow = w => { theWindow = w; }; __test.embedSuggest = embedSuggest; __test.pickWithClip = pickWithClip;"
+/* The desk gate (a desk without a seat does not work) is not this leg's subject, so the shell is loaded as a seated desk: signinWorksNow answers true, as pick.mjs's slices are given it. */
+const MAIN_TAIL = "\nif (typeof signinWorksNow === 'function') signinWorksNow = () => true;\n__test.setWindow = w => { theWindow = w; }; __test.embedSuggest = embedSuggest; __test.pickWithClip = pickWithClip;"
   + " __test.bumpPress = () => ++pickPress; __test.pickWin = () => pickWin;"
   + " __test.setConfig = f => { if (typeof deskAiConfig === 'function') deskAiConfig = f; };"
   + " __test.deskReorder = typeof deskReorder === 'undefined' ? { ask: async () => null } : deskReorder;"
