@@ -120,6 +120,7 @@ try {
           sessionStorage.setItem("eSessionTabs", JSON.stringify({ tabs, activeTabId: "tb1" }));
         } catch (e) {}
       }, codes);
+      await seatPage(q);
       await q.goto("file:///" + path.join(dir, "etiuda.html").replace(/\\/g, "/"), { waitUntil: "load", timeout: 60000 });
       await q.waitForFunction((n) => document.querySelectorAll("#tabsBar .tab[data-tid]").length >= n, { timeout: 30000 }, codes.length);
       if (await q.$("#ecYes")) await q.click("#ecYes");
