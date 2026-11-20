@@ -830,9 +830,11 @@ function createCore(deps) {
     out.end = cert.until; /* plant:seat-session-cap */
     return out;
   }
-  /* What a session keeps of the certificate its hello carried, and that a following Studio's member key carried it. */
+  /* What a session keeps of the certificate its hello carried: its delegated signer, and that a following Studio's member key carried it. */
   function seatOf(cert, deskPub) {
+    const signer = plain(cert) && plain(cert.via) && plain(cert.via.key) ? cert.via.key.pub : null;
     const seat = { pub: deskPub, licence: cert.licence, issued: cert.issued, until: cert.until, pooled: cert.pooled === true };
+    if (is(HEX64, signer)) seat.signer = signer; /* plant:seat-signer */
     if (cert.member === true) seat.member = true; /* plant:seat-member */
     return seat;
   }
@@ -1790,12 +1792,19 @@ function createCore(deps) {
     reads = !(s.ok && s.withdraw === true); /* plant:withdraw-reads */
     return reads ? s : no("seat-lapsed");
   }
-  /* A key's session on a team with seats, judged again at each use from the certificate its hello carried: a freed name, a run-out the
-     evidence now passes by the margin, or a pooled grace the service ended refuses it as seatGate refuses a new hello. A session that
-     carried none, or another licence's, holds no seat. A store's sessions are judged by their end alone; any other by ordinaryLapsed. */
+  function seatSignerRevoked(seat) {
+    if (!plain(seat) || !is(HEX64, seat.signer)) return false;
+    const list = revokedNow();
+    return Array.isArray(list) && list.indexOf(seat.signer) > -1;
+  }
+  /* A key's session on a team with seats, judged again at each use from the certificate its hello carried: a revoked signing key, a freed
+     name, a run-out the evidence now passes by the margin, or a pooled grace the service ended refuses it as seatGate refuses a new hello.
+     A session that carried none, or another licence's, holds no seat. A store's sessions are judged by their end alone; any other by
+     ordinaryLapsed (past its certificate's signing key check). */
   function seatLapsed(s) {
     const team = store.get("team");
     if (team && team.store) return null;
+    if (seatSignerRevoked(s.seat)) return no("seat-lapsed"); /* plant:session-seat-revoked */
     const seats = s.key && !s.inv ? store.get("seats") : undefined;
     if (!plain(seats)) return ordinaryLapsed(s);
     const seat = s.seat;

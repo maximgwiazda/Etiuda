@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-seats-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 200;
+const EXPECTED = 202;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* ETIUDA_PLANT_ONLY, a comma list of plant tags or planted names: only those plants run, every other is skipped, so one plant is proved
    alone without the whole sweep. */
@@ -1505,6 +1505,8 @@ async function main() {
     ["lapse-first", "s24h", lapseFirstScene, "a lapsed team's desk is told its seat"],
     [PLANTED.folderBack, "s24j", folderGoneScene, "a read-only team's lead moves its team file to a folder"],
     ["seat-member", "s25a", memberTakenScene, "the mark is dropped from the session's seat"],
+    ["seat-signer", "s28a", revokedSignerSessionScene, "a session keeps no record of the delegated key that signed its certificate"],
+    ["session-seat-revoked", "s28a", revokedSignerSessionScene, "a session whose certificate's signing key is revoked stays open"],
     [PLANTED.memberOutside, "s25a", memberTakenScene, "a marked certificate signed with its line is refused"],
     ["door-member", "s25b", memberDoorScene, "the door takes a marked certificate"],
     [PLANTED.memberOutside, "s25c", memberBytesScene, "a certificate given the mark after its signing is taken"],
