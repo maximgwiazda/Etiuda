@@ -41,7 +41,7 @@ const ASIDE = {
   "15ep": offWindows("15ep", "15em stands aside off Windows, so lifting plant:w2-folder-not-writable has no green leg there to turn"),
 };
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 211;
+const EXPECTED = 215;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -5464,10 +5464,49 @@ try {
       && !!refBig && refBig.ok === false && refBig.reason === "too-large",
       "1013s6 share-to refuses off-roster desk with not-on-team and oversized card with too-large: " + JSON.stringify({ refRem, refBig }));
 
+    /* The lead's switch (board 1013, piece 6): the field rides the signed team file; the desk alone is the gate, since the relay
+       holds the team file sealed under the team key and reads nothing in it. Cards waiting or kept stay. */
+    const switchDoc = (rev, sharing) => signS(Object.assign({}, JSON.parse(JSON.stringify(teamDoc2)), { rev }, sharing ? { sharing } : {}));
+    const heedSwitch = async doc => {
+      for (const d of [dA, dB, dC]) {
+        const m = d.api.rawCatalogFolder();
+        put(m, "etiuda-team.json", JSON.stringify(doc, null, 1));
+        await d.join("state");
+        await d.join("state");
+      }
+      return dA.join("state");
+    };
+    const waitingCard = Object.assign({}, sharedCard, { id: "u:shared-wait" });
+    const sentWait = await dA.join("share-to", dB.me.id, JSON.stringify(waitingCard), "");
+    const viewOff = await heedSwitch(switchDoc(3, "off"));
+    const refOff = await dA.join("share-to", dB.me.id, JSON.stringify(sharedCard), "");
+    const inboxOff = await dB.join("share-inbox");
+    const offItems = (inboxOff && inboxOff.items) || [];
+    check(!!sentWait && sentWait.ok === true && !!viewOff && !!viewOff.share && viewOff.share.off === true
+      && !!refOff && refOff.ok === false && refOff.reason === "sharing-off"
+      && offItems.length === 1 && offItems[0].card.id === "u:shared-wait",
+      "1013sw1 a team file saying sharing off turns share-to into a refusal (sharing-off) with nothing sent, and joinView().share.off says so: "
+      + JSON.stringify({ sentWait, off: viewOff && viewOff.share && viewOff.share.off, refOff, ids: offItems.map(i => i.card.id) }));
+    const keptOff = offItems[0] ? await dB.join("share-keep", JSON.stringify({ from: offItems[0].from, team: TEAM_S, card: JSON.stringify(offItems[0].card) }), "lamp-shop") : null;
+    const droppedOff = offItems[0] ? await dB.join("share-drop", String(offItems[0].id)) : null;
+    const inboxOff2 = await dB.join("share-inbox");
+    check(!!keptOff && keptOff.ok !== undefined && !(keptOff.reason === "sharing-off")
+      && !!droppedOff && droppedOff.ok === true && Array.isArray(inboxOff2 && inboxOff2.items) && inboxOff2.items.length === 0,
+      "1013sw2 while sharing is off a waiting card still opens and can be kept or declined: " + JSON.stringify({ keptOff, droppedOff, left: inboxOff2 && inboxOff2.items && inboxOff2.items.length }));
+    const viewOn = await heedSwitch(switchDoc(4, null));
+    const sentOn = await dA.join("share-to", dB.me.id, JSON.stringify(sharedCard), "");
+    const inboxOn = await dB.join("share-inbox");
+    check(!!viewOn && !!viewOn.share && viewOn.share.off !== true && !!sentOn && sentOn.ok === true
+      && ((inboxOn && inboxOn.items) || []).length === 1,
+      "1013sw3 a later team file without the field turns sharing on again: share-to sends and joinView().share.off is gone: "
+      + JSON.stringify({ off: viewOn && viewOn.share && viewOn.share.off, sentOn }));
+    for (const it of (inboxOn && inboxOn.items) || []) await dB.join("share-drop", it.id);
+
     if (PLANTS_OFF) {
       skip("1013s7 lifting plant:share-roster accepts off-roster recipient");
       skip("1013s8 lifting plant:share-seal-to sends unsealed card");
       skip("1013s9 lifting plant:share-open-from accepts without openCardFrom");
+      skip("1013sw4 lifting plant:share-off lets share-to send while the team file says off");
     } else {
       const liftSharePlant = async (tag, fn) => {
         const lines = SRC.split("\n"), at = lines.findIndex(l => l.includes("/* plant:" + tag + " */"));
@@ -5526,6 +5565,22 @@ try {
       });
       check(!p9.missing && p9 && p9.got && Array.isArray(p9.got.items) && p9.got.items.length === 1,
         "1013s9 lifting plant:share-open-from accepts an unverified card envelope: " + JSON.stringify(p9));
+      const pSw = await (async () => {
+        const lines = SRC.split(String.fromCharCode(10)), at = lines.findIndex(l => l.includes("/* plant:share-off */"));
+        if (at < 0) return { missing: true };
+        lines[at] = lines[at].replace(/if\s*\([^)]*\)\s*return[^;]*;/, "if (false) ;");
+        const dP = await loadFromCopy("p10-" + hexS(3), dA.ud, lines.join(String.fromCharCode(10)));
+        const m = dP.api.rawCatalogFolder();
+        put(m, "etiuda-team.json", JSON.stringify(switchDoc(5, "off"), null, 1));
+        await dP.join("state"); await dP.join("state");
+        const r = await dP.join("share-to", dB.me.id, JSON.stringify(sharedCard), "");
+        const got = await dB.join("share-inbox");
+        for (const it of (got && got.items) || []) await dB.join("share-drop", it.id);
+        for (const c of dP.chans) await c.stop().catch(() => {});
+        return { r };
+      })();
+      check(!pSw.missing && pSw.r && pSw.r.reason !== "sharing-off",
+        "1013sw4 lifting plant:share-off lets share-to send while the team file says off: " + JSON.stringify(pSw));
     }
     for (const d of [dA, dB, dC]) for (const c of d.chans) await c.stop().catch(() => {});
   }
