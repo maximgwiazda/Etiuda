@@ -5243,9 +5243,9 @@ function heedTeam() {
   }
   // The roster of the epoch accepted: a file at that epoch replaces it, and one below it put back changes nothing.
   if (r.team && Number.isInteger(r.epoch) && r.epoch >= 1 && r.epoch >= (teamEpochSeen[r.team] || 0)) { /* defence in depth: teamFileBehind (plant:epoch-rev) already refuses an older epoch before this */
-    const ids = rosterIdsOf(doc), ents = rosterEntriesOf(doc), had = teamRoster[r.team];
-    if (!had || had.epoch !== r.epoch || had.desks.join(",") !== ids.join(",") || !rosterEntriesSame(had.entries, ents)) {
-      teamRoster[r.team] = { epoch: r.epoch, desks: ids, entries: ents };
+    const ids = rosterIdsOf(doc), ents = rosterEntriesOf(doc), had = teamRoster[r.team], sharingOff = doc.sharing === "off";
+    if (!had || had.epoch !== r.epoch || had.desks.join(",") !== ids.join(",") || !rosterEntriesSame(had.entries, ents) || (had.sharing === "off") !== sharingOff) {
+      teamRoster[r.team] = Object.assign({ epoch: r.epoch, desks: ids, entries: ents }, sharingOff ? { sharing: "off" } : {});
       changed = true;
     }
     const pinned = teamPins[r.team];
@@ -6628,7 +6628,7 @@ function joinView() {
     const keptHere = shareKept[shareHere.team] || {}, nameOf = new Map((roster && Array.isArray(roster.entries) ? roster.entries : []).map(e => [e.id, e.name]));
     const kept = {};
     Object.keys(keptHere).forEach(card => { kept[card] = keptHere[card].map(r => ({ id: r.by, name: nameOf.get(r.by) || r.name || r.by, at: r.at })); });
-    view.share = { team: shareHere.team, teammates, inbox: shareInboxSeq };
+    view.share = Object.assign({ team: shareHere.team, teammates, inbox: shareInboxSeq }, roster && roster.sharing === "off" ? { off: true } : {});
     if (Object.keys(kept).length) view.share.kept = kept;
   }
   return view;
@@ -8578,7 +8578,7 @@ function readDesk() {
       if (!SEALED_TEAM_RE.test(t) || !table(v) || !Number.isInteger(v.epoch) || v.epoch < 1 || !Array.isArray(v.desks)) return;
       if (v.epoch > (teamRoster[t] ? teamRoster[t].epoch : 0)) {
         const ids = deskIdsOnce(v.desks);
-        teamRoster[t] = { epoch: v.epoch, desks: ids, entries: rosterEntriesChecked(v.entries, ids) }; /* plant:roster-readback */
+        teamRoster[t] = Object.assign({ epoch: v.epoch, desks: ids, entries: rosterEntriesChecked(v.entries, ids) }, v.sharing === "off" ? { sharing: "off" } : {}); /* plant:roster-readback */
       }
     });
     // A floor is taken where it is higher, by epoch and then by rev, and never lowered.
@@ -10018,11 +10018,12 @@ function shareActiveContext() {
   if (!me || !deskBranch) return null;
   const roster = teamRoster[here.team];
   const entries = roster && Array.isArray(roster.entries) ? roster.entries : [];
-  return { team: here.team, me, entries };
+  return { team: here.team, me, entries, off: !!roster && roster.sharing === "off" };
 }
 async function shareToCard(recipientId, cardJson, note) {
   const ctx = shareActiveContext();
   if (!ctx) return { ok: false, reason: "not-on-team" };
+  if (ctx.off) return { ok: false, reason: "sharing-off" }; /* plant:share-off */
   const recipient = ctx.entries.find(e => e && e.id === String(recipientId || "") && e.id !== ctx.me.id) || null;
   if (!recipient) return { ok: false, reason: "not-on-team" }; /* plant:share-roster */
   let card = null;

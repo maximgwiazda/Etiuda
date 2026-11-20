@@ -528,6 +528,7 @@ function joinTook(v,changed){
       });
       joinNow.share.kept=kept;
     }
+    if(s.share.off===true) joinNow.share.off=true;
   }
   const hadAskWhy=askWhy;
   if(s.askRefused || s.refused==="no-identity" || s.refused==="folder-not-answering" || s.refused==="folder-not-writable"){

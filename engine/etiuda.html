@@ -18846,6 +18846,7 @@ What is typed here stays in this browser.`;
         });
         joinNow.share.kept = kept;
       }
+      if (s.share.off === true) joinNow.share.off = true;
     }
     const hadAskWhy = askWhy;
     if (s.askRefused || s.refused === "no-identity" || s.refused === "folder-not-answering" || s.refused === "folder-not-writable") {
@@ -20398,7 +20399,7 @@ What is typed here stays in this browser.`;
   var deferredIds = /* @__PURE__ */ new Set();
   var seenInboxIds = /* @__PURE__ */ new Set();
   function shareOfferedNow() {
-    return !!teamShareState();
+    return !!teamShareState() && !teamShareState().off;
   }
   function cardIsShareable(m) {
     return !!(m && (m._custom || m._overridden || movedCardIds().has(m.id)));
@@ -20421,8 +20422,7 @@ What is typed here stays in this browser.`;
   }
   function shareSig(m) {
     const id = String(m && m.id || "");
-    const st = teamShareState();
-    const on = st && cardIsShareable(m) ? "s" : "";
+    const on = shareOfferedNow() && cardIsShareable(m) ? "s" : "";
     const open = shareOpenId === id ? "+" : "";
     const from = m && m.from && m.from.desk ? String(m.from.desk) + ":" + shareSenderName(m) : "";
     const kept = shareKeptOf(m).map((k) => k.id + "@" + k.at + "@" + k.name).join(",");
@@ -20476,7 +20476,7 @@ What is typed here stays in this browser.`;
     if (closeShareOut) closeShareOut();
     if (closeShareIn) closeShareIn();
     const st = teamShareState(), m = findCard(id);
-    if (!st || !m || !cardIsShareable(m)) return;
+    if (!st || st.off || !m || !cardIsShareable(m)) return;
     const mates = (st.teammates || []).slice();
     const selected = /* @__PURE__ */ new Set();
     let query = "", noteText = "", sending2 = false;
@@ -20651,7 +20651,7 @@ What is typed here stays in this browser.`;
     }
   }
   function shareRowHtml() {
-    if (!shareOfferedNow() || !inboxItems.length) return "";
+    if (!teamShareState() || !inboxItems.length) return "";
     const senders = [];
     inboxItems.forEach((it) => {
       if (it.fromName && senders.indexOf(it.fromName) < 0) senders.push(it.fromName);
@@ -20815,7 +20815,7 @@ What is typed here stays in this browser.`;
     openInboxBubble();
   }
   function refreshShareInbox() {
-    if (inboxLoading || !shareOfferedNow()) return;
+    if (inboxLoading || !teamShareState()) return;
     inboxLoading = true;
     shareInboxList().then((r) => {
       inboxLoading = false;

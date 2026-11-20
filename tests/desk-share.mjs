@@ -19,7 +19,7 @@ const PRIO = E.belowNormal();
 console.log("       this run at " + (PRIO.below ? "below-normal" : "priority " + PRIO.priority) + " priority");
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 31;
+const EXPECTED = 35;
 let fails = 0, checks = 0, notRun = 0;
 const check = (ok, what, detail) => {
   checks++;
@@ -108,7 +108,7 @@ const RAW = fs.readFileSync(ENGINE, "utf8");
 const url = copyFiles(path.join(lab, "page"), RAW);
 let browser = null;
 
-async function boot(pageUrl, { lang = "en", theme = "light", onTeam = true, inbox = [], kept = null } = {}) {
+async function boot(pageUrl, { lang = "en", theme = "light", onTeam = true, inbox = [], kept = null, off = false } = {}) {
   const ctx = await browser.createBrowserContext();
   const p = await ctx.newPage();
   p.__ctx = ctx;
@@ -116,7 +116,7 @@ async function boot(pageUrl, { lang = "en", theme = "light", onTeam = true, inbo
   p.on("pageerror", (e) => console.log("       page error: " + String(e && e.message || e).split("\n")[0]));
   await p.setViewport({ width: 1280, height: 860, deviceScaleFactor: 1 });
   await p.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
-  await p.evaluateOnNewDocument((lang, theme, onTeam, inbox, kept) => {
+  await p.evaluateOnNewDocument((lang, theme, onTeam, inbox, kept, off) => {
     try {
       for (const [k, v] of [["eTourDone_v3", "1"], ["eTourInvite_v3", "1"], ["eAgent", "Bench Agent"], ["eNameAsked", "1"], ["eFirstSigninSeen", "1"],
         ["eTheme", theme], ["eUiLang", lang], ["eStill", "1"], ["eMotionOff", "1"]]) localStorage.setItem(k, v);
@@ -136,6 +136,7 @@ async function boot(pageUrl, { lang = "en", theme = "light", onTeam = true, inbo
       ],
     } : null;
     if (shareState && kept) shareState.kept = JSON.parse(JSON.stringify(kept));
+    if (shareState && off) shareState.off = true;
     window.__keptCalls = [];
     window.__shareState = shareState;
     window.E_HOST = {
@@ -178,7 +179,7 @@ async function boot(pageUrl, { lang = "en", theme = "light", onTeam = true, inbo
         return Promise.resolve({ ok: true });
       },
     };
-  }, lang, theme, onTeam, inbox, kept);
+  }, lang, theme, onTeam, inbox, kept, off);
   await seatPage(p);
   await p.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
   await p.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
@@ -516,10 +517,54 @@ try {
     }
   }
 
+  /* 4b. The lead's switch (board 1013, piece 6): off draws no Share anywhere; waiting and kept cards stay; on restores it. */
+  {
+    const inboxW = [{
+      id: "d".repeat(32), from: "k-1111111111111111", fromName: "Ewa Nowak", team: "t-0123456789abcdef", note: "",
+      card: { id: "u:shared-sw", shelf: FIRST_SHELF, bodyShape: "plain", title: { en: "Waiting while off" }, body: { en: "Waiting body." } },
+    }];
+    const p = await boot(url, { onTeam: true, off: true, inbox: inboxW });
+    await p.evaluate((shelf) => {
+      pack.custom.push({ id: "u:own-sw", c: shelf, t: "Own", en: "Own body." });
+      pack.custom.push({ id: "u:kept-sw", c: shelf, t: "Kept", en: "Kept body.", from: { desk: "k-1111111111111111", card: "u:orig" } });
+      savePack();
+      rebuildCards();
+    }, FIRST_SHELF);
+    const swView = () => p.evaluate(() => {
+      const el = document.querySelector('.card[data-id="u:own-sw"] .txt[data-v]');
+      el.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 50, clientY: 50 }));
+      const items = [...document.querySelectorAll('.e-ctx [role="menuitem"]')].map((b) => b.textContent.trim());
+      if (typeof closeCtxMenu === "function") closeCtxMenu(false);
+      return {
+        btns: document.querySelectorAll('.card .cacts button[data-act="share"]').length,
+        menuHas: items.some((x) => /Share/i.test(x)),
+        row: !!document.getElementById("eShareRow"),
+        bub: !!document.querySelector(".e-share-in-bub"),
+        keptBadge: !!document.querySelector('.card[data-id="u:kept-sw"] .cbadge.from'),
+      };
+    });
+    await p.waitForSelector(".e-share-in-bub", { timeout: 5000 });
+    const offView = await swView();
+    check(offView.btns === 0 && !offView.menuHas,
+      "1013sw5 while the team's sharing is off a card draws no Share button and its menu offers no Share row", offView);
+    check(offView.row && offView.bub && offView.keptBadge,
+      "1013sw6 while sharing is off a card already waiting keeps its row and bubble, and a card already kept keeps its from mark", offView);
+    await p.click('.e-share-in-bub [data-share-in="keep"]');
+    await sleep(120);
+    const keptOff = await p.evaluate(() => ({ kept: (window.__calls || []).some((c) => c.op === "share-keep"), card: !!(pack.custom || []).find((c) => c && c.id === "u:shared-sw-kept") }));
+    await p.evaluate(() => { const st = Object.assign({}, window.__shareState); delete st.off; window.__shareState = st; window.__joinCb({ sealed: null, join: null, leads: [], share: st }); });
+    await sleep(120);
+    const onView = await swView();
+    check(keptOff.kept && keptOff.card && onView.btns >= 1 && onView.menuHas,
+      "1013sw7 Keep still works while off, and when the switch comes back on the Share button and menu row are drawn again", { keptOff, onView });
+    await closePage(p);
+  }
+
   /* 5. Plants on the page's deciding lines (inline on scratch copy of built page, never touching src/) */
   if (PLANTS_OFF) {
     skip("1013up1 lifting plant:share-verdict-first adds card when verdict refuses");
     skip("1013up2 lifting plant:share-own-only draws share button on catalog cards");
+    skip("1013sw8 lifting plant:share-off-page draws Share while the switch is off");
     skip("1013kp1 lifting the several-keepers count shows one name");
     skip("1013kp2 moving the receipt before the write sends it with nothing written");
   } else {
@@ -582,6 +627,17 @@ try {
       } finally { await closePage(p); }
     }
     check(!!k2 && Array.isArray(redK2) && redK2.length > 0 && redK2[0] === 0, "1013kp2 moving the receipt before the write sends it with nothing written", { located: !!k2, redK2 });
+
+    const u3 = plant("share-off-page", /function shareOfferedNow\(\)\s*\{[^}]+\}/, "function shareOfferedNow() { return !!teamShareState(); }");
+    let red3 = null;
+    if (u3) {
+      const p = await boot(u3, { onTeam: true, off: true });
+      try {
+        await p.evaluate((shelf) => { pack.custom.push({ id: "u:own-p3", c: shelf, t: "Own", en: "Own body." }); savePack(); rebuildCards(); }, FIRST_SHELF);
+        red3 = await p.evaluate(() => !!document.querySelector('.card[data-id="u:own-p3"] .cacts button[data-act="share"]'));
+      } finally { await closePage(p); }
+    }
+    check(!!u3 && red3 === true, "1013sw8 lifting the page's off guard draws the Share button while the switch is off", { located: !!u3, red3 });
   }
 } finally {
   if (browser) await Promise.race([browser.close().catch(() => {}), sleep(5000)]);

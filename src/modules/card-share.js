@@ -27,7 +27,7 @@ const deferredIds=new Set();
 const seenInboxIds=new Set();
 
 function shareOfferedNow(){
-  return !!teamShareState();
+  return !!teamShareState() && !teamShareState().off; /* plant:share-off-page */
 }
 function cardIsShareable(m) {
   return !!(m && (m._custom || m._overridden || movedCardIds().has(m.id))); /* plant:share-own-only */
@@ -50,8 +50,7 @@ function shareKeptOf(m){
 }
 function shareSig(m){
   const id=String(m&&m.id||"");
-  const st=teamShareState();
-  const on=st && cardIsShareable(m) ? "s" : "";
+  const on=shareOfferedNow() && cardIsShareable(m) ? "s" : "";
   const open=shareOpenId===id ? "+" : "";
   const from=(m && m.from && m.from.desk) ? String(m.from.desk)+":"+shareSenderName(m) : "";
   const kept=shareKeptOf(m).map(k=>k.id+"@"+k.at+"@"+k.name).join(",");
@@ -111,7 +110,7 @@ function sharePressed(id, fallbackOrigin){
   if(closeShareOut) closeShareOut();
   if(closeShareIn) closeShareIn();
   const st=teamShareState(), m=findCard(id);
-  if(!st || !m || !cardIsShareable(m)) return;
+  if(!st || st.off || !m || !cardIsShareable(m)) return;
   const mates=(st.teammates||[]).slice();
   const selected=new Set();
   let query="", noteText="", sending=false;
@@ -284,7 +283,7 @@ function sharePressed(id, fallbackOrigin){
 }
 
 function shareRowHtml(){
-  if(!shareOfferedNow() || !inboxItems.length) return "";
+  if(!teamShareState() || !inboxItems.length) return "";
   const senders=[];
   inboxItems.forEach(it=>{ if(it.fromName && senders.indexOf(it.fromName)<0) senders.push(it.fromName); });
   const sub=t("cards: {N}, from {NAMES}")
@@ -453,7 +452,7 @@ function scheduleInboxOpen(){
 }
 
 function refreshShareInbox(){
-  if(inboxLoading || !shareOfferedNow()) return;
+  if(inboxLoading || !teamShareState()) return;
   inboxLoading=true;
   shareInboxList().then(r=>{
     inboxLoading=false;
