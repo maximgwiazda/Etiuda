@@ -556,7 +556,7 @@ try {
     }
     check(!!u2 && red2 === true, "1013up2 lifting own-only guard draws share button on unmodified catalog cards", { located: !!u2, red2 });
 
-    const k1 = plant("kept-count", /const one = list\.length === 1;/, "const one = true;");
+    const k1 = plant("kept-count", /const one = list\d*\.length === 1;/, "const one = true;");
     let redK1 = null;
     if (k1) {
       const p = await boot(k1, { onTeam: true, kept: { "u:own-k": [{ id: "k-2222222222222222", name: "Tom Lis", at: "2026-11-18T10:00:00.000Z" }, { id: "k-1111111111111111", name: "Ewa Nowak", at: "2026-11-19T09:30:00.000Z" }] } });
