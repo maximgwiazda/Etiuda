@@ -926,7 +926,7 @@ if (!PLANTS_OFF) {
     ["day(ds.studioEnd||ds.ends)", "day(ds.studioEnd)"],
     "studioNoDeskEnd_en");
   await plant("ddp31", SIGNIN_PATH,
-    ["const pastOwn=v.now>0 && !!v.trials && v.trials.desk>0 && v.now>v.trials.desk && v.trials.studio>v.now; /* plant:own-trial-past */", "const pastOwn=false;"],
+    ["const pastOwn=ds.now>0 && ds.deskEnd>0 && ds.now>ds.deskEnd && ds.studioEnd>ds.now; /* plant:own-trial-past */", "const pastOwn=false;"],
     "askLeadStudio_en");
   await plant("ddp32", SETTINGS_PATH,
     ["ctl:seatShort ? val(seatShort) : \"\"}); /* plant:account-seat-short */", "ctl:\"\"});"],

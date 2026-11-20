@@ -29797,10 +29797,10 @@ What is typed here stays in this browser.`;
     if (typeof land === "function") land(run);
     else run();
   }
-  function signinOwnTrialWords(v) {
-    const pastOwn = v.now > 0 && !!v.trials && v.trials.desk > 0 && v.now > v.trials.desk && v.trials.studio > v.now;
+  function signinOwnTrialWords(v, ds) {
+    const pastOwn = ds.now > 0 && ds.deskEnd > 0 && ds.now > ds.deskEnd && ds.studioEnd > ds.now;
     if (pastOwn) {
-      const d = doorDay(v.trials.desk, v.now), s = doorDay(v.trials.studio, v.now);
+      const d = doorDay(ds.deskEnd, ds.now), s = doorDay(ds.studioEnd, ds.now);
       return [
         named(t("Etiuda Studio's trial · until {STUDIO_END}"), "{STUDIO_END}", s),
         named(named(t("Etiuda's own fourteen days ended on {DESK_END}. The Etiuda Studio trial on this account began later and covers Etiuda too, until {STUDIO_END}."), "{DESK_END}", d), "{STUDIO_END}", s)
@@ -30265,7 +30265,7 @@ What is typed here stays in this browser.`;
       code: signinManaged(v) ? "" : v.code,
       /* plant:asklead-code-managed */
       acts: [{ act: "check", label: t("Check now") }, acct],
-      own: signinManaged(v) ? null : v.seat === "held" && v.trialUntil ? signinOwnTrialWords(v) : null
+      own: signinManaged(v) ? null : v.seat === "held" && v.trialUntil ? signinOwnTrialWords(v, ds) : null
     };
     if (v.seat === "none" || !v.seat) return {
       moment: "nolicence",

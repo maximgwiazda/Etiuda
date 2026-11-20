@@ -267,10 +267,10 @@ function bootFirstSignin(land){
 }
 /* The trial the ask-your-lead panel names, from the certificate's end. Where the desk holds no seat to read, it is Studio's trial that
    runs when Etiuda's own fourteen days are past and Studio's end is not. */
-function signinOwnTrialWords(v){
-  const pastOwn=v.now>0 && !!v.trials && v.trials.desk>0 && v.now>v.trials.desk && v.trials.studio>v.now; /* plant:own-trial-past */
+function signinOwnTrialWords(v, ds){
+  const pastOwn=ds.now>0 && ds.deskEnd>0 && ds.now>ds.deskEnd && ds.studioEnd>ds.now; /* plant:own-trial-past */
   if(pastOwn){
-    const d=doorDay(v.trials.desk, v.now), s=doorDay(v.trials.studio, v.now);
+    const d=doorDay(ds.deskEnd, ds.now), s=doorDay(ds.studioEnd, ds.now);
     return [named(t("Etiuda Studio's trial · until {STUDIO_END}"),"{STUDIO_END}",s),
       named(named(t("Etiuda's own fourteen days ended on {DESK_END}. The Etiuda Studio trial on this account began later and covers Etiuda too, until {STUDIO_END}."),"{DESK_END}",d),"{STUDIO_END}",s)];
   }
@@ -677,7 +677,7 @@ function signinDoorOf(v){
      started at the sign-in. */
   if(v.askLead) return {moment:"asklead", ident, say:signinSay("asklead", v), code:signinManaged(v)?"":v.code, /* plant:asklead-code-managed */
     acts:[{act:"check", label:t("Check now")}, acct],
-    own:signinManaged(v)?null:v.seat==="held" && v.trialUntil ? signinOwnTrialWords(v) : null}; /* plant:asklead-trial-managed */
+    own:signinManaged(v)?null:v.seat==="held" && v.trialUntil ? signinOwnTrialWords(v, ds) : null}; /* plant:asklead-trial-managed */
   /* No certificate: the service found no licence with a seat for this account. The code still shows, since a lead admits by it, save on
      a managed computer, where nobody is admitted by code. */
   if(v.seat==="none" || !v.seat) return {moment:"nolicence", ident, say:signinSay("nolicence", v), code:signinManaged(v) ? "" : v.code, /* plant:code-managed */
