@@ -6205,6 +6205,24 @@ function inviteAccepted(j) {
   }
   return false;
 }
+/* Whether this invitation's one request went up to the relay, or its reply was lost: the channel's mark by the invitation's id, else
+   the mirror's state. Cancel takes a request back through the relay only where this is true. A join the marks cannot speak for, a
+   wrap held, or a state that cannot be read counts as sent. */
+function requestSent(j) {
+  const inv = j && j.invite && j.invite.relay;
+  if (!inv || !/^[0-9a-f]{32}$/.test(String(inv.inv))) return true;
+  if (Array.isArray(inv.wrapped) && inv.wrapped.some(n => Number.isInteger(n) && n >= 1)) return true;
+  const channelProgram = relayChannel && relayChannel.program;
+  const known = channelProgram && typeof channelProgram.inviteSent === "function";
+  if (known && (channelProgram.inviteSent(inv.inv) === true || channelProgram.replyLost(inv.inv) === true)) return true;
+  if (inv.rt) {
+    try {
+      const st = JSON.parse(fs.readFileSync(relayMirrorOf(inv.rt) + ".json", "utf8"));
+      return !!st && ((st.invitedIds && st.invitedIds[inv.inv] === true) || (st.replyLostIds && st.replyLostIds[inv.inv] === true));
+    } catch { /* mirror absent or damaged */ }
+  }
+  return !known;
+}
 /* The request leaves the mirror, so the channel sends its signed deletion on the invitation's session and the lead no longer
    sees it. The join says withdrawing until the relay has taken that deletion (onWithdrawn). The token, the pin and the keys
    stay, so Ask again sends the same request anew with no new link. */
@@ -6239,8 +6257,8 @@ function cancelJoin() {
   const j = teamJoin;
   /* A door request the relay named may be up at the lead's, so it is taken back there too; the join ends once the relay has taken
      the withdrawal (refusedWithdrawEnds). One the relay turned away, or never named, stands nowhere and simply goes. */
-  if (j && j.invite && j.invite.relay && j.invite.relay.door === true && j.invite.relay.end === undefined && /^[0-9a-f]{32}$/.test(String(j.invite.relay.inv))) return withdrawJoin(j); /* plant:door-cancel-withdraw */
-  if (!(j && j.invite && j.invite.relay && j.invite.relay.door === true) && inviteAccepted(j)) return withdrawJoin(j); /* plant:h35-keep */
+  if (j && j.invite && j.invite.relay && j.invite.relay.door === true && j.invite.relay.end === undefined && /^[0-9a-f]{32}$/.test(String(j.invite.relay.inv)) && requestSent(j)) return withdrawJoin(j); /* plant:door-cancel-withdraw */
+  if (!(j && j.invite && j.invite.relay && j.invite.relay.door === true) && inviteAccepted(j) && requestSent(j)) return withdrawJoin(j); /* plant:h35-keep */
   if (j && deskBranch) { try { unlinkOwn(joinFile()); } catch { /* gone already, or the share is away */ } }
   teamJoin = null;
   joinTold = false;
