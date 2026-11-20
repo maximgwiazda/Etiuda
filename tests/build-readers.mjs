@@ -60,12 +60,23 @@ function releaseEnv(homeRoot) {
 }
 function runRelease(dir, homeRoot) {
   note('release --up-to page in ' + path.basename(dir));
+  /* THE SCAN IS NOT WHAT THIS LEG READS (the test architect, 2026-11-20): release's step [3] runs the pre-commit name and quote scan over
+     the whole tracked tree, which took 705 s on fold 121 and 709 s on main 638fdcdd under load, and its time grows with the tree's lines.
+     The scan has its own gates (text-scan-selftest and the hook itself on every commit). Here release runs with a pre-commit hook that
+     passes, set for this child alone through git's environment config (core.hooksPath), as the d1 scratch repo's hook already is; every
+     step this leg reads (the build, the tracked outputs, the dashes, the page stop, the window wall) runs as it does in a release. */
+  const hooks = path.join(homeRoot, 'stub-hooks');
+  fs.mkdirSync(hooks, { recursive: true });
+  fs.writeFileSync(path.join(hooks, 'pre-commit'), '#!/bin/sh\nexit 0\n', 'utf8');
+  try { fs.chmodSync(path.join(hooks, 'pre-commit'), 0o755); } catch {}
+  const env = releaseEnv(homeRoot);
+  const n = Number(env.GIT_CONFIG_COUNT) || 0;
+  env.GIT_CONFIG_COUNT = String(n + 1);
+  env['GIT_CONFIG_KEY_' + n] = 'core.hooksPath';
+  env['GIT_CONFIG_VALUE_' + n] = hooks.split(path.sep).join('/');
   const r = spawnSync(process.execPath, ['tools/release.mjs', '--up-to', 'page'], {
-    cwd: dir, env: releaseEnv(homeRoot), encoding: 'utf8', windowsHide: true,
-    /* THE CEILING IS THE SCAN'S, NOT THE BUILD'S: release's step [3], the name and quote scan over the tracked tree, took 705 s on fold 121
-       and 709 s on main 638fdcdd on 2026-11-19 under load, past the 600 s this was, and its time grows with the tree's lines. The test
-       architect's register holds the real mend: skip or stub that scan here, since it has its own gates. */
-    maxBuffer: 64 * 1024 * 1024, timeout: 1800000,
+    cwd: dir, env, encoding: 'utf8', windowsHide: true,
+    maxBuffer: 64 * 1024 * 1024, timeout: 600000,
   });
   const out = (r.stdout || '') + (r.stderr || '');
   return { status: r.status === null ? -1 : r.status, out };
