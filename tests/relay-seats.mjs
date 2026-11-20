@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-seats-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 199;
+const EXPECTED = 200;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* ETIUDA_PLANT_ONLY, a comma list of plant tags or planted names: only those plants run, every other is skipped, so one plant is proved
    alone without the whole sweep. */
@@ -1331,6 +1331,54 @@ async function main() {
   }
   await leg("s26a", withdrawScene, "a desk always takes back its own request: its certificate run out, its key's hello asking for it (withdraw) opens a session that withdraws the door request, the same hello asking nothing refused seat-lapsed on the challenge it then opens on, the request's row then gone, and that session lists, reads the lead's answer or a wrap, opens a socket or sends another request no more than the desk can then knock, ask again or resume, asking a withdrawal or not; a current certificate's session is opened as built; on an ordinary and an Entra team");
   await leg("s24i", storeScene, "a person's store: a session opens on its store certificate alone, a seat certificate or none is refused, and a store session, carrying no seat, still reads twenty minutes on");
+  /* Revoking a seat certificate's delegated signing key ends sessions and WebSockets already open under it, on ordinary and Entra teams;
+     a desk and the lead under keys not revoked stay open and still receive announcements. */
+  async function revokedSignerSessionScene() {
+    const rows = {};
+    for (const [kind, o] of [["ordinary", {}], ["entra", { seats: true }]]) {
+      const w = await team(Object.assign({ desks: ["a", "b"] }, o)), now = w.R.clock.now;
+      const a = w.desks.a, b = w.desks.b, svc = serviceKey();
+      const viaSvc = K.delegationFor(now, { fields: { may: ["licence"], key: { id: svc.id, pub: svc.pub } } });
+      a.cert = certFor(a.pub, w.licence, now, 7 * DAY, { signer: svc, via: viaSvc });
+      b.cert = certFor(b.pub, w.licence, now, 7 * DAY);
+      const leadCert = kind === "entra" ? certFor(w.lead.pub, w.licence, now, 7 * DAY) : undefined;
+      const sa = await sessionAs(w, "a"), sb = await sessionAs(w, "b"), sl = await session(w, w.lead, leadCert);
+      const tokA = opened(sa) ? sa.json.session : "", tokB = opened(sb) ? sb.json.session : "", tokL = opened(sl) ? sl.json.session : "";
+      const openWs = async token => {
+        const up = await W.fetch(new Request("https://relay.test/relay/v1/t/" + w.rt + "/socket", { method: "GET", headers: { authorization: "Bearer " + token, upgrade: "websocket" } }), w.R.env);
+        const sockId = up.headers.get("x-stand-in-socket");
+        return [...w.R.hubs.values()].map(h => h.open.find(x => x.id === sockId)).find(Boolean) || null;
+      };
+      const wsA = await openWs(tokA), wsB = await openWs(tokB);
+      const beforeA = await listWith(w, sa), beforeB = await listWith(w, sb);
+      w.R.env.REVOKED = revokedText([svc.pub]);
+      w.R.clock.now = now + 5 * MIN;
+      const teamKey = crypto.randomBytes(32);
+      const leadBlob = B.seal({ relayTeamId: w.rt, epoch: 1, teamKey, writer: { keyId: w.lead.keyId, privateKey: w.lead.privateKey },
+        path: "lead.ec", body: "lead", counter: 1, place: "root", kind: "file" });
+      const leadPut = await putBlob(w, tokL, leadBlob);
+      const listA = await listWith(w, sa);
+      const blobA = B.seal({ relayTeamId: w.rt, epoch: 1, teamKey, writer: { keyId: a.keyId, privateKey: a.privateKey },
+        path: "a.ec", body: "a", counter: 1, place: "desk:" + a.place, kind: "file" });
+      const putA = await putBlob(w, tokA, blobA);
+      const freshA = await sessionAs(w, "a");
+      const listB = await listWith(w, sb);
+      const blobB = B.seal({ relayTeamId: w.rt, epoch: 1, teamKey, writer: { keyId: b.keyId, privateKey: b.privateKey },
+        path: "b.ec", body: "b", counter: 1, place: "desk:" + b.place, kind: "file" });
+      const putB = await putBlob(w, tokB, blobB);
+      const listL = await listWith(w, sl);
+      const wsAShut = !!wsA && !!wsA.closed && wsA.closed.code === 4400 && wsA.closed.reason === B.REASONS["seat-lapsed"] && wsA.sent.length === 0;
+      const wsBKept = !!wsB && !wsB.closed && wsB.sent.length === 1;
+      const ok = opened(sa) && opened(sb) && opened(sl) && beforeA.status === 200 && beforeB.status === 200 && leadPut.status === 200
+        && wsAShut && wsBKept && refused(listA, "seat-lapsed") && refused(putA, "seat-lapsed") && refused(freshA, "seat-lapsed")
+        && listB.status === 200 && putB.status === 200 && listL.status === 200;
+      rows[kind] = { ok, leadPut: leadPut.status, wsAClosed: wsA ? wsA.closed : null, wsASent: wsA ? wsA.sent.length : null,
+        wsBClosed: wsB ? wsB.closed : null, wsBSent: wsB ? wsB.sent.length : null,
+        listA: said(listA), putA: said(putA), freshA: said(freshA), listB: listB.status, putB: putB.status, listL: listL.status };
+    }
+    return { ok: rows.ordinary.ok && rows.entra.ok, detail: brief(rows) };
+  }
+  await leg("s28a", revokedSignerSessionScene, "revoking a seat certificate's delegated signing key refuses open sessions and closes open WebSockets under it at the next request or announce (ordinary and Entra teams), while sessions under unrevoked keys stay open");
 
   /* ---- the plants: each guard lifted in a copy of relay/core.cjs turns its named leg red, and the product file is never written ---- */
   const ADOPTED = ["createCore", "judgeCreate", "grantWhy", "grantOk", "judgeLead", "certWhy"];
