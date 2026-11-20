@@ -1947,6 +1947,8 @@ function deskEnvelopeBody(keysText) {
     + (Object.keys(teamLapseSeen).length ? ',"teamLapseSeen":' + JSON.stringify(teamLapseSeen) : "")
     + (Object.keys(teamContentSaid).length ? ',"teamContentSaid":' + JSON.stringify(teamContentSaid) : "")
     + (Object.keys(teamContentLead).length ? ',"teamContentLead":' + JSON.stringify(teamContentLead) : "")
+    + (Object.keys(shareSent).length ? ',"shareSent":' + JSON.stringify(shareSent) : "")
+    + (Object.keys(shareKept).length ? ',"shareKept":' + JSON.stringify(shareKept) : "")
     + (catalogPrivate.size ? ',"catalogPrivate":' + JSON.stringify(Array.from(catalogPrivate).sort()) : "")
     + (Object.keys(catalogLineage).length ? ',"catalogLineage":' + JSON.stringify(catalogLineage) : "")
     + (Object.keys(catalogRoots).length ? ',"catalogRoots":' + JSON.stringify(catalogRoots) : "")
@@ -2629,6 +2631,8 @@ const CARD_SEAL_LABEL = "etiuda-card-to\n";
 const CARD_INNER_KIND = "etiuda-card-inner";
 const CARD_PREFIX = "etiuda-card\n";
 const CARD_MAX_BYTES = 64 * 1024;
+const RECEIPT_KIND = "etiuda-card-kept";
+const SHARE_SENT_MAX = 500, SHARE_KEPT_MAX = 50;
 /* The largest ct worth opening: a 64 KB card whose every byte JSON writes as a six-character escape, plus 1 KB for the inner file's other fields and the 16-byte tag. */
 const CARD_MAX_CT_BYTES = CARD_MAX_BYTES * 6 + 1024;
 function cardSealInfo(team, sender, recipient) {
@@ -4186,6 +4190,8 @@ let teamLeft = {};                             // of those, a team the agent lef
 let teamLapseSeen = {};                        // team id -> "<step>:<until>": the lapse notice the agent dismissed, so a renewed grant's next lapse shows again
 let teamContentLead = {};                      // team id -> the lead key (keyId:public) the desk was told under; a told stamp without it reads as untold
 let teamContentSaid = {};                      // team id -> ISO timestamp when this desk was told for this team (contentSaid)
+let shareSent = {};                            // team id -> [{card, to, at}]: the cards this desk shared and to whom, which a receipt is read against
+let shareKept = {};                            // team id -> {card id: [{by, name, at}]}: who kept a card this desk shared, from their receipts
 let catalogLineage = {};                       // catalog id -> the id it grew from, each hop this desk has seen
 const catalogLineageSha = {};                  // catalog id -> the signed hash of the edition it grew from (grew.sha); this run only
 let catalogRoots = {};                         // catalog id -> the root it states (grew.root), read for the private mark alone
@@ -6601,7 +6607,11 @@ function joinView() {
     const teammates = (roster && Array.isArray(roster.entries) ? roster.entries : [])
       .filter(e => e && e.id && e.id !== me.id)
       .map(e => ({ id: e.id, name: e.name || e.id }));
+    const keptHere = shareKept[shareHere.team] || {}, nameOf = new Map((roster && Array.isArray(roster.entries) ? roster.entries : []).map(e => [e.id, e.name]));
+    const kept = {};
+    Object.keys(keptHere).forEach(card => { kept[card] = keptHere[card].map(r => ({ id: r.by, name: nameOf.get(r.by) || r.name || r.by, at: r.at })); });
     view.share = { team: shareHere.team, teammates, inbox: shareInboxSeq };
+    if (Object.keys(kept).length) view.share.kept = kept;
   }
   return view;
 }
@@ -7418,6 +7428,8 @@ function forgetLead(team, left) {
   delete teamLapseSeen[team];
   delete teamContentSaid[team];
   delete teamContentLead[team];
+  delete shareSent[team];
+  delete shareKept[team];
   delete teamPauseSeen[team];
   delete teamRelayGone[team];
   delete teamWas[team];
@@ -8596,6 +8608,24 @@ function readDesk() {
     if (doc && table(doc.teamContentLead)) Object.keys(doc.teamContentLead).forEach(t => {
       const v = doc.teamContentLead[t];
       if (SEALED_TEAM_RE.test(t) && typeof v === "string" && /^[^:]*:[0-9a-f]{64}$/.test(v)) teamContentLead[t] = v;
+    });
+    if (doc && table(doc.shareSent)) Object.keys(doc.shareSent).forEach(t => {
+      const v = doc.shareSent[t];
+      if (!SEALED_TEAM_RE.test(t) || !Array.isArray(v)) return;
+      const rows = v.filter(r => table(r) && typeof r.card === "string" && r.card && r.card.length <= 256 && /^k-[0-9a-f]{16}$/.test(String(r.to)) && typeof r.at === "string" && Number.isFinite(Date.parse(r.at)))
+        .slice(-SHARE_SENT_MAX).map(r => ({ card: r.card, to: r.to, at: r.at }));
+      if (rows.length) shareSent[t] = rows;
+    });
+    if (doc && table(doc.shareKept)) Object.keys(doc.shareKept).forEach(t => {
+      const v = doc.shareKept[t];
+      if (!SEALED_TEAM_RE.test(t) || !table(v)) return;
+      const out = {};
+      Object.keys(v).slice(-SHARE_SENT_MAX).forEach(card => {
+        const rows = Array.isArray(v[card]) ? v[card].filter(r => table(r) && /^k-[0-9a-f]{16}$/.test(String(r.by)) && typeof r.at === "string" && Number.isFinite(Date.parse(r.at)))
+          .slice(0, SHARE_KEPT_MAX).map(r => ({ by: r.by, name: typeof r.name === "string" ? r.name.slice(0, 120) : "", at: r.at })) : [];
+        if (card && card.length <= 256 && rows.length) out[card] = rows;
+      });
+      if (Object.keys(out).length) shareKept[t] = out;
     });
     if (doc && table(doc.catalogLineage)) Object.keys(doc.catalogLineage).slice(-LINEAGE_MAX).forEach(c => {
       const g = doc.catalogLineage[c];
@@ -9991,7 +10021,12 @@ async function shareToCard(recipientId, cardJson, note) {
     return { ok: false, reason: /64 KB/.test(String(e && e.message)) ? "too-large" : "bad-card" };
   }
   const r = await relayChannel.writeTo(recipient.id, JSON.stringify(env));
-  if (r && r.ok) return { ok: true, id: r.id };
+  if (r && r.ok) {
+    shareSent[ctx.team] = (shareSent[ctx.team] || []).filter(x => !(x.card === card.id && x.to === recipient.id))
+      .concat([{ card: card.id, to: recipient.id, at: new Date().toISOString() }]).slice(-SHARE_SENT_MAX);
+    persistDeskEnvelope();
+    return { ok: true, id: r.id };
+  }
   const why = (r && r.reason) || "failed";
   if (why === "blob-size") return { ok: false, reason: "too-large" };
   if (why === "seat-lapsed") return { ok: false, reason: "seat-lapsed" };
@@ -10007,6 +10042,7 @@ async function shareInbox() {
   if (!listed || !listed.ok) return { ok: false, reason: (listed && listed.reason) || "network", items: [] };
   const boxKey = openPrivate(deskBranch.box.priv);
   const items = [];
+  let took = false;
   for (const item of listed.items || []) {
     const sender = byId.get(item.writer);
     if (!sender) continue;
@@ -10018,13 +10054,48 @@ async function shareInbox() {
     let parsed = null;
     try { parsed = JSON.parse(openedText); } catch { parsed = null; }
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) continue;
+    if (parsed.kind === RECEIPT_KIND) {
+      if (takeReceipt(ctx, sender, parsed)) took = true;
+      await relayChannel.dropTo(item.id); /* plant:receipt-drop */
+      continue;
+    }
     const isWrap = parsed.kind === "etiuda-card-share" && parsed.card && typeof parsed.card === "object";
     const card = isWrap ? parsed.card : parsed;
     const note = isWrap && typeof parsed.note === "string" ? parsed.note : "";
     if (!card || typeof card !== "object" || Array.isArray(card) || typeof card.id !== "string" || !card.id) continue;
     items.push({ id: item.id, from: sender.id, fromName: sender.name || sender.id, team: ctx.team, card, note });
   }
+  if (took) { persistDeskEnvelope(); sendJoin(theWindow); }
   return { ok: true, items };
+}
+/* A receipt, already opened and verified against its sender's roster key, from the desk that kept a card: it counts only for a card this
+   desk shared to that very desk. Recorded once per keeper and card; true when it changed the record. */
+function takeReceipt(ctx, keeper, body) {
+  const card = typeof body.card === "string" ? body.card : "";
+  const known = !!card && (shareSent[ctx.team] || []).some(x => x.card === card && x.to === keeper.id); /* plant:receipt-known */
+  if (!known) return false;
+  const kept = shareKept[ctx.team] = shareKept[ctx.team] || {};
+  const rows = kept[card] = kept[card] || [];
+  if (rows.some(r => r.by === keeper.id) || rows.length >= SHARE_KEPT_MAX) return false;
+  const said = Date.parse(String(body.at || ""));
+  const at = Number.isFinite(said) && said <= Date.now() + 864e5 ? new Date(said).toISOString() : new Date().toISOString();
+  rows.push({ by: keeper.id, name: keeper.name || keeper.id, at });
+  return true;
+}
+/* This desk kept a card its sender shared: the receipt goes to the sender's addressed place, sealed as the card was, after the page has
+   written the kept card. Nothing is sent for a decline, which never reaches here. */
+async function shareKeptReceipt(senderId, cardId) {
+  const ctx = shareActiveContext();
+  if (!ctx) return { ok: false, reason: "not-on-team" };
+  const sender = ctx.entries.find(e => e && e.id === String(senderId || "") && e.id !== ctx.me.id) || null;
+  if (!sender || typeof cardId !== "string" || !cardId || cardId.length > 256) return { ok: false, reason: "not-on-team" };
+  const text = JSON.stringify({ kind: RECEIPT_KIND, card: cardId, at: new Date().toISOString() });
+  let env = null;
+  try {
+    env = sealCardTo(sender.box, ctx.team, ctx.me.id, sender.id, text, openPrivate(deskBranch.sign.priv)); /* plant:receipt-seal-to */
+  } catch { return { ok: false, reason: "bad-card" }; }
+  const r = await relayChannel.writeTo(sender.id, JSON.stringify(env));
+  return r && r.ok ? { ok: true } : { ok: false, reason: (r && r.reason) || "failed" };
 }
 function shareKeep(openedJson, catalogId) {
   let opened = null;
@@ -10042,6 +10113,7 @@ ipcMain.handle("etiuda:team-join", (e, op, file, name, check) => (!fromEngine(e)
   : op === "share-to" ? shareToCard(file, name, check)
   : op === "share-inbox" ? shareInbox()
   : op === "share-keep" ? shareKeep(file, name)
+  : op === "share-kept" ? shareKeptReceipt(file, name)
   : op === "share-drop" ? shareDrop(file)
   : op === "content" ? contentView() : op === "content-said" ? contentSaid(file) : op === "private" ? markPrivate(file, name === "on")
   : op === "ask" ? askJoin(file, name) : op === "cancel" ? cancelJoin() : op === "seen" ? leadSeen(file)
