@@ -9835,17 +9835,18 @@ What is typed here stays in this browser.`;
     "the seat on the team {LEAD} leads ended": "wygasło miejsce w zespole, który prowadzi {LEAD}",
     "the seat on the team ended": "wygasło miejsce w zespole",
     "the organisation's licence no longer gives this account a seat": "licencja organizacji nie daje już temu kontu miejsca",
-    "Etiuda's own trial is running.": "Trwa własny okres próbny Etiudy.",
-    "Day {N} of 14, until {DATE}, on up to three computers.": "Dzień {N} z 14, do {DATE}, najwyżej na trzech komputerach.",
+    "Trial · until {DATE}": "Okres próbny · do {DATE}",
+    "Etiuda's own trial, day {N} of 14, until {DATE}, on up to three computers.": "Własny okres próbny Etiudy, dzień {N} z 14, do {DATE}, najwyżej na trzech komputerach.",
+    "Etiuda Studio's trial · until {STUDIO_END}": "Okres próbny Etiudy Studio · do {STUDIO_END}",
+    "The Etiuda Studio trial on this account covers Etiuda too, until {STUDIO_END}.": "Okres próbny Etiudy Studio na tym koncie obejmuje także Etiudę, do {STUDIO_END}.",
+    "Own licence · paid until {ENDS}": "Własna licencja · opłacona do {ENDS}",
+    "This account's own licence, paid until {ENDS}, on up to three computers.": "Własna licencja tego konta, opłacona do {ENDS}, najwyżej na trzech komputerach.",
+    "Team's licence · until {ENDS}": "Licencja zespołu · do {ENDS}",
+    "A seat on the team {TEAM}; it renews by itself, and the team's licence runs until {ENDS}.": "Miejsce w zespole: {TEAM}; odnawia się samo, a licencja zespołu obowiązuje do {ENDS}.",
+    "A seat on a team; it renews by itself, and the team's licence runs until {ENDS}.": "Miejsce w zespole; odnawia się samo, a licencja zespołu obowiązuje do {ENDS}.",
     "Day {N} of 14, until {DESK_END}. The request to join waits for {LEAD}, and Etiuda works meanwhile.": "Dzień {N} z 14, do {DESK_END}. Prośba o dołączenie czeka na odpowiedź, której udzieli {LEAD}, a Etiuda w tym czasie działa.",
     "Day {N} of 14, until {DESK_END}. The request to join waits for the team's lead, and Etiuda works meanwhile.": "Dzień {N} z 14, do {DESK_END}. Prośba o dołączenie czeka na odpowiedź lidera zespołu, a Etiuda w tym czasie działa.",
-    "Etiuda now runs on the Etiuda Studio trial.": "Etiuda działa teraz w okresie próbnym Etiudy Studio.",
     "Etiuda's own fourteen days ended on {DESK_END}. The Etiuda Studio trial on this account began later and covers Etiuda too, until {STUDIO_END}.": "Własne czternaście dni Etiudy skończyły się {DESK_END}. Okres próbny Etiudy Studio na tym koncie zaczął się później i obejmuje także Etiudę, do {STUDIO_END}.",
-    "This account holds an Etiuda licence.": "To konto ma licencję Etiudy.",
-    "Paid until {ENDS}, on up to three computers.": "Opłacona do {ENDS}, najwyżej na trzech komputerach.",
-    "This account has a seat on the team {LEAD} leads.": "To konto ma miejsce w zespole, który prowadzi {LEAD}.",
-    "This account has a seat on a team.": "To konto ma miejsce w zespole.",
-    "It renews by itself; the team's licence runs until {ENDS}.": "Odnawia się samo; licencja zespołu obowiązuje do {ENDS}.",
     "This account has a seat on its organisation's licence.": "To konto ma miejsce w licencji swojej organizacji.",
     "It renews by itself; the licence runs until {ENDS}.": "Odnawia się samo; licencja obowiązuje do {ENDS}.",
     "Save your own work as files…": "Zapisz własną pracę jako pliki…",
@@ -30699,6 +30700,20 @@ What is typed here stays in this browser.`;
     if (typeof land === "function") land(run);
     else run();
   }
+  function signinOwnTrialWords(v, ds) {
+    const pastOwn = ds.now > 0 && ds.deskEnd > 0 && ds.now > ds.deskEnd && ds.studioEnd > ds.now;
+    if (pastOwn) {
+      const d = doorDay(ds.deskEnd, ds.now), s = doorDay(ds.studioEnd, ds.now);
+      return [
+        named(t("Etiuda Studio's trial · until {STUDIO_END}"), "{STUDIO_END}", s),
+        named(named(t("Etiuda's own fourteen days ended on {DESK_END}. The Etiuda Studio trial on this account began later and covers Etiuda too, until {STUDIO_END}."), "{DESK_END}", d), "{STUDIO_END}", s)
+      ];
+    }
+    return [
+      t("This account's own trial is running."),
+      named(t("Fourteen days, until {DATE}, on up to three computers. A lead can add this account at any time, without waiting for the trial to end."), "{DATE}", signinDay(v.trialUntil))
+    ];
+  }
   function signinCodeText(code) {
     return String(code || "").replace(/(.{4})(?=.)/g, "$1 ");
   }
@@ -30720,7 +30735,7 @@ What is typed here stays in this browser.`;
   }
   function signinTeam() {
     const l = teamLeads().find((x) => !x.removed);
-    return l ? { lead: String(l.lead || "") } : null;
+    return l ? { lead: String(l.lead || ""), team: String(l.team || "") } : null;
   }
   var named = (s, k, v) => String(s).split(k).join(v);
   function signinParts(v) {
@@ -30897,6 +30912,15 @@ What is typed here stays in this browser.`;
     if (on === "org") return t("the organisation's licence no longer gives this account a seat");
     return "";
   }
+  function deskSeatShort(ds) {
+    if (ds.state !== "working") return "";
+    const day = (at) => at ? doorDay(at, ds.now) : "";
+    if (ds.seatOn === "trial") return named(t("Trial · until {DATE}"), "{DATE}", day(ds.deskEnd));
+    if (ds.seatOn === "studio-trial") return named(t("Etiuda Studio's trial · until {STUDIO_END}"), "{STUDIO_END}", day(ds.studioEnd || ds.ends));
+    if (ds.seatOn === "own") return named(t("Own licence · paid until {ENDS}"), "{ENDS}", day(ds.ends));
+    if (ds.seatOn === "team") return named(t("Team's licence · until {ENDS}"), "{ENDS}", day(ds.ends));
+    return "";
+  }
   function deskDoorLines(ds) {
     const lead = ds.lead || "", n = String(ds.day || 0), dayAt = (at) => at ? doorDay(at, ds.now) : "";
     const desk = dayAt(ds.deskEnd), studio = dayAt(ds.studioEnd);
@@ -30930,29 +30954,26 @@ What is typed here stays in this browser.`;
         { "{DATE}": stopped, "{WHY}": deskWhySentence(ds.why, lead) }
       )
     ];
-    if (ds.state === "working" && ds.seatOn === "studio-trial") return [
-      t("Etiuda now runs on the Etiuda Studio trial."),
-      fill2(t("Etiuda's own fourteen days ended on {DESK_END}. The Etiuda Studio trial on this account began later and covers Etiuda too, until {STUDIO_END}."), { "{DESK_END}": desk, "{STUDIO_END}": studio })
-    ];
-    if (ds.state === "working" && ds.seatOn === "own") return [
-      t("This account holds an Etiuda licence."),
-      fill2(t("Paid until {ENDS}, on up to three computers."), { "{ENDS}": ends })
-    ];
-    if (ds.state === "working" && ds.seatOn === "team") return [
-      lead ? fill2(t("This account has a seat on the team {LEAD} leads."), { "{LEAD}": lead }) : t("This account has a seat on a team."),
-      fill2(t("It renews by itself; the team's licence runs until {ENDS}."), { "{ENDS}": ends })
-    ];
+    if (ds.state === "working" && ds.seatOn === "studio-trial") {
+      const studioAt = dayAt(ds.studioEnd || ds.ends);
+      return ["", desk ? fill2(t("Etiuda's own fourteen days ended on {DESK_END}. The Etiuda Studio trial on this account began later and covers Etiuda too, until {STUDIO_END}."), { "{DESK_END}": desk, "{STUDIO_END}": studioAt }) : fill2(t("The Etiuda Studio trial on this account covers Etiuda too, until {STUDIO_END}."), { "{STUDIO_END}": studioAt })];
+    }
+    if (ds.state === "working" && ds.seatOn === "own") return ["", fill2(t("This account's own licence, paid until {ENDS}, on up to three computers."), { "{ENDS}": ends })];
+    if (ds.state === "working" && ds.seatOn === "team") {
+      const team = signinTeam(), teamName = team ? team.team : "";
+      return ["", teamName ? fill2(t("A seat on the team {TEAM}; it renews by itself, and the team's licence runs until {ENDS}."), { "{TEAM}": teamName, "{ENDS}": ends }) : fill2(t("A seat on a team; it renews by itself, and the team's licence runs until {ENDS}."), { "{ENDS}": ends })];
+    }
     if (ds.state === "working" && ds.seatOn === "org") return [
       t("This account has a seat on its organisation's licence."),
       fill2(t("It renews by itself; the licence runs until {ENDS}."), { "{ENDS}": ends })
     ];
     if (ds.state === "working" && ds.waitingOnLead) return [
-      t("Etiuda's own trial is running."),
+      "",
       lead ? fill2(t("Day {N} of 14, until {DESK_END}. The request to join waits for {LEAD}, and Etiuda works meanwhile."), { "{N}": n, "{DESK_END}": desk, "{LEAD}": lead }) : fill2(t("Day {N} of 14, until {DESK_END}. The request to join waits for the team's lead, and Etiuda works meanwhile."), { "{N}": n, "{DESK_END}": desk })
     ];
     if (ds.state === "working") return [
-      t("Etiuda's own trial is running."),
-      fill2(t("Day {N} of 14, until {DATE}, on up to three computers."), { "{N}": n, "{DATE}": desk })
+      "",
+      fill2(t("Etiuda's own trial, day {N} of 14, until {DATE}, on up to three computers."), { "{N}": n, "{DATE}": desk })
     ];
     return ["", ""];
   }
@@ -31139,7 +31160,7 @@ What is typed here stays in this browser.`;
       return { moment: "ended", ident, heading: endedPair[0], line: endedPair[1], acts };
     }
     const pair = deskDoorLines(ds);
-    if (ds.state === "working") return { moment: "working", ident, heading: pair[0], line: pair[1], acts: [{ act: "check", label: t("Check now") }, acct] };
+    if (ds.state === "working") return { moment: "working", ident, heading: pair[0], line: pair[1], foot: deskSeatShort(ds), acts: [{ act: "check", label: t("Check now") }, acct] };
     if (v.askLead) return {
       moment: "asklead",
       ident,
@@ -31147,11 +31168,7 @@ What is typed here stays in this browser.`;
       code: signinManaged(v) ? "" : v.code,
       /* plant:asklead-code-managed */
       acts: [{ act: "check", label: t("Check now") }, acct],
-      own: signinManaged(v) ? null : v.seat === "held" && v.trialUntil ? [
-        t("This account's own trial is running."),
-        /* plant:asklead-trial-managed */
-        named(t("Fourteen days, until {DATE}, on up to three computers. A lead can add this account at any time, without waiting for the trial to end."), "{DATE}", signinDay(v.trialUntil))
-      ] : null
+      own: signinManaged(v) ? null : v.seat === "held" && v.trialUntil ? signinOwnTrialWords(v, ds) : null
     };
     if (v.seat === "none" || !v.seat) return {
       moment: "nolicence",
@@ -42582,15 +42599,16 @@ What is typed here stays in this browser.`;
       ));
       const ds = deskDoorState(v);
       if (ds.state === "ended" || ds.state === "working") {
-        const seatPair = deskDoorLines(ds);
+        const seatPair = deskDoorLines(ds), seatShort = deskSeatShort(ds);
         rows.push({
           key: "seat",
           icon: "check",
           dot: ds.state === "ended",
           /* plant:account-seat-dot */
-          title: seatPair[0],
+          title: seatShort ? t("Seat") : seatPair[0],
+          /* plant:account-seat-title */
           hint: seatPair[1],
-          ctl: ""
+          ctl: seatShort ? val(seatShort) : ""
         });
       } else if (signinNoSeat(v)) rows.push(row("seat", "check", t("Seat"), join(signinSay(v.refused, v, p)), ""));
       else if (v.seat === "none") rows.push(row("seat", "check", t("Seat"), join(signinSay("nolicence", v)), ""));

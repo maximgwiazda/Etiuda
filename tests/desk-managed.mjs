@@ -757,8 +757,8 @@ if (!PLANTS_OFF && S) {
     ": row(\"team\",\"people\",t(\"No team yet\"),doorSaid||t(\"No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself.\"),\"\"));"], "noTeamManaged", "settings");
   await plantPage("mmp44", ["if(v.askLead) return {moment:\"asklead\", ident, say:signinSay(\"asklead\", v), code:signinManaged(v)?\"\":v.code, /* plant:asklead-code-managed */",
     "if(v.askLead) return {moment:\"asklead\", ident, say:signinSay(\"asklead\", v), code:v.code,"], "askLeadManaged", "signin");
-  await plantPage("mmp45", ["own:signinManaged(v)?null:v.seat===\"held\" && v.trialUntil ? [t(\"This account's own trial is running.\"), /* plant:asklead-trial-managed */",
-    "own:v.seat===\"held\" && v.trialUntil ? [t(\"This account's own trial is running.\"),"], "askLeadManaged", "signin");
+  await plantPage("mmp45", ["own:signinManaged(v)?null:v.seat===\"held\" && v.trialUntil ? signinOwnTrialWords(v, ds) : null}; /* plant:asklead-trial-managed */",
+    "own:v.seat===\"held\" && v.trialUntil ? signinOwnTrialWords(v, ds) : null};"], "askLeadManaged", "signin");
   await plantPage("mmp46", ["    case \"seat-removed\": /* plant:seat-removed-contact */\n      { const c=v && v.managed ? v.managed.contact : \"\";",
     "    case \"seat-removed\":\n      { const c=\"\";"], "seatRemovedContact", "signin");
   await plantPage("mmp47", ["    case \"signin-notallowed\": /* plant:unmanaged-contact */\n      { const c=v && v.managed ? v.managed.contact : \"\";",

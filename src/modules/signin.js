@@ -265,6 +265,18 @@ function bootFirstSignin(land){
   };
   if(typeof land==="function") land(run); else run();
 }
+/* The trial the ask-your-lead panel names, from the certificate's end. Where the desk holds no seat to read, it is Studio's trial that
+   runs when Etiuda's own fourteen days are past and Studio's end is not. */
+function signinOwnTrialWords(v, ds){
+  const pastOwn=ds.now>0 && ds.deskEnd>0 && ds.now>ds.deskEnd && ds.studioEnd>ds.now; /* plant:own-trial-past */
+  if(pastOwn){
+    const d=doorDay(ds.deskEnd, ds.now), s=doorDay(ds.studioEnd, ds.now);
+    return [named(t("Etiuda Studio's trial · until {STUDIO_END}"),"{STUDIO_END}",s),
+      named(named(t("Etiuda's own fourteen days ended on {DESK_END}. The Etiuda Studio trial on this account began later and covers Etiuda too, until {STUDIO_END}."),"{DESK_END}",d),"{STUDIO_END}",s)];
+  }
+  return [t("This account's own trial is running."),
+    named(t("Fourteen days, until {DATE}, on up to three computers. A lead can add this account at any time, without waiting for the trial to end."),"{DATE}",signinDay(v.trialUntil))];
+}
 /* The code in four groups of four, as it is read aloud; Copy takes it without the spaces. */
 function signinCodeText(code){ return String(code||"").replace(/(.{4})(?=.)/g,"$1 "); }
 /* A day as the panel says one: "27 Nov". */
@@ -287,7 +299,7 @@ function signinWhen(at){
 }
 function signinTeam(){
   const l=teamLeads().find(x=>!x.removed);
-  return l ? {lead:String(l.lead||"")} : null;
+  return l ? {lead:String(l.lead||""), team:String(l.team||"")} : null;
 }
 const named=(s,k,v)=>String(s).split(k).join(v);
 /* The parts every form draws from: who (the initial, the person's own name, the provider's name), the code, the team. Nothing in it
@@ -438,6 +450,17 @@ function deskWhySentence(on, lead){
   if(on==="org") return t("the organisation's licence no longer gives this account a seat");
   return "";
 }
+/* The short form of the seat the desk runs on, the Seat row's value and the panel's foot: whose licence, and its end. "" where no case of
+   the family holds. A team's seat with the person's own licence kept aside is not told: the service sends nothing that says so. */
+function deskSeatShort(ds){
+  if(ds.state!=="working") return "";
+  const day=at=>at?doorDay(at, ds.now):"";
+  if(ds.seatOn==="trial") return named(t("Trial · until {DATE}"),"{DATE}",day(ds.deskEnd)); /* plant:seat-short-trial */
+  if(ds.seatOn==="studio-trial") return named(t("Etiuda Studio's trial · until {STUDIO_END}"),"{STUDIO_END}",day(ds.studioEnd||ds.ends)); /* plant:seat-short-studio */
+  if(ds.seatOn==="own") return named(t("Own licence · paid until {ENDS}"),"{ENDS}",day(ds.ends)); /* plant:seat-short-own */
+  if(ds.seatOn==="team") return named(t("Team's licence · until {ENDS}"),"{ENDS}",day(ds.ends)); /* plant:seat-short-team */
+  return "";
+}
 /* Heading and line for the state the door, the panel and the Seat row all read. */
 function deskDoorLines(ds){
   const lead=ds.lead||"", n=String(ds.day||0), dayAt=(at)=>at?doorDay(at, ds.now):"";
@@ -459,19 +482,25 @@ function deskDoorLines(ds){
   if(ds.state==="stopped") return [t("Etiuda has stopped on this computer."),
     fill(t("It stopped on {DATE}: {WHY}. Signing in with an account that has a seat, a purchase, or a team's lead admitting this account starts it again."),
       {"{DATE}":stopped, "{WHY}":deskWhySentence(ds.why, lead)})];
-  if(ds.state==="working" && ds.seatOn==="studio-trial") return [t("Etiuda now runs on the Etiuda Studio trial."),
-    fill(t("Etiuda's own fourteen days ended on {DESK_END}. The Etiuda Studio trial on this account began later and covers Etiuda too, until {STUDIO_END}."), {"{DESK_END}":desk, "{STUDIO_END}":studio})];
-  if(ds.state==="working" && ds.seatOn==="own") return [t("This account holds an Etiuda licence."),
-    fill(t("Paid until {ENDS}, on up to three computers."), {"{ENDS}":ends})];
-  if(ds.state==="working" && ds.seatOn==="team") return [lead ? fill(t("This account has a seat on the team {LEAD} leads."), {"{LEAD}":lead}) : t("This account has a seat on a team."),
-    fill(t("It renews by itself; the team's licence runs until {ENDS}."), {"{ENDS}":ends})];
+  /* The family seats carry no heading: the Seat row's label and the panel's foot say it in the short form (deskSeatShort). */
+  if(ds.state==="working" && ds.seatOn==="studio-trial"){
+    const studioAt=dayAt(ds.studioEnd||ds.ends);
+    return ["", desk ? fill(t("Etiuda's own fourteen days ended on {DESK_END}. The Etiuda Studio trial on this account began later and covers Etiuda too, until {STUDIO_END}."), {"{DESK_END}":desk, "{STUDIO_END}":studioAt})
+      : fill(t("The Etiuda Studio trial on this account covers Etiuda too, until {STUDIO_END}."), {"{STUDIO_END}":studioAt})];
+  }
+  if(ds.state==="working" && ds.seatOn==="own") return ["", fill(t("This account's own licence, paid until {ENDS}, on up to three computers."), {"{ENDS}":ends})];
+  if(ds.state==="working" && ds.seatOn==="team"){
+    const team=signinTeam(), teamName=team ? team.team : "";
+    return ["", teamName ? fill(t("A seat on the team {TEAM}; it renews by itself, and the team's licence runs until {ENDS}."), {"{TEAM}":teamName, "{ENDS}":ends})
+      : fill(t("A seat on a team; it renews by itself, and the team's licence runs until {ENDS}."), {"{ENDS}":ends})];
+  }
   if(ds.state==="working" && ds.seatOn==="org") return [t("This account has a seat on its organisation's licence."),
     fill(t("It renews by itself; the licence runs until {ENDS}."), {"{ENDS}":ends})];
-  if(ds.state==="working" && ds.waitingOnLead) return [t("Etiuda's own trial is running."),
+  if(ds.state==="working" && ds.waitingOnLead) return ["",
     lead ? fill(t("Day {N} of 14, until {DESK_END}. The request to join waits for {LEAD}, and Etiuda works meanwhile."), {"{N}":n, "{DESK_END}":desk, "{LEAD}":lead})
       : fill(t("Day {N} of 14, until {DESK_END}. The request to join waits for the team's lead, and Etiuda works meanwhile."), {"{N}":n, "{DESK_END}":desk})];
-  if(ds.state==="working") return [t("Etiuda's own trial is running."),
-    fill(t("Day {N} of 14, until {DATE}, on up to three computers."), {"{N}":n, "{DATE}":desk})];
+  if(ds.state==="working") return ["",
+    fill(t("Etiuda's own trial, day {N} of 14, until {DATE}, on up to three computers."), {"{N}":n, "{DATE}":desk})];
   return ["", ""];
 }
 function doorBandState(v){
@@ -642,14 +671,13 @@ function signinDoorOf(v){
     return {moment:"ended", ident, heading:endedPair[0], line:endedPair[1], acts:acts};
   }
   const pair=deskDoorLines(ds);
-  if(ds.state==="working") return {moment:"working", ident, heading:pair[0], line:pair[1], acts:[{act:"check", label:t("Check now")}, acct]}; /* plant:door-panel-working */
+  if(ds.state==="working") return {moment:"working", ident, heading:pair[0], line:pair[1], foot:deskSeatShort(ds), acts:[{act:"check", label:t("Check now")}, acct]}; /* plant:door-panel-working */
   /* ASK YOUR LEAD: the organisation's licence seats the people its
      leads add, so the code is given to a lead; beside it, never in its place, the person's own trial where it runs, which the service
      started at the sign-in. */
   if(v.askLead) return {moment:"asklead", ident, say:signinSay("asklead", v), code:signinManaged(v)?"":v.code, /* plant:asklead-code-managed */
     acts:[{act:"check", label:t("Check now")}, acct],
-    own:signinManaged(v)?null:v.seat==="held" && v.trialUntil ? [t("This account's own trial is running."), /* plant:asklead-trial-managed */
-      named(t("Fourteen days, until {DATE}, on up to three computers. A lead can add this account at any time, without waiting for the trial to end."),"{DATE}",signinDay(v.trialUntil))] : null};
+    own:signinManaged(v)?null:v.seat==="held" && v.trialUntil ? signinOwnTrialWords(v, ds) : null}; /* plant:asklead-trial-managed */
   /* No certificate: the service found no licence with a seat for this account. The code still shows, since a lead admits by it, save on
      a managed computer, where nobody is admitted by code. */
   if(v.seat==="none" || !v.seat) return {moment:"nolicence", ident, say:signinSay("nolicence", v), code:signinManaged(v) ? "" : v.code, /* plant:code-managed */
@@ -1178,6 +1206,7 @@ export {
   signinDoor,
   deskDoorState,
   deskDoorLines,
+  deskSeatShort,
   doorBandState,
   firstSigninHtml,
   signinDoorRefusedNow,
