@@ -7292,7 +7292,7 @@ if (deskOn()) try {
         const mark = ops.length;
         await press("seen");
         const page = await refresh();
-        out.match = { sent: ops.slice(mark).filter(o => o !== "state" && o !== "held"), after: held(),
+        out.match = { sent: ops.slice(mark).filter(o => o !== "state" && o !== "held" && o !== "content"), after: held(),
           card: page.indexOf("You are on the team") >= 0, catalog: factsOf(s.Dk.api.readCatalog() || "") === 1 };
       }
       const left = x => !!x && x.asked && x.first === 0 && x.sent.length === 1 && x.sent[0] === "leave"

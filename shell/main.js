@@ -4276,7 +4276,7 @@ function rosterIdsOf(doc) {
 }
 /* A name the lead or a desk gave: a bounded printable string, else "". */
 function rosterNameOf(v) {
-  return typeof v === "string" && v.length <= 120 && !/[ -]/.test(v) ? v.trim() : "";
+  return typeof v === "string" && v.length <= 120 && !/[\u0000-\u001f\u007f]/.test(v) ? v.trim() : "";
 }
 /* Each admitted desk a whole team file's roster lists, whole: its id, its name (the lead's, else the desk's own), its box and its key.
    A desk whose id, key or box fails today's patterns is left out here, and its id stays in rosterIdsOf. Sorted by id, once each. */
