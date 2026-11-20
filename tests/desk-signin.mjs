@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 306;
+const PLANTS = 308;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 210 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 211 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2372,9 +2372,9 @@ CASES.doorUnbar = (s, swap) => {
   return lifted(l) && l.q.beforeSeen.left === LEFT && lifted(d) && d.q.beforeSeen.left === undefined;
 };
 /* Cancel and the end of a withdrawal, with stand-ins: `st` {join, accepted, withdrawn, unlinked, undone, ended}. */
-const CANCEL_DECLS = ["function cancelJoin(", "function refusedWithdrawEnds("];
+const CANCEL_DECLS = ["function cancelJoin(", "function refusedWithdrawEnds(", "function signinLeave("];
 const CANCEL_STANDS = ["init", "readDesk", "inviteAccepted", "withdrawJoin", "deskBranch", "unlinkOwn", "joinFile", "newestEpoch", "undoInvite",
-  "persistDeskEnvelope", "joinView", "endRefusedRelay"];
+  "persistDeskEnvelope", "joinView", "endRefusedRelay", "requestSent", "signinOutWanted", "signinTeamHere", "sendJoin", "storeForget", "signinOutSend"];
 function loadCancel(st, swap) {
   let text = CANCEL_DECLS.map(d => tryDeclText(d)).filter(Boolean).join("\n");
   if (swap) {
@@ -2383,8 +2383,9 @@ function loadCancel(st, swap) {
   }
   const vals = { init: st, readDesk: () => ({}), inviteAccepted: () => st.accepted === true, withdrawJoin: j => { st.withdrawn.push(j); return { view: "withdrawing" }; },
     deskBranch: {}, unlinkOwn: f => { st.unlinked.push(f); }, joinFile: () => "/relay/" + RT + "/desks/" + DESK_ID + "/join.json", newestEpoch: () => 0,
-    undoInvite: () => { st.undone++; }, persistDeskEnvelope: () => {}, joinView: () => ({ view: true }), endRefusedRelay: j => { st.ended.push(j); } };
-  const body = "let deskKeys = {}, teamJoin = init.join, joinTold = true;\n" + text + "\nreturn { cancelJoin, refusedWithdrawEnds, join: () => teamJoin };";
+    undoInvite: () => { st.undone++; }, persistDeskEnvelope: () => {}, joinView: () => ({ view: true }), endRefusedRelay: j => { st.ended.push(j); },
+    requestSent: () => st.sent !== false, signinOutWanted: () => false, signinTeamHere: () => false, sendJoin: () => {}, storeForget: () => {}, signinOutSend: () => {} };
+  const body = "let deskKeys = {}, teamJoin = init.join, joinTold = true, signinWrote = \"\", theWindow = null, SEAT_NAME = \"seat.json\", path = null, sharedFolderForWrite = () => \"\";\n" + text + "\nreturn { cancelJoin, refusedWithdrawEnds, signinLeave, join: () => teamJoin };";
   return new Function(...CANCEL_STANDS, body)(...CANCEL_STANDS.map(n => vals[n]));
 }
 const cancelStand = (join, accepted) => ({ join, accepted, withdrawn: [], unlinked: [], undone: 0, ended: [] });
@@ -2483,6 +2484,24 @@ CASES.signoutDoorJoin = async (s, swap) => {
   const run = async join => { const st = outStand(s); st.teamJoin = join; loadWire(st, swap).signinOutNow(); await tick(5); return st; };
   const door = await run(doorJoin({ inv: DOOR_ID })), invited = await run(relayAsked()), none = await run(null);
   return door.cancels === 1 && door.sends === 1 && door.store.held === null && invited.cancels === 0 && none.cancels === 0;
+};
+
+/* Cancel and Sign out take a request back through the relay only where one went up (Argon 50, finding 4): at a door and by a
+   token the join goes at once, what it changed put back, where nothing was uploaded; where the request went up, or its reply was
+   lost, the join stays withdrawing until the relay takes the deletion. */
+CASES.cancelUnsent = (s, swap) => {
+  const run = (join, sent, out) => {
+    const st = cancelStand(join, true), had = join;
+    st.sent = sent;
+    const x = loadCancel(st, swap);
+    if (out) x.signinLeave({ held: null }, null); else x.cancelJoin();
+    return { st, j: x.join(), had };
+  };
+  const goes = o => o.st.withdrawn.length === 0 && o.j === null && o.st.undone === 1 && o.st.unlinked.length === 1;
+  const stays = o => o.st.withdrawn.length === 1 && o.st.withdrawn[0] === o.had && o.j === o.had && o.st.undone === 0;
+  const door = () => doorAsked({ inv: DOOR_ID }), token = () => relayAsked();
+  return goes(run(door(), false, false)) && stays(run(door(), true, false)) && goes(run(token(), false, false)) && stays(run(token(), true, false))
+    && goes(run(door(), false, true)) && stays(run(door(), true, true));
 };
 
 /* ---- leaving an account by signing in as another (review 2026-11-16, findings 11, 8, 1 and 2) ------------------------------- */
@@ -5529,6 +5548,7 @@ const LEGS = [
   ["ds21h", "signoutAfterRenew", "Sign out during a renewal sends signout/desk only once the renewal has its answer, so the service takes the sign out last, and the renewal's answer is not kept"],
   ["ds21i", "signoutOwed", "a sign out the service did not take is owed in the file with the desk key, asked again at the renewal's next turn while signed out, and cleared once taken"],
   ["ds21j", "signoutDoorJoin", "Sign out lets go of a request made at a team's door through Cancel; an invitation's request, or none, is left alone"],
+  ["ds21m", "cancelUnsent", "Cancel at a door or by a token, and Sign out at a door, take the request back through the relay only where one went up or its reply was lost; where none did the join goes at once and what it changed is put back"],
   ["ds21k", "outOwedView", "the page is told a sign out is owed only while nobody is signed in and none is out"],
   ["ds21l", "outOwedPage", "the page keeps an owed sign out only while signed out, and Account says so under Not signed in in the copywriter's words, Polish too, and nothing otherwise"],
   ["ds18c", "waitPage", "the door and Account tell the wait in the copywriter's words, the licence form and the team form, English and Polish, Check now first; an older service's \"full\" the same; no licence its own moment; today's words gone"],
@@ -6102,6 +6122,8 @@ if (!PLANTS_OFF) {
   await plantWire("dsp95", ["    if (pin && (pin.keyId !== d.keyId || pin.public !== d.lead)) return null; /* plant:door-pinned */\n", ""], "doorPins");
   await plantWire("dsp96", ["  delete teamLeft[d.team]; teamBarred.delete(d.team); /* plant:door-join-unbar */\n", ""], "doorUnbar");
   await plantWire("dsp97", ["return withdrawJoin(j); /* plant:door-cancel-withdraw */", "return null;"], "doorCancel");
+  await plantWire("dsp97a", ["&& requestSent(j)) return withdrawJoin(j); /* plant:door-cancel-withdraw */", ") return withdrawJoin(j); /* plant:door-cancel-withdraw */"], "cancelUnsent");
+  await plantWire("dsp97b", ["inviteAccepted(j) && requestSent(j)) return withdrawJoin(j); /* plant:h35-keep */", "inviteAccepted(j)) return withdrawJoin(j); /* plant:h35-keep */"], "cancelUnsent");
   await plantWire("dsp98", ["  if (j.refused !== true && j.invite.relay.door !== true) return false; /* plant:door-withdrawn-ends */", "  if (j.refused !== true) return false;"], "doorWithdrawnEnds");
   await plantWire("dsp99", ["  if (inv.withdrawing === true) return inv.rt === rt &&", "  if (false) return inv.rt === rt &&"], "doorWithdrawInvite");
   await plantWire("dsp99a", ["try { unlinkOwn(path.join(sharedFolderForWrite(), \"desks\", me.id, SEAT_NAME)); }", "try { fs.unlinkSync(path.join(sharedFolderForWrite(), \"desks\", me.id, SEAT_NAME)); }"], "signoutUnlinkOwn");

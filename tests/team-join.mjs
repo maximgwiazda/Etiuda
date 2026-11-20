@@ -2033,6 +2033,11 @@ try {
   const keptKey = sealText(crypto.randomBytes(32).toString("base64"));
   const cancelDesk = await relayDesk("h35-cancel-card", { wrapped: [1] },
     { teamKeys: { [relayTeam]: { 1: keptKey } }, teamSeen: [relayTeam] });
+  /* The channel's own record shows this invitation's request went up, as it does for any join the relay has accepted. */
+  fs.mkdirSync(path.join(cancelDesk.ud, "relay"), { recursive: true });
+  fs.writeFileSync(path.join(cancelDesk.ud, "relay", relayHex.h32 + ".json"), JSON.stringify({
+    kind: "etiuda-relay-channel", v: 1, seq: 1, tokenUsedIds: { [relayHex.h32]: true }, invitedIds: { [relayHex.h32]: true }
+  }), "utf8");
   const cancelSeed = JSON.stringify(cancelDesk.envelope());
   ST.lsSet("eUiLang", "en");
   await pageOn(cancelDesk);
