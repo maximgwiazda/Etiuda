@@ -520,6 +520,7 @@ function joinTook(v,changed){
         ? s.share.teammates.filter(x=>x&&x.id).map(x=>({id:String(x.id), name:String(x.name||x.id)}))
         : [],
     };
+    if(s.share.off===true) joinNow.share.off=true;
   }
   const hadAskWhy=askWhy;
   if(s.askRefused || s.refused==="no-identity" || s.refused==="folder-not-answering" || s.refused==="folder-not-writable"){

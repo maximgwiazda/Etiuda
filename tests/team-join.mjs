@@ -61,7 +61,7 @@ const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
 const EXPOSE = ["sealCatalog", "wrapTeamKey", "joinCommit", "joinCode", "joinGenuine", "joinOpening", "joinsSignedBytes", "joinSignedBytes",
   "branchSignedBytes", "deskFileGenuine", "readCatalog", "catalogLeadOk", "catalogChanged", "isCatalogName", "JOINS_NAME",
   "memberProof", "inviteCode", "inviteIdOf", "inviteRead", "folderHost", "signedSha", "inviteFolderBelongs", "relayRun", "acceptLink", "askSignedBytes", "rawCatalogFolder", "deskTrustChecks",
-  "sealCardTo", "openCardFrom", "relayChannel"];
+  "sealCardTo", "openCardFrom", "relayChannel", "relayMirrorOf"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -5469,7 +5469,7 @@ try {
     const switchDoc = (rev, sharing) => signS(Object.assign({}, JSON.parse(JSON.stringify(teamDoc2)), { rev }, sharing ? { sharing } : {}));
     const heedSwitch = async doc => {
       for (const d of [dA, dB, dC]) {
-        const m = d.api.rawCatalogFolder();
+        const m = d.api.relayMirrorOf(RT_S);
         put(m, "etiuda-team.json", JSON.stringify(doc, null, 1));
         await d.join("state");
         await d.join("state");
@@ -5570,7 +5570,7 @@ try {
         if (at < 0) return { missing: true };
         lines[at] = lines[at].replace(/if\s*\([^)]*\)\s*return[^;]*;/, "if (false) ;");
         const dP = await loadFromCopy("p10-" + hexS(3), dA.ud, lines.join(String.fromCharCode(10)));
-        const m = dP.api.rawCatalogFolder();
+        const m = dP.api.relayMirrorOf(RT_S);
         put(m, "etiuda-team.json", JSON.stringify(switchDoc(5, "off"), null, 1));
         await dP.join("state"); await dP.join("state");
         const r = await dP.join("share-to", dB.me.id, JSON.stringify(sharedCard), "");
