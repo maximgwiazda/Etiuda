@@ -520,6 +520,14 @@ function joinTook(v,changed){
         ? s.share.teammates.filter(x=>x&&x.id).map(x=>({id:String(x.id), name:String(x.name||x.id)}))
         : [],
     };
+    if(s.share.kept && typeof s.share.kept==="object" && !Array.isArray(s.share.kept)){
+      const kept={};
+      Object.keys(s.share.kept).forEach(card=>{
+        const rows=Array.isArray(s.share.kept[card]) ? s.share.kept[card].filter(x=>x&&x.id&&x.at).map(x=>({id:String(x.id), name:String(x.name||x.id), at:String(x.at)})) : [];
+        if(rows.length) kept[card]=rows;
+      });
+      joinNow.share.kept=kept;
+    }
   }
   const hadAskWhy=askWhy;
   if(s.askRefused || s.refused==="no-identity" || s.refused==="folder-not-answering" || s.refused==="folder-not-writable"){
@@ -1068,10 +1076,15 @@ function shareKeepCard(openedJson, catalogId){
   try{ return Promise.resolve(eHost().teamJoin("share-keep", String(openedJson||""), String(catalogId||""))).catch(()=>({ok:false, reason:"failed"})); }
   catch(e){ return Promise.resolve({ok:false, reason:"failed"}); }
 }
+function shareKeptNote(senderId, cardId){
+  if(!eHasJoin()) return Promise.resolve({ok:false});
+  try{ return Promise.resolve(eHost().teamJoin("share-kept", String(senderId||""), String(cardId||""))).catch(()=>({ok:false})); }
+  catch(e){ return Promise.resolve({ok:false}); }
+}
 function shareDropItem(blobId){
   if(!eHasJoin()) return Promise.resolve({ok:false});
   try{ return Promise.resolve(eHost().teamJoin("share-drop", String(blobId||""))).catch(()=>({ok:false})); }
   catch(e){ return Promise.resolve({ok:false}); }
 }
 
-export { lapseNote, shareRefusedNotes, relayElsewhereNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, teamPolicySaid, relayDesk, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, openJoinPaste, joinDoorButton, teamCanJoin, inviteHeld, noteCatalogCopy, joinTook, teamContent, teamContentNow, markCatalogPrivate, onContentChanged, openTeamBubble, closeTeamBubble, teamShareState, shareToTeammate, shareInboxList, shareKeepCard, shareDropItem };
+export { lapseNote, shareRefusedNotes, relayElsewhereNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, teamPolicySaid, relayDesk, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, openJoinPaste, joinDoorButton, teamCanJoin, inviteHeld, noteCatalogCopy, joinTook, teamContent, teamContentNow, markCatalogPrivate, onContentChanged, openTeamBubble, closeTeamBubble, teamShareState, shareToTeammate, shareInboxList, shareKeepCard, shareKeptNote, shareDropItem };

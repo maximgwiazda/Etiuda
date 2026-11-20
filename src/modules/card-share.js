@@ -1,6 +1,6 @@
 /* SHARING A CARD WITH A NAMED TEAMMATE (board 1013): the card's button, the blue picker bubble,
    refusals, the arriving row at the top of the list, Keep / Later / Decline, and the "from" mark. */
-import { teamShareState, onJoinPainted, shareToTeammate, shareInboxList, shareKeepCard, shareDropItem } from "./team-join.js";
+import { teamShareState, onJoinPainted, shareToTeammate, shareInboxList, shareKeepCard, shareKeptNote, shareDropItem } from "./team-join.js";
 import { ICON_SHARE } from "./icons.js";
 import { hangBubble } from "./bubble.js";
 import { dismissNode, cutLeaves } from "./motion.js";
@@ -43,13 +43,19 @@ function shareDateText(iso){
   const d=iso ? new Date(iso) : new Date();
   return isNaN(d.getTime()) ? new Date().toLocaleDateString() : d.toLocaleDateString();
 }
+function shareKeptOf(m){
+  const st=teamShareState();
+  const list=st && st.kept && m ? st.kept[String(m.id||"")] : null;
+  return Array.isArray(list) ? list : [];
+}
 function shareSig(m){
   const id=String(m&&m.id||"");
   const st=teamShareState();
   const on=st && cardIsShareable(m) ? "s" : "";
   const open=shareOpenId===id ? "+" : "";
   const from=(m && m.from && m.from.desk) ? String(m.from.desk)+":"+shareSenderName(m) : "";
-  return on+open+from;
+  const kept=shareKeptOf(m).map(k=>k.id+"@"+k.at+"@"+k.name).join(",");
+  return on+open+from+(kept?"|"+kept:"");
 }
 function shareButtonHtml(m){
   if(!shareOfferedNow() || !cardIsShareable(m)) return "";
@@ -64,6 +70,14 @@ function shareFromBadgeHtml(m){
   const tip=t("Shared by {NAME} on {DATE}. This copy belongs to this desk, and changes to it stay here.")
     .replace("{NAME}", name).replace("{DATE}", date);
   return '<span class="cbadge from" title="'+esc(tip)+'">'+esc(t("from {NAME}").replace("{NAME}", name))+'</span>';
+}
+function shareKeptBadgeHtml(m){
+  const list=shareKeptOf(m);
+  if(!list.length) return "";
+  const one = list.length === 1;
+  const tip=list.map(k=>t("Kept: {NAME}, {DATE}").replace("{NAME}", k.name).replace("{DATE}", shareDateText(k.at))).join("\n");
+  const txt=one ? t("kept · {NAME}").replace("{NAME}", list[0].name) : t("kept · {N}").replace("{N}", String(list.length));
+  return '<span class="cbadge kept" title="'+esc(tip)+'">'+esc(txt)+'</span>';
 }
 function joinNames(names){
   const list=(names||[]).filter(Boolean);
@@ -401,6 +415,7 @@ function openInboxBubble(){
       savePack([entry.id]);
       hooks.rebuildCards();
       await hooks.writeDeskBranch();
+      await shareKeptNote(cur.from, cur.card && cur.card.id);
       await shareDropItem(cur.id);
       inboxItems=inboxItems.filter(x=>x.id!==cur.id);
       deferredIds.delete(cur.id);
@@ -481,6 +496,7 @@ export {
   shareSig,
   shareButtonHtml,
   shareFromBadgeHtml,
+  shareKeptBadgeHtml,
   sharePressed,
   shareRowHtml,
   openInboxBubble,

@@ -19,7 +19,7 @@ const PRIO = E.belowNormal();
 console.log("       this run at " + (PRIO.below ? "below-normal" : "priority " + PRIO.priority) + " priority");
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 21;
+const EXPECTED = 31;
 let fails = 0, checks = 0, notRun = 0;
 const check = (ok, what, detail) => {
   checks++;
@@ -57,6 +57,9 @@ const WORDS = {
     notOnTeamTag: "not on the team",
     tooManyTag: "too many waiting",
     done: "Done",
+    keptOne: "kept · Tom Lis",
+    keptTwo: "kept · 2",
+    keptTipLabel: "Kept: ",
   },
   pl: {
     tip: "Udostępnij osobie z zespołu…",
@@ -82,6 +85,9 @@ const WORDS = {
     notOnTeamTag: "poza zespołem",
     tooManyTag: "za dużo oczekujących",
     done: "Gotowe",
+    keptOne: "zachowana · Tom Lis",
+    keptTwo: "zachowana · 2",
+    keptTipLabel: "Zachowano: ",
   },
 };
 
@@ -102,7 +108,7 @@ const RAW = fs.readFileSync(ENGINE, "utf8");
 const url = copyFiles(path.join(lab, "page"), RAW);
 let browser = null;
 
-async function boot(pageUrl, { lang = "en", theme = "light", onTeam = true, inbox = [] } = {}) {
+async function boot(pageUrl, { lang = "en", theme = "light", onTeam = true, inbox = [], kept = null } = {}) {
   const ctx = await browser.createBrowserContext();
   const p = await ctx.newPage();
   p.__ctx = ctx;
@@ -110,7 +116,7 @@ async function boot(pageUrl, { lang = "en", theme = "light", onTeam = true, inbo
   p.on("pageerror", (e) => console.log("       page error: " + String(e && e.message || e).split("\n")[0]));
   await p.setViewport({ width: 1280, height: 860, deviceScaleFactor: 1 });
   await p.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
-  await p.evaluateOnNewDocument((lang, theme, onTeam, inbox) => {
+  await p.evaluateOnNewDocument((lang, theme, onTeam, inbox, kept) => {
     try {
       for (const [k, v] of [["eTourDone_v3", "1"], ["eTourInvite_v3", "1"], ["eAgent", "Bench Agent"], ["eNameAsked", "1"], ["eFirstSigninSeen", "1"],
         ["eTheme", theme], ["eUiLang", lang], ["eStill", "1"], ["eMotionOff", "1"]]) localStorage.setItem(k, v);
@@ -129,6 +135,8 @@ async function boot(pageUrl, { lang = "en", theme = "light", onTeam = true, inbo
         { id: "k-3333333333333333", name: "Zofia Kamińska" },
       ],
     } : null;
+    if (shareState && kept) shareState.kept = JSON.parse(JSON.stringify(kept));
+    window.__keptCalls = [];
     window.__shareState = shareState;
     window.E_HOST = {
       onPickAsk() {},
@@ -159,6 +167,10 @@ async function boot(pageUrl, { lang = "en", theme = "light", onTeam = true, inbo
           const mine = Object.assign({}, card, { id: card.id + "-kept", from: { desk: parsed.from, card: card.id } });
           return Promise.resolve({ ok: true, card: mine });
         }
+        if (op === "share-kept") {
+          window.__keptCalls.push({ a, b, writes: window.__writes.length, after: window.__calls.map((x) => x.op).slice(0, -1) });
+          return Promise.resolve({ ok: true });
+        }
         if (op === "share-drop") {
           window.__inbox = window.__inbox.filter((x) => x.id !== a);
           return Promise.resolve({ ok: true });
@@ -166,7 +178,7 @@ async function boot(pageUrl, { lang = "en", theme = "light", onTeam = true, inbo
         return Promise.resolve({ ok: true });
       },
     };
-  }, lang, theme, onTeam, inbox);
+  }, lang, theme, onTeam, inbox, kept);
   await seatPage(p);
   await p.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
   await p.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
@@ -439,10 +451,77 @@ try {
     await closePage(p);
   }
 
+  /* 4b. The sender's "kept" mark (board 1013, piece 5), and the receipt a Keep sends */
+  for (const lang of ["en", "pl"]) {
+    const W = WORDS[lang];
+    const T1 = "2026-11-18T10:00:00.000Z", T2 = "2026-11-19T09:30:00.000Z";
+    const oneKept = { "u:own-k": [{ id: "k-2222222222222222", name: "Tom Lis", at: T1 }] };
+    const twoKept = { "u:own-k": [{ id: "k-2222222222222222", name: "Tom Lis", at: T1 }, { id: "k-1111111111111111", name: "Ewa Nowak", at: T2 }] };
+    const markOf = (p) => p.evaluate(() => {
+      const b = document.querySelector('.card[data-id="u:own-k"] .cbadge.kept');
+      return { txt: b ? b.textContent.trim() : "", tip: b ? b.getAttribute("title") || "" : "", n: document.querySelectorAll('.card[data-id="u:own-k"] .cbadge.kept').length };
+    });
+    const addOwn = (p) => p.evaluate((shelf) => {
+      pack.custom.push({ id: "u:own-k", c: shelf, t: "Own kept", en: "Own body." });
+      savePack();
+      rebuildCards();
+    }, FIRST_SHELF);
+    const dateOf = (p, iso) => p.evaluate((i) => new Date(i).toLocaleDateString(), iso);
+    {
+      const p = await boot(url, { lang, onTeam: true, kept: oneKept });
+      await addOwn(p);
+      await sleep(80);
+      const m1 = await markOf(p);
+      const d1 = await dateOf(p, T1);
+      check(m1.n === 1 && m1.txt === W.keptOne && m1.tip === W.keptTipLabel + "Tom Lis, " + d1,
+        "1013k1 (" + lang + ") one keeper: the card wears the sheet's mark with that person's name and a tooltip of one line", { m1, d1 });
+      await p.reload({ waitUntil: "load" });
+      await p.waitForFunction(() => document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
+      await addOwn(p);
+      await sleep(150);
+      const m3 = await markOf(p);
+      check(m3.n === 1 && m3.txt === W.keptOne,
+        "1013k3 (" + lang + ") after a restart the page asks the shell again and the mark is back, from the desk's record and not the page's", { m3 });
+      await closePage(p);
+    }
+    {
+      const p = await boot(url, { lang, onTeam: true, kept: twoKept });
+      await addOwn(p);
+      await sleep(80);
+      const m2 = await markOf(p);
+      const d1 = await dateOf(p, T1), d2 = await dateOf(p, T2);
+      check(m2.n === 1 && m2.txt === W.keptTwo && m2.tip === W.keptTipLabel + "Tom Lis, " + d1 + "\n" + W.keptTipLabel + "Ewa Nowak, " + d2,
+        "1013k2 (" + lang + ") several keepers: the mark counts them and the tooltip has one line per person", { m2, d1, d2 });
+      await closePage(p);
+    }
+    {
+      const mk = (id, from, name) => ({ id, from, fromName: name, team: "t-0123456789abcdef", note: "",
+        card: { id: "u:shared-r", shelf: FIRST_SHELF, bodyShape: "plain", title: { en: "R" }, body: { en: "Body." } } });
+      const p = await boot(url, { lang, onTeam: true, inbox: [mk("a".repeat(32), "k-1111111111111111", "Ewa Nowak")] });
+      await p.waitForSelector(".e-share-in-bub", { timeout: 5000 });
+      await p.click('.e-share-in-bub [data-share-in="keep"]');
+      await sleep(150);
+      const kept = await p.evaluate(() => window.__keptCalls.slice());
+      const p2 = await boot(url, { lang, onTeam: true, inbox: [mk("c".repeat(32), "k-2222222222222222", "Tom Lis")] });
+      await p2.waitForSelector(".e-share-in-bub", { timeout: 5000 });
+      await p2.click('.e-share-in-bub [data-share-in="decline"]');
+      await sleep(120);
+      const declined = await p2.evaluate(() => ({ kept: window.__keptCalls.length, ops: window.__calls.map((c) => c.op) }));
+      check(kept.length === 1 && kept[0].a === "k-1111111111111111" && kept[0].b === "u:shared-r" && kept[0].writes >= 1
+        && kept[0].after.indexOf("share-keep") >= 0 && kept[0].after.indexOf("share-drop") < 0
+        && declined.kept === 0 && declined.ops.indexOf("share-drop") >= 0,
+        "1013k4 (" + lang + ") Keep sends one receipt naming the sender and the card after the page's own write, and a decline sends none", { kept, declined });
+      await closePage(p);
+      await closePage(p2);
+    }
+  }
+
   /* 5. Plants on the page's deciding lines (inline on scratch copy of built page, never touching src/) */
   if (PLANTS_OFF) {
     skip("1013up1 lifting plant:share-verdict-first adds card when verdict refuses");
     skip("1013up2 lifting plant:share-own-only draws share button on catalog cards");
+    skip("1013kp1 lifting the several-keepers count shows one name");
+    skip("1013kp2 moving the receipt before the write sends it with nothing written");
   } else {
     const plant = (tag, re, rep) => {
       const m = RAW.match(re);
@@ -476,6 +555,33 @@ try {
       } finally { await closePage(p); }
     }
     check(!!u2 && red2 === true, "1013up2 lifting own-only guard draws share button on unmodified catalog cards", { located: !!u2, red2 });
+
+    const k1 = plant("kept-count", /const one = list\d*\.length === 1;/, "const one = true;");
+    let redK1 = null;
+    if (k1) {
+      const p = await boot(k1, { onTeam: true, kept: { "u:own-k": [{ id: "k-2222222222222222", name: "Tom Lis", at: "2026-11-18T10:00:00.000Z" }, { id: "k-1111111111111111", name: "Ewa Nowak", at: "2026-11-19T09:30:00.000Z" }] } });
+      try {
+        await p.evaluate((shelf) => { pack.custom.push({ id: "u:own-k", c: shelf, t: "Own kept", en: "Own body." }); savePack(); rebuildCards(); }, FIRST_SHELF);
+        await sleep(80);
+        redK1 = await p.evaluate(() => { const b = document.querySelector('.card[data-id="u:own-k"] .cbadge.kept'); return b ? b.textContent.trim() : ""; });
+      } finally { await closePage(p); }
+    }
+    check(!!k1 && redK1 !== "kept · 2", "1013kp1 lifting the several-keepers count shows one name where two kept", { located: !!k1, redK1 });
+
+    const k2 = plant("kept-order", /const res = await shareKeepCard\(opened, catalogId\);/, "shareKeptNote(cur.from, cur.card.id); const res = await shareKeepCard(opened, catalogId);");
+    let redK2 = null;
+    if (k2) {
+      const inbox = [{ id: "a".repeat(32), from: "k-1111111111111111", fromName: "Ewa Nowak", team: "t-0123456789abcdef", note: "",
+        card: { id: "u:shared-k2", shelf: FIRST_SHELF, bodyShape: "plain", title: { en: "K2" }, body: { en: "Body." } } }];
+      const p = await boot(k2, { onTeam: true, inbox });
+      try {
+        await p.waitForSelector(".e-share-in-bub", { timeout: 5000 });
+        await p.click('.e-share-in-bub [data-share-in="keep"]');
+        await sleep(150);
+        redK2 = await p.evaluate(() => window.__keptCalls.map((c) => c.writes));
+      } finally { await closePage(p); }
+    }
+    check(!!k2 && Array.isArray(redK2) && redK2.length > 0 && redK2[0] === 0, "1013kp2 moving the receipt before the write sends it with nothing written", { located: !!k2, redK2 });
   }
 } finally {
   if (browser) await Promise.race([browser.close().catch(() => {}), sleep(5000)]);

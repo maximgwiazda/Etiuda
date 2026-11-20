@@ -2930,7 +2930,7 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
 .cbadge{font:600 11px var(--sans);letter-spacing:0;padding:1px 7px;border-radius:6px;
   background:var(--accent-soft);color:var(--accent);text-transform:none}
 .cbadge.ed{background-color:var(--bg);background-image:linear-gradient(var(--ed-soft),var(--ed-soft));color:var(--ed)}
-.cbadge.from{background:var(--bg);color:var(--muted);border:1px solid var(--edge)}
+.cbadge.from,.cbadge.kept{background:var(--bg);color:var(--muted);border:1px solid var(--edge)}
 .e-share-bub .e-share-sub,.e-share-in-bub .e-share-in-sub{margin:0 0 10px;font-size:13px;line-height:1.45;color:var(--bub-dim)}
 .e-share-bub .e-share-find,.e-share-bub .e-share-note{display:block;box-sizing:border-box;width:100%;height:34px;margin:2px 0 8px;padding:0 10px;border:0;border-radius:8px;background:#fff;color:#0f172a;font:13.5px var(--sans);outline:none}
 .e-share-bub .e-share-find:focus,.e-share-bub .e-share-note:focus{box-shadow:inset 0 -2px 0 0 var(--accent-fill)}
@@ -9875,6 +9875,9 @@ What is typed here stays in this browser.`;
     "Decline": "Odrzuć",
     "Keep": "Zachowaj",
     "from {NAME}": "nadawca: {NAME}",
+    "kept · {NAME}": "zachowana · {NAME}",
+    "kept · {N}": "zachowana · {N}",
+    "Kept: {NAME}, {DATE}": "Zachowano: {NAME}, {DATE}",
     "Shared by {NAME} on {DATE}. This copy belongs to this desk, and changes to it stay here.": "Udostępnienie: {NAME}, {DATE}. Ta kopia należy do tego stanowiska, a zmiany w niej zostają tutaj.",
     "Sent to {NAMES}": "Wysłano: {NAMES}",
     "{NAME} is no longer on the team, so the card was not sent there.": "{NAME} nie jest już w zespole, więc karty tam nie wysłano.",
@@ -18180,6 +18183,7 @@ What is typed here stays in this browser.`;
     openInboxBubble: () => openInboxBubble,
     shareButtonHtml: () => shareButtonHtml,
     shareFromBadgeHtml: () => shareFromBadgeHtml,
+    shareKeptBadgeHtml: () => shareKeptBadgeHtml,
     shareOfferedNow: () => shareOfferedNow,
     sharePressed: () => sharePressed,
     shareRowHtml: () => shareRowHtml,
@@ -18215,6 +18219,7 @@ What is typed here stays in this browser.`;
     shareDropItem: () => shareDropItem,
     shareInboxList: () => shareInboxList,
     shareKeepCard: () => shareKeepCard,
+    shareKeptNote: () => shareKeptNote,
     shareRefusedNotes: () => shareRefusedNotes,
     shareToTeammate: () => shareToTeammate,
     teamCanJoin: () => teamCanJoin,
@@ -18833,6 +18838,14 @@ What is typed here stays in this browser.`;
         inbox: Number(s.share.inbox) || 0,
         teammates: Array.isArray(s.share.teammates) ? s.share.teammates.filter((x) => x && x.id).map((x) => ({ id: String(x.id), name: String(x.name || x.id) })) : []
       };
+      if (s.share.kept && typeof s.share.kept === "object" && !Array.isArray(s.share.kept)) {
+        const kept = {};
+        Object.keys(s.share.kept).forEach((card) => {
+          const rows = Array.isArray(s.share.kept[card]) ? s.share.kept[card].filter((x) => x && x.id && x.at).map((x) => ({ id: String(x.id), name: String(x.name || x.id), at: String(x.at) })) : [];
+          if (rows.length) kept[card] = rows;
+        });
+        joinNow.share.kept = kept;
+      }
     }
     const hadAskWhy = askWhy;
     if (s.askRefused || s.refused === "no-identity" || s.refused === "folder-not-answering" || s.refused === "folder-not-writable") {
@@ -19447,6 +19460,14 @@ What is typed here stays in this browser.`;
       return Promise.resolve(eHost().teamJoin("share-keep", String(openedJson || ""), String(catalogId || ""))).catch(() => ({ ok: false, reason: "failed" }));
     } catch (e) {
       return Promise.resolve({ ok: false, reason: "failed" });
+    }
+  }
+  function shareKeptNote(senderId, cardId) {
+    if (!eHasJoin()) return Promise.resolve({ ok: false });
+    try {
+      return Promise.resolve(eHost().teamJoin("share-kept", String(senderId || ""), String(cardId || ""))).catch(() => ({ ok: false }));
+    } catch (e) {
+      return Promise.resolve({ ok: false });
     }
   }
   function shareDropItem(blobId) {
@@ -20393,13 +20414,19 @@ What is typed here stays in this browser.`;
     const d = iso ? new Date(iso) : /* @__PURE__ */ new Date();
     return isNaN(d.getTime()) ? (/* @__PURE__ */ new Date()).toLocaleDateString() : d.toLocaleDateString();
   }
+  function shareKeptOf(m) {
+    const st = teamShareState();
+    const list2 = st && st.kept && m ? st.kept[String(m.id || "")] : null;
+    return Array.isArray(list2) ? list2 : [];
+  }
   function shareSig(m) {
     const id = String(m && m.id || "");
     const st = teamShareState();
     const on = st && cardIsShareable(m) ? "s" : "";
     const open = shareOpenId === id ? "+" : "";
     const from = m && m.from && m.from.desk ? String(m.from.desk) + ":" + shareSenderName(m) : "";
-    return on + open + from;
+    const kept = shareKeptOf(m).map((k) => k.id + "@" + k.at + "@" + k.name).join(",");
+    return on + open + from + (kept ? "|" + kept : "");
   }
   function shareButtonHtml(m) {
     if (!shareOfferedNow() || !cardIsShareable(m)) return "";
@@ -20412,6 +20439,14 @@ What is typed here stays in this browser.`;
     const name = shareSenderName(m), date = shareDateText(m.fromAt || m.changedAt);
     const tip = t("Shared by {NAME} on {DATE}. This copy belongs to this desk, and changes to it stay here.").replace("{NAME}", name).replace("{DATE}", date);
     return '<span class="cbadge from" title="' + esc(tip) + '">' + esc(t("from {NAME}").replace("{NAME}", name)) + "</span>";
+  }
+  function shareKeptBadgeHtml(m) {
+    const list2 = shareKeptOf(m);
+    if (!list2.length) return "";
+    const one = list2.length === 1;
+    const tip = list2.map((k) => t("Kept: {NAME}, {DATE}").replace("{NAME}", k.name).replace("{DATE}", shareDateText(k.at))).join("\n");
+    const txt = one ? t("kept · {NAME}").replace("{NAME}", list2[0].name) : t("kept · {N}").replace("{N}", String(list2.length));
+    return '<span class="cbadge kept" title="' + esc(tip) + '">' + esc(txt) + "</span>";
   }
   function joinNames(names) {
     const list2 = (names || []).filter(Boolean);
@@ -20743,6 +20778,7 @@ What is typed here stays in this browser.`;
         savePack([entry.id]);
         hooks.rebuildCards();
         await hooks.writeDeskBranch();
+        await shareKeptNote(cur.from, cur.card && cur.card.id);
         await shareDropItem(cur.id);
         inboxItems = inboxItems.filter((x) => x.id !== cur.id);
         deferredIds.delete(cur.id);
@@ -27914,7 +27950,7 @@ What is typed here stays in this browser.`;
     if (fav) cardH += '<span class="cbadge fav" title="' + esc(t("In Favourites")) + '">' + esc(t("fav")) + "</span>";
     if (m._custom || m._overridden || movedCardIds().has(m.id))
       cardH += '<span class="cbadge ed" title="' + esc(t("Changed or added by you, not what the catalog shipped")) + '">' + esc(t("mod")) + "</span>";
-    cardH += shareFromBadgeHtml(m);
+    cardH += shareFromBadgeHtml(m) + shareKeptBadgeHtml(m);
     const edMark = editionMarkOf(m.id);
     if (edMark) cardH += '<span class="cbadge edn" title="' + esc(edMark.k === "new" ? editionSaid(edMark, t("New in rev {R}"), t("New in edition {E}")) : editionSaid(edMark, t("Changed in rev {R}"), t("Changed in edition {E}"))) + '">' + esc(edMark.k === "new" ? t("new") : t("changed")) + "</span>";
     const favTip = t(fav ? "Remove from Favourites" : "Add to Favourites");
