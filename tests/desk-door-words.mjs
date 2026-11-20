@@ -18,7 +18,7 @@ const SETTINGS_PATH = path.join(ROOT, "src", "modules", "settings.js");
 const TEMPLATE_PATH = path.join(ROOT, "src", "template.html");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
-const CHECKS = 34, PLANTS = 30;
+const CHECKS = 41, PLANTS = 30;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -107,13 +107,14 @@ const W = {
       "org": "the organisation's licence no longer gives this account a seat"
     },
     w6: {
-      "trial": (n, d) => ["Etiuda's own trial is running.", `Day ${n} of 14, until ${d}, on up to three computers.`],
-      "trial-wait": (n, d) => ["Etiuda's own trial is running.", `Day ${n} of 14, until ${d}. The request to join waits for ${LEAD}, and Etiuda works meanwhile.`],
-      "studio-trial": (d, s) => ["Etiuda now runs on the Etiuda Studio trial.", `Etiuda's own fourteen days ended on ${d}. The Etiuda Studio trial on this account began later and covers Etiuda too, until ${s}.`],
-      "own": (e) => ["This account holds an Etiuda licence.", `Paid until ${e}, on up to three computers.`],
-      "team": (e) => [`This account has a seat on the team ${LEAD} leads.`, `It renews by itself; the team's licence runs until ${e}.`],
-      "org": (e) => ["This account has a seat on its organisation's licence.", `It renews by itself; the licence runs until ${e}.`]
+      "trial": (n, d) => [`Trial · until ${d}`, `Etiuda's own trial, day ${n} of 14, until ${d}, on up to three computers.`, true],
+      "trial-wait": (n, d) => [`Trial · until ${d}`, `Day ${n} of 14, until ${d}. The request to join waits for ${LEAD}, and Etiuda works meanwhile.`, true],
+      "studio-trial": (d, s) => [`Etiuda Studio's trial · until ${s}`, `Etiuda's own fourteen days ended on ${d}. The Etiuda Studio trial on this account began later and covers Etiuda too, until ${s}.`, true],
+      "own": (e) => [`Own licence · paid until ${e}`, `This account's own licence, paid until ${e}, on up to three computers.`, true],
+      "team": (e) => [`Team's licence · until ${e}`, `A seat on the team ${TEAM_NAME}; it renews by itself, and the team's licence runs until ${e}.`, true],
+      "org": (e) => ["This account has a seat on its organisation's licence.", `It renews by itself; the licence runs until ${e}.`, false]
     },
+    seat: "Seat",
     aBtn: "Save your own work as files…",
     aCap: "What this account made here can still be saved as files, in a folder of your choice: its own cards, its edits to a catalog's cards, and the flags it raised. Catalogs themselves are not saved.",
     bH: "This build of Etiuda cannot sign in.",
@@ -156,13 +157,14 @@ const W = {
       "org": "licencja organizacji nie daje już temu kontu miejsca"
     },
     w6: {
-      "trial": (n, d) => ["Trwa własny okres próbny Etiudy.", `Dzień ${n} z 14, do ${d}, najwyżej na trzech komputerach.`],
-      "trial-wait": (n, d) => ["Trwa własny okres próbny Etiudy.", `Dzień ${n} z 14, do ${d}. Prośba o dołączenie czeka na odpowiedź, której udzieli ${LEAD}, a Etiuda w tym czasie działa.`],
-      "studio-trial": (d, s) => ["Etiuda działa teraz w okresie próbnym Etiudy Studio.", `Własne czternaście dni Etiudy skończyły się ${d}. Okres próbny Etiudy Studio na tym koncie zaczął się później i obejmuje także Etiudę, do ${s}.`],
-      "own": (e) => ["To konto ma licencję Etiudy.", `Opłacona do ${e}, najwyżej na trzech komputerach.`],
-      "team": (e) => [`To konto ma miejsce w zespole, który prowadzi ${LEAD}.`, `Odnawia się samo; licencja zespołu obowiązuje do ${e}.`],
-      "org": (e) => ["To konto ma miejsce w licencji swojej organizacji.", `Odnawia się samo; licencja obowiązuje do ${e}.`]
+      "trial": (n, d) => [`Okres próbny · do ${d}`, `Własny okres próbny Etiudy, dzień ${n} z 14, do ${d}, najwyżej na trzech komputerach.`, true],
+      "trial-wait": (n, d) => [`Okres próbny · do ${d}`, `Dzień ${n} z 14, do ${d}. Prośba o dołączenie czeka na odpowiedź, której udzieli ${LEAD}, a Etiuda w tym czasie działa.`, true],
+      "studio-trial": (d, s) => [`Okres próbny Etiudy Studio · do ${s}`, `Własne czternaście dni Etiudy skończyły się ${d}. Okres próbny Etiudy Studio na tym koncie zaczął się później i obejmuje także Etiudę, do ${s}.`, true],
+      "own": (e) => [`Własna licencja · opłacona do ${e}`, `Własna licencja tego konta, opłacona do ${e}, najwyżej na trzech komputerach.`, true],
+      "team": (e) => [`Licencja zespołu · do ${e}`, `Miejsce w zespole: ${TEAM_NAME}; odnawia się samo, a licencja zespołu obowiązuje do ${e}.`, true],
+      "org": (e) => ["To konto ma miejsce w licencji swojej organizacji.", `Odnawia się samo; licencja obowiązuje do ${e}.`, false]
     },
+    seat: "Miejsce w licencji",
     aBtn: "Zapisz własną pracę jako pliki…",
     aCap: "To, co powstało tu na tym koncie, można jeszcze zapisać jako pliki w wybranym folderze: własne karty, zmiany w kartach katalogu i zgłoszenia. Same katalogi nie są zapisywane.",
     bH: "Ta wersja Etiudy nie umożliwia logowania.",
@@ -501,8 +503,12 @@ for (const lang of ["en", "pl"]) {
       if (!band || band.shown !== false || band.dot !== false) return false;
       const pHtml = panelHtml(pg, v, lang);
       const pTxt = textOf(pHtml);
-      if (!pTxt.includes(pair[0]) || !pTxt.includes(pair[1]) || !pTxt.includes(w.check) || !pTxt.includes(w.acctSet)) return false;
-      if (pHtml.includes("sgn-code") || pHtml.includes("sgn-ft")) return false;
+      if (!pTxt.includes(pair[1]) || !pTxt.includes(w.check) || !pTxt.includes(w.acctSet)) return false;
+      if (pHtml.includes("sgn-code")) return false;
+      /* A family seat is told by its short form in the foot and its line, with no heading; the organisation's keeps its heading and has no foot. */
+      if (pair[2]) {
+        if (!pHtml.includes('<p class="sgn-ft">' + pair[0] + "</p>") || pHtml.includes("<h4>")) return false;
+      } else if (!pTxt.includes(pair[0]) || pHtml.includes("sgn-ft")) return false;
     }
     return true;
   };
@@ -535,7 +541,12 @@ for (const lang of ["en", "pl"]) {
     for (const [v, pair] of variants) {
       const h = acctHtml(set, v, lang);
       const t = textOf(h);
-      if (!t.includes(pair[0]) || !t.includes(pair[1]) || h.includes("door-seat-dot") || !seatEmpty(h) || w.gone.some(g => t.includes(g))) return false;
+      if (!t.includes(pair[1]) || h.includes("door-seat-dot") || w.gone.some(g => t.includes(g))) return false;
+      if (pair[2]) {
+        /* The Seat row: its label, the short form as the value, the line under the label. */
+        const m = h.match(/<div class="set-row" data-row="seat">[\s\S]*?<div class="set-ctl">([\s\S]*?)<\/div><\/div>/);
+        if (!m || !m[1].includes('<span class="sgn-val">' + pair[0] + "</span>") || !textOf(h).includes(w.seat + " " + pair[1])) return false;
+      } else if (!t.includes(pair[0]) || !seatEmpty(h)) return false;
     }
     return true;
   };
@@ -619,8 +630,8 @@ CASES.noName = (pg = P) => {
     && pl5.includes("wygas\u0142o miejsce w zespole") && pl5.indexOf("kt\u00f3ry prowadzi") < 0
     && en6.includes("waits for the team's lead") && en6.indexOf("waits for ,") < 0
     && pl6.includes("czeka na odpowied\u017a lidera zespo\u0142u") && pl6.indexOf("udzieli ,") < 0
-    && enTeam.includes("This account has a seat on a team.") && enTeam.indexOf("leads.") < 0
-    && plTeam.includes("To konto ma miejsce w zespole.") && plTeam.indexOf("kt\u00f3ry prowadzi") < 0;
+    && enTeam.includes("A seat on a team; it renews by itself") && enTeam.indexOf("on the team") < 0
+    && plTeam.includes("Miejsce w zespole; odnawia si\u0119 samo") && plTeam.indexOf("zespole:") < 0;
 };
 
 /* Door lines say the month in full, and a date in another year keeps the year. The panel's own short day is unchanged. */
@@ -656,6 +667,78 @@ CASES.wayOn = (src) => {
     && block.indexOf("outline") < 0;
 };
 
+/* Licence line, one family (board 1011). The short form the Seat row carries as its value and the panel as its foot, for the
+   cases the desk can tell: own trial (A), Studio's trial (B), own licence (C), a team's seat (D). The fifth, a team's seat
+   with the person's own licence kept aside (E), is not in what the service sends, so the team's seat shows D. */
+const SHORT = {
+  en: { trial: d => `Trial · until ${d}`, studio: s => `Etiuda Studio's trial · until ${s}`, own: e => `Own licence · paid until ${e}`, team: e => `Team's licence · until ${e}` },
+  pl: { trial: d => `Okres próbny · do ${d}`, studio: s => `Okres próbny Etiudy Studio · do ${s}`, own: e => `Własna licencja · opłacona do ${e}`, team: e => `Licencja zespołu · do ${e}` }
+};
+for (const lang of ["en", "pl"]) {
+  CASES["seatFamily_" + lang] = (pg = P) => {
+    if (typeof pg.deskSeatShort !== "function") return false;
+    const sh = SHORT[lang];
+    const dStr = dayOf(T_DESK_END, lang), sStr = dayOf(T_STUDIO_END, lang), eStr = dayOf(T_ENDS, lang);
+    const short = (v, opts) => {
+      storage.lsSet("eUiLang", lang);
+      hostOn(v, opts);
+      try { return pg.deskSeatShort(pg.deskDoorState(pg.signinRead(v))); } finally { hostOff(); }
+    };
+    const keptAside = Object.assign({}, VIEWS.working("team"), { deskOnly: true, licenceManaged: true, cause: "own-licence" });
+    return short(VIEWS.working("trial")) === sh.trial(dStr)
+      && short(VIEWS.working("trial", { askLead: true })) === sh.trial(dStr)
+      && short(VIEWS.working("studio-trial")) === sh.studio(sStr)
+      && short(VIEWS.working("own")) === sh.own(eStr)
+      && short(VIEWS.working("team")) === sh.team(eStr)
+      && short(VIEWS.working("team"), { noTeam: true }) === sh.team(eStr)
+      && short(keptAside) === sh.team(eStr)
+      && short(VIEWS.working("org")) === ""
+      && short(VIEWS.ended) === "" && short(VIEWS.waiting) === "" && short(VIEWS.trialOver) === "" && short(VIEWS.stopped("own")) === "";
+  };
+}
+/* Studio's trial told with no end for Etiuda's own fourteen days: the short form takes the seat's end, and the line says no day it does not hold. */
+for (const lang of ["en", "pl"]) {
+  CASES["studioNoDeskEnd_" + lang] = (pg = P) => {
+    const sStr = dayOf(T_STUDIO_END, lang);
+    const v = Object.assign({}, VIEWS.working("studio-trial"), { trials: { studio: T_STUDIO_END } });
+    const noTrials = Object.assign({}, v, { trials: null });
+    const html = panelHtml(pg, v, lang), txt = textOf(html);
+    const plain = textOf(panelHtml(pg, noTrials, lang));
+    const line = lang === "pl" ? `Okres próbny Etiudy Studio na tym koncie obejmuje także Etiudę, do ${sStr}.` : `The Etiuda Studio trial on this account covers Etiuda too, until ${sStr}.`;
+    return html.includes('<p class="sgn-ft">' + SHORT[lang].studio(sStr) + "</p>") && txt.includes(line)
+      && txt.indexOf("ended on") < 0 && txt.indexOf("skończyły") < 0
+      && plain.includes(line);
+  };
+}
+/* The own-trial block of the ask-your-lead panel, where the desk holds no seat to read: past Etiuda's own fourteen days and inside Studio's trial it is Studio's trial that is said, never the own trial running. */
+for (const lang of ["en", "pl"]) {
+  CASES["askLeadStudio_" + lang] = (pg = P) => {
+    const sStr = dayOf(T_STUDIO_END, lang), dStr = dayOf(T_DESK_END, lang);
+    const base = { offered: ["microsoft", "google"], signedIn: "microsoft", code: CODE, works: false, askLead: true, seat: "held", deskOnly: true, trialUntil: T_DESK_END, now: T_NOW };
+    const past = Object.assign({}, base, { now: T_DESK_END + 86400000, trials: { desk: T_DESK_END, studio: T_STUDIO_END } });
+    const within = Object.assign({}, base, { trials: { desk: T_DESK_END, studio: T_STUDIO_END } });
+    const own = textOf(panelHtml(pg, within, lang));
+    const stud = panelHtml(pg, past, lang);
+    const sTxt = textOf(stud);
+    const line = lang === "pl" ? `Własne czternaście dni Etiudy skończyły się ${dStr}. Okres próbny Etiudy Studio na tym koncie zaczął się później i obejmuje także Etiudę, do ${sStr}.`
+      : `Etiuda's own fourteen days ended on ${dStr}. The Etiuda Studio trial on this account began later and covers Etiuda too, until ${sStr}.`;
+    const ownHead = lang === "pl" ? "Trwa własny okres próbny tego konta." : "This account's own trial is running.";
+    return own.includes(ownHead) && !sTxt.includes(ownHead)
+      && stud.includes("<b>" + SHORT[lang].studio(sStr) + "</b>") && sTxt.includes(line);
+  };
+}
+/* Nothing of the family where no case holds: the ended, waiting and trial-over panels carry no short-form foot, and the organisation's seat keeps its heading with an empty value. */
+CASES.noFamilyElsewhere = (pg = P) => {
+  for (const lang of ["en", "pl"]) {
+    for (const v of [VIEWS.ended, VIEWS.waiting, VIEWS.trialOver, VIEWS.working("org")]) {
+      if (panelHtml(pg, v, lang).includes("sgn-ft")) return false;
+    }
+    const org = acctHtml(SET, VIEWS.working("org"), lang);
+    if (!/<div class="set-row" data-row="seat">[\s\S]*?<div class="set-ctl"><\/div><\/div>/.test(org) || org.includes('sgn-val">' + SHORT[lang].team(dayOf(T_ENDS, lang)))) return false;
+  }
+  return true;
+};
+
 /* Run all checks. */
 const RUN_LIST = [
   ["dd1", "seam", "deskDoorState(view) returns the closed state set and all word facts"],
@@ -686,6 +769,13 @@ const RUN_LIST = [
   ["dd31", "panelRows", "state 4 puts the way on and Buy on one row, then Check now and Account settings on the next"],
   ["dd32", "offlineGlyph", "the offline box leads with an 18px crossed-signal glyph at 70% opacity"],
   ["dd33", "seamShape", "B-3a1 seam: same keys and types; waiting and both trial-over states come before stopped where their fields hold, on the stoppedAt the shell sends; stopped is !works with stoppedAt > 0 where those fields do not; trials-ended, busy and refusal map cleanly"],
+  ["dd35", "seatFamily_en", "licence line (EN): the short form for an own trial, Studio's trial, an own licence and a team's seat; a team's seat with a kept licence is told as the team's, as the service sends nothing more; none elsewhere"],
+  ["dd36", "seatFamily_pl", "licence line (PL): the short form for an own trial, Studio's trial, an own licence and a team's seat; a team's seat with a kept licence is told as the team's, as the service sends nothing more; none elsewhere"],
+  ["dd37", "studioNoDeskEnd_en", "licence line (EN): Studio's trial told with no end for the own fourteen days draws the seat's end and no day it does not hold"],
+  ["dd38", "studioNoDeskEnd_pl", "licence line (PL): Studio's trial told with no end for the own fourteen days draws the seat's end and no day it does not hold"],
+  ["dd39", "askLeadStudio_en", "licence line (EN): the ask-your-lead panel past the own fourteen days inside Studio's trial says Studio's trial, with the day, and not the own trial running"],
+  ["dd40", "askLeadStudio_pl", "licence line (PL): the ask-your-lead panel past the own fourteen days inside Studio's trial says Studio's trial, with the day, and not the own trial running"],
+  ["dd41", "noFamilyElsewhere", "licence line: the ended, waiting, trial-over and organisation panels carry no short-form foot, and the organisation's Seat row keeps an empty value"],
   ["dd34", "doorNotNoneWhenDue", "Argon 51 B2: deskDoorState never answers none while signed in and due (waiting, full, no licence, team seat marked by another key), and paintFirstSignin never draws the retired fallback"],
 ];
 
@@ -776,7 +866,7 @@ if (!PLANTS_OFF) {
     ["if(ds.state!==\"ended\") return {shown:false, dot:false, text:\"\", tip:\"\"}; /* plant:door-band-ended */", "return {shown:false, dot:false, text:\"\", tip:\"\"};"],
     "state4_en");
   await plant("ddp8", SIGNIN_PATH,
-    ["if(ds.state===\"working\") return {moment:\"working\", ident, heading:pair[0], line:pair[1], acts:[{act:\"check\", label:t(\"Check now\")}, acct]}; /* plant:door-panel-working */", "if(false) return {};"],
+    ["if(ds.state===\"working\") return {moment:\"working\", ident, heading:pair[0], line:pair[1], foot:deskSeatShort(ds), acts:[{act:\"check\", label:t(\"Check now\")}, acct]}; /* plant:door-panel-working */", "if(false) return {};"],
     "state6_en");
   await plant("ddp9", SIGNIN_PATH,
     ["const priv=t(\"This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The leads and administrator of the licence it joins see the account's name, address and picture.\"); /* plant:door-privacy-short */", "const priv=t(\"This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev.\");"],
@@ -813,11 +903,35 @@ if (!PLANTS_OFF) {
     ["    lead ? fill(t(\"Catalogs open here again once {LEAD}", "    true ? fill(t(\"Catalogs open here again once {LEAD}"],
     "noName");
   await plant("ddp22", SIGNIN_PATH,
-    ["return [lead ? fill(t(\"This account has a seat on the team {LEAD} leads.\")", "return [true ? fill(t(\"This account has a seat on the team {LEAD} leads.\")"],
+    ["return [\"\", teamName ? fill(t(\"A seat on the team {TEAM}; it renews by itself, and the team's licence runs until {ENDS}.\")", "return [\"\", true ? fill(t(\"A seat on the team {TEAM}; it renews by itself, and the team's licence runs until {ENDS}.\")"],
     "noName");
   await plant("ddp23", SIGNIN_PATH,
     ["    lead ? fill(t(\"Day {N} of 14, until {DESK_END}. The request to join waits for {LEAD}", "    true ? fill(t(\"Day {N} of 14, until {DESK_END}. The request to join waits for {LEAD}"],
     "noName");
+  await plant("ddp26", SIGNIN_PATH,
+    ["if(ds.seatOn===\"trial\") return named(t(\"Trial \u00b7 until {DATE}\"),\"{DATE}\",day(ds.deskEnd)); /* plant:seat-short-trial */", "if(false) return \"\";"],
+    "seatFamily_en");
+  await plant("ddp27", SIGNIN_PATH,
+    ["if(ds.seatOn===\"studio-trial\") return named(t(\"Etiuda Studio's trial \u00b7 until {STUDIO_END}\"),\"{STUDIO_END}\",day(ds.studioEnd||ds.ends)); /* plant:seat-short-studio */", "if(false) return \"\";"],
+    "seatFamily_en");
+  await plant("ddp28", SIGNIN_PATH,
+    ["if(ds.seatOn===\"own\") return named(t(\"Own licence \u00b7 paid until {ENDS}\"),\"{ENDS}\",day(ds.ends)); /* plant:seat-short-own */", "if(false) return \"\";"],
+    "seatFamily_pl");
+  await plant("ddp29", SIGNIN_PATH,
+    ["if(ds.seatOn===\"team\") return named(t(\"Team's licence \u00b7 until {ENDS}\"),\"{ENDS}\",day(ds.ends)); /* plant:seat-short-team */", "if(false) return \"\";"],
+    "seatFamily_pl");
+  await plant("ddp30", SIGNIN_PATH,
+    ["day(ds.studioEnd||ds.ends)", "day(ds.studioEnd)"],
+    "studioNoDeskEnd_en");
+  await plant("ddp31", SIGNIN_PATH,
+    ["const pastOwn=v.now>0 && !!v.trials && v.trials.desk>0 && v.now>v.trials.desk && v.trials.studio>v.now; /* plant:own-trial-past */", "const pastOwn=false;"],
+    "askLeadStudio_en");
+  await plant("ddp32", SETTINGS_PATH,
+    ["ctl:seatShort ? val(seatShort) : \"\"}); /* plant:account-seat-short */", "ctl:\"\"});"],
+    "account_en");
+  await plant("ddp33", SETTINGS_PATH,
+    ["title:seatShort ? t(\"Seat\") : seatPair[0], /* plant:account-seat-title */", "title:seatPair[0],"],
+    "account_pl");
   plantText("ddp19", TEMPLATE_PATH,
     [".door-out{margin-top:22px;padding-top:18px;border-top:1px solid var(--line)} /* plant:door-out-gap */", ".door-out{margin-top:18px;padding-top:18px;border-top:1px solid var(--line)} /* plant:door-out-gap */"],
     "css");
