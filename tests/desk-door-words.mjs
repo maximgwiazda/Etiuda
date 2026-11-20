@@ -18,7 +18,7 @@ const SETTINGS_PATH = path.join(ROOT, "src", "modules", "settings.js");
 const TEMPLATE_PATH = path.join(ROOT, "src", "template.html");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
-const CHECKS = 41, PLANTS = 30;
+const CHECKS = 41, PLANTS = 38;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -59,6 +59,8 @@ const textOf = html => String(html || "")
   .replace(/&amp;/g, "&")
   .replace(/\s+/g, " ")
   .trim();
+
+const footOf = html => { const m = String(html || "").match(/<p class="sgn-ft">([\s\S]*?)<\/p>/); return m ? textOf(m[1]) : null; };
 
 function hostOn(signinObj, opts) {
   const o = opts || {};
@@ -507,7 +509,7 @@ for (const lang of ["en", "pl"]) {
       if (pHtml.includes("sgn-code")) return false;
       /* A family seat is told by its short form in the foot and its line, with no heading; the organisation's keeps its heading and has no foot. */
       if (pair[2]) {
-        if (!pHtml.includes('<p class="sgn-ft">' + pair[0] + "</p>") || pHtml.includes("<h4>")) return false;
+        if (footOf(pHtml) !== pair[0] || pHtml.includes("<h4>")) return false;
       } else if (!pTxt.includes(pair[0]) || pHtml.includes("sgn-ft")) return false;
     }
     return true;
@@ -545,7 +547,7 @@ for (const lang of ["en", "pl"]) {
       if (pair[2]) {
         /* The Seat row: its label, the short form as the value, the line under the label. */
         const m = h.match(/<div class="set-row" data-row="seat">[\s\S]*?<div class="set-ctl">([\s\S]*?)<\/div><\/div>/);
-        if (!m || !m[1].includes('<span class="sgn-val">' + pair[0] + "</span>") || !textOf(h).includes(w.seat + " " + pair[1])) return false;
+        if (!m || !m[1].includes('<span class="sgn-val">') || textOf(m[1]) !== pair[0] || !textOf(h).includes(w.seat + " " + pair[1])) return false;
       } else if (!t.includes(pair[0]) || !seatEmpty(h)) return false;
     }
     return true;
@@ -703,11 +705,11 @@ for (const lang of ["en", "pl"]) {
     const v = Object.assign({}, VIEWS.working("studio-trial"), { trials: { studio: T_STUDIO_END } });
     const noTrials = Object.assign({}, v, { trials: null });
     const html = panelHtml(pg, v, lang), txt = textOf(html);
-    const plain = textOf(panelHtml(pg, noTrials, lang));
+    const plainHtml = panelHtml(pg, noTrials, lang), plain = textOf(plainHtml);
     const line = lang === "pl" ? `Okres próbny Etiudy Studio na tym koncie obejmuje także Etiudę, do ${sStr}.` : `The Etiuda Studio trial on this account covers Etiuda too, until ${sStr}.`;
-    return html.includes('<p class="sgn-ft">' + SHORT[lang].studio(sStr) + "</p>") && txt.includes(line)
+    return footOf(html) === SHORT[lang].studio(sStr) && txt.includes(line)
       && txt.indexOf("ended on") < 0 && txt.indexOf("skończyły") < 0
-      && plain.includes(line);
+      && plain.includes(line) && footOf(plainHtml) === SHORT[lang].studio(sStr);
   };
 }
 /* The own-trial block of the ask-your-lead panel, where the desk holds no seat to read: past Etiuda's own fourteen days and inside Studio's trial it is Studio's trial that is said, never the own trial running. */
@@ -724,7 +726,7 @@ for (const lang of ["en", "pl"]) {
       : `Etiuda's own fourteen days ended on ${dStr}. The Etiuda Studio trial on this account began later and covers Etiuda too, until ${sStr}.`;
     const ownHead = lang === "pl" ? "Trwa własny okres próbny tego konta." : "This account's own trial is running.";
     return own.includes(ownHead) && !sTxt.includes(ownHead)
-      && stud.includes("<b>" + SHORT[lang].studio(sStr) + "</b>") && sTxt.includes(line);
+      && sTxt.includes(SHORT[lang].studio(sStr) + " " + line);
   };
 }
 /* Nothing of the family where no case holds: the ended, waiting and trial-over panels carry no short-form foot, and the organisation's seat keeps its heading with an empty value. */

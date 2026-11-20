@@ -34,7 +34,7 @@ import { rewordState, rewordSwitchSet } from "./card-reword.js";
 import { SIGNIN_NAMES, signinNow, signinShown, signinParts, signinSay, signinNoSeat, signinTold, signinActsHtml, signinWhen, signinProvidersHtml, signinIdentHtml, signinCodeText, signinChoosingNow, signinDoorsHtml, signinDoorRefusedNow,
   signinAct, signinStart, signinOnChange, signinPreviewHtml, signinLinkHtml, signinLinkSelect, signinCopyHtml, signinManaged, signinKeepsAccount,
   signinCapHolds, signinStranded, signinStrandedWords, signinWaiting, signinWaitingWords, syncNow, syncLine, syncSet, syncOnChange, syncOpened, syncConsent, askSyncWhose,
-  deskDoorState, deskDoorLines } from "./signin.js";
+  deskDoorState, deskDoorLines, deskSeatShort } from "./signin.js";
 import { hangBubble } from "./bubble.js";
 
 /* THE SETTINGS SCREEN, a screen tab. Opening it shows every section on one page, under its name,
@@ -374,9 +374,10 @@ function accountGroups(){
       '<code class="sgn-mono">'+esc(signinCodeText(v.code))+'</code>'+signinCopyHtml("copy")));
     const ds=deskDoorState(v);
     if(ds.state==="ended" || ds.state==="working"){ /* plant:account-seat-state */
-      const seatPair=deskDoorLines(ds);
+      const seatPair=deskDoorLines(ds), seatShort=deskSeatShort(ds);
       rows.push({key:"seat", icon:"check", dot:ds.state==="ended", /* plant:account-seat-dot */
-        title:seatPair[0], hint:seatPair[1], ctl:""});
+        title:seatShort ? t("Seat") : seatPair[0], /* plant:account-seat-title */
+        hint:seatPair[1], ctl:seatShort ? val(seatShort) : ""}); /* plant:account-seat-short */
     }
     else if(signinNoSeat(v)) rows.push(row("seat","check",t("Seat"),join(signinSay(v.refused, v, p)),""));
     else if(v.seat==="none") rows.push(row("seat","check",t("Seat"),join(signinSay("nolicence", v)),""));
