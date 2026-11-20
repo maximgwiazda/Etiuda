@@ -448,7 +448,7 @@ function readState(file) {
 function freshState() {
   return { kind: STATE_KIND, v: 1, seq: 0, counters: {}, revs: {}, trust: {}, applied: {}, taken: {}, sent: {}, sentInv: {},
     refused: {}, own: 0, bytes: 0, leadEpoch: 0, pending: [], gone: {}, tokenUsed: false, invited: false,
-    tokenUsedIds: {}, invitedIds: {}, replyLostIds: {}, lostBlobs: {}, unkeptIds: {}, headT: null, heldHead: null, heldItem: null, lapse: null, skew: 0, made: null, suspect: false,
+    tokenUsedIds: {}, invitedIds: {}, replyLostIds: {}, lostBlobs: {}, withdrawLostIds: {}, unkeptIds: {}, headT: null, heldHead: null, heldItem: null, lapse: null, skew: 0, made: null, suspect: false,
     pin: null, chain: null, was: [], forks: {}, fork: null, behind: {}, stranded: null, listed: null, listedAsked: null, ahead: { held: [], steps: [] }, later: [] };
 }
 
@@ -502,6 +502,7 @@ function stateOf(x, now) {
   s.invitedIds = idSet(x.invitedIds);
   s.replyLostIds = idSet(x.replyLostIds);
   if (table(x.lostBlobs)) for (const k of Object.keys(x.lostBlobs)) if (HEX32.test(k) && HEX32.test(String(x.lostBlobs[k] || ""))) s.lostBlobs[k] = String(x.lostBlobs[k]);
+  s.withdrawLostIds = idSet(x.withdrawLostIds);
   s.unkeptIds = idSet(x.unkeptIds);
   for (const [name, prefix] of [["counters", "c\n"], ["revs", "r\n"]]) {
     if (table(x[name])) for (const k of Object.keys(x[name])) if (k.startsWith(prefix) && count(x[name][k])) s[name][k] = x[name][k];
@@ -1754,6 +1755,7 @@ function createProgram(opts) {
       if (HEX32.test(String(op.inviteId || ""))) st.invitedIds[String(op.inviteId)] = true; /* plant:invite-id-sent */
       if (HEX32.test(String(op.inviteId || ""))) delete st.replyLostIds[String(op.inviteId)];
       if (HEX32.test(String(op.inviteId || ""))) delete st.lostBlobs[String(op.inviteId)];
+      if (HEX32.test(String(op.inviteId || ""))) delete st.withdrawLostIds[String(op.inviteId)];
     }
     persist();
   }
@@ -1912,9 +1914,15 @@ function createProgram(opts) {
       persist();
     },
     replyLost(id) { return HEX32.test(String(id || "")) && st.replyLostIds[String(id)] === true; },
+    /* The invitation's withdrawal went out and no reply came back: the relay may hold it already. */
+    markWithdrawLost(id) {
+      if (HEX32.test(String(id || ""))) st.withdrawLostIds[String(id)] = true;
+      persist();
+    },
+    withdrawLost(id) { return HEX32.test(String(id || "")) && st.withdrawLostIds[String(id)] === true; },
     /* The request withdrawn at the relay: the invitation counts as not asked again, so a request written anew goes as the first. */
     unmarkInvited(id) {
-      if (HEX32.test(String(id || ""))) delete st.invitedIds[String(id)];
+      if (HEX32.test(String(id || ""))) { delete st.invitedIds[String(id)]; delete st.withdrawLostIds[String(id)]; }
       st.invited = false;
       persist();
     },
@@ -2282,7 +2290,12 @@ function createChannel(opts) {
     const body = seat => Object.assign({ challenge, key: who.keyId, pub: who.public, sig }, seat ? { seat } : {});
     const r = await seated(seat => call("POST", "session", { json: body(seat) }));
     if (refusalOf(r).reason !== "seat-lapsed" || !owedWithdrawal()) return r;
-    return call("POST", "session", { json: Object.assign(body(null), { withdraw: true }) }); /* plant:withdraw-ask */
+    const ask = await call("POST", "session", { json: Object.assign(body(null), { withdraw: true }) }); /* plant:withdraw-ask */
+    /* A withdrawal ask refused seat-lapsed means no request of this invitation is up at the relay: where the withdrawal's reply was lost, it is taken. */
+    let taken = false;
+    taken = refusalOf(ask).reason === "seat-lapsed" && prog.withdrawLost(ctx().inviteId); /* plant:withdraw-lost-hello */
+    if (taken) withdrawSettled();
+    return ask;
   }
   const sameSeat = (x, y) => !!x && !!y && table(x.sig) && table(y.sig) && x.sig.value === y.sig.value;
   /* send(seat) posts one hello on one challenge, carrying `seat` where it is not null; answers the relay's last answer. */
@@ -3070,7 +3083,13 @@ function createChannel(opts) {
     if (c.inviteId && prog.unkept(c.inviteId)) return { ok: true };
     const op = owedWithdrawal();
     if (!op) return null;
-    const u = await upload(op, who, { epoch: Math.max(1, prog.state().leadEpoch), key: c.inviteSeal });
+    let u = null, thrown = null;
+    try { u = await upload(op, who, { epoch: Math.max(1, prog.state().leadEpoch), key: c.inviteSeal }); } catch (e) { thrown = e; }
+    /* An upload that threw may have reached the relay: the withdrawal is marked sent with no reply, then the error goes on as before. */
+    let lost = false;
+    lost = !!thrown && !!c.inviteId; /* plant:withdraw-lost-throw */
+    if (lost) prog.markWithdrawLost(c.inviteId);
+    if (thrown) throw thrown;
     if (!u.ok) {
       const why = u.lim || u.why;
       let spent = false;
@@ -3081,6 +3100,10 @@ function createChannel(opts) {
         if (typeof o.onWithdrawUnkept === "function") o.onWithdrawUnkept();
         return { ok: true };
       }
+      /* A withdrawal sent with no reply is the relay's already; the retry then reads as a new request and is refused as that. */
+      let taken = false;
+      taken = !!(why && (why.reason === "bad-signature" || why.reason === "outside-place") && prog.withdrawLost(c.inviteId)); /* plant:withdraw-lost-settle */
+      if (taken) return withdrawSettled();
       let held = false;
       held = !!(why && why.reason === "team-lapsed"); /* plant:c5-held */
       if (held) {
@@ -3089,7 +3112,11 @@ function createChannel(opts) {
       }
       return why;
     }
-    prog.unmarkInvited(c.inviteId);
+    return withdrawSettled();
+  }
+  /* The withdrawal is over: the invitation counts as not asked and the shell is told. */
+  function withdrawSettled() {
+    prog.unmarkInvited(ctx().inviteId);
     answerHeld = null;
     /* Its session served the withdrawal alone, so the next ask (Ask again) says hello afresh with the seat in hand. */
     session = null; /* plant:withdrawn-session */
@@ -3109,14 +3136,17 @@ function createChannel(opts) {
     /* A press's cycle says hello afresh with the certificate that stands, and tells the shell where the seat then stands, open or refused. */
     if (pressNow) session = null; /* plant:press-hello */
     if (pressNow) seatState = "press"; /* plant:press-retells */
+    /* No request of this invitation stands at the relay, so a withdrawal the shell waits on has nothing to take back, and no seated session is needed to say so. */
+    const own = ctx();
+    let unsent = false;
+    unsent = (!!own.inviteId || own.door) && !invitedNow(); /* plant:unsent-settle */
+    if (unsent && typeof o.onWithdrawn === "function") o.onWithdrawn();
     const s = await ensureSession();
     if (!s.ok) { refusedLapse(s); return s; }
     if (session && session.by === "invite" && invitedNow()) {
       const w = await withdrawOwed(); /* plant:e4-withdraw-send */
       return w || pullAnswer();
     }
-    /* No request of this invitation stands at the relay, so a withdrawal the shell waits on has nothing left to take back. */
-    if (session && session.by === "invite" && typeof o.onWithdrawn === "function") o.onWithdrawn();
     const w = await pullWrap();
     if (!w.ok) return w;
     if (prog.suspect()) {

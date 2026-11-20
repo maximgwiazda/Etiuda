@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-seats-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 201;
+const EXPECTED = 205;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* ETIUDA_PLANT_ONLY, a comma list of plant tags or planted names: only those plants run, every other is skipped, so one plant is proved
    alone without the whole sweep. */
@@ -2756,6 +2756,10 @@ async function main() {
       "d9a", deskRenewFailsScene, "the renewal's failure stops the hello"],
     ["withdraw-ask", "d12a", deskWithdrawScene, "a desk whose seat is refused never asks for the withdrawal's session, so its request stays up"],
     ["withdrawn-session", "d12a", deskWithdrawScene, "the withdrawal's session is kept, and the request asked again goes first to it"],
+    ["withdraw-lost-throw", "d32a", withdrawLostTwiceScene, "a withdrawal whose request threw is never marked sent without a reply, so the retry is never settled"],
+    ["withdraw-lost-settle", "d32a", withdrawLostTwiceScene, "a retry refused as a new request after a lost withdrawal is refused for good, the join withdrawing for ever"],
+    ["withdraw-lost-hello", "d32a", withdrawLostTwiceScene, "a withdrawal ask refused seat-lapsed after a lost withdrawal is refused for good, the join withdrawing for ever"],
+    ["unsent-settle", "d33a", unsentWithdrawScene, "a withdrawal owed where no request went up waits for a seated session the relay refuses"],
     ["seat-lapsed-reopen", "d13a", reopenScene, "a session refused for its seat is kept to its keep, and the desk reads nothing and is told nothing meanwhile"],
     ["seat-none-renew", "d14a", noneSeatScene, "a hello refused for carrying no certificate asks no renewal"],
     ["invite-reread", "d15a", doorSeatScene, "the knock carries the invitation read before the hello, whose certificate the hello's renewal replaced"],
