@@ -41,7 +41,7 @@ const ASIDE = {
   "15ep": offWindows("15ep", "15em stands aside off Windows, so lifting plant:w2-folder-not-writable has no green leg there to turn"),
 };
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 211;
+const EXPECTED = 219;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -5464,6 +5464,28 @@ try {
       && !!refBig && refBig.ok === false && refBig.reason === "too-large",
       "1013s6 share-to refuses off-roster desk with not-on-team and oversized card with too-large: " + JSON.stringify({ refRem, refBig }));
 
+    const loadFromCopy = async (tag, baseUd, src) => {
+      const ud = path.join(LAB, "share-" + tag);
+      fs.cpSync(baseUd, ud, { recursive: true });
+      const wasLab = process.env.ETIUDA_SIGNIN_LAB;
+      process.env.ETIUDA_SIGNIN_LAB = signinLabPath;
+      const chans = [];
+      const chanWrap = { ...RelayChannel(), createChannel: opts => { const ch = RelayChannel().createChannel(opts); chans.push(ch); return ch; } };
+      let d;
+      try {
+        d = loadDesk(ud, src, {
+          net: { fetch: (url, init) => labFetch(url, init, R.clock.now) || relayFetchS(url, init) },
+          session: directSession, shell: labShell, relayChannel: chanWrap,
+        });
+      } finally {
+        if (wasLab === undefined) delete process.env.ETIUDA_SIGNIN_LAB; else process.env.ETIUDA_SIGNIN_LAB = wasLab;
+      }
+      d.me = await d.ask("etiuda:branch-identity", false);
+      d.chans = chans;
+      d.api.relayRun();
+      await untilS(() => d.chans.some(c => c.enrolled()), 5000);
+      return d;
+    };
     if (PLANTS_OFF) {
       skip("1013s7 lifting plant:share-roster accepts off-roster recipient");
       skip("1013s8 lifting plant:share-seal-to sends unsealed card");
@@ -5474,28 +5496,6 @@ try {
         if (at < 0) return { missing: true };
         lines[at] = lines[at].replace(/if\s*\([^)]*\)\s*return[^;]*;/, "if (false) ;").replace(/openCardFrom\([^)]*\)/, "String(env && env.card || \"\")");
         return fn(lines.join("\n"));
-      };
-      const loadFromCopy = async (tag, baseUd, src) => {
-        const ud = path.join(LAB, "share-" + tag);
-        fs.cpSync(baseUd, ud, { recursive: true });
-        const wasLab = process.env.ETIUDA_SIGNIN_LAB;
-        process.env.ETIUDA_SIGNIN_LAB = signinLabPath;
-        const chans = [];
-        const chanWrap = { ...RelayChannel(), createChannel: opts => { const ch = RelayChannel().createChannel(opts); chans.push(ch); return ch; } };
-        let d;
-        try {
-          d = loadDesk(ud, src, {
-            net: { fetch: (url, init) => labFetch(url, init, R.clock.now) || relayFetchS(url, init) },
-            session: directSession, shell: labShell, relayChannel: chanWrap,
-          });
-        } finally {
-          if (wasLab === undefined) delete process.env.ETIUDA_SIGNIN_LAB; else process.env.ETIUDA_SIGNIN_LAB = wasLab;
-        }
-        d.me = await d.ask("etiuda:branch-identity", false);
-        d.chans = chans;
-        d.api.relayRun();
-        await untilS(() => d.chans.some(c => c.enrolled()), 5000);
-        return d;
       };
       const p7 = await liftSharePlant("share-roster", async src => {
         const dP = await loadFromCopy("p7-" + hexS(3), dA.ud, src);
@@ -5526,6 +5526,127 @@ try {
       });
       check(!p9.missing && p9 && p9.got && Array.isArray(p9.got.items) && p9.got.items.length === 1,
         "1013s9 lifting plant:share-open-from accepts an unverified card envelope: " + JSON.stringify(p9));
+    }
+
+    /* ---- 1013r: the "kept" receipt back to the sender (piece 5) ---- */
+    {
+      const keyOfS = id => (id === dA.me.id ? dA.me.key : id === dB.me.id ? dB.me.key : id === dC.me.id ? dC.me.key : null);
+      const chanOf = d => d.chans.find(c => c.enrolled()) || d.chans[0];
+      const waiting = async d => { const l = await chanOf(d).listTo(keyOfS); return l && l.ok ? l.items.length : -1; };
+      const keptOf = async d => { const v = await d.join("state"); return (v && v.share && v.share.kept) || {}; };
+      const names = list => (list || []).map(k => k.id + ":" + k.name);
+
+      const sentC = await dA.join("share-to", dC.me.id, JSON.stringify(Object.assign({}, sharedCard, { id: "u:shared-2" })), "");
+      const inboxC2 = await dC.join("share-inbox");
+      const cItem = ((inboxC2 && inboxC2.items) || [])[0] || {};
+      const declinedC = await dC.join("share-drop", String(cItem.id || ""));
+      const afterDecline = await waiting(dA);
+      const keptAfterDecline = await keptOf(dA);
+      check(!!(sentC && sentC.ok) && cItem.card && cItem.card.id === "u:shared-2" && !!(declinedC && declinedC.ok) && afterDecline === 0
+        && Object.keys(keptAfterDecline).length === 0,
+        "1013r2 a decline sends the sender nothing: nothing waits at the sender's place and the sender's desk shows no mark: " + JSON.stringify({ sentC, declinedC, afterDecline, keptAfterDecline }));
+
+      const rB = await dB.join("share-kept", dA.me.id, "u:shared-1");
+      const pending1 = await waiting(dA);
+      const inboxA = await dA.join("share-inbox");
+      const keptA = await keptOf(dA);
+      const left1 = await waiting(dA);
+      const rowB = (keptA["u:shared-1"] || [])[0] || {};
+      check(!!(rB && rB.ok === true) && pending1 === 1 && !!(inboxA && inboxA.ok) && inboxA.items.length === 0 && left1 === 0
+        && (keptA["u:shared-1"] || []).length === 1 && rowB.id === dB.me.id && rowB.name === "Tom Lis" && Number.isFinite(Date.parse(rowB.at)),
+        "1013r1 a keep sends one receipt to the sender's addressed place; the sender's desk reads it, records the keeper by roster name and time, shows no card for it, and drops it: "
+        + JSON.stringify({ rB, pending1, inboxA, left1, keptA }));
+
+      const rB2 = await dB.join("share-kept", dA.me.id, "u:shared-1");
+      await dA.join("share-inbox");
+      const keptTwice = await keptOf(dA);
+      check(!!(rB2 && rB2.ok) && (keptTwice["u:shared-1"] || []).length === 1,
+        "1013r3 the same keeper's receipt twice is one keeper: " + JSON.stringify({ rB2, keptTwice }));
+
+      const unknown = await dC.join("share-kept", dA.me.id, "u:never-shared");
+      const notThem = await dC.join("share-kept", dA.me.id, "u:shared-1");
+      const stranger = crypto.generateKeyPairSync("ed25519");
+      const forgedBody = JSON.stringify({ kind: "etiuda-card-kept", card: "u:shared-1", at: new Date().toISOString() });
+      const forgedEnv = dC.api.sealCardTo(dA.me.box, TEAM_S, dC.me.id, dA.me.id, forgedBody,
+        stranger.privateKey);
+      const forgedPut = await chanOf(dC).writeTo(dA.me.id, JSON.stringify(forgedEnv));
+      const pendingBad = await waiting(dA);
+      await dA.join("share-inbox");
+      const keptBad = await keptOf(dA);
+      const leftBad = await waiting(dA);
+      const offRoster = await dB.join("share-kept", dRemId, "u:shared-1");
+      check(!!(unknown && unknown.ok) && !!(notThem && notThem.ok) && !!(forgedPut && forgedPut.ok) && pendingBad === 3
+        && Object.keys(keptBad).join() === "u:shared-1" && names(keptBad["u:shared-1"]).join() === rowB.id + ":Tom Lis"
+        && leftBad === 1 && !!offRoster && offRoster.ok === false && offRoster.reason === "not-on-team",
+        "1013r4 a receipt naming a card this desk did not share, or not to that keeper, is dropped and records nothing; one signed by another key records nothing; a keep for a sender off the roster sends nothing: "
+        + JSON.stringify({ unknown, notThem, forgedPut, pendingBad, keptBad, leftBad, offRoster }));
+
+      const reloaded = await loadFromCopy("r5-" + hexS(3), dA.ud, SRC);
+      const keptBack = await keptOf(reloaded);
+      for (const c of reloaded.chans) await c.stop().catch(() => {});
+      check(names(keptBack["u:shared-1"]).join() === rowB.id + ":Tom Lis" && Object.keys(keptBack).length === 1,
+        "1013r5 the mark survives a restart: a desk started again from this desk's own files still shows who kept the card: " + JSON.stringify({ keptBack }));
+
+      if (PLANTS_OFF) {
+        skip("1013rp1 lifting plant:receipt-known records a receipt for a card this desk never shared");
+        skip("1013rp2 lifting plant:receipt-seal-to sends the receipt unsealed");
+        skip("1013rp3 lifting plant:receipt-drop leaves a recorded receipt on the relay");
+      } else {
+        const lineOf = tag => SRC.split("\n").findIndex(l => l.includes("/* plant:" + tag + " */"));
+        const withLine = (tag, to) => {
+          const lines = SRC.split("\n"), at = lineOf(tag);
+          if (at < 0) return null;
+          lines[at] = to;
+          return lines.join("\n");
+        };
+        const knownSrc = (() => {
+          const lines = SRC.split("\n"), at = lineOf("receipt-known");
+          if (at < 0) return null;
+          lines[at] = lines[at].replace(/const known = [^;]*;/, "const known = true;");
+          return lines.join("\n");
+        })();
+        let p1 = { missing: true };
+        if (knownSrc) {
+          const dP = await loadFromCopy("rp1-" + hexS(3), dA.ud, knownSrc);
+          await dC.join("share-kept", dA.me.id, "u:never-planted");
+          await dP.join("share-inbox");
+          p1 = await keptOf(dP);
+          for (const c of dP.chans) await c.stop().catch(() => {});
+        }
+        check(!p1.missing && !!p1["u:never-planted"],
+          "1013rp1 lifting plant:receipt-known records a receipt for a card this desk never shared: " + JSON.stringify(p1));
+
+        const sealSrc = withLine("receipt-seal-to", "    env = { format: 1, kind: \"raw\", from: ctx.me.id, card: text }; /* unsealed */");
+        let p2 = { missing: true };
+        if (sealSrc) {
+          const dP = await loadFromCopy("rp2-" + hexS(3), dC.ud, sealSrc);
+          const sent = await dP.join("share-kept", dA.me.id, "u:shared-2");
+          await dA.join("share-inbox");
+          p2 = { sent, kept: await keptOf(dA) };
+          for (const c of dP.chans) await c.stop().catch(() => {});
+        }
+        check(!p2.missing && !(p2.kept["u:shared-2"] || []).length,
+          "1013rp2 lifting plant:receipt-seal-to sends the receipt unsealed and the sender records no keeper: " + JSON.stringify(p2));
+
+        const dropSrc = (() => {
+          const lines = SRC.split("\n"), at = lineOf("receipt-drop");
+          if (at < 0) return null;
+          lines[at] = lines[at].replace(/await relayChannel\.dropTo\(item\.id\);/, "");
+          return lines.join("\n");
+        })();
+        let p3 = { missing: true };
+        if (dropSrc) {
+          const dP = await loadFromCopy("rp3-" + hexS(3), dA.ud, dropSrc);
+          await dC.join("share-kept", dA.me.id, "u:shared-2");
+          const n0 = await waiting(dA);
+          await dP.join("share-inbox");
+          p3 = { n0, left: await waiting(dA) };
+          for (const c of dP.chans) await c.stop().catch(() => {});
+          await dA.join("share-inbox");
+        }
+        check(!p3.missing && p3.left === p3.n0,
+          "1013rp3 lifting plant:receipt-drop leaves a recorded receipt on the relay: " + JSON.stringify(p3));
+      }
     }
     for (const d of [dA, dB, dC]) for (const c of d.chans) await c.stop().catch(() => {});
   }
