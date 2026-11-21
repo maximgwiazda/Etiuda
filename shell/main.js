@@ -35,14 +35,16 @@ try {
 const { watchPage } = require(path.join(__dirname, "page-watch.cjs"));
 const { decideClose, showNotification: showNotificationOf, notifyFirstClose: notifyFirstCloseOf, setLoginItemSettings: setLoginItemSettingsOf, loginItemOn,
   createTray, buildTrayMenuTemplate, setJumpList: setJumpListOf, APP_IDS } = require(path.join(__dirname, "tray.cjs"));
+/* The test build is a harness build for everything but a toast: harnessLaunch(true) reads it as a person's start, so a Test Service
+   desk shows the first-close note and the desk's toasts, under its own app id (deskAppId), never the shipped one. */
 /* A HARNESS LAUNCH WRITES NOTHING THE ACCOUNT KEEPS OUTSIDE ITS LAB: no etiuda: handler, login item, jump list or toast.
    Every harness launch carries a user-data folder of its own (the door refuses one without) or a test variable, and the
    installer legs' build is one by what it is, whoever starts it; a customer's start is none of these. */
-function harnessLaunch() {
+function harnessLaunch(toast) {
   const argv = Array.isArray(process.argv) ? process.argv : [];
   return argv.some(a => /^--user-data-dir(=|$)/.test(String(a)))
     || ["ETIUDA_TEST_OFFSCREEN", "ETIUDA_TEST_DOCUMENTS", "ETIUDA_TEST_DEVTOOLS"].some(k => process.env[k] !== undefined)
-    || testIdentityBuild(); /* plant:harness-test-build */
+    || (!toast && testIdentityBuild()); /* plant:harness-test-build */
 }
 /* The name earlier builds' Run value carries: Electron's default id, "electron.app." and the app's name. */
 function legacyLoginName() {
@@ -80,11 +82,11 @@ function setJumpList(electronApp, opts) {
   return setJumpListOf(electronApp, opts);
 }
 function showNotification(opts) {
-  if (harnessLaunch()) return null; /* plant:harness-toast */
+  if (harnessLaunch(true)) return null; /* plant:harness-toast */
   return showNotificationOf(opts);
 }
 function notifyFirstClose(opts) {
-  if (harnessLaunch()) return null; /* plant:harness-first-close */
+  if (harnessLaunch(true)) return null; /* plant:harness-first-close */
   return notifyFirstCloseOf(opts);
 }
 const { readsLikeMessage, scoreSuggestions, MESSAGE_MAX_CHARS, SUGGEST_LIMIT } = require(path.join(__dirname, "clip-suggest.cjs"));
@@ -583,11 +585,19 @@ function handHeldLink(win) {
   handPendingLink(win);
 }
 /* The installer legs' build (tools/test-identity.cjs) marks its package.json; harnessLaunch reads it, once a run. */
-var testIdentityBuilt = null;
+var testIdentityBuilt = null, testIdentityId = "";
+/* The test build's own app id, as its package.json marks it, or "" for any other build. */
+function testIdentityAppId() { testIdentityBuild(); return testIdentityId; }
+/* The app user model id the desk's toasts carry: the installer's shortcut carries the build's appId, and a toast under another
+   id is not shown. The shipped desk's is APP_IDS.desktop; a test build's is its own. */
+function deskAppId() { return testIdentityAppId() || APP_IDS.desktop; }
 function testIdentityBuild() {
   if (testIdentityBuilt == null) { /* == null: a caller before line 500 reads undefined, and must still read the marker (the test architect, 2026-11-11) */
-    try { testIdentityBuilt = !!JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8")).etiudaTestBuild; }
-    catch (e) { testIdentityBuilt = false; }
+    try {
+      const mark = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8")).etiudaTestBuild;
+      testIdentityBuilt = !!mark;
+      testIdentityId = typeof mark === "string" ? mark : "";
+    } catch (e) { testIdentityBuilt = false; testIdentityId = ""; }
   }
   return testIdentityBuilt;
 }
@@ -9366,7 +9376,7 @@ ipcMain.on("etiuda:notify", (e, opts) => {
   const icon = trayIcon();
   showNotification({
     electron: { Notification: Notification, app: app },
-    appId: APP_IDS.desktop,
+    appId: deskAppId(),
     title: String(opts && opts.title || ""),
     body: String(opts && opts.body || ""),
     icon: icon,
@@ -16245,7 +16255,7 @@ function maybeFirstClose(win, traced) {
   const w = trayWords();
   return notifyFirstClose({
     electron: traced || { Notification: Notification, app: app },
-    appId: APP_IDS.desktop,
+    appId: deskAppId(),
     title: w.trayKeepsRunning,
     body: w.trayKeepsBody,
     told: trayNoticeTold === true,
@@ -16258,7 +16268,7 @@ function firstCloseTraced(win) {
   if (trayNoticeTold === true) return maybeFirstClose(win);
   let t = null;
   try {
-    t = trayToastTrace({ Notification: Notification, app: app, harness: harnessLaunch(), defaultAumid: legacyLoginName(),
+    t = trayToastTrace({ Notification: Notification, app: app, harness: harnessLaunch(true), defaultAumid: legacyLoginName(),
       state: trayTraceState, write: trayTraceWrite });
   } catch { t = null; }
   if (!t) return maybeFirstClose(win);

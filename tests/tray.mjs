@@ -423,15 +423,15 @@ async function run() {
       }
       const fakeApp = { getPath: () => ud, getName: () => "etiuda", setAppUserModelId: (id) => { rec.aumid.push(id); } };
       const consts = (src.match(/^const TRAY_TRACE_FILE[^\n]*\n^const trayTraceState[^\n]*$/m) || [""])[0];
-      const body = [consts, "let trayNoticeTold = false;", fnOf(src, "legacyLoginName"), fnOf(src, "notifyFirstClose"),
+      const body = [consts, "let trayNoticeTold = false;", fnOf(src, "legacyLoginName"), fnOf(src, "deskAppId"), fnOf(src, "notifyFirstClose"),
         fnOf(src, "maybeFirstClose"), fnOf(src, "firstCloseTraced"), fnOf(src, "trayToastTrace"), fnOf(src, "trayTraceWrite"),
         "return { close: " + (traced ? "firstCloseTraced" : "maybeFirstClose") + ", told: () => trayNoticeTold };"].join("\n");
       let lines = [], why = "";
       try {
         const made = new Function("fs", "path", "app", "Notification", "harnessLaunch", "notifyFirstCloseOf", "trayWords", "showDesk",
-          "APP_IDS", body)(fs, path, fakeApp, FakeNote, () => harness, trayMod.notifyFirstClose,
+          "APP_IDS", "testIdentityAppId", body)(fs, path, fakeApp, FakeNote, () => harness, trayMod.notifyFirstClose,
           () => { if (kind === "words-throw") throw new Error("words unread"); return { trayKeepsRunning: "Title", trayKeepsBody: "Body" }; },
-          () => {}, APP_IDS);
+          () => {}, APP_IDS, () => "");
         for (let i = 0; i < closes; i++) {
           try { made.close({}); } catch (e) { rec.threw.push(e.message); }
           if (i === 0 && lastNote && kind === "shows") lastNote.emit("failed", {}, WINDOWS_SAID);
