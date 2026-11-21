@@ -18,7 +18,7 @@ const SETTINGS_PATH = path.join(ROOT, "src", "modules", "settings.js");
 const TEMPLATE_PATH = path.join(ROOT, "src", "template.html");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
-const CHECKS = 41, PLANTS = 38;
+const CHECKS = 42, PLANTS = 41;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -426,6 +426,30 @@ for (const lang of ["en", "pl"]) {
   };
 }
 
+/* 5b. The door names whom an open join request waits on, as the service's answer gave it (the view's `asked`): one lead as the
+   team's lead is told, several in one line with the plural heading, none as before; both languages. */
+CASES.askedDoor = (pg = P) => {
+  const noTeam = { noTeam: true };
+  const asks = names => Object.assign({}, VIEWS.waiting, { asked: names });
+  const one = ["Anna Nowak"], two = ["Anna Nowak", "Piotr Zieliński"];
+  for (const lang of ["en", "pl"]) {
+    const w = W[lang], dEnd = dayOf(T_DESK_END, lang);
+    const lineOne = lang === "en" ? `Catalogs open here again once ${one[0]}, the team's lead, accepts it. Etiuda's own fourteen days ended on ${dEnd}.`
+      : `Katalogi znów otworzą się tutaj, gdy ${one[0]}, lider zespołu, ją przyjmie. Własne czternaście dni Etiudy skończyły się ${dEnd}.`;
+    const lineTwo = lang === "en" ? `Catalogs open here again once one of these leads accepts a request: ${two.join(", ")}. Etiuda's own fourteen days ended on ${dEnd}.`
+      : `Katalogi znów otworzą się tutaj, gdy któryś z tych liderów przyjmie prośbę: ${two.join(", ")}. Własne czternaście dni Etiudy skończyły się ${dEnd}.`;
+    const headTwo = lang === "en" ? "The requests to join are waiting." : "Prośby o dołączenie czekają.";
+    const bare = lang === "en" ? `Catalogs open here again once the team's lead accepts it. Etiuda's own fourteen days ended on ${dEnd}.`
+      : `Katalogi znów otworzą się tutaj, gdy lider zespołu ją przyjmie. Własne czternaście dni Etiudy skończyły się ${dEnd}.`;
+    const tOne = textOf(doorHtml(pg, asks(one), lang, noTeam)), tTwo = textOf(doorHtml(pg, asks(two), lang, noTeam));
+    const tNone = textOf(doorHtml(pg, VIEWS.waiting, lang, noTeam)), tNoneList = textOf(doorHtml(pg, asks([]), lang, noTeam));
+    if (!(tOne.includes(w.h2) && tOne.includes(lineOne))) return false;
+    if (!(tTwo.includes(headTwo) && tTwo.includes(lineTwo) && !tTwo.includes(w.h2))) return false;
+    if (!(tNone.includes(w.h2) && tNone.includes(bare) && tNoneList.includes(bare))) return false;
+  }
+  return true;
+};
+
 /* 6. State 3 ("trial-over-org") and State 3b ("trial-over"): row 3/3b words, buttons, quiet presses, rule & way out (sentence a). */
 for (const lang of ["en", "pl"]) {
   CASES["state3_" + lang] = (pg = P) => {
@@ -777,6 +801,7 @@ const RUN_LIST = [
   ["dd38", "studioNoDeskEnd_pl", "licence line (PL): Studio's trial told with no end for the own fourteen days draws the seat's end and no day it does not hold"],
   ["dd39", "askLeadStudio_en", "licence line (EN): the ask-your-lead panel past the own fourteen days inside Studio's trial says Studio's trial, with the day, and not the own trial running"],
   ["dd40", "askLeadStudio_pl", "licence line (PL): the ask-your-lead panel past the own fourteen days inside Studio's trial says Studio's trial, with the day, and not the own trial running"],
+  ["dd42", "askedDoor", "door (EN & PL): a person held at the door whose sign-in carried open join requests sees whom each waits on, one lead as the team's lead is told, several in one line with the plural heading, none as before"],
   ["dd41", "noFamilyElsewhere", "licence line: the ended, waiting, trial-over and organisation panels carry no short-form foot, and the organisation's Seat row keeps an empty value"],
   ["dd34", "doorNotNoneWhenDue", "Argon 51 B2: deskDoorState never answers none while signed in and due (waiting, full, no licence, team seat marked by another key), and paintFirstSignin never draws the retired fallback"],
 ];

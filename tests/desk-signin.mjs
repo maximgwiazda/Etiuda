@@ -5878,9 +5878,12 @@ answersWatched = false;
 /* A held certificate issued before every recorded answer in tests/signin-answers.json, standing in for what the desk kept before. */
 const HELD_BEFORE = () => ({ provider: "microsoft", refresh: "sealed:rt", sub: "sealed:s", seed: "6".repeat(64), code: CODE, cert: cert({ issued: VIA_FROM, until: VIA_FROM + 30 * 86400000 }), at: 1, checked: 1, reached: true, said: "", ask: false });
 const unreached = r => r.ok === false && r.reason === "unreached";
-/* `asked`, an open join request beside an answer, is not kept. The desk reads that answer as the same answer without the list. */
+/* `asked`, an open join request beside an answer, is kept as the lead names it, answer by answer (it was read as the same answer without
+   the list until the door named whom a request waits on). The service's lead object is never kept whole: only the plain name, and only where
+   it is plain text. */
 function askedHeldOk(r, c, s) {
   if (!c || !c.body || !Array.isArray(c.body.asked) || c.body.asked.length === 0 || !P) return false;
+  const names = c.body.asked.map(x => x.lead.name);
   const bareBody = JSON.parse(JSON.stringify(c.body));
   delete bareBody.asked;
   const desk = c.body.certificate ? c.body.certificate.desk : DESK_KEY;
@@ -5888,14 +5891,21 @@ function askedHeldOk(r, c, s) {
   const h = s.signinSettle(HELD_BEFORE(), r, NOW), hBare = s.signinSettle(HELD_BEFORE(), bare, NOW);
   const viewOf = held => s.signinViewOf(Object.assign({ provider: "microsoft" }, held), viewFacts());
   const v = viewOf(h), vBare = viewOf(hBare);
+  const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+  const without = o => { const x = Object.assign({}, o); delete x.asked; return x; };
   const panelOf = viewIn => { const d = P.signinDoor(P.signinRead(viewIn)); return d ? P.signinPanelHtml(d) : ""; };
   const html = panelOf(v), htmlBare = panelOf(vBare), stamp = String(c.body.asked[0].at);
   const door = P.signinDoor(P.signinRead(v));
+  /* The file: what is written reads back the same names, and a later answer without the list forgets them. */
+  const back = s.signinFileRead(s.signinFileText({ held: Object.assign({ provider: "microsoft", seed: "0".repeat(64) }, h) }), true).held;
+  const gone = s.signinSettle(h, bare, NOW + 1);
   return r.ok === true && bare.ok === true && r.cert === null && r.askLead === true && r.code === c.body.code
-    && !("asked" in r) && !("asked" in h) && !("asked" in v)
-    && JSON.stringify(r) === JSON.stringify(bare) && JSON.stringify(h) === JSON.stringify(hBare) && JSON.stringify(v) === JSON.stringify(vBare)
+    && same(r.asked, names) && !("asked" in bare) && same(h.asked, names) && same(v.asked, names) && !("asked" in hBare) && !("asked" in vBare)
+    && same(without(r), bare) && same(without(h), hBare) && same(without(v), vBare)
+    && !!back && same(back.asked, names) && !("asked" in gone)
     && h.said === "" && h.askLead === true && !!h.cert && JSON.stringify(h.cert) === JSON.stringify(HELD_BEFORE().cert) && h.ended > 0 && h.refresh === "sealed:rt"
-    && !!door && door.moment === "asklead" && html.length > 0 && html === htmlBare && html.indexOf(stamp) < 0;
+    && !!door && door.moment === "asklead" && html.length > 0 && html === htmlBare && html.indexOf(stamp) < 0
+    && P.signinRead(v).asked.join() === names.join() && P.signinRead(vBare).asked.length === 0;
 }
 CASES.askedHeld = s => {
   const c = ANSWER_CASES.find(x => x.case === "asked");
