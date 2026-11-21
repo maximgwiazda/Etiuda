@@ -162,5 +162,38 @@ ok(mainSrc.indexOf("plant:harness-test-build") > -1 && testBuildLifted.marker &&
    && testBuildLifted.marker.plain === false,
   "hw11 control: cutting plant:harness-test-build lets the installer legs' build, started with no switch or variable, read as a customer's start");
 
+/* THE TEST SERVICE BUILD'S TOASTS (board 1019 (1)): the installer legs' build is a harness build for the login item, the jump
+   list and the link, but a person running it as the app is shown the first-close note and the desk's toasts, under the
+   build's own app id, so the shipped app's id is never written. A start with a switch or variable shows none. */
+{
+  const hlSrc = fnText(code(mainSrc), "harnessLaunch");
+  const idSrc = fnText(code(mainSrc), "deskAppId");
+  const toastRun = (argv, env, testBuild) => {
+    try { return new Function("process", "testIdentityBuild", hlSrc + "\nreturn harnessLaunch(true);")({ argv, env }, () => !!testBuild); }
+    catch (e) { return "threw " + e.message; }
+  };
+  const bare = toastRun(["Etiuda QA.exe"], {}, true);
+  ok(bare === false && toastRun(["Etiuda QA.exe", "--user-data-dir=C:\\lab\\ud"], {}, true) === true
+     && toastRun(["Etiuda QA.exe"], { ETIUDA_TEST_OFFSCREEN: "" }, true) === true,
+    "hw12 the toast reading of the marker: the test build started bare shows toasts; a --user-data-dir or test-variable start still shows none: " + bare);
+  for (const name of ["showNotification", "notifyFirstClose"]) {
+    const text = fnText(code(mainSrc), name);
+    let through = "missing";
+    try {
+      const calls = [];
+      const f = new Function("harnessLaunch", name + "Of", text + "\nreturn " + name + ";")(toast => !toast, (...a) => { calls.push(a); return "wrote"; });
+      through = f({}) === "wrote" && calls.length === 1 ? "through" : "BLOCKED";
+    } catch (e) { through = "threw " + e.message; }
+    ok(through === "through", "hw13 " + name + " asks the harness marker as the toast, so the test build's bare start reaches the toast: " + through);
+  }
+  let id = "missing";
+  try {
+    const mk = test => new Function("testIdentityAppId", "APP_IDS", idSrc + "\nreturn deskAppId();")(() => test, { desktop: "app.etiuda.desktop" });
+    id = mk("app.etiuda.desktop.qa") + " | " + mk("");
+  } catch (e) { id = "threw " + e.message; }
+  ok(id === "app.etiuda.desktop.qa | app.etiuda.desktop",
+    "hw14 the desk's toasts carry the test build's own app id, and the shipped id otherwise (so the build's shortcut and its toasts agree): " + id);
+}
+
 console.log("\n#counts checks=" + checks + " failed=" + fails);
 process.exit(fails ? Math.min(fails, 63) : 0);
