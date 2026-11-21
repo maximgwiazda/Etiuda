@@ -712,6 +712,24 @@ try {
     "6q two presses with an unchanged pack build the model once, counted by a stand-in, and the open's IPC payload is under 1 KB: builds "
     + modelBuilds + ", payload " + lastOpenPayload + "B");
 
+  /* qrw1: a selection is matched whole, whatever its length: one word, and two, each open on a strip as a sentence does. */
+  if (process.platform === "win32") {
+    const selOpen = async sel => {
+      caret.sel = sel;
+      const o0 = opened.length;
+      held.get("Control+Shift+Space")();
+      await until(() => opened.length > o0 && pw.visible, 5000);
+      const o = opened[opened.length - 1] || {};
+      held.get("Control+Shift+Space")();
+      await until(() => !pw.visible);
+      caret.sel = null;
+      return { selected: o.selected || "", suggest: (o.suggest || []).map(r => r.id) };
+    };
+    const one = await selOpen("lantern"), two = await selOpen("lantern glass");
+    check(one.selected === "lantern" && one.suggest.length > 0 && two.selected === "lantern glass" && two.suggest.length > 0,
+      "qrw1 one selected word and two selected words each open on those words with the strip a sentence about them gets: " + JSON.stringify({ one, two }));
+  } else check(true, "qrw1 not Windows: no helper, so nothing is selected");
+
   CM_R2.setContentLangs(langsOrig_R2);
   if (CM_R2.SW_STORE && CM_R2.SW_STORE.en) {
     CM_R2.SW_STORE.en.length = 0;
@@ -1337,6 +1355,10 @@ try {
   check(clipReads === readsAtSweep && clipDoors.length === 0 && clipVerbs.length === 0,
     "2v Alt+V on the desk's window and in the picker reads nothing, no channel is the clipboard's, and neither page is given a read: "
     + JSON.stringify({ reads: clipReads, channels: clipDoors, verbs: clipVerbs }));
+  /* qrw2: no opening in this whole run read the clipboard, and the desk has no door to note its own copies by. */
+  const PRE_QRW = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
+  check(clipReads === 0 && !("etiuda:own-text" in onH) && !/noteOwnText/.test(PRE_QRW),
+    "qrw2 no opening of the picker reads the clipboard, selected or not, and the own-text door is gone: " + JSON.stringify({ reads: clipReads, door: "etiuda:own-text" in onH, preload: /noteOwnText/.test(PRE_QRW) }));
 
   /* ---- 7, THE SHELL'S HALF (board 901), run here while the shell stands: the word after a pick, said where the
      picker stood in a window that takes neither the focus nor a click; the desk's own door; and Shift+Enter. ---- */

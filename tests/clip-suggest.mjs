@@ -196,5 +196,27 @@ check(api.MESSAGE_MAX_CHARS === 1500 && huge.length > 5e6 && hugeReads && sliceR
   "a " + Math.round(huge.length / 1e6) + " MB clipboard is scored on its first " + api.MESSAGE_MAX_CHARS + " characters only, in "
   + hugeMs.toFixed(1) + " ms: " + JSON.stringify(hugeRows));
 
+/* csw1 to csw4: SELECTED TEXT IS SCORED WHOLE, whatever its length. An invented catalog whose intent is named by a
+   three-letter abbreviation, a two-word Polish phrase and a seven-letter word: each alone offers that intent. */
+const sowCat = {
+  cards: [
+    { title: { en: "Sowing day", pl: "Dzien siewu" }, body: { en: "We note the day your seeds went in.", pl: "" }, requests: ["t:sow"] },
+    { title: { en: "Filler crate" }, body: { en: "A plain crate." }, requests: [] }
+  ],
+  tags: [{ kind: "request", id: "t:sow", name: "Sowing date", topic: { en: "sowing date dos", pl: "data siewu" },
+    clause: { en: "the seedbed record", pl: "zapis grzadki" } }]
+};
+const sowModel = buildSuggestModel(sowCat, labels), sowCjs = cjs.buildSuggestModel(sowCat, labels);
+const sowIds = (t, m) => scoreSuggestions(t, m).map(r => r.id).join(",");
+const cjsIds = t => cjs.scoreSuggestions(t, sowCjs).map(r => r.id).join(",");
+check(sowIds("dos", sowModel) === "t:sow" && cjsIds("dos") === "t:sow",
+  "csw1 a three-letter selection offers its intent, in the module and the shell's copy: " + sowIds("dos", sowModel) + " / " + cjsIds("dos"));
+check(sowIds("data siewu", sowModel) === "t:sow" && cjsIds("data siewu") === "t:sow",
+  "csw2 two selected Polish words offer their intent: " + sowIds("data siewu", sowModel) + " / " + cjsIds("data siewu"));
+check(sowIds("seedbed", sowModel) === "t:sow" && sowIds("lantern", model) === "t:wick",
+  "csw3 one seven-letter word is a word, not a code: " + sowIds("seedbed", sowModel) + ", " + sowIds("lantern", model));
+check(!("readsLikeMessage" in api) && !("MESSAGE_WORD_MIN" in api) && !("MESSAGE_LETTER_SHARE" in api) && !/clipboard/i.test(src),
+  "csw4 the module has no message test and no word of a clipboard: " + Object.keys(api).join(","));
+
 console.log("\n#counts checks=" + checks + " failed=" + failed);
 process.exit(failed ? 1 : 0);
