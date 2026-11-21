@@ -186,35 +186,23 @@ try {
   const doc = fakeDoc(), drawn = host.testServiceBand(doc), again = host.testServiceBand(doc);
   check(!!drawn && again === null && doc.body.children[0] === drawn && drawn.id === "eTestBand" && drawn.textContent === lang.t(host.TEST_BAND_EN)
     && drawn.attrs["data-i18n-text"] === host.TEST_BAND_EN && doc.body.classes.has("e-test-service")
-    && host.TEST_BAND_EN === "Test build: sign-in goes to Etiuda's test service, not the real one.",
-    "ts5b the band is the body's first child, once, in the copywriter's words in this process's language, its English kept as its source; the body is marked");
-  const pl = /"Test build: sign-in goes to Etiuda's test service, not the real one\.":"([^"]+)"/.exec(UILANG);
-  check(!!pl && pl[1] === "Wersja testowa: logowanie trafia do testowej usługi Etiudy, nie do prawdziwej." && /"#eTestBand"\]\.forEach/.test(UILANG),
-    "ts5c the Polish is the copywriter's, and the chrome sweep turns the band with the language");
-  /* The band's room: in flow before the header, above every layer, and every layer fixed to the window's top starts under it. */
-  const room = cssIn => {
+    && host.TEST_BAND_EN === "Test service",
+    "ts5b the mark (once the band, the owner's word of 2026-11-20) is the body's first child, once, in the copywriter's words in this process's language, its English kept as its source; the body is marked");
+  const pl = /"Test service":"([^"]+)"/.exec(UILANG);
+  check(!!pl && pl[1] === "Usługa testowa" && /"#eTestBand"\]\.forEach/.test(UILANG),
+    "ts5c the Polish is held, and the chrome sweep turns the mark with the language");
+  /* The mark's place (the owner's word of 2026-11-20: the orange bar goes, a small corner mark at most): fixed in the bottom right
+     corner, dim, catching no pointer, and the band's old room is nothing, so no layer moves for it. */
+  const mark = cssIn => {
     const css = cssIn.replace(/\/\*[\s\S]*?\*\//g, "");
-    const fixedTop = [];
-    for (const m of css.matchAll(/(^|\n)([^{}\n][^{}]*)\{([^{}]*)\}/g)) {
-      const sel = m[2].trim(), body = m[3];
-      if (/position:\s*fixed/.test(body) && /(?:^|;|\s)(?:inset:\s*0|top:\s*0)(?:px)?\s*(?:;|$)/.test(body)) fixedTop.push(sel);
-    }
-    /* Layers that may lie under the band: they show nothing at the top edge a person needs (a 1px live region, a veil, a centred
-       mark, a tour that points with holes at what lies below, a menu or a drag ghost placed at the pointer). */
-    const UNDER = ["#eSay", ".e-launch-veil", "#sampleMark", "#tourRoot", ".menu.e-ctx", ".lk-ghost"];
-    const moved = (/body\.e-test-service \.modal,body\.e-test-service #railHit\{top:var\(--e-tb-h\)\}/.exec(css) ? ["#railHit", ".modal"] : []);
-    const unplaced = fixedTop.filter(s => !moved.includes(s) && !UNDER.some(u => s.indexOf(u) >= 0));
-    const ok = unplaced.length === 0 && /#eTestBand\{position:relative;z-index:2147483645;flex:0 0 auto;height:var\(--e-tb-h\)/.test(css)
-      && /body\.e-test-service\{--e-tb-h:24px\}/.test(css);
-    return { ok, fixedTop, unplaced };
+    const m = /#eTestBand\{([^{}]*)\}/.exec(css), b = m ? m[1] : "";
+    return !!m && /position:fixed/.test(b) && /right:10px/.test(b) && /bottom:6px/.test(b) && /pointer-events:none/.test(b)
+      && /background:none/.test(b) && /font-size:10px/.test(b) && !/app-region:drag/.test(b) && /body\.e-test-service\{--e-tb-h:0px\}/.test(css);
   };
-  const css = TEMPLATE.slice(0, TEMPLATE.indexOf("</style>")), r5 = room(css);
-  check(r5.ok, "ts5d the band is in flow above every layer, and of the " + r5.fixedTop.length + " layers fixed to the top edge (" + r5.fixedTop.join(", ")
-    + ") each starts under it or is named as one that may lie beneath" + (r5.unplaced.length ? ": unplaced " + r5.unplaced.join(", ") : ""));
-  plantCheck(() => {
-    const r5p = room(css.replace("body.e-test-service .modal,body.e-test-service #railHit{top:var(--e-tb-h)}", ""));
-    return !r5p.ok && r5p.unplaced.length === 2 && r5p.unplaced.includes(".modal") && r5p.unplaced.includes("#railHit");
-  }, "ts5e with the rule moving the dialog layer and the rail's edge under the band taken out, ts5d's reading goes red on .modal and #railHit");
+  const css = TEMPLATE.slice(0, TEMPLATE.indexOf("</style>"));
+  check(mark(css), "ts5d the test service mark sits fixed in the bottom right corner, small, without a background, catching no pointer, and takes no room");
+  plantCheck(() => !mark(css.replace("pointer-events:none;", "")) && !mark(css.replace("--e-tb-h:0px", "--e-tb-h:24px")),
+    "ts5e with the mark catching the pointer, or the band's old room given back, ts5d's reading goes red");
 } catch (e) {
   failed++;
   console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));
