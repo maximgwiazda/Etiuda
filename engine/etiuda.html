@@ -9892,7 +9892,6 @@ What is typed here stays in this browser.`;
     "A teammate": "Członek zespołu",
     "Signed by {DESK}, key {KEY}. Only that teammate can change this file; anyone with the folder can read it.": "Podpis: {DESK}, klucz {KEY}. Zmienić ten plik może tylko ten członek zespołu, a przeczytać każdy z dostępem do folderu.",
     "See what changed": "Zobacz zmiany",
-    "Work from this file": "Wczytaj ten plik do pracy",
     "A catalog of its own": "Osobny katalog",
     "Your edits are with the team": "Własne zmiany są już u zespołu",
     "Your edits are kept on this computer and go to the team as soon as it can take them. To hand them over now, Export saves them in a catalog file for the team's lead.": "Własne zmiany są zachowane na tym komputerze i trafią do zespołu, gdy tylko będzie mógł je przyjąć. Aby przekazać je od razu, Eksportuj zapisze je w pliku katalogu dla lidera zespołu.",
@@ -38776,7 +38775,7 @@ What is typed here stays in this browser.`;
       name: o.name,
       back: o.back,
       body: '<div class="ed-panel" data-i18n-skip><div class="ed-left">' + (note ? editionNoteHtml(note, "ed-note") : "") + editionCountsHtml(o.changes.counts) + '<div class="ed-list">' + items.map(row2).join("") + '</div></div><div class="ed-pane" id="edPane" aria-live="polite"></div></div>',
-      actions: '<button type="button" class="btn" id="edKeep">' + esc(desk ? desk.keep : t("Keep current")) + '</button><button type="button" class="btn primary" id="edLoad">' + esc(desk ? desk.load : t("Load the new edition")) + "</button>",
+      actions: '<button type="button" class="btn" id="edKeep">' + esc(desk ? desk.keep : t("Keep current")) + "</button>" + (desk ? "" : '<button type="button" class="btn primary" id="edLoad">' + esc(t("Load the new edition")) + "</button>"),
       wire: () => {
         const pane = document.getElementById("edPane"), list2 = document.querySelector(".ed-list");
         const draw = () => {
@@ -38819,7 +38818,8 @@ What is typed here stays in this browser.`;
           };
         });
         document.getElementById("edKeep").onclick = o.keep;
-        document.getElementById("edLoad").onclick = o.load;
+        const ld = document.getElementById("edLoad");
+        if (ld) ld.onclick = o.load;
         draw();
       }
     });
@@ -39173,7 +39173,7 @@ What is typed here stays in this browser.`;
       };
     });
   }
-  function openDeskLook(f, base, name, work, back) {
+  function openDeskLook(f, base, name, back) {
     return deskSides(f, base).then((s) => {
       if (!s) {
         const at = (f.desk && f.desk.id || "") + "/" + String(f.name || "") + "|" + f.mtime;
@@ -39193,7 +39193,6 @@ What is typed here stays in this browser.`;
         changes,
         name,
         keep: back,
-        load: work,
         back,
         taken: () => {
         },
@@ -39202,7 +39201,6 @@ What is typed here stays in this browser.`;
           was: t("In the team's edition"),
           now: t("At {DESK}").split("{DESK}").join(who),
           keep: t("Back to the Library"),
-          load: t("Work from this file").split("{DESK}").join(who),
           take: inUse ? t("Take this text").split("{DESK}").join(who) : "",
           taken: (it) => deskTaken(it, s.hers),
           toggle: (it) => deskToggle(it, s.hers),
@@ -39280,8 +39278,8 @@ What is typed here stays in this browser.`;
     if (active && eCatalogSignature(active) === eCatalogSignature(c))
       toast(t("That file matches the catalog you already have."));
   }
-  function loadCatalogFromFolder(name, mtime, desk) {
-    return eReadCatalogFile(name, desk, true).then((got) => {
+  function loadCatalogFromFolder(name, mtime) {
+    return eReadCatalogFile(name, "", true).then((got) => {
       if (!got) return;
       if (!got.text) {
         toastRefusal(fileReadLine(name, fileReadCode(got)));
@@ -39297,24 +39295,20 @@ What is typed here stays in this browser.`;
       const offTeam = !!got.notOnTeam;
       const shown2 = eOfferCatalogDialog(c, {
         file: got.name,
-        foundHtml: eFoundHtml(got.name, desk ? deskFolderOf(desk) : eCatalogFolder()),
+        foundHtml: eFoundHtml(got.name, eCatalogFolder()),
         refusedKey: "CatalogNo",
         force: true,
         asked: true,
         direct: !offTeam,
         offTeam,
-        fromList: !desk,
+        fromList: true,
         accept: (sig) => {
           lsSet(E_CATALOG_KEY, sig);
-          return activateCatalog(c, desk ? { file: "", from: got.name } : { file: got.name, fileAt: +mtime || 0 });
+          return activateCatalog(c, { file: got.name, fileAt: +mtime || 0 });
         }
       });
       if (!shown2) toastIfSameCatalog(c);
     });
-  }
-  function deskFolderOf(id) {
-    const dir = eCatalogFolder(), sep = dir.indexOf("\\") > -1 ? "\\" : "/";
-    return dir + sep + "desks" + sep + id;
   }
   function ecMetaHtml(o) {
     const ed = o.ed || "", cnt = o.cnt != null && o.cnt !== "" ? o.cnt : ed ? "" : o.meta || "";
@@ -39633,19 +39627,10 @@ What is typed here stays in this browser.`;
   function lookAtDesk(f, files, held) {
     const base = deskBase(f, files, held);
     const name = shownCatalogName(catalogNameOfFile(!base ? f.name : base.held ? catalogFileName() : base.file.name));
-    openDeskLook(
-      f,
-      base,
-      name,
-      () => {
-        closeModal();
-        loadCatalogFromFolder(f.name, f.mtime, f.desk.id);
-      },
-      () => {
-        closeModal();
-        hooks.openManage();
-      }
-    );
+    openDeskLook(f, base, name, () => {
+      closeModal();
+      hooks.openManage();
+    });
   }
   function noteForeignSigner(c, wrap, place) {
     const doc = catalogDocOf(c), sig = doc && doc.sig, kid = sig && sig.keyId ? String(sig.keyId) : "";

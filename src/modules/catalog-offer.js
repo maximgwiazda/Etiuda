@@ -128,7 +128,6 @@ function offerAtBoot(){
    asking outranks it - the same rule the explicit watch check follows - and through the one
    bubble, which loads at once only where nothing is loaded. The date arrives from the row that was clicked: the
    host read it with the listing, and asking again would be asking for a second answer. */
-/* `desk` is a colleague's folder under desks/, whose file is worked from: no file of the catalog folder is then in use. */
 /* The matches line is true only when the two are the same catalog. A refusal for any other
    reason has already spoken, or has stayed quiet on purpose. */
 function toastIfSameCatalog(c){
@@ -136,8 +135,8 @@ function toastIfSameCatalog(c){
   if(active && eCatalogSignature(active)===eCatalogSignature(c))
     toast(t("That file matches the catalog you already have."));
 }
-function loadCatalogFromFolder(name,mtime,desk){
-  return eReadCatalogFile(name,desk,true).then(got=>{
+function loadCatalogFromFolder(name,mtime){
+  return eReadCatalogFile(name,"",true).then(got=>{
     if(!got) return;
     if(!got.text){ toastRefusal(fileReadLine(name, fileReadCode(got))); return; }
     let c=null;
@@ -149,17 +148,13 @@ function loadCatalogFromFolder(name,mtime,desk){
     // A file whose desk is off the team's roster is asked about even on an empty desk, so its note is read first.
     const offTeam=!!got.notOnTeam;
     const shown=eOfferCatalogDialog(c,{
-      file:got.name, foundHtml:eFoundHtml(got.name,desk?deskFolderOf(desk):eCatalogFolder()),
-      refusedKey:"CatalogNo", force:true, asked:true, direct:!offTeam, offTeam:offTeam, fromList:!desk,
+      file:got.name, foundHtml:eFoundHtml(got.name,eCatalogFolder()),
+      refusedKey:"CatalogNo", force:true, asked:true, direct:!offTeam, offTeam:offTeam, fromList:true,
       accept:sig=>{ lsSet(E_CATALOG_KEY,sig);
-        return activateCatalog(c,desk?{file:"", from:got.name}:{file:got.name, fileAt:+mtime||0}); }
+        return activateCatalog(c,{file:got.name, fileAt:+mtime||0}); }
     });
     if(!shown) toastIfSameCatalog(c);
   });
-}
-function deskFolderOf(id){
-  const dir=eCatalogFolder(), sep=dir.indexOf("\\")>-1?"\\":"/";
-  return dir+sep+"desks"+sep+id;
 }
 /* THE LIBRARY'S LIST OF CATALOGS, painted from this file rather than from the Library's own:
    the host's watch ends here, and a folder that changes under an open Library has to reach the
@@ -215,7 +210,7 @@ function ecExportHtml(){
       +esc(t("Export…"))+'</button>':'';
 }
 /* A COLLEAGUE'S ROW: the desk's name, with the first four of its key where two desks share one, the desk's glyph for whose it is,
-   and See what changed. A file of a colleague's is looked at, never worked from: no row offers that (board 1016). `at` is the
+   and See what changed. A file of a colleague's is looked at, never worked from: no row and no panel offers that (board 1016). `at` is the
    row's place in the list of desks. */
 function ecDeskRowHtml(f,o){
   const who=deskName(f);
@@ -553,14 +548,11 @@ function paintCatalogList(){
     if(dir) wireFolderLink(dir);
   },()=>{ listFetchingContent=false; });
 }
-/* LOOK, from a colleague's row: the panel stands where the Library was, and its two ways out go back to the Library or
-   on to the question that loads that desk's file, as the row's own Work from it does. */
+/* LOOK, from a colleague's row: the panel stands where the Library was, and its way out goes back to the Library. */
 function lookAtDesk(f,files,held){
   const base=deskBase(f,files,held);
   const name=shownCatalogName(catalogNameOfFile(!base ? f.name : base.held ? catalogFileName() : base.file.name));
-  openDeskLook(f,base,name,
-    ()=>{ closeModal(); loadCatalogFromFolder(f.name,f.mtime,f.desk.id); },
-    ()=>{ closeModal(); hooks.openManage(); });
+  openDeskLook(f,base,name,()=>{ closeModal(); hooks.openManage(); });
 }
 /* A CATALOG SIGNED BY A KEY OTHER THAN THE TEAM LEAD'S says whose key it is, once its signature has
    verified under the key the ring names for it: the key is named by the print of that public, never by the

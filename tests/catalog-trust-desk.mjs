@@ -457,7 +457,7 @@ async function launch(plan) {
     // The file picker's reading half, over a file anywhere: importCatalogText is where both import routes end.
     import: file => { CF.importCatalogText(fs.readFileSync(path.join(LAB, file), "utf8"), path.basename(file)); },
     load: name => { const b = doc.querySelector("button[data-ec-load=\"" + name + "\"]"); if (!b) throw new Error("no Load for " + name); b.onclick(); },
-    // A colleague's file asked for by name and desk ("name,desk"), as Work from it asks once its row has been drawn.
+    // A colleague's file asked for by name with a desk id as a third argument, which the loader no longer takes (board 1016).
     deskload: arg => { const [n, id] = String(arg).split(","); OFFER.loadCatalogFromFolder(n, 0, id); },
     // A file of the catalog folder loaded by name, as a relay desk's page opens its team's catalog (team-join.js).
     folderload: name => { OFFER.loadCatalogFromFolder(name, 0); },
@@ -602,7 +602,8 @@ async function launch(plan) {
       return { name: b && b.childNodes[0] ? b.childNodes[0].textContent : "", desk: r.classList.contains("ec-desk"), alone: r.classList.contains("ec-alone"),
                loaded: r.classList.contains("is-loaded"), file: r.getAttribute("data-ec-file"), at: r.getAttribute("data-ec-desk"),
                fp: texts(r, ".ec-fp")[0] || "", tip: who ? (who.getAttribute("data-tip") || "").replace(/&(?:amp|lt|gt|quot|#39|nbsp);/g, m => ENT[m]) : "", mine: texts(r, ".ec-mine"),
-               meta: texts(r, ".ec-meta")[0] || "", acts: r.querySelectorAll("button").map(x => x.getAttribute("aria-label") || x.id) };
+               meta: texts(r, ".ec-meta")[0] || "", acts: r.querySelectorAll("button").map(x => x.getAttribute("aria-label") || x.id),
+               works: r.querySelectorAll("[data-ec-work]").length };
     }) : [];
   };
   obs.rows = [];
@@ -622,7 +623,7 @@ async function launch(plan) {
       const card = doc.getElementById("modalCard");
       obs.read.look = !modalUp() ? null : { title: texts(card, ".modal-t")[0] || "", name: texts(card, ".modal-name")[0] || "",
         heads: texts(card, ".ed-head"), rows: card.querySelectorAll(".ed-row").length, mine: pressed("[data-ed-mine]"),
-        mineWord: texts(card, "[data-ed-mine]"), keep: texts(card, "#edKeep")[0] || "", load: texts(card, "#edLoad")[0] || "", take: takes() };
+        mineWord: texts(card, "[data-ed-mine]"), keep: texts(card, "#edKeep")[0] || "", load: texts(card, "#edLoad")[0] || "", ways: card.querySelectorAll("button").map(x => x.id).filter(id => /^ed(Keep|Load)$/.test(id)), take: takes() };
     },
     mine: () => {
       obs.rebuilt = obs.rebuilt || 0; HOOKS.rebuildCards = () => { obs.rebuilt++; };
@@ -639,12 +640,6 @@ async function launch(plan) {
     forgetlook: async () => { (await import(MOD("desk-look.js"))).forgetLookEdits(); },
     ownclear: () => { delete (PACK.pack.overrides || {})[plan.card]; PACK.savePack(); },
     edback2: () => { doc.getElementById("edKeep").onclick(); obs.read.back = { modal: modalUp(), backs: obs.backs }; },
-    // A colleague's row offers no Work from this file (board 1016): the file is worked from through the panel's own button, as the Look offers it.
-    work: async at => {
-      const b = doc.querySelector("button[data-ec-look=\"" + at + "\"]"); if (!b) throw new Error("no Look on row " + at);
-      b.onclick(); await settle();
-      const w = doc.getElementById("edLoad"); if (!w) throw new Error("no Work from this file on the panel of row " + at); w.onclick();
-    },
     over: () => { obs.read.over = JSON.parse(JSON.stringify(PACK.pack.overrides || {})); obs.read.heldId = String((CAT.storedCatalog() || {}).id || ""); },
     // A colleague's file landing while the Library is open, and the list read as it then stands, painted by nothing here.
     drop: () => {
@@ -731,7 +726,7 @@ if (process.argv[2] === "--launch") {
    ================================================================================================ */
 async function parent() {
   const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-  const EXPECTED = 141 + (PLANTS_OFF ? 0 : 3);
+  const EXPECTED = 144 + (PLANTS_OFF ? 0 : 6);
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -1292,8 +1287,8 @@ async function parent() {
     const rowOf = (rows, four) => rows.find(r => r.desk && r.fp === four) || {};
     const olaRow = rowOf(rows75, ola1.four), ola2Row = rowOf(rows75, ola2.four), p75 = rows75.find(r => r.name === "Piotr, a teammate") || {};
     check(same(rows75.map(r => r.name), ["lamp.ec", "Ola, a teammate", "Ola, a teammate", "Piotr, a teammate"]) && rows75[0].loaded
-      && !olaRow.alone && !ola2Row.alone && p75.alone && deskRows.every(r => r.file === null) && same(olaRow.acts, ["See what changed"]),
-      "75a the colleagues' files hang under the catalog in use, the one grown from nothing stands alone at the foot, each with See what changed and no Work from this file (board 1016); this desk's own file and one claiming the id in use have no row: "
+      && !olaRow.alone && !ola2Row.alone && p75.alone && deskRows.every(r => r.file === null) && same(olaRow.acts, ["See what changed"]) && rows75.every(r => !r.works),
+      "75a the colleagues' files hang under the catalog in use, the one grown from nothing stands alone at the foot, each with Look and nothing more, no Work from this file (the sentence read 'each with Look and Work from it'); this desk's own file and one claiming the id in use have no row: "
       + JSON.stringify(rows75.map(r => [r.name, r.fp, r.alone, r.acts.join("/")])));
     check(olaRow.fp === ola1.four && ola2Row.fp === ola2.four && p75.fp === "" && olaRow.tip.indexOf(grouped(ola1.id)) > -1 && /^Signed by Ola, a teammate, key /.test(olaRow.tip),
       "75b two desks of one name each carry the first four of their key, and the desk's glyph names its key in four groups: " + JSON.stringify([olaRow.fp, ola2Row.fp, p75.fp, olaRow.tip]));
@@ -1445,8 +1440,32 @@ async function parent() {
     const L2 = run(lab75, ["desk", "rows", "look:" + olaRow.at, "mine", "mine", "edback2"], true, { card: "c-warm" });
     const lk = rd(L2, "look"), m1 = ((L2.read || {}).mine || [])[0] || {}, m2 = ((L2.read || {}).mine || [])[1] || {};
     check(!!lk.title && lk.title === "Ola, a teammate" && lk.name === "lamp" && same(lk.heads, ["In the team's edition", "At Ola, a teammate"]) && lk.rows === 2
-      && same(lk.mine, ["false"]) && same(lk.take, []) && lk.keep === "Back to the Library" && lk.load === "Work from this file",
-      "75d Look stands the edition panel told it is a desk: its name, the catalog compared with, the two heads, the card changed and the one added, one take and no offer's pair: " + JSON.stringify(lk));
+      && same(lk.mine, ["false"]) && same(lk.take, []) && lk.keep === "Back to the Library" && lk.load === "" && same(lk.ways, ["edKeep"]),
+      "75d Look stands the edition panel told it is a desk: its name, the catalog compared with, the two heads, the card changed and the one added, one take, no offer's pair and no Work from this file (the panel once drew it as its primary button): " + JSON.stringify(lk));
+    /* 1016w: LIFTING EACH PLANT puts a Work from this file back, in a copy of src/: on the colleague's row (1016a), on the Look panel (1016b). */
+    const plantedSrc = (lab, file, from, to) => {
+      const copy = fs.mkdtempSync(path.join(os.tmpdir(), "plant-1016-"));
+      labs.push(copy);
+      fs.cpSync(lab, copy, { recursive: true });
+      fs.cpSync(path.join(ROOT, "src"), path.join(copy, "src"), { recursive: true });
+      const f = path.join(copy, "src", "modules", file), text = fs.readFileSync(f, "utf8");
+      if (text.split(from).length !== 2) return { copy, ok: false };
+      fs.writeFileSync(f, text.replace(from, () => to), "utf8");
+      return { copy, ok: true };
+    };
+    if (PLANTS_OFF) console.log("  SKIP  1016w lifting each plant draws Work from this file again (ETIUDA_PLANTS=off)");
+    else {
+      const pRow = plantedSrc(lab75, "catalog-offer.js", `ecActHtml("Eject",ICON_EJECT,' data-ec-eject="1"'):"")`,
+        `ecActHtml("Eject",ICON_EJECT,' data-ec-eject="1"'):ecActHtml("Work from this file",ICON_LOAD,' data-ec-work="'+o.at+'"'))`);
+      const pr = pRow.ok ? run(lab75, ["desk", "rows"], true, { modRoot: pRow.copy }) : null;
+      check(!!pr && (pr.rows[0] || []).some(r => r.works > 0 || r.acts.includes("Work from this file")),
+        "1016w1 lifting the plant on the colleague's row draws Work from this file again (FAIL 1016a): " + (pr ? JSON.stringify((pr.rows[0] || []).map(r => r.acts.join("/"))) : "plant line absent"));
+      const pLook = plantedSrc(lab75, "edition-panel.js", `(desk?'':'<button type="button" class="btn primary" id="edLoad">`,
+        `('<button type="button" class="btn primary" id="edLoad">`);
+      const pl = pLook.ok ? run(lab75, ["desk", "rows", "look:" + olaRow.at, "edback2"], true, { card: "c-warm", modRoot: pLook.copy }) : null;
+      check(!!pl && (rd(pl, "look").ways || []).includes("edLoad"),
+        "1016w2 lifting the plant on the Look panel draws its primary button again (FAIL 1016b): " + (pl ? JSON.stringify(rd(pl, "look").ways) : "plant line absent"));
+    }
     check(same(m1.pressed, ["true"]) && same(undated(m1.over), { en: HERS }) && dated(m1.over) && m1.rebuilt === 1 && /Now in your edits/.test((m1.row || [""])[0]),
       "75e the take makes that desk's text of the changed field this desk's own edit at once, that field alone, and the cards are drawn again: " + JSON.stringify(m1));
     check(same(m2.pressed, ["false"]) && m2.over === null && rd(L2, "back").modal === false && rd(L2, "back").backs === 1,
@@ -1497,18 +1516,41 @@ async function parent() {
       "75G THE CONTROL: a file grown from a catalog in the folder that is not in use hangs under that catalog, is compared with it, and its changed card cannot be taken: "
       + JSON.stringify([gRows.map(r => r.name), lkG]));
 
-    const L6 = run(lab75, ["desk", "rows", "work:" + olaRow.at, "settle", "yes", "settle"], true);
+    const L6 = run(lab75, ["desk", "rows", "wire", "openpath:catalogs/desks/" + ola1.id + "/lamp-" + sha8(ID) + ".ec", "settle", "said", "yes", "settle"], true);
     const L7 = run(lab75, ["desk", "rows", "over"], true);
     const rows7 = L7.rows[0] || [], olaRow7 = rowOf(rows7, ola1.four);
     check(rd(L7, "over") && rd(L7, "heldId") === ola1.doc.id && L7.fileAtStart === "" && L7.fromAtEnd === "lamp-" + sha8(ID) + ".ec"
-      && olaRow7.loaded && same(olaRow7.acts, ["See what changed", "Eject"]) && rows7.filter(r => r.loaded).length === 1 && !rows7[0].loaded
+      && olaRow7.loaded && same(olaRow7.acts, ["See what changed", "Eject"]) && rows7.every(r => !r.works) && rows7.filter(r => r.loaded).length === 1 && !rows7[0].loaded
       && same(rows7[0].mine, ["Your edits to it come back when it is loaded again"]) && same(rd(L7, "over"), {}),
-      "75h Work from this file, on the Look panel, makes that desk's file the catalog in use, its row the loaded one and no other; no file of the folder is named in use, and the team's catalog says this desk's edits wait for it: "
+      "75h a colleague's file dropped and taken with Yes (the sentence read 'Work from it makes that desk's file...') is the catalog in use, its row the loaded one with Look and Eject and no Work from this file, and no other row loaded; no file of the folder is named in use, and the team's catalog says this desk's edits wait for it: "
       + JSON.stringify({ held: rd(L7, "heldId"), file: L7.fileAtStart, from: L7.fromAtEnd, rows: rows7.map(r => [r.name, r.loaded, r.mine]), over: rd(L7, "over") }));
     const L8 = run(lab75, ["desk", "rows", "load:lamp.ec", "settle", "yes", "settle"], true);
     const L9 = run(lab75, ["desk", "over"], true);
     check(rd(L9, "heldId") === ID && same(undated((rd(L9, "over") || {})["c-warm"]), { en: HERS }),
       "75i and loading the team's catalog again brings this desk's own edit of it back (" + JSON.stringify([rd(L9, "heldId"), (rd(L9, "over") || {})["c-warm"]]) + ")");
+
+    /* 1016: A DROPPED FILE STILL LOADS, and neither Work from this file is drawn in any state of the list: not on a row that is not
+       loaded (75a), not on the colleague's row that is (75h), and not on the Look panel (75d). The drop is the shell's own route. */
+    const lab1016 = scenario([["catalogs/lamp.ec", wanted], ["catalogs/etiuda-ring.json", ring]]);
+    const d1016 = run(lab1016, ["wire", "openpath:catalogs/lamp.ec", "settle", "offer", "yes", "settle"], true);
+    check(d1016.reloaded === true && d1016.heldId === ID && !(d1016.errors || []).length,
+      "1016c a catalog file dropped on the desk is offered and, taken with Yes, is the catalog in use: " + JSON.stringify({ loaded: d1016.reloaded, held: d1016.heldId, errors: (d1016.errors || []).slice(0, 2) }));
+    if (PLANTS_OFF) console.log("  SKIP  1016w3 lifting the plant on the drop's Yes loads nothing (ETIUDA_PLANTS=off)");
+    else {
+      const lab1016p = scenario([["catalogs/lamp.ec", wanted], ["catalogs/etiuda-ring.json", ring]]);
+      const pDrop = plantedSrc(lab1016p, "catalog-offer.js", `lsSet(E_CATALOG_KEY,sig);
+      return activateCatalog(c,{file:mine?file:"",`,
+        `lsSet(E_CATALOG_KEY,sig);
+      return; activateCatalog(c,{file:mine?file:"",`);
+      const pd = pDrop.ok ? run(lab1016p, ["wire", "openpath:catalogs/lamp.ec", "settle", "offer", "yes", "settle"], true, { modRoot: pDrop.copy }) : null;
+      check(!!pd && pd.reloaded !== true && pd.heldId !== ID,
+        "1016w3 lifting the plant on the drop's Yes loads nothing (FAIL 1016c): " + (pd ? JSON.stringify({ loaded: pd.reloaded, held: pd.heldId }) : "plant line absent"));
+    }
+    const noWork = r => !r.works && !r.acts.includes("Work from this file");
+    check(rows75.every(noWork) && rows7.every(noWork) && !!olaRow7.loaded,
+      "1016a no Work from this file is drawn on a colleague's row, the one not in use or the one in use: " + JSON.stringify([rows75.map(r => [r.name, r.acts.join("/")]), rows7.map(r => [r.name, r.loaded, r.acts.join("/")])]));
+    check(lk.load === "" && !lk.ways.includes("edLoad") && same(lk.ways, ["edKeep"]) && lk.keep === "Back to the Library",
+      "1016b the Look panel stands with its one way back to the Library and no Work from this file beside it: " + JSON.stringify(lk.ways));
     /* The listing the shell sends is what repaints an open Library: a colleague's file written under it appears with no other paint. */
     const cyLab = lab75g, cyPair = crypto.generateKeyPairSync("ed25519"), cy = deskOf(grown("Good day, from Cy."), "Cy", cyPair, cyLab);
     const cyRel = path.join("desks", cy.id, "lamp-" + sha8(ID) + ".ec"), cyText = fs.readFileSync(path.join(cyLab, "catalogs", cyRel), "utf8");
@@ -1968,9 +2010,9 @@ async function parent() {
         errors: [boot76k, no76k, yes76k].flatMap(o => o.errors || []).slice(0, 2) }));
 
     /* 77: A COLLEAGUE'S FILE WHOSE DESK IS OFF THE TEAM'S ROSTER (board 889). The desk pins a team's lead and keeps the roster
-       it accepted, written into desk.json as the shell writes them, with no team file in the folder. Asked for by name, as
-       Work from it asks once a row was drawn before the roster changed, the file is offered with the note, and on an empty
-       desk the offer stands where it would have loaded at once. In the Library only the roster's desks are drawn, and this
+       it accepted, written into desk.json as the shell writes them, with no team file in the folder. Asked for by name
+       with a desk id, which only the retired Work from this file passed, nothing is read, and the drop and Import below are the
+       ways such a file is offered. In the Library only the roster's desks are drawn, and this
        desk's own file still says its edits are in the folder. */
     const lead77 = crypto.generateKeyPairSync("ed25519");
     const TEAM77 = "t-" + "7a".repeat(8), LEAD77 = { keyId: "roster-lead", public: pubHex(lead77.publicKey) };
@@ -1982,21 +2024,22 @@ async function parent() {
       if (branch) env.branch = { sign: { pub: branch.raw.toString("hex"), priv: "sealed" }, box: { pub: "ef".repeat(32), priv: "sealed" } };
       fs.writeFileSync(at, JSON.stringify(env), "utf8");
     };
+    // The refusal's toast selects its words for a screen reader, which the stub page has no range for.
+    const STUB_TOAST = /selectNodeContents/;
     const alone77 = id => Object.assign(JSON.parse(JSON.stringify(wanted)), { id: id, name: "Kiosk " + id });
     const lab77 = scenario([]);
     const bo77 = deskOf(alone77("bo-kiosk"), "Bo", null, lab77), bo77File = "lamp-" + sha8("bo-kiosk") + ".ec";
     onRoster(lab77, ["k-" + "0".repeat(16)]);
     const off77 = run(lab77, ["deskload:" + bo77File + "," + bo77.id, "said", "settle"]);
     const o77 = off77.offers[0] || {};
-    check(o77.shown === true && same(o77.roster, ["This file comes from outside the team."]) && o77.yes === "Load catalog file"
-      && !off77.reloaded && off77.heldId === "" && !(off77.errors || []).length,
-      "77a on an empty desk, a file asked for whose desk is off the team's roster is offered with the note rather than loaded at once: "
+    check(o77.shown !== true && !off77.reloaded && off77.heldId === "" && !(off77.errors || []).filter(e => !STUB_TOAST.test(e)).length,
+      "77a a colleague's file asked for by name with its desk id, which the loader no longer takes, is not offered and not loaded (the sentence read: on an empty desk, a file asked for whose desk is off the team's roster is offered with the note rather than loaded at once): "
       + JSON.stringify({ shown: o77.shown, roster: o77.roster, yes: o77.yes, loaded: off77.reloaded, held: off77.heldId, errors: (off77.errors || []).slice(0, 2) }));
     const lab77A = scenario([]), bo77A = deskOf(alone77("bo-kiosk"), "Bo", null, lab77A);
     onRoster(lab77A, [bo77A.id]);
     const on77 = run(lab77A, ["deskload:" + bo77File + "," + bo77A.id, "said", "settle"]);
-    check(on77.reloaded === true && on77.heldId === bo77A.doc.id && !(on77.offers[0] || {}).shown && !(on77.errors || []).length,
-      "77A THE CONTROL: the same file, its desk on the roster, loads at once on the empty desk as before, with no offer and no note: "
+    check(!on77.reloaded && on77.heldId === "" && !(on77.offers[0] || {}).shown && !(on77.errors || []).filter(e => !STUB_TOAST.test(e)).length,
+      "77A THE CONTROL: the same file, its desk on the roster, is not loaded either, the desk id being ignored (the sentence read: loads at once on the empty desk as before, with no offer and no note): "
       + JSON.stringify({ loaded: on77.reloaded, held: on77.heldId, offer: (on77.offers[0] || {}).shown, errors: (on77.errors || []).slice(0, 2) }));
     const lab77b = accepted();
     const pin77 = JSON.parse(JSON.parse(fs.readFileSync(path.join(lab77b, "userdata", "desk.json"), "utf8")).keys.eCatalog).pin;
