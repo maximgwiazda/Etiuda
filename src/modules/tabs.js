@@ -543,6 +543,10 @@ function applyTab(tb){
 }
 function switchTab(id, force){
   const fromScreen = Boolean(screenOn) || Boolean(force);
+  /* Leaving a screen redraws the strip, and the strip marks activeTabId. Named after the clear, it marks the tab used
+     before the screen first, and the in-place move to the chosen one then fades from that (board 1019: the old tab
+     showed as selected for a fraction of a second). Named before it, the one redraw is already right. */
+  if(screenOn && id && tabs.some(x=>x.id===id)) activeTabId=id;
   if(screenOn) clearScreenOn(false);
   if(!id||(id===activeTabId && !fromScreen)) return;
   if(!fromScreen){
@@ -573,7 +577,6 @@ function stepTab(dir){
   if(allScreens.includes(nextId)){
     frontScreenTab(nextId);
   } else {
-    if(screenOn) clearScreenOn(false);
     switchTab(nextId);
   }
 }

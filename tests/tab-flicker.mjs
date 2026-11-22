@@ -137,14 +137,14 @@ try {
 
   /* tfl6, tfl7 the plant: the line that names the chosen tab before the screen clears, lifted. */
   const lines = rawHtml.split("\n");
-  const mark = lines.findIndex(l => l.includes("plant:tab-front"));
+  const mark = lines.findIndex(l => /if \(screenOn && id && tabs\.some\(\(x\) => x\.id === id\)\) activeTabId = id;/.test(l));
   if (process.env.ETIUDA_PLANTS === "off") {
     check(true, "tfl6 NOT RUN (ETIUDA_PLANTS=off)"); check(true, "tfl7 NOT RUN (ETIUDA_PLANTS=off)");
   } else {
     let planted = null, why = "";
-    if (mark < 0) why = " (no plant mark)";
+    if (mark < 0) why = " (the line was not found in the built page)";
     else {
-      const ls = lines.slice(); ls[mark] = ls[mark].replace(/activeTabId=\w+\.id;/, "");
+      const ls = lines.slice(); ls[mark] = ls[mark].replace(/ activeTabId = id;/, " void 0;");
       if (ls[mark] === lines[mark]) why = " (the plant line did not change)";
       else planted = ls.join("\n");
     }
