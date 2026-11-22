@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 644;
+const EXPECTED = 648;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -8246,6 +8246,53 @@ async function main() {
         if (PLANTS_OFF) { skip("1013bg" + String.fromCharCode(97 + n++) + " lifting plant:" + tag + " turns the 1013b legs red"); continue; }
         const p = await liftCore("plant:" + tag, turns);
         check(goodSc(sc) && p.turned && p.back, "1013bg" + String.fromCharCode(97 + n++) + " lifting plant:" + tag + " turns the 1013b legs red (" + say + "), and the product file is never written: " + how(p));
+      }
+    }
+    /* ---- 1013bh: an addressed item the desk never takes goes after thirty days, its slot with it (board 1013, N1 of the test architect) ---- */
+    async function keepScene() {
+      const w = await world();
+      const third = keyPair(true), cId = "k-" + hex(8);
+      const dev3 = await devices(w, w.devs.concat([{ id: third.keyId, pub: third.pub, desk: cId }]));
+      let sA = await sessionOf(w, w.desk), sB = await sessionOf(w, w.other), sL = await sessionOf(w, w.lead);
+      const toB = "to:" + w.otherId, toC = "to:" + cId;
+      const out = { dev3: dev3.status };
+      const one = await put2(w, sA, w.desk, toB, 1);
+      let ca = 10, cb = 10;
+      for (let i = 0; i < CAP; i++) { if (i % 2) await put2(w, sA, w.desk, toC, ca++); else await put2(w, sB, w.other, toC, cb++); }
+      out.fullBefore = (await put2(w, sA, w.desk, toC, ca++)).r;
+      const store = () => w.R.stores.get(w.rt);
+      out.rowBefore = store().get("blob:" + one.b.id) !== undefined;
+      w.R.clock.now += C.KEEP_MS - MIN;
+      sA = await sessionOf(w, w.desk); sB = await sessionOf(w, w.other); sL = await sessionOf(w, w.lead);
+      out.listedInside = listed(await since(w, sB), one.b.id);
+      out.fullInside = (await put2(w, sA, w.desk, toC, ca++)).r;
+      w.R.clock.now += 2 * MIN;
+      sA = await sessionOf(w, w.desk); sB = await sessionOf(w, w.other); sL = await sessionOf(w, w.lead);
+      out.readPast = await getBlob(w, sB, one.b.id);
+      out.freed = (await put2(w, sA, w.desk, toC, ca++)).r;
+      out.listedPast = listed(await since(w, sB), one.b.id);
+      await since(w, sL);
+      out.rowAfter = store().get("blob:" + one.b.id) !== undefined;
+      out.tombAfter = store().get("tomb:" + one.b.id) !== undefined;
+      return out;
+    }
+    const kp = await keepScene();
+    check(kp.dev3 === 200 && kp.rowBefore && refused(kp.fullBefore, "recipient-full") && kp.listedInside === true && refused(kp.fullInside, "recipient-full")
+      && refused(kp.readPast, "expired") && kp.listedPast === false && kp.freed.status === 200,
+      "1013bh an item addressed to a desk, never taken, is served and held against the desk's " + CAP + " slots up to thirty days, and past them is told expired, left out of its list, and its slot is free again: "
+      + JSON.stringify({ fullBefore: kp.fullBefore.json, listedInside: kp.listedInside, fullInside: kp.fullInside.json, readPast: kp.readPast.json, listedPast: kp.listedPast, freed: kp.freed.status }));
+    check(kp.rowAfter === false && kp.tombAfter === true,
+      "1013bi the same item is taken out of the relay's store at the first list or upload after thirty days, its id kept as an expired tombstone: "
+      + JSON.stringify({ rowAfter: kp.rowAfter, tombAfter: kp.tombAfter }));
+    {
+      const LIFTS = [
+        ["to-keep", "bh", "the item is served and holds its slot for ever", async () => { const o = await keepScene(); return o.listedPast === true || o.freed.status !== 200; }],
+        ["to-keep-row", "bi", "the item is never taken out of the store", async () => { const o = await keepScene(); return o.rowAfter === true; }],
+      ];
+      for (const [tag, leg, say, turns] of LIFTS) {
+        if (PLANTS_OFF) { skip("1013bj" + leg + " lifting plant:" + tag + " turns 1013" + leg + " red"); continue; }
+        const p = await liftCore("plant:" + tag, turns);
+        check(kp.rowAfter === false && p.turned && p.back, "1013bj" + leg + " lifting plant:" + tag + " turns 1013" + leg + " red (" + say + "), and the product file is never written: " + how(p));
       }
     }
   }

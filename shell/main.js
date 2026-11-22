@@ -10062,17 +10062,21 @@ async function shareInbox() {
   const boxKey = openPrivate(deskBranch.box.priv);
   const items = [];
   let took = false;
+  /* An envelope from a teammate that this desk cannot open or read as a card or a receipt can never be acted on, and the relay counts it
+     toward this desk's room for ever, so it is removed there as an envelope already taken is. Never without this desk's own key: where
+     that cannot be read, nothing is known about any envelope, and a good one is left. */
+  const unopened = async id => { if (boxKey) await relayChannel.dropTo(id); }; /* plant:inbox-drop-unopened */
   for (const item of listed.items || []) {
     const sender = byId.get(item.writer);
     if (!sender) continue;
     let env = null;
     try { env = JSON.parse(item.body); } catch { env = null; }
-    if (!env || env.from !== sender.id) continue;
+    if (!env || env.from !== sender.id) { await unopened(item.id); continue; }
     const openedText = openCardFrom(env, ctx.team, ctx.me.id, sender.key, boxKey); /* plant:share-open-from */
-    if (!openedText) continue;
+    if (!openedText) { await unopened(item.id); continue; }
     let parsed = null;
     try { parsed = JSON.parse(openedText); } catch { parsed = null; }
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) continue;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) { await unopened(item.id); continue; }
     if (parsed.kind === RECEIPT_KIND) {
       if (takeReceipt(ctx, sender, parsed)) took = true;
       await relayChannel.dropTo(item.id); /* plant:receipt-drop */
@@ -10081,7 +10085,7 @@ async function shareInbox() {
     const isWrap = parsed.kind === "etiuda-card-share" && parsed.card && typeof parsed.card === "object";
     const card = isWrap ? parsed.card : parsed;
     const note = isWrap && typeof parsed.note === "string" ? parsed.note : "";
-    if (!card || typeof card !== "object" || Array.isArray(card) || typeof card.id !== "string" || !card.id) continue;
+    if (!card || typeof card !== "object" || Array.isArray(card) || typeof card.id !== "string" || !card.id) { await unopened(item.id); continue; }
     items.push({ id: item.id, from: sender.id, fromName: sender.name || sender.id, team: ctx.team, card, note });
   }
   if (took) { persistDeskEnvelope(); sendJoin(theWindow); }

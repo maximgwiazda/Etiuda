@@ -5562,6 +5562,8 @@ try {
       check(!p8.missing && p8 && Array.isArray(p8.items) && p8.items.length === 0,
         "1013s8 lifting plant:share-seal-to sends unsealed envelope rejected by share-inbox: " + JSON.stringify(p8));
       const p9 = await liftSharePlant("share-open-from", async src => {
+        /* The real desk B now drops the unsealed envelope p8 left, as one it cannot open, so the unverified one is written afresh here. */
+        await (dA.chans.find(c => c.enrolled()) || dA.chans[0]).writeTo(dB.me.id, JSON.stringify({ format: 1, kind: "raw", from: dA.me.id, card: JSON.stringify(sharedCard) }));
         const dP = await loadFromCopy("p9-" + hexS(3), dB.ud, src);
         const got = await dP.join("share-inbox");
         for (const it of (got && got.items) || []) await dP.join("share-drop", it.id);
@@ -5637,8 +5639,8 @@ try {
       const offRoster = await dB.join("share-kept", dRemId, "u:shared-1");
       check(!!(unknown && unknown.ok) && !!(notThem && notThem.ok) && !!(forgedPut && forgedPut.ok) && pendingBad === 3
         && Object.keys(keptBad).join() === "u:shared-1" && names(keptBad["u:shared-1"]).join() === rowB.id + ":Tom Lis"
-        && leftBad === 1 && !!offRoster && offRoster.ok === false && offRoster.reason === "not-on-team",
-        "1013r4 a receipt naming a card this desk did not share, or not to that keeper, is dropped and records nothing; one signed by another key records nothing; a keep for a sender off the roster sends nothing: "
+        && leftBad === 0 && !!offRoster && offRoster.ok === false && offRoster.reason === "not-on-team",
+        "1013r4 a receipt naming a card this desk did not share, or not to that keeper, is dropped and records nothing; one signed by another key records nothing and is dropped as well, nothing left waiting; a keep for a sender off the roster sends nothing: "
         + JSON.stringify({ unknown, notThem, forgedPut, pendingBad, keptBad, leftBad, offRoster }));
 
       const reloaded = await loadFromCopy("r5-" + hexS(3), dA.ud, SRC);
@@ -5706,6 +5708,71 @@ try {
         }
         check(!p3.missing && p3.left === p3.n0,
           "1013rp3 lifting plant:receipt-drop leaves a recorded receipt on the relay: " + JSON.stringify(p3));
+      }
+
+      /* ---- 1013n: an envelope this desk cannot open is dropped at the relay, so a teammate cannot fill the desk's room with it (N1 of the test architect) ---- */
+      {
+        const goodCard = Object.assign({}, sharedCard, { id: "u:n1-good" });
+        const junkText = JSON.stringify({ kind: "etiuda-card-kept", card: "u:n1-junk", at: new Date().toISOString() });
+        const writeJunk = async d => {
+          const sealedElsewhere = d.api.sealCardTo(dB.me.box, TEAM_S, d.me.id, dB.me.id, junkText, stranger.privateKey);
+          const forged = d.api.sealCardTo(dA.me.box, TEAM_S, d.me.id, dA.me.id, junkText, stranger.privateKey);
+          return [
+            await chanOf(d).writeTo(dA.me.id, "junk, not an envelope"),
+            await chanOf(d).writeTo(dA.me.id, JSON.stringify({ from: dB.me.id, format: 1 })),
+            await chanOf(d).writeTo(dA.me.id, JSON.stringify(sealedElsewhere)),
+            await chanOf(d).writeTo(dA.me.id, JSON.stringify(forged)),
+          ];
+        };
+        await dA.join("share-inbox");
+        R.clock.now += 61000;
+        const goodPut = await dB.join("share-to", dA.me.id, JSON.stringify(goodCard), "A good one");
+        const junkPuts = (await writeJunk(dC)).concat(await writeJunk(dB));
+        const before = await waiting(dA);
+        const read1 = await dA.join("share-inbox");
+        const after1 = await waiting(dA);
+        const read2 = await dA.join("share-inbox");
+        check(!!(goodPut && goodPut.ok) && junkPuts.every(x => x && x.ok) && before === 9 && !!(read1 && read1.ok)
+          && read1.items.length === 1 && read1.items[0].card.id === "u:n1-good" && after1 === 1 && read2.items.length === 1 && read2.items[0].card.id === "u:n1-good",
+          "1013n1a an envelope this desk cannot open (not JSON, from not the writer, sealed to another desk, signed by a key off the roster) is dropped at the relay when the inbox is read, and a good card beside them is neither dropped nor hidden: "
+          + JSON.stringify({ before, after1, items1: read1 && read1.items.map(i => i.card.id), items2: read2 && read2.items.map(i => i.card.id) }));
+
+        R.clock.now += 61000;
+        let flood = 0, stoppedBy = "";
+        for (let i = 0; i < 60 && !stoppedBy; i++) {
+          const w = i % 2 ? dB : dC;
+          const r = await chanOf(w).writeTo(dA.me.id, "junk " + i + " " + "x".repeat(20));
+          if (r && r.ok) flood++; else stoppedBy = (r && r.reason) || "?";
+        }
+        const aSeen = await dA.join("share-inbox");
+        const waitingAfter = await waiting(dA);
+        const bToA = await dB.join("share-to", dA.me.id, JSON.stringify(Object.assign({}, sharedCard, { id: "u:n1-later" })), "");
+        const bReceipt = await dB.join("share-kept", dA.me.id, "u:n1-good");
+        check(stoppedBy === "recipient-full" && flood >= 40 && !!(aSeen && aSeen.ok) && aSeen.items.length === 1 && waitingAfter === 1
+          && !!(bToA && bToA.ok) && !!(bReceipt && bReceipt.ok),
+          "1013n1b a teammate who filled the desk's room with envelopes nobody can open leaves it open: one read of the inbox drops them, and the next card and the next receipt to this desk are taken: "
+          + JSON.stringify({ flood, stoppedBy, items: aSeen && aSeen.items.length, waitingAfter, bToA, bReceipt }));
+        await dA.join("share-inbox");
+
+        if (PLANTS_OFF) {
+          skip("1013n1p lifting plant:inbox-drop-unopened leaves an envelope nobody can open on the relay");
+        } else {
+          const lines = SRC.split("\n"), at = lines.findIndex(l => l.includes("/* plant:inbox-drop-unopened */"));
+          let pl = { missing: true };
+          if (at >= 0) {
+            lines[at] = lines[at].replace(/if \(boxKey\) await relayChannel\.dropTo\(id\);/, "");
+            const dP = await loadFromCopy("n1p-" + hexS(3), dA.ud, lines.join("\n"));
+            R.clock.now += 61000;
+            await chanOf(dC).writeTo(dA.me.id, "junk for the planted desk");
+            const n0 = await waiting(dA);
+            await dP.join("share-inbox");
+            pl = { n0, left: await waiting(dA) };
+            for (const c of dP.chans) await c.stop().catch(() => {});
+            await dA.join("share-inbox");
+          }
+          check(!pl.missing && pl.left === pl.n0,
+            "1013n1p lifting plant:inbox-drop-unopened leaves an envelope nobody can open on the relay: " + JSON.stringify(pl));
+        }
       }
     }
     for (const d of [dA, dB, dC]) for (const c of d.chans) await c.stop().catch(() => {});

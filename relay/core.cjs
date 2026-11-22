@@ -1833,9 +1833,14 @@ function createCore(deps) {
     return ended ? no("no-hello") : null;
   }
 
+  /* A deletion is kept KEEP_MS, and so is an item addressed to a desk, whatever its state (N1 of board 1013's probe): a desk that never
+     comes back, or never can open what a teammate left for it, cannot hold its slots for ever. */
   function expired(m, now) {
+    if (toOf(m) !== null) return now - m.at > KEEP_MS; /* plant:to-keep */
     return m.del && now - m.at > KEEP_MS; /* plant:deletion-keep */
   }
+  /* An addressed item that is not itself a deletion has an expiry row of its own, so the next list or upload after its keep takes it out. */
+  const keepsRow = m => toOf(m) !== null && !m.del;
 
   function served(m) {
     const out = { v: 1, id: m.id, supersedes: m.supersedes, epoch: m.epoch, writer: m.writer, counter: m.counter, del: m.del,
@@ -2201,6 +2206,7 @@ function createCore(deps) {
       store.del("put:" + obj);
       store.put("seq:" + pad(seq), m.id);
       if (m.del) store.put(expiryKey(now + KEEP_MS, m.id), "del");
+      if (keepsRow(m)) store.put(expiryKey(now + KEEP_MS, m.id), "to"); /* plant:to-keep-row */
     });
     return { ok: true, seq, id: m.id, size: ct.length, writer: m.writer, session: j.a.s.hash, drop,
       uploadedInv: j.a.invite && !j.a.withdraw ? j.a.invite : null };
@@ -2219,7 +2225,7 @@ function createCore(deps) {
     store.del("blob:" + m.id);
     noteBlobs(-1);
     store.del("seq:" + pad(m.seq));
-    if (m.del) store.del(expiryKey(m.at + KEEP_MS, m.id));
+    if (m.del || keepsRow(m)) store.del(expiryKey(m.at + KEEP_MS, m.id));
     store.put("bytes", Math.max(0, (store.get("bytes") || 0) - m.size));
     store.put("tomb:" + m.id, { writer: m.writer, why, until: now + KEEP_MS });
     store.put(expiryKey(now + KEEP_MS, m.id), "tomb");
@@ -2243,7 +2249,7 @@ function createCore(deps) {
     store.del("blob:" + m.id);
     noteBlobs(-1);
     store.del("seq:" + pad(m.seq));
-    if (m.del) store.del(expiryKey(m.at + KEEP_MS, m.id));
+    if (m.del || keepsRow(m)) store.del(expiryKey(m.at + KEEP_MS, m.id));
     store.put("bytes", Math.max(0, (store.get("bytes") || 0) - m.size));
     store.put("held:" + m.id, Object.assign({}, m, { heldUntil: until, heldLeft: until - clock() }));
     store.put(expiryKey(until, m.id), "held");
