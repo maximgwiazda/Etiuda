@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 648;
+const EXPECTED = 651;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -8293,6 +8293,47 @@ async function main() {
         if (PLANTS_OFF) { skip("1013bj" + leg + " lifting plant:" + tag + " turns 1013" + leg + " red"); continue; }
         const p = await liftCore("plant:" + tag, turns);
         check(kp.rowAfter === false && p.turned && p.back, "1013bj" + leg + " lifting plant:" + tag + " turns 1013" + leg + " red (" + say + "), and the product file is never written: " + how(p));
+      }
+    }
+    /* ---- 1013bk: an item addressed to a desk still on the team outlives its writer's removal for its addressee, to the removal's grace
+       (the relay-admission review's class B); the lead still never reads it ---- */
+    async function heldToScene() {
+      const w = await world();
+      const sA = await sessionOf(w, w.desk);
+      const toB = "to:" + w.otherId;
+      const sent = await put2(w, sA, w.desk, toB, 1);
+      const out = { sent: sent.r.status };
+      out.dropped = (await devices(w, [w.devs[1]])).status;
+      let sB = await sessionOf(w, w.other);
+      const sL = await sessionOf(w, w.lead);
+      out.listB = listed(await since(w, sB), sent.b.id);
+      const rB = await getBlob(w, sB, sent.b.id);
+      out.readB = rB.status === 200 && !!rB.meta && rB.meta.place === toB;
+      out.listL = listed(await since(w, sL), sent.b.id);
+      out.readL = await getBlob(w, sL, sent.b.id);
+      w.R.clock.now += C.REMOVED_KEEP_MS + MIN;
+      sB = await sessionOf(w, w.other);
+      out.listPast = listed(await since(w, sB), sent.b.id);
+      out.readPast = (await getBlob(w, sB, sent.b.id)).status;
+      return out;
+    }
+    const hk = await heldToScene();
+    const goodHk = o => o.sent === 200 && o.dropped === 200 && o.listB === true && o.readB === true && o.listL === false && refused(o.readL, "missing")
+      && o.listPast === false && o.readPast !== 200;
+    check(goodHk(hk), "1013bk an item addressed to a desk still on the team, its writer then removed, is listed to and served to that desk until the removal's grace ends,"
+      + " the lead told missing and seeing nothing, and past the grace neither listed nor served: "
+      + JSON.stringify({ sent: hk.sent, dropped: hk.dropped, listB: hk.listB, readB: hk.readB, listL: hk.listL, readL: hk.readL && hk.readL.status, listPast: hk.listPast, readPast: hk.readPast }));
+    {
+      const LIFTS = [
+        ["held-to-since", "the addressee's list leaves the held item out", async () => (await heldToScene()).listB !== true],
+        ["held-to-blob", "the addressee is told the held item is missing", async () => (await heldToScene()).readB !== true],
+      ];
+      let n = 0;
+      for (const [tag, say, turns] of LIFTS) {
+        const id = "1013bl" + String.fromCharCode(97 + n++);
+        if (PLANTS_OFF) { skip(id + " lifting plant:" + tag + " turns 1013bk red"); continue; }
+        const p = await liftCore("plant:" + tag, turns);
+        check(goodHk(hk) && p.turned && p.back, id + " lifting plant:" + tag + " turns 1013bk red (" + say + "), and the product file is never written: " + how(p));
       }
     }
   }

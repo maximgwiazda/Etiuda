@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-seats-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 208;
+const EXPECTED = 219;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* ETIUDA_PLANT_ONLY, a comma list of plant tags or planted names: only those plants run, every other is skipped, so one plant is proved
    alone without the whole sweep. */
@@ -1208,6 +1208,73 @@ async function main() {
   await leg("s24f", leadOrdinaryScene, "the lead's key opens with no certificate on an ordinary team, its session keeping no seat, and is refused with none on an Entra team");
   await leg("s24g", inviteStageScene, "the invitation stage on every team: an unseated token hello is refused seat-lapsed, its token unspent, no try counted and its challenge good, which then opens with a current certificate and spends the token; both resumes ask the seat again; on an Entra team another licence's certificate opens it and none is refused");
   await leg("s24h", lapseFirstScene, "lapse first: a lapsed ordinary team's desk is told team-lapsed seated or not, and so is the lead; a read-only team's desk meets the seat, refused with none and open with one");
+  /* ---- A freed key at the invitation stage (the relay-admission review's class A): the grant's freed list is the seat rule's at every
+     hello that reads the team, so a key named as freed on a certificate issued before the freeing opens no invitation session, a token's,
+     a resume's or a door's reopening of a token-bound request, loses the invitation session and socket it holds, and opens again on a
+     certificate issued since. ---- */
+  const freeGrant = (w, pub, at) => grantAt(w.lead.pub, w.R.clock.now, { licence: w.licence, live: w.R.clock.now, freed: [{ key: pub, at }] });
+  async function freedTokenScene() {
+    const w = await team({ seats: true }), j = joiner(w, "j"), inv = await inviteOn(w), early = certFor(j.pub, w.licence, T0, DAY);
+    w.R.clock.now = T0 + HOUR;
+    const named = await renew(w, freeGrant(w, j.pub, w.R.clock.now));
+    const hello = await helloWith(w, j, { invite: inv.token, inv: inv.inv, seat: early });
+    const row = storeOf(w).get("inv:" + inv.inv) || {};
+    const ok = named.status === 200 && refused(hello, "seat-lapsed") && row.spent === false;
+    return { ok, detail: brief({ named: said(named), tokenHello: said(hello), spent: row.spent }) };
+  }
+  async function freedResumeScene() {
+    const w = await team({ seats: true }), j = joiner(w, "j"), inv = await inviteOn(w), early = certFor(j.pub, w.licence, T0, DAY);
+    const first = await helloWith(w, j, { invite: inv.token, inv: inv.inv, seat: early });
+    w.R.clock.now = T0 + HOUR;
+    const named = await renew(w, freeGrant(w, j.pub, w.R.clock.now));
+    const resume = await helloWith(w, j, { seat: early });
+    const ok = opened(first) && named.status === 200 && refused(resume, "seat-lapsed");
+    return { ok, detail: brief({ first: said(first), named: said(named), resume: said(resume) }) };
+  }
+  async function freedInviteSessionScene() {
+    const w = await team({ seats: true }), j = joiner(w, "j"), inv = await inviteOn(w), early = certFor(j.pub, w.licence, T0, DAY);
+    const s = await helloWith(w, j, { invite: inv.token, inv: inv.inv, seat: early });
+    const before = await listWith(w, s), token = opened(s) ? s.json.session : "";
+    const up = await W.fetch(new Request("https://relay.test/relay/v1/t/" + w.rt + "/socket", { method: "GET", headers: { authorization: "Bearer " + token, upgrade: "websocket" } }), w.R.env);
+    const sockId = up.headers.get("x-stand-in-socket");
+    const ws = [...w.R.hubs.values()].map(h => h.open.find(x => x.id === sockId)).find(Boolean) || null;
+    w.R.clock.now = T0 + 5 * MIN;
+    const named = await renew(w, freeGrant(w, j.pub, w.R.clock.now));
+    const after = await listWith(w, s);
+    const shut = !!ws && !!ws.closed && ws.closed.code === 4401;
+    const ok = opened(s) && before.status === 200 && named.status === 200 && after.status === 401 && !!after.json && after.json.error === "no-hello" && shut;
+    return { ok, detail: brief({ token: said(s), listedBefore: said(before), named: said(named), listedAfter: said(after), socket: ws ? ws.closed : "none" }) };
+  }
+  async function freedSinceInviteScene() {
+    const w = await team({ seats: true }), j = joiner(w, "j"), inv = await inviteOn(w);
+    w.R.clock.now = T0 + HOUR;
+    const named = await renew(w, freeGrant(w, j.pub, w.R.clock.now));
+    w.R.clock.now += 5 * MIN;
+    const late = certFor(j.pub, w.licence, w.R.clock.now, DAY);
+    const hello = await helloWith(w, j, { invite: inv.token, inv: inv.inv, seat: late });
+    const list = await listWith(w, hello);
+    w.R.clock.now += 40 * MIN;
+    const resume = await helloWith(w, j, { seat: late });
+    const ok = named.status === 200 && opened(hello) && list.status === 200 && opened(resume);
+    return { ok, detail: brief({ named: said(named), tokenHello: said(hello), listed: said(list), resume: said(resume) }) };
+  }
+  async function freedDoorScene() {
+    const w = await team({ seats: true }), j = joiner(w, "j"), inv = await inviteOn(w), early = certFor(j.pub, w.licence, T0, DAY);
+    const door = await doorOf(w, [w.licence]);
+    const first = await helloWith(w, j, { invite: inv.token, inv: inv.inv, seat: early });
+    w.R.clock.now = T0 + HOUR;
+    const named = await renew(w, freeGrant(w, j.pub, w.R.clock.now));
+    const knock = await knockWith(w, j, early);
+    w.R.clock.now += 5 * MIN;
+    const late = await knockWith(w, j, certFor(j.pub, w.licence, w.R.clock.now, DAY));
+    const ok = door.status === 200 && opened(first) && named.status === 200 && refused(knock, "seat-lapsed") && opened(late);
+    return { ok, detail: brief({ door: said(door), first: said(first), named: said(named), knockBefore: said(knock), knockSince: said(late) }) };
+  }
+  await leg("s30a", freedTokenScene, "a key the grant names as freed, on a current certificate issued before the freeing, is refused seat-lapsed at an invitation's token hello, the token unspent");
+  await leg("s30b", freedResumeScene, "a key bound to an invitation and then named as freed is refused seat-lapsed at its resume on the certificate it joined with");
+  await leg("s30c", freedInviteSessionScene, "an invitation session open when the grant newly names its key as freed ends at that renewal, its list no-hello and its socket closed");
+  await leg("s30d", freedSinceInviteScene, "a key named as freed and then given a certificate issued since opens an invitation's token hello, lists, and resumes");
+  await leg("s30e", freedDoorScene, "a token-bound key named as freed reopens no invitation session at the door on its earlier certificate, and does on one issued since");
   /* No folder arm: a working team's lead writing its team file with a channel keeps no team file or move row, and a
      read-only team's lead moving it to a folder is refused team-lapsed, as every write there is. */
   async function folderGoneScene() {
@@ -1516,6 +1583,12 @@ async function main() {
     ["withdraw-only", "s26a", withdrawScene, "a withdrawal's session sends another request"],
     [PLANTED.withdrawAny, "s26a", withdrawScene, "the exemption widened to any resume, so a resume that is not a withdrawal opens"],
     [PLANTED.withdrawAny, "s24g", inviteStageScene, "the exemption widened to any resume, so an unseated resume opens"],
+    ["invite-freed", "s30a", freedTokenScene, "a freed key's token hello opens an invitation session"],
+    ["invite-freed", "s30b", freedResumeScene, "a freed key resumes its invitation"],
+    ["freed-invite-sessions", "s30c", freedInviteSessionScene, "a freed key's invitation session lives out its thirty minutes"],
+    ["freed-invite-sockets", "s30c", freedInviteSessionScene, "a freed key's invitation socket stays open"],
+    ["freed-issued", "s30d", freedSinceInviteScene, "the issue-time comparison dropped, so a certificate issued after the freeing is refused at the invitation"],
+    ["door-freed", "s30e", freedDoorScene, "a freed key reopens its token-bound invitation at the door"],
     ["store-session", "s24i", storeScene, "a store's session is judged by the seat gate, so its store certificate is refused and a seat certificate opens it"],
   ];
   for (const [tag, id, scene, what] of PLANTS) {
