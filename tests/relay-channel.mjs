@@ -63,7 +63,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 566;
+const EXPECTED = 567;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -8205,7 +8205,7 @@ async function ownSetup(mod) {
   const tm = await freshTeam([deskKey]);
   const tag = tm.rt.slice(0, 8);
   const mk = (name, place) => opened(mod, name + "-" + tag, tm, LEAD, place || "root", { keyFor: e => keys.get(e) || null, sealEpoch: () => 1 });
-  return { tm, mk, deskKey, teamText: teamBody(tm, 1, 1, [member(deskKey)]) };
+  return { tm, mk, deskKey, keys, teamText: teamBody(tm, 1, 1, [member(deskKey)]) };
 }
   const putsOf = p => p.t.log.filter(l => /^PUT b\//.test(l)).length;
 
@@ -8537,8 +8537,10 @@ async function parallelOffline(mod) {
    first and kept in its record (rootClash); no conflict copy is written beside either. `kind` is "team" or "head"; for the team file
    `mine` and `theirs` are revs, and the two rosters differ by one desk each, so a tie is two different files. */
 async function rootParallel(mod, kind, mine, theirs) {
-  const { tm, mk, deskKey, teamText } = await ownSetup(mod);
+  const { tm, mk, deskKey, keys, teamText } = await ownSetup(mod);
   const dA = keyPair(true), dB = keyPair(true), base = Date.now() - 60000;
+  /* A desk of the team, by its own key: one following from the start, and one opened only at the end, as a joiner. */
+  const deskOf = n => opened(mod, n + "-" + tm.rt.slice(0, 8), tm, deskKey, "desk:" + deskKey.keyId, { keyFor: e => keys.get(e) || null, sealEpoch: () => 1 });
   const name = kind === "head" ? HEAD_FILE : C.TEAM_NAME;
   const head = (t, ed) => headWith(tm.id, t, [{ catalog: "quay-board", rev: 2, edition: ed, published: "1 March 2026" }]);
   const first = kind === "head" ? head(base, "Quay one") : null;
@@ -8547,10 +8549,12 @@ async function rootParallel(mod, kind, mine, theirs) {
   const a = mk("rp-a"), b = mk("rp-b");
   put(a.mirror, C.TEAM_NAME, teamText);
   if (first) put(a.mirror, HEAD_FILE, first);
+  const dk = kind === "team" ? deskOf("rp-d") : null;
   a.ch.start(); b.ch.start();
   await a.ch.idle(); await b.ch.idle();
   await once(a);
   await once(b);
+  if (dk) { dk.ch.start(); await dk.ch.idle(); await once(dk); }
   const both = kind === "head" ? read(a.mirror, HEAD_FILE) === first && read(b.mirror, HEAD_FILE) === first
     : read(a.mirror, C.TEAM_NAME) === teamText && read(b.mirror, C.TEAM_NAME) === teamText;
   a.t.down = true;
@@ -8558,12 +8562,14 @@ async function rootParallel(mod, kind, mine, theirs) {
   await once(a);
   put(b.mirror, name, Bt);
   await once(b);
+  if (dk) await once(dk);
   a.t.down = false;
   const at = a.t.log.length, said0 = a.said.length;
   await once(a);
   await once(a);
   await once(b);
   await once(a);
+  if (dk) await once(dk);
   const which = v => (v === A ? "the first's" : v === Bt ? "the second's" : v === null ? "none" : "other");
   const clash = typeof a.prog.rootClash === "function" ? a.prog.rootClash() : null;
   const out = { both, atA: which(read(a.mirror, name)), atB: which(read(b.mirror, name)),
@@ -8571,6 +8577,8 @@ async function rootParallel(mod, kind, mine, theirs) {
     copies: fs.readdirSync(a.mirror).concat(fs.readdirSync(b.mirror)).filter(n => /conflicted copy/.test(n)),
     said: a.said.slice(said0).filter(l => l.indexOf(name) >= 0 && l.indexOf("changed on this computer and on another at once") >= 0),
     clash: clash ? clash.map(c => ({ path: c.path, kept: c.kept, here: c.here, team: c.team })) : null };
+  out.atDesk = dk ? which(read(dk.mirror, name)) : null;
+  if (dk) await dk.ch.stop();
   await a.ch.stop(); await b.ch.stop();
   /* The first started again on its record: the clash is still there to tell, and nothing more goes up. */
   const again = mk("rp-a");
@@ -8581,6 +8589,14 @@ async function rootParallel(mod, kind, mine, theirs) {
   await once(third);
   out.atThird = which(read(third.mirror, name));
   await third.ch.stop();
+  if (kind === "team") {
+    const late = deskOf("rp-e");
+    late.ch.start();
+    await late.ch.idle();
+    await once(late);
+    out.atLateDesk = which(read(late.mirror, name));
+    await late.ch.stop();
+  }
   return out;
 }
 const rootTold = (x, path, kept, here, team) => !!x.clash && x.clash.length === 1 && x.clash[0].path === path && x.clash[0].kept === kept
@@ -8643,6 +8659,9 @@ if (partOn("pNor")) {
       && rootTold(t3, T, "here", { epoch: 1, rev: 4 }, { epoch: 1, rev: 3 }),
       "tse1d the first computer's unsent team file at rev 4, newer than the second's rev 3, goes up once and stands everywhere, and the second's is said and kept as passed over: first "
       + t3.atA + ", second " + t3.atB + ", third " + t3.atThird + ", uploads " + t3.putsBack + ", clash " + JSON.stringify(t3.clash));
+    check(t1.atDesk === "the second's" && t1.atLateDesk === "the second's" && t3.atDesk === "the first's" && t3.atLateDesk === "the first's",
+      "tse1g a desk of the team, following throughout, and a desk opened afterwards as a joiner, both hold the newer team file: rev 3 against the first's rev 2 "
+      + JSON.stringify({ following: t1.atDesk, joiner: t1.atLateDesk }) + ", the first's rev 4 against rev 3 " + JSON.stringify({ following: t3.atDesk, joiner: t3.atLateDesk }));
     const h1 = await rootParallel(C, "head", 1000, 2000), h2 = await rootParallel(C, "head", 3000, 2000);
     check(h1.atA === "the second's" && h1.atB === "the second's" && h1.atThird === "the second's" && h1.putsBack === 0 && h1.clash && h1.clash.length === 1 && h1.clash[0].kept === "team" && h1.said.length === 1
       && h2.atA === "the first's" && h2.atB === "the first's" && h2.atThird === "the first's" && h2.putsBack === 1 && h2.clash && h2.clash.length === 1 && h2.clash[0].kept === "here",
