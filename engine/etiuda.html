@@ -4695,6 +4695,12 @@ body.e-take-drag .modal-card.ed-modal{translate:0 28px;scale:.985}
   display:flex;align-items:center;gap:14px}
 .e-undo p{margin:0;color:var(--bub-ink)}
 .e-undo .tour-actions{margin:0;padding:0;border:0;flex:none}
+/* The close control: a bare mark beside Undo, in the bubble's own ink, that only puts the offer away. */
+.e-undo .tour-actions{display:flex;align-items:center;gap:6px}
+.e-undo-x{border:0;background:transparent;color:var(--bub-ink);opacity:.75;cursor:default;padding:4px;border-radius:999px;line-height:0;flex:none}
+.e-undo-x:hover,.e-undo-x:focus-visible{opacity:1;background:color-mix(in srgb,currentColor 16%,transparent)}
+.e-undo-x:focus-visible{outline:2px solid var(--bub-ink);outline-offset:1px}
+.e-undo-x .ic{width:14px;height:14px;stroke-width:1.6}
 /* The question before Clear local changes: the strip's place, a heading and two lines stacked above its buttons. */
 .e-undo.e-clear-ask{display:block;width:min(560px,calc(100vw - 24px))}
 .e-undo.e-clear-ask p{margin:0 0 8px}
@@ -7443,6 +7449,7 @@ What is typed here stays in this browser.`;
     catalogAwaitingLine: () => catalogAwaitingLine,
     catalogCountsLine: () => catalogCountsLine,
     counted: () => counted,
+    dismissStandingUndo: () => dismissStandingUndo,
     fileStamp: () => fileStamp,
     hugDottedGround: () => hugDottedGround,
     noteUndoTyping: () => noteUndoTyping,
@@ -8888,8 +8895,6 @@ What is typed here stays in this browser.`;
     "Removed from Favourites": "Usunięto z Ulubionych",
     "Shown again": "Pokazano ponownie",
     "Tab cleared": "Wyczyszczono rozmowę",
-    "Tab closed": "Zamknięto rozmowę",
-    "Other tabs closed": "Zamknięto pozostałe rozmowy",
     "Copy": "Kopiuj",
     "Copy the {LANG} version": "Kopiuj wersję {LANG}",
     "Show the note": "Pokaż notatkę",
@@ -9919,6 +9924,7 @@ What is typed here stays in this browser.`;
   var undoTake = null;
   var undoLapse = null;
   var undoTyped = false;
+  var undoShut = null;
   function noteUndoTyping() {
     undoTyped = true;
   }
@@ -9935,7 +9941,7 @@ What is typed here stays in this browser.`;
     el.id = "eUndo";
     el.setAttribute("role", "status");
     el.setAttribute("data-side", "none");
-    el.innerHTML = "<p>" + esc(t(said)) + '</p><div class="tour-actions"><button type="button" class="btn primary" id="eUndoBtn" aria-label="' + esc(t("Undo")) + '" aria-keyshortcuts="Control+Z">' + esc(t("Undo")) + "<kbd>" + esc(UNDO_KEY) + "</kbd></button></div>";
+    el.innerHTML = "<p>" + esc(t(said)) + '</p><div class="tour-actions"><button type="button" class="btn primary" id="eUndoBtn" aria-label="' + esc(t("Undo")) + '" aria-keyshortcuts="Control+Z">' + esc(t("Undo")) + "<kbd>" + esc(UNDO_KEY) + '</kbd></button><button type="button" class="e-undo-x" id="eUndoX" aria-label="' + esc(t("Close")) + '" title="' + esc(t("Close")) + '">' + ICON_X + "</button></div>";
     cutLeaves();
     document.body.appendChild(el);
     if (from) hangBubble(el, typeof from === "function" ? from : originOf(from));
@@ -9943,6 +9949,7 @@ What is typed here stays in this browser.`;
     const close = (kept) => {
       clearTimeout(undoTimer);
       if (undoTake === take) undoTake = null;
+      if (undoShut === shut) undoShut = null;
       const end = undoLapse;
       if (end === onLapse) undoLapse = null;
       dismissNode(el);
@@ -9952,10 +9959,14 @@ What is typed here stays in this browser.`;
       close(true);
       undo();
     };
+    const shut = () => close(false);
     undoTake = take;
     undoLapse = onLapse;
     undoTyped = false;
+    undoShut = shut;
     el.querySelector("#eUndoBtn").onclick = take;
+    const shutBtn = el.querySelector("#eUndoX");
+    if (shutBtn) shutBtn.onclick = shut;
     el.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
       e.preventDefault();
@@ -9963,6 +9974,12 @@ What is typed here stays in this browser.`;
       close(false);
     });
     undoTimer = setTimeout(() => close(false), UNDO_MS);
+  }
+  function dismissStandingUndo() {
+    const el = document.getElementById("eUndo");
+    if (!undoShut || !el || el.hidden) return false;
+    undoShut();
+    return true;
   }
   function takeStandingUndo(inField) {
     const el = document.getElementById("eUndo");
@@ -14758,16 +14775,16 @@ What is typed here stays in this browser.`;
     if (idx < 0) return;
     if (id === activeTabId) snapshotActiveTab();
     if (tabs.length === 1) {
-      const keepId = tabs[0].id, kept2 = tabHasWork(tabs[0]) ? keepClosed({ tab: tabs[0], idx: 0, cleared: true }) : null;
+      const keepId = tabs[0].id;
+      if (tabHasWork(tabs[0])) keepClosed({ tab: tabs[0], idx: 0, cleared: true });
       tabs[0] = Object.assign(blankTab(), { id: keepId });
       applyTab(tabs[0]);
       saveTabSession();
-      if (kept2) offerUndo("Tab cleared", () => reopenClosedTab(kept2), null, tabAt(0));
-      else toast("Tab cleared");
+      toast("Tab cleared");
       activeHeard();
       return;
     }
-    const kept = keepClosed({ tab: tabs[idx], idx, cleared: false });
+    keepClosed({ tab: tabs[idx], idx, cleared: false });
     const wasActive = id === activeTabId;
     tabs.splice(idx, 1);
     if (wasActive) {
@@ -14776,13 +14793,7 @@ What is typed here stays in this browser.`;
       drawTabs();
     }
     saveTabSession();
-    offerUndo("Tab closed", () => reopenClosedTab(kept), null, tabAt(idx));
   }
-  var tabAt = (i) => () => {
-    const all = [...document.querySelectorAll("#tabsBar .tab[data-tid]")].filter((b) => b.getClientRects().length && !b.closest(".e-gone"));
-    return all[Math.min(i, all.length - 1)] || null;
-  };
-  var tabOf = (id) => () => [...document.querySelectorAll("#tabsBar .tab[data-tid]")].find((b) => b.dataset.tid === String(id)) || null;
   function closeTabById(id) {
     closeTab(id);
   }
@@ -14790,11 +14801,10 @@ What is typed here stays in this browser.`;
     const keep = tabs.find((x) => x.id === id);
     if (!keep || tabs.length < 2) return;
     snapshotActiveTab();
-    const kept = keepClosed({ many: tabs.map((tab, idx) => ({ tab, idx })).filter((x) => x.tab.id !== id) });
+    keepClosed({ many: tabs.map((tab, idx) => ({ tab, idx })).filter((x) => x.tab.id !== id) });
     tabs = [keep];
     applyTab(keep);
     saveTabSession();
-    offerUndo("Other tabs closed", () => reopenClosedTab(kept), null, tabOf(id));
     activeHeard();
   }
   function closedTabCount() {
@@ -14815,13 +14825,12 @@ What is typed here stays in this browser.`;
   }
   function closeAllTabs() {
     snapshotActiveTab();
-    const kept = tabs.some(tabHasWork) ? keepClosed({ all: tabs, active: activeTabId }) : null;
+    if (tabs.some(tabHasWork)) keepClosed({ all: tabs, active: activeTabId });
     const keepId = tabs[0] ? tabs[0].id : null;
     tabs = [keepId ? Object.assign(blankTab(), { id: keepId }) : blankTab()];
     applyTab(tabs[0]);
     saveTabSession();
-    if (kept) offerUndo("All tabs closed", () => reopenClosedTab(kept), null, tabAt(0));
-    else toast("All tabs closed");
+    toast("All tabs closed");
     activeHeard();
   }
   function askClose(answer) {
@@ -14886,6 +14895,7 @@ What is typed here stays in this browser.`;
   }
   function escapeLadderStep() {
     if (intentEscapeStep()) return true;
+    if (dismissStandingUndo()) return true;
     if (escCloseAllTabsStep()) return true;
     if (pageScrollY() > 0) {
       scrollPageTop();

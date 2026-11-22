@@ -4695,6 +4695,12 @@ body.e-take-drag .modal-card.ed-modal{translate:0 28px;scale:.985}
   display:flex;align-items:center;gap:14px}
 .e-undo p{margin:0;color:var(--bub-ink)}
 .e-undo .tour-actions{margin:0;padding:0;border:0;flex:none}
+/* The close control: a bare mark beside Undo, in the bubble's own ink, that only puts the offer away. */
+.e-undo .tour-actions{display:flex;align-items:center;gap:6px}
+.e-undo-x{border:0;background:transparent;color:var(--bub-ink);opacity:.75;cursor:default;padding:4px;border-radius:999px;line-height:0;flex:none}
+.e-undo-x:hover,.e-undo-x:focus-visible{opacity:1;background:color-mix(in srgb,currentColor 16%,transparent)}
+.e-undo-x:focus-visible{outline:2px solid var(--bub-ink);outline-offset:1px}
+.e-undo-x .ic{width:14px;height:14px;stroke-width:1.6}
 /* The question before Clear local changes: the strip's place, a heading and two lines stacked above its buttons. */
 .e-undo.e-clear-ask{display:block;width:min(560px,calc(100vw - 24px))}
 .e-undo.e-clear-ask p{margin:0 0 8px}

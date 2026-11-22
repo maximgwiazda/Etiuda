@@ -7,7 +7,7 @@ import { esc } from "./esc.js";
 import { sxIcon } from "./sx-icons.js";
 import { formatActionChord, tabAddTitle } from "./shortcuts.js";
 import { lsGet, ssGet, ssSet } from "./storage.js";
-import { t, toast, TOAST_MS, toastSerial, offerUndo } from "./ui-lang.js";
+import { t, toast, TOAST_MS, toastSerial, dismissStandingUndo } from "./ui-lang.js";
 import { catSlot } from "./cat-identity.js";
 import { pageScrollY, pageScroller, scrollPageTop } from "./page-scroll.js";
 import { cssEsc } from "./css-esc.js";
@@ -706,10 +706,9 @@ function addTab(){
   toast("The new tab starts with cleared fields and your settings kept.");
   activeHeard();
 }
-/* A CLOSED CONVERSATION COMES BACK: the Undo bubble right after, and Ctrl+Shift+T for the last few while the window is
-   open, the way a browser reopens a tab. Kept in memory and nowhere else. A cleared last tab comes back into itself,
-   and every conversation Escape closed comes back at once, with anything begun since kept after them. Each bubble
-   reopens its own close, so the key and the bubble never bring back two. */
+/* A CLOSED CONVERSATION COMES BACK with Ctrl+Shift+T for the last few while the window is open, the way a browser
+   reopens a tab, and shows nothing when it closes. Kept in memory and nowhere else. A cleared last tab comes back into
+   itself, and every conversation Escape closed comes back at once, with anything begun since kept after them. */
 const closedTabs=[], CLOSED_KEEP=10;
 function keepClosed(entry){
   closedTabs.push(JSON.parse(JSON.stringify(entry)));
@@ -749,15 +748,16 @@ function closeTab(id, ev){
   if(idx<0) return;
   if(id===activeTabId) snapshotActiveTab();
   if(tabs.length===1){
-    const keepId=tabs[0].id, kept=tabHasWork(tabs[0]) ? keepClosed({ tab:tabs[0], idx:0, cleared:true }) : null;
+    const keepId=tabs[0].id;
+    if(tabHasWork(tabs[0])) keepClosed({ tab:tabs[0], idx:0, cleared:true });
     tabs[0]=Object.assign(blankTab(),{id:keepId});
     applyTab(tabs[0]);
     saveTabSession();
-    if(kept) offerUndo("Tab cleared", ()=>reopenClosedTab(kept), null, tabAt(0)); else toast("Tab cleared");
+    toast("Tab cleared");
     activeHeard();
     return;
   }
-  const kept=keepClosed({ tab:tabs[idx], idx, cleared:false });
+  keepClosed({ tab:tabs[idx], idx, cleared:false });
   const wasActive=id===activeTabId;
   tabs.splice(idx,1);
   if(wasActive){
@@ -766,22 +766,17 @@ function closeTab(id, ev){
     drawTabs();
   }
   saveTabSession();
-  offerUndo("Tab closed", ()=>reopenClosedTab(kept), null, tabAt(idx));
 }
-/* WHERE A TAB'S UNDO HANGS: the conversation tab now in that slot, else the last one, or the tab an act kept. */
-const tabAt=i=>()=>{ const all=[...document.querySelectorAll("#tabsBar .tab[data-tid]")].filter(b=>b.getClientRects().length && !b.closest(".e-gone")); return all[Math.min(i,all.length-1)]||null; };
-const tabOf=id=>()=>[...document.querySelectorAll("#tabsBar .tab[data-tid]")].find(b=>b.dataset.tid===String(id))||null;
 /* A tab's menu (context-menu.js): close one by its id, close every other, and how many can come back. */
 function closeTabById(id){ closeTab(id); }
 function closeOtherTabs(id){
   const keep=tabs.find(x=>x.id===id);
   if(!keep || tabs.length<2) return;
   snapshotActiveTab();
-  const kept=keepClosed({ many:tabs.map((tab,idx)=>({ tab, idx })).filter(x=>x.tab.id!==id) });
+  keepClosed({ many:tabs.map((tab,idx)=>({ tab, idx })).filter(x=>x.tab.id!==id) });
   tabs=[keep];
   applyTab(keep);
   saveTabSession();
-  offerUndo("Other tabs closed", ()=>reopenClosedTab(kept), null, tabOf(id));
   activeHeard();
 }
 function closedTabCount(){ return closedTabs.length; }
@@ -810,12 +805,12 @@ function tabHasWork(tb){
    already produces, and it keeps that tab's id so the strip does not blink. */
 function closeAllTabs(){
   snapshotActiveTab();
-  const kept=tabs.some(tabHasWork) ? keepClosed({ all:tabs, active:activeTabId }) : null;
+  if(tabs.some(tabHasWork)) keepClosed({ all:tabs, active:activeTabId });
   const keepId=tabs[0]?tabs[0].id:null;
   tabs=[keepId?Object.assign(blankTab(),{id:keepId}):blankTab()];
   applyTab(tabs[0]);
   saveTabSession();
-  if(kept) offerUndo("All tabs closed", ()=>reopenClosedTab(kept), null, tabAt(0)); else toast("All tabs closed");
+  toast("All tabs closed");
   activeHeard();
 }
 /* CLOSING THE WINDOW ASKS ONCE WHILE A CONVERSATION IS IN PROGRESS (desk-chrome-close-quits-forgets): the X, Alt+F4 and
@@ -880,6 +875,8 @@ function escCloseAllTabsStep(){
    depending on where the caret happens to be. */
 function escapeLadderStep(){
   if(intentEscapeStep()) return true;
+  /* A standing Undo bubble is dismissed before Escape arms the wipe: nothing above wanted this press. */
+  if(dismissStandingUndo()) return true;
   if(escCloseAllTabsStep()) return true;
   /* THE LAST RUNG, and where a held Escape comes to rest. Once nothing is left to shed, how far
      down the cards you are is the only thing still between you and the beginning, and every
@@ -1587,7 +1584,7 @@ function drawTabsCore(){
         if(e.target.closest && e.target.closest(".tab-x")) return;
         switchTab(tb.id);
       };
-      /* The middle button closes the conversation as its x does, Undo included; its press is kept from starting the
+      /* The middle button closes the conversation as its x does; its press is kept from starting the
          page's own scrolling by drag. */
       b.onmousedown=e=>{ if(e.button===1) e.preventDefault(); };
       b.onauxclick=e=>{ if(e.button===1) closeTab(tb.id,e); };
