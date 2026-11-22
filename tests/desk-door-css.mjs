@@ -14,7 +14,7 @@
  *   dc3 the way on, focused from the keyboard, is still filled, and the page's own 2px outline is drawn round it
  *   dc4 the way out stands 22px under the quiet presses, over a 1px rule with 18px of padding
  *   dc5 the offline box is a row: an 18px crossed-signal glyph at 70% opacity beside its words
- *   dc6 state 4's panel is two rows: the way on and Buy side by side 8px apart, inside the panel, Check now and Account settings
+ *   dc6 state 4's panel is two rows: Check now and Buy side by side 8px apart, inside the panel, Account settings
  *       under them; in English and in Polish
  *
  * EVERY CHECK IS SHOWN RED (dcp1 to dcp7): the rule it holds is put in another form in a scratch copy of the built page, the
@@ -234,7 +234,7 @@ function readChecks(m) {
     dc5: !!m.off && m.off.display === "flex" && near(m.off.w, 18, 0.5) && near(m.off.h, 18, 0.5) && near(parseFloat(m.off.opacity), 0.7, 0.01)
       && m.off.before && m.off.sameRow,
     dc6: panels.length === 2 && panels.every(p => p.rows && p.rows.n === 2 && p.rows.sameTop && near(p.rows.gap, 8, 0.5) && p.rows.inside
-      && p.rows.below && p.rows.restN === 2),
+      && p.rows.below && p.rows.restN === 1),
   };
 }
 
@@ -244,7 +244,7 @@ const DESCR = {
   dc3: "the way on, focused from the keyboard, is still filled and wears the page's own 2px outline",
   dc4: "the way out stands 22px under the quiet presses, over a 1px rule with 18px of padding",
   dc5: "the offline box is a flex row: an 18px glyph at 70% opacity beside its words",
-  dc6: "state 4's panel is two rows: the way on and Buy 8px apart inside the panel, Check now and Account settings under them, in both languages",
+  dc6: "state 4's panel is two rows: Check now and Buy 8px apart inside the panel, Account settings under them, in both languages",
 };
 const ORDER = ["dc1", "dc2", "dc3", "dc4", "dc5", "dc6"];
 
