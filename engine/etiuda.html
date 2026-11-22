@@ -683,13 +683,11 @@ input,textarea,[contenteditable="true"],[contenteditable=""],.mono,code,pre,.ec-
 *::-webkit-scrollbar-thumb:hover{background-color:var(--scroll-thumb-hover)}
 *::-webkit-scrollbar-corner{background:transparent}
 
-/* THE TEST SERVICE BAND (host.js testServiceBand): in flow above the header, so everything below makes room, and the layers fixed
-   to the window's top start under it. It paints above every layer and drags the window as the header's row does. */
-#eTestBand{position:relative;z-index:2147483645;flex:0 0 auto;height:var(--e-tb-h);padding:0 12px;box-sizing:border-box;
-  background:#78350f;color:#fff;font-family:var(--sans);font-size:12px;line-height:var(--e-tb-h);text-align:center;
-  white-space:nowrap;overflow:hidden;user-select:none;-webkit-user-select:none;
-  app-region:drag;-webkit-app-region:drag}
-body.e-test-service{--e-tb-h:24px}
+/* THE TEST SERVICE BAND (host.js testServiceBand): a small dim mark fixed in the bottom right corner;
+   it takes no room and catches no pointer (the owner's word of 2026-11-20: the orange bar goes). */
+#eTestBand{position:fixed;right:10px;bottom:6px;z-index:2147483645;height:auto;padding:0;background:none;color:var(--muted,#888);
+  font-family:var(--sans);font-size:10px;line-height:1.2;opacity:.55;white-space:nowrap;pointer-events:none;user-select:none;-webkit-user-select:none}
+body.e-test-service{--e-tb-h:0px}
 body.e-test-service .modal,body.e-test-service #railHit{top:var(--e-tb-h)}
 
 /* relative, not static, and NOT sticky: nothing scrolls under it any more, but the z-index
@@ -9290,7 +9288,7 @@ What is typed here stays in this browser.`;
     "Password": "Hasło",
     "Beside the customer's name there is now a wheel: it chooses who in the team this reply names.": "Obok imienia klienta jest teraz kółko: wybiera się nim osobę z zespołu, którą wymienia ta odpowiedź.",
     "No catalog loaded": "Nie wczytano katalogu",
-    "Test build: sign-in goes to Etiuda's test service, not the real one.": "Wersja testowa: logowanie trafia do testowej usługi Etiudy, nie do prawdziwej.",
+    "Test service": "Usługa testowa",
     "This catalog has changed since it was loaded.": "Ten katalog zmienił się od czasu wczytania.",
     "This file is an earlier edition than the one loaded now.": "Ten plik to wcześniejsze wydanie niż wczytane teraz.",
     "The tour of Etiuda's controls, one at a time": "Przewodnik po Etiudzie, krok po kroku",
@@ -17516,14 +17514,14 @@ What is typed here stays in this browser.`;
     } catch (e) {
     }
   }
-  var TEST_BAND_EN = "Test build: sign-in goes to Etiuda's test service, not the real one.";
+  var TEST_BAND_EN = "Test service";
   function testServiceBand(doc) {
     if (!doc || !doc.body || doc.getElementById("eTestBand")) return null;
     const el = doc.createElement("div");
     el.id = "eTestBand";
     el.setAttribute("role", "note");
     el.setAttribute("data-i18n-text", TEST_BAND_EN);
-    el.textContent = t("Test build: sign-in goes to Etiuda's test service, not the real one.");
+    el.textContent = t("Test service");
     doc.body.insertBefore(el, doc.body.firstChild);
     doc.body.classList.add("e-test-service");
     return el;
