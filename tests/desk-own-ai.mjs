@@ -171,10 +171,12 @@ try { shell(""); } catch (e) { loadError = (e && e.message) || String(e); }
     const S = shell("");
     const team = S.joinPolicyFacts(exportText([["TeamFolder", "REG_SZ", "D:\\Quay\\team"], ["LeadKey", "REG_SZ", "ab".repeat(32)]].concat(ORG,
       [["DeskOrganisationModel", "REG_DWORD", 1]])));
-    if (team.folder !== "D:\\Quay\\team" || team.lead !== "ab".repeat(32) || !team.values) problems.push("team values beside them " + team.folder);
+    /* Was: the team's pair, TeamFolder and LeadKey, taken beside them. Now: a team works over the relay only, so TeamFolder is not
+       read (tests/folder-team-held.mjs fth7) and LeadKey is still taken beside them. */
+    if (team.folder || team.lead !== "ab".repeat(32) || !team.values) problems.push("team values beside them " + team.folder);
   }
   check(!problems.length, "da1 policy reads AiProvider, AiEndpoint, AiModel, AiKey and DeskOrganisationModel; a value it cannot use is left out alone, "
-    + "and the team's values beside them are still taken: " + (problems.join("; ") || "four values, four switch shapes, five bad values"));
+    + "and the team's LeadKey beside them is still taken, its TeamFolder not read: " + (problems.join("; ") || "four values, four switch shapes, five bad values"));
 }
 
 { /* da2 */
