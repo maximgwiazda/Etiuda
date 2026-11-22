@@ -1660,8 +1660,8 @@ try {
     + (heldShown && heldShown.mode) + ", then " + (heldHidden && (heldHidden.mode || "nothing held")) + ", " + bubbles.length + " bubble(s) drawn");
 
   /* Hide, or Escape, on the bubble while it holds a link's confirm lets the link go in the shell as Cancel does (link-no), so a link
-     waiting behind it is offered (link-handler 3ht); the held answer then names no offer (jlk5). Lifting the page's line turns it red
-     (jlk6). The bubble is drawn on stand-ins. */
+     waiting behind it is offered (link-handler 3ht); the held answer then names no offer, and the next link the shell hands over opens
+     the bubble again though nothing else on the page changed (jlk5). Lifting either page line turns it red (jlk6). On stand-ins. */
   let hideLinkRuns = 0;
   async function hideLinkScene(M) {
     const shells = [];
@@ -1673,14 +1673,15 @@ try {
     const was = { createElement: document.createElement, body: document.body };
     const gWas = {};
     for (const k of ["innerWidth", "innerHeight", "addEventListener", "removeEventListener"]) gWas[k] = globalThis[k];
-    const out = { shown: false, escaped: false, sent: false, released: false };
+    const out = { shown: false, escaped: false, sent: false, released: false, next: false };
     try {
       document.createElement = () => node();
       document.body = { appendChild: el => { shells.push(el); return el; } };
       Object.assign(globalThis, { innerWidth: 1280, innerHeight: 800, addEventListener: noop, removeEventListener: noop });
       const n = hideLinkRuns++;
       const Dl = await deskWith("hide-link-" + n, folder("hide-link-own-" + n));
-      window.E_HOST = hostOver(Dl);
+      let took = null;
+      window.E_HOST = Object.assign(hostOver(Dl), { onTeamJoin: fn => { took = fn; } });
       const team = "t-" + crypto.randomBytes(8).toString("hex");
       const blob = inviteBlob({ team, relay: { rt: crypto.randomBytes(16).toString("hex"), url: "https://relay.test/relay/v1",
         token: crypto.randomBytes(32).toString("hex"), inv: crypto.randomBytes(16).toString("hex") }, lead: lampLead, secret: newSecret() });
@@ -1698,6 +1699,15 @@ try {
       out.sent = calls.slice(from).some(c => c[0] === "link-no");
       const after = await Dl.join("held");
       out.released = !!after && !after.offer;
+      const teamB = "t-" + crypto.randomBytes(8).toString("hex");
+      const blobB = inviteBlob({ team: teamB, relay: { rt: crypto.randomBytes(16).toString("hex"), url: "https://relay.test/relay/v1",
+        token: crypto.randomBytes(32).toString("hex"), inv: crypto.randomBytes(16).toString("hex") }, lead: lampLead, secret: newSecret() });
+      const gotB = Dl.api.acceptLink("etiuda:join#" + blobB.slice("etiuda-join:".length));
+      const drawn = shells.length;
+      if (took) await took(await Dl.join("held"));
+      await new Promise(r => setTimeout(r, 30));
+      const hB = M.inviteHeld();
+      out.next = !!(gotB && gotB.confirm === true) && shells.length > drawn && !!hB && hB.mode === "confirm" && !!hB.offer && hB.offer.team === teamB;
     } finally {
       AS.setCards([]);
       document.createElement = was.createElement;
@@ -1707,25 +1717,32 @@ try {
     return out;
   }
   const sayHide = r => (r.shown ? "link confirm shown" : "no link confirm") + ", " + (r.escaped ? "Escape pressed" : "no bubble to press")
-    + ", " + (r.sent ? "link-no sent" : "no link-no") + ", " + (r.released ? "the shell holds no offer" : "the shell still holds the offer");
+    + ", " + (r.sent ? "link-no sent" : "no link-no") + ", " + (r.released ? "the shell holds no offer" : "the shell still holds the offer")
+    + ", " + (r.next ? "the next link opens the bubble" : "the next link draws no bubble");
   const hideNow = await hideLinkScene(TJ);
-  check(hideNow.shown && hideNow.escaped && hideNow.sent && hideNow.released,
-    "jlk5 Escape on the bubble holding a link's confirm lets the link go in the shell as Cancel does: " + sayHide(hideNow));
-  if (PLANTS_OFF) skip("jlk6 lifting plant:hide-link-no keeps the link held in the shell after Escape (jlk5 red)");
+  const hideOk = r => r.shown && r.escaped && r.sent && r.released && r.next;
+  check(hideOk(hideNow), "jlk5 Escape on the bubble holding a link's confirm lets the link go in the shell as Cancel does, and the next link "
+    + "opens the bubble again: " + sayHide(hideNow));
+  if (PLANTS_OFF) skip("jlk6 lifting plant:hide-link-no or plant:link-unshut, each alone, turns jlk5 red");
   else {
     const at = path.join(ROOT, "src", "modules", "team-join.js"), before = fs.readFileSync(at);
-    const lines = before.toString("utf8").split(/\n/), i = lines.findIndex(l => l.indexOf("plant:hide-link-no") >= 0);
-    let r = null;
-    if (i >= 0) {
-      lines.splice(i, 1);
-      const dir = fs.mkdtempSync(path.join(LAB, "hide-link-plant-"));
-      const modulesUrl = pathToFileURL(path.join(ROOT, "src", "modules")).href;
-      fs.writeFileSync(path.join(dir, "team-join.js"), lines.join("\n").replace(/from "\.\//g, 'from "' + modulesUrl + "/"), "utf8");
-      r = await hideLinkScene(await import(pathToFileURL(path.join(dir, "team-join.js")).href));
+    const notes = [];
+    let turned = true;
+    for (const tag of ["plant:hide-link-no", "plant:link-unshut"]) {
+      const lines = before.toString("utf8").split(/\n/), i = lines.findIndex(l => l.indexOf(tag) >= 0);
+      let r = null;
+      if (i >= 0) {
+        lines.splice(i, 1);
+        const dir = fs.mkdtempSync(path.join(LAB, "hide-link-plant-"));
+        const modulesUrl = pathToFileURL(path.join(ROOT, "src", "modules")).href;
+        fs.writeFileSync(path.join(dir, "team-join.js"), lines.join("\n").replace(/from "\.\//g, 'from "' + modulesUrl + "/"), "utf8");
+        r = await hideLinkScene(await import(pathToFileURL(path.join(dir, "team-join.js")).href));
+      }
+      turned = turned && !!r && r.shown && !hideOk(r);
+      notes.push(tag + " " + (r ? sayHide(r) : "plant line absent"));
     }
     const same = fs.readFileSync(at).equals(before);
-    check(!!r && r.shown && r.escaped && !(r.sent && r.released) && same,
-      "jlk6 lifting plant:hide-link-no keeps the link held in the shell after Escape (jlk5 red): " + (r ? sayHide(r) : "plant line absent")
+    check(turned && same, "jlk6 lifting plant:hide-link-no or plant:link-unshut, each alone, turns jlk5 red: " + notes.join("; ")
       + ", tree " + (same ? "untouched" : "changed"));
   }
 
