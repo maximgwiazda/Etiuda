@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-seats-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 231;
+const EXPECTED = 232;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* ETIUDA_PLANT_ONLY, a comma list of plant tags or planted names: only those plants run, every other is skipped, so one plant is proved
    alone without the whole sweep. */
@@ -1326,13 +1326,19 @@ async function main() {
     w.R.clock.now += MIN;
     const lifted = await renew(w, grantAt(w.lead.pub, w.R.clock.now));
     const back = await sessionAs(w, "a");
+    /* A name lapses at its at plus the longest certificate span, never because a grant omits the list (G1): a grant past that span
+       keeps a newer name and drops the lapsed one. */
+    w.R.clock.now = at + 30 * DAY + MIN;
+    const fresh = hex(32), past = await renew(w, grantAt(w.lead.pub, w.R.clock.now, undefined, { fields: { freed: [{ key: fresh, at: w.R.clock.now }] } }));
+    const keptKeys = ((storeOf(w).get("freedAll") || {}).freed || []).map(x => x.key);
+    const lapsedDropped = past.status === 200 && keptKeys.indexOf(fresh) > -1 && keptKeys.indexOf(a.pub) < 0 && keptKeys.indexOf(j.pub) < 0;
     const ended = r => r.status === 401 && !!r.json && r.json.error === "no-hello";
     const ok = opened(dev) && opened(invS) && Object.values(bad).every(v => v === "shape") && full === null && named.status === 200 && ended(devAfter) && ended(invAfter)
       && refused(devHello, "seat-lapsed") && refused(resume, "seat-lapsed") && refused(invHello, "seat-lapsed") && opened(other) && stillOrdinary
-      && opened(since) && lifted.status === 200 && opened(back);
+      && opened(since) && lifted.status === 200 && refused(back, "seat-lapsed") && lapsedDropped;
     return { ok, detail: brief({ device: said(dev), invitation: said(invS), refusedShapes: bad, fullList: full, named: said(named), deviceListAfter: said(devAfter),
       invitationListAfter: said(invAfter), nextDeviceHello: said(devHello), resume: said(resume), nextInvitationHello: said(invHello), otherDesk: said(other),
-      stillOrdinary, certSince: said(since), lifted: said(lifted), earlierCertAfterLift: said(back) }) };
+      stillOrdinary, certSince: said(since), lifted: said(lifted), earlierCertAfterListlessGrant: said(back), lapsedDropped, keptKeys }) };
   }
   await leg("s30g", freedOrdinaryScene, "an ordinary licence's grant naming keys as freed (a top-level freed list on a grant without seats, newest first): the team stays ordinary, the named desk's device and invitation sessions end no-hello, its next device hello, invitation resume and invitation hello are refused seat-lapsed, a desk not named opens on any licence, a certificate issued since opens, a later grant naming nobody lifts the name; a full list of FREED_MAX is taken, and an empty list, one not a list, oldest first, a key twice, an entry after the grant's issue, an entry with another field, a bare key, an upper-case key, one past FREED_MAX, the list inside seats, or the list beside seats is refused shape");
   /* No folder arm: a working team's lead writing its team file with a channel keeps no team file or move row, and a
@@ -1656,7 +1662,8 @@ async function main() {
     ["grant-freed-top", "s30g", freedOrdinaryScene, "an ordinary licence's freed list is taken whatever its shape or placement"],
     ["freed-ordinary-kept", "s30g", freedOrdinaryScene, "an ordinary licence's freed list is not kept"],
     ["freed-ordinary-read", "s30g", freedOrdinaryScene, "an ordinary licence's freed list is never read at a hello"],
-    ["freed-ordinary-lift", "s30g", freedOrdinaryScene, "a later grant naming nobody leaves the name standing"],
+    ["freed-ordinary-stands", "s30g", freedOrdinaryScene, "a later grant without the list lifts every name"],
+    ["freed-ordinary-lapse", "s30g", freedOrdinaryScene, "a name is kept past its at plus the longest certificate span"],
     ["freed-sessions", "s30g", freedOrdinaryScene, "an ordinary freed key's device session lives on"],
     ["freed-invite-sessions", "s30g", freedOrdinaryScene, "an ordinary freed key's invitation session lives on"],
     ["store-session", "s24i", storeScene, "a store's session is judged by the seat gate, so its store certificate is refused and a seat certificate opens it"],

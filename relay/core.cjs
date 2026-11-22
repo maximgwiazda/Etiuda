@@ -780,17 +780,25 @@ function createCore(deps) {
      stays (the service reads it from the seats it still holds). A team whose grants never carried seats is never written here. */
   function takeSeats(grant) {
     const held = store.get("seats"), was = plain(held) && Number.isSafeInteger(held.at) ? held : null, at = grant.issued;
-    /* An ordinary licence's freed list, {freed, at}, kept apart from the seats so the team stays ordinary; the newest-issued grant decides,
-       and one naming nobody lifts every name. */
+    /* An ordinary licence's freed list, {freed, at}, kept apart from the seats so the team stays ordinary. Each name is kept until its
+       at plus the longest certificate span (CERT_SPAN_MS), merged from every grant that lists it (the later at wins), and never lifted
+       because a grant omits the list: trial grants, seat grants and a service sweep may all leave it out (the test architect's G1).
+       A person taken back holds a certificate issued after the freeing, which freedBefore accepts, so nothing needs lifting. */
     const all = store.get("freedAll"), allWas = plain(all) && Number.isSafeInteger(all.at) ? all : null;
+    const now = clock();
+    let freedLive = list => (Array.isArray(list) ? list : []).filter(x => plain(x) && Number.isSafeInteger(x.at));
+    freedLive = list => (Array.isArray(list) ? list : []).filter(x => plain(x) && Number.isSafeInteger(x.at) && x.at + CERT_SPAN_MS > now); /* plant:freed-ordinary-lapse */
     if (grant.seats === undefined && Array.isArray(grant.freed)) {
-      if (allWas && at < allWas.at) return;
-      const next = grant.freed.map(f => ({ key: f.key, at: f.at }));
-      store.put("freedAll", { freed: next, at }); /* plant:freed-ordinary-kept */
-      endFreed(next.filter(f => !(allWas ? allWas.freed : []).some(x => x.key === f.key && x.at >= f.at)).map(f => f.key));
+      const held = new Map(freedLive(allWas && allWas.freed).map(x => [x.key, x.at])), newly = [];
+      for (const x of freedLive(grant.freed)) { const had = held.get(x.key); if (had === undefined || x.at > had) { held.set(x.key, x.at); newly.push(x.key); } }
+      const next = [...held].map(([key, t]) => ({ key, at: t })).sort((p, q) => q.at - p.at).slice(0, FREED_MAX);
+      store.put("freedAll", { freed: next, at: Math.max(at, allWas ? allWas.at : at) }); /* plant:freed-ordinary-kept */
+      endFreed(newly);
       return;
     }
-    if (allWas && at > allWas.at) store.del("freedAll"); /* plant:freed-ordinary-lift */
+    let liftOnOmission = true;
+    liftOnOmission = false; /* plant:freed-ordinary-stands */
+    if (liftOnOmission && allWas && at > allWas.at) store.del("freedAll");
     if (grant.seats === undefined) {
       let lifts = true;
       lifts = false; /* plant:seats-held */
