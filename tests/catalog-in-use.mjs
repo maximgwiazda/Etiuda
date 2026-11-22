@@ -20,7 +20,10 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
-const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
+/* A desk that pins a team is put on the team's relay mirror (tests/relay-mirror-desk.mjs): the share a box names stands for the relay's
+   copy of the team, carried to the desk's mirror and back by the stand-in. It was the desk's folder-mirror and the folder syncer. */
+import { relayizeDesk, relayMirrorOf, relayMirrorProgram, relayChannelOf } from "./relay-mirror-desk.mjs";
+let LEAD_PIN = null;
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 const EXPECTED = 148;
 
@@ -60,6 +63,7 @@ const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
 const eventFor = () => ({ sender: { id: 1, once: noop }, senderFrame: ENGINE_FRAME, returnValue: undefined });
 
 function loadDesk(ud, src) {
+  relayizeDesk(ud);
   const said = [];
   const on = {}, invoke = {};
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop, info: noop };
@@ -87,11 +91,12 @@ function loadDesk(ud, src) {
   const win = { isDestroyed: () => false, webContents: { send: (...a) => sent.push(a) } };
   return { api, ask, said, ud, envelope, sent, win, sync };
 }
-function newDesk(name, folder, src) {
+function newDesk(name, folder, src, team) {
   const ud = path.join(LAB, name);
   fs.mkdirSync(ud, { recursive: true });
-  fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
-    keys: { eCatalogFolder: folder, eUiLang: "en", eAgent: "North desk" } }), "utf8");
+  fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(Object.assign({ kind: "etiuda-desk", schema: 1,
+    keys: { eCatalogFolder: folder, eUiLang: "en", eAgent: "North desk" } },
+    team ? { teamPins: { [team]: { keyId: LEAD_PIN.keyId, public: LEAD_PIN.public } } } : {})), "utf8");
   return loadDesk(ud, src);
 }
 const folder = name => { const f = path.join(LAB, name); fs.mkdirSync(f, { recursive: true }); return f; };
@@ -113,7 +118,7 @@ const touch = (file, ms) => fs.utimesSync(file, ms / 1000, ms / 1000);
    (b) slice 2), so they are read where the desk writes them; a share no team box knows is read itself. */
 const ownDir = (share, id) => {
   const b = getBoxForDir(share);
-  return b && b.team && b.D ? path.join(syncerMod.folderMirrorOf(b.D.ud, b.team), "desks", id) : path.join(share, "desks", id);
+  return b && b.team && b.D ? path.join(relayMirrorOf(b.D.ud, b.team), "desks", id) : path.join(share, "desks", id);
 };
 const inUsePath = (share, id) => path.join(ownDir(share, id), "in-use.ec");
 const answerPath = (share, id) => path.join(ownDir(share, id), "catalog-answer.ec");
@@ -124,20 +129,12 @@ try {
   const lead = crypto.generateKeyPairSync("ed25519");
   const other = crypto.generateKeyPairSync("ed25519");
   const LEAD = { keyId: "quay-lead", public: pubHex(lead.publicKey) };
+  LEAD_PIN = LEAD;
   /* The lead's box, the X25519 key an answer about a catalog the team does not list is sealed to (board 962, stage 0). */
   const leadBox = crypto.generateKeyPairSync("x25519");
   const BOX = pubHex(leadBox.publicKey);
   syncMirror = (box) => {
-    const mirror = syncerMod.folderMirrorOf(box.D.ud, box.team);
-    const prog = syncerMod.createFolderProgram({
-      team: box.team,
-      folder: box.share,
-      mirror: mirror,
-      pin: LEAD,
-      /* The key this desk keeps for the epoch, as the shell's syncer is given: the mirror holds the desk's own files now. */
-      keyFor: (epoch) => box.D.api.teamKeyAt(box.team, epoch) || box.key,
-      checks: box.D.api.deskTrustChecks(),
-    });
+    const prog = box.D.relayProgram || (box.D.relayProgram = relayMirrorProgram({ store: box.share, mirror: relayMirrorOf(box.D.ud, box.team) }));
     prog.syncOnce();
     prog.syncOnce();
   };
@@ -166,7 +163,7 @@ try {
     { catalog: "north-lamps", keyId: LEAD.keyId, alg: "Ed25519", public: LEAD.public }] };
   const teamFile = (D, id, epoch, roster, catalogs) => textOf(sign({
     format: 1, kind: "etiuda-team", id, catalogs: catalogs || ["not-this"], lead: Object.assign({}, LEAD, { box: BOX }),
-    sealed: true, exportsSealed: false, epoch, roster,
+    sealed: true, exportsSealed: false, epoch, roster, channel: relayChannelOf(id),
   }, lead.privateKey, LEAD));
   const entry = (D, who, key, team, epoch) => ({
     desk: { id: who.id, key: who.key, box: who.box },
@@ -205,9 +202,9 @@ try {
   const arm = async (name, src) => {
     const share = folder(name + "-share");
     put(share, "etiuda-ring.json", RING);
-    const D = newDesk(name, share, src);
-    const me = await D.ask("etiuda:branch-identity", true);
     const team = "t-" + crypto.randomBytes(8).toString("hex");
+    const D = newDesk(name, share, src, team);
+    const me = await D.ask("etiuda:branch-identity", true);
     const key = crypto.randomBytes(32);
     const box = { share, D, me, team, key };
     boxMap.set(share, box);
@@ -845,12 +842,13 @@ try {
     box.D.api.tryCatalogAsk(box.D.win);
     const hadUse = fs.existsSync(useFile);
     const hadAns = fs.existsSync(ans) && !!openAnswerDoc(box.D, ans, box.key);
-    box.D.api.setDown(box.share);
+    /* The folder that does not answer is the team's mirror, where the desk's own files are, and the eject is owed across a relaunch.
+       (906e said: while the share is unreachable, on a folder team, where the eject landed in the mirror and the folder syncer's
+       outbox owed the share the two removals; no share is reached now, and what is owed is the desk's own record, ejectOwed.) */
+    const mirror = relayMirrorOf(box.D.ud, box.team), own = "desks/" + box.me.id + "/";
+    box.D.api.setDown(mirror);
     box.D.sync("etiuda:catalog-eject");
-    /* On a folder team the eject lands in the mirror and its outbox owes the share the two removals, across a relaunch. */
-    const mirror = syncerMod.folderMirrorOf(box.D.ud, box.team), own = "desks/" + box.me.id + "/";
-    const owed = box.D.envelope().ejectOwed || (syncerMod.owedAt(mirror, own + "in-use.ec") && syncerMod.owedAt(mirror, own + "catalog-answer.ec")
-      ? { team: box.team, sha: pin } : null);
+    const owed = box.D.envelope().ejectOwed || null;
     const again = loadDesk(box.D.ud);
     again.api.catalogChanged(again.win);
     const env = again.envelope();
@@ -859,7 +857,7 @@ try {
     const ansLeft = fs.existsSync(ans) || fs.existsSync(path.join(box.share, own, "catalog-answer.ec"));
     check(hadUse && hadAns && owed && owed.team === box.team && owed.sha === pin
         && !useLeft && !ansLeft && !env.ejectOwed && !env.inUse,
-      "906e an eject while the share is unreachable is still owed after a relaunch, and the next run removes in-use.ec and the answer (owed "
+      "906e an eject while the team's mirror is unreachable is still owed after a relaunch, and the next run removes in-use.ec and the answer (owed "
       + (owed && owed.team === box.team && owed.sha === pin ? "kept" : "lost")
       + ", in use " + (useLeft ? "still there" : "gone") + ", answer " + (ansLeft ? "still there" : "gone") + ")");
   }
@@ -1612,7 +1610,7 @@ try {
     {
       const box = await arm("s0-nobox");
       put(box.share, "etiuda-team.json", textOf(sign({
-        format: 1, kind: "etiuda-team", id: box.team, catalogs: ["harbour-board"], lead: LEAD,
+        format: 1, kind: "etiuda-team", id: box.team, channel: relayChannelOf(box.team), catalogs: ["harbour-board"], lead: LEAD,
         sealed: true, exportsSealed: false, epoch: 1, roster: [entry(box.D, box.me, box.key, box.team, 1)],
       }, lead.privateKey, LEAD)));
       const pin = askFor(box, "s0-nobox", quayBody, null);
@@ -1725,7 +1723,7 @@ try {
        is withdrawn when the mark is set or the desk is untold. */
     let r2ms = 0;
     const teamText = (box, o) => textOf(sign(Object.assign({
-      format: 1, kind: "etiuda-team", id: box.team, catalogs: o.catalogs || ["harbour-board"],
+      format: 1, kind: "etiuda-team", id: box.team, channel: relayChannelOf(box.team), catalogs: o.catalogs || ["harbour-board"],
       lead: Object.assign({}, o.lead || LEAD, { box: BOX }), sealed: true, exportsSealed: false, epoch: 1,
       roster: [entry(box.D, box.me, box.key, box.team, 1)], rev: o.rev || 0,
     }, o.handover ? { handover: o.handover } : {}),
@@ -1787,7 +1785,7 @@ try {
       /* F2: an older team file put back where the desk reads it, listing a catalog the lead has since taken off the list. */
       const roll = async (name, src) => {
         const r = await b0Ask(name, { catalogs: ["quay-held"], format: 1, src });
-        const mirrorTeam = path.join(syncerMod.folderMirrorOf(r.box.D.ud, r.box.team), "etiuda-team.json");
+        const mirrorTeam = path.join(relayMirrorOf(r.box.D.ud, r.box.team), "etiuda-team.json");
         const original = fs.readFileSync(mirrorTeam, "utf8");
         relead(r.box, { rev: 1, catalogs: ["harbour-board"] });
         r.again();
@@ -1912,13 +1910,13 @@ try {
       const H = n => crypto.createHash("sha256").update(String(n)).digest("hex");
       const adopted = async (name, src) => {
         const author = await arm(name, src);
-        const mate = { D: newDesk(name + "-mate", author.share, src) };
+        const mate = { D: newDesk(name + "-mate", author.share, src, author.team) };
         mate.me = await mate.D.ask("etiuda:branch-identity", true);
         const roster = [entry(author.D, author.me, author.key, author.team, 1), entry(mate.D, mate.me, author.key, author.team, 1)];
         const list = [{ catalog: "harbour-board", desk: author.me.id, original: H(author.me.id + "-aaaaaaaa") },
           { catalog: "not-listed", desk: author.me.id, original: H("x") }, { catalog: "harbour-board", desk: author.me.id, original: "short" },
           { catalog: "harbour-board", desk: "k-" + "0".repeat(16), original: H("y") }];
-        const signed = (who, team, rows) => textOf(sign({ format: 1, kind: "etiuda-team", id: team, catalogs: ["harbour-board"],
+        const signed = (who, team, rows) => textOf(sign({ format: 1, kind: "etiuda-team", id: team, channel: relayChannelOf(team), catalogs: ["harbour-board"],
           lead: Object.assign({}, who, { box: BOX }), sealed: true, exportsSealed: false, epoch: 1, roster,
           adopted: rows }, who === OTHER ? other.privateKey : lead.privateKey, who));
         put(author.share, "etiuda-team.json", signed(LEAD, author.team, list));
@@ -1966,7 +1964,7 @@ try {
         join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["harbour-board"], true);
         const first = await writeCopy(box, "99999999", "quay-held");
         put(box.share, "etiuda-team.json", textOf(sign({
-          format: 1, kind: "etiuda-team", id: box.team, catalogs: ["harbour-board"], lead: Object.assign({}, LEAD, { box: BOX }),
+          format: 1, kind: "etiuda-team", id: box.team, channel: relayChannelOf(box.team), catalogs: ["harbour-board"], lead: Object.assign({}, LEAD, { box: BOX }),
           sealed: true, exportsSealed: false, epoch: 1, roster: [], rev: 1,
         }, lead.privateKey, LEAD)));
         r2ms += 2000;
@@ -1974,17 +1972,17 @@ try {
         const left = box.D.api.teamUse().member === false;
         box.D.api.tryHeldBranches();
         syncMirror(box);
-        const mirror = syncerMod.folderMirrorOf(box.D.ud, box.team);
+        const mirror = relayMirrorOf(box.D.ud, box.team);
         return {
           held: !!first && first.held === true, left,
           written: fs.existsSync(branchAt(box, "99999999")) || fs.existsSync(path.join(box.share, "desks", box.me.id, "quay-99999999.ec")),
-          owed: syncerMod.owedList(mirror).filter(o => o.rel.indexOf("desks/") === 0).length,
           clear: holdsText(mirror, B0_MARK) || holdsText(box.share, B0_MARK),
         };
       };
       const g = await dropped("c5-dropped");
-      check(g.held && g.left && !g.written && g.owed === 0 && !g.clear,
-        "974f a copy held while untold stays held after the roster drops the desk: nothing written to the mirror or the share, nothing owed, no clear text (" + JSON.stringify(g) + ")");
+      /* 974f, moved: it also said nothing is owed (the folder syncer's outbox, gone); the mirror holding no file and no clear text says it. */
+      check(g.held && g.left && !g.written && !g.clear,
+        "974f a copy held while untold stays held after the roster drops the desk: nothing written to the mirror or the share, no clear text (" + JSON.stringify(g) + ")");
       if (PLANTS_OFF) skip("974g lifting plant:team-write-hold turns 974f red");
       else {
         const pt = SRC.split("\n").map(l => l.indexOf("plant:team-write-hold") >= 0 ? "  /* plant:team-write-hold */" : l).join("\n");
@@ -2307,8 +2305,8 @@ try {
         const fake = catalog(1, { id: c1Id, name: "Planted", card: B0_MARK, unsigned: true });
         fake.grew = { id: "quay-held", rev: 4, sha: pinV4(JSON.parse(leadEd)) };
         /* Planted where the folder team's mirror carries the share's desk folders, as the syncer brings a teammate's files. */
-        const plantDir = mine === "top" ? path.join(box.D.ud, "folder-mirror", box.team)
-          : path.join(box.D.ud, "folder-mirror", box.team, "desks", mine ? box.me.id : otherDesk);
+        const plantDir = mine === "top" ? relayMirrorOf(box.D.ud, box.team)
+          : path.join(relayMirrorOf(box.D.ud, box.team), "desks", mine ? box.me.id : otherDesk);
         fs.mkdirSync(plantDir, { recursive: true });
         fs.writeFileSync(path.join(plantDir, "quay-63636363.ec"), textOf(fake), "utf8");
         /* This desk once saw the chain from that id to the team's catalog, so the copy's chain reads three hops. */

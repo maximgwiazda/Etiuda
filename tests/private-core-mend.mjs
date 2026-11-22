@@ -25,7 +25,10 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
-const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
+/* A desk that pins a team is put on the team's relay mirror (tests/relay-mirror-desk.mjs): the share a box names stands for the relay's
+   copy of the team, carried to the desk's mirror and back by the stand-in. It was the desk's folder-mirror and the folder syncer. */
+import { relayizeDesk, relayMirrorOf, relayMirrorProgram, relayChannelOf } from "./relay-mirror-desk.mjs";
+let LEAD_PIN = null;
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 const EXPECTED = 28;
 
@@ -56,6 +59,7 @@ const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
 const eventFor = () => ({ sender: { id: 1, once: noop }, senderFrame: ENGINE_FRAME, returnValue: undefined });
 
 function loadDesk(ud, src) {
+  relayizeDesk(ud);
   const said = [];
   const on = {}, invoke = {};
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop, info: noop };
@@ -84,11 +88,12 @@ function loadDesk(ud, src) {
   const win = { isDestroyed: () => false, webContents: { send: (...a) => sent.push(a) } };
   return { api, ask, said, ud, envelope, sent, win, sync };
 }
-function newDesk(name, folder, src) {
+function newDesk(name, folder, src, team) {
   const ud = path.join(LAB, name);
   fs.mkdirSync(ud, { recursive: true });
-  fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
-    keys: { eCatalogFolder: folder, eUiLang: "en", eAgent: "North desk" } }), "utf8");
+  fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(Object.assign({ kind: "etiuda-desk", schema: 1,
+    keys: { eCatalogFolder: folder, eUiLang: "en", eAgent: "North desk" } },
+    team ? { teamPins: { [team]: { keyId: LEAD_PIN.keyId, public: LEAD_PIN.public } } } : {})), "utf8");
   return loadDesk(ud, src);
 }
 const folder = name => { const f = path.join(LAB, name); fs.mkdirSync(f, { recursive: true }); return f; };
@@ -109,7 +114,7 @@ const touch = (file, ms) => fs.utimesSync(file, ms / 1000, ms / 1000);
 /* The desk's own files land in its folder team's mirror, and the syncer carries them to the share. */
 const ownDir = (share, id) => {
   const b = getBoxForDir(share);
-  return b && b.team && b.D ? path.join(syncerMod.folderMirrorOf(b.D.ud, b.team), "desks", id) : path.join(share, "desks", id);
+  return b && b.team && b.D ? path.join(relayMirrorOf(b.D.ud, b.team), "desks", id) : path.join(share, "desks", id);
 };
 const inUsePath = (share, id) => path.join(ownDir(share, id), "in-use.ec");
 const answerPath = (share, id) => path.join(ownDir(share, id), "catalog-answer.ec");
@@ -120,15 +125,11 @@ try {
   const lead = crypto.generateKeyPairSync("ed25519");
   const other = crypto.generateKeyPairSync("ed25519");
   const LEAD = { keyId: "quay-lead", public: pubHex(lead.publicKey) };
+  LEAD_PIN = LEAD;
   const leadBox = crypto.generateKeyPairSync("x25519");
   const BOX = pubHex(leadBox.publicKey);
   syncMirror = (box) => {
-    const mirror = syncerMod.folderMirrorOf(box.D.ud, box.team);
-    const prog = syncerMod.createFolderProgram({
-      team: box.team, folder: box.share, mirror: mirror, pin: LEAD,
-      keyFor: (epoch) => box.D.api.teamKeyAt(box.team, epoch) || box.key,
-      checks: box.D.api.deskTrustChecks(),
-    });
+    const prog = box.D.relayProgram || (box.D.relayProgram = relayMirrorProgram({ store: box.share, mirror: relayMirrorOf(box.D.ud, box.team) }));
     prog.syncOnce();
     prog.syncOnce();
   };
@@ -154,7 +155,7 @@ try {
   const RING = { format: 1, kind: "etiuda-ring", keys: [{ catalog: "north-lamps", keyId: LEAD.keyId, alg: "Ed25519", public: LEAD.public }] };
   const teamFile = (D, id, epoch, roster, catalogs) => textOf(sign({
     format: 1, kind: "etiuda-team", id, catalogs: catalogs || ["not-this"], lead: Object.assign({}, LEAD, { box: BOX }),
-    sealed: true, exportsSealed: false, epoch, roster,
+    sealed: true, exportsSealed: false, epoch, roster, channel: relayChannelOf(id),
   }, lead.privateKey, LEAD));
   const entry = (D, who, key, team, epoch) => ({ desk: { id: who.id, key: who.key, box: who.box }, wrap: D.api.wrapTeamKey(key, who.box, team, epoch, who.id) });
   const pinOf = (D, text) => { try { return D.api.signedSha(JSON.parse(text)); } catch { return ""; } };
@@ -175,9 +176,9 @@ try {
   const arm = async (name, src) => {
     const share = folder(name + "-share");
     put(share, "etiuda-ring.json", RING);
-    const D = newDesk(name, share, src);
-    const me = await D.ask("etiuda:branch-identity", true);
     const team = "t-" + crypto.randomBytes(8).toString("hex");
+    const D = newDesk(name, share, src, team);
+    const me = await D.ask("etiuda:branch-identity", true);
     const key = crypto.randomBytes(32);
     const box = { share, D, me, team, key };
     boxMap.set(share, box);
@@ -197,7 +198,7 @@ try {
      (the card text by default) appears. */
   const leaks = (box, needle) => {
     const hits = [], want = needle || MARK;
-    for (const f of [box.share, syncerMod.folderMirrorOf(box.D.ud, box.team)].flatMap(walk)) {
+    for (const f of [box.share, relayMirrorOf(box.D.ud, box.team)].flatMap(walk)) {
       let raw = ""; try { raw = fs.readFileSync(f, "utf8"); } catch { continue; }
       const desk = path.basename(path.dirname(f));
       let env = null; try { env = JSON.parse(raw); } catch { env = null; }
@@ -229,7 +230,7 @@ try {
   const mark = (u, id, on) => u.box.D.ask("etiuda:team-join", "private", id, on ? "on" : "off");
   const view = u => u.box.D.ask("etiuda:team-join", "content");
   const teamText = (box, o) => textOf(sign({
-    format: 1, kind: "etiuda-team", id: box.team, catalogs: o.catalogs, lead: Object.assign({}, LEAD, { box: BOX }), sealed: true,
+    format: 1, kind: "etiuda-team", id: box.team, channel: relayChannelOf(box.team), catalogs: o.catalogs, lead: Object.assign({}, LEAD, { box: BOX }), sealed: true,
     exportsSealed: false, epoch: 1, roster: [entry(box.D, box.me, box.key, box.team, 1)], rev: o.rev,
   }, lead.privateKey, LEAD));
   let ms = 0;

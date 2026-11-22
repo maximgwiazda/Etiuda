@@ -38,6 +38,7 @@ import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { pathToFileURL, fileURLToPath } from "node:url";
+import { relayizeDesk, relayMirrorOf, relayMirrorProgram, relayChannelOf } from "./relay-mirror-desk.mjs";
 
 const SELF = fileURLToPath(import.meta.url);
 const ROOT = path.resolve(path.dirname(SELF), "..");
@@ -646,24 +647,12 @@ async function launch(plan) {
       const at = path.join(LAB, "catalogs", plan.drop.rel);
       fs.mkdirSync(path.dirname(at), { recursive: true });
       fs.writeFileSync(at, plan.drop.text, "utf8");
+      /* A desk on a relay team's mirror (a scene that put its desk there: 77c) is carried what landed, by the stand-in of
+         tests/relay-mirror-desk.mjs: `catalogs` stands for the relay's copy of the team. It was the folder syncer into the desk's folder-mirror. */
       try {
-        const teamFile = path.join(LAB, "catalogs", "etiuda-team.json");
-        if (fs.existsSync(teamFile)) {
-          const doc = JSON.parse(fs.readFileSync(teamFile, "utf8"));
-          if (doc && doc.id) {
-            const mirror = path.join(LAB, "userdata", "folder-mirror", doc.id);
-            const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
-            const prog = syncerMod.createFolderProgram({
-              team: doc.id,
-              folder: path.join(LAB, "catalogs"),
-              mirror: mirror,
-              pin: doc.lead,
-              keys: {},
-              checks: latestChecks
-            });
-            prog.syncOnce();
-            prog.syncOnce();
-          }
+        const relayRoot = path.join(LAB, "userdata", "relay");
+        for (const rt of fs.existsSync(relayRoot) ? fs.readdirSync(relayRoot) : []) {
+          relayMirrorProgram({ store: path.join(LAB, "catalogs"), mirror: path.join(relayRoot, rt) }).syncOnce();
         }
       } catch (e) {
         obs.errors.push("syncDrop: " + String(e && e.message || e));
@@ -2055,10 +2044,14 @@ async function parent() {
     /* The lead adds a desk at the epoch already accepted: the team file says so, under the pinned lead, and the roster kept
        at that epoch follows it. The file lands while the desk runs, after its boot has read the folder, so the listing
        itself heeds it. It lists desks only, with no key for anybody, so nothing is sealed or opened. */
-    const team77 = { format: 1, kind: "etiuda-team", id: TEAM77, catalogs: [ID], lead: LEAD77, sealed: false, exportsSealed: false, epoch: 1,
+    const team77 = { format: 1, kind: "etiuda-team", id: TEAM77, catalogs: [ID], lead: LEAD77, sealed: false, exportsSealed: false, epoch: 1, channel: relayChannelOf(TEAM77),
       roster: [ola77, cy77].map(d => ({ desk: { id: d.id, key: d.raw.toString("hex"), box: "ef".repeat(32) } })) };
     team77.sig = { alg: "Ed25519", keyId: LEAD77.keyId };
     team77.sig.value = crypto.sign(null, Buffer.from(V2.v2SignedBytes(team77)), lead77.privateKey).toString("hex");
+    /* 77c, moved: the desk is put on the team's relay mirror (the team file lands in the mirror, where a team file is read; a folder was read as
+       a team's before), what `catalogs` held carried to it first. */
+    relayizeDesk(path.join(lab77b, "userdata"));
+    relayMirrorProgram({ store: path.join(lab77b, "catalogs"), mirror: relayMirrorOf(path.join(lab77b, "userdata"), TEAM77) }).syncOnce();
     const r77c = run(lab77b, ["desk", "drop", "rows"], true, { drop: { rel: "etiuda-team.json", text: JSON.stringify(team77) } });
     const rows77c = r77c.rows[0] || [];
     check(same(rows77c.map(r => r.name).sort(), ["Cy, a teammate", "Ola, a teammate", "lamp.ec"]) && !(r77c.errors || []).length,
