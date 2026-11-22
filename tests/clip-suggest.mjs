@@ -1,12 +1,9 @@
-/* The message test and the score floor, on an invented catalog.
+/* The score floor, on an invented catalog, for words selected in another program whatever their length.
  *
  *   node tests/clip-suggest.mjs
  *
- * A word is a whitespace token which, with punctuation trimmed from its ends, is letters
- * only (an inner hyphen or apostrophe allowed) and two or more letters long. A message
- * has at least MESSAGE_WORD_MIN such words, and at least MESSAGE_LETTER_SHARE of its
- * non-space characters are letters. The strip is the intents whose score is above
- * SUGGEST_SCORE_FLOOR, five at most. Nothing of the message is kept after the score.
+ * The strip is the intents whose score is above SUGGEST_SCORE_FLOOR, five at most. A selection is
+ * scored whole: no length, word count or shape keeps it from the scorer. Nothing of it is kept after the score.
  */
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
@@ -27,37 +24,12 @@ const check = (ok, what) => {
 
 const api = await import(pathToFileURL(MOD).href);
 const {
-  MESSAGE_WORD_MIN, MESSAGE_LETTER_SHARE, SUGGEST_SCORE_FLOOR, SUGGEST_LIMIT,
-  readsLikeMessage, messageWords, buildSuggestModel, scoreSuggestions
+  SUGGEST_SCORE_FLOOR, SUGGEST_LIMIT, buildSuggestModel, scoreSuggestions
 } = api;
 
-check(MESSAGE_WORD_MIN === 3 && MESSAGE_LETTER_SHARE === 0.6 && SUGGEST_SCORE_FLOOR === 2.5 && SUGGEST_LIMIT === 5,
-  "the floors are the named constants: " + [MESSAGE_WORD_MIN, MESSAGE_LETTER_SHARE, SUGGEST_SCORE_FLOOR, SUGGEST_LIMIT].join(", "));
+check(SUGGEST_SCORE_FLOOR === 2.5 && SUGGEST_LIMIT === 5,
+  "the floors are the named constants: " + [SUGGEST_SCORE_FLOOR, SUGGEST_LIMIT].join(", "));
 
-const notMessages = [
-  ["bare code", "X7K2P9"],
-  ["labelled code", "Booking code X7K2P9"],
-  ["phone", "+44 7700 900123"],
-  ["email", "ada@example.com"],
-  ["url", "https://example.com/lamps"],
-  ["card", "4242 4242 4242 4242"],
-  ["one name", "Ada"],
-  ["two names", "Ada Lovelace"],
-  ["code and two names", "X7K2P9 Ada Lovelace"]
-];
-for (const [name, text] of notMessages) {
-  check(readsLikeMessage(text) === false, name + " is not a message (" + messageWords(text).length + " words): " + JSON.stringify(text));
-}
-const names = ["Ada Maria Quinn", "Mary Anne Evans", "Jan Maria Kowalski"];
-for (const text of names) {
-  check(readsLikeMessage(text) === true && messageWords(text).length === 3, "a three-word name is a message: " + JSON.stringify(text));
-}
-check(readsLikeMessage("well-known brass lamp") && messageWords("Mary-Jane Anne Smith").length === 3,
-  "an inner hyphen stays inside the word");
-check(messageWords("O'Brien sends lamps").length === 3, "an inner apostrophe stays inside the word");
-check(readsLikeMessage("Ok ok ok !!!!") === true && readsLikeMessage("Ok ok ok !!!!!") === false,
-  "the letter share is at least " + MESSAGE_LETTER_SHARE + ", and one more mark falls under it");
-check(readsLikeMessage("") === false && readsLikeMessage("   ") === false, "an empty clipboard is not a message");
 
 /* Thirteen cards, so a word on one of them is under the 8% weight cut. The topic word
    lantern is on no card, so its weight stays 1 and one exact tier-1 hit scores 4.
@@ -93,7 +65,7 @@ const catalog = {
     action: { en: "fitted", pl: "zalozono" }
   }]
 };
-const labels = { suggest: "Suggested from the copied message", suggestTip: "None is chosen until one is clicked." };
+const labels = { suggest: "Suggested from the selected words", suggestTip: "None is chosen until one is clicked." };
 const model = buildSuggestModel(catalog, labels);
 const hidden = scoreSuggestions("please send brasswick soonish", model);
 const shown = scoreSuggestions("please mend lantern today", model);
@@ -101,8 +73,13 @@ check(hidden.length === 0, "a tier-2 exact at the floor stays hidden: " + JSON.s
 check(shown.length === 1 && shown[0].id === "t:wick" && shown[0].score > SUGGEST_SCORE_FLOOR && shown[0].name === "Wick trim",
   "a tier-1 exact above the floor is offered: " + JSON.stringify(shown));
 const nameScore = scoreSuggestions("Ada Maria Quinn", model);
-check(readsLikeMessage("Ada Maria Quinn") && nameScore.length === 0,
-  "a three-word name can be a message and still leave the strip empty: " + JSON.stringify(nameScore));
+check(nameScore.length === 0, "a three-word name leaves the strip empty: " + JSON.stringify(nameScore));
+/* Text that is no customer's sentence is scored like any other selection, and offers nothing here. */
+for (const [name, text] of [["bare code", "X7K2P9"], ["labelled code", "Booking code X7K2P9"], ["phone", "+44 7700 900123"],
+  ["email", "ada@example.com"], ["url", "https://example.com/lamps"], ["card", "4242 4242 4242 4242"], ["one name", "Ada"],
+  ["two names", "Ada Lovelace"], ["code and two names", "X7K2P9 Ada Lovelace"], ["empty", ""], ["blank", "   "]]) {
+  check(scoreSuggestions(text, model).length === 0, name + " offers no intent: " + JSON.stringify(text));
+}
 check(scoreSuggestions("please mend the lantern today", model).length <= SUGGEST_LIMIT, "at most five are offered");
 
 const secret = "zebraquill please mend the lantern glass today";
@@ -179,7 +156,7 @@ const deCjs = cjs.scoreSuggestions("Guten tag schraube bitte", cjs.buildSuggestM
 check(deCjs.length === 1 && deCjs[0].id === "t:schraube",
   "the shell copy suggests the German-only intent as well");
 
-/* A huge clipboard is read on its first MESSAGE_MAX_CHARS only: the same rows as that slice, the words past it
+/* A huge selection is read on its first MESSAGE_MAX_CHARS only: the same rows as that slice, the words past it
    never seen, and the cost of a long message rather than of its megabytes. */
 const head = "please mend lantern today. ";
 let body = head;
@@ -187,13 +164,12 @@ while (body.length < api.MESSAGE_MAX_CHARS) body += "and then a few more words "
 const huge = body + " brass kettle schraube ".repeat(250000);
 const t0 = process.hrtime.bigint();
 const hugeRows = scoreSuggestions(huge, model);
-const hugeReads = readsLikeMessage(huge);
 const hugeMs = Number(process.hrtime.bigint() - t0) / 1e6;
 const sliceRows = scoreSuggestions(huge.slice(0, api.MESSAGE_MAX_CHARS), model);
 const cjsRows = cjs.scoreSuggestions(huge, cjs.buildSuggestModel(catalog, labels));
-check(api.MESSAGE_MAX_CHARS === 1500 && huge.length > 5e6 && hugeReads && sliceRows.length > 0
+check(api.MESSAGE_MAX_CHARS === 1500 && huge.length > 5e6 && sliceRows.length > 0
     && JSON.stringify(hugeRows) === JSON.stringify(sliceRows) && JSON.stringify(cjsRows) === JSON.stringify(sliceRows) && hugeMs < 200,
-  "a " + Math.round(huge.length / 1e6) + " MB clipboard is scored on its first " + api.MESSAGE_MAX_CHARS + " characters only, in "
+  "a " + Math.round(huge.length / 1e6) + " MB selection is scored on its first " + api.MESSAGE_MAX_CHARS + " characters only, in "
   + hugeMs.toFixed(1) + " ms: " + JSON.stringify(hugeRows));
 
 /* csw1 to csw4: SELECTED TEXT IS SCORED WHOLE, whatever its length. An invented catalog whose intent is named by a

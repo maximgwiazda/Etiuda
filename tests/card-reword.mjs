@@ -121,8 +121,7 @@ async function desk(o) {
       openPicker() {}, signinState: () => st, signIn: async () => st, signinCheck: async () => st,
       aiState: () => ({ model: false, org: !!window.__host, reword: window.__host }),
       reword: o => { rec("reword", o); const a = typeof window.__answer === "function" ? window.__answer(o) : window.__answer;
-        return Promise.resolve(a || { ok: false, why: "answer" }); },
-      noteOwnText: t => rec("noteOwnText", t) };
+        return Promise.resolve(a || { ok: false, why: "answer" }); } };
     /* Every other call the page makes of its host is recorded too, as a store it could write. */
     window.E_HOST = new Proxy(base, { get: (t, k) => k in t ? t[k] : undefined });
     try { Object.defineProperty(navigator, "clipboard", { value: { writeText: async s => { window.__clip.push(s); } }, configurable: true }); } catch (e) {}
@@ -332,12 +331,12 @@ try {
       "cr4b a render that keeps the card's node and patches its class leaves the rewording standing, dashed, with its chip and answers", kept4);
 
     /* cr5 */
-    const held = await stores(p, ["noteOwnText"]);
-    const otherCalls = await p.evaluate(MARK => window.__calls.filter(c => c.indexOf(MARK) > -1 && c.indexOf("noteOwnText ") !== 0), MARK);
+    const held = await stores(p);
+    const otherCalls = await p.evaluate(MARK => window.__calls.filter(c => c.indexOf(MARK) > -1), MARK);
     await p.click(cardSel(PLAIN) + ' .rw-ans button[data-rw="approve"]');
     await sleep(200);
     const washAfterApprove = await p.evaluate(() => document.querySelectorAll(".e-copy-wash").length), clipAfterApprove = await p.evaluate(() => window.__clip.length);
-    const after = await cardFace(p, PLAIN), kept = await stores(p, ["noteOwnText"]), ov = await overrideOf(p, PLAIN);
+    const after = await cardFace(p, PLAIN), kept = await stores(p), ov = await overrideOf(p, PLAIN);
     await shotCard(p, PLAIN, "c3-approved-light");
     /* The editor's own save of the same field on another card, for the shape of what it stores. */
     await p.evaluate(id => window.openCardEditor(id), PLAIN2);
@@ -360,14 +359,14 @@ try {
 
     /* cr6 */
     const body2 = await raw(p, STEPS);
-    const s0 = await stores(p, ["noteOwnText"]);
+    const s0 = await stores(p);
     await openMenu(p, STEPS);
     await press(p, "friendlier", { ok: true, text: body2.split("\n\n").map(x => rewordOf(x, "Kindly")).join("\n\n") });
     const stepsOn = await cardFace(p, STEPS);
     await shotCard(p, STEPS, "c4-steps-reworded-light");
     await p.click(cardSel(STEPS) + ' .rw-ans button[data-rw="revert"]');
     await sleep(150);
-    const reverted = await cardFace(p, STEPS), s1 = await stores(p, ["noteOwnText"]);
+    const reverted = await cardFace(p, STEPS), s1 = await stores(p);
     check(stepsOn.on && stepsOn.blocks >= 2 && stepsOn.text.indexOf("Kindly") > -1 && !reverted.on && reverted.text.indexOf("Kindly") < 0 && s1.indexOf("Kindly") < 0
       && reverted.blocks === stepsOn.blocks,
       "cr6 a card of steps reworded keeps its steps, and Revert shows it as it was with nothing stored", { stepsOn: { on: stepsOn.on, blocks: stepsOn.blocks }, reverted: { on: reverted.on, blocks: reverted.blocks } });
@@ -508,7 +507,7 @@ try {
     } else if (name === "stored") {
       const b = await raw(p, PLAIN);
       await openMenu(p, PLAIN); await press(p, "shorter", { ok: true, text: rewordOf(b) });
-      said = (await stores(p, ["noteOwnText"])).indexOf(MARK) > -1; red = said;
+      said = (await stores(p)).indexOf(MARK) > -1; red = said;
     } else if (name === "patched") {
       const b = await raw(p, PLAIN);
       await openMenu(p, PLAIN); await press(p, "shorter", { ok: true, text: rewordOf(b) });

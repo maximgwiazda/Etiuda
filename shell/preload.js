@@ -285,7 +285,6 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   searchRank: (text) => ipcRenderer.invoke("etiuda:search-rank", String(text || "")),
   /* The picker opened from the desk itself, by the pointer, as the hotkey opens it. */
   openPicker: () => ipcRenderer.send("etiuda:pick-show"),
-  noteOwnText: (text) => ipcRenderer.send("etiuda:own-text", String(text || "")),
   /* Start with Windows, quit on close, and the tray's notification switch. The login item is read
      back from Windows. The page stores quit on close itself and tells the shell, so a close before
      the next read still follows the row. */

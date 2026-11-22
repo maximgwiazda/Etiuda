@@ -359,8 +359,8 @@ function suggestModel(){
   if(typeof eSuggestStandIn === "function") eSuggestStandIn();
   cachedModelKey = key;
   cachedModel = buildSuggestModel(suggestCatalog(), {
-    suggest:t("Suggested from the copied message"),
-    suggestTip:t("Intents suggested from the message on the clipboard. None is chosen until one is clicked.")
+    suggest:t("Suggested from the selected words"),
+    suggestTip:t("Intents suggested from the selected words. None is chosen until one is clicked.")
   });
   return cachedModel;
 }

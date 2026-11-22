@@ -87,7 +87,7 @@ function notifyFirstClose(opts) {
   if (harnessLaunch()) return null; /* plant:harness-first-close */
   return notifyFirstCloseOf(opts);
 }
-const { readsLikeMessage, scoreSuggestions, MESSAGE_MAX_CHARS, SUGGEST_LIMIT } = require(path.join(__dirname, "clip-suggest.cjs"));
+const { scoreSuggestions, MESSAGE_MAX_CHARS, SUGGEST_LIMIT } = require(path.join(__dirname, "clip-suggest.cjs"));
 const { honourPendingReset, stageReset, deliverResetNotice, retryPendingReset, stopPendingReset } = require(path.join(__dirname, "desk-reset.cjs"));
 const deskAi = require(path.join(__dirname, "desk-ai.cjs"));
 /* THE EMBEDDED MODEL, where the package carries it beside the asar; a copy of the shell without these files suggests by words. */
@@ -14144,7 +14144,7 @@ function pickPage() {
   let rows = [], last = null, words = {}, chords = {}, at = 0, asked = 0, said = "", sent = null, closing = false;
   let suggest = [], sgAt = -1, picked = [];
   /* THE WORDS SELECTED on the screen stand in the box as given, and the box counts as at rest while they do: the strip of
-     what the shell suggests for them shows, as for a copied message, and the rows are the resting list. Typing over them
+     what the shell suggests for them shows, and the rows are the resting list. Typing over them
      makes the box a query like any other. A suggestion is still taken only by the agent. */
   const selNote = document.getElementById("sel");
   let chosen = "";
@@ -14562,7 +14562,7 @@ function pickPage() {
     }
     legend();
   }
-  /* Drawn only while suggestions are on and the query is empty, so a quiet clipboard adds no element. */
+  /* Drawn only while suggestions are on and the query is empty, so an opening with nothing selected adds no element. */
   function paintStrip() {
     const on = suggest.length > 0 && blank();
     const host = document.getElementById ? document.getElementById("sg") : null;
@@ -15169,7 +15169,7 @@ function caretWhich() {
 }
 /* THE WORDS SELECTED in the window in front, and whether they can be edited there. The helper's first line is the fact
    and the rest are the words. Nothing selected, no text pattern, a refusal, a failure, or no answer within
-   CARET_SELECTION_MS leaves the words empty and the fact unknown, and then the clipboard stands in. */
+   CARET_SELECTION_MS leaves the words empty and the fact unknown, and the picker opens with nothing to suggest from. */
 const CARET_SELECTION_MS = 300;
 /* A line that is not one of the five facts is not a selection: the words it might have carried are not used. */
 function readSelectionFact(out) {
@@ -15185,12 +15185,12 @@ function readSelectionFact(out) {
   if (head === "u contradicted" && body.trim()) return { words: body, editable: null, fact: "unknown", reason: "contradicted" };
   if (head === "ro" || head === "ed" || head === "u mixed" || head === "u unsupported" || head === "u contradicted")
     return { words: "", editable: null, fact: "unknown", reason: "no selection" };
-  return { words: "", editable: null, fact: "unknown", reason: "clipboard" };
+  return { words: "", editable: null, fact: "unknown", reason: "failed" };
 }
 function pickFactLine(fact, reason) {
   if (fact === "read-only" || fact === "editable") return fact;
-  const allowed = reason === "no selection" || reason === "no text pattern" || reason === "not supported" || reason === "mixed" || reason === "contradicted" || reason === "clipboard" || reason === "timeout" || reason === "refused"; /* plant:editable-trace */
-  return "unknown (" + (allowed ? reason : "clipboard") + ")";
+  const allowed = reason === "no selection" || reason === "no text pattern" || reason === "not supported" || reason === "mixed" || reason === "contradicted" || reason === "failed" || reason === "timeout" || reason === "refused"; /* plant:editable-trace */
+  return "unknown (" + (allowed ? reason : "failed") + ")";
 }
 /* One line per opening, beside tray-trace.txt: which of the three, and for unknown the reason. Never the words, their
    length, or the window. Two thousand lines a run, and the file at 64 KiB, the same bound as the tray's. */
@@ -15216,7 +15216,7 @@ function pickTrace(fact, reason) {
 function caretSelection() {
   const empty = reason => ({ words: "", editable: null, fact: "unknown", reason: reason });
   const tool = caretTool();
-  if (!tool) return Promise.resolve(empty("clipboard"));
+  if (!tool) return Promise.resolve(empty("failed"));
   return new Promise(done => {
     let told = false;
     const tell = t => { if (!told) { told = true; done(t); } };
@@ -15225,7 +15225,7 @@ function caretSelection() {
       clearTimeout(late);
       if (err) {
         const code = err.code;
-        tell(empty(code === 1 || code === 2 ? "no selection" : code === 3 ? "no text pattern" : code === 6 ? "refused" : "clipboard"));
+        tell(empty(code === 1 || code === 2 ? "no selection" : code === 3 ? "no text pattern" : code === 6 ? "refused" : "failed"));
         return;
       }
       tell(readSelectionFact(out));
@@ -15308,8 +15308,8 @@ function focusDesk() {
   win.show();
   win.focus();
 }
-/* The clipboard, read once when the picker opens and kept in this function only. */
-let lastOwnText = "", lastCountedText = "";
+/* The hash of the last selection counted as an opening with suggestions, so one message is counted once. */
+let lastCountedText = "";
 let lastProfiles = null, lastProfilesEpoch = null;
 /* THE MODEL'S HALF OF THE STRIP. The words decide whether a strip shows; the model, while it is on, carried, checked and
    warm for this catalog, fills that strip with its five instead, if they come within EMBED_BUDGET_MS of the press. */
@@ -15477,7 +15477,6 @@ ipcMain.handle("etiuda:pick-put", (e) => {
   if (!pickerWorks()) { pickReworded = ""; return false; }
   const text = pickClipText(pickReworded, process.platform), was = pickSelectedNow, target = pickTarget;
   pickReworded = "";
-  noteOwnText(text);
   clipboard.writeText(text);
   hidePicker(true);
   const lf = s => String(s || "").replace(/\r\n/g, "\n");
@@ -15566,32 +15565,6 @@ function orgSuggestRows(shown, scored, profiles) {
   return rows;
 }
 
-function noteOwnText(text) {
-  if (!text) return;
-  lastOwnText = crypto.createHash("sha256").update(String(text).replace(/\r\n/g, "\n")).digest("hex");
-}
-function isOwnText(text) {
-  if (!text || !lastOwnText) return false;
-  const h = crypto.createHash("sha256").update(String(text).replace(/\r\n/g, "\n")).digest("hex");
-  return h === lastOwnText;
-}
-/* THE CLIPBOARD'S TEXT, handed to then(text). Windows' readText answers at once and the opening goes on in the same turn,
-   as before; Electron 44 on Linux answers with a Promise (Claude gamma's Ubuntu walk, 2026-11-09), which used to be read
-   as "[object Promise]", so a copied message was never suggested there. That one is awaited. */
-const CLIP_WAIT_MS = 1000;
-function withClipText(then) {
-  let got = "";
-  try { got = clipboard.readText(); } catch (e) { got = ""; }
-  if (got && typeof got.then === "function") {
-    /* A read that never settles must not leave the picker unable to open again: after CLIP_WAIT_MS it opens with no
-       message to suggest from, as for an empty clipboard. */
-    const late = new Promise(done => setTimeout(() => done(""), CLIP_WAIT_MS));
-    Promise.race([Promise.resolve(got).then(t => String(t || ""), () => ""), late]).then(then)
-      .catch(e => { console.error("etiuda: the picker could not open - " + e.message); pickOpening = false; });
-    return;
-  }
-  then(String(got || ""));
-}
 /* THE HOTKEY. A second press while the picker stands closes it; otherwise the desk's page is asked
    for what to show, the picker is filled while hidden and shown only once its page says it has
    drawn, so no opening shows the last one's rows. */
@@ -15607,21 +15580,21 @@ function pickToggle() {
   const press = ++pickPress;
   pickTarget = null;
   const which = caretWhich().then(t => { if (press === pickPress) pickTarget = t; });
-  /* The selection first, asked beside which window is in front and before anything of this program comes forward; the
-     clipboard is read only where none came, and written nothing at the press. One trace line names the fact. */
+  /* The selection, asked beside which window is in front and before anything of this program comes forward; with none,
+     the picker opens with nothing to suggest from. The clipboard is neither read nor written at the press. One trace
+     line names the fact. */
   caretSelection().then(got => {
     const words = got && got.words;
     if (words) { pickTrace(got.fact || "unknown", got.reason || ""); pickWithClip(press, which, words, true, got.editable); } /* plant:selection-first */
-    else { pickTrace("unknown", (got && got.reason) || "clipboard"); withClipText(text => pickWithClip(press, which, text, false, null)); }
+    else { pickTrace("unknown", (got && got.reason) || "failed"); pickWithClip(press, which, "", false, null); }
   }).catch(e => { console.error("etiuda: the picker could not open - " + e.message); pickOpening = false; });
 }
-/* `selected`: the text is the window's selection, which the picker shows in its box; a clipboard's text never reaches it.
+/* `selected`: the text is the window's selection, which the picker shows in its box and suggests from whole, whatever its length.
    `editable` is true, false, or null where the helper could not say, and the page stores it without showing it. */
 function pickWithClip(press, which, text, selected, editable) {
   let clip = text;
   const shown = selected ? String(text) : "";
-  const isOwn = isOwnText(clip);
-  const want = !isOwn && readsLikeMessage(clip);
+  const want = !!String(clip).trim(); /* plant:selection-whole */
   const clipHash = crypto.createHash("sha256").update(String(clip).replace(/\r\n/g, "\n")).digest("hex");
   /* Where the desk carries the model, every opening asks for the catalog's passages, the Menu's included, so the model warms
      at the first opening of any kind. */
@@ -15784,7 +15757,6 @@ ipcMain.handle("etiuda:pick-copy", (e, what) => {
   if (pick.other) arg.other = 1;
   return askDesk("copy", arg).then(v => {
     if (v && typeof v.text === "string") {
-      noteOwnText(pickClipText(v.text, process.platform));
       clipboard.writeText(pickClipText(v.text, process.platform));
       caretPaste(pickTarget, showPickNote);
       hidePicker(true);
@@ -15831,13 +15803,6 @@ ipcMain.handle("etiuda:search-rank", (e, text) => {
   const answer = builtin && embedSuggest.installed() ? Promise.resolve(builtin) : Promise.resolve({ cards: [], intents: [] });
   answer.then(() => orgSearchSoon(q), () => {});
   return answer;
-});
-/* The page tells main the text it copied, so the strip never suggests from a reply the desk wrote. A string within the cap and
-   nothing else: a longer one is no reply the desk wrote, and anything not a string is not noted at all. */
-const OWN_TEXT_MAX = 200000;
-ipcMain.on("etiuda:own-text", (e, text) => {
-  if (!fromEngine(e) || typeof text !== "string" || !text || text.length > OWN_TEXT_MAX) return;
-  noteOwnText(text);
 });
 /* Settings' row: which combination the desk asks for, and whether Windows let the desk hold it. */
 ipcMain.on("etiuda:hotkey-state", (e) => {

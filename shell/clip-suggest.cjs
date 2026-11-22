@@ -20,15 +20,11 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/modules/clip-suggest.js
 var clip_suggest_exports = {};
 __export(clip_suggest_exports, {
-  MESSAGE_LETTER_SHARE: () => MESSAGE_LETTER_SHARE,
   MESSAGE_MAX_CHARS: () => MESSAGE_MAX_CHARS,
-  MESSAGE_WORD_MIN: () => MESSAGE_WORD_MIN,
   SUGGEST_LIMIT: () => SUGGEST_LIMIT,
   SUGGEST_SCORE_FLOOR: () => SUGGEST_SCORE_FLOOR,
   buildSuggestModel: () => buildSuggestModel,
   intentPassages: () => intentPassages,
-  messageWords: () => messageWords,
-  readsLikeMessage: () => readsLikeMessage,
   scoreSuggestions: () => scoreSuggestions
 });
 module.exports = __toCommonJS(clip_suggest_exports);
@@ -148,8 +144,6 @@ function wordMatchesTerm(word, term) {
 }
 
 // src/modules/clip-suggest.js
-var MESSAGE_WORD_MIN = 3;
-var MESSAGE_LETTER_SHARE = 0.6;
 var SUGGEST_SCORE_FLOOR = 2.5;
 var SUGGEST_LIMIT = 5;
 var MESSAGE_MAX_CHARS = 1500;
@@ -208,28 +202,6 @@ var EN_TRANS = /[,;]?\s+(?:and\s+also|and\s+I\s+also|also\s+can|plus\s+can|by\s+
 function isStopWord(w) {
   const folded = foldDiacritics(String(w || "").toLowerCase());
   return AFFINITY_STOP.has(folded) || POLITE_STOP.has(folded) || GREET_STOP.has(folded);
-}
-function messageWords(text) {
-  const out = [];
-  const parts = String(text == null ? "" : text).split(/\s+/);
-  for (let i = 0; i < parts.length; i++) {
-    const core = parts[i].replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
-    if (!core) continue;
-    const letters = core.match(/\p{L}/gu);
-    if (!letters || letters.length < 2) continue;
-    if (/^[\p{L}]+(?:['-][\p{L}]+)*$/u.test(core)) out.push(core);
-  }
-  return out;
-}
-function letterShare(text) {
-  const s = String(text == null ? "" : text).replace(/\s+/g, "");
-  if (!s) return 0;
-  const letters = s.match(/\p{L}/gu);
-  return (letters ? letters.length : 0) / [...s].length;
-}
-function readsLikeMessage(text) {
-  const s = String(text == null ? "" : text).slice(0, MESSAGE_MAX_CHARS);
-  return messageWords(s).length >= MESSAGE_WORD_MIN && letterShare(s) >= MESSAGE_LETTER_SHARE;
 }
 function suggestEditDistance1(a, b) {
   if (a === b) return false;
@@ -463,12 +435,8 @@ function buildSuggestModel(catalog, labels) {
 }
 function segmentCustomerMessage(raw) {
   if (!raw || typeof raw !== "string") return [];
-  if (raw.length < 4 || raw.length > MESSAGE_MAX_CHARS) return [];
+  if (raw.length > MESSAGE_MAX_CHARS) return [];
   if (!/\p{L}/u.test(raw)) return [];
-  const trimmed = raw.trim();
-  if (/^[A-Z0-9]{6,8}$/i.test(trimmed)) return [];
-  if (/^https?:\/\/\S+$/i.test(trimmed)) return [];
-  if (trimmed.startsWith("{") && trimmed.endsWith("}")) return [];
   const lines = raw.split(/\r?\n/).map((line) => {
     let l = line.replace(/^\s*(?:\[\d{1,2}:\d{2}(?::\d{2})?\]|\(\d{1,2}:\d{2}(?::\d{2})?\))\s*(?:[^:]+:)?\s*/, "");
     l = l.replace(/^\s*\d{1,2}:\d{2}\s*-\s*/, "");
@@ -476,7 +444,7 @@ function segmentCustomerMessage(raw) {
     return l;
   });
   let cleanText = lines.join(" ").replace(/\s+/g, " ").trim();
-  if (cleanText.length < 4) return [];
+  if (!cleanText) return [];
   let isPl = /[ąćęłńóśźż]/i.test(cleanText);
   if (!isPl) {
     const plCount = (cleanText.match(/\b(?:czy|jak|nie|jest|mam|prosze|proszę|lot|do|na|w|z)\b/gi) || []).length;
@@ -621,7 +589,7 @@ function scoreSegment(segText, profiles, vocab, weightOf, cache) {
 }
 function scoreSuggestions(text, model) {
   text = String(text == null ? "" : text).slice(0, MESSAGE_MAX_CHARS);
-  if (!readsLikeMessage(text) || !model) return [];
+  if (!text.trim() || !model) return [];
   const profiles = profilesFrom(model);
   const vocab = new Map(model.vocab || []);
   const weightOf = new Map(model.weights || []);
@@ -646,14 +614,10 @@ function scoreSuggestions(text, model) {
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
-  MESSAGE_LETTER_SHARE,
   MESSAGE_MAX_CHARS,
-  MESSAGE_WORD_MIN,
   SUGGEST_LIMIT,
   SUGGEST_SCORE_FLOOR,
   buildSuggestModel,
   intentPassages,
-  messageWords,
-  readsLikeMessage,
   scoreSuggestions
 });
