@@ -10712,6 +10712,8 @@ function signinSecretRead(text) {
 /* THE ORDER PAGE IS CONFIGURATION, as a provider's client id is: the origin of etiuda.dev's site (https, no path), where the desk-only
    licence is ordered; the page itself is that origin and the desk's language's path (orderPageFor). While it is "" Account offers no
    Buy (the order page's section, below). Going live is this one line, set to "https://etiuda.dev". */
+/* Going live is this one line set to "https://etiuda.dev", and only once the site carries the order pages and order.js (today only
+   on the site branch site-order-2026-11-22, not its main): an earlier setting would send Buy to pages that do not exist. */
 let ORDER_PAGE = "";
 const ORDER_ORIGIN_SHAPE = /^https:\/\/(?:[a-z0-9-]+\.)*etiuda\.dev$/; /* plant:order-origin */
 const ORDER_PAGE_SHAPE = /^https:\/\/(?:[a-z0-9-]+\.)*etiuda\.dev(?:\/[A-Za-z0-9._~-]+)*\/?$/; /* plant:order-shape */
