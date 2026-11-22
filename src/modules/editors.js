@@ -328,7 +328,7 @@ function openIntentEditor(idx, fromManage){
          itself rather than a rule being enforced. */
       '<span class="mf-left">'+
         (isNew ? "" : '<button type="button" class="btn danger mf-del" id="ieDelete" '+
-          'title="Delete this intent: a built-in one returns on Reset, one you made does not">Delete</button>')+
+          'title="Delete this intent">Delete</button>')+
         '<button type="button" class="btn mf-reset" id="ieReset">Reset</button>'+
       '</span>'+
       '<button type="button" class="btn" id="ieCancel" title="Close without saving any change">Cancel</button>'+

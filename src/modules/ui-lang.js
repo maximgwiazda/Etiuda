@@ -714,6 +714,7 @@ UI_STRINGS.pl={
   "Move or delete cards in this category first":"Kategorię można usunąć, gdy jej karty zostaną przeniesione albo usunięte",
   "Move or delete the cards in this category first":"Kategorię można usunąć, gdy jej karty zostaną przeniesione albo usunięte",
   "Delete card":"Usuń kartę",
+  /* words: placeholder, the editors' Delete as the Library's, until the copywriter's */
   "Delete this card":"Usuń tę kartę",
   "New intent":"Nowa intencja",
   "New intent…":"Nowa intencja…",
@@ -847,8 +848,6 @@ UI_STRINGS.pl={
   "Close without saving any change":"Zamknij bez zapisywania zmian",
   "Save this card on this computer":"Zapisz tę kartę na tym komputerze",
   "Save this intent on this computer":"Zapisz tę intencję na tym komputerze",
-  "Delete this card: a built-in one returns on Reset, one you made does not":"Usuń tę kartę: wbudowana wróci po zresetowaniu, własna nie",
-  "Delete this intent: a built-in one returns on Reset, one you made does not":"Usuń tę intencję: wbudowana wróci po zresetowaniu, własna nie",
   "Discard your edits and restore the catalog wording.":"Odrzuca zmiany i przywraca treść z katalogu.",
   "Restore built-in quick facts":"Przywróć wbudowane szybkie fakty",
   "{KEY} is fixed and keeps its own meaning":"{KEY} to klawisz stały i zachowuje swoje znaczenie",

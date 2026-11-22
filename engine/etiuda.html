@@ -8791,6 +8791,7 @@ What is typed here stays in this browser.`;
     "Move or delete cards in this category first": "Kategorię można usunąć, gdy jej karty zostaną przeniesione albo usunięte",
     "Move or delete the cards in this category first": "Kategorię można usunąć, gdy jej karty zostaną przeniesione albo usunięte",
     "Delete card": "Usuń kartę",
+    /* words: placeholder, the editors' Delete as the Library's, until the copywriter's */
     "Delete this card": "Usuń tę kartę",
     "New intent": "Nowa intencja",
     "New intent…": "Nowa intencja…",
@@ -8924,8 +8925,6 @@ What is typed here stays in this browser.`;
     "Close without saving any change": "Zamknij bez zapisywania zmian",
     "Save this card on this computer": "Zapisz tę kartę na tym komputerze",
     "Save this intent on this computer": "Zapisz tę intencję na tym komputerze",
-    "Delete this card: a built-in one returns on Reset, one you made does not": "Usuń tę kartę: wbudowana wróci po zresetowaniu, własna nie",
-    "Delete this intent: a built-in one returns on Reset, one you made does not": "Usuń tę intencję: wbudowana wróci po zresetowaniu, własna nie",
     "Discard your edits and restore the catalog wording.": "Odrzuca zmiany i przywraca treść z katalogu.",
     "Restore built-in quick facts": "Przywróć wbudowane szybkie fakty",
     "{KEY} is fixed and keeps its own meaning": "{KEY} to klawisz stały i zachowuje swoje znaczenie",
@@ -37340,7 +37339,7 @@ What is typed here stays in this browser.`;
            from Save. Delete is offered for BUILT-IN intents as well, which it was not - Manage
            could already delete one, so the editor refusing was the surface disagreeing with
            itself rather than a rule being enforced. */
-        '<span class="mf-left">' + (isNew ? "" : '<button type="button" class="btn danger mf-del" id="ieDelete" title="Delete this intent: a built-in one returns on Reset, one you made does not">Delete</button>') + '<button type="button" class="btn mf-reset" id="ieReset">Reset</button></span><button type="button" class="btn" id="ieCancel" title="Close without saving any change">Cancel</button><button type="button" class="btn primary" id="ieSave" title="Save this intent on this computer">Save</button>'
+        '<span class="mf-left">' + (isNew ? "" : '<button type="button" class="btn danger mf-del" id="ieDelete" title="Delete this intent">Delete</button>') + '<button type="button" class="btn mf-reset" id="ieReset">Reset</button></span><button type="button" class="btn" id="ieCancel" title="Close without saving any change">Cancel</button><button type="button" class="btn primary" id="ieSave" title="Save this intent on this computer">Save</button>'
       )
     });
     $("#ieCancel").onclick = doneIntentEditor;
@@ -38385,7 +38384,7 @@ What is typed here stays in this browser.`;
         /* Delete and Reset are both "undo my work", so they sit together at the left, away from
            Save. Reset only exists when there is something to reset, which is why it is the one
            button whose absence must not move the others - .mf-left holds the pair. */
-        '<span class="mf-left">' + (isNew ? "" : '<button type="button" class="btn danger mf-del" id="meDelete" title="Delete this card: a built-in one returns on Reset, one you made does not">Delete</button>') + '<button type="button" class="btn mf-reset" id="meReset">Reset</button></span><button type="button" class="btn" id="meCancel" title="Close without saving any change">Cancel</button><button type="button" class="btn primary" id="meSave" title="Save this card on this computer">Save</button>'
+        '<span class="mf-left">' + (isNew ? "" : '<button type="button" class="btn danger mf-del" id="meDelete" title="Delete this card">Delete</button>') + '<button type="button" class="btn mf-reset" id="meReset">Reset</button></span><button type="button" class="btn" id="meCancel" title="Close without saving any change">Cancel</button><button type="button" class="btn primary" id="meSave" title="Save this card on this computer">Save</button>'
       )
     });
     $("#meCancel").onclick = doneCardEditor;
