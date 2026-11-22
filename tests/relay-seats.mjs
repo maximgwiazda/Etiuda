@@ -1295,18 +1295,27 @@ async function main() {
       nextDeviceHello: said(devHello), nextInvitationHello: said(invHello) }) };
   }
   await leg("s30f", freedEveryPathScene, "an enrolled desk the grant names as freed: its device and invitation sessions end no-hello on that renewal, and its next device hello and next invitation hello are each refused seat-lapsed");
-  /* An ordinary licence's grant carrying the service's freed list alone, seats: {freed: [{key, at}]}: the team stays ordinary (no seats
-     row, any licence's certificate still opens a desk not named), a named key is refused at once at the device hello and on the invitation
-     path and loses the sessions it holds, a certificate issued since opens it, and a later grant naming nobody lifts the name. */
+  /* An ordinary licence's grant carrying the service's freed list, a top-level freed: [{key, at}] on a grant without seats, newest first:
+     the team stays ordinary (no seats row, any licence's certificate still opens a desk not named), a named key is refused at once at the
+     device hello and on the invitation path and loses the sessions it holds, a certificate issued since opens it, and a later grant
+     naming nobody lifts the name. Any other placement, or a list out of shape, is refused shape. */
   async function freedOrdinaryScene() {
     const w = await team({}), a = w.desks.a, j = joiner(w, "j"), inv = await inviteOn(w), inv2 = await inviteOn(w);
     a.cert = certFor(a.pub, hex(16), T0, DAY);
     const jc = certFor(j.pub, hex(16), T0, DAY);
     const dev = await sessionAs(w, "a"), invS = await helloWith(w, j, { invite: inv.token, inv: inv.inv, seat: jc });
     w.R.clock.now = T0 + 5 * MIN;
-    const at = w.R.clock.now, freed = [{ key: a.pub, at }, { key: j.pub, at }];
-    const empty = C.grantWhy(grantAt(w.lead.pub, at, { freed: [] }), w.lead.pub, at, K.ROOTS), bare = C.grantWhy(grantAt(w.lead.pub, at, {}), w.lead.pub, at, K.ROOTS);
-    const named = await renew(w, grantAt(w.lead.pub, at, { freed }));
+    const at = w.R.clock.now, freed = [{ key: a.pub, at }, { key: j.pub, at: at - MIN }];
+    const top = list => grantAt(w.lead.pub, at, undefined, { fields: { freed: list } });
+    const why = g => C.grantWhy(g, w.lead.pub, at, K.ROOTS);
+    const bad = {
+      empty: why(top([])), notList: why(top({ key: a.pub, at })), oldestFirst: why(top(freed.slice().reverse())), twice: why(top([freed[0], freed[0]])),
+      afterIssue: why(top([{ key: a.pub, at: at + 1 }])), extraField: why(top([{ key: a.pub, at, licence: hex(16) }])), bareKey: why(top([a.pub])),
+      upperKey: why(top([{ key: a.pub.toUpperCase(), at }])), tooMany: why(top(Array.from({ length: C.FREED_MAX + 1 }, (_, i) => ({ key: hex(32), at: at - i })))),
+      inSeats: why(grantAt(w.lead.pub, at, { freed })), besideSeats: why(grantAt(w.lead.pub, at, { licence: w.licence, live: at }, { fields: { freed } })),
+    };
+    const full = why(top(Array.from({ length: C.FREED_MAX }, (_, i) => ({ key: hex(32), at: at - i }))));
+    const named = await renew(w, top(freed));
     const devAfter = await listWith(w, dev), invAfter = await listWith(w, invS);
     const devHello = await sessionAs(w, "a"), resume = await helloWith(w, j, { seat: jc });
     const invHello = await helloWith(w, a, { invite: inv2.token, inv: inv2.inv, seat: a.cert });
@@ -1318,14 +1327,14 @@ async function main() {
     const lifted = await renew(w, grantAt(w.lead.pub, w.R.clock.now));
     const back = await sessionAs(w, "a");
     const ended = r => r.status === 401 && !!r.json && r.json.error === "no-hello";
-    const ok = opened(dev) && opened(invS) && empty === "shape" && bare === "shape" && named.status === 200 && ended(devAfter) && ended(invAfter)
+    const ok = opened(dev) && opened(invS) && Object.values(bad).every(v => v === "shape") && full === null && named.status === 200 && ended(devAfter) && ended(invAfter)
       && refused(devHello, "seat-lapsed") && refused(resume, "seat-lapsed") && refused(invHello, "seat-lapsed") && opened(other) && stillOrdinary
       && opened(since) && lifted.status === 200 && opened(back);
-    return { ok, detail: brief({ device: said(dev), invitation: said(invS), emptyList: empty, noFields: bare, named: said(named), deviceListAfter: said(devAfter),
+    return { ok, detail: brief({ device: said(dev), invitation: said(invS), refusedShapes: bad, fullList: full, named: said(named), deviceListAfter: said(devAfter),
       invitationListAfter: said(invAfter), nextDeviceHello: said(devHello), resume: said(resume), nextInvitationHello: said(invHello), otherDesk: said(other),
       stillOrdinary, certSince: said(since), lifted: said(lifted), earlierCertAfterLift: said(back) }) };
   }
-  await leg("s30g", freedOrdinaryScene, "an ordinary licence's grant naming keys as freed (seats holding the freed list alone): the team stays ordinary, the named desk's device and invitation sessions end no-hello, its next device hello, invitation resume and invitation hello are refused seat-lapsed, a desk not named opens on any licence, a certificate issued since opens, a later grant naming nobody lifts the name, and an empty list or empty seats is refused shape");
+  await leg("s30g", freedOrdinaryScene, "an ordinary licence's grant naming keys as freed (a top-level freed list on a grant without seats, newest first): the team stays ordinary, the named desk's device and invitation sessions end no-hello, its next device hello, invitation resume and invitation hello are refused seat-lapsed, a desk not named opens on any licence, a certificate issued since opens, a later grant naming nobody lifts the name; a full list of FREED_MAX is taken, and an empty list, one not a list, oldest first, a key twice, an entry after the grant's issue, an entry with another field, a bare key, an upper-case key, one past FREED_MAX, the list inside seats, or the list beside seats is refused shape");
   /* No folder arm: a working team's lead writing its team file with a channel keeps no team file or move row, and a
      read-only team's lead moving it to a folder is refused team-lapsed, as every write there is. */
   async function folderGoneScene() {
@@ -1644,7 +1653,7 @@ async function main() {
     ["invite-freed", "s30f", freedEveryPathScene, "a freed key's invitation hello opens"],
     ["freed-sessions", "s30f", freedEveryPathScene, "a freed key's device session lives on"],
     ["freed-invite-sessions", "s30f", freedEveryPathScene, "a freed key's invitation session lives on"],
-    ["grant-freed-ordinary", "s30g", freedOrdinaryScene, "an ordinary licence's freed list is refused shape"],
+    ["grant-freed-top", "s30g", freedOrdinaryScene, "an ordinary licence's freed list is taken whatever its shape or placement"],
     ["freed-ordinary-kept", "s30g", freedOrdinaryScene, "an ordinary licence's freed list is not kept"],
     ["freed-ordinary-read", "s30g", freedOrdinaryScene, "an ordinary licence's freed list is never read at a hello"],
     ["freed-ordinary-lift", "s30g", freedOrdinaryScene, "a later grant naming nobody leaves the name standing"],
