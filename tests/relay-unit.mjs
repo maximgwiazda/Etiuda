@@ -8043,8 +8043,9 @@ async function main() {
     /* Where this half met the relay seats (integration, Held for decision 49), the digest is the relay seats branch's wire: its seats grant
        and its status; this half changes neither. A person's store moved it: the notice route, and the store grant, store certificate,
        notice and store computer list byte forms. A seat certificate's signed marks moved it: the "desk-only" and "member" lines, signed
-       from CERT_MARKS, whose rows the digest reads beside the byte forms. The addressed place (board 1013, piece 2) added one refusal, recipient-full (403): its reason word and its STATUS row. */
-    const WIRE_SHA = "a7788ffa9e175f3a7da8a5fee0a31800026618705eb46d3006e3a78c55a31bf6";
+       from CERT_MARKS, whose rows the digest reads beside the byte forms. The addressed place (board 1013, piece 2) added one refusal, recipient-full (403): its reason word and its STATUS row.
+       A token hello naming a lead key not the team's added one more, lead-other (403): its reason word and its STATUS row. */
+    const WIRE_SHA = "8b4cc6d001775bde1224467ba02af8204d70142a5e08610b2af50e9f1f553a30";
     check(sha(wire) === WIRE_SHA && forms.length > 200,
       "1013w the relay's wire is as it was: its routes, methods, refusals and their words, socket closes and signed byte forms digest to "
       + WIRE_SHA.slice(0, 12) + ": " + sha(wire).slice(0, 12));
