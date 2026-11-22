@@ -535,6 +535,7 @@ function joinTook(v,changed){
     const heldOffer={lead:String(offer.lead||""), team:String(offer.team||""), relay:String(offer.relay), link:true, code:"", left:String(offer.left||"")};
     if(joinDoorHolds()){ pendingInvite={kind:"link", offer:heldOffer}; whenJoinDoorOpens(replayPendingInvite); return joinNow; } /* plant:join-link-door */
     joinOffer=heldOffer;
+    joinShut=""; /* plant:link-unshut */ // a link's offer is not in the state a hidden bubble was shut at, so each new link is drawn
     joinRead="link"; joinBlob=""; joinTyped=""; joinWhy=""; joinLinkSaid=null;
     joinMode="confirm"; /* plant:link-page */
     paintJoin();
