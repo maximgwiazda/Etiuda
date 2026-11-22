@@ -1719,8 +1719,9 @@ try {
       const D = loadDesk(ud, src || undefined);
       syncFolder(share);
       const booted = facts(D.sync("etiuda:catalog") || "");
-      /* `gone`: the file in use rewritten by hand, so no edition of it is one the lead signed. */
-      if (gone) put(share, "board.ec", JSON.stringify(Object.assign(JSON.parse(CAT2), { sig: undefined, rev: 3 }), null, 1) + "\n");
+      /* `gone`: the file in use moved out of the share, so no edition of it the lead signed is left there. WAS: rewritten by hand,
+         unsigned; since the signing-trust build an unsigned file no longer replaces the lead-signed edition, so that left one. */
+      if (gone) { fs.renameSync(path.join(share, "board.ec"), path.join(path.dirname(share), path.basename(share) + "-board-away.ec")); syncFolder(share); }
       put(share, "pebble.ec", sideOf("pebble-board", 1, "Pebble Board"));
       touch(path.join(share, "pebble.ec"), Date.now() + 3000);
       const pick = facts(D.api.readCatalog() || "").name || "nothing";
@@ -1730,7 +1731,7 @@ try {
     };
     const m6 = unlisted(null, false), m7 = unlisted(null, true);
     check(m6.booted === 2 && m6.pick === "Quay Board" && m6.sent.length === 0 && m7.pick === "nothing" && m7.sent.length === 0,
-      "962s5m6 a desk working in a catalog its team does not list keeps it as its pick and is sent nothing of another id; with no edition of it the lead signed left, it picks nothing: pick "
+      "962s5m6 a desk working in a catalog its team does not list keeps it as its pick and is sent nothing of another id; with the file in use gone from the share, so no edition the lead signed is left, it picks nothing: pick "
       + m6.pick + ", sent " + (m6.sent.join(",") || "nothing") + "; rewritten, pick " + m7.pick + ", sent " + (m7.sent.join(",") || "nothing"));
     if (PLANTS_OFF) skip("962s5m7 lifting plant:pick-in-use-gone picks the team's catalog over the one in use");
     else {
