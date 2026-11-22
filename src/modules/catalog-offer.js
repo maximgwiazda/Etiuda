@@ -1293,12 +1293,12 @@ function adoptedListParts(adopted,me,held,looseId,aside,all,current){
   return {matches, asideShown, asideRows, adoptFor, grouped:asideShown.length>0 || matches.length>0};
 }
 /* A group's heading, and its one plain sentence beside it. */
-const EC_GROUP_SENTENCE={
-  "Team catalogs":"Published by the team's lead; everyone on the team works from the same edition.",
-  "Personal catalogs":"Your own; one marked Private is never sent to the team."
-};
+const EC_GROUP_SENTENCE=new Map([
+  ["Team catalogs", "Published by the team's lead; everyone on the team works from the same edition."],
+  ["Personal catalogs", "Your own; one marked Private is never sent to the team."]
+]);
 function ecGroupHtml(word){
-  return '<div class="ec-group"><span>'+esc(t(word))+'</span><small>'+esc(t(EC_GROUP_SENTENCE[word]))+'</small></div>';
+  return '<div class="ec-group"><span>'+esc(t(word))+'</span><small>'+esc(t(EC_GROUP_SENTENCE.get(word)))+'</small></div>';
 }
 /* The rows in two groups where the desk holds a catalog set aside or one the team took up, and as they always were otherwise. A row is
    the team's where the lead signed its file. */

@@ -8244,7 +8244,6 @@ What is typed here stays in this browser.`;
     "Etiuda is ready for its first replies.": "Etiuda czeka na pierwsze odpowiedzi.",
     "Most people answer from their team's catalog. Joining the team brings it to this desk, with every update after.": "Większość osób odpowiada z katalogu swojego zespołu. Po dołączeniu do zespołu katalog trafia na to stanowisko, a z nim każda kolejna aktualizacja.",
     "Join your team": "Dołącz do zespołu",
-    "The team's lead invites this account by its email address, and the invitation appears here with one Join; a link from the lead, opened on this computer, does the same.": "Lider zespołu zaprasza to konto na jego adres e-mail, a zaproszenie pojawia się tutaj z jednym przyciskiem Dołącz; to samo daje link od lidera otwarty na tym komputerze.",
     "No invitation yet? The team's lead sends one.": "Nie ma jeszcze zaproszenia? Wysyła je lider zespołu.",
     "Working on your own?": "Praca bez zespołu?",
     "Catalog files": "Pliki katalogów",
@@ -40348,12 +40347,12 @@ What is typed here stays in this browser.`;
     const asideRows = asideShown.map((r, i) => ecAsideRowHtml(r, i, matches.filter((m) => m.aside === r.id && !m.current).map(noteFor2).join("")));
     return { matches, asideShown, asideRows, adoptFor, grouped: asideShown.length > 0 || matches.length > 0 };
   }
-  var EC_GROUP_SENTENCE = {
-    "Team catalogs": "Published by the team's lead; everyone on the team works from the same edition.",
-    "Personal catalogs": "Your own; one marked Private is never sent to the team."
-  };
+  var EC_GROUP_SENTENCE = /* @__PURE__ */ new Map([
+    ["Team catalogs", "Published by the team's lead; everyone on the team works from the same edition."],
+    ["Personal catalogs", "Your own; one marked Private is never sent to the team."]
+  ]);
   function ecGroupHtml(word) {
-    return '<div class="ec-group"><span>' + esc(t(word)) + "</span><small>" + esc(t(EC_GROUP_SENTENCE[word])) + "</small></div>";
+    return '<div class="ec-group"><span>' + esc(t(word)) + "</span><small>" + esc(t(EC_GROUP_SENTENCE.get(word))) + "</small></div>";
   }
   function ecGroupedRows(tops, under, alone, asideRows, grouped) {
     const withUnder = (k) => [tops[k].html].concat(under[k]);

@@ -168,7 +168,6 @@ UI_STRINGS.pl={
   "Etiuda is ready for its first replies.":"Etiuda czeka na pierwsze odpowiedzi.",
   "Most people answer from their team's catalog. Joining the team brings it to this desk, with every update after.":"Większość osób odpowiada z katalogu swojego zespołu. Po dołączeniu do zespołu katalog trafia na to stanowisko, a z nim każda kolejna aktualizacja.",
   "Join your team":"Dołącz do zespołu",
-  "The team's lead invites this account by its email address, and the invitation appears here with one Join; a link from the lead, opened on this computer, does the same.":"Lider zespołu zaprasza to konto na jego adres e-mail, a zaproszenie pojawia się tutaj z jednym przyciskiem Dołącz; to samo daje link od lidera otwarty na tym komputerze.",
   "No invitation yet? The team's lead sends one.":"Nie ma jeszcze zaproszenia? Wysyła je lider zespołu.",
   "Working on your own?":"Praca bez zespołu?",
   "Catalog files":"Pliki katalogów",
