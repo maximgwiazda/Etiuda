@@ -9812,7 +9812,8 @@ What is typed here stays in this browser.`;
     "The team's relay is read-only until renewed": "Przekaźnik zespołu działa tylko do odczytu do czasu odnowienia",
     "The team's shared folder is read-only where {FILE} goes, so this desk keeps the change and tries again at each check.": "Wspólny folder zespołu jest tylko do odczytu w miejscu, gdzie ma trafić {FILE}, więc to stanowisko zachowuje zmianę i próbuje ponownie przy każdym sprawdzeniu.",
     /* The copywriter's words: the copy the relay channel kept beside the team's edition. */
-    "{FILE} was kept on this computer and not sent to the team: another computer changed the same catalog at the same moment, and the team kept that computer's edition.": "Plik {FILE} zachowano na tym komputerze i nie wysłano go zespołowi: inny komputer zmienił ten sam katalog w tej samej chwili, a zespół zachował wydanie z tamtego komputera.",
+    "{FILE} was not sent to the team: the team's edition had changed in the meantime, from another computer or from an earlier send of this one. It is kept beside the catalog in the team's folder on this computer, and can be opened and published again if it is the edition wanted.": "Pliku {FILE} nie wysłano zespołowi: wydanie zespołu zmieniło się w międzyczasie, z innego komputera albo po wcześniejszym wysłaniu z tego. Plik zostaje obok katalogu w folderze zespołu na tym komputerze; można go otworzyć i opublikować ponownie, jeśli to właściwe wydanie.",
+    "More files kept the same way: {N}.": "Więcej plików zachowanych w ten sam sposób: {N}.",
     "{FILE} is marked read-only in the team's shared folder, so this desk keeps the change and tries again at each check.": "Plik {FILE} we wspólnym folderze zespołu jest oznaczony jako tylko do odczytu, więc to stanowisko zachowuje zmianę i próbuje ponownie przy każdym sprawdzeniu.",
     "The catalogs on this desk stay as they are and work as before; nothing new passes between this desk and the team.": "Katalogi na tym stanowisku zostają bez zmian i działają jak dotąd; nic nowego nie przechodzi już między stanowiskiem a zespołem.",
     "The relay keeps the team's copy until {DATE}.": "Przekaźnik przechowuje kopię zespołu do dnia {DATE}.",
@@ -18756,7 +18757,10 @@ What is typed here stays in this browser.`;
     return lapseWords(l).title;
   }
   function keptApartNotes(l) {
-    return (Array.isArray(l && l.keptApart) ? l.keptApart : []).filter((f) => typeof f === "string" && f).map((f) => t("{FILE} was kept on this computer and not sent to the team: another computer changed the same catalog at the same moment, and the team kept that computer's edition.").split("{FILE}").join(f));
+    const out = (Array.isArray(l && l.keptApart) ? l.keptApart : []).filter((f) => typeof f === "string" && f).map((f) => t("{FILE} was not sent to the team: the team's edition had changed in the meantime, from another computer or from an earlier send of this one. It is kept beside the catalog in the team's folder on this computer, and can be opened and published again if it is the edition wanted.").split("{FILE}").join(f));
+    const more = l && Number.isSafeInteger(l.keptApartMore) && l.keptApartMore > 0 ? l.keptApartMore : 0;
+    if (out.length && more) out.push(t("More files kept the same way: {N}.").split("{N}").join(String(more)));
+    return out;
   }
   function shareRefusedNotes(l) {
     return (Array.isArray(l && l.shareRefused) ? l.shareRefused : []).filter((r) => r && typeof r.file === "string" && r.file).map((r) => (r.kind === "folder" ? t("The team's shared folder is read-only where {FILE} goes, so this desk keeps the change and tries again at each check.") : t("{FILE} is marked read-only in the team's shared folder, so this desk keeps the change and tries again at each check.")).split("{FILE}").join(r.file));
@@ -18916,6 +18920,7 @@ What is typed here stays in this browser.`;
         if (l.stranded && typeof l.stranded === "object") row2.stranded = { seen: l.stranded.seen === true };
         const keptApart = Array.isArray(l.keptApart) ? l.keptApart.filter((f) => typeof f === "string" && f && f.length <= 200).map(String).slice(0, 3) : [];
         if (keptApart.length) row2.keptApart = keptApart;
+        if (keptApart.length && Number.isSafeInteger(l.keptApartMore) && l.keptApartMore > 0) row2.keptApartMore = l.keptApartMore;
         if (l.needsFolder === true) row2.needsFolder = true;
         if (l.awaitsEdition === true) row2.awaitsEdition = true;
         if (typeof l.reading === "string" && l.reading) row2.reading = String(l.reading);

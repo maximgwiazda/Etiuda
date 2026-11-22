@@ -7448,15 +7448,15 @@ function strandedShown(team) {
   try { s = relayChannel.stranded(); } catch { s = null; }
   return s ? { seen: s.seen === true } : null;
 }
-/* The conflict copies the relay channel kept beside the team's edition on this computer and never sent, by file name, for the
-   team's row; null where there are none or the team is not the one followed. */
+/* The conflict copies the relay channel kept beside the team's edition on this computer and never sent, for the team's row: the
+   first three by file name and how many more; null where there are none or the team is not the one followed. */
 function keptApartShown(team) {
   const here = relayHere();
   if (!here || here.team !== team || !relayChannel || typeof relayChannel.keptApart !== "function") return null;
   let list = null;
   try { list = relayChannel.keptApart(); } catch { list = null; }
-  const names = (Array.isArray(list) ? list : []).map(rel => path.basename(String(rel))).filter(Boolean).slice(0, 3);
-  return names.length ? names : null;
+  const all = (Array.isArray(list) ? list : []).map(rel => path.basename(String(rel))).filter(Boolean);
+  return all.length ? { names: all.slice(0, 3), more: Math.max(0, all.length - 3) } : null;
 }
 function strandedDismissed(team) {
   const here = relayHere();
@@ -7544,7 +7544,8 @@ function leadsView() {
     const stranded = strandedShown(t);
     if (stranded) row.stranded = stranded; /* plant:stranded-row */
     const keptApart = keptApartShown(t);
-    if (keptApart) row.keptApart = keptApart; /* plant:kept-apart-row */
+    if (keptApart) row.keptApart = keptApart.names; /* plant:kept-apart-row */
+    if (keptApart && keptApart.more) row.keptApartMore = keptApart.more; /* plant:kept-apart-more-row */
     if (teamNeedsFolder[t]) {
       row.needsFolder = true;
       row.openFolder = shellWords().openFolder;
