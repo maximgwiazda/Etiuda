@@ -1910,7 +1910,9 @@ async function main() {
         const step = raw.trim();
         if (!step) continue;
         const m = /^node\s+(\S+)\s*(.*)$/.exec(step);
-        if (m && /gate-run/.test(m[1])) refuse("npm script " + name + " runs this file, which would "
+        /* This file itself, by its path; tests/gate-run.mjs is its selftest and a gate like any other (the test architect,
+           2026-11-22: the bare /gate-run/ matched it, so `npm run gates` refused the test script on main). */
+        if (m && /(^|[\\/])tools[\\/]gate-run\.mjs$/.test(m[1])) refuse("npm script " + name + " runs this file, which would "
           + "run itself: " + JSON.stringify(step),
           "the runner is not a gate; name the scripts it should run on the command line");
         if (!m) refuse("a step of npm script " + name + " is not a node gate this can run: "
