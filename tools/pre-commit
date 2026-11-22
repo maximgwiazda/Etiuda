@@ -301,7 +301,8 @@ held=""
 # One file, counted or set aside. $2 is the folder whose ignore rules it is read under.
 consider() {
   [ -f "$1" ] || return 0
-  git -C "$2" check-ignore -q "$1" || return 0
+  # A file in the held-back home ($3 = home) sits outside every tree, so no ignore rule can speak for it.
+  [ "${3:-}" = home ] || git -C "$2" check-ignore -q "$1" || return 0
   if [ "$have_pub" = 1 ]; then
     r="$(quotes_of "$1")"
     nq="${r%% *}"; np="${r##* }"
@@ -334,6 +335,30 @@ for f in *-catalog.js *-catalog.json catalogs/*; do consider "$f" .; done
 main_root="$(cd "$(git rev-parse --git-common-dir)/.." 2>/dev/null && pwd)"
 if [ -n "$main_root" ] && [ "$main_root" != "$(pwd)" ]; then
   for f in "$main_root"/*-catalog.js "$main_root"/*-catalog.json "$main_root"/catalogs/*; do consider "$f" "$main_root"; done
+fi
+# THE HELD-BACK HOME (Claude alpha, 2026-11-22, before board 1016's purge): the catalog the quote scan holds back lives
+# outside every tree, and each repository learns where from one line in a file inside its own git directory,
+# etiuda-held-back, beside etiuda-names: never from a committed file and never from a default. It fails closed. A path
+# file that names no folder, a folder that is not there, or one holding nothing this scan can read is refused, and so is
+# a repository with no path file once no catalog stands beside the engine either (the refusal below, "the quote scan
+# needs a catalog"). Until the catalog has moved, the root's copy is still read beside it.
+held_home_file="$(git rev-parse --git-common-dir 2>/dev/null)/etiuda-held-back"
+if [ -f "$held_home_file" ]; then
+  held_home="$(sed 's/#.*//' "$held_home_file" | awk 'NF { print; exit }' | sed 's/[[:space:]]*$//')"
+  if [ -z "$held_home" ]; then
+    say "$held_home_file names no folder: the quote scan will not guess where the held-back catalog lives."
+    fail=1
+  elif [ ! -d "$held_home" ]; then
+    say "$held_home_file names $held_home, which is not a folder here: the held-back catalog has moved or gone."
+    fail=1
+  else
+    before_home=$ncats
+    for f in "$held_home"/*; do consider "$f" "$held_home" home; done
+    if [ "$ncats" = "$before_home" ]; then
+      say "$held_home holds no catalog this scan can read: an empty held-back home is refused, not passed."
+      fail=1
+    fi
+  fi
 fi
 # A REPOSITORY THAT NEVER HOLDS A CATALOG SAYS SO IN A FILE OF ITS OWN, board item 435. This
 # script is installed in more than one repository now, and one of them - the Studio - has no
