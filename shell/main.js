@@ -34,15 +34,17 @@ try {
 } catch { /* the bundled roots stand */ }
 const { watchPage } = require(path.join(__dirname, "page-watch.cjs"));
 const { decideClose, showNotification: showNotificationOf, notifyFirstClose: notifyFirstCloseOf, setLoginItemSettings: setLoginItemSettingsOf, loginItemOn,
-  createTray, buildTrayMenuTemplate, setJumpList: setJumpListOf, APP_IDS } = require(path.join(__dirname, "tray.cjs"));
+  createTray, buildTrayMenuTemplate, setJumpList: setJumpListOf, bubblePlace, APP_IDS } = require(path.join(__dirname, "tray.cjs"));
+/* The test build is a harness build for everything but a toast: harnessLaunch(true) reads it as a person's start, so a Test Service
+   desk shows the first-close note and the desk's toasts, under its own app id (deskAppId), never the shipped one. */
 /* A HARNESS LAUNCH WRITES NOTHING THE ACCOUNT KEEPS OUTSIDE ITS LAB: no etiuda: handler, login item, jump list or toast.
    Every harness launch carries a user-data folder of its own (the door refuses one without) or a test variable, and the
    installer legs' build is one by what it is, whoever starts it; a customer's start is none of these. */
-function harnessLaunch() {
+function harnessLaunch(toast) {
   const argv = Array.isArray(process.argv) ? process.argv : [];
   return argv.some(a => /^--user-data-dir(=|$)/.test(String(a)))
     || ["ETIUDA_TEST_OFFSCREEN", "ETIUDA_TEST_DOCUMENTS", "ETIUDA_TEST_DEVTOOLS"].some(k => process.env[k] !== undefined)
-    || testIdentityBuild(); /* plant:harness-test-build */
+    || (!toast && testIdentityBuild()); /* plant:harness-test-build */
 }
 /* The name earlier builds' Run value carries: Electron's default id, "electron.app." and the app's name. */
 function legacyLoginName() {
@@ -80,11 +82,11 @@ function setJumpList(electronApp, opts) {
   return setJumpListOf(electronApp, opts);
 }
 function showNotification(opts) {
-  if (harnessLaunch()) return null; /* plant:harness-toast */
+  if (harnessLaunch(true)) return null; /* plant:harness-toast */
   return showNotificationOf(opts);
 }
 function notifyFirstClose(opts) {
-  if (harnessLaunch()) return null; /* plant:harness-first-close */
+  if (harnessLaunch(true)) return null; /* plant:harness-first-close */
   return notifyFirstCloseOf(opts);
 }
 const { readsLikeMessage, scoreSuggestions, MESSAGE_MAX_CHARS, SUGGEST_LIMIT } = require(path.join(__dirname, "clip-suggest.cjs"));
@@ -583,11 +585,19 @@ function handHeldLink(win) {
   handPendingLink(win);
 }
 /* The installer legs' build (tools/test-identity.cjs) marks its package.json; harnessLaunch reads it, once a run. */
-var testIdentityBuilt = null;
+var testIdentityBuilt = null, testIdentityId = "";
+/* The test build's own app id, as its package.json marks it, or "" for any other build. */
+function testIdentityAppId() { testIdentityBuild(); return testIdentityId; }
+/* The app user model id the desk's toasts carry: the installer's shortcut carries the build's appId, and a toast under another
+   id is not shown. The shipped desk's is APP_IDS.desktop; a test build's is its own. */
+function deskAppId() { return testIdentityAppId() || APP_IDS.desktop; }
 function testIdentityBuild() {
   if (testIdentityBuilt == null) { /* == null: a caller before line 500 reads undefined, and must still read the marker (the test architect, 2026-11-11) */
-    try { testIdentityBuilt = !!JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8")).etiudaTestBuild; }
-    catch (e) { testIdentityBuilt = false; }
+    try {
+      const mark = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8")).etiudaTestBuild;
+      testIdentityBuilt = !!mark;
+      testIdentityId = typeof mark === "string" ? mark : "";
+    } catch (e) { testIdentityBuilt = false; testIdentityId = ""; }
   }
   return testIdentityBuilt;
 }
@@ -9282,7 +9292,7 @@ function closeHeld(win, e) {
   if (decision === "hide" && ensureTray() && !(lost && !lost.back)) {
     try { if (e && typeof e.preventDefault === "function") e.preventDefault(); } catch { /* already held */ }
     try { if (win && typeof win.hide === "function") win.hide(); } catch { /* this window cannot hide */ }
-    try { firstCloseTraced(win); } catch { /* the toast is a courtesy */ }
+    try { firstCloseNote(win); } catch { /* the note is a courtesy */ }
     return true;
   }
   if (win && (win.etiudaInstallerClose || win.etiudaSessionEnd || win.etiudaRefusalClose)) return false;
@@ -9354,6 +9364,14 @@ ipcMain.on("etiuda:tray-notes-set", (e, on) => {
   if (!fromEngine(e)) return;
   setTrayNotes(!!on);
 });
+ipcMain.on("etiuda:tray-bubble-set", (e, on) => {
+  if (!fromEngine(e)) return;
+  patchWindowMeta({ trayBubble: !!on });
+});
+ipcMain.on("etiuda:tray-bubble-state", (e) => {
+  if (!fromEngine(e)) { e.returnValue = null; return; }
+  e.returnValue = { on: bubbleOn() };
+});
 ipcMain.on("etiuda:tray-notes-state", (e) => {
   if (!fromEngine(e)) { e.returnValue = null; return; }
   e.returnValue = { on: notesOn() };
@@ -9366,7 +9384,7 @@ ipcMain.on("etiuda:notify", (e, opts) => {
   const icon = trayIcon();
   showNotification({
     electron: { Notification: Notification, app: app },
-    appId: APP_IDS.desktop,
+    appId: deskAppId(),
     title: String(opts && opts.title || ""),
     body: String(opts && opts.body || ""),
     icon: icon,
@@ -13960,6 +13978,9 @@ const SHELL_WORDS = {
         trayTip: "Etiuda",
         trayKeepsRunning: "Etiuda keeps running in the tray",
         trayKeepsBody: "Its shortcut still works and the team's updates still arrive. To quit, right-click the tray icon and choose Quit Etiuda; Settings, under General, can make closing the window quit instead.",
+        trayBubbleBody: "Its shortcut still works and the team's updates still arrive. To quit, right-click its icon here and choose Quit Etiuda.",
+        trayBubbleOff: "Don't show again",
+        trayBubbleOk: "OK",
         jumpRecent: "Recent catalogs",
         jumpReplies: "Quick replies",
         jumpNewTab: "New tab",
@@ -13986,6 +14007,9 @@ const SHELL_WORDS = {
         trayTip: "Etiuda",
         trayKeepsRunning: "Etiuda działa dalej w zasobniku",
         trayKeepsBody: "Skrót nadal działa, a aktualizacje od zespołu wciąż docierają. Program zamyka pozycja Zakończ Etiudę w menu ikony zasobnika; w Ustawieniach, w części Ogólne, można ustawić, by zamknięcie okna kończyło działanie.",
+        trayBubbleBody: "Skrót nadal działa, a aktualizacje od zespołu wciąż docierają. Aby zamknąć program, wystarczy kliknąć tę ikonę prawym przyciskiem i wybrać Zakończ Etiudę.",
+        trayBubbleOff: "Nie pokazuj więcej",
+        trayBubbleOk: "OK",
         jumpRecent: "Ostatnie katalogi",
         jumpReplies: "Szybkie odpowiedzi",
         jumpNewTab: "Nowa rozmowa",
@@ -16249,7 +16273,7 @@ function maybeFirstClose(win, traced) {
   const w = trayWords();
   return notifyFirstClose({
     electron: traced || { Notification: Notification, app: app },
-    appId: APP_IDS.desktop,
+    appId: deskAppId(),
     title: w.trayKeepsRunning,
     body: w.trayKeepsBody,
     told: trayNoticeTold === true,
@@ -16262,7 +16286,7 @@ function firstCloseTraced(win) {
   if (trayNoticeTold === true) return maybeFirstClose(win);
   let t = null;
   try {
-    t = trayToastTrace({ Notification: Notification, app: app, harness: harnessLaunch(), defaultAumid: legacyLoginName(),
+    t = trayToastTrace({ Notification: Notification, app: app, harness: harnessLaunch(true), defaultAumid: legacyLoginName(),
       state: trayTraceState, write: trayTraceWrite });
   } catch { t = null; }
   if (!t) return maybeFirstClose(win);
@@ -16270,6 +16294,116 @@ function firstCloseTraced(win) {
   try { got = maybeFirstClose(win, t.electron); } catch (e) { t.end(null, e); throw e; } /* plant:trace-caught */
   t.end(got, null);
   return got;
+}
+/* THE TRAY BUBBLE: at the first close of a start the desk's own blue bubble stands over the tray icon, in place of Windows's
+   notification. Once a start; Don't show again writes trayBubble false to the place file, which Settings reads and writes too. */
+const BUBBLE_W = 360, BUBBLE_PAD = 20, BUBBLE_MS = 9000;
+let bubbleWin = null, bubbleTimer = null, bubbleSized = null, bubbleDesk = null;
+function bubbleOn() {
+  return readWindowMeta().trayBubble !== false; /* plant:bubble-key */
+}
+function bubbleAct(go) {
+  if (go !== "ok" && go !== "off" && go !== "open") return;
+  if (go === "off") patchWindowMeta({ trayBubble: false }); /* plant:bubble-off-write */
+  hideTrayBubble();
+  if (go === "open") showDesk(deskWindow());
+}
+function hideTrayBubble() {
+  clearTimeout(bubbleTimer);
+  bubbleSized = null;
+  if (bubbleDesk) { try { bubbleDesk.win.removeListener("show", bubbleDesk.fn); } catch { /* the window is gone */ } bubbleDesk = null; }
+  const win = bubbleWin;
+  bubbleWin = null;
+  if (win && !win.isDestroyed()) { try { win.close(); } catch { /* closed already */ } }
+}
+/* A press in the bubble is a link to bubble:<word>, caught as a navigation and never followed: the page holds no script and the
+   window no preload, so nothing it holds reaches the shell but one of these three words. */
+function bubbleGo(url) {
+  const m = /^bubble:(ok|off|open)$/.exec(String(url || ""));
+  return m ? m[1] : "";
+}
+/* The bubble's document: the family's blue bubble as the picker's tour step draws it, its pointer on the tray icon where there is
+   one (side above the bubble's edge, tip the pointer's place across it), the quiet button on the left and OK filled on the right. */
+function bubbleDoc(w, side, tip) {
+  const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return '<!DOCTYPE html>\n<html lang="en">\n<meta charset="utf-8">\n'
+    + '<meta http-equiv="Content-Security-Policy" content="' + policyFor(["'none'"]) + '">\n'
+    + '<title>Etiuda</title>\n<style>\n'
+    + ':root{color-scheme:light;--bub:#2563eb;--bub-ink:#fff;--bub-dim:rgba(255,255,255,.92);--bub-shadow:rgba(37,99,235,.32);--radius-sm:8px;'
+    + '--sans:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}\n'
+    + 'html,body{margin:0;height:100%;overflow:hidden;background:transparent}\n'
+    + 'body{font:14px/1.35 var(--sans);cursor:default;user-select:none;-webkit-user-select:none}\n'
+    + '.bub{position:fixed;left:' + BUBBLE_PAD + 'px;top:' + BUBBLE_PAD + 'px;box-sizing:border-box;width:' + BUBBLE_W + 'px;overflow:visible;padding:12px 14px;'
+    + 'background:var(--bub);color:var(--bub-ink);border-radius:14px;line-height:1.5;filter:drop-shadow(0 10px 22px var(--bub-shadow))}\n'
+    + '.bub-tip{position:absolute;width:12px;height:12px;margin-left:-6px;background:var(--bub);transform:rotate(45deg);border-radius:2px;pointer-events:none}\n'
+    + '.bub[data-side=above]>.bub-tip{bottom:-6px}\n.bub[data-side=below]>.bub-tip{top:-6px}\n.bub[data-side=none]>.bub-tip{display:none}\n'
+    + 'h3{margin:0 0 6px;font:700 15.5px/1.3 var(--sans);letter-spacing:-.2px}\n'
+    + 'p{margin:0 0 10px;font-size:13.5px;line-height:1.5;color:var(--bub-dim);text-wrap:balance}\n'
+    + '.acts{display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-top:2px;padding-top:10px;border-top:1px solid rgba(255,255,255,.24)}\n'
+    + 'a{color:inherit;text-decoration:none}.bub-text{display:block}\n'
+    + '.btn{display:inline-block;padding:7px 11px;border:1px solid transparent;border-radius:var(--radius-sm);background:rgba(0,0,0,.14);color:#fff;'
+    + 'font:600 13px var(--sans);cursor:default;white-space:nowrap;outline:none}\n'
+    + '.btn:hover{background:rgba(0,0,0,.26)}\n'
+    + '.btn.primary{background:#fff;border-color:#fff;color:var(--bub)}\n.btn.primary:hover{background:#fff;filter:brightness(.94)}\n'
+    + '.off{margin-right:auto}\n'
+    + '</style>\n<body><div class="bub" role="status" data-side="' + side + '">'
+    + '<a class="bub-text" href="bubble:open" draggable="false"><h3>' + esc(w.trayKeepsRunning) + '</h3><p>' + esc(w.trayBubbleBody) + '</p></a>'
+    + '<div class="acts"><a role="button" class="btn off" href="bubble:off" draggable="false">' + esc(w.trayBubbleOff) + '</a>'
+    + '<a role="button" class="btn primary" href="bubble:ok" draggable="false">' + esc(w.trayBubbleOk) + '</a></div>'
+    + '<i class="bub-tip" aria-hidden="true" style="left:' + (tip == null ? 0 : tip) + 'px"></i></div>\n'
+    + '\n';
+}
+/* Made only here, shown without focus: the chat under it keeps both the focus and the keyboard. No global shortcut is held, so Esc stays
+   with the program in front. Returns whether a window was made; the placing waits for the page's height (etiuda:bubble-size). */
+function showTrayBubble(win) {
+  if (typeof BrowserWindow !== "function" || !screen) return false;
+  hideTrayBubble();
+  const w = trayWords();
+  let bounds = null;
+  try { bounds = deskTray && typeof deskTray.getBounds === "function" ? deskTray.getBounds() : null; } catch { bounds = null; }
+  const real = !!bounds && Number.isFinite(bounds.x) && Number.isFinite(bounds.y) && bounds.width > 0 && bounds.height > 0;
+  let d;
+  try { d = real ? screen.getDisplayNearestPoint({ x: Math.round(bounds.x + bounds.width / 2), y: Math.round(bounds.y + bounds.height / 2) }) : screen.getPrimaryDisplay(); }
+  catch { d = screen.getPrimaryDisplay(); }
+  const place = (h) => bubblePlace({ bounds: bounds, display: { bounds: d.bounds, workArea: d.workArea }, size: { width: BUBBLE_W, height: h } });
+  const first = place(160);
+  const bw = new BrowserWindow({
+    width: BUBBLE_W + 2 * BUBBLE_PAD, height: 160 + 2 * BUBBLE_PAD, show: false, frame: false, resizable: false, focusable: false,
+    transparent: true, alwaysOnTop: true, skipTaskbar: true, minimizable: false, maximizable: false, fullscreenable: false, hasShadow: false,
+    title: "Etiuda", webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, webviewTag: false, webSecurity: true, spellcheck: false },
+  });
+  bubbleWin = bw;
+  bw.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  bw.webContents.on("will-navigate", (e, url) => { e.preventDefault(); bubbleAct(bubbleGo(url || e.url)); });
+  bw.on("closed", () => { if (bubbleWin === bw) hideTrayBubble(); });
+  bubbleSized = (h) => {
+    bubbleSized = null;
+    if (bw.isDestroyed() || bubbleWin !== bw) return;
+    const hh = Math.max(60, Math.min(400, Math.round(Number(h) || 160)));
+    const at = place(hh);
+    bw.setBounds({ x: at.x - BUBBLE_PAD, y: at.y - BUBBLE_PAD, width: BUBBLE_W + 2 * BUBBLE_PAD, height: hh + 2 * BUBBLE_PAD });
+    bw.setAlwaysOnTop(true, "pop-up-menu");
+    bw.showInactive();
+    const desk = liveWin(win) ? win : null;
+    if (desk) { bubbleDesk = { win: desk, fn: hideTrayBubble }; desk.once("show", hideTrayBubble); }
+    bubbleTimer = setTimeout(hideTrayBubble, BUBBLE_MS);
+  };
+  setTimeout(() => { if (bubbleSized && bubbleWin === bw) bubbleSized(160); }, 800);
+  bw.webContents.once("did-finish-load", () => {
+    bw.webContents.executeJavaScript("(function(){var e=document.querySelector('.bub');return e?Math.ceil(e.getBoundingClientRect().height):0})()")
+      .then((h) => { if (bubbleSized && bubbleWin === bw) bubbleSized(h); }, () => {});
+  });
+  bw.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(bubbleDoc(w, first.side, first.tip)));
+  return true;
+}
+/* The close's note: the bubble where it can be made and the person has not turned it off, else the Windows notification as before. */
+function firstCloseNote(win) {
+  if (trayNoticeTold === true) return null; /* plant:bubble-once */
+  if (!bubbleOn()) { trayNoticeTold = true; return null; } /* plant:bubble-off */
+  if (!harnessLaunch(true)) {
+    try { if (showTrayBubble(win)) { trayNoticeTold = true; return { shown: true, bubble: true }; } } catch { /* the notification stands in */ }
+  }
+  return firstCloseTraced(win);
 }
 /* THE FIRST-CLOSE TRACE: each attempt at the first-close toast appends one line to tray-trace.txt in the user-data folder,
    naming what Notification.isSupported() answered, the app user model id in force, harnessLaunch() and the outcome, and

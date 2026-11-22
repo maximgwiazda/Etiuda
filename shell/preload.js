@@ -294,6 +294,8 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   setClosePolicy: (quit) => ipcRenderer.send("etiuda:close-policy-set", !!quit),
   setTrayNotes: (on) => ipcRenderer.send("etiuda:tray-notes-set", !!on),
   trayNotesState: () => ipcRenderer.sendSync("etiuda:tray-notes-state"),
+  setTrayBubble: (on) => ipcRenderer.send("etiuda:tray-bubble-set", !!on),
+  trayBubbleState: () => ipcRenderer.sendSync("etiuda:tray-bubble-state"),
   notify: (opts) => ipcRenderer.send("etiuda:notify", opts),
   onTrayGo: (fn) => ipcRenderer.on("etiuda:tray-go", (_e, kind) => { try { fn(String(kind || "")); } catch { /* the page has gone */ } }),
   /* The version note: {offer, look} now and after each look, and the release page opened by the shell from the note it kept. */

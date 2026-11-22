@@ -9178,6 +9178,8 @@ What is typed here stays in this browser.`;
     "Etiuda starts in the tray when this Windows account signs in.": "Etiuda uruchamia się w zasobniku po zalogowaniu do tego konta Windows.",
     "When the window closes": "Po zamknięciu okna",
     "Stay in the tray": "Zostaje w zasobniku",
+    "Say so at the first close": "Informuj przy pierwszym zamknięciu",
+    "Once each start, a blue bubble over the tray icon says Etiuda keeps running there. Don't show again in the bubble turns this off.": "Raz po każdym uruchomieniu niebieski dymek nad ikoną w zasobniku informuje, że Etiuda działa tam dalej. Przycisk Nie pokazuj więcej w dymku wyłącza tę opcję.",
     "Quit": "Kończy działanie",
     "Closing the window will quit Etiuda.": "Zamknięcie okna zakończy działanie Etiudy.",
     "In the tray, Etiuda still answers its shortcut and shows notifications.": "W zasobniku Etiuda nadal reaguje na swój skrót i pokazuje powiadomienia.",
@@ -42786,6 +42788,22 @@ What is typed here stays in this browser.`;
         t("In the tray, Etiuda still answers its shortcut and shows notifications."),
         seg2("closehow", [{ v: "stay", t: t("Stay in the tray") }, { v: "quit", t: t("Quit") }], quit ? "quit" : "stay")
       ));
+      if (typeof host.trayBubbleState === "function") {
+        let bubbleOn = true;
+        try {
+          const s = host.trayBubbleState();
+          bubbleOn = !(s && s.on === false);
+        } catch (e) {
+          bubbleOn = true;
+        }
+        rows.push(row(
+          "firstclose",
+          "forward",
+          t("Say so at the first close"),
+          t("Once each start, a blue bubble over the tray icon says Etiuda keeps running there. Don't show again in the bubble turns this off."),
+          onoff("firstclose", bubbleOn, "", "")
+        ));
+      }
       groups.push({ head: t("Starting and closing"), rows });
     }
     return groups;
@@ -43631,6 +43649,15 @@ What is typed here stays in this browser.`;
               }
             }
             toast(quit ? t("Closing the window will quit Etiuda.") : t("Stay in the tray"));
+          } else if (seg3 === "firstclose") {
+            const host = eHost();
+            if (host && typeof host.setTrayBubble === "function") {
+              try {
+                host.setTrayBubble(on);
+              } catch (e) {
+              }
+            }
+            toast(on ? t("On") : t("Off"));
           } else if (seg3 === "notesmaster") {
             const host = eHost();
             if (host && typeof host.setTrayNotes === "function") {
@@ -43734,7 +43761,7 @@ What is typed here stays in this browser.`;
     nsDel("Cols");
     nsDel("Floor");
     const host = eHost();
-    let loginWas = false, notesWere = true;
+    let loginWas = false, notesWere = true, bubbleWas = true;
     if (host && typeof host.loginItemState === "function") {
       try {
         const s = host.loginItemState();
@@ -43749,9 +43776,22 @@ What is typed here stays in this browser.`;
       } catch (e) {
       }
     }
+    if (host && typeof host.trayBubbleState === "function") {
+      try {
+        const s = host.trayBubbleState();
+        bubbleWas = !(s && s.on === false);
+      } catch (e) {
+      }
+    }
     if (host && typeof host.setLoginItem === "function") {
       try {
         host.setLoginItem(false);
+      } catch (e) {
+      }
+    }
+    if (host && typeof host.setTrayBubble === "function") {
+      try {
+        host.setTrayBubble(true);
       } catch (e) {
       }
     }
@@ -43778,6 +43818,12 @@ What is typed here stays in this browser.`;
       if (host && typeof host.setTrayNotes === "function") {
         try {
           host.setTrayNotes(notesWere);
+        } catch (e) {
+        }
+      }
+      if (host && typeof host.setTrayBubble === "function") {
+        try {
+          host.setTrayBubble(bubbleWas);
         } catch (e) {
         }
       }

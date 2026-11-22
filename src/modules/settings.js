@@ -481,6 +481,13 @@ function generalGroups(){
     rows.push(row("closehow","desks",t("When the window closes"),
       t("In the tray, Etiuda still answers its shortcut and shows notifications."),
       seg("closehow",[{v:"stay",t:t("Stay in the tray")},{v:"quit",t:t("Quit")}], quit?"quit":"stay")));
+    if(typeof host.trayBubbleState==="function"){
+      let bubbleOn=true;
+      try{ const s=host.trayBubbleState(); bubbleOn=!(s && s.on===false); }catch(e){ bubbleOn=true; }
+      rows.push(row("firstclose","forward",t("Say so at the first close"),
+        t("Once each start, a blue bubble over the tray icon says Etiuda keeps running there. Don't show again in the bubble turns this off."),
+        onoff("firstclose", bubbleOn, "", "")));
+    }
     groups.push({head:t("Starting and closing"), rows:rows});
   }
   return groups;
@@ -1194,6 +1201,11 @@ function wirePage(box){
           if(host){ try{ host.setClosePolicy(quit); }catch(e){} }
           toast(quit?t("Closing the window will quit Etiuda."):t("Stay in the tray"));
         }
+        else if(seg==="firstclose"){
+          const host=eHost();
+          if(host && typeof host.setTrayBubble==="function"){ try{ host.setTrayBubble(on); }catch(e){} }
+          toast(on?t("On"):t("Off"));
+        }
         else if(seg==="notesmaster"){
           const host=eHost();
           if(host && typeof host.setTrayNotes==="function"){ try{ host.setTrayNotes(on); }catch(e){} }
@@ -1262,14 +1274,18 @@ function resetAllSettings(){
   nsDel("Cols"); nsDel("Floor");
   /* Start with Windows is not a desk key. Reset turns the login item off, and tray notices back on. */
   const host=eHost();
-  let loginWas=false, notesWere=true;
+  let loginWas=false, notesWere=true, bubbleWas=true;
   if(host && typeof host.loginItemState==="function"){
     try{ const s=host.loginItemState(); loginWas=!!(s && s.openAtLogin); }catch(e){}
   }
   if(host && typeof host.trayNotesState==="function"){
     try{ const s=host.trayNotesState(); notesWere=!(s && s.on===false); }catch(e){}
   }
+  if(host && typeof host.trayBubbleState==="function"){
+    try{ const s=host.trayBubbleState(); bubbleWas=!(s && s.on===false); }catch(e){}
+  }
   if(host && typeof host.setLoginItem==="function"){ try{ host.setLoginItem(false); }catch(e){} }
+  if(host && typeof host.setTrayBubble==="function"){ try{ host.setTrayBubble(true); }catch(e){} }
   if(host && typeof host.setTrayNotes==="function"){ try{ host.setTrayNotes(true); }catch(e){} }
   applyPrefs();
   repaintScreen();
@@ -1277,6 +1293,7 @@ function resetAllSettings(){
     Object.keys(was).forEach(k=>{ const v=was[k]; if(v==null) lsDel(k); else lsSet(k,v); });
     if(host && typeof host.setLoginItem==="function"){ try{ host.setLoginItem(loginWas); }catch(e){} }
     if(host && typeof host.setTrayNotes==="function"){ try{ host.setTrayNotes(notesWere); }catch(e){} }
+    if(host && typeof host.setTrayBubble==="function"){ try{ host.setTrayBubble(bubbleWas); }catch(e){} }
     applyPrefs();
     repaintScreen();
   }, null, from);

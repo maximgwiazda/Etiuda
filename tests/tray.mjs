@@ -423,15 +423,15 @@ async function run() {
       }
       const fakeApp = { getPath: () => ud, getName: () => "etiuda", setAppUserModelId: (id) => { rec.aumid.push(id); } };
       const consts = (src.match(/^const TRAY_TRACE_FILE[^\n]*\n^const trayTraceState[^\n]*$/m) || [""])[0];
-      const body = [consts, "let trayNoticeTold = false;", fnOf(src, "legacyLoginName"), fnOf(src, "notifyFirstClose"),
+      const body = [consts, "let trayNoticeTold = false;", fnOf(src, "legacyLoginName"), fnOf(src, "deskAppId"), fnOf(src, "notifyFirstClose"),
         fnOf(src, "maybeFirstClose"), fnOf(src, "firstCloseTraced"), fnOf(src, "trayToastTrace"), fnOf(src, "trayTraceWrite"),
         "return { close: " + (traced ? "firstCloseTraced" : "maybeFirstClose") + ", told: () => trayNoticeTold };"].join("\n");
       let lines = [], why = "";
       try {
         const made = new Function("fs", "path", "app", "Notification", "harnessLaunch", "notifyFirstCloseOf", "trayWords", "showDesk",
-          "APP_IDS", body)(fs, path, fakeApp, FakeNote, () => harness, trayMod.notifyFirstClose,
+          "APP_IDS", "testIdentityAppId", body)(fs, path, fakeApp, FakeNote, () => harness, trayMod.notifyFirstClose,
           () => { if (kind === "words-throw") throw new Error("words unread"); return { trayKeepsRunning: "Title", trayKeepsBody: "Body" }; },
-          () => {}, APP_IDS);
+          () => {}, APP_IDS, () => "");
         for (let i = 0; i < closes; i++) {
           try { made.close({}); } catch (e) { rec.threw.push(e.message); }
           if (i === 0 && lastNote && kind === "shows") lastNote.emit("failed", {}, WINDOWS_SAID);
@@ -506,6 +506,126 @@ async function run() {
       const swallowed = mainText.replace("return show.apply(n, arguments);", "return undefined;");
       const seenBroken = swallowed !== mainText ? diffs(swallowed) : [];
       check(seenBroken.length > 0, "ft13 control: a stand-in whose show() no longer reaches Electron's is caught by ft8: " + seenBroken.length + " case(s) differ");
+    }
+  }
+
+  /* 11. THE TRAY BUBBLE (board 1016 (10)): the desk's own blue bubble at the first close of a start, in place of Windows's
+     notification. Its place is the pure bubblePlace in tray.cjs; once per start, the Off the bubble's own button sets, the
+     window that takes no focus and the Settings row are read from shell/main.js, the engine and the preload. */
+  {
+    const bp = trayMod.bubblePlace;
+    const disp = { bounds: { x: 0, y: 0, width: 1920, height: 1080 }, workArea: { x: 0, y: 0, width: 1920, height: 1040 } };
+    const size = { width: 360, height: 150 };
+    const at = (bounds) => (typeof bp === "function" ? bp({ bounds: bounds, display: disp, size: size }) : null);
+    const a = at({ x: 1700, y: 1040, width: 24, height: 40 });
+    check(!!a && a.side === "above" && a.x === 1532 && a.y === 880 && a.tip === 180,
+      "tb1 a tray icon on the bottom taskbar: the bubble stands just above it, centred on the icon, its pointer on the icon: " + JSON.stringify(a));
+    const e = at({ x: 1900, y: 1040, width: 24, height: 40 });
+    check(!!e && e.side === "above" && e.x === 1552 && e.tip === 340,
+      "tb2 an icon at the screen's edge: the bubble keeps 8 px inside the work area and the pointer stays on the bubble's own edge: " + JSON.stringify(e));
+    const none = [["zero bounds", { x: 0, y: 0, width: 0, height: 0 }], ["no bounds", undefined], ["empty object", {}], ["not a number", { x: NaN, y: 1, width: 24, height: 24 }],
+      ["overflow flyout, inside the work area", { x: 1600, y: 900, width: 24, height: 24 }]].map(([n, b]) => [n, at(b)]);
+    check(none.every(([, r]) => r && r.side === "none" && r.tip === null && r.x === 1548 && r.y === 878),
+      "tb3 bounds empty, zero, unreadable or in the hidden overflow: the bubble stands at the bottom corner by the notification area, with no pointer: "
+      + JSON.stringify(none));
+
+    const mainText = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
+    const fnOf = (src, name) => {
+      const at2 = src.search(new RegExp("^function " + name + "\\(", "m"));
+      const end = at2 < 0 ? -1 : src.indexOf("\n}", at2);
+      return end < 0 ? "" : src.slice(at2, end + 2);
+    };
+    /* kind: on, off, bubble-false, bubble-throws; harness: the marker's answer */
+    const noteRun = (src, kind, harness, closes) => {
+      const log = { bubble: 0, traced: 0 };
+      const body = ["let trayNoticeTold = false;", fnOf(src, "firstCloseNote"),
+        "return { close: firstCloseNote, told: () => trayNoticeTold };"].join("\n");
+      let made, why = "";
+      try {
+        made = new Function("bubbleOn", "harnessLaunch", "showTrayBubble", "firstCloseTraced", body)(
+          () => kind !== "off", () => harness,
+          () => { log.bubble++; if (kind === "bubble-throws") throw new Error("no window"); return kind !== "bubble-false"; },
+          () => { log.traced++; return null; });
+        for (let i = 0; i < closes; i++) made.close({});
+      } catch (err) { why = String(err && err.message || err); }
+      return { log: log, told: made ? made.told() : null, why: why };
+    };
+    const noteReads = (src) => ({
+      on: noteRun(src, "on", false, 3), off: noteRun(src, "off", false, 2), no: noteRun(src, "bubble-false", false, 1),
+      throws: noteRun(src, "bubble-throws", false, 1), harness: noteRun(src, "on", true, 1),
+    });
+    const n = noteReads(mainText);
+    const nsay = (x) => JSON.stringify(x);
+    check(n.on.log.bubble === 1 && n.on.log.traced === 0 && n.on.told === true,
+      "tb4 three closes in one start: the bubble is shown once, Windows's notification never, and the start is told: " + nsay(n.on));
+    check(n.off.log.bubble === 0 && n.off.log.traced === 0 && n.off.told === true,
+      "tb5 with Say so at the first close Off, nothing is shown at the close, bubble or Windows notification: " + nsay(n.off));
+    check(n.no.log.bubble === 1 && n.no.log.traced === 1 && n.throws.log.traced === 1 && n.throws.why === "",
+      "tb6 a bubble that cannot be made (answers false or throws) leaves the close to the Windows notification once: " + nsay([n.no, n.throws]));
+    check(n.harness.log.bubble === 0 && n.harness.log.traced === 1,
+      "tb7 a harness launch makes no bubble window: " + nsay(n.harness));
+
+    /* The setting and the bubble's own buttons */
+    const actRun = (src, go, on) => {
+      const patches = [], shown = [], hid = [];
+      const body = [fnOf(src, "bubbleOn"), fnOf(src, "bubbleAct"), "return { on: bubbleOn, act: bubbleAct };"].join("\n");
+      let made;
+      try { made = new Function("readWindowMeta", "patchWindowMeta", "showDesk", "deskWindow", "hideTrayBubble", body)(
+        () => (on === undefined ? {} : { trayBubble: on, trayNotes: false }), (x) => patches.push(JSON.stringify(x)), () => shown.push(1), () => null, () => hid.push(1)); }
+      catch (err) { return { on: null, patches: [], shown: 0, hid: 0, why: String(err && err.message || err) }; }
+      if (go) made.act(go);
+      return { on: made.on(), patches: patches, shown: shown.length, hid: hid.length };
+    };
+    const ar = (src) => ({ none: actRun(src, "", undefined), offKey: actRun(src, "", false), ok: actRun(src, "ok", undefined), off: actRun(src, "off", undefined),
+      open: actRun(src, "open", undefined), junk: actRun(src, "later", undefined) });
+    const r = ar(mainText);
+    check(r.none.on === true && r.offKey.on === false,
+      "tb8 the bubble is on by default and off only where the place file says trayBubble false, whatever the notifications' master switch holds: " + nsay([r.none, r.offKey]));
+    check(r.ok.patches.length === 0 && r.ok.hid === 1 && r.ok.shown === 0
+      && r.off.patches.join() === '{"trayBubble":false}' && r.off.hid === 1 && r.off.shown === 0
+      && r.open.patches.length === 0 && r.open.hid === 1 && r.open.shown === 1 && r.junk.hid === 0 && r.junk.patches.length === 0,
+      "tb9 OK closes it and writes nothing; Don't show again writes trayBubble false and closes it; its text opens Etiuda; any other word does nothing: " + nsay(r));
+
+    const sb = fnOf(mainText, "showTrayBubble");
+    check(sb.length > 0 && /focusable:\s*false/.test(sb) && /showInactive\(\)/.test(sb) && !/\.focus\(/.test(sb) && !/\.show\(\)/.test(sb)
+      && /getBounds\(/.test(sb) && !/globalShortcut/.test(sb) && !/globalShortcut/.test(fnOf(mainText, "hideTrayBubble")) && /setTimeout\(/.test(sb),
+      "tb10 the bubble's window is not focusable and is shown inactive, never focused; it reads the tray's bounds, registers no global shortcut, so Esc stays with the program in front, and closes by itself");
+
+    const settingsSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"), "utf8");
+    const langSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8");
+    const preloadSrc = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
+    const bubLine = "Once each start, a blue bubble over the tray icon says Etiuda keeps running there. Don't show again in the bubble turns this off.";
+    const bubLinePl = "Raz po każdym uruchomieniu niebieski dymek nad ikoną w zasobniku informuje, że Etiuda działa tam dalej. Przycisk Nie pokazuj więcej w dymku wyłącza tę opcję.";
+    check(settingsSrc.includes('row("firstclose"') && settingsSrc.includes('t("Say so at the first close")') && settingsSrc.includes('t("' + bubLine + '")')
+      && settingsSrc.includes('seg==="firstclose"') && settingsSrc.includes("setTrayBubble") && settingsSrc.includes("trayBubbleState")
+      && langSrc.includes('"Say so at the first close":"Informuj przy pierwszym zamknięciu"') && langSrc.includes('"' + bubLine + '":"' + bubLinePl + '"')
+      && /setTrayBubble:[^\n]*etiuda:tray-bubble-set/.test(preloadSrc) && /trayBubbleState:[^\n]*etiuda:tray-bubble-state/.test(preloadSrc)
+      && /ipcMain\.on\("etiuda:tray-bubble-set"/.test(mainText) && /ipcMain\.on\("etiuda:tray-bubble-state"/.test(mainText),
+      "tb11 Settings, General has the row Say so at the first close (On or Off) in both languages, wired through the preload to the place file");
+    const wordsEn = ["Its shortcut still works and the team's updates still arrive. To quit, right-click its icon here and choose Quit Etiuda.", "Don't show again"];
+    const wordsPl = ["Skrót nadal działa, a aktualizacje od zespołu wciąż docierają. Aby zamknąć program, wystarczy kliknąć tę ikonę prawym przyciskiem i wybrać Zakończ Etiudę.", "Nie pokazuj więcej"];
+    check(wordsEn.every(w => mainText.includes('"' + w + '"')) && wordsPl.every(w => mainText.includes('"' + w + '"')),
+      "tb12 the bubble's body and its quiet button are the copywriter's words, English and Polish");
+
+    const goOf = (src) => { try { return new Function(fnOf(src, "bubbleGo") + "\nreturn bubbleGo;")(); } catch (err) { return () => "threw: " + err.message; } };
+    const go = goOf(mainText);
+    const gos = ["bubble:ok", "bubble:off", "bubble:open", "bubble:evil", "bubble:ok ", "https://example.com/", "file:///c:/x", "", undefined, "BUBBLE:OK"].map((u) => go(u));
+    check(JSON.stringify(gos) === JSON.stringify(["ok", "off", "open", "", "", "", "", "", "", ""]),
+      "tb17 a press in the bubble is a link that is caught and never followed: only bubble:ok, bubble:off and bubble:open mean anything, any other address means nothing: " + JSON.stringify(gos));
+    const doc = fnOf(mainText, "bubbleDoc");
+    check(doc.length > 0 && !/<script/i.test(doc) && /href=\\?"bubble:off/.test(doc) && /href=\\?"bubble:ok/.test(doc) && /href=\\?"bubble:open/.test(doc)
+      && !/preload/.test(sb) && /will-navigate/.test(sb) && /bubbleGo\(/.test(sb),
+      "tb18 the bubble's page holds no script and its window no preload: its three presses are links the shell catches on navigation (the Don't show again button, OK, and the text)");
+
+    /* the plants: each deciding line cut in memory, the reading made again */
+    if (PLANTS_OFF) console.log("  NOT RUN tb13 to tb16, the bubble's plant proofs (ETIUDA_PLANTS=off)");
+    else {
+      const cutOf = (tag) => mainText.split("\n").filter((l) => l.indexOf("plant:" + tag) < 0).join("\n");
+      const p1 = noteReads(cutOf("bubble-off")), p2 = noteReads(cutOf("bubble-once")), p3 = ar(cutOf("bubble-key")), p4 = ar(cutOf("bubble-off-write"));
+      check(mainText.includes("plant:bubble-off") && p1.off.log.bubble > 0, "tb13 control: cutting plant:bubble-off shows the bubble with the setting Off: " + nsay(p1.off));
+      check(mainText.includes("plant:bubble-once") && p2.on.log.bubble > 1, "tb14 control: cutting plant:bubble-once shows it at every close: " + nsay(p2.on));
+      check(mainText.includes("plant:bubble-key") && p3.offKey.on !== false, "tb15 control: cutting plant:bubble-key leaves the bubble on after Off is written: " + nsay(p3.offKey));
+      check(mainText.includes("plant:bubble-off-write") && p4.off.patches.join() !== '{"trayBubble":false}', "tb16 control: cutting plant:bubble-off-write leaves Don't show again writing nothing: " + nsay(p4.off));
     }
   }
 
