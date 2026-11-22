@@ -2138,7 +2138,7 @@ function translateTree(root){
     });
     /* Text only where the element holds nothing but text: a button, a label, a heading. Anything
        with element children is left alone, because replacing its text would delete them. */
-    if(!(el.classList && (el.classList.contains("e-dot-hug") || el.classList.contains("e-dot-t"))) && el.children && el.children.length===0 && el.textContent && el.textContent.trim()){
+    if(!(el.classList && el.classList.contains("e-dot-hug")) && el.children && el.children.length===0 && el.textContent && el.textContent.trim()){
       const src=el.getAttribute("data-i18n-text") || el.textContent.trim();
       const out=t(src);
       if(out!==el.textContent.trim()){ el.setAttribute("data-i18n-text", src); el.textContent=out; }
@@ -2215,7 +2215,6 @@ function dgRunHasWords(run){
   }
   return false;
 }
-let hugSeq=0;
 function hugDottedGround(root){
   hugDottedGround.cardIn=0;
   if(!root || root.nodeType!==1 || typeof getComputedStyle!=="function") return 0;
@@ -2337,17 +2336,10 @@ function hugDottedGround(root){
     }
     const hug=doc.createElement("span");
     hug.className="e-dot-hug";
-    /* each patch lies BELOW the one made before it, so a patch's spread never covers the words of the block above it (the descenders of a
-       heading reach to its foot; the next block's capitals start inside theirs): the upper patch paints over the lower's margin instead */
-    hug.style.zIndex=String(-1-(hugSeq++));
     const outer=insideFlex ? doc.createElement("span") : hug;
     if(insideFlex){ outer.className="e-dot-flex"; outer.appendChild(hug); }
     run[0].parentNode.insertBefore(outer, run[0]);
-    /* the words in a box of their own, above the patch (template.html, .e-dot-t) */
-    const words=doc.createElement("span");
-    words.className="e-dot-t";
-    hug.appendChild(words);
-    for(let j=0;j<run.length;j++) words.appendChild(run[j]);
+    for(let j=0;j<run.length;j++) hug.appendChild(run[j]);
     wrapped++;
   }
   return wrapped;
