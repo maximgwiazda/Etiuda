@@ -639,6 +639,16 @@ function conflictSiblingName(canonical, name) {
   if (/^(_conf\(\d+\))+$/i.test(tail)) return true;
   return false;
 }
+/* The relay channel's own name for this computer's edition kept beside the team's file (channel.cjs keepApart): the stem, then
+   " (conflicted copy <date>[ n])". Any other tail is a file of its own in the mirror. */
+function keptCopyName(canonical, name) {
+  const c = path.basename(String(canonical || "")), n = path.basename(String(name || ""));
+  const cExt = path.extname(c), nExt = path.extname(n);
+  if (!c || !n || cExt.toLowerCase() !== nExt.toLowerCase()) return false;
+  const cStem = c.slice(0, c.length - cExt.length), nStem = n.slice(0, n.length - nExt.length);
+  if (!cStem || nStem.slice(0, cStem.length).toLowerCase() !== cStem.toLowerCase()) return false;
+  return /^ \(conflicted copy( \d{4}-\d{2}-\d{2})?( \d+)?\)$/.test(nStem.slice(cStem.length));
+}
 function isCatalogName(name) {
   const n = path.basename(String(name || ""));
   /* The head is named with the files the watch already hears, so a landing reaches Settings. */
@@ -982,11 +992,15 @@ function editionRev(data) {
   return Number.isFinite(n) ? n : -1;
 }
 /* Whether edition `a` is the one to open over edition `b`, both of one catalog id. The higher rev, except that in the relay
-   mirror a conflict-named copy of the other file is never opened over it: the relay channel keeps this computer's own parallel
+   mirror the copy of the other file named as the channel keeps one (keptCopyName) is never opened over it: the relay channel keeps this computer's own parallel
    edition there, beside the team's, and never sends it, so on the lead's own desk it would show cards the team does not have.
    At the same rev the file named as the catalog is opened over its copy, where the files are. */
 function editionBeats(a, b, mirror) {
-  const copy = (x, y) => !!mirror && path.resolve(path.dirname(x.file)) === path.resolve(mirror) && conflictSiblingName(y.file, x.file);
+  const copy = (x, y) => {
+    let tail = conflictSiblingName(y.file, x.file);
+    tail = keptCopyName(y.file, x.file); /* plant:pick-kept-tail */
+    return !!mirror && path.resolve(path.dirname(x.file)) === path.resolve(mirror) && tail;
+  };
   const ac = copy(a, b), bc = copy(b, a);
   if (ac !== bc) return bc; /* plant:pick-copy-last */
   const ar = editionRev(a.data), br = editionRev(b.data);
