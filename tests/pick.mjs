@@ -39,7 +39,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 165 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 12);
+const EXPECTED = 169 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 13);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1791,6 +1791,101 @@ try {
   const sgBtnPressed = sgHost.el && sgHost.el.children.find(c => c.getAttribute && c.getAttribute("data-id") === "t:wick");
   check(lastCall() === 'copy {"id":"a","vi":0}' && sgBtnPressed && sgBtnPressed.getAttribute("aria-pressed") === "true",
     "4s up, then Enter, then Enter copies row 0 and leaves the intent picked, counted once: " + lastCall());
+
+  /* ---- 4c. the suggested intents are one band of chips (board 1019 (6), direction A) ------------------------------------
+     The page's script is run over a stand-in that records what it draws and which keys it answers. The band's size is read
+     from the sheet the document carries, as arithmetic: no window opens here, so what the eye sees (seven whole replies
+     under a band of two lines at most, at the fixed 600 by 424) is held as the heights that add up to it. Alt+1 to Alt+5
+     take a chip as a click on it does; the arrows still step among the chips; nothing in the picker speaks of a copied message. */
+  {
+    const CHIPS = [{ id: "t:post", name: "Post" }, { id: "t:lamp", name: "Lamps" }, { id: "t:wick", name: "Wicks" },
+      { id: "t:glass", name: "Glass" }, { id: "t:oil", name: "Lamp oil" }, { id: "t:sixth", name: "Sixth" }];
+    const chipRun = async scriptText => {
+      const L = {}, q3 = { value: "", placeholder: "", focus() {}, setAttribute() {}, addEventListener: (t, fn) => { L[t] = fn; } };
+      let html = "";
+      const host = { el: null, insertBefore(el) { this.el = el; } };
+      const box3 = { parentNode: host, set innerHTML(v) { html = v; }, get innerHTML() { return html; }, setAttribute() {}, querySelectorAll: () => [], addEventListener() {} };
+      const calls = [];
+      let onOpen = null;
+      const W = { E_PICK: {
+        find: () => Promise.resolve(JSON.stringify({ rows: [R("found")] })),
+        takeSuggest: id => { calls.push("take " + id); return Promise.resolve(JSON.stringify({ rows: [R("s1")], picked: [id] })); },
+        copy: w => { calls.push("copy " + w); }, close() {}, ready() {}, onOpen: fn => { onOpen = fn; } } };
+      const D = { getElementById: id => (id === "q" ? q3 : id === "rows" ? box3 : null),
+        createElement: tag => ({ tagName: tag, id: "", className: "", title: "", textContent: "", type: "", children: [], attrs: {}, L: {},
+          setAttribute(k, v) { this.attrs[k] = String(v); if (k === "id") this.id = String(v); },
+          getAttribute(k) { return this.attrs[k] || ""; },
+          appendChild(c) { this.children.push(c); return c; }, remove() {}, addEventListener(t, fn) { this.L[t] = fn; } }),
+        documentElement: { style: { setProperty() {} }, dataset: {}, classList: { toggle() {} }, lang: "" } };
+      new Function("window", "document", scriptText)(W, D);
+      const key = (k, code, mods) => { let prevented = false;
+        L.keydown(Object.assign({ key: k, code: code, ctrlKey: false, altKey: false, metaKey: false, shiftKey: false, preventDefault() { prevented = true; } }, mods || {}));
+        return prevented; };
+      onOpen(JSON.stringify({ rows: pRows, suggest: CHIPS.slice(0, 5), words: { suggest: "Suggested", suggestTip: "tip" } }));
+      await tick(5);
+      const chips = () => host.el ? host.el.children.filter(c => c.tagName === "button") : [];
+      const alt = [];
+      for (let n = 1; n <= 6; n++) { const c0 = calls.length; const stopped = key(String(n), "Digit" + n, { altKey: true }); await tick(5); alt.push([n, calls.slice(c0).join(","), stopped]); }
+      const c1 = calls.length;
+      key("1", "Numpad1", { altKey: true, ctrlKey: true }); key("1", "Digit1", { altKey: true, shiftKey: true });
+      q3.value = "lamp"; key("1", "Digit1", { altKey: true }); q3.value = "";
+      await tick(5);
+      const ignored = calls.slice(c1);
+      const c2 = calls.length;
+      host.el.L.click({ target: { closest: () => chips()[1] }, ctrlKey: false });
+      await tick(5);
+      const clicked = calls.slice(c2);
+      const mark = () => chips().map(c => c.getAttribute("aria-selected")).join("");
+      key("ArrowRight", "ArrowRight"); const afterRight0 = mark();
+      key("ArrowUp", "ArrowUp"); key("ArrowUp", "ArrowUp"); const afterUp = mark();
+      key("ArrowRight", "ArrowRight"); const afterRight = mark(); key("ArrowLeft", "ArrowLeft"); key("ArrowLeft", "ArrowLeft"); const afterLeft = mark();
+      return { alt, ignored, clicked, afterRight0, afterUp, afterRight, afterLeft, keys: chips().map(c => c.getAttribute("aria-keyshortcuts")),
+        names: chips().map(c => c.textContent), label: host.el.children[0] && host.el.children[0].textContent };
+    };
+    const J4c = JSON.stringify;
+    const chipsOn = await chipRun(script);
+    const wantAlt = [[1, "take t:post", true], [2, "take t:lamp", true], [3, "take t:wick", true], [4, "take t:glass", true], [5, "take t:oil", true], [6, "", false]];
+    check(J4c(chipsOn.alt) === J4c(wantAlt) && J4c(chipsOn.keys) === J4c(["Alt+1", "Alt+2", "Alt+3", "Alt+4", "Alt+5"])
+      && J4c(chipsOn.names) === J4c(["Post", "Lamps", "Wicks", "Glass", "Lamp oil"]) && chipsOn.label === "Suggested",
+      "4chips1 five chips under the label, and Alt+1 to Alt+5 take chip 1 to 5 as the key's own act, Alt+6 taking nothing: " + J4c(chipsOn));
+    check(chipsOn.ignored.length === 0 && J4c(chipsOn.clicked) === J4c(["take t:lamp"]) && chipsOn.afterRight0 === "falsefalsefalsefalsefalse"
+      && chipsOn.afterUp === "falsefalsefalsefalsetrue" && chipsOn.afterRight === "truefalsefalsefalsefalse" && chipsOn.afterLeft === "falsefalsefalsetruefalse",
+      "4chips2 Alt with Ctrl or Shift, or over a typed query, takes nothing; a click takes the chip as the row's Enter does; with a chip marked the"
+      + " arrows still step among them, Left and Right as Up and Down do: " + J4c(chipsOn));
+    const sheetOf = (d, sel) => { const i = d.indexOf("\n" + sel + "{"); return i < 0 ? "" : d.slice(i + sel.length + 2, d.indexOf("}", i)); };
+    const prop = (r, name) => { const m = new RegExp("(?:^|;)" + name + ":([^;]*)").exec(r); return m ? m[1].trim() : ""; };
+    const px = v => parseFloat(v) || 0;
+    const wrapOk = d => { const sgR = sheetOf(d, "#sg"), labR = sheetOf(d, "#sg .sg-lab"), btnR = sheetOf(d, "#sg button");
+      return /^flex$/.test(prop(sgR, "display")) && prop(sgR, "flex-wrap") === "wrap" && prop(sgR, "flex-direction") === "" && !/width:100%/.test(btnR)
+        && /max-width:calc\(33\.3+% - \d+px\)/.test(btnR) && prop(labR, "flex") === "0 0 100%"; };
+    check(wrapOk(doc),
+      "4chips3 the band is a wrapping row: each chip as wide as its words (never the full width), at most a third of the band so two lines hold"
+      + " five, the label on a line of its own: " + J4c({ sg: sheetOf(doc, "#sg"), lab: sheetOf(doc, "#sg .sg-lab"), btn: sheetOf(doc, "#sg button") }));
+    const mainSrc = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
+    const size = /const PICK_SIZE = \{ width: (\d+), height: (\d+) \}/.exec(mainSrc);
+    const sgR = sheetOf(doc, "#sg"), labR = sheetOf(doc, "#sg .sg-lab"), btnR = sheetOf(doc, "#sg button"), bodyR = sheetOf(doc, "body"),
+      topR = sheetOf(doc, "#top"), rowR = sheetOf(doc, "#rows li"), footR = sheetOf(doc, "footer");
+    const chipH = px(prop(btnR, "height")), gap = px(prop(sgR, "gap")), lab = px(prop(labR, "line-height"));
+    const band = lab + gap + 2 * chipH + gap, pad = px(prop(bodyR, "padding")), bodyGap = px(prop(bodyR, "gap")), top = px(prop(topR, "flex").split(" ")[2]);
+    const foot = px(prop(footR, "padding").split(" ")[0]) + 1 + Math.ceil(px(prop(footR, "font-size")) * 1.35);
+    const room = (size ? +size[2] : 0) - 2 * pad - top - band - foot - 3 * bodyGap, rowH = px(prop(rowR, "height"));
+    check(!!size && +size[1] === 600 && +size[2] === 424 && prop(sgR, "max-height") === (band - gap) + "px" && chipH > 0 && rowH === 36 && room >= 7 * rowH,
+      "4chips4 at the fixed 600 by 424 the band is two lines at most and seven whole replies show beneath it: window " + J4c(size && size.slice(1, 3))
+      + ", band " + band + " (cap " + prop(sgR, "max-height") + "), room for the replies " + room + " against " + 7 * rowH);
+    if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  4chips5 the chips' two plants (ETIUDA_PLANTS=off)");
+    else {
+      const sLines = script.split("\n");
+      const altHits = sLines.filter(l => l.indexOf("plant:pick-chip-alt") >= 0).length;
+      const wrapLines = mainSrc.split("\n").filter(l => l.indexOf("plant:pick-chip-wrap") >= 0);
+      const noAlt = sLines.map(l => (l.indexOf("plant:pick-chip-alt") >= 0 ? l.replace("e.altKey &&", "false &&") : l)).join("\n");
+      const planted = await chipRun(noAlt);
+      const noWrap = doc.replace("\n#sg{" + sgR + "}", "\n#sg{" + sgR.replace("flex-wrap:wrap", "flex-wrap:nowrap") + "}");
+      check(altHits === 1 && noAlt !== script && J4c(planted.alt) !== J4c(wantAlt) && wrapLines.length === 1 && wrapLines[0].indexOf("flex-wrap:wrap") >= 0
+        && noWrap !== doc && !wrapOk(noWrap) && wrapOk(doc),
+        "4chips5 rewriting plant:pick-chip-alt leaves Alt+n taking nothing, and rewriting plant:pick-chip-wrap (the band's wrapping) is what 4chips3 reads red: "
+        + J4c({ altHits, wrapHits: wrapLines.length, alt: planted.alt }));
+    }
+  }
 
   /* ---- 5. what the shell may not do -------------------------------------------------------- */
   console.log("\n[5/7] what the shell may not do, read from its text with the comments taken out");
