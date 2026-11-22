@@ -1108,7 +1108,8 @@ try {
     await perfPage.waitForSelector("#screenHost .sx-page", { timeout: 10000 });
     await sleep(200);
     const selInfo = await perfPage.evaluate(() => {
-      const spans = Array.from(document.querySelectorAll("#screenHost .sx-page span.e-dot-hug"))
+      /* the words stand in the patch's box of their own, .e-dot-t (template.html): the text node is that box's first child */
+      const spans = Array.from(document.querySelectorAll("#screenHost .sx-page span.e-dot-hug > span.e-dot-t"))
         .filter((el) => el.firstChild && el.firstChild.nodeType === 3 && el.firstChild.nodeValue.trim());
       if (spans.length < 1) return { found: 0 };
       const keep = spans[0];
@@ -1128,8 +1129,8 @@ try {
       obs.disconnect();
       const after = sel.toString();
       const collapsed = sel.isCollapsed;
-      const other = spans.length > 1 ? spans[1] : keep;
-      const raw = other.firstChild;
+      const other = (spans.length > 1 ? spans[1] : keep).parentNode;
+      const raw = other.firstChild.firstChild;
       const parent = other.parentNode;
       parent.insertBefore(raw, other);
       other.remove();
