@@ -48,7 +48,7 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 318;
+const PLANTS = 331;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
@@ -405,7 +405,7 @@ CASES.seatFile = s => {
   return Object.keys(d).join() === "format,desk,certificate" && d.format === 2 && d.desk === DESK_ID && JSON.stringify(d.certificate) === JSON.stringify(cert())
     && s.SEAT_NAME === "seat.json";
 };
-/* A refusal keeps the last certificate; "signin" forgets the refresh token; a service not reached is only marked; an answer of none
+/* A refusal keeps the last certificate; "signin" forgets the refresh token and sets the certificate aside (dsfe1); a service not reached is only marked; an answer of none
    keeps a held certificate to its own end, `ended` stamped (B-2b; the stamp itself, keepNone), and takes none where none was held. */
 CASES.settle = s => {
   const h = { provider: "microsoft", refresh: "sealed:rt", sub: "sealed:s", seed: "6".repeat(64), code: CODE, cert: cert(), at: 1, checked: 1, reached: true, said: "", ask: false };
@@ -413,7 +413,7 @@ CASES.settle = s => {
   const away = s.signinSettle(h, { ok: false, reason: "unreached" }, NOW), none = s.signinSettle(h, { ok: true, code: CODE, cert: null }, NOW);
   const fresh = s.signinSettle(Object.assign({}, h, { reached: false, said: "full" }), { ok: true, code: CODE, cert: cert({ issued: NOW + 1 }) }, NOW);
   return full.cert === h.cert && full.said === "full" && full.refresh === "sealed:rt" && full.ask === false
-    && freed.cert === h.cert && freed.refresh === "" && freed.ask === true && away.reached === false && away.cert === h.cert && away.at === 1
+    && freed.cert === null && freed.freed === NOW && freed.refresh === "" && freed.ask === true && away.reached === false && away.cert === h.cert && away.at === 1
     && none.cert === h.cert && none.ended === NOW && none.code === CODE && s.signinSettle(Object.assign({}, h, { cert: null }), { ok: true, code: CODE, cert: null }, NOW).cert === null
     && fresh.cert.issued === NOW + 1 && fresh.reached === true && fresh.said === "" && fresh.at === NOW;
 };
@@ -540,7 +540,8 @@ CASES.renewRefuse = async s => {
   return other.said === "signin-other" && theirs.said === "signin-unbound" && [other, theirs].every(r => r.held.refresh === "" && r.held.ask === true
     && r.held.cert && r.held.code === CODE) && io1.posted.length === 0 && io2.posted.length === 0;
 };
-/* The provider or the service away, or the service refusing: the certificate, the code and the provider stay, the desk works on. */
+/* The provider or the service away, or the service refusing: the certificate, the code and the provider stay, the desk works on; a freed seat
+   keeps the code and the provider, its certificate set aside (dsfe1). */
 CASES.renewFail = async s => {
   const plain = answer({ id_token: jwt(msClaims(undefined)) });
   const offline = await s.signinRenewHeld(renewIo(new Error("offline"), answer({})), MS, DESK_KEY, heldOf(), () => NOW);
@@ -550,7 +551,7 @@ CASES.renewFail = async s => {
   const kept = r => !!r.held.cert && r.held.code === CODE && r.held.provider === "microsoft";
   return offline.said === "signin-unreached" && kept(offline) && offline.held.reached === false && offline.held.refresh === "sealed:rt-1"
     && away.said === "unreached" && kept(away) && away.held.reached === false && busy.said === "unreached" && kept(busy)
-    && freed.said === "signin" && kept(freed) && freed.held.refresh === "" && freed.held.ask === true;
+    && freed.said === "signin" && freed.held.cert === null && freed.held.code === CODE && freed.held.provider === "microsoft" && freed.held.refresh === "" && freed.held.ask === true;
 };
 
 /* ---- the renewal's wiring, evaluated with stand-ins for the shell around it --------------------------------------------- */
@@ -5517,6 +5518,8 @@ CASES.freedDoor = async (s, page) => {
   try { plPair = pg.deskDoorLines(pg.deskDoorState(v)); plScreen = words(pg.firstSigninHtml(v)); } finally { storage.lsSet("eUiLang", "en"); }
   return ds.state === "freed" && pair[0] === FREED_EN[0] && pair[1] === FREED_EN[1] && screen.indexOf(FREED_EN[0]) >= 0 && screen.indexOf(FREED_EN[1]) >= 0
     && /data-signin-act="another"[^>]*>Sign in again</.test(html) && screen.indexOf("has stopped") < 0
+    /* No Check now and no note promising it: with no refresh token it would ask nothing. */
+    && html.indexOf('data-signin-act="check"') < 0 && screen.indexOf("Check now") < 0
     && !!panel && panel.moment === "freed" && panel.heading === FREED_EN[0] && panel.line === FREED_EN[1] && Array.isArray(panel.providers) && panel.providers.join() === "microsoft"
     && !!plPair && plPair[0] === FREED_PL[0] && plPair[1] === FREED_PL[1] && plScreen.indexOf(FREED_PL[0]) >= 0 && plScreen.indexOf("Zaloguj się ponownie") >= 0
     && stopped.state === "stopped";
@@ -5547,7 +5550,7 @@ const LEGS = [
   ["ds3c", "answers", "the service's answers read as the interface names them; a certificate for another desk or code is not taken"],
   ["ds3g", "managedRead", "a managed tenant: the service's word that it is managed, and why, read from a seat and a no-role refusal and kept; an ordinary answer clears it"],
   ["ds3d", "seatFile", "seat.json is {format: 2, desk, certificate}, the certificate whole and no token"],
-  ["ds3e", "settle", "a refusal keeps the last certificate, a freed seat forgets the refresh token, a service away is only marked, none keeps a held certificate with ended stamped and takes none where none was held"],
+  ["ds3e", "settle", "a refusal keeps the last certificate, a freed seat forgets the refresh token and sets its certificate aside, a service away is only marked, none keeps a held certificate with ended stamped and takes none where none was held"],
   ["ds3f", "lapse", "the calm lapse: lapsed once the kept certificate's until has passed, never with no certificate"],
   ["ds4b", "door", "the provider's door asks only its own token address, by POST, no redirect followed, nothing cached, no cookie"],
   ["ds4c", "keep", "the refresh token is sealed by a real keyring and never kept on Linux's basic_text"],
@@ -5557,7 +5560,7 @@ const LEGS = [
   ["ds6c", "scopes", "the first sign-in asks Microsoft for openid profile email offline_access and Google for openid email profile; a refresh asks Microsoft what it asked before and Google nothing"],
   ["ds7a", "renewWrite", "a refreshed token with the seat's sub goes to signin/desk with no seed, signed by this desk's key, and the new certificate is kept"],
   ["ds7b", "renewRefuse", "another sub or another desk's nonce posts nothing, forgets the refresh token and asks the person"],
-  ["ds7c", "renewFail", "the provider or the service away, or the service refusing, keeps the certificate and the code; a freed seat asks the person"],
+  ["ds7c", "renewFail", "the provider or the service away, or the service refusing, keeps the certificate and the code; a freed seat asks the person, its certificate set aside"],
   ["ds7d", "renewHarness", "signinRenewNow returns at once on a harness start, reading and asking nothing"],
   ["ds7e", "renewDaily", "the renewal runs once at each start, soon after the window, then daily by a named constant, and never from a harness start"],
   ["ds7f", "renewWire", "the wiring keeps and writes a renewed certificate and tells the page; a provider no longer offered is never asked"],
@@ -6013,7 +6016,7 @@ const DESK_READS = {
   "none": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && r.cert === null && r.code === c.body.code && !!h.cert && h.ended === NOW && h.said === ""
     && JSON.stringify(h.trials) === JSON.stringify(c.body.trials); },
   "waiting": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && r.cert === null && r.code === c.body.code && h.said === "waiting" && h.ask === false && h.refresh === "sealed:rt"; },
-  "signin": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === false && r.reason === "signin" && h.refresh === "" && h.ask === true; },
+  "signin": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === false && r.reason === "signin" && h.refresh === "" && h.ask === true && h.cert === null && h.freed === NOW; },
   "desks": r => r.ok === false && r.reason === "desks",
   "token": r => r.ok === false && r.reason === "token",
   "access-token": r => r.ok === false && r.reason === "access-token" && r.managed === true,
@@ -6122,8 +6125,8 @@ if (!PLANTS_OFF) {
   await plant("dsp28", ["const SIGNOUT_DESK_LINE = \"etiuda-licence-signout-desk\"; /* plant:signout-line */", "const SIGNOUT_DESK_LINE = \"etiuda-licence-signin-desk\";"], "signoutBody");
   await plant("dsp12", ["&& String(c.desk) === String(deskKey) && /^[0-9a-f]{64}$/.test(String(c.person)) && SIGNIN_CODE.test(String(c.code)) /* plant:cert-desk */",
     "&& /^[0-9a-f]{64}$/.test(String(c.person)) && SIGNIN_CODE.test(String(c.code))"], "answers");
-  await plant("dsp13", ["    refresh: freed ? \"\" : held.refresh }, ans.managed === true ? { managed: true, cause: ans.cause || \"\" } : {}); /* plant:settle-freed */",
-    "    refresh: held.refresh }, ans.managed === true ? { managed: true, cause: ans.cause || \"\" } : {});"], "settle");
+  await plant("dsp13", ["    refresh: freed ? \"\" : held.refresh }, aside, ans.managed === true ? { managed: true, cause: ans.cause || \"\" } : {}); /* plant:settle-freed */",
+    "    refresh: held.refresh }, aside, ans.managed === true ? { managed: true, cause: ans.cause || \"\" } : {});"], "settle");
   await plant("dsp15", ["return !!held && !!held.cert && now >= held.cert.until; /* plant:lapse-until */", "return !!held && !!held.cert && now >= held.cert.until + 86400000;"], "lapse");
   await plant("dsp16", ["if (!Object.keys(SIGNIN_PROVIDERS).some(id => SIGNIN_PROVIDERS[id].token === u)) throw new Error(\"a token is asked only at a provider's own token address\"); /* plant:door-host */", ""], "door");
   await plant("dsp17", ["body: form, redirect: \"error\", cache: \"no-store\", credentials: \"omit\", signal: ctl ? ctl.signal : undefined }); /* plant:door-redirect */",
@@ -6512,6 +6515,20 @@ if (!PLANTS_OFF) {
   await plant("dsgp30", ["  current = !h.cert || !clock || !(clock.issued > 0) || h.cert.issued >= clock.issued; /* plant:file-clock-issued */", "  current = true;"], "settleClockIssued");
   await plantWire("dsgp31", ["  const keyOk = !signinState._key || key === signinState._key; /* plant:state-key */", "  const keyOk = true;"], "stateKeyRestoreAndTell");
   await plantWire("dsgp32", ["  if (wasClock && wasKey !== key && key && held && held.cert) tellSignin(); /* plant:clock-key-told */\n", ""], "stateKeyRestoreAndTell");
+  /* A lead's act ends the seat (dsfe): each deciding line planted alone. */
+  await plant("dsfep1", ["  const aside = ends ? { cert: null, doors: [], doorsSig: \"\", freed: Number.isSafeInteger(deskNow) && deskNow > 0 ? deskNow : now } : {}; /* plant:freed-aside */", "  const aside = {};"], "freedEnds");
+  await plant("dsfep2", ["  const ends = freed && !!held.cert; /* plant:freed-ends */", "  const ends = !!held.cert;"], "freedOthers");
+  await plant("dsfep3", ["    delete out.freed; /* plant:freed-clear */", ""], "freedEnds");
+  await plant("dsfep4", ["  if (out.held && !out.held.cert && Number.isSafeInteger(h.freed) && h.freed > 0) out.held.freed = h.freed; /* plant:freed-file */", ""], "freedEnds");
+  await plant("dsfep5", ["  if (signedIn && held && held.freed > 0) view.freed = held.freed; /* plant:view-freed */", ""], "freedDoor");
+  await plant("dsfep6", ["  return Object.assign({}, held, { checked: now, reached: true, said: ans.reason, ask: freed || held.ask === true,", "  return Object.assign({ provider: held.provider, sub: held.sub, seed: held.seed }, { checked: now, reached: true, said: ans.reason, ask: freed || held.ask === true,"], "freedKeeps");
+  await plantPage("dsfep7", ["    freed: signedIn ? signinTimeRead(o.freed) : 0, /* plant:read-freed */", "    freed: 0,"], "freedDoor");
+  await plantPage("dsfep8", ["  else if(!works && v.signedIn && v.freed>0) state=\"freed\"; /* plant:door-state-freed */", ""], "freedDoor");
+  await plantPage("dsfep9", ["  if(ds.state===\"freed\") return [t(\"The team's lead has taken back this computer's seat.\"), /* plant:door-lines-freed */", "  if(false) return [t(\"The team's lead has taken back this computer's seat.\"),"], "freedDoor");
+  await plantPage("dsfep10", ["|| ds.state===\"freed\") return doorLaterHtml(v, ds); /* plant:door-later-freed */", ") return doorLaterHtml(v, ds);"], "freedDoor");
+  await plantPage("dsfep13", ["  if(!checkFilled && !freed) quiet.push(doorTextPress(t(\"Check now\"), \"check\")); /* plant:door-freed-nocheck */", "  if(!checkFilled) quiet.push(doorTextPress(t(\"Check now\"), \"check\"));"], "freedDoor");
+  await plantPage("dsfep11", ["  quiet.push(doorTextPress(freed ? t(\"Sign in again\") : t(\"Use another account\"), \"another\")); /* plant:door-freed-again */", "  quiet.push(doorTextPress(t(\"Use another account\"), \"another\"));"], "freedDoor");
+  await plantPage("dsfep12", ["  if(v.freed>0 && deskDoorState(v).state===\"freed\"){", "  if(false){"], "freedDoor");
   const gated = MAIN.replace("function writeBranch(stem, text) {\n", "function writeBranch(stem, text) {\n  if (!signinView().signedIn) return { ok: false };\n");
   check(gated !== MAIN && outsideNames(gated).slice().sort().join() !== expectOutside.slice().sort().join(),
     "dsp14 plant a sign-in gate on the desk file's write turns ds5a red");

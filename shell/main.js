@@ -11828,6 +11828,8 @@ function signinViewOf(kept, o) {
   /* The invitations waiting, by place, and the lead a Join waits on: only where any, as `asked`. */
   if (signedIn && held && Array.isArray(held.invited) && held.invited.length) view.invited = signinInvitedView(held.invited);
   if (signedIn && held && typeof held.joinWait === "string" && held.joinWait) view.joinWait = held.joinWait;
+  /* When a lead took back this computer's seat: only where one did, as `asked`. */
+  if (signedIn && held && held.freed > 0) view.freed = held.freed; /* plant:view-freed */
   /* Only where machine policy sets any of its six values, so an unmanaged desk's view is the same object as before. */
   const m = o.managed;
   if (m && m.any) view.managed = { on: m.managed, shared: m.shared, personal: m.personal, provider: m.provider, tenant: !!m.tenant, closed: m.closed, contact: m.contact, /* plant:view-managed */
@@ -11839,7 +11841,8 @@ function signinViewOf(kept, o) {
 }
 /* `held` after the service's answer `ans` at `now`: a certificate replaces the last; an answer of none (a wait is said as "waiting")
    keeps a held certificate to its own end, `ended` the desk's time `deskNow` at the first such answer, and drops its doors; a refusal
-   keeps it and is said; "signin", a seat freed, forgets the refresh token, since only a sign-in takes it again. The seat's words go
+   keeps it and is said; "signin", a seat freed, forgets the refresh token, since only a sign-in takes it again, and sets aside the
+   certificate it held, `freed` stamped. The seat's words go
    with the certificate they came with, the trials are kept until an answer names others. Whatever the answer, the list it carried
    replaces the kept one only where it is later (signinRevokedNext). */
 function signinSettle(held, ans, now, deskNow, clockIssued) {
@@ -11858,14 +11861,18 @@ function signinSettleSeat(held, ans, now, deskNow, clockIssued) {
       said: ans.waiting === true ? "waiting" : "", ask: false, askLead: ans.askLead === true, managed: ans.managed === true, cause: ans.managed === true ? ans.cause || "" : "",
       storeOffer: ans.storeOffer === true }); /* plant:wait-settle */
     delete out.ended; delete out.holding; delete out.trials; delete out.asked; delete out.invited; delete out.joinWait;
+    delete out.freed; /* plant:freed-clear */
     const joinWait = signinJoinWaitKept(held, ans);
     return Object.assign(out, ended ? { ended: ended } : {}, signinWordsOf(ans.cert ? ans.holding : keep ? held.holding : null, ans.trials || (held && held.trials)), signinAskedWords(signinAskedOf((ans.asked || []).map(n => ({ lead: { name: n } })))), /* plant:words-settle */
       signinInvitedWords(signinInvitedOf(ans.invited)), joinWait ? { joinWait: joinWait } : {});
   }
   if (ans.reason === "unreached") return Object.assign({}, held, { checked: now, reached: false });
   const freed = ans.reason === "signin";
+  /* A lead's own act, never a lapse: the certificate and its doors are set aside at once, `freed` the desk's time, so the desk stops. */
+  const ends = freed && !!held.cert; /* plant:freed-ends */
+  const aside = ends ? { cert: null, doors: [], doorsSig: "", freed: Number.isSafeInteger(deskNow) && deskNow > 0 ? deskNow : now } : {}; /* plant:freed-aside */
   return Object.assign({}, held, { checked: now, reached: true, said: ans.reason, ask: freed || held.ask === true,
-    refresh: freed ? "" : held.refresh }, ans.managed === true ? { managed: true, cause: ans.cause || "" } : {}); /* plant:settle-freed */
+    refresh: freed ? "" : held.refresh }, aside, ans.managed === true ? { managed: true, cause: ans.cause || "" } : {}); /* plant:settle-freed */
 }
 /* The reasons a provider's refresh forgets its token: it no longer takes it, or the token it gives is not this seat's or not the pinned tenant's. */
 const SIGNIN_LOST = Object.freeze(["signin-ask", "signin-expired", "signin-other", "signin-unbound", "signin-tenant"]);
@@ -11948,6 +11955,8 @@ function signinFileRead(text, packed) {
   if (out.held && (h.seated === true || out.held.cert)) out.held.seated = true; /* plant:seated-file */
   /* The service's none while a certificate ran, kept with that certificate alone; the seat's words with it, the trials beside. */
   if (out.held && out.held.cert && Number.isSafeInteger(h.ended) && h.ended > 0) out.held.ended = h.ended; /* plant:ended-file */
+  /* A seat a lead took back, kept where no certificate is (signinSettleSeat). */
+  if (out.held && !out.held.cert && Number.isSafeInteger(h.freed) && h.freed > 0) out.held.freed = h.freed; /* plant:freed-file */
   if (out.held) Object.assign(out.held, signinWordsOf(out.held.cert ? signinHoldingOf(h.holding) : null, signinTrialsOf(h.trials))); /* plant:words-file */
   if (out.held) Object.assign(out.held, signinAskedWords(signinAskedOf(Array.isArray(h.asked) ? h.asked.map(n => ({ lead: { name: n } })) : null))); /* plant:asked-file */
   if (out.held) Object.assign(out.held, signinInvitedWords(signinInvitedOf(h.invited)), signinJoinWaitKept(h, out.held) ? { joinWait: h.joinWait } : {});
@@ -13255,7 +13264,7 @@ function storeView() {
     ask, askNow: ask && !storeNotNow.has(who), again: storeAgainTimer ? storeAgainAt : 0, /* plant:store-view-again */
     looking: storeLooking > 0, ever: s.told === true, /* plant:store-view-looking */
     anew: storeAnew, /* plant:store-view-anew */
-    seatless: !!held && (!held.cert || held.said === "full"), full: s.full === true }); /* plant:store-view-room */
+    seatless: !!held && ((!held.cert && !(held.freed > 0)) || held.said === "full"), full: s.full === true }); /* plant:store-view-room */
 }
 function tellStore() {
   const win = theWindow;
