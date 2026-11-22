@@ -56,7 +56,7 @@ try {
     lineOf("const MANAGED_TENANT_ID ="), lineOf("const MANAGED_TENANT_DOMAIN ="), lineOf("const MANAGED_CONTACT_MAX ="),
     MAIN.slice(once(MAIN, "\nconst MANAGED_NAMES =") + 1, MAIN.indexOf("]);", once(MAIN, "\nconst MANAGED_NAMES =")) + 3),
     fnOf("function managedPolicyFrom("), lineOf("function managedStrands("), lineOf("function rawPublic("), fnOf("function branchIdOf("),
-    fnOf("function branchIdentity("), lineOf("const GOOGLE_HD_NEEDS_EMAIL ="), tableOf(), lineOf("function signinKnown("),
+    fnOf("function branchIdentity("), tableOf(), lineOf("function signinKnown("),
     lineOf("const SIGNIN_ACCESS_MAX ="), lineOf("const SIGNIN_DESK_LINE ="), lineOf("function signinTokenHash("), fnOf("function signinDeskBytes("),
     lineOf("const SIGNIN_DESK_MANAGED_LINE ="), fnOf("function signinDeskManagedBytes("), fnOf("function signinDeskManagedBody("),
     lineOf("const SIGNIN_DESK_POOLED_LINE ="), lineOf("const SIGNIN_DESK_MANAGED_POOLED_LINE ="), fnOf("function signinDeskPooledBytes("),

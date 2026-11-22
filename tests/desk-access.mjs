@@ -50,7 +50,7 @@ const fnOf = start => { const at = once(MAIN, "\n" + start) + 1; return MAIN.sli
 const tableOf = () => { const at = once(MAIN, "\nlet SIGNIN_PROVIDERS = Object.freeze({") + 1; return MAIN.slice(at, MAIN.indexOf("\n});", at) + 4); };
 let TEXT = "", sliced = "";
 try {
-  TEXT = [lineOf("const GOOGLE_HD_NEEDS_EMAIL ="), tableOf(), lineOf("const SIGNIN_TENANT ="), lineOf("const SIGNIN_SKEW_MS ="),
+  TEXT = [tableOf(), lineOf("const SIGNIN_TENANT ="), lineOf("const SIGNIN_SKEW_MS ="),
     lineOf("function signinKnown("), lineOf("const SIGNIN_ACCESS_ID ="), lineOf("const SIGNIN_ACCESS_MAX ="), fnOf("function signinServiceScope("),
     fnOf("function signinAccessFor("), lineOf("const SIGNIN_PERSONAL_TENANT ="), fnOf("function signinPinOk("), lineOf("const SIGNIN_NONCE_LINE ="),
     fnOf("function signinNonce("), lineOf("function signinB64url("), fnOf("function signinSame("), fnOf("function signinAuthorize("),
@@ -112,7 +112,7 @@ CASES.ordinary = s => {
   const form = formOf(s.signinRefreshForm(MS, "r", path || undefined));
   const got = s.signinTokens({ status: 200, bytes: Buffer.from(JSON.stringify({ id_token: jwt(idClaims({ nonce: "n" })), access_token: "graph", refresh_token: "r" })) }, MS, "n", NOW);
   const body = s.signinDeskBody("microsoft", "id.tok.en", DESK, SEED, NOW, sign);
-  return path === "" && scopeOf(url) === "openid profile offline_access" && url.indexOf("api%3A") < 0 && form.get("scope") === "openid profile offline_access"
+  return path === "" && scopeOf(url) === "openid profile email offline_access" && url.indexOf("api%3A") < 0 && form.get("scope") === "openid profile offline_access"
     && got.ok && !("accessToken" in got) && Object.keys(body).join() === "provider,idToken,desk,seed,t,sig" && verifies(today.desk("microsoft", "id.tok.en", DESK, NOW, SEED), body.sig);
 };
 CASES.personal = s => {
@@ -160,7 +160,7 @@ CASES.managed = s => {
   const body = s.signinDeskBody("microsoft", "id.tok.en", DESK, SEED, NOW, sign, ACCESS);
   const renew = s.signinDeskBody("microsoft", "id.tok.en", DESK, "", NOW, sign, ACCESS);
   const none = (tableOn(s, ""), s.signinAccessFor(MS, true, null));
-  return path === SCOPE && remembered === SCOPE && scopeOf(url) === "openid profile offline_access " + SCOPE && form.get("scope") === "openid profile offline_access " + SCOPE
+  return path === SCOPE && remembered === SCOPE && scopeOf(url) === "openid profile email offline_access " + SCOPE && form.get("scope") === "openid profile offline_access " + SCOPE
     && Object.keys(body).join() === "provider,idToken,accessToken,desk,seed,t,sig" && verifies(today.managed("microsoft", "id.tok.en", ACCESS, DESK, NOW, SEED), body.sig)
     && !verifies(today.managed("microsoft", "id.tok.en", ACCESS, DESK, NOW), body.sig)
     && Object.keys(renew).join() === "provider,idToken,accessToken,desk,t,sig" && verifies(today.managed("microsoft", "id.tok.en", ACCESS, DESK, NOW), renew.sig)

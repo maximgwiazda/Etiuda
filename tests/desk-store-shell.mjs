@@ -313,8 +313,8 @@ async function scopesOnScene(src) {
   const scopeOf = u => new URL(u).searchParams.get("scope"), formScope = f => new URLSearchParams(f).get("scope");
   const policy = { plain: T.storeOnFor(null, false).on, managedUnset: T.storeOnFor({ managed: { type: "dword", value: "1" } }, false).on,
     managedOn: T.storeOnFor({ managed: { type: "dword", value: "1" }, personalstore: { type: "REG_SZ", value: "on" } }, false).on, personOff: T.storeOnFor(null, true).on };
-  const ok = scopeOf(m.url) === "openid profile offline_access" && formScope(m.form) === "openid profile offline_access Files.ReadWrite.AppFolder"
-    && scopeOf(gg.url) === "openid" && formScope(gg.form) === null && gg.form === todayForm(T, g)
+  const ok = scopeOf(m.url) === "openid profile email offline_access" && formScope(m.form) === "openid profile offline_access Files.ReadWrite.AppFolder"
+    && scopeOf(gg.url) === "openid email profile" && formScope(gg.form) === null && gg.form === todayForm(T, g)
     && T.signinIo({ loop: null }).store === false && policy.plain === true && policy.managedUnset === false && policy.managedOn === true && policy.personOff === false;
   return { ok, detail: brief({ ms: scopeOf(m.url), msRefresh: formScope(m.form), google: scopeOf(gg.url), googleRefresh: formScope(gg.form), ioStore: T.signinIo({ loop: null }).store, policy }) };
 }
@@ -1695,7 +1695,7 @@ async function switchMidLookScene(src) {
    the loopback's landing to ask the folder alone; a refusal, or an administrator's approval needed, leaves the desk signed in and says
    "consent" once; a renewal asks the folder quietly and never opens a browser. The browser is a stand-in over real HTTP to the loopback. */
 const MS_AUTH = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
-const TODAY_MS = "openid profile offline_access", FOLDER_ALONE = "openid Files.ReadWrite.AppFolder";
+const TODAY_MS = "openid profile email offline_access", TODAY_REFRESH = "openid profile offline_access", FOLDER_ALONE = "openid Files.ReadWrite.AppFolder";
 const labOf = () => ({ service: STAGING, clientIds: { microsoft: MS_CLIENT, google: G_CLIENT }, root: rawPub(LAB_ROOT.publicKey) });
 function loopGet(port, at) {
   return new Promise(resolve => {
@@ -1781,7 +1781,7 @@ const unHtml = h => String(h).replace(/&#39;/g, "'").replace(/&quot;/g, "\"").re
 const wordsAre = (html, w) => { const x = unHtml(html); return x.indexOf("<h1>" + w[0] + "</h1>") >= 0 && x.indexOf(">" + w[1] + "<") >= 0 && x.indexOf("<title>" + w[2] + " · Etiuda</title>") >= 0; };
 const folderPage = (page, k) => page.status === 200 && wordsAre(page.body, FOLDER_WORDS.en[k]);
 /* (n0) NO STORE OFFERED, NOTHING ASKED: the licence service answering a sign-in without "storeOffer": true (today's service). Each
-   provider's sign-in asks the provider what it asked before sync (Microsoft "openid profile offline_access", Google "openid"), one browser
+   provider's sign-in asks the provider what it asked before sync (Microsoft "openid profile email offline_access", Google "openid email profile"), one browser
    request and no step after the seat, no folder scope in any refresh, no app-folder call, no key file, no store/grant, no look, and the
    Account row is not shown. With the offer, both ask the folder apart after the seat in the same window. A renewal whose answer no longer
    carries the offer ends it: no look, the row not shown. */
@@ -1805,8 +1805,8 @@ async function noOfferScene(src) {
   const turned = await T.storeTurn();
   const ended = { wasOn, offerKept: T.signinState().held.storeOffer === true, turned: turned === null || turned === undefined, row: T.storeView().shown === true, graphAfter: w.graph.length - graphBefore };
   const none = x => x.folderForms === 0 && x.graph === 0 && x.drive === 0 && !x.file && x.grants === 0 && !x.look && !x.row && x.scopes.length === 1;
-  const ok = none(out.microsoft) && out.microsoft.scopes[0] === "openid profile offline_access" && none(out.google) && out.google.scopes[0] === "openid"
-    && out["microsoft+offer"].scopes[0] === "openid profile offline_access" && out["google+offer"].scopes[0] === "openid"
+  const ok = none(out.microsoft) && out.microsoft.scopes[0] === "openid profile email offline_access" && none(out.google) && out.google.scopes[0] === "openid email profile"
+    && out["microsoft+offer"].scopes[0] === "openid profile email offline_access" && out["google+offer"].scopes[0] === "openid email profile"
     && (out["microsoft+offer"].folderForms > 0 || out["microsoft+offer"].scopes.length === 2) && out["google+offer"].scopes[1] === "openid " + DRIVE_SCOPE
     && ended.wasOn && !ended.offerKept && !ended.row && ended.graphAfter === 0;
   return { ok, detail: brief({ out, ended }) };
@@ -1916,7 +1916,7 @@ async function refusedFlowScene(src, refuse, why, page) {
   const ok = !!r.qs[0] && r.qs[0].get("scope") === TODAY_MS && !!r.held && !!r.held.cert && r.view.said === "signin-done" && folderPage(r.page, page)
     && r.qs.length === 2 && r.shell.opened.length === 1 && second.get("scope") === FOLDER_ALONE && second.get("redirect_uri") === r.qs[0].get("redirect_uri")
     && !!r.now && r.now.state === "unavailable" && r.now.why === why && r.now.say === why && r.world.graph.length === 0
-    && r.forms.join() === "authorization_code,refresh_token " + TODAY_MS + " Files.ReadWrite.AppFolder" && r.b.again.every(x => x.status !== 303);
+    && r.forms.join() === "authorization_code,refresh_token " + TODAY_REFRESH + " Files.ReadWrite.AppFolder" && r.b.again.every(x => x.status !== 303);
   return { ok, detail: flowBrief(r) };
 }
 async function grantFlowScene(src) {
@@ -1927,13 +1927,13 @@ async function grantFlowScene(src) {
     && second.get("redirect_uri") === first.get("redirect_uri") && second.get("login_hint") === "person@example.test" && second.get("response_mode") === "query"
     && second.get("state") !== first.get("state") && second.get("code_challenge_method") === "S256"
     && r.shell.opened.length === 1 && r.qs.length === 2 && !!r.held && !!r.held.cert && folderPage(r.page, "on") && !!r.now && r.now.state === "on" && used >= 2
-    && r.forms.join() === "authorization_code,refresh_token " + TODAY_MS + " Files.ReadWrite.AppFolder,authorization_code" && r.b.again.every(x => x.status !== 303);
+    && r.forms.join() === "authorization_code,refresh_token " + TODAY_REFRESH + " Files.ReadWrite.AppFolder,authorization_code" && r.b.again.every(x => x.status !== 303);
   return { ok, detail: flowBrief(r) + " hint=" + (second && second.get("login_hint")) + " prompt=" + (second && second.get("prompt")) };
 }
 async function quietFlowScene(src) {
   const r = await signinFlow(src, { quiet: true });
   const ok = r.qs.length === 1 && r.qs[0].get("scope") === TODAY_MS && r.shell.opened.length === 1 && !!r.held && !!r.held.cert && seatPage(r.page)
-    && !!r.now && r.now.state === "on" && r.forms.join() === "authorization_code,refresh_token " + TODAY_MS + " Files.ReadWrite.AppFolder";
+    && !!r.now && r.now.state === "on" && r.forms.join() === "authorization_code,refresh_token " + TODAY_REFRESH + " Files.ReadWrite.AppFolder";
   return { ok, detail: flowBrief(r) };
 }
 async function offFlowScene(src) {
@@ -2197,8 +2197,8 @@ async function googleSwitchScene(src) {
   const q = on.opened.length === 1 ? new URL(on.opened[0]).searchParams : new URLSearchParams();
   const held = r.shell.T.signinState().held, access = r.shell.T.get().storeAccess, now = r.shell.T.get().storeNow;
   const apart = r.qs[1] || new URLSearchParams();
-  const ok = ungiven && first.get("scope") === "openid" && apart.get("scope") === "openid " + DRIVE_SCOPE && on.answer === "asked" && on.opened.length === 1
-    && on.opened[0].indexOf("https://accounts.google.com/o/oauth2/v2/auth?") === 0 && q.get("scope") === "openid " + DRIVE_SCOPE && q.get("login_hint") === SUB
+  const ok = ungiven && first.get("scope") === "openid email profile" && apart.get("scope") === "openid " + DRIVE_SCOPE && on.answer === "asked" && on.opened.length === 1
+    && on.opened[0].indexOf("https://accounts.google.com/o/oauth2/v2/auth?") === 0 && q.get("scope") === "openid email profile " + DRIVE_SCOPE && q.get("login_hint") === SUB
     && q.get("prompt") === null && folderPage(on.page, "on") && !!held && !!held.cert && !!access && access.token === r.world.access && !!now && now.why !== "ungiven";
   /* The store opened on Google: the look on, its key file made in Drive's app data folder by the folder's token and naming the store the look
      holds and the licence service granted, every Drive request made with that token, nothing asked of Graph. */

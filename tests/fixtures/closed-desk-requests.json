@@ -34,7 +34,7 @@
       "redirect_uri": "http://127.0.0.1:<port>",
       "response_mode": "query",
       "response_type": "code",
-      "scope": "openid profile offline_access",
+      "scope": "openid profile email offline_access",
       "state": "<state>"
      }
     },
@@ -111,7 +111,7 @@
       "prompt": "select_account",
       "redirect_uri": "http://127.0.0.1:<port>",
       "response_type": "code",
-      "scope": "openid",
+      "scope": "openid email profile",
       "state": "<state>"
      }
     },
