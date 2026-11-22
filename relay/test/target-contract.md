@@ -174,7 +174,7 @@ The relay and the program each apply the blob, team and rate limits. An incoming
 | `revoked` | That grant was signed by a revoked key, so the relay did not take it. |
 | `withdrawn` | That desk has withdrawn its request, so it was not let in. |
 | `seat-lapsed` | This desk's seat needs a current certificate, so the relay did not open a session. |
-| `lead-other` | This invitation link does not match its team's lead; it may be damaged or altered. Nothing was used or sent. The link as the lead sent it still works, and so does an invitation to this account's email address. |
+| `lead-other` | This invitation link does not match its team's lead: it may be damaged or altered, or the team may have a new lead since it was sent. Nothing was used or sent. A new link from the team's lead, or an invitation to this account's email address, works. |
 
 A swap of id, team, epoch, counter or `supersedes` fails closed as `bad-signature`. A path written onto the blob is not where the file lands. A blob sealed for an epoch the team file does not carry is `epoch`.
 

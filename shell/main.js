@@ -478,8 +478,8 @@ const LINK_NO_TEAM_PL = "To zaproszenie nie wskazuje zespołu, do którego to st
 const LINK_LONG = "This invitation is longer than Etiuda opens, so it was not opened. Ask your lead for a new one.";
 const LINK_LONG_PL = "To zaproszenie jest dłuższe, niż Etiuda może otworzyć, więc go nie otwarto. Nowe wystawi lider zespołu.";
 /* The copywriter's words; the relay's lead-other refusal is said in them too (joinLeadOther). */
-const LINK_KEY = "This invitation link does not match its team's lead; it may be damaged or altered. Nothing was used or sent. The link as the lead sent it still works, and so does an invitation to this account's email address.";
-const LINK_KEY_PL = "Ten link z zaproszeniem nie zgadza się z liderem zespołu; mógł zostać uszkodzony albo zmieniony. Niczego nie użyto ani nie wysłano. Link w postaci wysłanej przez lidera nadal działa, podobnie jak zaproszenie na adres e-mail tego konta.";
+const LINK_KEY = "This invitation link does not match its team's lead: it may be damaged or altered, or the team may have a new lead since it was sent. Nothing was used or sent. A new link from the team's lead, or an invitation to this account's email address, works.";
+const LINK_KEY_PL = "Ten link z zaproszeniem nie zgadza się z liderem zespołu: mógł zostać uszkodzony albo zmieniony, albo zespół ma już innego lidera niż w chwili wysłania. Niczego nie użyto ani nie wysłano. Zadziała nowy link od lidera zespołu albo zaproszenie na adres e-mail tego konta.";
 function linkRefusal(en, pl) { return { refused: en, saidEn: en, saidPl: pl }; }
 function linkLooks(s) {
   const head = s.slice(0, 12).toLowerCase();

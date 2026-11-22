@@ -2174,8 +2174,8 @@ if (deskOn()) try {
      lead before the token is spent; the desk lets the join and its pin go and says so in the link's sentence; the genuine invitation,
      the same token, then joins under the real lead (jlk3). Each new line, lifted alone, turns that red (jlk4). */
   if (partOn("pLeadKey")) {
-    const LINK_KEY_EN = "This invitation link does not match its team's lead; it may be damaged or altered. Nothing was used or sent. The link as the lead sent it still works, and so does an invitation to this account's email address.";
-    const LINK_KEY_PL = "Ten link z zaproszeniem nie zgadza się z liderem zespołu; mógł zostać uszkodzony albo zmieniony. Niczego nie użyto ani nie wysłano. Link w postaci wysłanej przez lidera nadal działa, podobnie jak zaproszenie na adres e-mail tego konta.";
+    const LINK_KEY_EN = "This invitation link does not match its team's lead: it may be damaged or altered, or the team may have a new lead since it was sent. Nothing was used or sent. A new link from the team's lead, or an invitation to this account's email address, works.";
+    const LINK_KEY_PL = "Ten link z zaproszeniem nie zgadza się z liderem zespołu: mógł zostać uszkodzony albo zmieniony, albo zespół ma już innego lidera niż w chwili wysłania. Niczego nie użyto ani nie wysłano. Zadziała nowy link od lidera zespołu albo zaproszenie na adres e-mail tego konta.";
     let leadRuns = 0;
     async function leadKeyRun(source) {
       const genuine = await relayInviteOn(RT2, TEAM2);
