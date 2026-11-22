@@ -182,7 +182,7 @@ function leadKeyMatches(id, pub) {
 const ROOT_PUB = "f78558260ad75c094052f936326a63bffb1a581ac8b91d898ae1fd01b61127ee";
 const GRANT_KIND = "etiuda-relay-grant", DELEGATION_KIND = "etiuda-delegation";
 const GRANT_MAX_MS = 45 * 24 * 60 * 60 * 1000;
-const GRANT_FIELDS = ["kind", "format", "lead", "issued", "until", "paid", "sig", "via", "seats"];
+const GRANT_FIELDS = ["kind", "format", "lead", "issued", "until", "paid", "sig", "via", "seats", "freed"];
 /* A grant's seats: the licence its desks' certificates must name, and the latest instant the service saw a proof succeed for any person
    of it, no later than the grant's issue; or, as {licence, release: true}, the service's word that a team gated for that licence is
    released. */
@@ -193,6 +193,9 @@ const SEATS_FIELDS = ["licence", "live"], RELEASE_FIELDS = ["licence", "release"
    test architect's read). At most FREED_MAX, keys distinct, as many as a team holds desks (KEYS_MAX), so a large company's pooled desks,
    each freed every morning, all fit: a thousand entries are about 95 KB, inside JSON_MAX and a stored value's 128 KiB. */
 const FREED_MAX = KEYS_MAX;
+/* An ordinary licence's freed desks: `freed`, a top-level field only on a grant without seats (seats always mean a seat-counted
+   licence), {key, at} as above, newest first, absent when empty. It gates nothing; a certificate on a listed key issued before its
+   at is refused (freedBefore). */
 /* A PERSON'S STORE: a team whose members are one person's computers, made and renewed by a store grant, which names the
    person's code where a relay grant names seats. Its sessions ask a store certificate naming the same code, and the service may end it
    by its notice. A store grant is signed under the delegation's "relay-grant", in its own kind, so neither grant is read as the other. */
@@ -380,6 +383,7 @@ function grantWhy(grant, leadPub, now, roots, revoked) {
   if (!is(HEX64, grant.lead) || !Number.isSafeInteger(grant.issued) || !Number.isSafeInteger(grant.until) || !sigShaped(grant.sig)) return "shape";
   if (typeof grant.paid !== "boolean") return "shape"; /* plant:grant-paid */
   if (grant.seats !== undefined && !seatsShaped(grant.seats, grant.issued)) return "shape"; /* plant:grant-seats */
+  if (grant.freed !== undefined && (grant.seats !== undefined || !freedShaped(grant.freed, grant.issued))) return "shape"; /* plant:grant-freed-top */
   if (grant.lead !== leadPub) return "lead"; /* plant:grant-lead */
   if (grant.until <= grant.issued || grant.until - grant.issued > GRANT_MAX_MS) return "span"; /* plant:grant-span */
   if (grant.issued > now + CALL_SKEW_MS) return "future"; /* plant:grant-future */
@@ -399,14 +403,17 @@ function grantWhy(grant, leadPub, now, roots, revoked) {
   return null;
 }
 const grantOk = (grant, leadPub, now, roots, revoked) => grantWhy(grant, leadPub, now, roots, revoked) === null;
+function freedShaped(list, issued) {
+  const entryOk = f => plain(f) && exactly(f, ["key", "at"]) && is(HEX64, f.key) && Number.isSafeInteger(f.at) && f.at >= 0 && f.at <= issued;
+  return Array.isArray(list) && list.length >= 1 && list.length <= FREED_MAX && list.every(entryOk) && new Set(list.map(f => f.key)).size === list.length
+    && list.every((f, i) => i === 0 || f.at <= list[i - 1].at);
+}
 function seatsShaped(s, issued) {
   if (plain(s) && exactly(s, RELEASE_FIELDS)) return is(HEX32, s.licence) && s.release === true;
   const listed = !!s && Array.isArray(s.freed);
   let freedOk = !!s && s.freed === undefined || listed;
   const entryOk = f => plain(f) && exactly(f, ["key", "at"]) && is(HEX64, f.key) && Number.isSafeInteger(f.at) && f.at >= 0 && f.at <= issued;
   freedOk = !!s && (s.freed === undefined || (listed && s.freed.length >= 1 && s.freed.length <= FREED_MAX && s.freed.every(entryOk) && new Set(s.freed.map(f => f.key)).size === s.freed.length)); /* plant:grant-freed-shape */
-  /* An ordinary licence's seats: the freed list alone, gating nothing (takeSeats keeps it as "freedAll"). */
-  if (plain(s) && exactly(s, ["freed"])) return listed && !!freedOk; /* plant:grant-freed-ordinary */
   return plain(s) && exactly(s, s.freed === undefined ? SEATS_FIELDS : SEATS_FIELDS.concat(["freed"])) && !!freedOk && is(HEX32, s.licence)
     && Number.isSafeInteger(s.live) && s.live >= 0 && s.live <= issued;
 }
@@ -776,9 +783,9 @@ function createCore(deps) {
     /* An ordinary licence's freed list, {freed, at}, kept apart from the seats so the team stays ordinary; the newest-issued grant decides,
        and one naming nobody lifts every name. */
     const all = store.get("freedAll"), allWas = plain(all) && Number.isSafeInteger(all.at) ? all : null;
-    if (plain(grant.seats) && grant.seats.licence === undefined && Array.isArray(grant.seats.freed)) {
+    if (grant.seats === undefined && Array.isArray(grant.freed)) {
       if (allWas && at < allWas.at) return;
-      const next = grant.seats.freed.map(f => ({ key: f.key, at: f.at }));
+      const next = grant.freed.map(f => ({ key: f.key, at: f.at }));
       store.put("freedAll", { freed: next, at }); /* plant:freed-ordinary-kept */
       endFreed(next.filter(f => !(allWas ? allWas.freed : []).some(x => x.key === f.key && x.at >= f.at)).map(f => f.key));
       return;
