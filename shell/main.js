@@ -2410,6 +2410,21 @@ function statsWithdrawn() {
   statsSpan = ""; statsPeriod = null; statsHeld = null; statsWroteKey = ""; /* plant:stats-withdrawn */
   armMidnight();
 }
+/* Empties the statistics already on the share for a catalog now private, even when this process has forgotten
+   which catalog they named. Where no span is held the file is taken off. A file still named as another
+   catalog that is not private is left. */
+function withdrawPrivateStats(id) {
+  if (!statsCatalogPrivate(id)) return;
+  if (statsWroteNamed && statsWroteNamed.id !== id && !statsCatalogPrivate(statsWroteNamed.id)) return;
+  if (statsSpan && statsPeriod) {
+    const text = statsWroteNamed && statsWroteNamed.id === id ? statsWroteNamed.text : JSON.stringify({ catalog: { id: id } });
+    const r = writeStatsAnswer(text, "", "close");
+    if (r && r.ok) return;
+  }
+  const at = statsFile();
+  if (!at) return;
+  try { unlinkOwn(at.dest); } catch { /* the next pass tries again */ }
+}
 function tryLiveStats(win) {
   if (!folderAnswers(catalogFolder())) return;
   const got = readSpanText();
@@ -4115,6 +4130,30 @@ function withdrawClosed() {
       gone = !!d && typeof d === "object" && own && !teamListedDoc(d, use);
     }
     if (gone) { try { unlinkOwn(file); } catch { /* the next pass tries again */ } } /* plant:s0b-withdraw-branch */
+  }
+}
+/* The root file of a shared catalog sits outside desks/, so the walk above never sees it. A mark takes off only
+   a file this desk wrote, at the root it writes to, while that file is still this catalog and still unsigned.
+   A neighbor, a signed or sealed file, and a file that now holds another catalog stay. */
+function withdrawSharedRoot(id) {
+  const root = sharedFolderForWrite();
+  if (!root || !folderAnswers(root)) return;
+  const want = new Set(privateChain(lineageOfId(id)));
+  const base = path.resolve(root);
+  const seen = new Set();
+  let versions = [];
+  try { versions = historyRead().versions; } catch { versions = []; }
+  for (const v of versions) {
+    if (!v || !v.wrote || typeof v.path !== "string" || !want.has(String(v.id || ""))) continue;
+    const file = path.resolve(v.path);
+    if (seen.has(file)) continue;
+    if (path.resolve(path.dirname(file)) !== base || !/\.ec$/i.test(path.basename(file))) continue;
+    seen.add(file);
+    let text = "";
+    try { text = fs.readFileSync(file, "utf8"); } catch { continue; }
+    const facts = historyFacts(text);
+    if (!historyFree(facts) || !want.has(String(facts.id || ""))) continue;
+    try { unlinkOwn(file); } catch { /* the next pass tries again */ }
   }
 }
 /* Whether the kept answer is about a catalog now private: its chain carries a mark, and the edition it answered with is not the
@@ -7393,8 +7432,10 @@ function markPrivate(id, on) {
     /* An answer whose catalog this desk did not record goes too, since it cannot be told apart. */
     if (on && !answerKept) removeAnswer();
     tryCatalogAsk(theWindow);
-    /* Statistics already on the share about the catalog now private are written again at once with nothing of it. */
-    if (on && statsWroteNamed && statsCatalogPrivate(statsWroteNamed.id)) writeStatsAnswer(statsWroteNamed.text, "", "close"); /* plant:pcm-stats-mark */
+    /* Statistics already on the share are emptied now, or taken off where this process cannot write them. */
+    if (on) withdrawPrivateStats(id); /* plant:pcm-stats-mark */
+    /* A root file this desk wrote of this catalog is taken off the share, and only that file. */
+    if (on) withdrawSharedRoot(id); /* plant:pcm-shared-root */
   }
   return contentView();
 }
@@ -8490,6 +8531,12 @@ function shareMustSeal(root) {
   const pinned = pinTrusted(doc.id);
   return !!pinned && pinned.keyId === doc.lead.keyId && pinned.public === doc.lead.public;
 }
+/* The catalog in these bytes is private here, as the statistics and the working copy judge it. */
+function sharedCatalogPrivate(data) {
+  if (!data || typeof data !== "object") return false;
+  const use = teamUse();
+  return use.member && use.seal ? privateHere(data, use) : catalogMarkedPrivate(data);
+}
 /* Writes the page's merged catalog over the file it read, answered {ok, rev}, or {changed} where the file is no longer
    the one read, {busy} where another desk holds the lock, {taken} where a file to be created is already there, and
    {refused} for a signed or sealed catalog on either side. A sealed team's share is written sealed, or refused,
@@ -8502,6 +8549,8 @@ function sharedWrite(name, text, sha, create) {
   let data = null;
   try { data = catalogPayload(text).data; } catch { return { ok: false }; }
   if (!isV2(data) || !historyFree(historyFacts(text))) return { ok: false, refused: true };
+  /* A catalog marked private is not written into the shared file: the lead and every teammate can open it. */
+  if (sharedCatalogPrivate(data)) return { ok: false, refused: true, private: true }; /* plant:pcm-shared-private */
   const root = sharedFolderForWrite();
   const seal = sealFor(String(data.id || ""), "", root);
   if (seal && !seal.plain) {
@@ -10152,7 +10201,15 @@ function shareActiveContext() {
   const entries = roster && Array.isArray(roster.entries) ? roster.entries : [];
   return { team: here.team, me, entries, off: !!roster && roster.sharing === "off" };
 }
+/* The catalog in use is private here, so a card from it is not sent. */
+function shareCatalogPrivate() {
+  const doc = loadedText ? catalogDocIn(loadedText) : null;
+  if (!doc || doc.kind !== "etiuda-catalog" || typeof doc.id !== "string" || !doc.id) return false;
+  const use = teamUse();
+  return use.member && use.seal ? privateHere(doc, use) : catalogMarkedPrivate(doc);
+}
 async function shareToCard(recipientId, cardJson, note) {
+  if (shareCatalogPrivate()) return { ok: false, reason: "private" }; /* plant:pcm-share-private */
   const ctx = shareActiveContext();
   if (!ctx) return { ok: false, reason: "not-on-team" };
   if (ctx.off) return { ok: false, reason: "sharing-off" }; /* plant:share-off */

@@ -1915,6 +1915,8 @@ UI_STRINGS.pl={
   "This card is too large to share, so nothing was sent.":"Ta karta jest za duża, by ją udostępnić, więc nic nie wysłano.",
   "This desk has no current seat, so nothing was sent; sharing works again once it has one.":"To stanowisko nie ma teraz ważnego miejsca w licencji, więc nic nie wysłano; udostępnianie zadziała ponownie, gdy je odzyska.",
   "This card could not be sent just now.":"Nie udało się teraz wysłać tej karty.",
+  /* words: placeholder */
+  "This catalog is private, so this card stays on this desk.":"Ten katalog jest prywatny, więc ta karta zostaje na tym stanowisku.",
   "This card could not be kept just now.":"Nie udało się teraz zachować tej karty."
 };
 // Is this a language this build carries? The table itself stays private to this file.

@@ -9991,6 +9991,8 @@ What is typed here stays in this browser.`;
     "This card is too large to share, so nothing was sent.": "Ta karta jest za duża, by ją udostępnić, więc nic nie wysłano.",
     "This desk has no current seat, so nothing was sent; sharing works again once it has one.": "To stanowisko nie ma teraz ważnego miejsca w licencji, więc nic nie wysłano; udostępnianie zadziała ponownie, gdy je odzyska.",
     "This card could not be sent just now.": "Nie udało się teraz wysłać tej karty.",
+    /* words: placeholder */
+    "This catalog is private, so this card stays on this desk.": "Ten katalog jest prywatny, więc ta karta zostaje na tym stanowisku.",
     "This card could not be kept just now.": "Nie udało się teraz zachować tej karty."
   };
   function uiLangKnown(l) {
@@ -17504,7 +17506,7 @@ What is typed here stays in this browser.`;
   function eSharedWrite(name, text, sha, create) {
     if (!eHasShared()) return Promise.resolve({ ok: false });
     try {
-      return Promise.resolve(eHost().sharedWrite(String(name || ""), String(text || ""), String(sha || ""), create === true)).then((v) => v && typeof v === "object" ? { ok: v.ok === true, changed: v.changed === true, busy: v.busy === true, taken: v.taken === true, refused: v.refused === true, sealed: v.sealed === true } : { ok: false }).catch(() => ({ ok: false }));
+      return Promise.resolve(eHost().sharedWrite(String(name || ""), String(text || ""), String(sha || ""), create === true)).then((v) => v && typeof v === "object" ? { ok: v.ok === true, changed: v.changed === true, busy: v.busy === true, taken: v.taken === true, refused: v.refused === true, sealed: v.sealed === true, private: v.private === true } : { ok: false }).catch(() => ({ ok: false }));
     } catch (e) {
       return Promise.resolve({ ok: false });
     }
@@ -20576,7 +20578,19 @@ What is typed here stays in this browser.`;
   function wholeRefusalLine(reason) {
     if (reason === "too-large") return t("This card is too large to share, so nothing was sent.");
     if (reason === "seat-lapsed") return t("This desk has no current seat, so nothing was sent; sharing works again once it has one.");
+    if (reason === "private") return t("This catalog is private, so this card stays on this desk.");
     return t("This card could not be sent just now.");
+  }
+  function sharePrivateNow() {
+    const cur = hooks.currentCatalog({ asIs: true });
+    const id = cur && cur.id ? String(cur.id) : "";
+    const c = teamContentNow();
+    let marked = false;
+    marked = !!id && !!(c && Array.isArray(c.private) && c.private.indexOf(id) >= 0);
+    return marked;
+  }
+  function sharePrivateLine() {
+    return t("This catalog is private, so this card stays on this desk.");
   }
   function sharePressed(id, fallbackOrigin) {
     if (closeShareOut && shareOpenId === id) {
@@ -20587,6 +20601,10 @@ What is typed here stays in this browser.`;
     if (closeShareIn) closeShareIn();
     const st = teamShareState(), m = findCard(id);
     if (!st || st.off || !m || !cardIsShareable(m)) return;
+    if (sharePrivateNow()) {
+      toast(sharePrivateLine());
+      return;
+    }
     const mates = (st.teammates || []).slice();
     const selected = /* @__PURE__ */ new Set();
     let query = "", noteText = "", sending2 = false;
@@ -20706,13 +20724,17 @@ What is typed here stays in this browser.`;
         const sentNames = [], refusedList = [];
         let wholeWhy = "";
         for (const mate of chosen) {
+          if (sharePrivateNow()) {
+            wholeWhy = "private";
+            break;
+          }
           const r = await shareToTeammate(mate.id, cardJson, noteText);
           if (r && r.ok) {
             sentNames.push(mate.name);
             continue;
           }
           const why = r && r.reason || "failed";
-          if ((why === "too-large" || why === "seat-lapsed") && sentNames.length === 0 && refusedList.length === 0) {
+          if ((why === "too-large" || why === "seat-lapsed" || why === "private") && sentNames.length === 0 && refusedList.length === 0) {
             wholeWhy = why;
             break;
           }
@@ -34156,7 +34178,7 @@ What is typed here stays in this browser.`;
       return Promise.resolve(io.write(JSON.stringify(doc, null, 1) + "\n", r.sha || "", !F)).then((w) => {
         if (w && w.ok) return { route, state: m.state, fresh: m.fresh, pin: io.pinOf(doc), others, wrote: true };
         if (w && w.changed && n < 1) return attempt(n + 1);
-        return quit(w && w.busy ? "busy" : w && w.taken ? "taken" : w && w.changed ? "beaten" : w && w.sealed ? "sealed" : "refused");
+        return quit(w && w.private ? "private" : w && w.busy ? "busy" : w && w.taken ? "taken" : w && w.changed ? "beaten" : w && w.sealed ? "sealed" : "refused");
       });
     });
     return attempt(0);
@@ -35018,8 +35040,17 @@ What is typed here stays in this browser.`;
     const own = sharedOwnPin();
     return !!own && pinned(c).pin === own;
   }
+  function sharedPrivateNow(loose, origin) {
+    const id = String(loose ? origin && origin.id || lyGet("LooseId") || "" : origin && origin.id || "");
+    const c = teamContentNow();
+    const list2 = c && Array.isArray(c.private) ? c.private : [];
+    let on = false;
+    on = !!id && list2.indexOf(id) >= 0;
+    return on;
+  }
   function writeShared(loose, origin, holds, layer) {
     if (!sharedEditing()) return null;
+    if (sharedPrivateNow(loose, origin)) return Promise.resolve({ route: "none" });
     const pin = loose ? "" : String(origin.pin || "");
     const at = loose ? String(lyGet("SharedFile") || "") : String(nsGet("CatalogFile") || "");
     if (!loose && !at) return null;
@@ -35046,6 +35077,7 @@ What is typed here stays in this browser.`;
         today: todayEdition()
       }).then((r) => {
         if (!same()) return { route: "branch" };
+        if (r && r.why === "private") return { route: "none", why: "private", state: r.state, fresh: [] };
         if (!at && (r.why === "taken" || r.why === "other") && n + 1 < SHARED_NAMES) return go(n + 1);
         lySet("Shared", JSON.stringify({ file: name, pin, state: r.state }));
         if (r.wrote) {

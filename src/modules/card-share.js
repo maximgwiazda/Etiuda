@@ -1,6 +1,6 @@
 /* SHARING A CARD WITH A NAMED TEAMMATE (board 1013): the card's button, the blue picker bubble,
    refusals, the arriving row at the top of the list, Keep / Later / Decline, and the "from" mark. */
-import { teamShareState, onJoinPainted, shareToTeammate, shareInboxList, shareKeepCard, shareKeptNote, shareDropItem } from "./team-join.js";
+import { teamShareState, onJoinPainted, shareToTeammate, shareInboxList, shareKeepCard, shareKeptNote, shareDropItem, teamContentNow } from "./team-join.js";
 import { ICON_SHARE } from "./icons.js";
 import { hangBubble } from "./bubble.js";
 import { dismissNode, cutLeaves } from "./motion.js";
@@ -102,7 +102,20 @@ function closeShareBubbles(back){
 function wholeRefusalLine(reason){
   if(reason==="too-large") return t("This card is too large to share, so nothing was sent.");
   if(reason==="seat-lapsed") return t("This desk has no current seat, so nothing was sent; sharing works again once it has one.");
+  if(reason==="private") return t("This catalog is private, so this card stays on this desk.");
   return t("This card could not be sent just now.");
+}
+/* The catalog in use is marked private, so a card from it is not sent. */
+function sharePrivateNow(){
+  const cur=hooks.currentCatalog({asIs:true});
+  const id=cur && cur.id ? String(cur.id) : "";
+  const c=teamContentNow();
+  let marked=false;
+  marked=!!id && !!(c && Array.isArray(c.private) && c.private.indexOf(id)>=0); /* plant:pcm-share-page */
+  return marked;
+}
+function sharePrivateLine(){
+  return t("This catalog is private, so this card stays on this desk.");
 }
 
 function sharePressed(id, fallbackOrigin){
@@ -111,6 +124,7 @@ function sharePressed(id, fallbackOrigin){
   if(closeShareIn) closeShareIn();
   const st=teamShareState(), m=findCard(id);
   if(!st || st.off || !m || !cardIsShareable(m)) return;
+  if(sharePrivateNow()){ toast(sharePrivateLine()); return; }
   const mates=(st.teammates||[]).slice();
   const selected=new Set();
   let query="", noteText="", sending=false;
@@ -237,10 +251,11 @@ function sharePressed(id, fallbackOrigin){
       const sentNames=[], refusedList=[];
       let wholeWhy="";
       for(const mate of chosen){
+        if(sharePrivateNow()){ wholeWhy="private"; break; }
         const r=await shareToTeammate(mate.id, cardJson, noteText);
         if(r && r.ok){ sentNames.push(mate.name); continue; }
         const why=(r && r.reason) || "failed";
-        if((why==="too-large" || why==="seat-lapsed") && sentNames.length===0 && refusedList.length===0){
+        if((why==="too-large" || why==="seat-lapsed" || why==="private") && sentNames.length===0 && refusedList.length===0){
           wholeWhy=why;
           break;
         }
