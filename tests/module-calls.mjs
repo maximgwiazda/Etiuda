@@ -5096,10 +5096,12 @@ const CARD_B = {
     start([["dp-a", "Anna"], ["dp-b", "Bartek"]], "dp-b");
     pax.value = "Bartek Nowak";
     T.closeActiveTab();
-    const offered = said(), closed = strip();
-    press();
-    check("tabs.js", "1012t1 a conversation closed offers Undo, and Undo brings it back where it was, in front, with what it held, what was typed just before the close included",
-      () => eq([offered, closed, strip(), pax.value].join("|"), "Tab closed|dp-a:Anna|dp-a:Anna,dp-b:Bartek Nowak|Bartek Nowak"));
+    const offered = bubble() ? "bubble" : "none", closed = strip();
+    RS.runShortcut("tabReopen");
+    /* 1012t1 was: a conversation closed offers Undo, and Undo brings it back where it was, in front, with what it held,
+       what was typed just before the close included. Now nothing is drawn on the close, and Ctrl+Shift+T does the same. */
+    check("tabs.js", "1022u1 a conversation closed draws no Undo bubble, and Ctrl+Shift+T brings it back where it was, in front, with what it held, what was typed just before the close included",
+      () => eq([offered, closed, strip(), pax.value].join("|"), "none|dp-a:Anna|dp-a:Anna,dp-b:Bartek Nowak|Bartek Nowak"));
 
     start([["dp-a", "Anna"], ["dp-b", "Bartek"], ["dp-c", "Celina"]], "dp-b");
     T.closeActiveTab(); T.stepTab(1); T.closeActiveTab();
@@ -5109,16 +5111,16 @@ const CARD_B = {
     const afterStale = strip();
     RS.runShortcut("tabReopen");
     const both = strip();
-    check("run-shortcut.js", "1012t2 Ctrl+Shift+T brings back the last closed first, each in its place; a bubble whose close the key already undid brings back nothing more",
+    check("run-shortcut.js", "1012t2 Ctrl+Shift+T brings back the last closed first, each in its place (1022u2: no bubble stands to bring back more)",
       () => eq([keyed.join("/"), afterStale, both, T.reopenClosedTab()].join("|"),
         "true/dp-a:Anna,dp-c:Celina|dp-a:Anna,dp-c:Celina|dp-a:Anna,dp-b:Bartek,dp-c:Celina|false"));
 
     start([["dp-a", "Anna"]], "dp-a");
     T.closeActiveTab();
-    const cleared = [said(), strip()];
-    press();
-    check("tabs.js", "1012t3 the last conversation closed is cleared and offers Undo, which brings it back into itself",
-      () => eq(cleared.join("|") + "|" + strip(), "Tab cleared|dp-a:|dp-a:Anna"));
+    const cleared = [bubble() ? "bubble" : "none", strip()];
+    RS.runShortcut("tabReopen");
+    check("tabs.js", "1012t3 the last conversation closed is cleared with no Undo bubble (was: offers Undo), and Ctrl+Shift+T brings it back into itself",
+      () => eq(cleared.join("|") + "|" + strip(), "none|dp-a:|dp-a:Anna"));
 
     start([["dp-a", "Anna"], ["dp-b", "Bartek"]], "dp-b");
     const toasts = () => String(toastEl.textContent || toastEl.innerHTML);
@@ -5130,13 +5132,38 @@ const CARD_B = {
     RS.runShortcut("escapeHeld");
     const heldArmed = strip();
     RS.runShortcut("escape");
-    const wiped = [strip(), said()].join("/");
+    const wiped = [strip(), bubble() ? "bubble" : "none"].join("/");
     pax.value = "Celina";
-    press();
+    RS.runShortcut("tabReopen");
     const restored = strip().split(","), begun = restored[2] || "";
-    check("tabs.js", "1012t4 a held Escape neither asks nor closes every conversation, armed or not; a press asks, a second closes them and offers Undo, which brings back every one with the one in front, and keeps the conversation begun since after them",
+    check("tabs.js", "1012t4 a held Escape neither asks nor closes every conversation, armed or not; a press asks, a second closes them with no Undo bubble (was: and offers Undo), and Ctrl+Shift+T brings back every one with the one in front, and keeps the conversation begun since after them",
       () => eq([held, asked, heldArmed, wiped, restored.slice(0, 2).join(","), restored.length, /:Celina$/.test(begun) && !/^dp-a:/.test(begun), pax.value].join("|"),
-        "/dp-a:Anna,dp-b:Bartek|Press Esc again to close all tabs|dp-a:Anna,dp-b:Bartek|dp-a:/All tabs closed|dp-a:Anna,dp-b:Bartek|3|true|Bartek"));
+        "/dp-a:Anna,dp-b:Bartek|Press Esc again to close all tabs|dp-a:Anna,dp-b:Bartek|dp-a:/none|dp-a:Anna,dp-b:Bartek|3|true|Bartek"));
+
+    /* 1022u3 to u5: every Undo bubble that stays can be put away, by its close control and by Escape, and putting it
+       away never takes the Undo. The Undo is offered here as any act's is, through offerUndo itself. */
+    const UL = await import(MOD("ui-lang.js"));
+    start([["dp-a", "Anna"], ["dp-b", "Bartek"]], "dp-b");
+    let took = 0, lapsed = 0;
+    UL.offerUndo("Card deleted", () => { took++; }, () => { lapsed++; });
+    const stood = bubble(), markup = stood ? stood.innerHTML : "";
+    stood.btns["#eUndoX"].onclick();
+    const afterX = [bubble() ? "bubble" : "none", took, lapsed].join("/");
+    check("ui-lang.js", "1022u3 an Undo bubble carries a close control, labelled Close, beside Undo; pressing it puts the bubble away, never takes the Undo, and lets the offer lapse as the wait does",
+      () => eq([/id="eUndoX"[^>]*aria-label="Close"/.test(markup) && /id="eUndoBtn"/.test(markup), afterX].join("|"), "true|none/0/1"));
+    toastEl.textContent = ""; toastEl.innerHTML = ""; toastEl.classList.remove("show");
+    UL.offerUndo("Card deleted", () => { took++; });
+    RS.runShortcut("escape");
+    const afterEscU = [bubble() ? "bubble" : "none", took, strip(), String(toastEl.textContent || toastEl.innerHTML)].join("/");
+    check("tabs.js", "1022u4 Escape with nothing else to shed puts a standing Undo bubble away without taking it, and does not arm the wipe of every conversation",
+      () => eq(afterEscU, "none/0/dp-a:Anna,dp-b:Bartek/"));
+    UL.offerUndo("Card deleted", () => { took++; });
+    const shy = bubble(); shy.hidden = true;
+    RS.runShortcut("escape");
+    const hiddenKept = [!!bubble(), took].join("/");
+    shy.hidden = false; RS.runShortcut("escape");
+    check("tabs.js", "1022u5 a bubble hidden behind a question is left alone by Escape; shown again it goes on the press, before the wipe of the conversations takes the next",
+      () => eq([hiddenKept, bubble() ? "bubble" : "none", took, strip()].join("|"), "true/0|none|0|dp-a:Anna,dp-b:Bartek"));
 
     const heard = [];
     const answer = { copyMarked: true };
@@ -5244,7 +5271,7 @@ const CARD_B = {
       const SCU = await import(MOD("shortcuts.js"));
       KD.wireGlobalKeydown();
       const ctrlZ = o => { const e = key(Object.assign({ key: "z", code: "KeyZ", ctrlKey: true }, o || {})); pageKeys(e); return e.prevented; };
-      const closeB = () => { start([["dp-a", "Anna"], ["dp-b", "Bartek"]], "dp-b"); globalThis.document.activeElement = body; T.closeActiveTab(); };
+      const closeB = () => { start([["dp-a", "Anna"], ["dp-b", "Bartek"]], "dp-b"); globalThis.document.activeElement = body; T.closeActiveTab(); UL.offerUndo("Card deleted", () => T.reopenClosedTab()); };
       closeB();
       const btnHtml = (bubble() || {}).innerHTML || "";
       const taken = [ctrlZ(), strip(), !!bubble()].join("/");
@@ -5331,6 +5358,7 @@ const CARD_B = {
     answers.length = 0;
     start([["dp-a", "Anna"], ["dp-b", "Bartek"], ["dp-c", "Celina"]], "dp-c");
     T.closeActiveTab();
+    UL.offerUndo("Card deleted", () => T.reopenClosedTab());
     const undoBub = bubble();
     ask(); ask();
     const one = asking(), q = one[0] || el(), stayFocused = globalThis.document.activeElement === q.btns["#eCloseStay"];
@@ -5568,11 +5596,13 @@ const CARD_B = {
 
     start([["dp-a", "Anna"], ["dp-b", "Bartek"], ["dp-c", "Celina"]], "dp-a");
     const tabEl = node({}, { dataset: { tid: "dp-b" } }); tabEl.up["#tabsBar .tab[data-tid]"] = tabEl;
+    if (bubble()) bubble().hidden = false;
+    UL.dismissStandingUndo(); /* an earlier leg's bubble no longer stands to be replaced by a close */
     const back0 = T.closedTabCount();
     const tabRows = CX.ctxRowsFor(tabEl), tabNames = names(tabRows);
     run(tabRows, "Close the other tabs");
-    const onlyB = [strip(), pax.value, said()].join("/");
-    press();
+    const onlyB = [strip(), pax.value, bubble() ? "bubble" : "none"].join("/");
+    T.reopenClosedTab();
     const restoredStrip = strip(), restoredPax = pax.value;
     start([["dp-a", "Anna"], ["dp-b", "Bartek"], ["dp-c", "Celina"]], "dp-a");
     const behind = node({}, { dataset: { tid: "dp-b" } }); behind.up["#tabsBar .tab[data-tid]"] = behind;
@@ -5584,10 +5614,10 @@ const CARD_B = {
     const before = node({}, { dataset: { tid: "dp-a" } }); before.up["#tabsBar .tab[data-tid]"] = before;
     run(CX.ctxRowsFor(before), "Close this tab");
     const closedBefore = [strip().split(",").map((t) => t.split(":")[0]).join(","), pax.value].join("/");
-    check("context-menu.js", "1012x5 a tab's menu opens a new tab, closes this one or every other, and reopens the last closed; the others closed come back by Undo, each in its place, the kept one still in front, and Close this tab on a tab behind leaves that one gone and the one in front still in front",
+    check("context-menu.js", "1012x5 a tab's menu opens a new tab, closes this one or every other, and reopens the last closed; the others closed come back with no Undo bubble (was: by Undo) by the reopen, each in its place, the kept one still in front, and Close this tab on a tab behind leaves that one gone and the one in front still in front",
       () => eq([tabNames, onlyB, restoredStrip, restoredPax, closedBehind, closedBefore].join("|"),
         "Rename tab|-|New tab|-|Close this tab|Close the other tabs" + (back0 ? "|Reopen the last closed tab" : "")
-        + "|dp-b:Bartek/Bartek/Other tabs closed|dp-a:Anna,dp-b:Bartek,dp-c:Celina|Bartek|dp-a:Anna,dp-c:Celina/Anna|dp-b,dp-c/Celina Nowak"));
+        + "|dp-b:Bartek/Bartek/none|dp-a:Anna,dp-b:Bartek,dp-c:Celina|Bartek|dp-a:Anna,dp-c:Celina/Anna|dp-b,dp-c/Celina Nowak"));
 
     const pageListen = {};
     globalThis.addEventListener = (k, fn) => { (pageListen[k] = pageListen[k] || []).push(fn); };

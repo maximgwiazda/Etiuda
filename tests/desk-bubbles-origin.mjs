@@ -47,7 +47,7 @@ const check = (ok, what, detail) => {
   if (!ok) fails++;
 };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 15;
+const EXPECTED = 18;
 
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-bubbles-"));
 fs.copyFileSync(E.ENGINE_PATH, path.join(lab, "etiuda.html"));
@@ -167,38 +167,44 @@ const QUESTIONS = [
   }],
 ];
 
-/* EVERY UNDO. Where the act takes its control away, the control expected is the one of its kind now at the same place,
-   counted among those on screen before the act (ctlAt), else the last of them. */
-const UNDOS = [
+/* THE TAB CLOSES (board 1019): none of them draws an Undo bubble. They were the first five of EVERY UNDO below, and
+   each measured the bubble's pointer; the closes are moved here and measure that nothing stands. Ctrl+Shift+T is
+   the way back. */
+const TAB_CLOSES = [
   ["Tab closed, by its X", () => {
     addTab(); addTab();
     const tabsNow = document.querySelectorAll("#tabsBar .tab[data-tid]");
     tabsNow[1].querySelector(".tab-x").click();
-    return { name: "tab-closed", bub: "#eUndo", ctl: "#tabsBar .tab[data-tid]", ctlAt: 1 };
+    return { name: "tab-closed" };
   }],
   ["Tab closed, the last in the strip", () => {
     const tabsNow = document.querySelectorAll("#tabsBar .tab[data-tid]");
     const n = tabsNow.length;
     tabsNow[n - 1].querySelector(".tab-x").click();
-    return { name: "tab-closed-last", bub: "#eUndo", ctl: "#tabsBar .tab[data-tid]", ctlAt: n - 1 };
+    return { name: "tab-closed-last" };
   }],
   ["Other tabs closed", () => {
     addTab(); addTab();
     const keep = document.querySelectorAll("#tabsBar .tab[data-tid]")[1].dataset.tid;
     closeOtherTabs(keep);
-    return { name: "tabs-other", bub: "#eUndo", ctl: '#tabsBar .tab[data-tid="' + keep + '"]' };
+    return { name: "tabs-other" };
   }],
   ["All tabs closed", () => {
     addTab();
     const p = document.getElementById("pax"); p.value = "A traveller"; p.dispatchEvent(new Event("input", { bubbles: true }));
     closeAllTabs();
-    return { name: "tabs-all", bub: "#eUndo", ctl: "#tabsBar .tab[data-tid]", ctlAt: 0 };
+    return { name: "tabs-all" };
   }],
   ["Tab cleared, the one tab", () => {
     const p = document.getElementById("pax"); p.value = "A traveller"; p.dispatchEvent(new Event("input", { bubbles: true }));
     document.querySelector("#tabsBar .tab[data-tid] .tab-x").click();
-    return { name: "tab-cleared", bub: "#eUndo", ctl: "#tabsBar .tab[data-tid]", ctlAt: 0 };
+    return { name: "tab-cleared" };
   }],
+];
+
+/* EVERY UNDO. Where the act takes its control away, the control expected is the one of its kind now at the same place,
+   counted among those on screen before the act (ctlAt), else the last of them. */
+const UNDOS = [
   ["Card deleted in its editor, on the desk", () => {
     const cardsNow = [...document.querySelectorAll("#list .card[data-id]")].filter(e => e.getClientRects().length);
     const at = 1, id = cardsNow[at].dataset.id;
@@ -331,6 +337,56 @@ async function runUndos(page, label, only) {
     const r = await measure(page, act);
     if (!r.ok) bad.push({ what, ...r });
     if (process.env.BUB_LOG) console.log("       " + what + " " + JSON.stringify(r));
+    await tidy(page);
+    await sleep(60);
+  }
+  check(!bad.length && n > 0, label.replace("{N}", n), bad);
+}
+
+/* NO UNDO AFTER A TAB CLOSE, and every other Undo can be put away. Each tab close draws no #eUndo; each Undo that
+   stays carries the close control, labelled in the page's language, and is put away by it or by Escape (the two
+   alternate) without its act being undone: the card deleted in its editor stays deleted. */
+async function runTabCloses(page, label) {
+  const bad = [];
+  for (const [what, act] of TAB_CLOSES) {
+    await page.evaluate(MEASURE);
+    try { await page.evaluate(act); } catch (e) { bad.push({ what, why: String(e && e.message || e).split(String.fromCharCode(10))[0] }); continue; }
+    await sleep(300);
+    const shown = await page.evaluate(() => !!document.getElementById("eUndo"));
+    if (shown) bad.push({ what, why: "an Undo bubble stands after the close" });
+    await tidy(page);
+  }
+  check(!bad.length, label.replace("{N}", TAB_CLOSES.length), bad);
+}
+async function runUndoClose(page, label) {
+  const bad = [];
+  let n = 0;
+  for (const [what, act] of UNDOS) {
+    n++;
+    await page.evaluate(MEASURE);
+    let sel;
+    try { sel = await page.evaluate(act); } catch (e) { bad.push({ what, why: "act threw" }); await tidy(page); continue; }
+    if (!sel || sel.why) { bad.push({ what, why: sel && sel.why }); await tidy(page); continue; }
+    await sleep(400);
+    const x = await page.evaluate(() => { const b = document.getElementById("eUndoX"); return b && b.getClientRects().length ? b.getAttribute("aria-label") : null; });
+    if (process.env.BUB_LOG) console.log("       " + what + " close=" + x);
+    /* A reset act puts the language back to the desk's own, which the Polish leg reads as English. */
+    const wipes = /^(Settings reset|Shortcuts reset|Local changes cleared|Catalog ejected)/.test(what);
+    if (x !== (label.indexOf("pl") === 0 && !wipes ? "Zamknij" : "Close")) { bad.push({ what, why: "no close control, or unlabelled: " + x }); await tidy(page); continue; }
+    const before = await page.evaluate(() => document.querySelectorAll("#list .card[data-id]").length);
+    /* Escape: from the bubble's own button where the desk has a dialog or screen open (that is where its Escape goes), and
+       from the bare page where the desk is quiet (the panel's row). */
+    const quiet = what.indexOf("Card deleted in its editor") === 0, viaX = !quiet && n % 2 === 1;
+    if (viaX) await page.click("#eUndoX");
+    else {
+      if (quiet) await page.evaluate(() => { document.activeElement && document.activeElement.blur && document.activeElement.blur(); });
+      else await page.evaluate(() => document.getElementById("eUndoBtn").focus());
+      await page.keyboard.press("Escape");
+    }
+    await sleep(500);
+    const after = await page.evaluate(() => ({ bub: !!document.getElementById("eUndo"), cards: document.querySelectorAll("#list .card[data-id]").length }));
+    if (after.bub) bad.push({ what, why: "the bubble stands after " + (viaX ? "its close control" : "Escape") });
+    if (what.indexOf("Card deleted in its editor") === 0 && after.cards !== before) bad.push({ what, why: "putting it away undid the delete", before, cards: after.cards });
     await tidy(page);
     await sleep(60);
   }
@@ -580,6 +636,15 @@ try {
   const p2 = await boot();
   await runUndos(p2, "b2 every Undo hangs from the control whose act it undoes, or the one now in its place ({N})");
   await p2.close();
+  const p9 = await boot();
+  await runTabCloses(p9, "b9 a tab close draws no Undo bubble ({N} ways)");
+  await p9.close();
+  const p10 = await boot();
+  await runUndoClose(p10, "b10 every Undo carries a close control, and it or Escape puts the bubble away without undoing ({N})");
+  await p10.close();
+  const p11 = await boot({ lang: "pl" });
+  await runUndoClose(p11, "pl b10 every Undo's close control reads Zamknij ({N})");
+  await p11.close();
   const p3 = await boot();
   await runNotices(p3, "b3 the notices hang from the control of what they concern (" + NOTICES.length + ", and a second from one control)");
   await p3.close();
@@ -589,7 +654,7 @@ try {
     await runQuestions(p, "b5 " + lang + " " + theme + ": the questions hang from their controls (" + QUESTIONS.length + ")");
     await p.close();
     const q = await boot({ lang, theme });
-    await runUndos(q, "b5 " + lang + " " + theme + ": three Undos ({N})", ["Tab closed, by its X", "Card deleted in its editor, on the desk", "Settings reset"]);
+    await runUndos(q, "b5 " + lang + " " + theme + ": three Undos ({N})", ["Card deleted in its editor, on the desk", "Settings reset", "Intent deleted, from the panel's row"]);
     await q.close();
   }
   const shapeBad = [];

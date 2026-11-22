@@ -4,7 +4,7 @@ import { $, originOf } from "./dom.js";
 import { hangBubble } from "./bubble.js";
 import { esc } from "./esc.js";
 import { cutLeaves, dismissNode, mgReduceMotion, M_MS } from "./motion.js";
-import { ICON_LINT_WARNING, ICON_STAMP } from "./icons.js";
+import { ICON_LINT_WARNING, ICON_STAMP, ICON_X } from "./icons.js";
 
 /* ---- UI LANGUAGE ------------------------------------------------------------------------
    The CHROME's language, not the CONTENT's: the EN|PL switch decides what is copied to
@@ -895,8 +895,6 @@ UI_STRINGS.pl={
   "Removed from Favourites":"Usunięto z Ulubionych",
   "Shown again":"Pokazano ponownie",
   "Tab cleared":"Wyczyszczono rozmowę",
-  "Tab closed":"Zamknięto rozmowę",
-  "Other tabs closed":"Zamknięto pozostałe rozmowy",
   "Copy":"Kopiuj",
   "Copy the {LANG} version":"Kopiuj wersję {LANG}",
   "Show the note":"Pokaż notatkę",
@@ -1940,7 +1938,7 @@ function t(en){
 const UNDO_MS=10000;
 /* The key the button names, the fixed "undo" row of SC_DEFS as formatActionChord spells it. */
 const UNDO_KEY="Ctrl+Z";
-let undoTimer=0, undoTake=null, undoLapse=null, undoTyped=false;
+let undoTimer=0, undoTake=null, undoLapse=null, undoTyped=false, undoShut=null;
 /* A field typed in since the bubble came (keydown.js reports it): its Ctrl+Z is then its own typing's. */
 function noteUndoTyping(){ undoTyped=true; }
 function offerUndo(said, undo, lapse, from){
@@ -1956,7 +1954,8 @@ function offerUndo(said, undo, lapse, from){
   el.setAttribute("data-side","none");
   el.innerHTML='<p>'+esc(t(said))+'</p>'
     +'<div class="tour-actions"><button type="button" class="btn primary" id="eUndoBtn" aria-label="'+esc(t("Undo"))
-    +'" aria-keyshortcuts="Control+Z">'+esc(t("Undo"))+'<kbd>'+esc(UNDO_KEY)+'</kbd></button></div>';
+    +'" aria-keyshortcuts="Control+Z">'+esc(t("Undo"))+'<kbd>'+esc(UNDO_KEY)+'</kbd></button>'
+    +'<button type="button" class="e-undo-x" id="eUndoX" aria-label="'+esc(t("Close"))+'" title="'+esc(t("Close"))+'">'+ICON_X+'</button></div>';
   cutLeaves();
   document.body.appendChild(el);
   if(from) hangBubble(el, typeof from==="function" ? from : originOf(from));
@@ -1964,19 +1963,31 @@ function offerUndo(said, undo, lapse, from){
   const close=kept=>{
     clearTimeout(undoTimer);
     if(undoTake===take) undoTake=null;
+    if(undoShut===shut) undoShut=null;
     const end=undoLapse;
     if(end===onLapse) undoLapse=null;
     dismissNode(el);
     if(!kept && end===onLapse && onLapse) onLapse();
   };
   const take=()=>{ close(true); undo(); };
-  undoTake=take; undoLapse=onLapse; undoTyped=false;
+  /* THE CLOSE CONTROL AND ESCAPE DISMISS THE OFFER: it lapses as the wait does, and never runs the undo. */
+  const shut=()=>close(false);
+  undoTake=take; undoLapse=onLapse; undoTyped=false; undoShut=shut;
   el.querySelector("#eUndoBtn").onclick=take;
+  const shutBtn=el.querySelector("#eUndoX");
+  if(shutBtn) shutBtn.onclick=shut;
   el.addEventListener("keydown",e=>{
     if(e.key!=="Escape") return;
     e.preventDefault(); e.stopPropagation(); close(false);
   });
   undoTimer=setTimeout(()=>close(false),UNDO_MS);
+}
+/* ESCAPE'S LAST RUNG BEFORE THE DESK'S OWN: a standing, showing Undo bubble is dismissed, never taken. True where it was. */
+function dismissStandingUndo(){
+  const el=document.getElementById("eUndo");
+  if(!undoShut || !el || el.hidden) return false;
+  undoShut();
+  return true;
 }
 /* CTRL+Z TAKES THE STANDING UNDO: true where it did. Nothing where none stands or a question hides it, and nothing
    from a field typed in since the bubble came, whose key it then is. */
@@ -2360,6 +2371,7 @@ export {
   t,
   offerUndo,
   takeStandingUndo,
+  dismissStandingUndo,
   noteUndoTyping,
   tc,
   counted,
