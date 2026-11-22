@@ -698,7 +698,8 @@ async function main() {
   /* Owed by the move itself: the syncer also owes a desk's own file the share lacks, two listings on, and marks that under back. */
   const blockedOwed = g => g.owed.indexOf(g.ownRel) >= 0 && g.backed.indexOf(g.ownRel) < 0;
   const r2b = roMove({ blocked: true });
-  check(r2b.opened && blockedOwed(r2b) && r2b.otherKept && r2b.teamKept,
+  /* 998o RETIRED, with the folder syncer's outbox (the folder mirror's piece): the desk's own copies the folder refuses were kept in the team's mirror and owed, and the outbox tried them again; there is no outbox. It said what its sentence below says. */
+  retire(r2b.opened && blockedOwed(r2b) && r2b.otherKept && r2b.teamKept,
     "998o where the folder refuses the desk's own copies, they are kept in the team's mirror and owed, so the outbox tries them at each"
     + " scan (998i in folder-mirror shows the team's row saying a read-only refusal): " + JSON.stringify(r2b));
   if (PLANTS_OFF) {
