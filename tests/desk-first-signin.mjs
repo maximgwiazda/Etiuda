@@ -43,7 +43,9 @@ function notRun(line) {
 async function buildLiftedHtml(relMod, tag, outPath) {
   const modPath = path.join(ROOT, relMod);
   const lines = fs.readFileSync(modPath, "utf8").split("\n");
-  const plantAt = lines.findIndex(l => l.includes("plant:" + tag));
+  /* The whole name: "plant:desk-works" must not take "plant:desk-works-host" (fs4d lifted the wrong line, the test architect, 2026-11-22). */
+  const whole = new RegExp("plant:" + tag + "(?![A-Za-z0-9_-])"); /* a tag is letters, digits and hyphens */
+  const plantAt = lines.findIndex(l => whole.test(l));
   if (plantAt < 0) return -1;
   lines.splice(plantAt, 1);
   const liftedSource = lines.join("\n");
