@@ -337,7 +337,33 @@ function accountCardHtml(v){
   return h+'</div>';
 }
 /* Buy, where the shell names an order page (shell/main.js orderAddress); the shell builds the address, so the page names none. */
+/* The service's word that the account's licence is paid by a subscription (board 1020): Buy is then the subscription's portal, never a second
+   order. The shell builds the address and names it only where the provider gave one; the page learns a yes or no (shell/main.js signinViewOf). */
+function buyPays(v){ return !!(v && v.signedIn && v.buy && v.buy.pays); }
+const PAY_NAMES={stripe:"Stripe", paddle:"Paddle"};
+function payName(p){ return PAY_NAMES[p] || ""; }
+function payDay(at){ return new Date(at).toLocaleDateString(uiLang()==="pl" ? "pl-PL" : "en-GB",{day:"numeric", month:"short", year:"numeric"}); }
+function buyPaysRow(v){
+  const p=v.buy.pays, who=payName(p.provider);
+  return p.portal
+    ? row("buy","forward",t("Licence for one person"),t("This account already pays for its licence, so this opens its subscription at {PROVIDER} instead of a second order; seats are added there.").split("{PROVIDER}").join(who), /* words: Claudette, 2026-11-22 */
+      '<button type="button" class="btn" data-e-open="buy">'+esc(t("Add seats…"))+'</button>')
+    : row("buy","forward",t("Licence for one person"),t("This account already pays for its licence, and a licence holds one subscription, so no second order is taken."),"");
+}
+/* A payment the service holds naming the account, newest, one line by its kind. The title is a placeholder (the copywriter gave the lines only). */
+const PAY_HELD_LINES={
+  "already-pays":"A second payment from this account, of {DATE}, is held: the licence it already pays for takes more seats at {PROVIDER} instead, and the second payment is refunded.",
+  "managed":"A payment from this account, of {DATE}, is held, because this account's organisation holds its Etiuda licence. It is refunded or attached by hand, and this line then goes by itself.",
+  "review":"A payment from this account, of {DATE}, is held for a look by hand. It is refunded or attached to a licence, and this line then goes by itself.",
+  "pending":"{PROVIDER} has not yet confirmed this account's payment of {DATE}. The licence comes by itself once it does."
+};
+function payHeldRow(h){
+  const line=PAY_HELD_LINES[h.kind];
+  if(!line) return null;
+  return row("payment","forward",t("Payment") /* words: placeholder */,t(line).split("{DATE}").join(payDay(h.at)).split("{PROVIDER}").join(payName(h.provider)),"");
+}
 function buyRow(v){
+  if(buyPays(v)) return buyPaysRow(v);
   return row("buy","forward",t("Licence for one person"),v.signedIn ? t("The order page opens in the browser, and the licence bought there is this account's.")
     : t("A licence is bought for the account signed in here, so signing in comes first."),
     '<button type="button" class="btn" data-e-open="buy">'+esc(t("Buy"))+'</button>');
@@ -349,7 +375,7 @@ function accountGroups(){
   const v=signinNow(), groups=[];
   if(signinShown(v) || signinManaged(v)) groups.push({rows:[], after:accountCardHtml(v)}); /* plant:account-managed-closed */
   const stranded=signinStranded(v) && !signinWaiting(v);
-  const rows=[name], buy=!stranded && buyOffered() && !v.busy && !signinManaged(v) /* plant:buy-page-managed */
+  const rows=[name], buy=!stranded && (buyOffered() || buyPays(v)) && !v.busy && !signinManaged(v) /* plant:buy-page-managed */
     && !v.licenceManaged; /* plant:account-buy-managed */
   /* A managed tenant's account: nothing to buy, and who holds the licence instead (the copywriter's placeholder words). */
   const held=!stranded && v.licenceManaged ? row("buy","forward",t("Licence for one person"),t("Your organisation holds the Etiuda licence for this account, so there is nothing to buy here."),"") : null;
@@ -384,6 +410,8 @@ function accountGroups(){
     if(cause) rows.push(row("cause","check",t("Licence"),cause,""));
     if(buy) rows.push(buyRow(v));
     else if(held) rows.push(held);
+    const payHeld=v.buy && v.buy.held ? payHeldRow(v.buy.held) : null;
+    if(payHeld) rows.push(payHeld);
     rows.push(row("checked","clock",t("Last checked"),v.reached ? "" : t("The sign-in service cannot be reached just now. Etiuda keeps working with the catalog it has."),
       (v.at ? val(signinWhen(v.at)) : "")+'<button type="button" class="btn" data-signin-act="check">'+esc(t("Check now"))+'</button>'));
   } else if(buy && !v.signedIn) rows.push(buyRow(v));

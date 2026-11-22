@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 318;
+const PLANTS = 325;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 211 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 212 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -98,6 +98,7 @@ NAMES.push("SIGNIN_TRACE_ASKED", "signinTraceLine", "signinTraceSaid");
 NAMES.push("signinLanding", "signinLandingHtml", "signinLandingCsp", "SIGNIN_LAND_MS");
 NAMES.push("signinAccessFor", "signinClaims", "signinPinOk");
 NAMES.push("signinWorks", "signinViewOf", "signinClockObserve", "signinClockRead", "signinClockText", "signinClockBytes", "signinVerified");
+NAMES.push("signinBuyOf", "signinBuyKept");
 NAMES.push("signinClockStart", "signinWorksOf", "signinSaidOf", "signinHoldingOf", "signinTrialsOf", "signinWordsOf", "SIGNIN_LEAD_MAX");
 /* The section, evaluated: `swap` is [from, to], put in place of the one line that holds `from`, for a plant; `invSwap` the same in the
    invitation's slice as well. */
@@ -385,6 +386,44 @@ CASES.storeOffer = s => {
   const held = { provider: "microsoft", refresh: "sealed:rt", sub: "sealed:s", seed: "6".repeat(64), code: CODE, cert: null, at: 1, checked: 1, reached: true, said: "", ask: false };
   const h1 = s.signinSettle(held, yes, NOW), h2 = s.signinSettle(h1, { ok: false, reason: "unreached" }, NOW), h3 = s.signinSettle(h2, a(base), NOW);
   return yes.storeOffer === true && none.storeOffer === true && not.every(v => v === false) && h1.storeOffer === true && h2.storeOffer === true && h3.storeOffer === false;
+};
+/* Board 1020: "pays" and "held" beside a seating answer. Of "pays" the desk reads `deskOnly` alone (a team's changes nothing here), its provider
+   and a portal only where it is Stripe's own login link; of "held" the first entry it can read, newest first. Each seating answer says them
+   afresh (a renewal without them ends them); one that does not reach leaves them; signin.json keeps them and reads them typed again. */
+CASES.buyWords = s => {
+  const stray = o => s.signinAnswer(strayAnswer(Object.assign({ ok: true, certificate: cert(), code: CODE, doors: [] }, o)), DESK_KEY, true);
+  const PORTAL = "https://billing.stripe.com/p/login/test_aB3dE5gH7jK9mN1pQ3rS5tU7";
+  const E = (kind, at) => ({ kind, provider: "stripe", at: at === undefined ? NOW : at });
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const yes = stray({ pays: { deskOnly: { provider: "stripe", portal: PORTAL } } });
+  const team = stray({ pays: { team: { provider: "stripe", portal: PORTAL } } });
+  const both = stray({ pays: { team: { provider: "stripe" }, deskOnly: { provider: "paddle" } } });
+  const odd = ["http://billing.stripe.com/p/login/aB3dE5gH7jK9", "https://billing.example.com/p/login/aB3dE5gH7jK9", "https://billing.stripe.com/p/login/aB3dE5gH7jK9?x=1", 7]
+    .map(p => stray({ pays: { deskOnly: { provider: "stripe", portal: p } } }).buy);
+  const live = stray({ pays: { deskOnly: { provider: "stripe", portal: "https://billing.stripe.com/p/login/aB3dE5gH7jK9" } } }).buy;
+  const nobody = [{ deskOnly: { provider: "someone" } }, { deskOnly: [] }, [], "pays", null].map(p => stray({ pays: p }).buy);
+  const one = stray({ held: [E("already-pays")] }), kinds = ["already-pays", "managed", "review", "pending"].map(k => stray({ held: [E(k)] }).buy.held.kind);
+  const skip = stray({ held: [E("mystery"), { kind: "review", provider: "elsewhere", at: NOW }, E("review", 0), E("review", 1.5), null, E("managed", NOW - 5), E("pending")] });
+  const none = [{ held: E("review") }, { held: [] }, { held: [E("mystery")] }, { held: "review" }].map(o => stray(o).buy);
+  const wait = s.signinAnswer(strayAnswer({ ok: true, certificate: null, code: CODE, reason: "waiting", held: [E("already-pays")] }), DESK_KEY, true);
+  const held0 = heldOf({ cert: null });
+  const h1 = s.signinSettle(held0, yes, NOW), h2 = s.signinSettle(h1, { ok: false, reason: "unreached" }, NOW), h3 = s.signinSettle(h2, stray({}), NOW);
+  const h4 = s.signinSettle(h3, stray({ pays: { deskOnly: { provider: "stripe" } }, held: [E("pending")] }), NOW);
+  const back = h => s.signinFileRead(s.signinFileText({ held: h })).held;
+  const kept = back(h4), fresh = back(h3);
+  const forged = JSON.parse(s.signinFileText({ held: h1 })); forged.held.buy.pays.portal = "http://x.example/p/login/aB3dE5gH7jK9"; forged.held.buy.held = { kind: "mystery", provider: "stripe", at: NOW };
+  const forgedBack = s.signinFileRead(JSON.stringify(forged)).held;
+  const view = s.signinViewOf(h1, viewFacts({})), view4 = s.signinViewOf(h4, viewFacts({})), view3 = s.signinViewOf(h3, viewFacts({}));
+  return same(yes.buy, { pays: { provider: "stripe", portal: PORTAL } }) && team.buy === undefined && same(both.buy, { pays: { provider: "paddle" } })
+    && odd.every(b => same(b, { pays: { provider: "stripe" } })) && same(live, { pays: { provider: "stripe", portal: "https://billing.stripe.com/p/login/aB3dE5gH7jK9" } })
+    && nobody.every(b => b === undefined)
+    && same(one.buy, { held: E("already-pays") }) && same(kinds, ["already-pays", "managed", "review", "pending"])
+    && same(skip.buy, { held: E("managed", NOW - 5) }) && none.every(b => b === undefined)
+    && wait.waiting === true && same(wait.buy, { held: E("already-pays") })
+    && same(h1.buy, yes.buy) && same(h2.buy, yes.buy) && h3.buy === undefined && same(h4.buy, { pays: { provider: "stripe" }, held: E("pending") })
+    && same(kept.buy, h4.buy) && fresh.buy === undefined && same(forgedBack.buy, { pays: { provider: "stripe" } })
+    && same(view.buy, { pays: { provider: "stripe", portal: true } }) && same(view4.buy, { pays: { provider: "stripe", portal: false }, held: E("pending") })
+    && view3.buy === undefined && JSON.stringify(view).indexOf("billing.stripe.com") < 0;
 };
 /* The service's answers read as the interface names them; a certificate for another desk or another code is not taken. */
 CASES.answers = s => {
@@ -5466,6 +5505,7 @@ const LEGS = [
   ["ds2e", "flow", "the whole path at the provider with stand-ins: the token's nonce is made again from this desk's key and the seed, no client secret sent"],
   ["ds2f", "notAllowed", "the organisation's refusal at the provider is its own reason, apart from the person's Cancel and any other refusal"],
   ["dso", "storeOffer", "the store offered only by storeOffer true beside a seating answer, absent, null and every other value none; said afresh by each seating answer, kept where one does not reach"],
+  ["dsb", "buyWords", "what the person pays and what is held, beside a seating answer: pays by deskOnly alone, the portal only where Stripe's own link, the first readable held entry; said afresh, kept where an answer does not reach, kept in signin.json and read typed; the page's view carries the portal as a yes or no"],
   ["ds3a", "deskBody", "signin/desk's body has the interface's names alone, signed by this desk's key over the service's bytes; the seed on a first sign-in only"],
   ["ds3b", "serviceDoor", "the service's door posts JSON to signin/desk alone, no redirect, nothing cached, no cookie, nothing over 8 KiB"],
   ["ds3c", "answers", "the service's answers read as the interface names them; a certificate for another desk or code is not taken"],
@@ -5851,9 +5891,9 @@ const outside = outsideNames(MAIN);
 /* And to write the seat after a request to join and a folder change (ds10b), and to knock at a relay team's door with the
    certificate and write the request there (ds11d), and for Buy to carry the sign-in code to the order page (tests/desk-buy.mjs), none
    of which gates anything; and to hand a team's relay its seat on a licence that follows Entra, which the relay judges and nothing
-   on the desk waits on (tests/relay-seats.mjs d1a to d3a). */
+   on the desk waits on (tests/relay-seats.mjs d1a to d3a), and for Buy to go to the portal of an account that already pays (tests/desk-buy.mjs b11). */
 const expectOutside = ["signinListen", "armSigninRenew", "signinFlush", "signinFlush", "signinDoorInvite", "signinDoorKept", "signinView", "signinWorksNow", "signinWorksNow",
-  "signinRelaySeatIo", "signinRelaySeatIo", "signinPressNow"];
+  "signinRelaySeatIo", "signinRelaySeatIo", "signinPressNow", "signinPaysNow"];
 check(outside.slice().sort().join() === expectOutside.slice().sort().join(),
   "ds5a nothing local is gated: outside its section the shell names the sign-in only to require its loopback, to arm the renewal, to write the seat after a join and to press on Ask again: " + outside.join(" "));
 const modules = fs.readdirSync(path.join(ROOT, "src", "modules")).filter(n => n.endsWith(".js"));
@@ -5926,7 +5966,16 @@ CASES.askedHeld = s => {
   const desk = c.body && c.body.certificate ? c.body.certificate.desk : DESK_KEY;
   return askedHeldOk(s.signinAnswer({ status: c.status, bytes: Buffer.from(JSON.stringify(c.body)) }, desk, true), c, s);
 };
+/* Board 1020: the service's word of what the person pays and what it holds, read as the desk keeps it (`buy`), settled whole and kept. */
+const BUY_READ = (r, c, s, wait) => {
+  const h = s.signinSettle(HELD_BEFORE(), r, NOW), d = c.body.pays && c.body.pays.deskOnly, e = c.body.held && c.body.held[0];
+  const want = Object.assign({}, d ? { pays: Object.assign({ provider: d.provider }, d.portal ? { portal: d.portal } : {}) } : {}, e ? { held: { kind: e.kind, provider: e.provider, at: e.at } } : {});
+  return r.ok === true && JSON.stringify(r.buy) === JSON.stringify(want) && JSON.stringify(h.buy) === JSON.stringify(want) && (!wait || r.waiting === true);
+};
 const DESK_READS = {
+  "pays": (r, c, s) => !!r.cert && !!c.body.pays.deskOnly.portal && BUY_READ(r, c, s),
+  "held": (r, c, s) => r.cert === null && BUY_READ(r, c, s),
+  "held-waiting": (r, c, s) => r.cert === null && BUY_READ(r, c, s, true),
   "seated": (r, c, s) => r.ok === true && !!r.cert && r.cert.desk === c.body.certificate.desk && r.code === c.body.code && r.doors.length === 0
     && s.signinSettle(HELD_BEFORE(), r, NOW).cert === r.cert,
   "seated-doors": (r, c) => r.ok === true && !!r.cert && r.doors.length === c.body.doors.length && r.doors.length > 0,
@@ -5987,6 +6036,7 @@ for (const c of ANSWER_CASES) {
     if (!want(got, c, S23)) misread.push(c.case + " read as " + JSON.stringify(got).slice(0, 120));
     /* Every seating answer that offers the store is read as an offer. */
     else if (c.route === "signin/desk" && c.body.ok === true && c.body.storeOffer === true && got.storeOffer !== true) misread.push(c.case + " read with no offer");
+    else if (c.route === "signin/desk" && c.body.ok === true && !c.body.pays && !c.body.held && got.buy !== undefined) misread.push(c.case + " read a payment the service did not name");
   } catch (e) { misread.push(c.case + " threw " + (e && e.message)); }
 }
 check(ANSWER_CASES.length > 0 && misread.length === 0,
@@ -6027,6 +6077,13 @@ if (!PLANTS_OFF) {
   await plant("dsp8", ["return \"signin-notallowed\"; /* plant:not-allowed */", "return \"signin-refused\";"], "notAllowed");
   await plant("dspo1", ["const storeOffer = j.storeOffer === true; /* plant:offer-read */", "const storeOffer = !!j.storeOffer;"], "storeOffer");
   await plant("dspo2", ["    storeOffer: ans.storeOffer === true }); /* plant:wait-settle */", "    storeOffer: held.storeOffer === true || ans.storeOffer === true }); /* plant:wait-settle */"], "storeOffer");
+  await plant("dspb1", ["? j.pays.deskOnly : null; /* plant:pays-read */", "? (j.pays.deskOnly || j.pays.team) : null;"], "buyWords");
+  await plant("dspb2", ["/^https:\\/\\/billing\\.stripe\\.com\\/p\\/login\\/(?:test_)?[A-Za-z0-9]{8,64}$/; /* plant:portal-shape */", "/^https:\\/\\/\\S+$/;"], "buyWords");
+  await plant("dspb3", ["SIGNIN_HELD_KINDS.indexOf(e.kind) < 0 || SIGNIN_PAY_PROVIDERS.indexOf(e.provider) < 0) return null; /* plant:held-kind */", "SIGNIN_PAY_PROVIDERS.indexOf(e.provider) < 0) return null;"], "buyWords");
+  await plant("dspb4", ["    Object.assign(words, signinBuyOf(j)); /* plant:buy-read */", ""], "buyWords");
+  await plant("dspb5", ["    if (ans.buy) out.buy = ans.buy; /* plant:buy-settle */", ""], "buyWords");
+  await plant("dspb6", ["if (b) out.held.buy = b; } /* plant:buy-file */", "} "], "buyWords");
+  await plant("dspb7", ["if (signedIn && held && held.buy) view.buy = ", "if (false) view.buy = "], "buyWords");
   await plant("dsp9", ["const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t, seed: seed || \"\" })) || \"\"); /* plant:desk-signed */",
     "const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t + 1, seed: seed || \"\" })) || \"\");"], "deskBody");
   /* Review 2's finding 12, its residual: the seed signed as the bytes' last line. Planted out, the first sign-in's signature is over a

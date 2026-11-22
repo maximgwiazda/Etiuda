@@ -11645,6 +11645,31 @@ function signinTrialsOf(v) {
 function signinWordsOf(holding, trials) {
   return Object.assign({}, holding ? { holding: holding } : {}, trials ? { trials: trials } : {});
 }
+/* WHAT THE SERVICE SAYS OF THE PERSON'S PAYMENTS (board 1020), beside a seating answer and only where it holds something: "pays", of which the
+   desk reads `deskOnly` alone (a licence of the person's own that a subscription pays; `team` on a member's desk changes nothing here), its
+   provider and the provider's portal where the address is Stripe's own login link; and "held", newest first, of which the desk keeps the
+   first entry it can read, its kind, provider and day. Kept as `buy`: {pays?: {provider, portal?}, held?: {kind, provider, at}}. */
+const SIGNIN_PAY_PROVIDERS = ["stripe", "paddle"];
+const SIGNIN_HELD_KINDS = ["already-pays", "managed", "review", "pending"];
+const SIGNIN_PORTAL = /^https:\/\/billing\.stripe\.com\/p\/login\/(?:test_)?[A-Za-z0-9]{8,64}$/; /* plant:portal-shape */
+function signinPaysOk(d) {
+  if (!d || typeof d !== "object" || Array.isArray(d) || SIGNIN_PAY_PROVIDERS.indexOf(d.provider) < 0) return null;
+  return Object.assign({ provider: d.provider }, typeof d.portal === "string" && SIGNIN_PORTAL.test(d.portal) ? { portal: d.portal } : {});
+}
+function signinHeldOk(e) {
+  if (!e || typeof e !== "object" || Array.isArray(e) || SIGNIN_HELD_KINDS.indexOf(e.kind) < 0 || SIGNIN_PAY_PROVIDERS.indexOf(e.provider) < 0) return null; /* plant:held-kind */
+  return Number.isSafeInteger(e.at) && e.at > 0 ? { kind: e.kind, provider: e.provider, at: e.at } : null;
+}
+function signinBuyKept(pays, held) {
+  const p = signinPaysOk(pays), h = signinHeldOk(held);
+  return p || h ? Object.assign({}, p ? { pays: p } : {}, h ? { held: h } : {}) : null;
+}
+function signinBuyOf(j) {
+  const p = j && j.pays && typeof j.pays === "object" && !Array.isArray(j.pays) ? j.pays.deskOnly : null; /* plant:pays-read */
+  const h = Array.isArray(j && j.held) ? j.held.map(signinHeldOk).find(x => x) : null;
+  const b = signinBuyKept(p, h);
+  return b ? { buy: b } : {};
+}
 /* The service's answer read: {ok, code, cert, doors, doorsSig, askLead, holding?, trials?} (the doors only under signinDoorsSigned; cert null where no
    licence admits the person yet, and then no doors; `waiting` where a licence admits them and has no free seat, so a quiet renewal seats
    the desk once one frees; `askLead` where their organisation's licence seats only the people its leads add, beside their own trial's
@@ -11667,6 +11692,7 @@ function signinAnswerBody(res, deskKey, packed) {
        absent, null or anything else is no offer, and nothing of sync is asked, looked at or said (storeOffered). */
     const storeOffer = j.storeOffer === true; /* plant:offer-read */
     const words = Object.assign(signinWordsOf(signinHoldingOf(j.seat), signinTrialsOf(j.trials)), signinAskedWords(signinAskedOf(j.asked)), signinInvitedWords(signinInvitedOf(j.invited))); /* plant:words-read */
+    Object.assign(words, signinBuyOf(j)); /* plant:buy-read */
     if (j.certificate === null) return Object.assign({ ok: true, code: String(j.code), cert: null, doors: [], waiting: j.reason === "waiting", askLead, storeOffer }, signinManagedOf(j), words); /* plant:wait-read */
     if (signinCertOk(j.certificate, deskKey) && j.certificate.code === j.code) {
       const doors = signinDoorsOk(j.doors, packed), signed = signinDoorsSigned(doors, j.doorsSig, j.certificate); /* plant:door-signed-read */
@@ -11832,6 +11858,8 @@ function signinViewOf(kept, o) {
   /* The invitations waiting, by place, and the lead a Join waits on: only where any, as `asked`. */
   if (signedIn && held && Array.isArray(held.invited) && held.invited.length) view.invited = signinInvitedView(held.invited);
   if (signedIn && held && typeof held.joinWait === "string" && held.joinWait) view.joinWait = held.joinWait;
+  /* What the person pays and what is held, for the page: the portal as a yes or no, never its address (the shell builds the address, buyAddress). */
+  if (signedIn && held && held.buy) view.buy = Object.assign({}, held.buy.pays ? { pays: { provider: held.buy.pays.provider, portal: !!held.buy.pays.portal } } : {}, held.buy.held ? { held: Object.assign({}, held.buy.held) } : {}); /* plant:view-buy */
   /* Only where machine policy sets any of its six values, so an unmanaged desk's view is the same object as before. */
   const m = o.managed;
   if (m && m.any) view.managed = { on: m.managed, shared: m.shared, personal: m.personal, provider: m.provider, tenant: !!m.tenant, closed: m.closed, contact: m.contact, /* plant:view-managed */
@@ -11861,8 +11889,9 @@ function signinSettleSeat(held, ans, now, deskNow, clockIssued) {
     const out = Object.assign({}, held, { code: ans.code, cert: ans.cert || (keep ? held.cert : null), doors: ans.cert ? (ans.doors || []) : [], doorsSig: ans.cert ? String(ans.doorsSig || "") : "", at: now, checked: now, reached: true,
       said: ans.waiting === true ? "waiting" : "", ask: false, askLead: ans.askLead === true, managed: ans.managed === true, cause: ans.managed === true ? ans.cause || "" : "",
       storeOffer: ans.storeOffer === true }); /* plant:wait-settle */
-    delete out.ended; delete out.holding; delete out.trials; delete out.asked; delete out.invited; delete out.joinWait;
+    delete out.ended; delete out.holding; delete out.trials; delete out.asked; delete out.invited; delete out.joinWait; delete out.buy;
     const joinWait = signinJoinWaitKept(held, ans);
+    if (ans.buy) out.buy = ans.buy; /* plant:buy-settle */
     return Object.assign(out, ended ? { ended: ended } : {}, signinWordsOf(ans.cert ? ans.holding : keep ? held.holding : null, ans.trials || (held && held.trials)), signinAskedWords(signinAskedOf((ans.asked || []).map(n => ({ lead: { name: n } })))), /* plant:words-settle */
       signinInvitedWords(signinInvitedOf(ans.invited)), joinWait ? { joinWait: joinWait } : {});
   }
@@ -11953,6 +11982,7 @@ function signinFileRead(text, packed) {
   /* The service's none while a certificate ran, kept with that certificate alone; the seat's words with it, the trials beside. */
   if (out.held && out.held.cert && Number.isSafeInteger(h.ended) && h.ended > 0) out.held.ended = h.ended; /* plant:ended-file */
   if (out.held) Object.assign(out.held, signinWordsOf(out.held.cert ? signinHoldingOf(h.holding) : null, signinTrialsOf(h.trials))); /* plant:words-file */
+  if (out.held && h.buy && typeof h.buy === "object") { const b = signinBuyKept(h.buy.pays, h.buy.held); if (b) out.held.buy = b; } /* plant:buy-file */
   if (out.held) Object.assign(out.held, signinAskedWords(signinAskedOf(Array.isArray(h.asked) ? h.asked.map(n => ({ lead: { name: n } })) : null))); /* plant:asked-file */
   if (out.held) Object.assign(out.held, signinInvitedWords(signinInvitedOf(h.invited)), signinJoinWaitKept(h, out.held) ? { joinWait: h.joinWait } : {});
   if (out.held && h.org && typeof h.org === "object") out.held.org = { tid: SIGNIN_TENANT.test(String(h.org.tid)) ? String(h.org.tid).toLowerCase() : "", /* plant:org-file */
@@ -12362,6 +12392,11 @@ function signinView() {
     licenceManaged: st.licenceManaged === true, keeps: sealsForReal(safeStorage, process.platform), managed: m,
     stranded: m && m.any ? deskKeyStranded(m) : false, accountKept: m && m.any ? signinAccountKept(st) : false,
     deskKey: at.key, deskNow: at.desk, last: at.last, online: at.online, registered: st.registered === true }); /* plant:view-clock */
+}
+/* The held seat's own account of what it pays (board 1020), the portal's address included, which the view hands the page as a yes or no. */
+function signinPaysNow() {
+  const held = signinState().held;
+  return held && held.buy && held.buy.pays ? held.buy.pays : null;
 }
 /* THE DESK'S CLOCK IN THIS RUN (signinClockObserve): read from signin.json at the first ask, observed at every view and save and by
    a tick, which also keeps it in the file hourly and tells the page when the system's network comes or goes. The tick is armed by
@@ -13839,6 +13874,9 @@ function buyAddress() {
   if (buyManaged(v) || (v && v.licenceManaged)) return ""; /* plant:buy-managed */
   let lang = "en";
   try { if (shellWords().lang === "pl") lang = "pl"; } catch { lang = "en"; }
+  /* A person whose licence a subscription pays is sent to its portal, or to nothing where there is none: never a second checkout (board 1020). */
+  const pays = v && v.signedIn ? signinPaysNow() : null; /* plant:pays-signed */
+  if (pays) return pays.portal || ""; /* plant:buy-pays */
   return orderAddress(orderPageFor(ORDER_PAGE, lang), v && v.code);
 }
 ipcMain.on("etiuda:buy-state", (e) => { e.returnValue = fromEngine(e) ? { offer: !!buyAddress() } : null; }); /* plant:buy-state-managed */

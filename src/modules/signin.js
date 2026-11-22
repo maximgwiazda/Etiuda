@@ -18,6 +18,16 @@ import { eDeskFlush } from "./storage.js";
 /* "lab" is offered only by the sign-in lab (shell/main.js signinLabRead), never by a desk installed or packaged. */
 const SIGNIN_NAMES={microsoft:"Microsoft", google:"Google", lab:"Lab"};
 /* The shell's answer as the page keeps it; every field checked, so a missing host reads as nothing offered. */
+/* What the service said the account pays and what it holds (board 1020), as the shell's view hands it: the provider, whether it gave a portal (never
+   its address), and the newest held payment's kind, provider and day; null where neither. Settings draws them (settings.js buyPays, payHeldRow). */
+function signinPayRead(b){
+  if(!b || typeof b!=="object") return null;
+  const prov=p=>p==="stripe" || p==="paddle";
+  const p=b.pays && typeof b.pays==="object" && prov(b.pays.provider) ? {provider:b.pays.provider, portal:b.pays.portal===true} : null;
+  const h=b.held && typeof b.held==="object" && prov(b.held.provider) && Number.isSafeInteger(b.held.at) && b.held.at>0
+    && (b.held.kind==="already-pays" || b.held.kind==="managed" || b.held.kind==="review" || b.held.kind==="pending") ? {kind:b.held.kind, provider:b.held.provider, at:b.held.at} : null;
+  return p || h ? Object.assign({}, p ? {pays:p} : {}, h ? {held:h} : {}) : null;
+}
 function signinRead(v){
   const o=v && typeof v==="object" ? v : {};
   const known=id=>Object.prototype.hasOwnProperty.call(SIGNIN_NAMES, id);
@@ -36,6 +46,7 @@ function signinRead(v){
     joinWait: signedIn && typeof o.joinWait==="string" && o.joinWait.length<=120 ? o.joinWait : "",
     /* The service said this account's organisation holds its licence (a managed tenant), and why where it also owns one. */
     licenceManaged: o.licenceManaged===true,
+    buy: signedIn ? signinPayRead(o.buy) : null, /* plant:read-buy */
     cause: o.licenceManaged===true && (o.cause==="own-licence" || o.cause==="assigned") ? o.cause : "",
     at: Number.isFinite(o.at) ? o.at : 0,
     reached: o.reached!==false,
