@@ -651,7 +651,10 @@ try {
   const SHARE_EN = "This catalog is private, so this card stays on this desk.";
   const SHARE_PL = "Ten katalog jest prywatny, więc ta karta zostaje na tym stanowisku.";
   const runSharePage = src => {
-    const own = { hooks: { currentCatalog: () => ({ id: "quay-held" }) }, teamContentNow: () => ({ private: ["quay-held"] }), t: s => s };
+    /* currentCatalog builds an export, which mints a new id each call as the page's does; the catalog in use is storedCatalog's. */
+    let minted = 0;
+    const own = { hooks: { currentCatalog: () => ({ id: "c-export" + (++minted) }), storedCatalog: () => ({ id: "quay-held" }) },
+      teamContentNow: () => ({ private: ["quay-held"] }), t: s => s };
     let api;
     try {
       api = new Function("scope", "with(scope){\n" + sliceFn(src, "function sharePrivateNow(") + "\n" + sliceFn(src, "function wholeRefusalLine(") + "\nreturn { sharePrivateNow, wholeRefusalLine };\n}")(withScope(own));
