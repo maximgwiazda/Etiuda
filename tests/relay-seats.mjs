@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-seats-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 219;
+const EXPECTED = 224;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* ETIUDA_PLANT_ONLY, a comma list of plant tags or planted names: only those plants run, every other is skipped, so one plant is proved
    alone without the whole sweep. */
@@ -1275,6 +1275,26 @@ async function main() {
   await leg("s30c", freedInviteSessionScene, "an invitation session open when the grant newly names its key as freed ends at that renewal, its list no-hello and its socket closed");
   await leg("s30d", freedSinceInviteScene, "a key named as freed and then given a certificate issued since opens an invitation's token hello, lists, and resumes");
   await leg("s30e", freedDoorScene, "a token-bound key named as freed reopens no invitation session at the door on its earlier certificate, and does on one issued since");
+  /* An enrolled desk the lead frees (the service's freed list for its key): its next device hello and its next invitation hello are
+     refused, and the device and invitation sessions it holds end on the renewal that frees it. */
+  async function freedEveryPathScene() {
+    const w = await team({ seats: true }), a = w.desks.a, inv = await inviteOn(w), inv2 = await inviteOn(w);
+    prove(w, "a", DAY);
+    const dev = await sessionAs(w, "a");
+    const invS = await helloWith(w, a, { invite: inv.token, inv: inv.inv, seat: a.cert });
+    const devBefore = await listWith(w, dev), invBefore = await listWith(w, invS);
+    w.R.clock.now = T0 + 5 * MIN;
+    const named = await renew(w, freeGrant(w, a.pub, w.R.clock.now));
+    const devAfter = await listWith(w, dev), invAfter = await listWith(w, invS);
+    const devHello = await sessionAs(w, "a");
+    const invHello = await helloWith(w, a, { invite: inv2.token, inv: inv2.inv, seat: a.cert });
+    const ended = r => r.status === 401 && !!r.json && r.json.error === "no-hello";
+    const ok = opened(dev) && opened(invS) && devBefore.status === 200 && invBefore.status === 200 && named.status === 200
+      && ended(devAfter) && ended(invAfter) && refused(devHello, "seat-lapsed") && refused(invHello, "seat-lapsed");
+    return { ok, detail: brief({ device: said(dev), invitation: said(invS), named: said(named), deviceListAfter: said(devAfter), invitationListAfter: said(invAfter),
+      nextDeviceHello: said(devHello), nextInvitationHello: said(invHello) }) };
+  }
+  await leg("s30f", freedEveryPathScene, "an enrolled desk the grant names as freed: its device and invitation sessions end no-hello on that renewal, and its next device hello and next invitation hello are each refused seat-lapsed");
   /* No folder arm: a working team's lead writing its team file with a channel keeps no team file or move row, and a
      read-only team's lead moving it to a folder is refused team-lapsed, as every write there is. */
   async function folderGoneScene() {
@@ -1589,6 +1609,10 @@ async function main() {
     ["freed-invite-sockets", "s30c", freedInviteSessionScene, "a freed key's invitation socket stays open"],
     ["freed-issued", "s30d", freedSinceInviteScene, "the issue-time comparison dropped, so a certificate issued after the freeing is refused at the invitation"],
     ["door-freed", "s30e", freedDoorScene, "a freed key reopens its token-bound invitation at the door"],
+    ["seat-freed", "s30f", freedEveryPathScene, "a freed key's device hello opens"],
+    ["invite-freed", "s30f", freedEveryPathScene, "a freed key's invitation hello opens"],
+    ["freed-sessions", "s30f", freedEveryPathScene, "a freed key's device session lives on"],
+    ["freed-invite-sessions", "s30f", freedEveryPathScene, "a freed key's invitation session lives on"],
     ["store-session", "s24i", storeScene, "a store's session is judged by the seat gate, so its store certificate is refused and a seat certificate opens it"],
   ];
   for (const [tag, id, scene, what] of PLANTS) {
