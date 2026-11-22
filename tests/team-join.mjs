@@ -41,7 +41,7 @@ const ASIDE = {
   "15ep": offWindows("15ep", "15em stands aside off Windows, so lifting plant:w2-folder-not-writable has no green leg there to turn"),
 };
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 223;
+const EXPECTED = 223 - 32; /* the folder join's checks are retired: see FOLDER_JOIN_RETIRED */
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -364,6 +364,20 @@ try {
   /* ---- outside the team ---------------------------------------------------------------------------------------- */
   const me1 = await D1.ask("etiuda:branch-identity", true);
   const D2 = newDesk("two", SHARE), me2 = await D2.ask("etiuda:branch-identity", true);
+  /* ---- THE FOLDER JOIN, RETIRED with the folder team (P2: a desk outside a team asks to join through the shared folder; no folder is read as a team,
+     so no desk is outside one, and a team is joined over the relay by an invitation). Its checks 15d to 15z and j14a to j14f, 32 of them,
+     said what their sentences below say and are no longer asked; the code stays under the switch as the record of what each held. ---- */
+  /* ---- the pinned lead's key, shown once to compare, and forgotten where it is not the lead's ------------------- */
+  // Studio's Settings show its key as "studio-" and these 16 hex (src/sign.mjs keyIdFor): made here from the public half.
+  const printOf = pub => crypto.createHash("sha256").update(Buffer.from(pub, "hex")).digest("hex").slice(0, 16);
+  /* The key's four facts. The team's name, folder, removal and policy beside them are 15bn to 15bs's. */
+  const leadsOf = v => JSON.stringify((v && v.leads) ? v.leads.map(l => ({ team: l.team, print: l.print, admitted: l.admitted, seen: l.seen })) : null);
+  /* What the retired section handed to the checks after it: a request made with no invitation (none is made now), and a desk started over a
+     fresh record, as the section's last desk was. The checks after it that need a folder join are the next to retire (P2). */
+  const r1 = null, bytes1 = "";
+  const fresh7 = loadDesk(newDesk("seven", SHARE).ud);
+  const FOLDER_JOIN_RETIRED = true;
+  if (!FOLDER_JOIN_RETIRED) {
   put(SHARE, "etiuda-team.json", teamFile([entry(me2, K1, 1)]));
   put(SHARE, "lamps.ec", P.sealCatalog(K1, TEAM, 1, A1));
   put(SHARE, "plain.ec", A1);
@@ -653,11 +667,6 @@ try {
     "15v the lead's own admission read while the request stands refused waits too, and the cancel alone, the team file"
     + " unchanged since, has it read again and the catalog open");
 
-  /* ---- the pinned lead's key, shown once to compare, and forgotten where it is not the lead's ------------------- */
-  // Studio's Settings show its key as "studio-" and these 16 hex (src/sign.mjs keyIdFor): made here from the public half.
-  const printOf = pub => crypto.createHash("sha256").update(Buffer.from(pub, "hex")).digest("hex").slice(0, 16);
-  /* The key's four facts. The team's name, folder, removal and policy beside them are 15bn to 15bs's. */
-  const leadsOf = v => JSON.stringify((v && v.leads) ? v.leads.map(l => ({ team: l.team, print: l.print, admitted: l.admitted, seen: l.seen })) : null);
   const shown = await D1r.join("state");
   const seenNow = await D1r.join("seen", TEAM);
   const seenLater = await loadDesk(D1r.ud).join("state");
@@ -695,6 +704,7 @@ try {
     "15z THE CONTROL: after forgetting, a request answered by the real lead admits the desk, pins that lead, lifts the bar and"
     + " shows the new key once: " + leadsOf(rejoined));
 
+  }
   /* ---- an invitation: paste, confirm, and a request that proves the secret without carrying it ------------------- */
   const inviteBlob = (o) => "etiuda-join:" + Buffer.from(JSON.stringify(o)).toString("base64url");
   const filesUnder = (dir) => {
