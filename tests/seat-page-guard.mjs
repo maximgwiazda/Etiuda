@@ -16,6 +16,7 @@ const { seatedView } = require("./seat-page.js");
 /* Page-booting legs whose subject is the unseated door, kept off seatPage by name. */
 const DOOR_LEGS = Object.freeze({
   "tests/desk-first-signin.mjs": "its subject is the first-opening sign-in door, its refusal states, provider hand-offs and door-due rule",
+  "tests/desk-join-invited.mjs": "its subject is a desk held at the door (no team, asking a lead, no licence, the full door) and the invitation rows drawn there and in Account, each view handed by the leg",
 });
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
