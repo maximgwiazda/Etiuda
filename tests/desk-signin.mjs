@@ -6137,7 +6137,7 @@ if (!PLANTS_OFF) {
   await plant("dsa5", ["if (signedIn && held && Array.isArray(held.asked) && held.asked.length) view.asked = held.asked.slice(); /* plant:view-asked */", ""], "askedHeld");
   await plant("dsa6", [".test(n) || out.indexOf(n) >= 0) continue; /* plant:asked-name */", ".test(n)) continue;"], "askedHeld");
   await plant("dsa7", ["!n || n.length > SIGNIN_LEAD_MAX || ", "!n || "], "askedHeld");
-  await plant("dsa8", ["\u007f-\u009f<>\u200e\u200f\u202a-\u202e\u2066-\u2069]/.test(n)", "\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/.test(n)"], "askedHeld");
+  await plant("dsa8", ["\\u007f-\\u009f<>\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]/.test(n)", "\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]/.test(n)"], "askedHeld");
   await plant("dsa9", ["if (out.length >= SIGNIN_ASKED_MAX) break;", ""], "askedHeld");
   await plant("dsa1", ["if (j.certificate === null) return Object.assign({ ok: true, code: String(j.code), cert: null, doors: [], waiting: j.reason === \"waiting\", askLead, storeOffer }, signinManagedOf(j), words); /* plant:wait-read */",
     "if (j.certificate === null) return Object.assign({ ok: true, code: String(j.code), cert: null, doors: [], waiting: j.reason === \"waiting\", askLead, storeOffer, asked: j.asked }, signinManagedOf(j), words);"], "askedHeld");

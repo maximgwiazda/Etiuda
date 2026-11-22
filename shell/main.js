@@ -11428,7 +11428,7 @@ function signinAskedOf(v) {
   if (!Array.isArray(v)) return out;
   for (const e of v) {
     const n = e && typeof e === "object" && e.lead && typeof e.lead === "object" && typeof e.lead.name === "string" ? e.lead.name.trim() : "";
-    if (!n || n.length > SIGNIN_LEAD_MAX || /[ --<>‎‏‪-‮⁦-⁩]/.test(n) || out.indexOf(n) >= 0) continue; /* plant:asked-name */
+    if (!n || n.length > SIGNIN_LEAD_MAX || /[\u0000-\u001f\u007f-\u009f<>\u200e\u200f\u202a-\u202e\u2066-\u2069]/.test(n) || out.indexOf(n) >= 0) continue; /* plant:asked-name */
     out.push(n);
     if (out.length >= SIGNIN_ASKED_MAX) break;
   }
