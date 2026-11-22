@@ -9,6 +9,8 @@
  *                            comment row appear, keeps each typed value in the box it was typed in, and Save stores it there
  *   intent-save-diff         Save after changing one clause stores that clause alone, and the next edition's name, other clause and
  *                            comment reach the screen with the saved clause kept
+ *   ed-radio-undo, ed-radio-back  a form of address chosen in the card editor, a radio group sharing one name, is put back by
+ *                            the Undo of moving on without saving, and in a window brought back after a close
  *   delete-restores          no Delete control says Reset brings the entry back: nothing on the desk un-removes it but its Undo
  *   private-layer-not-sent   copies made while the catalog in use is private are in no answer for a span, though they sit in the
  *                            layer a team edition of the same id reads (dem4a); the page's own view of the mark decides (dem4b)
@@ -35,7 +37,7 @@ const check = (ok, what, detail) => {
 };
 const skip = what => { skipped++; console.log("  SKIP " + what); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 11;
+const EXPECTED = 13;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const clone = o => JSON.parse(JSON.stringify(o));
 
@@ -221,6 +223,39 @@ async function pickedDay(file, marked) {
   });
 }
 
+/* ed-radio-undo and ed-radio-back. The first card on the list, its English form of address set to one it does not hold, then
+   left by Next (how "undo") or by closing every editor (how "back"), and the Undo taken. */
+const radioLab = labWith("radio", SAMPLE);
+async function radioKept(file, how) {
+  return scene(radioLab, file, async page => {
+    await page.evaluate(() => openCardEditor(document.querySelector("#list .card[data-id]").dataset.id));
+    await page.waitForFunction(() => !!document.getElementById("meSave"), { timeout: 10000 });
+    await sleep(100);
+    const chosen = await page.evaluate(() => {
+      const group = [...document.querySelectorAll('#modalCard input[type="radio"][name="meAddr_en"]')];
+      const to = group.find(el => !el.checked);
+      if (!to) return { n: group.length, value: null };
+      to.click();
+      return { n: group.length, value: to.value };
+    });
+    await settle(page);
+    if (how === "undo") await page.evaluate(() => document.getElementById("edNext").click());
+    else await page.evaluate(() => closeAllDialogs());
+    await settle(page);
+    await sleep(200);
+    const offered = await page.evaluate(() => !!document.getElementById("eUndoBtn"));
+    if (offered) await page.evaluate(() => document.getElementById("eUndoBtn").click());
+    await settle(page);
+    await sleep(300);
+    const after = await page.evaluate(() => {
+      const el = document.querySelector('#modalCard input[type="radio"][name="meAddr_en"]:checked');
+      return el ? el.value : null;
+    });
+    return { chosen, offered, after };
+  });
+}
+const radioHeld = r => !!r && r.chosen.n > 1 && r.chosen.value !== null && r.offered && r.after === r.chosen.value;
+
 /* A deciding line lifted in a copy of the built page, beside the lab's catalog: the scene run on it must turn red. */
 async function pagePlant(dir, from, to, run, red, line) {
   if (PLANTS_OFF) { skip(line); return; }
@@ -249,6 +284,11 @@ async function main() {
     check(diffHeld(r), "intent-save-diff Save after one clause stores that clause alone, and the next edition's name, Polish clause and comment show beside it", r);
     await pagePlant(diffLab, 'if (next[k] !== String((BASE_STORE[k] || [])[at] || "").trim()) own[k] = next[k];', "own[k] = next[k];",
       savedDiff, r => !diffHeld(r), "p intent-save-diff every field stored again on Save (editors.js, the intent's Save) turns it red");
+  }
+  {
+    const u = await radioKept("etiuda.html", "undo"), b = await radioKept("etiuda.html", "back");
+    check(radioHeld(u), "ed-radio-undo a form of address chosen in the card editor survives the Undo of moving on without saving", u);
+    check(radioHeld(b), "ed-radio-back a form of address chosen in the card editor survives in a window brought back after a close", b);
   }
   {
     const found = resetPromisers();
