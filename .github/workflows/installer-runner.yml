@@ -36,7 +36,7 @@ on:
         type: string
         default: probe
       legs:
-        description: For the legs stage, leg names separated by spaces (all-upgrade running-1618 system-bare locked-1618 all-move); empty runs all five
+        description: For the legs stage, leg names separated by spaces (see tools/runner/installer-legs.mjs); empty runs every leg but the installer mends' six, which run only where named
         required: false
         type: string
         default: ""

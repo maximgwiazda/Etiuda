@@ -8,7 +8,8 @@
  * THE CRITERION, each leg's own words of 2026-11-11, implemented as they stand; where the runner cannot do a part, the leg says
  * so in its own no-verdict line rather than passing:
  *   all-upgrade   "an all-users upgrade: version N with /allusers, then N+1 with /S. The uninstall entry, the shortcuts and the
- *                 etiuda: link must be intact afterwards, and a marker file planted in the install folder gone".
+ *                 etiuda: link must be intact afterwards, and a marker file planted in the install folder gone". The last clause is
+ *                 flipped to kept by the B1 ruling, "an install or an update never removes what it did not put there" (Claude α, 2026-11-22).
  *   running-1618  "1618 at a running copy: the installing account's own copy is left as it is when another session's copy
  *                 ends the run with 1618, and nothing else changes" (the installer owner's ruling, 2026-11-13: closing the
  *                 person's own copy only to refuse would cost their open work for no install). The other session is a standard account made for the leg,
@@ -28,6 +29,8 @@
  *   ts-uninstall  the ordinary build, the Test Service build over it, then the uninstall from the entry: no shortcut of either
  *                 name is left for this account, with the registration's ShortcutName as installed and with it deleted (the
  *                 test architect, 2026-11-17, with the mend of shell/installer.nsh's customUnInstall).
+ *   short-stage, old-copy-kept, pre-own-survives, foreign-folder-refused, per-user-at-sign-in, pf-dotdot: the installer mends'
+ *                 legs (B1, B4, B5 and the Program Files ".."), each criterion above its function. Run only where named.
  *
  * WHAT IT REUSES. The test build and its installer as tools/runner/hkcu-uninstaller-marker.mjs makes them (the test identity
  * of tools/test-identity.cjs, built from tools/electron-builder-test.cjs with E.unsignedEnv, refused unless G.setupRefusal
@@ -60,7 +63,10 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const NO_VERDICT = 78;
-const LEG_NAMES = ["all-upgrade", "running-1618", "system-bare", "locked-1618", "all-move", "all-space-d", "system-push", "ext-claimed", "ts-cycle", "ts-uninstall", "shipped-detect", "nonpersistent", "net-hosts"];
+const LEG_NAMES = ["all-upgrade", "running-1618", "system-bare", "locked-1618", "all-move", "all-space-d", "system-push", "ext-claimed", "ts-cycle", "ts-uninstall", "shipped-detect", "nonpersistent", "net-hosts",
+  "short-stage", "old-copy-kept", "pre-own-survives", "foreign-folder-refused", "per-user-at-sign-in", "pf-dotdot"];
+/* Run only where named: the installer mends' legs (below), kept out of a run that names no leg. */
+const NAMED_ONLY = ["short-stage", "old-copy-kept", "pre-own-survives", "foreign-folder-refused", "per-user-at-sign-in", "pf-dotdot"];
 let OUT = "";
 const say = (l) => { process.stdout.write(l + "\n"); if (OUT) fs.appendFileSync(path.join(OUT, "legs.txt"), l + "\n"); };
 const refuse = (why) => { say("#legs refused: " + why); process.exit(NO_VERDICT); };
@@ -76,7 +82,7 @@ if (outAt < 0 || !argv[outAt + 1]) refuse("--out <dir> is wanted");
 const named = argv.filter((a, i) => i !== outAt && i !== outAt + 1);
 const unknown = named.filter((n) => LEG_NAMES.indexOf(n) < 0);
 if (unknown.length) refuse("no leg named " + unknown.join(", ") + "; the legs are " + LEG_NAMES.join(", "));
-const CHOSEN = named.length ? LEG_NAMES.filter((n) => named.indexOf(n) > -1) : LEG_NAMES.slice();
+const CHOSEN = named.length ? LEG_NAMES.filter((n) => named.indexOf(n) > -1) : LEG_NAMES.filter((n) => NAMED_ONLY.indexOf(n) < 0);
 
 const G = require(path.join(ROOT, "tests", "install-guard.cjs"));
 const P = require(path.join(ROOT, "tests", "install-plan.js"));
@@ -363,17 +369,17 @@ async function allUpgrade(rec) {
     links: commonLinks().map((f) => fs.existsSync(f) && P.samePath(ps("lnk", ["-File", f]), path.join(dir, PRODUCT + ".exe"))),
     link: (() => { const k = "HKLM\\Software\\Classes\\" + T.scheme; const v = G.regQuery(k); const cmd = present(k + "\\shell\\open\\command") ? G.regValues(G.regQuery(k + "\\shell\\open\\command").text)["(Default)"] || "" : "";
       return v.present && "URL Protocol" in G.regValues(v.text) && cmd.toLowerCase().indexOf(dir.toLowerCase()) > -1; })(),
-    markerGone: !fs.existsSync(marker),
+    markerKept: fs.existsSync(marker),
     asarNew: shaOr(asarAt),
   };
   rec.f("n1-exit", facts.exit); rec.f("dir", dir); rec.f("hklm-entry", yes(facts.entry)); rec.f("uninstaller", yes(facts.uninstaller));
   rec.f("same-folder", yes(facts.location)); rec.f("hkcu-entry", yes(facts.perUser)); rec.f("desktop-link", yes(facts.links[0]));
-  rec.f("startmenu-link", yes(facts.links[1])); rec.f(T.scheme + "-link", yes(facts.link)); rec.f("marker-gone", yes(facts.markerGone));
+  rec.f("startmenu-link", yes(facts.links[1])); rec.f(T.scheme + "-link", yes(facts.link)); rec.f("marker-kept", yes(facts.markerKept));
   rec.f("asar", facts.asarNew === asarOld ? "unchanged" : asarTree && facts.asarNew === asarTree ? "this-tree" : "other");
-  const ok = facts.exit === 0 && facts.entry && facts.uninstaller && facts.location && !facts.perUser && facts.links.every(Boolean) && facts.link && facts.markerGone;
-  rec.end(ok, ok ? "N with /allusers, then N+1 with /S: the all-users entry, both shortcuts and the " + T.scheme + ": link intact, the planted file gone"
+  const ok = facts.exit === 0 && facts.entry && facts.uninstaller && facts.location && !facts.perUser && facts.links.every(Boolean) && facts.link && facts.markerKept;
+  rec.end(ok, ok ? "N with /allusers, then N+1 with /S: the all-users entry, both shortcuts and the " + T.scheme + ": link intact, the planted file kept"
     : "after N+1 with /S something is not intact: exit " + facts.exit + ", entry " + yes(facts.entry) + ", uninstaller " + yes(facts.uninstaller)
-      + ", shortcuts " + facts.links.map(yes).join("/") + ", link " + yes(facts.link) + ", planted file gone " + yes(facts.markerGone) + ", a per-user entry " + yes(facts.perUser));
+      + ", shortcuts " + facts.links.map(yes).join("/") + ", link " + yes(facts.link) + ", planted file kept " + yes(facts.markerKept) + ", a per-user entry " + yes(facts.perUser));
 }
 
 /* ---- (e) all-move: an all-users install moved to another folder by the newer setup, with a link planted in the old one -----
@@ -1319,6 +1325,375 @@ async function locked1618(rec) {
   rec.end(false, "exit " + (r.timedOut ? "none within 15 min" : r.code) + " where 1618 was wanted; the copy is " + (whole ? "whole" : "fully new"));
 }
 
+/* ---- the installer mends' legs: B1, B4 and B5 of the update and install review, and the Program Files ".." -----------------
+   Named only, never in a run that names no leg: three start the desk or make accounts, so none shares a run with the fresh-account
+   legs (nonpersistent, net-hosts). Each reads the folder's own list (etiuda-files.ini) by itself, never through the tree's code. */
+const ASIDE = ".setup-previous", STAGED = ".setup-staging", FILES_INI = "etiuda-files.ini";
+const WIDE = /^(resources|locales)(\\|$)/;
+const RUNONCE = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce", RUNONCE_VALUE = T.appId + ".per-user-copy";
+/** The [files] keys of a list, lower-cased; null where there is no list. */
+function iniFiles(file) {
+  let text;
+  try { text = fs.readFileSync(file, "utf8"); } catch (e) { return null; }
+  const out = new Set();
+  let sect = "";
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim(), h = /^\[([^\]]*)\]$/.exec(line), eq = line.indexOf("=");
+    if (h) sect = h[1].toLowerCase();
+    else if (sect === "files" && eq > 0) out.add(line.slice(0, eq).trim().toLowerCase());
+  }
+  return out;
+}
+/** The [list] entries in order, as written. */
+function iniListed(file) {
+  const out = [];
+  let sect = "";
+  for (const raw of fs.readFileSync(file, "utf8").split(/\r?\n/)) {
+    const line = raw.trim(), h = /^\[([^\]]*)\]$/.exec(line), eq = line.indexOf("=");
+    if (h) sect = h[1].toLowerCase();
+    else if (sect === "list" && eq > 0) out.push(line.slice(eq + 1).trim());
+  }
+  return out;
+}
+const isLink = (p) => { try { return fs.lstatSync(p).isSymbolicLink(); } catch (e) { return false; } };
+const holds = (p, text) => { try { return fs.readFileSync(p, "utf8") === text; } catch (e) { return false; } };
+const numberedAsides = (dir) => { const out = []; for (let i = 1; i <= 9; i++) if (fs.existsSync(dir + ASIDE + "." + i)) out.push(i); return out; };
+/** Where a planted file is now: the folder, the copy aside, a numbered copy aside, or gone. */
+function whereIs(dir, rel) {
+  if (fs.existsSync(path.join(dir, rel))) return "folder";
+  if (fs.existsSync(path.join(dir + ASIDE, rel))) return "aside";
+  for (const i of numberedAsides(dir)) if (fs.existsSync(path.join(dir + ASIDE + "." + i, rel))) return "aside." + i;
+  return "gone";
+}
+PS.under = ["param([string]$Prefix)", "$p = $Prefix.TrimEnd('\\') + '\\'",
+  "@(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($p, [StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { [string]$_.ProcessId + ' ' + $_.Name }) -join ', '"];
+fs.writeFileSync(psFile("under"), PS.under.join("\r\n"), "utf8");
+async function installUser(rec, exe, tag) {
+  const args = P.installArgs({ mode: "user" });
+  const bad = P.argsFault(args, "user");
+  if (bad) throw new Error("refusing " + args.join(" ") + ": " + bad);
+  const r = await runExe(exe, args, 600000);
+  const dir = userDir();
+  rec.f(tag + "-exit", r.timedOut ? "timeout" : r.code);
+  return { code: r.timedOut ? "timeout" : r.code, dir, ok: r.code === 0 && !!dir && fs.existsSync(path.join(dir, PRODUCT + ".exe")) };
+}
+/** One start of the installed desk as this account, through the launch door, stopped by pid after `seconds` or once `done` holds. */
+async function startDesk(rec, prog, tag, seconds, done) {
+  const ud = path.join(process.env.APPDATA, T.packageName), docsRoot = path.join(LAB, tag + "-documents");
+  fs.mkdirSync(docsRoot, { recursive: true });
+  const opts = { stdio: "ignore", windowsHide: true, env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: docsRoot, ETIUDA_TEST_DEVTOOLS: "1" }) };
+  const args = ["--user-data-dir=" + ud];
+  const no = E.shellLaunchRefusal(WHO, args, opts);
+  if (no) throw new NoVerdict("the desk's start is refused: " + no[0]);
+  const t0 = Date.now(), child = E.shellLaunch(WHO, prog, args, opts);
+  let gone = false;
+  child.on("exit", () => { gone = true; });
+  let held = -1;
+  for (let i = 0; i < seconds; i++) { await sleep(1000); if (done && done()) { held = Math.round((Date.now() - t0) / 1000); break; } if (gone) break; }
+  const up = !gone;
+  if (!gone) E.killTree(child.pid);
+  for (const p of procsOf(prog)) E.killTree(p.pid);
+  for (let i = 0; i < 15 && procsOf(prog).length; i++) await sleep(1000);
+  rec.f(tag + "-desk-up", yes(up)); rec.f(tag + "-done-s", held);
+  return { up, held };
+}
+
+/* short-stage (B5): "an update is swapped in only when every packaged file is present at its exact size". A second build of this
+   tree whose package lacks one listed file (its list still naming it) is run over a whole install: exit 2, the installed copy's
+   files and DisplayVersion as they were, and no staging folder left beside it. */
+const SHORT_DIST = () => path.join(LAB, "dist-short");
+function shortSetup(rec) {
+  const ini = path.join(DIST, "win-unpacked", FILES_INI);
+  if (!fs.existsSync(ini)) throw new NoVerdict("the build under test wrote no " + FILES_INI + " into its package, so no short stage can be made from it");
+  const listed = iniListed(ini);
+  const sizes = listed.map((rel) => { try { return { rel, size: fs.statSync(path.join(DIST, "win-unpacked", rel)).size }; } catch (e) { return null; } }).filter(Boolean);
+  const pick = sizes.find((s) => s.rel.toLowerCase() === "license.electron.txt")
+    || sizes.filter((s) => !/\\/.test(s.rel) && !/\.exe$/i.test(s.rel)).sort((a, b) => a.size - b.size)[0];
+  if (!pick) throw new NoVerdict("the list names no file at the package's root to leave out");
+  const out = SHORT_DIST(), cfg = path.join(LAB, "short-stage.cjs"), stash = path.join(LAB, "short-stage-stash.bin");
+  /* Left out after the list is written, at each of the two writes, so the list still names it: the hooks are the build's own. */
+  fs.writeFileSync(cfg, ['"use strict";', 'const fs = require("node:fs"), path = require("node:path");',
+    "const base = require(" + JSON.stringify(path.join(ROOT, "tools", "electron-builder-test.cjs")) + ");",
+    "const REL = " + JSON.stringify(pick.rel) + ", STASH = " + JSON.stringify(stash) + ";",
+    'if (typeof base.afterPack !== "function" || typeof base.afterSign !== "function") throw new Error("short-stage: the build has no afterPack and afterSign hooks");',
+    "const at = (c) => path.join(c.appOutDir, REL);",
+    "module.exports = Object.assign({}, base, {",
+    "  afterPack: async (c) => { await base.afterPack(c); if (fs.existsSync(at(c))) { fs.copyFileSync(at(c), STASH); fs.unlinkSync(at(c)); } },",
+    "  afterSign: async (c) => { if (!fs.existsSync(at(c)) && fs.existsSync(STASH)) fs.copyFileSync(STASH, at(c)); await base.afterSign(c); if (fs.existsSync(at(c))) fs.unlinkSync(at(c)); },",
+    "});", ""].join("\n"));
+  const cli = path.join(ROOT, "node_modules", "electron-builder", "out", "cli", "cli.js");
+  try {
+    execFileSync(process.execPath, [cli, "--win", "--config", cfg], { cwd: ROOT, stdio: "inherit", env: E.unsignedEnv({ ETIUDA_DIST: out }) });
+  } catch (e) { throw new NoVerdict("the short build could not be made: " + oneLine(e.message)); }
+  const found = fs.existsSync(out) ? fs.readdirSync(out).filter((n) => /-setup\.exe$/i.test(n)) : [];
+  if (found.length !== 1) throw new NoVerdict(out + " holds " + found.length + " installers; expected 1");
+  const exe = path.join(out, found[0]);
+  const no = G.setupRefusal(G.setupIdentity(exe), "desk");
+  if (no) throw new NoVerdict("the short setup is refused before it runs: " + no);
+  const shortIni = path.join(out, "win-unpacked", FILES_INI);
+  const stillListed = fs.existsSync(shortIni) && iniListed(shortIni).some((r) => r.toLowerCase() === pick.rel.toLowerCase());
+  const left = !fs.existsSync(path.join(out, "win-unpacked", pick.rel));
+  rec.f("left-out", pick.rel); rec.f("left-out-bytes", pick.size); rec.f("short-still-listed", yes(stillListed)); rec.f("short-file-absent", yes(left));
+  if (!stillListed || !left) throw new NoVerdict("the short build is not short as meant: listed " + yes(stillListed) + ", absent " + yes(left));
+  return exe;
+}
+async function shortStage(rec) {
+  const short = shortSetup(rec);
+  const dir = await installMachine(rec, NEWER, "n");
+  const before = manifest(dir), dv = valueOf(regKey(KM.uninstall), "DisplayVersion");
+  const r = await runExe(short, ["/S"], 600000);
+  const d = manifestDiff(before, manifest(dir));
+  const facts = { exit: r.timedOut ? "timeout" : r.code, same: !d.changed.length && !d.gone.length && !d.added.length,
+    dv: valueOf(regKey(KM.uninstall), "DisplayVersion") === dv && !!dv, staged: fs.existsSync(dir + STAGED) };
+  rec.f("exit", facts.exit); rec.f("files-as-they-were", yes(facts.same)); rec.f("changed", few(d.changed.concat(d.gone, d.added)) || 0);
+  rec.f("displayversion-kept", yes(facts.dv)); rec.f("staging-left", yes(facts.staged));
+  const ok = facts.exit === 2 && facts.same && facts.dv && !facts.staged;
+  rec.end(ok, ok ? "a package one listed file short was refused with 2: the installed copy, its files and its DisplayVersion as they were, no staging folder left"
+    : "the short package: exit " + facts.exit + " (2 wanted), files as they were " + yes(facts.same) + ", DisplayVersion kept " + yes(facts.dv) + ", staging left " + yes(facts.staged));
+}
+
+/* pre-own-survives (B1): "an install or an update never removes what it did not put there". N for all users into an empty folder;
+   a person's file, a folder of theirs, a file of theirs inside the program's resources folder and a junction of theirs are put in
+   it; N+1 with a bare /S, then N+1 again (the second swap drops the first's copy aside by its list). Green where both runs exit 0,
+   N+1 is in place, and the person's file, folder and junction (its target untouched) are in the folder after each. Where the file
+   inside resources is, after each, is recorded: a copy installed before the list counts resources whole, as etiudaDropOld does. */
+async function preOwnSurvives(rec) {
+  const old = olderSetup(rec);
+  const A = path.join(LAB, "pre", "app");
+  rec.after("uninstall", uninstallMachine);
+  const args = P.installArgs({ mode: "machine", dir: A });
+  const bad = P.argsFault(args, "machine");
+  if (bad) throw new Error("refusing " + args.join(" ") + ": " + bad);
+  const r0 = await runExe(old, args, 600000);
+  rec.f("n-exit", r0.timedOut ? "timeout" : r0.code);
+  if (r0.code !== 0 || !fs.existsSync(path.join(A, PRODUCT + ".exe")) || !P.samePath(machineDir(), A))
+    throw new NoVerdict("N did not install for all users into " + A + " (exit " + r0.code + ")");
+  rec.f("n-list", yes(fs.existsSync(path.join(A, FILES_INI))));
+  const TEXT = "planted by " + WHO + "\n";
+  const OWN = "a-persons-own-file.txt", OWN_IN = "a-persons-folder\\inside.txt", IN_RES = "resources\\a-persons-file-in-resources.txt", LINK = "a-persons-link";
+  for (const rel of [OWN, OWN_IN, IN_RES]) { fs.mkdirSync(path.dirname(path.join(A, rel)), { recursive: true }); fs.writeFileSync(path.join(A, rel), TEXT); }
+  const victimDir = path.join(LAB, "pre-victim"), victim = path.join(victimDir, "must-stay.txt");
+  fs.mkdirSync(victimDir, { recursive: true });
+  fs.writeFileSync(victim, "must stay\n");
+  const mk = spawnSync("cmd.exe", ["/c", "mklink", "/J", path.join(A, LINK), victimDir], { encoding: "utf8", windowsHide: true, timeout: 30000 });
+  rec.after("junctions", () => {
+    const said = [];
+    for (const d of [A, A + ASIDE].concat(numberedAsides(A).map((i) => A + ASIDE + "." + i))) {
+      const l = path.join(d, LINK);
+      if (isLink(l)) { const r = spawnSync("cmd.exe", ["/c", "rmdir", l], { windowsHide: true, timeout: 30000 }); said.push(path.basename(d) + (r.status === 0 ? " removed" : " refused")); }
+    }
+    return said.join(",") || "none left";
+  });
+  if (mk.status !== 0 || !fs.existsSync(path.join(A, LINK, "must-stay.txt"))) throw new NoVerdict("the junction could not be planted (" + oneLine(mk.stderr || mk.stdout) + ")");
+  const built = newBuild(), asarTree = built["resources\\app.asar"] || "";
+  const shipped = new Set(Object.keys(built).concat([FILES_INI, UNINSTALLER.toLowerCase(), "uninstallericon.ico"]));
+  const look = (tag, r) => {
+    const f = {
+      exit: r.timedOut ? "timeout" : r.code,
+      program: fs.existsSync(path.join(A, PRODUCT + ".exe")) && !!asarTree && shaOr(path.join(A, "resources", "app.asar")) === asarTree,
+      own: holds(path.join(A, OWN), TEXT), ownIn: holds(path.join(A, OWN_IN), TEXT),
+      link: isLink(path.join(A, LINK)), victim: holds(victim, "must stay\n"),
+      inRes: whereIs(A, IN_RES), aside: fs.existsSync(path.join(A + ASIDE, PRODUCT + ".exe")), numbered: numberedAsides(A),
+    };
+    const strays = Object.keys(manifest(A)).filter((k) => !shipped.has(k) && ![OWN, OWN_IN, IN_RES].includes(k));
+    rec.f(tag + "-exit", f.exit); rec.f(tag + "-program-new", yes(f.program)); rec.f(tag + "-own-file", yes(f.own)); rec.f(tag + "-own-folder", yes(f.ownIn));
+    rec.f(tag + "-junction-in-folder", yes(f.link)); rec.f(tag + "-junction-target-intact", yes(f.victim)); rec.f(tag + "-file-in-resources", f.inRes);
+    rec.f(tag + "-aside-holds-program", yes(f.aside)); rec.f(tag + "-numbered-asides", f.numbered.join(",") || "none"); rec.f(tag + "-strays", strays.length ? few(strays) : 0);
+    f.ok = f.exit === 0 && f.program && f.own && f.ownIn && f.link && f.victim;
+    return f;
+  };
+  const first = look("n1", await runExe(NEWER, ["/S"], 600000));
+  const second = look("n1-again", await runExe(NEWER, ["/S"], 600000));
+  const ok = first.ok && second.ok;
+  const words = (f) => "exit " + f.exit + ", N+1 in place " + yes(f.program) + ", own file " + yes(f.own) + ", own folder " + yes(f.ownIn)
+    + ", junction " + yes(f.link) + ", its target " + yes(f.victim) + ", the file in resources " + f.inRes;
+  rec.end(ok, ok ? "N, then N+1 twice with /S: the person's file, folder and junction stayed in the folder each time, the junction's target untouched (the file in resources: "
+    + first.inRes + ", then " + second.inRes + ")" : "first update: " + words(first) + "; second: " + words(second));
+}
+
+/* foreign-folder-refused (B1): a folder that holds other files and no earlier Etiuda is refused with 2 before anything is written:
+   the file there untouched and alone, nothing staged beside it, nothing registered. An empty folder, the control, installs. */
+async function foreignFolderRefused(rec) {
+  const F = path.join(LAB, "pre", "theirs"), notes = path.join(F, "notes.txt"), TEXT = "a person's notes\n";
+  fs.mkdirSync(F, { recursive: true });
+  fs.writeFileSync(notes, TEXT);
+  rec.after("uninstall", uninstallMachine);
+  const args = P.installArgs({ mode: "machine", dir: F });
+  const bad = P.argsFault(args, "machine");
+  if (bad) throw new Error("refusing " + args.join(" ") + ": " + bad);
+  const r = await runExe(NEWER, args, 600000);
+  const facts = { exit: r.timedOut ? "timeout" : r.code, notes: holds(notes, TEXT), alone: fs.readdirSync(F).join(",") === "notes.txt",
+    staged: fs.existsSync(F + STAGED), registered: !!valueOf(regKey(KM.uninstall), "DisplayVersion") };
+  const Em = path.join(LAB, "pre", "empty");
+  fs.mkdirSync(Em, { recursive: true });
+  const r2 = facts.registered ? { code: "not run" } : await runExe(NEWER, P.installArgs({ mode: "machine", dir: Em }), 600000);
+  const empty = r2.code === 0 && fs.existsSync(path.join(Em, PRODUCT + ".exe"));
+  rec.f("exit", facts.exit); rec.f("notes-untouched", yes(facts.notes)); rec.f("folder-holds-only-notes", yes(facts.alone));
+  rec.f("staging-beside", yes(facts.staged)); rec.f("registered", yes(facts.registered)); rec.f("empty-folder-exit", r2.timedOut ? "timeout" : r2.code); rec.f("empty-folder-installed", yes(empty));
+  const ok = facts.exit === 2 && facts.notes && facts.alone && !facts.staged && !facts.registered && empty;
+  rec.end(ok, ok ? "a folder holding a person's file and no Etiuda was refused with 2, the file untouched and alone, nothing staged or registered; an empty folder installed"
+    : "the foreign folder: exit " + facts.exit + " (2 wanted), notes untouched " + yes(facts.notes) + ", alone " + yes(facts.alone) + ", staging beside " + yes(facts.staged)
+      + ", registered " + yes(facts.registered) + "; the empty folder installed " + yes(empty));
+}
+
+/* old-copy-kept (B5): the old copy stays beside the install until the new one has started. Per user: N, then N+1 with /currentuser;
+   the copy aside holds N's program; one start of the desk as this account, and it loses every file its list names (or, from a copy
+   installed before the list, the newer list's files and resources and locales whole). All users: N, then N+1 with /S; the copy
+   aside stays after a start by a standard account, which may not write there, and the uninstall takes both folders. */
+async function oldCopyKept(rec) {
+  const wall = E.windowWallRefusal(WHO);
+  if (wall) throw new NoVerdict("the leg starts the installed desk and the window wall refuses: " + wall[0]);
+  if (!process.env.APPDATA) throw new NoVerdict("APPDATA is not set, so the desk's user-data folder cannot be named");
+  const old = olderSetup(rec);
+  rec.after("uninstall-user", uninstallUser);
+  const n = await installUser(rec, old, "u-n");
+  if (!n.ok) throw new NoVerdict("N did not install for this account (exit " + n.code + ")");
+  const nu = await installUser(rec, NEWER, "u-n1");
+  const asideU = n.dir + ASIDE, progU = path.join(n.dir, PRODUCT + ".exe");
+  const uHad = fs.existsSync(path.join(asideU, PRODUCT + ".exe"));
+  const own = iniFiles(path.join(asideU, FILES_INI));
+  const listed = own || iniFiles(path.join(n.dir, FILES_INI)) || new Set();
+  const isListed = (k) => listed.has(k) || (!own && WIDE.test(k));
+  rec.f("u-aside-after-install", yes(uHad)); rec.f("u-aside-list", own ? "its own" : "the newer, resources and locales whole");
+  const start = nu.ok && uHad ? await startDesk(rec, progU, "u", 40, () => !fs.existsSync(asideU)) : { up: false, held: -1 };
+  await sleep(2000);
+  const leftU = Object.keys(manifest(asideU)), leftListed = leftU.filter(isListed);
+  rec.f("u-aside-after-start", fs.existsSync(asideU) ? "there" : "gone"); rec.f("u-aside-left-listed", leftListed.length ? few(leftListed) : 0);
+  const uOk = nu.ok && uHad && start.up && leftListed.length === 0;
+  const uWords = "per user: N+1 exit " + nu.code + ", the copy aside held N's program " + yes(uHad) + ", the desk started " + yes(start.up)
+    + ", listed files left in the copy aside after it " + leftListed.length;
+  const uninstalled = await uninstallUser();
+  rec.f("u-uninstall", uninstalled);
+
+  const dir = await installMachine(rec, old, "m-n");
+  const rm = await runExe(NEWER, ["/S"], 600000);
+  const asideM = dir + ASIDE, progM = path.join(dir, PRODUCT + ".exe");
+  const mHad = fs.existsSync(path.join(asideM, PRODUCT + ".exe"));
+  rec.f("m-n1-exit", rm.timedOut ? "timeout" : rm.code); rec.f("m-aside-after-install", yes(mHad));
+  let mStart = "unreached";
+  const name = "etst" + crypto.randomInt(10000, 99999);
+  let secret = "Aa1!" + crypto.randomBytes(24).toString("base64");
+  rec.after("account", () => ps("rmuser", ["-Name", name]));
+  const made = ps("mkuser", ["-Name", name], { LEG_PW: secret });
+  const right = made === "made" ? ps("batchright", ["-Name", name]) : "no account";
+  if (made === "made" && right === "granted" && mHad) {
+    const task = "etst-aside-" + name;
+    rec.after("task", () => ps("unreg", ["-Task", task]));
+    rec.after("person-copy", () => { const left = procsOf(progM).filter((p) => String(p.user).toLowerCase() === name.toLowerCase());
+      return left.length ? left.map((p) => p.pid + " " + E.killTree(p.pid).killed).join(",") : "had ended"; });
+    const started = ps("runplain", ["-Task", task, "-Name", name, "-Exe", progM], { LEG_PW: secret });
+    let up = 0;
+    for (let i = 0; i < 30 && started === "started"; i++) { await sleep(1000); if (procsOf(progM).some((p) => String(p.user).toLowerCase() === name.toLowerCase())) up++; }
+    for (const p of procsOf(progM).filter((p) => String(p.user).toLowerCase() === name.toLowerCase())) E.killTree(p.pid);
+    mStart = started !== "started" ? "refused: " + started : up >= 15 ? "up " + up + " s" : "up only " + up + " s (" + ps("taskinfo", ["-Task", task]) + ")";
+  } else mStart = "unreached: account " + made + ", right " + right;
+  secret = null;
+  const mKept = fs.existsSync(path.join(asideM, PRODUCT + ".exe"));
+  rec.f("m-start", mStart); rec.f("m-aside-after-start", yes(mKept));
+  for (let i = 0; i < 15 && procsOf(progM).length; i++) await sleep(1000);
+  const un = exeOf(valueOf(regKey(KM.uninstall), "UninstallString"));
+  const ru = un && fs.existsSync(un) ? await runExe(un, P.uninstallArgs("machine"), 300000) : { code: "no uninstaller" };
+  const g1 = await goneWithin(dir, 120), g2 = await goneWithin(asideM, 30);
+  rec.f("m-uninstall-exit", ru.code); rec.f("m-folder-gone-s", g1); rec.f("m-aside-gone-s", g2);
+  const startReached = /^up \d+ s$/.test(mStart);
+  const mOk = rm.code === 0 && mHad && (!startReached || mKept) && g1 > 0 && g2 > 0;
+  const mWords = "all users: N+1 exit " + rm.code + ", the copy aside held N's program " + yes(mHad) + ", after a standard account's start (" + mStart + ") it "
+    + (mKept ? "stayed" : "was gone") + ", the uninstall took the folder " + yes(g1 > 0) + " and the copy aside " + yes(g2 > 0);
+  rec.end(uOk && mOk, uWords + "; " + mWords + (startReached ? "" : "; the start as a standard account was not reached, so that part has no verdict"));
+}
+
+/* per-user-at-sign-in (B4): an all-users install started elevated over this account's per-user copy writes one RunOnce value in
+   HKCU, that copy's own UninstallString followed by /currentuser /S /KEEP_APP_DATA, and runs nothing from the per-user folder.
+   A hosted runner cannot sign in again, so Explorer's reading of RunOnce at a sign-in is not reached: the leg runs the value's
+   command line itself with a restricted token (runas /trustlevel, Administrators for deny only), and wants exit 0, the per-user
+   folder and HKCU entry gone, a file in the account's data folder kept, and the all-users copy and its shortcuts intact. */
+async function perUserAtSignIn(rec) {
+  if (!process.env.APPDATA) throw new NoVerdict("APPDATA is not set, so the account's data folder cannot be named");
+  const old = olderSetup(rec);
+  if (valueOf(RUNONCE, RUNONCE_VALUE)) throw new NoVerdict(RUNONCE + " already holds " + RUNONCE_VALUE);
+  rec.after("runonce", () => { if (!valueOf(RUNONCE, RUNONCE_VALUE)) return "none left";
+    const r = spawnSync("reg", ["delete", RUNONCE, "/v", RUNONCE_VALUE, "/f"], { windowsHide: true, timeout: 30000 }); return r.status === 0 ? "deleted" : "refused"; });
+  rec.after("uninstall-user", uninstallUser);
+  const n = await installUser(rec, old, "n");
+  if (!n.ok) throw new NoVerdict("N did not install for this account (exit " + n.code + ")");
+  const ud = path.join(process.env.APPDATA, T.packageName), marker = path.join(ud, "per-user-at-sign-in-marker.txt");
+  const madeUd = !fs.existsSync(ud);
+  fs.mkdirSync(ud, { recursive: true });
+  fs.writeFileSync(marker, "kept\n");
+  rec.after("marker", () => { try { fs.unlinkSync(marker); if (madeUd) fs.rmdirSync(ud); return "removed"; } catch (e) { return "left: " + e.code; } });
+
+  rec.after("uninstall", uninstallMachine);
+  const seen = new Set();
+  let watching = true;
+  const watch = (async () => { while (watching) { const s = ps("under", ["-Prefix", n.dir]); if (s && !/^no answer/.test(s)) s.split(", ").forEach((x) => seen.add(x)); await sleep(500); } })();
+  const r = await runExe(NEWER, P.installArgs({ mode: "machine" }), 600000);
+  watching = false;
+  await watch;
+  const value = valueOf(RUNONCE, RUNONCE_VALUE), unStr = valueOf(regKey(KU.uninstall), "UninstallString");
+  const mdir = machineDir();
+  const install = {
+    exit: r.timedOut ? "timeout" : r.code, value: !!value, starts: !!unStr && value.startsWith(unStr),
+    ends: / \/currentuser \/S \/KEEP_APP_DATA$/.test(value), ranNothing: seen.size === 0,
+    perUser: fs.existsSync(path.join(n.dir, PRODUCT + ".exe")) && present(regKey(KU.uninstall)),
+    allUsers: !!mdir && fs.existsSync(path.join(mdir, PRODUCT + ".exe")),
+  };
+  rec.f("exit", install.exit); rec.f("runonce", value); rec.f("starts-with-uninstallstring", yes(install.starts)); rec.f("ends-with-switches", yes(install.ends));
+  rec.f("ran-from-per-user-folder", seen.size ? few([...seen]) : "nothing"); rec.f("per-user-copy-still-there", yes(install.perUser)); rec.f("all-users-copy", yes(install.allUsers));
+  const installOk = install.exit === 0 && install.value && install.starts && install.ends && install.ranNothing && install.perUser && install.allUsers;
+  if (!installOk) {
+    rec.end(false, "the elevated all-users install: exit " + install.exit + ", RunOnce value " + yes(install.value) + ", starting with the HKCU UninstallString " + yes(install.starts)
+      + ", ending /currentuser /S /KEEP_APP_DATA " + yes(install.ends) + ", nothing run from the per-user folder " + yes(install.ranNothing)
+      + ", the per-user copy left for it " + yes(install.perUser) + ", the all-users copy " + yes(install.allUsers));
+    return;
+  }
+
+  /* The sign-in's stand-in: the value's own command line, run with a restricted token, its groups written first. */
+  /* Two witnesses of the token: whoami's groups (with its errors) and "net session", which answers 0 only to an elevated administrator.
+     Both files go to the run's artifact. Windows' own by full path: the runner's PATH finds Git's whoami first. */
+  const cmd = path.join(LAB, "signin-standin.cmd"), groups = path.join(OUT, "signin-groups.txt"), exitFile = path.join(LAB, "signin-exit.txt");
+  const netFile = path.join(OUT, "signin-net-session.txt");
+  fs.writeFileSync(cmd, ["@echo off", '"%SystemRoot%\\System32\\whoami.exe" /groups > "' + groups + '" 2>&1', '"%SystemRoot%\\System32\\net.exe" session >nul 2>&1', '>"' + netFile + '" echo %ERRORLEVEL%', value, '>"' + exitFile + '" echo %ERRORLEVEL%'].join("\r\n") + "\r\n");
+  const ra = spawnSync("runas.exe", ["/trustlevel:0x20000", cmd], { encoding: "utf8", windowsHide: true, timeout: 60000 });
+  rec.f("runas", oneLine((ra.stdout || "") + " " + (ra.stderr || "")) || "status " + ra.status);
+  for (let i = 0; i < 300 && ra.status === 0 && !fs.existsSync(exitFile); i++) await sleep(1000);
+  if (!fs.existsSync(exitFile)) throw new NoVerdict("the install part held (RunOnce " + JSON.stringify(value) + ", nothing run); the stand-in for the sign-in never finished under runas /trustlevel: "
+    + oneLine((ra.stdout || "") + " " + (ra.stderr || "")) + (fs.existsSync(groups) ? " (it did start)" : " (it never started)"));
+  await sleep(500);
+  const g = fs.existsSync(groups) ? fs.readFileSync(groups, "utf8") : "";
+  const admRow = g.split(/\r?\n/).find((l) => /BUILTIN\\Administrators/i.test(l)) || "";
+  const label = (/Mandatory Label\\(\w+) Mandatory Level/i.exec(g) || [])[1] || "unread";
+  const net = fs.existsSync(netFile) ? parseInt(fs.readFileSync(netFile, "utf8"), 10) : NaN;
+  const read = !!admRow || label !== "unread";
+  const unelevated = (/deny only/i.test(admRow) || /^(medium|low)$/i.test(label)) && net !== 0;
+  rec.f("standin-net-session", Number.isNaN(net) ? "unread" : net); rec.f("standin-groups-bytes", g.length);
+  rec.f("standin-administrators", admRow ? (/deny only/i.test(admRow) ? "deny only" : "enabled") : "absent"); rec.f("standin-integrity", label);
+  const sx = parseInt(fs.readFileSync(exitFile, "utf8"), 10);
+  const goneIn = await goneWithin(n.dir, 120);
+  const after = {
+    exit: sx, folder: goneIn > 0 || !fs.existsSync(n.dir), entry: !present(regKey(KU.uninstall)), marker: holds(marker, "kept\n"),
+    allUsers: !!machineDir() && fs.existsSync(path.join(machineDir(), PRODUCT + ".exe")) && present(regKey(KM.uninstall)),
+    links: commonLinks().every((f) => fs.existsSync(f)),
+  };
+  rec.f("standin-exit", sx); rec.f("per-user-folder-gone", yes(after.folder)); rec.f("hkcu-entry-gone", yes(after.entry)); rec.f("data-file-kept", yes(after.marker));
+  rec.f("all-users-intact", yes(after.allUsers)); rec.f("all-users-shortcuts", yes(after.links));
+  const removed = after.exit === 0 && after.folder && after.entry && after.marker && after.allUsers && after.links;
+  /* A token not shown to be ordinary says nothing of ordinary rights: no verdict where the line otherwise did all it should. */
+  if (!unelevated && removed)
+    throw new NoVerdict("the install part held and the line removed the per-user copy, kept the data and left the all-users copy whole; but the stand-in's token was not shown to be ordinary (Administrators "
+      + (admRow ? (/deny only/i.test(admRow) ? "deny only" : "enabled") : read ? "absent" : "unread") + ", " + label + " integrity, net session " + (Number.isNaN(net) ? "unread" : net) + "), so ordinary rights are unproven");
+  const ok = unelevated && after.exit === 0 && after.folder && after.entry && after.marker && after.allUsers && after.links;
+  rec.end(ok, (ok ? "elevated all-users over a per-user copy wrote " + JSON.stringify(value) + " to HKCU RunOnce and ran nothing of that copy; the line, run with a restricted token, removed the per-user copy and its entry with exit 0, kept the data file, and left the all-users copy and its shortcuts whole"
+    : "the line, run with a restricted token (" + label + " integrity, unelevated " + yes(unelevated) + "): exit " + sx + ", per-user folder gone " + yes(after.folder) + ", HKCU entry gone " + yes(after.entry)
+      + ", data file kept " + yes(after.marker) + ", all-users copy intact " + yes(after.allUsers) + ", its shortcuts " + yes(after.links))
+    + "; a real sign-in (Explorer reading RunOnce) is not reached on a hosted runner");
+}
+
+/* pf-dotdot (the Program Files D): interactive only. The writable-folder box belongs to the folder page, which a hosted runner cannot
+   drive; tests/allusers-folder.mjs and the GetFullPathNameW check read it from the script. */
+async function pfDotdot() {
+  throw new NoVerdict("the box for \"C:\\Program Files\\..\\Users\\Public\\Etiuda\" appears only on the folder page, which this runner cannot drive; unreached here");
+}
+
 /* ---- the run ------------------------------------------------------------------------------------------------------- */
 
 function record(name) {
@@ -1329,7 +1704,9 @@ function record(name) {
   return rec;
 }
 const LEGS = { "all-upgrade": allUpgrade, "running-1618": running1618, "system-bare": systemBare, "locked-1618": locked1618, "all-move": allMove, "all-space-d": allSpaceD,
-  "system-push": systemPush, "ext-claimed": extClaimed, "ts-cycle": tsCycle, "ts-uninstall": tsUninstall, "shipped-detect": shippedDetect, "nonpersistent": nonPersistent, "net-hosts": netHosts };
+  "system-push": systemPush, "ext-claimed": extClaimed, "ts-cycle": tsCycle, "ts-uninstall": tsUninstall, "shipped-detect": shippedDetect, "nonpersistent": nonPersistent, "net-hosts": netHosts,
+  "short-stage": shortStage, "old-copy-kept": oldCopyKept, "pre-own-survives": preOwnSurvives, "foreign-folder-refused": foreignFolderRefused,
+  "per-user-at-sign-in": perUserAtSignIn, "pf-dotdot": pfDotdot };
 
 /* The newer setup, built once from this tree under the test identity, as the marker builds it. */
 const early = legPreflight();
