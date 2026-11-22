@@ -2385,6 +2385,7 @@ function writeStatsAnswer(text, askId, forced) {
   statsHeld = null;
   statsWroteKey = key;
   statsWroteNamed = out.catalog ? { id: out.catalog.id, text: String(text || "") } : null;
+  statsNamedNote(out.catalog ? out.catalog.id : "");
   statsLastWrite = now.getTime();
   statsSealNote(got.seal);
   return { ok: true, sync: out.sync, syncMs: now.getTime(), why: why };
@@ -2410,20 +2411,39 @@ function statsWithdrawn() {
   statsSpan = ""; statsPeriod = null; statsHeld = null; statsWroteKey = ""; /* plant:stats-withdrawn */
   armMidnight();
 }
-/* Empties the statistics already on the share for a catalog now private, even when this process has forgotten
-   which catalog they named. Where no span is held the file is taken off. A file still named as another
-   catalog that is not private is left. */
+/* The catalog the statistics on the share last named, "" for none, kept in stats-named.json beside desk.json so a later
+   process knows it. Written when it changes. */
+let statsNamedKept = null;
+function statsNamedNote(id) {
+  if (statsNamedKept === id) return;
+  statsNamedKept = id;
+  try { writeReplacing(path.join(app.getPath("userData"), "stats-named.json"), JSON.stringify({ id: id }) + "\n"); }
+  catch (e) { console.error("etiuda: the catalog the statistics named could not be kept - " + e.message); }
+}
+function statsNamedLast() {
+  if (statsWroteNamed) return statsWroteNamed.id;
+  if (statsNamedKept === null) {
+    let v = null;
+    try { v = JSON.parse(fs.readFileSync(path.join(app.getPath("userData"), "stats-named.json"), "utf8")); } catch { v = null; }
+    statsNamedKept = v && typeof v.id === "string" ? v.id : "";
+  }
+  return statsNamedKept;
+}
+/* Empties the statistics already on the share where they name a catalog now private, even after this process has
+   forgotten writing them. Where no span is held the file is taken off. Statistics that name another catalog, or none,
+   or that this desk never recorded naming, are left. */
 function withdrawPrivateStats(id) {
   if (!statsCatalogPrivate(id)) return;
-  if (statsWroteNamed && statsWroteNamed.id !== id && !statsCatalogPrivate(statsWroteNamed.id)) return;
+  const named = statsNamedLast();
+  if (!named || !statsCatalogPrivate(named)) return; /* plant:pcm-withdraw-named */
   if (statsSpan && statsPeriod) {
-    const text = statsWroteNamed && statsWroteNamed.id === id ? statsWroteNamed.text : JSON.stringify({ catalog: { id: id } });
+    const text = statsWroteNamed && statsWroteNamed.id === named ? statsWroteNamed.text : JSON.stringify({ catalog: { id: named } });
     const r = writeStatsAnswer(text, "", "close");
     if (r && r.ok) return;
   }
   const at = statsFile();
   if (!at) return;
-  try { unlinkOwn(at.dest); } catch { /* the next pass tries again */ }
+  try { unlinkOwn(at.dest); statsNamedNote(""); } catch { /* the next pass tries again */ }
 }
 function tryLiveStats(win) {
   if (!folderAnswers(catalogFolder())) return;
