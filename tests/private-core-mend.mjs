@@ -358,7 +358,7 @@ try {
   const r6 = await pcm6();
   check(r6.answer.team && !r6.shownPrivate,
     "pcm6 a catalog answered as the team's is not shown Private to the page (" + JSON.stringify(r6) + ")");
-  await planted("pcm6p", "plant:pcm-view-sent", "    private: Array.from(catalogPrivate).sort(), listed: team && Array.isArray(doc.catalogs) ? doc.catalogs.map(String) : [] };",
+  await planted("pcm6p", "plant:pcm-view-sent", "    private: Array.from(catalogPrivate).sort(), listed: team && Array.isArray(doc.catalogs) ? doc.catalogs.map(String) : [],",
     pcm6, r => r.answer.team && r.shownPrivate, "the page is told Private for a catalog being sent");
 
   /* pcm7 (finding 4, S10): an untold desk names no personal catalog; told, it names it; a team catalog is named either way. */
@@ -476,19 +476,19 @@ try {
 
   /* pcm10 (the test architect's HOLD 1, 2026-11-22): the page judges a row by the shell's own teamListedDoc answer, which contentView
      sends as teamPins, the signed pins of the catalogs this desk holds that are the team's. The lead's signed edition under a listed
-     id is among them; a stranger-signed file under that id, and a copy whose first hop the lead did not sign, are not. The mark is
-     taken on the listed id while a personal catalog under it is held, even one not in use. */
+     id is among them; a stranger-signed catalog under that id, and a copy whose first hop the lead did not sign, are not. The mark is
+     taken on the listed id while a personal catalog under it is held. */
   const pcm10 = async src => {
     const E = catalog(4, { id: "quay-held", card: "the lead's own card" });
     const S = sign(catalog(4, { id: "quay-held", name: "Quay held, mine", card: MARK, unsigned: true }), other.privateKey, { keyId: "stranger" });
     const F = catalog(5, { id: FORK, name: "Quay held, forked", card: MARK, unsigned: true });
     F.grew = { id: "quay-held", rev: 4, sha: "sha256:" + "cd".repeat(32) };
-    const box = await arm("pcm10-" + (src ? "p" : "g"), src);
+    /* The stranger's file is the catalog in use, opened from outside the team's folder: a folder team's syncer takes no catalog into
+       the mirror that the lead did not sign, so that is how a desk holds one. */
+    const u = await setup("pcm10-" + (src ? "p" : "g"), { catalogs: ["quay-held"], body: textOf(S), src });
+    const box = u.box;
     put(box.share, "quay-held.ec", textOf(E));
-    put(box.share, "quay-mine.ec", textOf(S));
     put(box.share, "quay-fork.ec", textOf(F));
-    join(box, ["quay-held"]);
-    await box.D.ask("etiuda:team-join", "content-said", box.team, "");
     const v = await box.D.ask("etiuda:team-join", "content");
     const pins = Array.isArray(v.teamPins) ? v.teamPins : null;
     const m = await box.D.ask("etiuda:team-join", "private", "quay-held", "on");

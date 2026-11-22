@@ -1075,8 +1075,8 @@ await checkAsync("L22 Catalog & data shows Private toggle on personal rows only,
   let contentState = { team: "", told: true, private: ["cat-priv"], listed: ["cat-team"] };
   const privCalls = [];
   const FILES = [
-    { name: "team.ec", mtime: 4000, cards: 2, edition: "edition 1", macros: 2, intents: 1, cats: 1, id: "cat-team", rev: 1, grew: null },
-    { name: "team-fork.ec", mtime: 3500, cards: 2, edition: "rev 1", macros: 2, intents: 1, cats: 1, id: "cat-fork", rev: 1, grew: { id: "cat-team", rev: 1, sha: "a".repeat(64) } },
+    { name: "team.ec", mtime: 4000, cards: 2, edition: "edition 1", macros: 2, intents: 1, cats: 1, id: "cat-team", rev: 1, grew: null, sha: "sha256:" + "e".repeat(64) },
+    { name: "team-fork.ec", mtime: 3500, cards: 2, edition: "rev 1", macros: 2, intents: 1, cats: 1, id: "cat-fork", rev: 1, grew: { id: "cat-team", rev: 1, sha: "a".repeat(64) }, sha: "sha256:" + "f".repeat(64) },
     { name: "own.ec", mtime: 3000, cards: 2, edition: "rev 1", macros: 2, intents: 1, cats: 1, id: "cat-own", rev: 1, grew: null },
     { name: "priv.ec", mtime: 2000, cards: 2, edition: "rev 1", macros: 2, intents: 1, cats: 1, id: "cat-priv", rev: 1, grew: null },
   ];
@@ -1120,8 +1120,10 @@ await checkAsync("L22 Catalog & data shows Private toggle on personal rows only,
     if (offSw || offTeamLbl || offListLock || offBarLock) {
       return "off-team showed controls: " + JSON.stringify({ offSw, offTeamLbl, offListLock, offBarLock: !!offBarLock });
     }
-    /* On-team: team.ec and team-fork.ec have Team catalog and no switch; own.ec has unchecked switch; priv.ec has checked switch + lock; bar has lock. */
-    contentState = { team: "t-lib", told: true, private: ["cat-priv"], listed: ["cat-team"] };
+    /* On-team: team.ec and team-fork.ec have Team catalog and no switch; own.ec has unchecked switch; priv.ec has checked switch + lock; bar has lock.
+       Board 1014, 2026-11-22: a row is the team's because the shell's teamPins names its pin (it was by its id or grew chain reaching a
+       listed id); the two team rows are named there. */
+    contentState = { team: "t-lib", told: true, private: ["cat-priv"], listed: ["cat-team"], teamPins: ["sha256:" + "e".repeat(64), "sha256:" + "f".repeat(64)] };
     await TJ.teamContent();
     await CO.paintCatalogList();
     CO.paintCatPrivate();

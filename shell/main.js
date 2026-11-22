@@ -3968,15 +3968,43 @@ function privateHere(doc, use) {
   if (use && use.seal && teamListedDoc(doc, use)) return false; /* plant:s0b-private-listed plant:pcm-private-signed */
   return catalogMarkedPrivate(doc);
 }
-/* Whether catalog `id` is the team's here, as privateHere judges it: the team lists its stored chain, and where the catalog in
-   use carries this id, its lead signed it or the edition it grew from at its first hop (teamListedDoc). The catalog in use is
-   the one an answer, a working copy and in-use.ec are made from; with none under this id, the list alone decides. */
-function idTeamHere(id) {
+/* Whether catalog `id` is the team's here, as privateHere judges it: the team lists its stored chain, and every catalog this desk
+   holds under the id (heldJudged: the catalog in use and the catalog folder's files) is the lead's signed edition or grew from one
+   at its first hop (teamListedDoc). With none held under the id, the list alone decides. `judged` is heldJudged's answer where the
+   caller has it. */
+function idTeamHere(id, judged) {
   if (!idListedHere(id)) return false;
-  const doc = loadedText ? catalogDocIn(loadedText) : null;
-  if (!doc || doc.kind !== "etiuda-catalog" || doc.id !== id) return true;
-  const use = teamUse();
-  return !(use.member && use.seal) || teamListedDoc(doc, use);
+  let held = judged;
+  if (!held) { const use = teamUse(); if (!(use.member && use.seal)) return true; held = heldJudged(use); }
+  return held.filter(h => h.id === id).every(h => h.team);
+}
+/* The catalogs this desk holds, the catalog in use and every file in the catalog folder it can open, each {id, pin, team}, `team`
+   being the shell's own teamListedDoc answer for the team `use` names: what the page is told a row is (contentView's teamPins), so
+   it never derives the rule itself. A file's grew chain is judged, never learned (lineageAsked), since a teammate can write the
+   folder. */
+function heldJudged(use) {
+  const out = [], seen = new Set();
+  if (!(use && use.member && use.seal)) return out;
+  const texts = [loadedText];
+  for (const file of ecFilesIn(catalogFolder())) {
+    try { if (fs.statSync(file).size <= BRANCH_TEXT_MAX) texts.push(catalogRead(fs.readFileSync(file, "utf8")).json); } catch { /* not one this desk opens */ }
+  }
+  const was = lineageAsked;
+  lineageAsked = was || {};
+  try {
+    for (const t of texts) {
+      const doc = t ? catalogDocIn(t) : null;
+      if (!doc || doc.kind !== "etiuda-catalog" || typeof doc.id !== "string" || !doc.id) continue;
+      let pin = "";
+      try { pin = signedSha(doc); } catch { pin = ""; }
+      if (!PIN_RE.test(pin) || seen.has(pin)) continue;
+      seen.add(pin);
+      let team = false;
+      team = teamListedDoc(doc, use); /* plant:pcm-team-pins */
+      out.push({ id: doc.id, pin: pin, team: team });
+    }
+  } finally { lineageAsked = was; }
+  return out;
 }
 /* Whether the team at this folder lists catalog `id`, by its stored chain. */
 function idListedHere(id) {
@@ -7325,10 +7353,14 @@ function contentView(read) {
   const doc = read === undefined ? folderTeamDoc() : read;
   const pin = doc ? pinTrusted(doc.id) : null;
   const team = pin && pin.keyId === doc.lead.keyId && pin.public === doc.lead.public ? String(doc.id) : "";
-  /* `listed`: the team's catalogs, which the private mark is never offered on. `private`: the marks that hold, so the page is
-     never told Private for a catalog this desk sends as the team's (idTeamHere); a mark it leaves out stays kept. */
+  /* `listed`: the team's catalogs, by id. `teamPins`: the signed pins of the catalogs this desk holds that are the team's, by the
+     shell's own teamListedDoc (heldJudged), which is all the page reads to say a row is the team's. `private`: the marks that hold,
+     so the page is never told Private for a catalog this desk sends as the team's (idTeamHere); a mark it leaves out stays kept. */
+  const use = team ? teamUse() : null;
+  const judged = use && use.member && use.seal && use.seal.team === team ? heldJudged(use) : [];
   return { team: team, told: contentApplies(team),
-    private: Array.from(catalogPrivate).filter(id => !team || !idTeamHere(id)).sort(), listed: team && Array.isArray(doc.catalogs) ? doc.catalogs.map(String) : [] }; /* plant:pcm-view-sent */
+    private: Array.from(catalogPrivate).filter(id => !team || !idTeamHere(id, judged)).sort(), listed: team && Array.isArray(doc.catalogs) ? doc.catalogs.map(String) : [], /* plant:pcm-view-sent */
+    teamPins: judged.filter(h => h.team).map(h => h.pin).sort() };
 }
 /* This desk was told for `team`: kept with the time it was told, so unlisted catalogs can be answered or shared. */
 function contentSaid(team) {
