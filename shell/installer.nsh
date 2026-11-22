@@ -1864,8 +1864,8 @@ Var RemoveDataBox
     LangString RecogniseSameText ${ID} "Na tym komputerze jest już program ${PRODUCT_NAME} w wersji $InstalledVersion, tej samej co w instalatorze. Zainstalować go ponownie?$\r$\n$\r$\nDane na tym komputerze i licencja zostają bez zmian."
     LangString RecogniseNewerText ${ID} "Na tym komputerze jest już program ${PRODUCT_NAME} w wersji $InstalledVersion, nowszej niż wersja ${VERSION} z tego instalatora. Zainstalować w jej miejsce wersję ${VERSION}?$\r$\n$\r$\nDane na tym komputerze i licencja zostają bez zmian."
     LangString RecogniseUnreadableText ${ID} "Na tym komputerze jest już program ${PRODUCT_NAME}, ale nie da się odczytać jego wersji. Zainstalować w jego miejsce wersję ${VERSION}?$\r$\n$\r$\nDane na tym komputerze i licencja zostają bez zmian."
-    LangString etiudaOldCopyGoes ${ID} "Etiuda jest zainstalowana. Kopia zainstalowana tylko dla tego konta zostanie usunięta przy następnym logowaniu do Windows na tym koncie; dane i licencja zostają bez zmian." ; placeholder: Claudette
-    LangString etiudaFolderNotOurs ${ID} "W folderze $etiudaBase są inne pliki, a Etiuda instaluje się tylko w pustym folderze albo w miejsce wcześniejszej Etiudy. Wystarczy wybrać inny folder i uruchomić instalator ponownie." ; placeholder: Claudette
+    LangString etiudaOldCopyGoes ${ID} "Program Etiuda jest zainstalowany dla wszystkich użytkowników. Kopia zainstalowana wcześniej tylko dla tego konta zostanie usunięta przy następnym logowaniu do Windows na tym koncie; dane programu na tym koncie zostają bez zmian." ; the copywriter's words, 2026-11-22 (f0b458b49)
+    LangString etiudaFolderNotOurs ${ID} "Nie zainstalowano programu Etiuda: w folderze $etiudaBase są już inne pliki. Program instaluje się tylko w pustym folderze albo w miejsce swojej wcześniejszej kopii, więc wystarczy uruchomić instalator ponownie i wybrać inny folder." ; the copywriter's words, 2026-11-22 (f0b458b49)
     !endif
     LangString etiudaSetupNotFinished ${ID} "Instalacja programu ${PRODUCT_NAME} nie została ukończona. Pomóc może ponowne uruchomienie instalatora; jeśli znów się zatrzyma, ten kod pomoże ustalić przyczynę: $2."
 
@@ -1883,8 +1883,8 @@ Var RemoveDataBox
     LangString RecogniseSameText ${ID} "${PRODUCT_NAME} $InstalledVersion is already installed on this computer, the same version as this installer. Reinstall it?$\r$\n$\r$\nData on this computer and the licence stay as they are."
     LangString RecogniseNewerText ${ID} "${PRODUCT_NAME} $InstalledVersion is installed on this computer, which is newer than this installer's ${VERSION}. Reinstall ${VERSION} in its place?$\r$\n$\r$\nData on this computer and the licence stay as they are."
     LangString RecogniseUnreadableText ${ID} "${PRODUCT_NAME} is already installed on this computer, but its version cannot be read. Reinstall ${VERSION} in its place?$\r$\n$\r$\nData on this computer and the licence stay as they are."
-    LangString etiudaOldCopyGoes ${ID} "Etiuda is installed. The copy installed for this account only is removed the next time this account signs in to Windows; the data and the licence stay as they are." ; placeholder: Claudette
-    LangString etiudaFolderNotOurs ${ID} "$etiudaBase holds other files, and Etiuda installs only into an empty folder or over an earlier Etiuda. Choose another folder and run the installer again." ; placeholder: Claudette
+    LangString etiudaOldCopyGoes ${ID} "Etiuda is installed for all users. The copy installed earlier for this account alone is removed the next time this account signs in to Windows; this account's data for Etiuda stays as it is." ; the copywriter's words, 2026-11-22 (f0b458b49)
+    LangString etiudaFolderNotOurs ${ID} "Etiuda was not installed: $etiudaBase already holds other files. It installs only into an empty folder or over an earlier copy of itself, so run the installer again and choose another folder." ; the copywriter's words, 2026-11-22 (f0b458b49)
     !endif
     LangString etiudaSetupNotFinished ${ID} "The installation of ${PRODUCT_NAME} did not finish. Running the installer again may help; if it stops again, this code helps find the cause: $2."
 
