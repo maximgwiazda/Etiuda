@@ -956,7 +956,7 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     const init = code(macro(nsh, "customInit"));
     const lang = macro(nsh, "TurnLang ID") || (/!macro TurnLang ID\r?\n([\s\S]*?)!macroend/.exec(nsh) || [])[1] || "";
     const defs = lang.split(/\r?\n/).map((l, i, all) => ({ l: l.trim(), guarded: all.slice(0, i).reverse().find(x => /^\s*!(ifndef|endif)\b/.test(x)) }))
-      .filter(x => /^LangString etiudaOldCopyGoes \$\{ID\} "[^"]+"(?: ; (?:placeholder: Claudette|the copywriter's words, 2026-11-22 \(f0b458b49\)))?$/.test(x.l));
+      .filter(x => /^LangString etiudaOldCopyGoes \$\{ID\} "[^"]+"(?: ; (?:placeholder: Claudette|the copywriter's words))?$/.test(x.l));
     return at > -1 && open !== null && /^Var etiudaFinishText$/m.test(nsh)
       && init[0] === "StrCpy $etiudaFinishText \"$(MUI_TEXT_FINISH_INFO_TEXT)\""
       && defs.length === 2 && defs.every(d => d.guarded && /!ifndef BUILD_UNINSTALLER/.test(d.guarded))

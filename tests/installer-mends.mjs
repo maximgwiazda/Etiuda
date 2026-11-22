@@ -271,7 +271,7 @@ const refuses = nsh => {
   const says = seen > g && b.slice(seen, quit).includes("MessageBox MB_OK|MB_ICONSTOP \"$(etiudaFolderNotOurs)\" /SD IDOK") && b[quit - 1] === "SetErrorLevel 2";
   const back = b.findIndex(l => l === "!insertmacro etiudaRenameRetry \"$etiudaAside\" \"$etiudaBase\"");
   const before = quit > -1 && quit < b.indexOf("CreateDirectory \"$etiudaStage\"") && back > -1 && g > back;
-  const words = (nsh.match(/LangString etiudaFolderNotOurs \$\{ID\} "[^"\n]+" ; (?:placeholder: Claudette|the copywriter's words, 2026-11-22 \(f0b458b49\))\n/g) || []).length === 2;
+  const words = (nsh.match(/LangString etiudaFolderNotOurs \$\{ID\} "[^"\n]+" ; (?:placeholder: Claudette|the copywriter's words)\n/g) || []).length === 2;
   return { ok: guard && says && before && words, guard, says, before, words };
 };
 const f1 = refuses(NSH);
@@ -288,7 +288,7 @@ const leftToItsOwner = nsh => {
   const cond = rest.indexOf("${If} $R9 != \"\""), w = rest.indexOf(RUNONCE);
   const said = rest.indexOf("StrCpy $etiudaFinishText \"$(etiudaOldCopyGoes)\"");
   const runsNothing = !rest.some(l => /uninstallOldVersion|ExecWait|\bExec\b|ExecShell|nsExec/.test(l));
-  const words = (nsh.match(/LangString etiudaOldCopyGoes \$\{ID\} "[^"\n]+" ; (?:placeholder: Claudette|the copywriter's words, 2026-11-22 \(f0b458b49\))\n/g) || []).length === 2;
+  const words = (nsh.match(/LangString etiudaOldCopyGoes \$\{ID\} "[^"\n]+" ; (?:placeholder: Claudette|the copywriter's words)\n/g) || []).length === 2;
   return { ok: cond > -1 && w > cond && said > cond && runsNothing && words, cond, w, said, runsNothing, words };
 };
 const o1 = leftToItsOwner(NSH);
@@ -448,7 +448,10 @@ const dropsAtStart = async main => {
   const f4 = new Map([["C:\\E.setup-previous\\Etiuda.exe", ""], ["C:\\E.setup-previous\\etiuda-files.ini", OLD_LIST]]);
   const said4 = await drop(memFs(f4, new Set(["C:\\E.setup-previous", "C:\\E"]), new Map()), W.join, "C:\\E.setup-previous", "C:\\E", "Etiuda.exe");
   const called = /\n\s*createWindow\(\);\n(?:\s*\w+\(\);\n)*\s*const asideAt = setTimeout\(dropSetAside, \d+\);\n/.test(main)
-    && /function dropSetAside\(\) \{\n\s*if \(process\.platform !== "win32" \|\| !app\.isPackaged\) return;/.test(main);
+    && /function dropSetAside\(\) \{\n\s*if \(process\.platform !== "win32" \|\| !app\.isPackaged\) return;/.test(main)
+    /* The copy aside is walked with original-fs: Electron's node:fs reads resources\app.asar as a folder, so it would be walked, never
+       unlinked, and the folder kept (hosted old-copy-kept, three runs). The memory folder here cannot show that, so the call is read. */
+    && /function dropSetAside\(\) \{[\s\S]*?ofs = require\("original-fs"\)[\s\S]*?setAsideDrop\(ofs\.promises, /.test(main);
   return { ok: gone && kept && wide && notOurs && said4 === "gone" && called, gone, kept, wide, notOurs, all: said4, called };
 };
 const a1 = await dropsAtStart(MAIN).catch(e => ({ ok: false, why: e.message }));
@@ -459,6 +462,8 @@ const a2 = await dropsAtStart(MAIN.replace(" || !(await fsp.lstat(join(aside, ex
 check(!a2.ok, "im5d control: a folder of that name without the program taken as ours reads red");
 const a3 = await dropsAtStart(MAIN.replace("else if (listed.files.has(key) || whole(key)) await fsp.unlink(p)", "else await fsp.unlink(p)")).catch(() => ({ ok: false }));
 check(!a3.ok, "im5d control: every file in the copy aside deleted, a sweep, reads red");
+const a4 = await dropsAtStart(MAIN.replace("setAsideDrop(ofs.promises, ", "setAsideDrop(fs.promises, ")).catch(() => ({ ok: false }));
+check(!a4.ok, "im5d control: the copy aside walked with Electron's node:fs, which reads app.asar as a folder, reads red");
 
 /* ---- im7: ".." resolved before the Program Files prefix ---- */
 const resolvesFirst = text => {
