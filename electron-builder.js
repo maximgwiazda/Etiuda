@@ -94,6 +94,11 @@ const signing = cert ? { signtoolOptions: { certificateFile: cert, ...SIGN_TIMES
   : artifact.length ? { azureSignOptions: Object.fromEntries(Object.entries(ARTIFACT).map(([key, name]) => [key, given(name)])) }
   : esigner.esignerSigning(process.env, __dirname, output) || {};
 
+function installFiles(context) {
+  if (context.electronPlatformName !== "win32") return;
+  console.log("etiuda-files.ini: " + require("./shell/install-files.cjs").writeManifest(context.appOutDir) + " files listed");
+}
+
 module.exports = sellerAddress.sellerConfig(testService.testServiceConfig({
   appId: "app.etiuda.desktop",
   // The display name: the Start menu entry, Add or remove programs, and the install folder.
@@ -205,6 +210,10 @@ module.exports = sellerAddress.sellerConfig(testService.testServiceConfig({
     if (context.electronPlatformName !== "win32") return;
     (await import(require("node:url").pathToFileURL(path.join(__dirname, "tools", "sellable.mjs")).href)).keepMakersSignatures(context.packager);
   },
+  // THE INSTALL'S OWN LIST (shell/install-files.cjs), written again once the folder is signed and its resources edited, so every
+  // size is the one the installer extracts; afterPack's stands only where nothing signs or edits after it.
+  afterPack: async context => installFiles(context),
+  afterSign: async context => installFiles(context),
   beforePack: async context => {
     const plat = context.electronPlatformName;
     if (plat === "linux") linuxIcons();
