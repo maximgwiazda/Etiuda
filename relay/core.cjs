@@ -405,6 +405,8 @@ function seatsShaped(s, issued) {
   let freedOk = !!s && s.freed === undefined || listed;
   const entryOk = f => plain(f) && exactly(f, ["key", "at"]) && is(HEX64, f.key) && Number.isSafeInteger(f.at) && f.at >= 0 && f.at <= issued;
   freedOk = !!s && (s.freed === undefined || (listed && s.freed.length >= 1 && s.freed.length <= FREED_MAX && s.freed.every(entryOk) && new Set(s.freed.map(f => f.key)).size === s.freed.length)); /* plant:grant-freed-shape */
+  /* An ordinary licence's seats: the freed list alone, gating nothing (takeSeats keeps it as "freedAll"). */
+  if (plain(s) && exactly(s, ["freed"])) return listed && !!freedOk; /* plant:grant-freed-ordinary */
   return plain(s) && exactly(s, s.freed === undefined ? SEATS_FIELDS : SEATS_FIELDS.concat(["freed"])) && !!freedOk && is(HEX32, s.licence)
     && Number.isSafeInteger(s.live) && s.live >= 0 && s.live <= issued;
 }
@@ -771,6 +773,17 @@ function createCore(deps) {
      stays (the service reads it from the seats it still holds). A team whose grants never carried seats is never written here. */
   function takeSeats(grant) {
     const held = store.get("seats"), was = plain(held) && Number.isSafeInteger(held.at) ? held : null, at = grant.issued;
+    /* An ordinary licence's freed list, {freed, at}, kept apart from the seats so the team stays ordinary; the newest-issued grant decides,
+       and one naming nobody lifts every name. */
+    const all = store.get("freedAll"), allWas = plain(all) && Number.isSafeInteger(all.at) ? all : null;
+    if (plain(grant.seats) && grant.seats.licence === undefined && Array.isArray(grant.seats.freed)) {
+      if (allWas && at < allWas.at) return;
+      const next = grant.seats.freed.map(f => ({ key: f.key, at: f.at }));
+      store.put("freedAll", { freed: next, at }); /* plant:freed-ordinary-kept */
+      endFreed(next.filter(f => !(allWas ? allWas.freed : []).some(x => x.key === f.key && x.at >= f.at)).map(f => f.key));
+      return;
+    }
+    if (allWas && at > allWas.at) store.del("freedAll"); /* plant:freed-ordinary-lift */
     if (grant.seats === undefined) {
       let lifts = true;
       lifts = false; /* plant:seats-held */
@@ -795,12 +808,15 @@ function createCore(deps) {
     const before = was && Array.isArray(was.freed) ? was.freed : [];
     let newly = (kept.freed || []).map(f => f.key);
     newly = (kept.freed || []).filter(f => !before.some(x => x.key === f.key && x.at >= f.at)).map(f => f.key); /* plant:freed-new */
-    if (newly.length) {
-      const team = store.get("team") || {}, pubOf = id => (team.lead && id === team.lead.keyId ? team.lead.pub : (store.get("dev:" + id) || {}).pub);
-      for (const [k, s] of store.list("ses:")) if (s && s.key && newly.indexOf(pubOf(s.key)) > -1) store.del(k); /* plant:freed-sessions */
-      /* An invitation's session holds no key of its own; the seat its hello carried names the desk. */
-      for (const [k, s] of store.list("ses:")) if (s && !s.key && s.inv && plain(s.seat) && newly.indexOf(s.seat.pub) > -1) store.del(k); /* plant:freed-invite-sessions */
-    }
+    endFreed(newly);
+  }
+  /* The desk keys a grant newly names as freed lose the sessions they hold now, a key's and an invitation's. */
+  function endFreed(newly) {
+    if (!newly.length) return;
+    const team = store.get("team") || {}, pubOf = id => (team.lead && id === team.lead.keyId ? team.lead.pub : (store.get("dev:" + id) || {}).pub);
+    for (const [k, s] of store.list("ses:")) if (s && s.key && newly.indexOf(pubOf(s.key)) > -1) store.del(k); /* plant:freed-sessions */
+    /* An invitation's session holds no key of its own; the seat its hello carried names the desk. */
+    for (const [k, s] of store.list("ses:")) if (s && !s.key && s.inv && plain(s.seat) && newly.indexOf(s.seat.pub) > -1) store.del(k); /* plant:freed-invite-sessions */
   }
   /* A desk's or a Studio's session on a team whose grant carries seats, before it is issued: `cert` judged by certWhy for the seats' licence, its run
      ending decided here. A current one opens the session and its issue is kept as evidence; a run-out one opens it until the evidence
@@ -827,11 +843,13 @@ function createCore(deps) {
   }
 
   /* A pooled desk the service freed (its person's place taken by another pooled desk) is refused outright while the grant names it,
-     on a certificate issued before it was freed; one issued since (its person came back to it) is judged as any other. The one rule
-     for every hello that reads the team (seatGate, anySeat, the door's reopening of a token's request) and for a key's session. */
+     on a certificate issued before it was freed; one issued since (its person came back to it) is judged as any other. An ordinary
+     licence's list (freedAll) names keys the same way. The one rule for every hello that reads the team (seatGate, anySeat, the
+     door's reopening of a token's request) and for a key's session. */
   function freedBefore(cert, deskPub) {
-    const seats = store.get("seats");
-    const named = plain(seats) && Array.isArray(seats.freed) ? seats.freed.find(f => plain(f) && f.key === deskPub) : undefined;
+    const seats = store.get("seats"), all = store.get("freedAll");
+    let named = plain(seats) && Array.isArray(seats.freed) ? seats.freed.find(f => plain(f) && f.key === deskPub) : undefined;
+    if (!named && plain(all) && Array.isArray(all.freed)) named = all.freed.find(f => plain(f) && f.key === deskPub); /* plant:freed-ordinary-read */
     let since = false;
     since = !!named && plain(cert) && Number.isSafeInteger(cert.issued) && cert.issued >= named.at; /* plant:freed-issued */
     return !!named && !since;
