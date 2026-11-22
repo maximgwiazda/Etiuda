@@ -389,21 +389,6 @@
       ${EndIf}
     ${EndIf}
 
-    # SILENT, A NEWER COPY IS NEVER REPLACED: there is no one to answer the question, so the run ends 1638, the code Windows
-    # gives another version already installed, and nothing is written. /ALLOWDOWNGRADE is the deployment tool's own yes.
-    ${If} ${Silent}
-      ${If} $0 == 1
-      ${AndIf} $InstalledVersion != ""
-        ClearErrors
-        ${GetOptions} $CMDLINE "/ALLOWDOWNGRADE" $1
-        ${If} ${Errors}
-          SetErrorLevel 1638
-          Quit
-        ${EndIf}
-      ${EndIf}
-      Goto DoneRecognise
-    ${EndIf}
-
     MessageBox MB_OKCANCEL|MB_ICONQUESTION "$RecogniseMsg" /SD IDOK IDOK Proceed IDCANCEL Cancel
     Cancel:
       Quit
@@ -467,8 +452,8 @@
   FunctionEnd
   !endif
 
-  # The swap's walks (etiudaDropOldFiles, etiudaListWalk and etiudaStageWhole), in the installer only: here, after electron-builder's
-  # !addplugindir, because its System::Call compiled where this file is read breaks makensis 3.12's every later one.
+  # The swap's walks (etiudaDropOldFiles, etiudaListWalk) and the stage's judge (etiudaStageWhole), in the installer
+  # only: here, after electron-builder's !addplugindir, because its System::Call compiled where this file is read breaks makensis 3.12's every later one.
   !ifndef BUILD_UNINSTALLER
   !ifmacrodef etiudaDropOldFilesFunction
     !insertmacro etiudaDropOldFilesFunction
@@ -840,7 +825,7 @@
 # files go into "<folder>.setup-staging" beside the install while the older copy stays installed, registered and
 # startable; only then is the app closed and the folder swapped by two renames, the older copy aside to
 # "<folder>.setup-previous" and back if the second rename will not go. A copy in that folder keeps its registration until
-# it is written over; the copy aside goes once the new one is registered. Installer only, and after Studio's five hooks.
+# it is written over; the copy aside stays until the new one has started. Installer only, and after Studio's five hooks.
 # The copy set aside is also the uninstaller's to remove (customRemoveFiles), so its name is defined for both passes.
 !define ETIUDA_ASIDE_SUFFIX ".setup-previous"
 !ifndef BUILD_UNINSTALLER
@@ -1013,6 +998,35 @@ Var etiudaDropList
     SetErrorLevel 1618
     Quit
   ${EndIf}
+  # AN INSTALL NEVER REMOVES WHAT IT DID NOT PUT THERE: a folder that holds anything and is no copy of this program (neither
+  # its program nor its list) is refused before anything is written, so no later update can set a person's files aside.
+  ${If} ${FileExists} "$etiudaBase\*.*"
+  ${AndIfNot} ${FileExists} "$etiudaBase\${APP_EXECUTABLE_FILENAME}"
+  ${AndIfNot} ${FileExists} "$etiudaBase\${ETIUDA_FILES}"
+    Push $1
+    Push $2
+    StrCpy $2 "empty"
+    FindFirst $0 $1 "$etiudaBase\*.*"
+    ${DoWhile} $1 != ""
+      ${If} $1 != "."
+      ${AndIf} $1 != ".."
+        StrCpy $2 "theirs"
+        ${ExitDo}
+      ${EndIf}
+      FindNext $0 $1
+    ${Loop}
+    FindClose $0
+    ${If} $2 == "theirs"
+      DetailPrint `Not installing into "$etiudaBase", which holds other files.`
+      ${IfNot} ${Silent}
+        MessageBox MB_OK|MB_ICONSTOP "$(etiudaFolderNotOurs)" /SD IDOK
+      ${EndIf}
+      SetErrorLevel 2
+      Quit
+    ${EndIf}
+    Pop $2
+    Pop $1
+  ${EndIf}
   !insertmacro etiudaRemoveTree "$etiudaStage"
   # A stage folder that outlives its removal is another account's, made under a parent anyone may write to and held open: it
   # is never reused and renamed into place with that account's rights. Nothing of this run's is written yet; retry later.
@@ -1108,6 +1122,7 @@ Var etiudaDropList
     StrCpy $etiudaWalkMode "drop"
     Push ""
     Call etiudaListWalk
+    Delete "$etiudaAside\${ETIUDA_FILES}"
     RMDir "$etiudaAside"
     StrCpy $0 0
     ${DoWhile} ${FileExists} "$etiudaAside\*.*"
@@ -1304,7 +1319,8 @@ FunctionEnd
 
 # TWO WALKS OVER A COPY ASIDE ($etiudaWalkRoot) BY A LIST ($etiudaWalkIni, shell/install-files.cjs): "keep" moves back into
 # $etiudaBase every entry the list does not name, a folder holding no listed file whole; "drop" deletes the listed files and the
-# folders they leave empty. Neither enters a link, which no list names, nor touches an entry the newer folder already holds.
+# folders they leave empty, the list itself left for the caller. Neither enters a link, which no list names, nor touches an
+# entry the newer folder already holds.
 # $etiudaWalkWide "1" also counts resources and locales whole (etiudaAsideList). Compiled from customHeader, as etiudaDropOldFiles.
 !macro etiudaListWalkFunction
 Function etiudaListWalk
@@ -1361,6 +1377,7 @@ Function etiudaListWalk
       StrCmp $R6 "wide" etiudaWalkOurs etiudaWalkTheirs
     etiudaWalkOurs:
       StrCmp $etiudaWalkMode "drop" 0 etiudaWalkSkip
+      StrCmp $R4 "${ETIUDA_FILES}" etiudaWalkSkip
       Delete "$etiudaWalkRoot$R0\$R2"
       Goto etiudaWalkSkip
     etiudaWalkTheirs:
@@ -1480,8 +1497,8 @@ FunctionEnd
 # each entry, not a junction among the folders above it, and etiudaOldFolder compares strings, so "U\j\Etiuda" with j pointing
 # at the new install's parent would have an elevated run delete its own fresh copy. In an all-users install the per-user copy's
 # folder goes from the unelevated instance (etiudaAsUser), with that person's rights; none reached, it is left as it is, and an
-# installer started elevated leaves it to that copy's own uninstaller at the next sign-in (etiudaOldUserCopy). A per-user install empties HKCU's folder only when it
-# runs unelevated. HKLM's InstallLocation, which only an administrator writes, keeps its drop. Only the registers cross, so the
+# installer started elevated leaves it to that copy's own uninstaller at the next sign-in (etiudaOldUserCopy). A per-user install
+# empties HKCU's folder only when it runs unelevated. HKLM's InstallLocation, which only an administrator writes, keeps its drop. Only the registers cross, so the
 # run takes the new folder in $R7 and the older one in $R8.
 !macro etiudaDropOldRun
   StrCpy $etiudaBase $R7
@@ -1568,7 +1585,8 @@ FunctionEnd
   ${Else}
     # An installer started elevated has no unelevated instance, and this one never runs that file: wherever HKCU names an
     # uninstaller, as uninstallOldVersion would read it, it is left to run as that account at its next sign-in (RunOnce, HKCU's
-    # own), silent and keeping the data the two copies share, and the finish page says so.
+    # own), with that account's ordinary rights: /currentuser keeps it per-user, so it never elevates; /KEEP_APP_DATA keeps the
+    # data the two copies share. The finish page says so.
     Push $R9
     ReadRegStr $R9 HKCU "${UNINSTALL_REGISTRY_KEY}" UninstallString
     !ifdef UNINSTALL_REGISTRY_KEY_2
@@ -1577,7 +1595,7 @@ FunctionEnd
       ${EndIf}
     !endif
     ${If} $R9 != ""
-      WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\RunOnce" "${APP_ID}.per-user-copy" "$R9 /S /KEEP_APP_DATA"
+      WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\RunOnce" "${APP_ID}.per-user-copy" "$R9 /currentuser /S /KEEP_APP_DATA"
       StrCpy $etiudaFinishText "$(etiudaOldCopyGoes)"
     ${EndIf}
     Pop $R9
@@ -1601,11 +1619,10 @@ FunctionEnd
   # $appExe, the etiuda: command and InstallLocation would carry "\\", which the uninstaller's compare then misses. Trimmed
   # once here, in .onInit after initMultiUser has read /D, before any page and the install section, silent or not.
   !insertmacro etiudaTrimSlashes $INSTDIR
-  # A silent run is read too, so an older setup never replaces a newer copy unasked (RecogniseExistingInstallation).
-  ${IfNot} ${UAC_IsInnerInstance}
-    Call RecogniseExistingInstallation
-  ${EndIf}
   ${IfNot} ${Silent}
+    ${IfNot} ${UAC_IsInnerInstance}
+      Call RecogniseExistingInstallation
+    ${EndIf}
     InitPluginsDir
     CreateDirectory "$PLUGINSDIR\turn"
     Push $0
@@ -1649,8 +1666,8 @@ Var TurnReady
 !ifndef BUILD_UNINSTALLER
 Var InstalledVersion
 Var RecogniseMsg
-# THE FINISH PAGE'S TEXT, Modern UI's own unless etiudaOldUserCopy left a per-user copy for its next sign-in. With the Run box on the page
-# the label is 195 by 40 dialog units, about five lines, so the case's text replaces the whole of it rather than adding.
+# THE FINISH PAGE'S TEXT, Modern UI's own unless etiudaOldUserCopy left a per-user copy to its next sign-in. With the Run box on
+# the page the label is 195 by 40 dialog units, about five lines, so the case's text replaces the whole of it rather than adding.
 Var etiudaFinishText
 !define MUI_FINISHPAGE_TEXT "$etiudaFinishText"
 !endif
@@ -1847,7 +1864,8 @@ Var RemoveDataBox
     LangString RecogniseSameText ${ID} "Na tym komputerze jest już program ${PRODUCT_NAME} w wersji $InstalledVersion, tej samej co w instalatorze. Zainstalować go ponownie?$\r$\n$\r$\nDane na tym komputerze i licencja zostają bez zmian."
     LangString RecogniseNewerText ${ID} "Na tym komputerze jest już program ${PRODUCT_NAME} w wersji $InstalledVersion, nowszej niż wersja ${VERSION} z tego instalatora. Zainstalować w jej miejsce wersję ${VERSION}?$\r$\n$\r$\nDane na tym komputerze i licencja zostają bez zmian."
     LangString RecogniseUnreadableText ${ID} "Na tym komputerze jest już program ${PRODUCT_NAME}, ale nie da się odczytać jego wersji. Zainstalować w jego miejsce wersję ${VERSION}?$\r$\n$\r$\nDane na tym komputerze i licencja zostają bez zmian."
-    LangString etiudaOldCopyGoes ${ID} "Etiuda jest zainstalowana. Kopia zainstalowana tylko dla tego konta zostanie usunięta przy następnym logowaniu do Windows na tym koncie; dane i licencja zostają bez zmian."
+    LangString etiudaOldCopyGoes ${ID} "Etiuda jest zainstalowana. Kopia zainstalowana tylko dla tego konta zostanie usunięta przy następnym logowaniu do Windows na tym koncie; dane i licencja zostają bez zmian." ; placeholder: Claudette
+    LangString etiudaFolderNotOurs ${ID} "W folderze $etiudaBase są inne pliki, a Etiuda instaluje się tylko w pustym folderze albo w miejsce wcześniejszej Etiudy. Wystarczy wybrać inny folder i uruchomić instalator ponownie." ; placeholder: Claudette
     !endif
     LangString etiudaSetupNotFinished ${ID} "Instalacja programu ${PRODUCT_NAME} nie została ukończona. Pomóc może ponowne uruchomienie instalatora; jeśli znów się zatrzyma, ten kod pomoże ustalić przyczynę: $2."
 
@@ -1865,7 +1883,8 @@ Var RemoveDataBox
     LangString RecogniseSameText ${ID} "${PRODUCT_NAME} $InstalledVersion is already installed on this computer, the same version as this installer. Reinstall it?$\r$\n$\r$\nData on this computer and the licence stay as they are."
     LangString RecogniseNewerText ${ID} "${PRODUCT_NAME} $InstalledVersion is installed on this computer, which is newer than this installer's ${VERSION}. Reinstall ${VERSION} in its place?$\r$\n$\r$\nData on this computer and the licence stay as they are."
     LangString RecogniseUnreadableText ${ID} "${PRODUCT_NAME} is already installed on this computer, but its version cannot be read. Reinstall ${VERSION} in its place?$\r$\n$\r$\nData on this computer and the licence stay as they are."
-    LangString etiudaOldCopyGoes ${ID} "Etiuda is installed. The copy installed for this account only is removed the next time this account signs in to Windows; the data and the licence stay as they are."
+    LangString etiudaOldCopyGoes ${ID} "Etiuda is installed. The copy installed for this account only is removed the next time this account signs in to Windows; the data and the licence stay as they are." ; placeholder: Claudette
+    LangString etiudaFolderNotOurs ${ID} "$etiudaBase holds other files, and Etiuda installs only into an empty folder or over an earlier Etiuda. Choose another folder and run the installer again." ; placeholder: Claudette
     !endif
     LangString etiudaSetupNotFinished ${ID} "The installation of ${PRODUCT_NAME} did not finish. Running the installer again may help; if it stops again, this code helps find the cause: $2."
 

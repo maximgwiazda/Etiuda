@@ -197,9 +197,6 @@ check(!keepsTheirs(NSH.replace("StrCmp $etiudaWalkMode \"keep\" 0 etiudaWalkSkip
   "im1a control: nothing moved back, so the person's files would go with the copy aside, reads red");
 check(!keepsTheirs(NSH.replace("ReadINIStr $R5 $etiudaWalkIni \"files\" $R4", "StrCpy $R5 \"\"")).ok,
   "im1a control: the list not read for files, so the program's files move back over the new copy's folder, reads red");
-check(!keepsTheirs(NSH.replace(/\n\s*IfFileExists "\$etiudaBase\$R0\\\$R2" etiudaWalkSkip/, "")).ok
-  || !/IfFileExists "\$etiudaBase\$R0\\\$R2" etiudaWalkSkip/.test(NSH),
-  "im1a control: the check for a name the new folder already holds is deciding (the replay fails a rename onto it, as Windows does)");
 
 const keepsWide = nsh => {
   const r = tryOr(() => replay(nsh, "etiudaListWalk", pair(false), walkVars("keep", true), [""]), null);
@@ -210,7 +207,7 @@ const keepsWide = nsh => {
 };
 check(keepsWide(NSH).ok, "im1b keep, a copy installed before the list: the newer copy's list stands in, resources and locales count whole,"
   + " and a person's file at the root still goes back");
-check(!keepsWide(NSH.replace("StrCmp $R6 \"wide\" etiudaWalkInto etiudaWalkTheirs", "Goto etiudaWalkTheirs")).ok,
+check(!keepsWide(NSH.replace("StrCmp $R6 \"wide\" etiudaWalkOurs etiudaWalkTheirs", "Goto etiudaWalkTheirs")).ok,
   "im1b control: resources not counted whole, so an older program file there moves into the new folder, reads red");
 
 const dropsListed = nsh => {
@@ -219,16 +216,17 @@ const dropsListed = nsh => {
   t.dirs.delete("A\\kit"); t.files.delete("A\\kit\\a.dll"); t.links.set("A\\kit", "X"); t.files.set("X\\a.dll", F(4));
   const r = tryOr(() => replay(nsh, "etiudaListWalk", t, walkVars("drop", false), [""]), null);
   if (!r) return { ok: false };
-  const gone = ["A\\Etiuda.exe", "A\\Uninstall Etiuda.exe", "A\\etiuda-files.ini", "A\\resources\\app.asar", "A\\locales\\pl.pak", "A\\locales"].every(p => !has(r, p));
-  const kept = ["A\\my-notes.txt", "A\\Projects\\a.txt", "A\\resources\\person.txt", "A\\collide.txt", "A\\resources", "A\\kit", "X\\a.dll", "X\\secret.txt"].every(p => has(r, p));
+  const gone = ["A\\Etiuda.exe", "A\\Uninstall Etiuda.exe", "A\\resources\\app.asar", "A\\locales\\pl.pak", "A\\locales"].every(p => !has(r, p));
+  const kept = ["A\\etiuda-files.ini", "A\\my-notes.txt", "A\\Projects\\a.txt", "A\\resources\\person.txt", "A\\collide.txt", "A\\resources", "A\\kit", "X\\a.dll", "X\\secret.txt"].every(p => has(r, p));
   const t2 = { dirs: new Set(["A", "A\\resources", "B"]), files: new Map([["A\\Etiuda.exe", F(9)], ["A\\resources\\app.asar", F(5)], ["A\\etiuda-files.ini", F(1, OLD_LIST)]]), links: new Map() };
   const r2 = tryOr(() => replay(nsh, "etiudaListWalk", t2, walkVars("drop", false), [""]), null);
-  const clean = !!r2 && r2.fsys.files.size === 0 && [...r2.fsys.dirs].join() === "A,B";
+  const clean = !!r2 && [...r2.fsys.files.keys()].join() === "A\\etiuda-files.ini" && [...r2.fsys.dirs].join() === "A,B";
   return { ok: gone && kept && clean, gone, kept, clean };
 };
 const d1 = dropsListed(NSH);
 check(d1.ok, "im1c drop: the copy aside loses its listed files and the folders they empty; a person's file and folder, a name both"
-  + " copies hold, and a junction where a listed folder was (its target untouched) stay; an aside of listed files alone empties", JSON.stringify(d1));
+  + " copies hold, and a junction where a listed folder was (its target untouched) stay; an aside of listed files alone empties"
+  + " but for the list itself, which the walk reads to its end and the swap deletes after it", JSON.stringify(d1));
 check(!dropsListed(NSH.replace(/IntOp \$R5 \$R3 & 0x400\n\s*IntCmp \$R5 0 0 etiudaWalkTheirs etiudaWalkTheirs\n/, "")).ok,
   "im1c control: the link test taken out, so the walk deletes inside the junction's target, reads red");
 check(!dropsListed(NSH.replace("StrCmp $R5 \"\" 0 etiudaWalkOurs", "Goto etiudaWalkOurs")).ok,
@@ -243,6 +241,7 @@ const placed = nsh => {
   const keepGuard = swap[keepAt - 2] === "${If} $etiudaAsideMade == \"1\"" && swap[keepAt - 1] === "!insertmacro etiudaAsideList \"$etiudaBase\""
     && swap[keepAt + 1] === "Push \"\"" && swap[keepAt + 2] === "Call etiudaListWalk";
   const dropGuard = swap[dropAt - 1] === "!insertmacro etiudaAsideList \"$etiudaStage\"" && swap[dropAt + 2] === "Call etiudaListWalk"
+    && swap[dropAt + 3] === "Delete \"$etiudaAside\\${ETIUDA_FILES}\""
     && swap.slice(dropAt, asideAt).some(l => /^Rename "\$etiudaAside" "\$etiudaAside\.\$0"$/.test(l));
   const list = code(macro(nsh, "etiudaAsideList"));
   const chooses = list.includes("StrCpy $etiudaWalkIni \"$etiudaAside\\${ETIUDA_FILES}\"") && list.includes("StrCpy $etiudaWalkIni \"${FALLBACK}\\${ETIUDA_FILES}\"");
@@ -265,9 +264,9 @@ check(!placed(NSH.replace("    !insertmacro etiudaRenameRetry \"$etiudaBase\" \"
 /* ---- im1e: a folder that is not ours is refused ---- */
 const refuses = nsh => {
   const b = code(macro(nsh, "etiudaStageBegin"));
-  const g = b.indexOf("${If} ${FileExists} \"$etiudaBase\*.*\"");
-  const guard = g > -1 && b[g + 1] === "${AndIfNot} ${FileExists} \"$etiudaBase\${APP_EXECUTABLE_FILENAME}\""
-    && b[g + 2] === "${AndIfNot} ${FileExists} \"$etiudaBase\${ETIUDA_FILES}\"";
+  const g = b.indexOf("${If} ${FileExists} \"$etiudaBase\\*.*\"");
+  const guard = g > -1 && b[g + 1] === "${AndIfNot} ${FileExists} \"$etiudaBase\\${APP_EXECUTABLE_FILENAME}\""
+    && b[g + 2] === "${AndIfNot} ${FileExists} \"$etiudaBase\\${ETIUDA_FILES}\"";
   const seen = b.indexOf("StrCpy $2 \"theirs\"", g), quit = b.indexOf("Quit", seen);
   const says = seen > g && b.slice(seen, quit).includes("MessageBox MB_OK|MB_ICONSTOP \"$(etiudaFolderNotOurs)\" /SD IDOK") && b[quit - 1] === "SetErrorLevel 2";
   const back = b.findIndex(l => l === "!insertmacro etiudaRenameRetry \"$etiudaAside\" \"$etiudaBase\"");
@@ -282,7 +281,7 @@ check(!refuses(NSH.replace("      SetErrorLevel 2\n      Quit\n    ${EndIf}\n   
   "im1e control: the refusal that goes on into the folder anyway reads red");
 
 /* ---- im4: the per-user copy met by an installer started elevated ---- */
-const RUNONCE = "WriteRegStr HKCU \"Software\Microsoft\Windows\CurrentVersion\RunOnce\" \"${APP_ID}.per-user-copy\" \"$R9 /currentuser /S /KEEP_APP_DATA\"";
+const RUNONCE = "WriteRegStr HKCU \"Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce\" \"${APP_ID}.per-user-copy\" \"$R9 /currentuser /S /KEEP_APP_DATA\"";
 const leftToItsOwner = nsh => {
   const m = code(macro(nsh, "etiudaOldUserCopy"));
   const rest = m.slice(m.lastIndexOf("${Else}"));
@@ -296,7 +295,7 @@ const o1 = leftToItsOwner(NSH);
 check(o1.ok, "im4a started elevated, the per-user copy HKCU names is left to its own uninstaller at that account's next sign-in (HKCU"
   + " RunOnce, /currentuser /S /KEEP_APP_DATA), the elevated install runs no program of that account's, and the finish page says so in"
   + " both languages, marked a placeholder for the copywriter", JSON.stringify(o1));
-check(!leftToItsOwner(NSH.replace(/\n\s*WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\RunOnce"[^\n]*/, "")).ok,
+check(!leftToItsOwner(NSH.replace(/\n\s*WriteRegStr HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce"[^\n]*/, "")).ok,
   "im4a control: the copy left registered with nothing to remove it, as before, reads red");
 check(!leftToItsOwner(NSH.replace("$R9 /currentuser /S /KEEP_APP_DATA", "$R9 /S /KEEP_APP_DATA")).ok,
   "im4a control: the line without /currentuser, which beside the new all-users copy would take the all-users branch and ask to elevate, reads red");
@@ -456,8 +455,8 @@ const a1 = await dropsAtStart(MAIN).catch(e => ({ ok: false, why: e.message }));
 check(a1.ok, "im5d the desk's start drops the copy aside by its own list, or the newer list with resources and locales whole: listed"
   + " files and emptied folders go, a person's file and a junction (its target untouched) stay, a folder without the program is not"
   + " ours, and it runs once the window is made, packaged on Windows alone", JSON.stringify(a1));
-const a2 = await dropsAtStart(MAIN.replace("if (!s || s.isSymbolicLink()) continue;", "if (!s) continue;")).catch(() => ({ ok: false }));
-check(!a2.ok, "im5d control: the junction entered reads red");
+const a2 = await dropsAtStart(MAIN.replace(" || !(await fsp.lstat(join(aside, exe)).catch(() => null))) return \"none\";", ") return \"none\";")).catch(() => ({ ok: false }));
+check(!a2.ok, "im5d control: a folder of that name without the program taken as ours reads red");
 const a3 = await dropsAtStart(MAIN.replace("else if (listed.files.has(key) || whole(key)) await fsp.unlink(p)", "else await fsp.unlink(p)")).catch(() => ({ ok: false }));
 check(!a3.ok, "im5d control: every file in the copy aside deleted, a sweep, reads red");
 

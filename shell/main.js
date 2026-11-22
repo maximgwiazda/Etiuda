@@ -630,7 +630,7 @@ async function setAsideDrop(fsp, join, aside, own, exe) {
     if (head) sect = head[1].toLowerCase();
     else if (eq > 0 && listed[sect]) listed[sect].add(line.slice(0, eq).trim().toLowerCase());
   }
-  const whole = key => wide && /^(resources|locales)(\\|$)/.test(key); /* as etiudaAsideList counts them */
+  const whole = key => wide && /^(resources|locales)(\\|$)/.test(key); /* a copy installed before the list: as etiudaDropOld counts them */
   const walk = async rel => {
     for (const name of await fsp.readdir(rel ? join(aside, rel) : aside).catch(() => [])) {
       const r = rel ? rel + "\\" + name : name, key = r.toLowerCase(), p = join(aside, r);
