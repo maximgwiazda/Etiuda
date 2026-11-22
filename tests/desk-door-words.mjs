@@ -18,7 +18,7 @@ const SETTINGS_PATH = path.join(ROOT, "src", "modules", "settings.js");
 const TEMPLATE_PATH = path.join(ROOT, "src", "template.html");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
-const CHECKS = 42, PLANTS = 42;
+const CHECKS = 44, PLANTS = 44;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -765,6 +765,30 @@ CASES.noFamilyElsewhere = (pg = P) => {
   return true;
 };
 
+/* No press the desk cannot answer (class B, 22 November 2026). The service's ask route is not what a lead's Roster reads under
+   Asking to join, and the desk holds the leads' names, not the pseudonyms the route names them by, so the door draws no "Ask {LEAD}"
+   and no "Ask a team's lead…" in any state, door or panel, in either language. Every state is swept: a button that does
+   nothing is the fault, wherever it stands. */
+const ASK_VIEWS = () => [VIEWS.none, VIEWS.first, VIEWS.waiting, VIEWS.trialOverOrg, VIEWS.trialOver, VIEWS.ended,
+  Object.assign({}, VIEWS.ended, { holding: { on: "org", ends: T_ENDS } }),
+  ...["trial", "studio-trial", "own", "team", "org"].map(on => VIEWS.stopped(on)),
+  ...["trial", "studio-trial", "own", "team", "org"].map(on => VIEWS.working(on))];
+const askPressIn = (html) => /data-signin-act="ask"/.test(html) || /Ask a team's lead|Ask Jan Kowalski|Poproś lidera zespołu|Poproś: Jan Kowalski/.test(textOf(html).replace(/&hellip;/g, "…"));
+CASES.noAskDoor = (pg = P) => {
+  for (const lang of ["en", "pl"]) for (const noTeam of [false, true]) for (const v of ASK_VIEWS()) {
+    if (askPressIn(doorHtml(pg, v, lang, { noTeam }))) return false;
+  }
+  const en = doorHtml(pg, VIEWS.trialOverOrg, "en");
+  return new RegExp(`class="btn primary"[^>]*>${W.en.buy}<`).test(en) && textOf(en).includes(W.en.check);
+};
+CASES.noAskPanel = (pg = P) => {
+  for (const lang of ["en", "pl"]) for (const noTeam of [false, true]) for (const v of ASK_VIEWS()) {
+    if (askPressIn(panelHtml(pg, v, lang, { noTeam }))) return false;
+  }
+  const en = panelHtml(pg, VIEWS.ended, "en");
+  return new RegExp(`class="btn primary"[^>]*>${W.en.check}<`).test(en) && textOf(en).includes(W.en.buy) && textOf(en).includes(W.en.acctSet);
+};
+
 /* Run all checks. */
 const RUN_LIST = [
   ["dd1", "seam", "deskDoorState(view) returns the closed state set and all word facts"],
@@ -802,6 +826,8 @@ const RUN_LIST = [
   ["dd39", "askLeadStudio_en", "licence line (EN): the ask-your-lead panel past the own fourteen days inside Studio's trial says Studio's trial, with the day, and not the own trial running"],
   ["dd40", "askLeadStudio_pl", "licence line (PL): the ask-your-lead panel past the own fourteen days inside Studio's trial says Studio's trial, with the day, and not the own trial running"],
   ["dd42", "askedDoor", "door (EN & PL): a person held at the door whose sign-in carried open join requests sees whom each waits on, one lead as the team's lead is told, several in one line with the plural heading, none as before"],
+  ["dd60", "noAskDoor", "door (EN & PL), every state: no Ask press that nothing answers, Buy filled where Ask stood"],
+  ["dd61", "noAskPanel", "panel (EN & PL), every state: no Ask press that nothing answers, Check now filled on the ended panel"],
   ["dd41", "noFamilyElsewhere", "licence line: the ended, waiting, trial-over and organisation panels carry no short-form foot, and the organisation's Seat row keeps an empty value"],
   ["dd34", "doorNotNoneWhenDue", "Argon 51 B2: deskDoorState never answers none while signed in and due (waiting, full, no licence, team seat marked by another key), and paintFirstSignin never draws the retired fallback"],
 ];
