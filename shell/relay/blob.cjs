@@ -54,6 +54,7 @@ const REASONS = Object.freeze({
   "revoked": "That grant was signed by a revoked key, so the relay did not take it.",
   "withdrawn": "That desk has withdrawn its request, so it was not let in.",
   "seat-lapsed": "This desk's seat needs a current certificate, so the relay did not open a session.",
+  "lead-other": "This invitation link does not match its team's lead; it may be damaged or altered. Nothing was used or sent. The link as the lead sent it still works, and so does an invitation to this account's email address.",
 });
 
 function refusal(reason) {

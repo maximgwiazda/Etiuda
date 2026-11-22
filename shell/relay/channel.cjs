@@ -2405,7 +2405,10 @@ function createChannel(opts) {
     else return why; /* plant:invite-bind */
     let carry = () => ({});
     carry = seat => (seat ? { seat } : {}); /* plant:invite-seat */
-    const r = await seated(seat => call("POST", "session", { json: Object.assign({ challenge: ch.json.challenge, invite: inv.token, inv: inv.inv }, bind, carry(seat)) }));
+    /* The lead key the desk pinned from the invitation, which the relay holds against the team's lead before it spends the token. */
+    let named = {};
+    if (HEX64.test(String(inv.lead))) named = { lead: String(inv.lead) }; /* plant:token-lead-sent */
+    const r = await seated(seat => call("POST", "session", { json: Object.assign({ challenge: ch.json.challenge, invite: inv.token, inv: inv.inv }, bind, named, carry(seat)) }));
     if (r.status === 200 && r.json && HEX64.test(String(r.json.session))) {
       prog.markTokenUsed(inv.inv);
       session = { token: r.json.session, at: clock(), by: "invite", inv: String(inv.inv) };
@@ -2418,6 +2421,7 @@ function createChannel(opts) {
     if (ended) inviteEnd("ended"); /* plant:S3-page-ended */
     if (ended) return { ok: false, reason: "invite-ended", said: INVITE_ENDED_SAID, served: false }; /* plant:invite-ended */
     if (t.reason === "removed") { inviteEnd("removed"); return t; } /* plant:h35-removed-end */
+    if (t.reason === "lead-other") { inviteEnd("other"); return t; } /* plant:lead-other-end */
     if (t.reason !== "token-spent") return t; /* plant:token-kept */
     prog.markTokenUsed(inv.inv);
     t.said = INVITE_USED_SAID; /* plant:invite-used */
@@ -2478,7 +2482,7 @@ function createChannel(opts) {
   }
 
   /* The relay has refused this invitation's token, as spent ("used"), past its end ("ended"), or made before this desk
-     was removed ("removed"), or turned a door request away ("turned"). The shell keeps that with the request, which is where the
+     was removed ("removed"), or as naming a lead key not the team's ("other"), or turned a door request away ("turned"). The shell keeps that with the request, which is where the
      page reads it. */
   function inviteEnd(kind) {
     if (typeof o.onInviteEnd === "function") o.onInviteEnd(kind);

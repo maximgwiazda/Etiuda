@@ -1427,6 +1427,11 @@ function createCore(deps) {
       && crypto.timingSafeEqual(Buffer.from(sha256(b.invite), "hex"), Buffer.from(inv.hash, "hex"));
     if (!right) { if (!spendChallenge(b.challenge, b.inv)) return no("rate"); noteTry(b.inv, b.key); return no("not-enrolled"); } /* plant:token-match */
     if (ended) return endNow();
+    /* A hello may name the lead key the desk pinned from its invitation: one that is not the team's lead is refused here, the token
+       unspent and no try counted, so a link carrying another lead's key spends nothing. A hello naming none is judged as before. */
+    let leadOther = false;
+    leadOther = b.lead !== undefined && !(is(HEX64, b.lead) && b.lead === teamOf(rt).lead.pub); /* plant:token-lead */
+    if (leadOther) return no("lead-other");
     /* A key already removed opens no read on an invitation registered before that removal. The token is not spent. */
     if (binds) {
       const gone = store.get("gone:" + b.key);

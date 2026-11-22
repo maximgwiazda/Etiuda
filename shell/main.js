@@ -477,9 +477,9 @@ const LINK_NO_TEAM = "This invitation names no team this desk can join, so nothi
 const LINK_NO_TEAM_PL = "To zaproszenie nie wskazuje zespołu, do którego to stanowisko mogłoby dołączyć, więc niczego nie wysłano. Nowe wystawi lider zespołu.";
 const LINK_LONG = "This invitation is longer than Etiuda opens, so it was not opened. Ask your lead for a new one.";
 const LINK_LONG_PL = "To zaproszenie jest dłuższe, niż Etiuda może otworzyć, więc go nie otwarto. Nowe wystawi lider zespołu.";
-/* placeholder: Claudette */
-const LINK_KEY = "This invitation carries a lead's key that does not belong to its lead, so it was not used and nothing was sent. Ask your lead for a new one.";
-const LINK_KEY_PL = "To zaproszenie zawiera klucz, który nie należy do jego lidera, więc go nie użyto i niczego nie wysłano. Nowe wystawi lider zespołu.";
+/* The copywriter's words; the relay's lead-other refusal is said in them too (joinLeadOther). */
+const LINK_KEY = "This invitation link does not match its team's lead; it may be damaged or altered. Nothing was used or sent. The link as the lead sent it still works, and so does an invitation to this account's email address.";
+const LINK_KEY_PL = "Ten link z zaproszeniem nie zgadza się z liderem zespołu; mógł zostać uszkodzony albo zmieniony. Niczego nie użyto ani nie wysłano. Link w postaci wysłanej przez lidera nadal działa, podobnie jak zaproszenie na adres e-mail tego konta.";
 function linkRefusal(en, pl) { return { refused: en, saidEn: en, saidPl: pl }; }
 function linkLooks(s) {
   const head = s.slice(0, 12).toLowerCase();
@@ -6560,6 +6560,21 @@ function cancelJoin() {
   persistDeskEnvelope();
   return joinView();
 }
+/* The relay refused this join's token hello because the lead key this desk pinned from the invitation is not the team's lead.
+   Nothing was spent and nothing reached the lead, so the request and all the invitation set go back as Cancel puts them, the
+   pin included, and the person is told in the link's own sentence. */
+function joinLeadOther(team) {
+  const j = teamJoin;
+  if (!j || j.team !== team || !j.invite || !j.invite.relay || j.invite.relay.door === true) return;
+  if (deskBranch) { try { unlinkOwn(joinFile()); } catch { /* gone already */ } }
+  teamJoin = null;
+  joinTold = false;
+  if (j.invite.before) undoInvite(team, j.invite.before, j.invite); /* plant:lead-other-undo */
+  persistDeskEnvelope();
+  console.error("etiuda: " + LINK_KEY + " " + LINK_KEY_PL);
+  heldLinkText = "";
+  handLinkView(Object.assign({}, joinView(), { linkRefusal: { en: LINK_KEY, pl: LINK_KEY_PL } }));
+}
 /* What an invitation changes for `team`, as this desk holds it before: an entry the desk did not hold is left out, and `epoch`
    is the newest key it held, the mark Cancel compares the key it holds then with. */
 function inviteBefore(team) {
@@ -8024,6 +8039,9 @@ function relayRun() {
       if (wrapKey && wrapKey.length === 32) out.wrapKey = wrapKey;
       /* The lead's box the invitation named, so this desk finds its own copy of the team file before it holds one (F6). */
       if (/^[0-9a-f]{64}$/.test(String(inv.box))) out.box = inv.box; /* plant:f6-box-lent */
+      /* The lead key this desk pinned, which the token hello names so the relay refuses it, unspent, where it is not the team's lead. */
+      const pinNow = teamPins[team];
+      if (pinNow && /^[0-9a-f]{64}$/.test(String(pinNow.public))) out.lead = pinNow.public; /* plant:token-lead-pin */
       return out;
     },
     /* The relay named this desk's request at the standing door: kept, and the request written with its seat and that id. */
@@ -8050,6 +8068,7 @@ function relayRun() {
     /* The relay refused this invitation's token, as spent or past its end, or turned a door request away. Kept with the request,
        and the page told now. */
     onInviteEnd: kind => {
+      if (kind === "other") { joinLeadOther(team); return; } /* plant:lead-other-join */
       const j = teamJoin, inv = j && j.team === team && j.invite && j.invite.relay;
       const known = kind === "used" || kind === "ended" || kind === "removed" || (kind === "turned" && !!inv && inv.door === true);
       if (!known || !inv || inv.end === kind) return;
