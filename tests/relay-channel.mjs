@@ -3395,6 +3395,38 @@ if (deskOn()) try {
         "962s6e6a a desk working in B keeps B loaded when B leaves its team and B's file leaves the mirror, this run and across a restart, and picks none of the rest: folder "
         + JSON.stringify(a6f) + ", relay " + JSON.stringify(a6r));
 
+      /* cfu1: the lead's own desk opens the team's edition, never the copy the channel kept beside it. In the relay mirror a
+         conflict-named copy of a catalog loses to the file it is a copy of whatever its rev (the copy is the computer's own
+         parallel edition, and it never went to the team); in a folder a copy that leads still opens, and on a tie the canonical
+         name wins. The file the desk picks is read from the list pickEdition is given, in either order. */
+      const cfuName = "quay-board", cfuCopy = cfuName + " (conflicted copy 2026-11-22).ec", cfuCanon = cfuName + ".ec";
+      const cfuPick = async (kind, copyRev, canonRev, src) => {
+        const d = await e6Desk(kind, src), out = [];
+        const item = (name, rev) => ({ file: path.join(d.mir, name), data: JSON.parse(catOf(cfuName, rev)) });
+        for (const order of [[item(cfuCopy, copyRev), item(cfuCanon, canonRev)], [item(cfuCanon, canonRev), item(cfuCopy, copyRev)]]) {
+          const got = d.D.api.pickEdition(order);
+          out.push(got ? path.basename(got.file) : null);
+        }
+        return out;
+      };
+      const cu1 = { relayLead: await cfuPick("relay", 3, 2), relayTie: await cfuPick("relay", 2, 2), folderLead: await cfuPick("folder", 3, 2), folderTie: await cfuPick("folder", 2, 2) };
+      const both = (o, want) => o.length === 2 && o[0] === want && o[1] === want;
+      check(both(cu1.relayLead, cfuCanon) && both(cu1.relayTie, cfuCanon),
+        "cfu1a in the relay mirror the lead's desk opens the team's edition and not the conflict copy beside it, the copy at rev 3 against the team's rev 2, and at the same rev, whichever the order: "
+        + JSON.stringify({ lead: cu1.relayLead, tie: cu1.relayTie }));
+      check(both(cu1.folderLead, cfuCopy) && both(cu1.folderTie, cfuCanon),
+        "cfu1b in a shared folder a conflict copy at the higher rev still opens, as before, and at the same rev the file named as the catalog does: "
+        + JSON.stringify({ lead: cu1.folderLead, tie: cu1.folderTie }));
+      if (PLANTS_OFF) {
+        skip("cfu1c lifting plant:pick-copy-last opens the copy that leads in the relay mirror");
+        skip("cfu1d lifting plant:pick-tie-canonical opens the first of two files at the same rev in a folder");
+      } else {
+        const sc = lifted6("plant:pick-copy-last"), pc = sc ? await cfuPick("relay", 3, 2, sc) : null;
+        check(!!pc && pc.indexOf(cfuCopy) >= 0, "cfu1c lifting plant:pick-copy-last opens the copy that leads in the relay mirror (FAIL cfu1a): " + (sc ? JSON.stringify(pc) : "plant line absent"));
+        const st = lifted6("plant:pick-tie-canonical"), pt = st ? await cfuPick("folder", 2, 2, st) : null;
+        check(!!pt && pt.indexOf(cfuCopy) >= 0, "cfu1d lifting plant:pick-tie-canonical opens the first of two files at the same rev in a folder (FAIL cfu1b): " + (st ? JSON.stringify(pt) : "plant line absent"));
+      }
+
       if (PLANTS_OFF) {
         skip("962s6e6c2 lifting plant:head-listed keeps naming B on the row");
         skip("962s6e6b2 lifting plant:s6-withdraw-unlisted leaves B's working copy on the share");
