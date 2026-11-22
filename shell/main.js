@@ -646,7 +646,11 @@ async function setAsideDrop(fsp, join, aside, own, exe) {
 function dropSetAside() {
   if (process.platform !== "win32" || !app.isPackaged) return;
   const own = path.dirname(process.execPath);
-  setAsideDrop(fs.promises, path.join, own + ".setup-previous", own, path.basename(process.execPath)).catch(() => {});
+  /* Electron's node:fs reads an .asar as a folder, so resources\app.asar would be walked and never unlinked, and the copy aside
+     never emptied: original-fs sees it as the file it is (outside Electron, as in the harness, node:fs already does). */
+  let ofs = fs;
+  try { ofs = require("original-fs"); } catch { ofs = fs; }
+  setAsideDrop(ofs.promises, path.join, own + ".setup-previous", own, path.basename(process.execPath)).catch(() => {});
 }
 /* The lead's standing span, at the root of the team's folder. It replaces the old request file, which nothing here reads. */
 const SPAN_NAME = "stats-span.json";
