@@ -10709,9 +10709,11 @@ function signinSecretRead(text) {
   const v = d && typeof d === "object" && !Array.isArray(d) && d.format === 1 ? d.google : undefined;
   return Object.freeze(typeof v === "string" && SIGNIN_SECRET_SHAPE.test(v) ? { google: v } : {}); /* plant:secret-shape */
 }
-/* THE ORDER PAGE IS CONFIGURATION, as a provider's client id is: etiuda.dev's address where a licence is ordered, https, with no
-   query and no fragment of its own. While it is "" Account offers no Buy (the order page's section, below). */
+/* THE ORDER PAGE IS CONFIGURATION, as a provider's client id is: the origin of etiuda.dev's site (https, no path), where the desk-only
+   licence is ordered; the page itself is that origin and the desk's language's path (orderPageFor). While it is "" Account offers no
+   Buy (the order page's section, below). Going live is this one line, set to "https://etiuda.dev". */
 let ORDER_PAGE = "";
+const ORDER_ORIGIN_SHAPE = /^https:\/\/(?:[a-z0-9-]+\.)*etiuda\.dev$/; /* plant:order-origin */
 const ORDER_PAGE_SHAPE = /^https:\/\/(?:[a-z0-9-]+\.)*etiuda\.dev(?:\/[A-Za-z0-9._~-]+)*\/?$/; /* plant:order-shape */
 /* THE SIGN-IN LAB, this whole path run from a development tree against a service other than production: the file ETIUDA_SIGNIN_LAB
    names, read once at start by the wiring and only on a desk neither installed nor packaged. It names the service, http on 127.0.0.1
@@ -10735,7 +10737,7 @@ function signinLabRead(text) {
   try { d = JSON.parse(String(text)); } catch { d = null; }
   if (!d || typeof d !== "object" || Array.isArray(d) || !signinLabService(d.service)
     || !(d.root === undefined || /^[0-9a-f]{64}$/.test(String(d.root)))) return null; /* plant:lab-shape */
-  if (!(d.order === undefined || (typeof d.order === "string" && ORDER_PAGE_SHAPE.test(d.order)))) return null; /* plant:lab-order */
+  if (!(d.order === undefined || (typeof d.order === "string" && ORDER_ORIGIN_SHAPE.test(d.order)))) return null; /* plant:lab-order */
   if (!(d.relay === undefined || DOOR_RELAYS.installed.concat(DOOR_RELAYS.unpackaged).indexOf(d.relay) >= 0)) return null; /* plant:lab-relay */
   const ids = d.clientIds === undefined ? {} : d.clientIds, p = d.provider;
   if (!ids || typeof ids !== "object" || Array.isArray(ids)
@@ -13822,12 +13824,20 @@ function orderAddress(page, code) {
   if (typeof page !== "string" || !ORDER_PAGE_SHAPE.test(page)) return ""; /* plant:order-page */
   return page + (typeof code === "string" && /^[0-9A-Z]{16}$/.test(code) ? "#code=" + code : ""); /* plant:order-fragment */
 }
+/* The desk-only order page in the desk's language, both paths the site's (its order.js reads the "#code=" the address then carries). */
+const ORDER_PATHS = Object.freeze({ en: "/en/order/desk/", pl: "/pl/zamowienie/stanowisko/" });
+function orderPageFor(origin, lang) {
+  if (typeof origin !== "string" || !ORDER_ORIGIN_SHAPE.test(origin)) return ""; /* plant:order-origin-use */
+  return origin + ORDER_PATHS[lang === "pl" ? "pl" : "en"]; /* plant:order-lang */
+}
 /* A managed computer offers no Buy (decision 49): the state says none, and a click or an open names no address. */
 function buyManaged(v) { return !!(v && v.managed && v.managed.on === true); }
 function buyAddress() {
   const v = signinView();
   if (buyManaged(v) || (v && v.licenceManaged)) return ""; /* plant:buy-managed */
-  return orderAddress(ORDER_PAGE, v && v.code);
+  let lang = "en";
+  try { if (shellWords().lang === "pl") lang = "pl"; } catch { lang = "en"; }
+  return orderAddress(orderPageFor(ORDER_PAGE, lang), v && v.code);
 }
 ipcMain.on("etiuda:buy-state", (e) => { e.returnValue = fromEngine(e) ? { offer: !!buyAddress() } : null; }); /* plant:buy-state-managed */
 /* Buy leaves as the release page does (etiuda:update-click): the preload names a trusted click on it, which stands for the address

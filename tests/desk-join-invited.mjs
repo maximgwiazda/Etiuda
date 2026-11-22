@@ -77,7 +77,8 @@ try {
     fnOf("function signinInvitedView("), fnOf("function signinJoinWaitKept("), lineOf("const SIGNIN_ASK_LINE ="), fnOf("function signinJoinBytes("),
     fnOf("function signinJoinBody("), fnOf("function signinJoinOf("), fnOf("function signinJoinSettle("),
     lineOf("let SIGNIN_SERVICE ="), lineOf("let SIGNOUT_SERVICE ="), lineOf("function storeServiceAt("), fnOf("async function signinServiceAsk("),
-    lineOf("const SIGNIN_BODY_MAX ="), fnOf("function orderAddress("), lineOf("const ORDER_PAGE_SHAPE ="), fnOf("function buyAddress(")].join("\n");
+    lineOf("const SIGNIN_BODY_MAX ="), fnOf("function orderAddress("), lineOf("const ORDER_PAGE_SHAPE ="), lineOf("const ORDER_ORIGIN_SHAPE ="), lineOf("const ORDER_PATHS ="),
+    fnOf("function orderPageFor("), fnOf("function buyAddress(")].join("\n");
 } catch (e) { sliced = e.message; }
 let SHELL_SWAP = null;
 function shellOf(view) {
@@ -88,7 +89,7 @@ function shellOf(view) {
   }
   const posted = [];
   const env = { Buffer, signinPost: (f, url, bytes) => { posted.push({ url, body: JSON.parse(bytes.toString("utf8")) }); return Promise.resolve({ status: 200, bytes: Buffer.from("{}") }); },
-    signinView: () => view || {}, buyManaged: () => false, ORDER_PAGE: "https://etiuda.dev/order/desk" };
+    signinView: () => view || {}, buyManaged: () => false, ORDER_PAGE: "https://etiuda.dev", shellWords: () => ({ lang: "en" }) };
   const names = Object.keys(env);
   const api = new Function(...names, text + "\nreturn { signinInvitedOf, signinInvitedWords, signinInvitedView, signinJoinWaitKept, signinJoinBytes, signinJoinBody, signinJoinOf,"
     + " signinJoinSettle, signinServiceAsk, storeServiceAt, orderAddress, buyAddress };")(...names.map(n => env[n]));
@@ -150,8 +151,8 @@ CASES.settle = () => {
 /* dji6: the order page's handoff is the fragment the shell builds from its own view, unchanged: the same value the old screens showed. */
 CASES.handoff = () => {
   const S = shellOf({ code: CODE });
-  return S.orderAddress("https://etiuda.dev/order/desk", CODE) === "https://etiuda.dev/order/desk#code=" + CODE && S.buyAddress() === "https://etiuda.dev/order/desk#code=" + CODE
-    && shellOf({ code: "" }).buyAddress() === "https://etiuda.dev/order/desk";
+  return S.orderAddress("https://etiuda.dev/en/order/desk/", CODE) === "https://etiuda.dev/en/order/desk/#code=" + CODE && S.buyAddress() === "https://etiuda.dev/en/order/desk/#code=" + CODE
+    && shellOf({ code: "" }).buyAddress() === "https://etiuda.dev/en/order/desk/";
 };
 /* dji1, the preload: every view the page is handed comes without the code; the Join press reaches its channel. */
 let PRELOAD_SWAP = null;
