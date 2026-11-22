@@ -2151,7 +2151,7 @@ function translateTree(root){
     });
     /* Text only where the element holds nothing but text: a button, a label, a heading. Anything
        with element children is left alone, because replacing its text would delete them. */
-    if(!(el.classList && el.classList.contains("e-dot-hug")) && el.children && el.children.length===0 && el.textContent && el.textContent.trim()){
+    if(!(el.classList && (el.classList.contains("e-dot-hug") || el.classList.contains("e-dot-t"))) && el.children && el.children.length===0 && el.textContent && el.textContent.trim()){
       const src=el.getAttribute("data-i18n-text") || el.textContent.trim();
       const out=t(src);
       if(out!==el.textContent.trim()){ el.setAttribute("data-i18n-text", src); el.textContent=out; }
@@ -2352,9 +2352,24 @@ function hugDottedGround(root){
     const outer=insideFlex ? doc.createElement("span") : hug;
     if(insideFlex){ outer.className="e-dot-flex"; outer.appendChild(hug); }
     run[0].parentNode.insertBefore(outer, run[0]);
-    for(let j=0;j<run.length;j++) hug.appendChild(run[j]);
+    /* the words in a box of their own, above the patch (template.html, .e-dot-t) */
+    const words=doc.createElement("span");
+    words.className="e-dot-t";
+    hug.appendChild(words);
+    for(let j=0;j<run.length;j++) words.appendChild(run[j]);
     wrapped++;
   }
+  /* each patch lies BELOW the one before it in its ground, so a patch's spread never covers the words of the block above it (a heading's
+     descenders reach to its foot): numbered by document order over the whole ground at every pass, so the same screen numbers the same */
+  const grounds=[];
+  targets.forEach(({ground})=>{ if(grounds.indexOf(ground)<0) grounds.push(ground); });
+  grounds.forEach(ground=>{
+    const ws=ground.querySelectorAll(".e-dot-hug > .e-dot-t");
+    for(let i=0;i<ws.length;i++){
+      const z=String(-1-i), hug=ws[i].parentNode;
+      if(hug.style.zIndex!==z) hug.style.zIndex=z;
+    }
+  });
   return wrapped;
 }
 /** The app's own furniture, never the catalog's content. */
