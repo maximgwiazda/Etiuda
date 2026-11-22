@@ -1,17 +1,13 @@
-/* Whether a clipboard text reads as a message, and which intents it is about.
+/* Which intents the words selected in another program are about, whatever their length.
    The desk builds the model from the catalog it has loaded. The shell scores the
-   clipboard text against that model and keeps the text in its own memory.
+   selected words against that model and keeps them in its own memory.
    Stop words and polite framing are generic language. Nothing here is a catalog's. */
 import { foldDiacritics, splitWords, wordMatchesTerm } from "./words.js";
 
-/* A message is at least this many words, and at least this share of its non-space
-   characters are letters. The strip shows an intent only when its score is above
-   the floor, and at most this many, best first. */
-const MESSAGE_WORD_MIN = 3;
-const MESSAGE_LETTER_SHARE = 0.6;
+/* The strip shows an intent only when its score is above the floor, and at most this many, best first. */
 const SUGGEST_SCORE_FLOOR = 2.5;
 const SUGGEST_LIMIT = 5;
-/* Only this much of a clipboard is ever read, so a huge one costs no more than a long message. */
+/* Only this much of a selection is ever read, so a huge one costs no more than a long message. */
 const MESSAGE_MAX_CHARS = 1500;
 
 const AFFINITY_STOP = new Set([
@@ -33,33 +29,6 @@ const EN_TRANS = /[,;]?\s+(?:and\s+also|and\s+I\s+also|also\s+can|plus\s+can|by\
 function isStopWord(w) {
   const folded = foldDiacritics(String(w || "").toLowerCase());
   return AFFINITY_STOP.has(folded) || POLITE_STOP.has(folded) || GREET_STOP.has(folded);
-}
-
-/* A whitespace token, punctuation trimmed from its ends, letters only, an inner
-   hyphen or apostrophe allowed, two or more letters. */
-function messageWords(text) {
-  const out = [];
-  const parts = String(text == null ? "" : text).split(/\s+/);
-  for (let i = 0; i < parts.length; i++) {
-    const core = parts[i].replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
-    if (!core) continue;
-    const letters = core.match(/\p{L}/gu);
-    if (!letters || letters.length < 2) continue;
-    if (/^[\p{L}]+(?:['-][\p{L}]+)*$/u.test(core)) out.push(core);
-  }
-  return out;
-}
-
-function letterShare(text) {
-  const s = String(text == null ? "" : text).replace(/\s+/g, "");
-  if (!s) return 0;
-  const letters = s.match(/\p{L}/gu);
-  return (letters ? letters.length : 0) / [...s].length;
-}
-
-function readsLikeMessage(text) {
-  const s = String(text == null ? "" : text).slice(0, MESSAGE_MAX_CHARS);
-  return messageWords(s).length >= MESSAGE_WORD_MIN && letterShare(s) >= MESSAGE_LETTER_SHARE;
 }
 
 function suggestEditDistance1(a, b) {
@@ -300,12 +269,8 @@ function buildSuggestModel(catalog, labels) {
 
 function segmentCustomerMessage(raw) {
   if (!raw || typeof raw !== "string") return [];
-  if (raw.length < 4 || raw.length > MESSAGE_MAX_CHARS) return [];
+  if (raw.length > MESSAGE_MAX_CHARS) return [];
   if (!/\p{L}/u.test(raw)) return [];
-  const trimmed = raw.trim();
-  if (/^[A-Z0-9]{6,8}$/i.test(trimmed)) return [];
-  if (/^https?:\/\/\S+$/i.test(trimmed)) return [];
-  if (trimmed.startsWith("{") && trimmed.endsWith("}")) return [];
   const lines = raw.split(/\r?\n/).map(line => {
     let l = line.replace(/^\s*(?:\[\d{1,2}:\d{2}(?::\d{2})?\]|\(\d{1,2}:\d{2}(?::\d{2})?\))\s*(?:[^:]+:)?\s*/, "");
     l = l.replace(/^\s*\d{1,2}:\d{2}\s*-\s*/, "");
@@ -313,7 +278,7 @@ function segmentCustomerMessage(raw) {
     return l;
   });
   let cleanText = lines.join(" ").replace(/\s+/g, " ").trim();
-  if (cleanText.length < 4) return [];
+  if (!cleanText) return [];
   let isPl = /[ąćęłńóśźż]/i.test(cleanText);
   if (!isPl) {
     const plCount = (cleanText.match(/\b(?:czy|jak|nie|jest|mam|prosze|proszę|lot|do|na|w|z)\b/gi) || []).length;
@@ -433,7 +398,7 @@ function scoreSegment(segText, profiles, vocab, weightOf, cache) {
 
 function scoreSuggestions(text, model) {
   text = String(text == null ? "" : text).slice(0, MESSAGE_MAX_CHARS);
-  if (!readsLikeMessage(text) || !model) return [];
+  if (!text.trim() || !model) return [];
   const profiles = profilesFrom(model);
   const vocab = new Map(model.vocab || []);
   const weightOf = new Map(model.weights || []);
@@ -458,13 +423,9 @@ function scoreSuggestions(text, model) {
 }
 
 export {
-  MESSAGE_WORD_MIN,
   MESSAGE_MAX_CHARS,
-  MESSAGE_LETTER_SHARE,
   SUGGEST_SCORE_FLOOR,
   SUGGEST_LIMIT,
-  readsLikeMessage,
-  messageWords,
   buildSuggestModel,
   intentPassages,
   scoreSuggestions

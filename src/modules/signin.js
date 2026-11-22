@@ -876,7 +876,6 @@ function signinCall(name, arg){
 /* `text` to the clipboard; resolves true once the clipboard took it, false otherwise. */
 function signinCopy(text){
   if(!text) return Promise.resolve(false);
-  try{ const h=eHost(); if(h && typeof h.noteOwnText==="function") h.noteOwnText(text); }catch(e){}
   try{ if(navigator.clipboard&&window.isSecureContext) return navigator.clipboard.writeText(text).then(()=>true, ()=>false); }catch(e){}
   return Promise.resolve(false);
 }

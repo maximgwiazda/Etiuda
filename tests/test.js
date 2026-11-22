@@ -8190,7 +8190,6 @@ if (require.main === module) {
       relay: /const BUILTIN_RELAY_URL = "https:\/\/etiuda\.dev\/relay\/v1"/.test(main),
       licence: /"https:\/\/etiuda\.dev\/licence\/v1\//.test(main),
       caret: /const CARET = path\.resolve\(output, "\.caret", "caret\.exe"\)/.test(cfg) && /\{ from: path\.dirname\(CARET\), to: "\.", filter: \[path\.basename\(CARET\)\] \}/.test(cfg),
-      clipboard: /clipboard\.readText\(/.test(main),
     };
     const DENY = [
       ["relay", /\bno network (request|call|connection|access)|makes no (network )?connection|(never|does not|doesn't) (connect|contact)s?\b|works (entirely |fully )?offline|(asks|sends) (anything|nothing) over a network/i],
@@ -8199,8 +8198,6 @@ if (require.main === module) {
       ["licence", /nie sprawdza (żadnej )?licencji|bez (sprawdzania|kontroli) licencji/i],
       ["caret", /no (other |background )?(helper|executable)|nothing else runs/i],
       ["caret", /programów pomocniczych|programu pomocniczego|nie uruchamia (żadnych )?innych programów/i],
-      ["clipboard", /(never|does not|doesn't) reads? the clipboard|only writes? (to )?the clipboard/i],
-      ["clipboard", /nie (czyta|odczytuje) schowka|do schowka tylko zapisuje/i],
     ];
     const NAME = { en: [/\brelay\b/i, /\bsealed\b/i, /European Union/], pl: [/przekaźnik/i, /zapieczętowan/i, /Unii Europejskiej/] };
     const said = (text, lang) => DENY.filter(([f, re]) => facts[f] && re.test(text)).map(([f, re]) => f + " denied (" + text.match(re)[0] + ")")

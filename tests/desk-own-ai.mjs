@@ -503,10 +503,10 @@ try {
     const problems = [];
     const LOCAL = /this computer|your computer|leaves|never kept|never sent|not sent|nothing is sent|sends nothing|sending nothing|stays|kept here|local/i;
     const LOCAL_PL = /tym komputerze|tego komputera|twoim komputerze|nie opuszcza|nie jest wysyłan|niewysyłan|nie wysyła|nie trafia|zostaje|pozostaje|przechowywan|lokaln/i;
-    const SUBJECT = /model|message|search/i, SUBJECT_PL = /model|wiadomoś|wyszuk/i;
-    const CLAIMS = ["Reads a copied message on this computer", "The model ranks the suggestions; nothing leaves this computer",
+    const SUBJECT = /model|message|search|selected words|words selected/i, SUBJECT_PL = /model|wiadomoś|wyszuk|zaznaczony tekst na tym|tekście zaznaczonym/i;
+    const CLAIMS = ["Reads the selected message on this computer", "The model ranks the suggestions; nothing leaves this computer",
       "The model built into Etiuda, which works on this computer alone.", "From the third letter typed, the main search adds the cards and intents closest in meaning after those that match the words, ranked by the model on this computer.",
-      "The model ranks the search beside word matches; nothing leaves this computer", "When Quick replies opens with a customer's message copied"];
+      "The model ranks the search beside word matches; nothing leaves this computer", "When Quick replies opens with a customer's message selected in another program"];
     /* True whenever they are drawn, and not drawn while the organisation's model ranks with both switches on: the built-in
        choice's hint, the pause's line, the too-slow line ("the built-in model's order stands"), the incomplete setting's line,
        both switches off. */
@@ -597,7 +597,7 @@ try {
     const offNote = await note();
     await flip("aisuggest", "on"); await sleep(100);
     const onNote = await note();
-    if (!/never kept or sent/.test(offNote) || !/is sent to api\.openai\.com/.test(onNote)) problems.push("the note " + JSON.stringify([offNote.slice(-60), onNote.slice(-120)]));
+    if (!/never kept or sent/.test(offNote) || !/(is|are) sent to api\.openai\.com/.test(onNote)) problems.push("the note " + JSON.stringify([offNote.slice(-60), onNote.slice(-120)]));
     await page.evaluate(() => { localStorage.removeItem("eAiOff"); localStorage.removeItem("eSearchAiOff"); });
     check(!problems.length, "db6 while the organisation's model ranks, the AI section's lede says what is sent by the two switches and follows a switch "
       + "moved on the open page, and the picker's note follows the suggestion switch: " + (problems.join("; ") || "three ledes, two notes"));
@@ -612,24 +612,24 @@ try {
     const problems = [];
     const T = {
       en: {
-        both: "The organisation's model at api.openai.com ranks the search and the suggestions. The search text, the copied message the suggestions are made from, and up to 12 short pieces of the cards being ranked are sent there.",
+        both: "The organisation's model at api.openai.com ranks the search and the suggestions. The search text, the selected message the suggestions are made from, and up to 12 short pieces of the cards being ranked are sent there.",
         search: "The organisation's model at api.openai.com ranks the search. The search text is sent there, with up to 12 short pieces of the cards being ranked.",
-        suggest: "The organisation's model at api.openai.com ranks the suggestions. The copied message they are made from is sent there, with up to 12 short pieces of the cards being ranked.",
+        suggest: "The organisation's model at api.openai.com ranks the suggestions. The selected message they are made from is sent there, with up to 12 short pieces of the cards being ranked.",
         R: "At your press, the words or the card you ask it to reword go there too.",
         noneOff: "The organisation's model at api.openai.com is set, and with both switches and Rewording off, nothing is sent to it.",
         noneOn: "The organisation's model at api.openai.com is set. With both switches off, only the words or the card you ask it to reword are sent to it, at your press.",
-        rowOff: "The search text, the copied message the suggestions are made from and up to 12 short pieces of the cards being ranked are sent to api.openai.com, and nowhere else.",
-        rowOn: "The search text, the copied message the suggestions are made from and up to 12 short pieces of the cards being ranked are sent to api.openai.com, and nowhere else; so, at your press, are the words or the card you ask it to reword.",
+        rowOff: "The search text, the selected message the suggestions are made from and up to 12 short pieces of the cards being ranked are sent to api.openai.com, and nowhere else.",
+        rowOn: "The search text, the selected message the suggestions are made from and up to 12 short pieces of the cards being ranked are sent to api.openai.com, and nowhere else; so, at your press, are the words or the card you ask it to reword.",
       },
       pl: {
-        both: "Model organizacji pod adresem api.openai.com ustala kolejność wyszukiwania i propozycji. Trafia tam tekst wyszukiwania, skopiowana wiadomość, z której powstają propozycje, i najwyżej 12 krótkich fragmentów porządkowanych kart.",
+        both: "Model organizacji pod adresem api.openai.com ustala kolejność wyszukiwania i propozycji. Trafia tam tekst wyszukiwania, zaznaczona wiadomość, z której powstają propozycje, i najwyżej 12 krótkich fragmentów porządkowanych kart.",
         search: "Model organizacji pod adresem api.openai.com ustala kolejność wyszukiwania. Trafia tam tekst wyszukiwania, razem z najwyżej 12 krótkimi fragmentami porządkowanych kart.",
-        suggest: "Model organizacji pod adresem api.openai.com ustala kolejność propozycji. Trafia tam skopiowana wiadomość, z której powstają, razem z najwyżej 12 krótkimi fragmentami porządkowanych kart.",
+        suggest: "Model organizacji pod adresem api.openai.com ustala kolejność propozycji. Trafia tam zaznaczona wiadomość, z której powstają, razem z najwyżej 12 krótkimi fragmentami porządkowanych kart.",
         R: "Po kliknięciu trafia tam też tekst albo karta do przeredagowania.",
         noneOff: "Model organizacji pod adresem api.openai.com jest ustawiony, a przy wyłączonych obu przełącznikach i Przeredagowaniu nic do niego nie trafia.",
         noneOn: "Model organizacji pod adresem api.openai.com jest ustawiony. Przy wyłączonych obu przełącznikach trafia do niego tylko, po kliknięciu, tekst albo karta do przeredagowania.",
-        rowOff: "Tekst wyszukiwania, skopiowana wiadomość, z której powstają propozycje, i najwyżej 12 krótkich fragmentów porządkowanych kart trafiają do api.openai.com i nigdzie indziej.",
-        rowOn: "Tekst wyszukiwania, skopiowana wiadomość, z której powstają propozycje, i najwyżej 12 krótkich fragmentów porządkowanych kart trafiają do api.openai.com i nigdzie indziej; po kliknięciu trafia tam też tekst albo karta do przeredagowania.",
+        rowOff: "Tekst wyszukiwania, zaznaczona wiadomość, z której powstają propozycje, i najwyżej 12 krótkich fragmentów porządkowanych kart trafiają do api.openai.com i nigdzie indziej.",
+        rowOn: "Tekst wyszukiwania, zaznaczona wiadomość, z której powstają propozycje, i najwyżej 12 krótkich fragmentów porządkowanych kart trafiają do api.openai.com i nigdzie indziej; po kliknięciu trafia tam też tekst albo karta do przeredagowania.",
       },
     };
     /* The shell's state as each case has it: rewordOn true or false with an address, true with no address (no organisation's model to send to),

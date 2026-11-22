@@ -39,7 +39,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 166 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 12);
+const EXPECTED = 169 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 13);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -330,7 +330,7 @@ try {
     setImmediate(() => done(caret.fail && args && args[0] === "paste" ? Object.assign(new Error("refused"), { code: 3 }) : null,
       args && args[0] === "which" ? caret.front : "", ""));
   } });
-  let suspended = null, clipReads = 0, clipHeld = "", clipAsPromise = false, clipNever = false;
+  let suspended = null, clipReads = 0;
   const onH = {}, invH = {};
   const area = { x: 0, y: 0, width: 1920, height: 1040 };
   let cursor = { x: 300, y: 200 };
@@ -341,7 +341,7 @@ try {
       getPreferredSystemLanguages: () => ["en-US"] },
     ipcMain: { on: (ch, fn) => { onH[ch] = fn; }, handle: (ch, fn) => { invH[ch] = fn; } },
     BrowserWindow: BW, Menu: anything(), dialog: anything(), net: seatLab.net(), protocol: anything(), session: anything(),
-    clipboard: { writeText: t => clip.push(t), readText: () => { clipReads++; return clipNever ? new Promise(() => {}) : clipAsPromise ? Promise.resolve(clipHeld) : clipHeld; } },
+    clipboard: { writeText: t => clip.push(t), readText: () => { clipReads++; return ""; } },
     globalShortcut: { register: (a, fn) => { if (taken.has(a)) return false; held.set(a, fn); return true; },
       unregister: a => { held.delete(a); }, unregisterAll: () => held.clear(), setSuspended: v => { suspended = !!v; } },
     screen: { getCursorScreenPoint: () => cursor, getDisplayNearestPoint: () => ({ workArea: area }),
@@ -567,36 +567,40 @@ try {
     + "opened " + opened.length + ", rows " + (opened[0] ? opened[0].rows.length : "none")
     + ", visible " + pw.visible + ", focused " + pw.focused
     + ", show " + (pw.calls.indexOf("show") > -1) + ", bounds " + JSON.stringify(pw.bounds));
-  check(clipReads === 1, "2h2 that one opening reads the clipboard once: " + clipReads);
+  check(clipReads === 0, "2h2 that one opening reads no clipboard: " + clipReads);
   held.get("Control+Shift+Space")();
   await until(() => !pw.visible);
   const secret = "zebraquill please mend the lantern glass today";
+  const WIN2 = process.platform === "win32";
   const writesAtSecret = written.length, saidAtSecret = said.length, sentAtSecret = desk.sent.length, readsAtSecret = clipReads;
-  clipHeld = secret;
+  caret.sel = secret;
   held.get("Control+Shift+Space")();
   await until(() => opened.length >= 2 && pw.visible);
+  caret.sel = null;
   const openAsks = desk.sent.slice(sentAtSecret).filter(a => a[0] === "etiuda:pick-ask" && a[2] === "open").map(a => String(a[3] || ""));
   const askedBlob = desk.sent.slice(sentAtSecret).map(a => JSON.stringify(a)).join("\n");
   const openObj = opened[opened.length - 1];
   const kept = written.slice(writesAtSecret).join("\n") + "\n" + said.slice(saidAtSecret).join("\n") + "\n"
-    + JSON.stringify(openObj) + "\n" + askedBlob + "\n" + openAsks.join("\n") + "\n" + pw.sent.map(a => JSON.stringify(a)).join("\n");
-  check(clipReads === readsAtSecret + 1 && openAsks.indexOf('{"profiles":1}') > -1 && !("profiles" in openObj) && !("suggest" in openObj)
-    && kept.indexOf(secret) < 0,
-    "2h3 a message is asked for as profiles only, and its text reaches neither the page, a log nor the disk: reads "
+    + askedBlob + "\n" + openAsks.join("\n");
+  if (WIN2) check(clipReads === readsAtSecret && openAsks.indexOf('{"profiles":1}') > -1 && !("profiles" in openObj) && !("suggest" in openObj)
+    && openObj.selected === secret && kept.indexOf(secret) < 0,
+    "2h3 a selection is asked for as profiles only, reaches the picker alone, and its text reaches neither the desk's page, a log nor the disk: reads "
     + (clipReads - readsAtSecret) + ", profiles key " + ("profiles" in openObj) + ", suggest key " + ("suggest" in openObj)
     + ", text kept " + (kept.indexOf(secret) > -1));
+  else check(true, "2h3 not Windows: no helper, so nothing is selected");
   held.get("Control+Shift+Space")();
   await until(() => !pw.visible);
-  clipHeld = "X7K2P9";
-  const sentCode = desk.sent.length, openedCode = opened.length;
+  caret.sel = "X7K2P9";
+  const openedCode = opened.length;
   held.get("Control+Shift+Space")();
   await until(() => opened.length > openedCode && pw.visible);
-  const codeAsks = desk.sent.slice(sentCode).filter(a => a[0] === "etiuda:pick-ask").map(a => String(a[3] || ""));
+  caret.sel = null;
   const codeOpen = opened[opened.length - 1];
-  check(codeAsks.indexOf("{}") > -1 && !("suggest" in codeOpen) && Object.keys(codeOpen).join(",") === Object.keys(opened[0]).join(","),
-    "2h4 a booking code leaves the picker the same shape as the empty open: " + Object.keys(codeOpen).join(","));
+  if (WIN2) check(codeOpen.selected === "X7K2P9" && !("suggest" in codeOpen),
+    "2h4 a selected booking code is scored like any selection and offers no intent: " + Object.keys(codeOpen).join(","));
+  else check(true, "2h4 not Windows: no helper, so nothing is selected");
 
-  /* Row 2: The strip never suggests from Etiuda's own reply, and counts a message once. */
+  /* Row 2: A message is counted once, and a reply just copied is not read back. */
   const CM_R2 = await import(MOD("content-model.js"));
   const IID_R2 = await import(MOD("intent-id.js"));
   const langsOrig_R2 = CM_R2.CONTENT_LANGS.slice();
@@ -609,7 +613,7 @@ try {
   IID_R2.snapshotBaseIntents();
   AS.setCards(CARDS.map(c => Object.assign({}, c, c.id === "c-lamp" ? { requests: ["t:wick"] } : {})));
 
-  clipHeld = secret;
+  caret.sel = secret;
   const opensBeforeR2 = desk.sent.filter(a => a[0] === "etiuda:pick-ask" && a[2] === "suggest-open").length;
   held.get("Control+Shift+Space")();
   await until(() => pw.visible);
@@ -625,76 +629,24 @@ try {
   await until(() => !pw.visible);
   const opensAfterR2 = desk.sent.filter(a => a[0] === "etiuda:pick-ask" && a[2] === "suggest-open").length;
   const threeOpensCount = opensAfterR2 - opensBeforeR2;
+  caret.sel = null;
 
   await pickerPage.E_PICK.copy(JSON.stringify({ id: "c-lamp", vi: 0 }));
-  clipHeld = clip[clip.length - 1];
   held.get("Control+Shift+Space")();
   await until(() => pw.visible);
   const ownOpenObj = opened[opened.length - 1];
   const ownSuggestOpenCalls = desk.sent.filter(a => a[0] === "etiuda:pick-ask" && a[2] === "suggest-open").length - opensAfterR2;
   held.get("Control+Shift+Space")();
   await until(() => !pw.visible);
-  check(threeOpensCount === 1 && (!ownOpenObj.suggest || !ownOpenObj.suggest.length) && ownSuggestOpenCalls === 0,
-    "6p copy a reply, then open the picker again: no strip, no count. Three opens on one customer message give one count");
-
-  /* 6r etiuda:own-text takes a string within its cap and nothing else. A non-string that would read as a customer's message
-     if turned into one, and an over-long string, are not noted: the message still shows its strip, as it would had the page
-     never sent them. */
-  const fresh6r = secret + " Thank you.";
-  onH["etiuda:own-text"](deskEvent(), "x".repeat(300001));
-  onH["etiuda:own-text"](deskEvent(), { toString: () => fresh6r });
-  clipHeld = fresh6r;
-  held.get("Control+Shift+Space")();
-  await until(() => pw.visible);
-  const afterBad = opened[opened.length - 1];
-  held.get("Control+Shift+Space")();
-  await until(() => !pw.visible);
-  check(!!(afterBad.suggest && afterBad.suggest.length),
-    "6r own-text takes a string within its cap only: after a non-string and a 300,001-character send, a customer's message still"
-    + " shows its strip: " + JSON.stringify((afterBad.suggest || []).length));
-
-  /* 6s. Electron 44 on Linux answers clipboard.readText() with a Promise (Claude gamma's Ubuntu walk, 2026-11-09); the
-     shell read it as "[object Promise]", so a copied message was never suggested there. The same message, read through a
-     Promise, shows its strip. */
-  clipAsPromise = true;
-  clipHeld = fresh6r + " Again.";
-  held.get("Control+Shift+Space")();
-  await until(() => pw.visible);
-  const viaPromise = opened[opened.length - 1];
-  held.get("Control+Shift+Space")();
-  await until(() => !pw.visible);
-  clipAsPromise = false;
-  check(!!(viaPromise.suggest && viaPromise.suggest.length),
-    "6s a clipboard that answers with a Promise, as on Linux, still shows a customer's message its strip: "
-    + JSON.stringify((viaPromise.suggest || []).length));
-
-  /* 6t. A clipboard read that never settles must not lock the picker: it opens after the wait with no message strip, and
-     opens again on the next press. */
-  clipNever = true;
-  const t6 = Date.now();
-  held.get("Control+Shift+Space")();
-  await until(() => pw.visible);
-  const neverOpenMs = Date.now() - t6;
-  const neverOpen = opened[opened.length - 1];
-  held.get("Control+Shift+Space")();
-  await until(() => !pw.visible);
-  clipNever = false;
-  clipHeld = "";
-  held.get("Control+Shift+Space")();
-  await until(() => pw.visible);
-  const reopened = pw.visible;
-  held.get("Control+Shift+Space")();
-  await until(() => !pw.visible);
-  check(!(neverOpen.suggest && neverOpen.suggest.length) && reopened && neverOpenMs < 5000,
-    "6t a clipboard read that never settles opens the picker after the wait with no strip, and the next press opens it again: "
-    + neverOpenMs + " ms, reopened " + reopened);
+  check((process.platform !== "win32" || threeOpensCount === 1) && (!ownOpenObj.suggest || !ownOpenObj.suggest.length) && ownSuggestOpenCalls === 0,
+    "6p copy a reply, then open the picker with nothing selected: no strip, no count. Three opens on one selected message give one count");
 
   /* Row 7: Two presses with an unchanged pack build the model once, counted by a stand-in, and the open's IPC payload is under 1 KB. */
   let modelBuilds = 0;
   if (typeof PICK.setSuggestModelStandIn === "function") {
     PICK.setSuggestModelStandIn(() => { modelBuilds++; });
   }
-  clipHeld = "zebraquill please mend the lantern glass today";
+  caret.sel = "zebraquill please mend the lantern glass today";
   const sentAtRow7 = desk.sent.length;
   held.get("Control+Shift+Space")();
   await until(() => pw.visible);
@@ -708,9 +660,28 @@ try {
   const lastOpenPayload = lastOpenAnswer ? JSON.stringify(lastOpenAnswer).length : 0;
   held.get("Control+Shift+Space")();
   await until(() => !pw.visible);
-  check(press1Builds === 1 && modelBuilds === 1 && lastOpenPayload < 1024,
+  caret.sel = null;
+  check((process.platform !== "win32" || press1Builds === 1 && modelBuilds === 1) && lastOpenPayload < 1024,
     "6q two presses with an unchanged pack build the model once, counted by a stand-in, and the open's IPC payload is under 1 KB: builds "
     + modelBuilds + ", payload " + lastOpenPayload + "B");
+
+  /* qrw1: a selection is matched whole, whatever its length: one word, and two, each open on a strip as a sentence does. */
+  if (process.platform === "win32") {
+    const selOpen = async sel => {
+      caret.sel = sel;
+      const o0 = opened.length;
+      held.get("Control+Shift+Space")();
+      await until(() => opened.length > o0 && pw.visible, 5000);
+      const o = opened[opened.length - 1] || {};
+      held.get("Control+Shift+Space")();
+      await until(() => !pw.visible);
+      caret.sel = null;
+      return { selected: o.selected || "", suggest: (o.suggest || []).map(r => r.id) };
+    };
+    const one = await selOpen("lantern"), two = await selOpen("lantern glass");
+    check(one.selected === "lantern" && one.suggest.length > 0 && two.selected === "lantern glass" && two.suggest.length > 0,
+      "qrw1 one selected word and two selected words each open on those words with the strip a sentence about them gets: " + JSON.stringify({ one, two }));
+  } else check(true, "qrw1 not Windows: no helper, so nothing is selected");
 
   CM_R2.setContentLangs(langsOrig_R2);
   if (CM_R2.SW_STORE && CM_R2.SW_STORE.en) {
@@ -723,7 +694,6 @@ try {
   }
   AS.setCards(CARDS.map(c => Object.assign({}, c)));
 
-  clipHeld = "";
 
   const found2 = JSON.parse(await pickerPage.E_PICK.find("brass"));
   check(ids(found2.rows) === "c-sign/0", "2i a query from the picker is answered by the desk's own search: " + ids(found2.rows));
@@ -1158,14 +1128,15 @@ try {
     "2z with no helper beside the program nothing is run, and the reply waits on the clipboard as before: " + (caret.runs.length - from) + " run(s)");
   caret.there = true;
 
-  /* 2s1 to 2s4: THE SELECTION FIRST (Quick replies on the selection, Max's ruling 2026-11-15). The helper answers the words
+  /* 2s1 to 2s4: THE SELECTION (Quick replies on the selection, Max's ruling 2026-11-15). The helper answers the words
      selected: the picker shows them in its box and suggests from them, the clipboard is not read, and nothing is written to
-     it at the press. Nothing selected, a refusal (a password field) or no answer within about 300 ms: the clipboard as
-     before. The selected words reach the picker's page and nowhere else: not the desk's page, a log or the disk. */
+     it at the press. Nothing selected, a refusal (a password field) or no answer within about 300 ms: the picker opens with
+     nothing to suggest from, the clipboard still unread. The selected words reach the picker's page and nowhere else: not the
+     desk's page, a log or the disk. */
   {
-    const SEL = "zebraquill please mend the lantern glass today. Thank you, Ola.", CLIP = "the kettle brews tea for the guests";
+    const SEL = "zebraquill please mend the lantern glass today. Thank you, Ola.";
     const opening = async sel => {
-      caret.sel = sel; clipHeld = CLIP;
+      caret.sel = sel;
       const r0 = clipReads, c0 = clip.length, o0 = opened.length, w0 = written.length, s0 = said.length, d0 = desk.sent.length, t0 = Date.now();
       held.get("Control+Shift+Space")();
       await until(() => opened.length > o0 && pw.visible, 5000);
@@ -1180,18 +1151,18 @@ try {
     };
     caret.there = true;
     const got = await opening(SEL), none = await opening(null), refused = await opening(6), hung = await opening("hang");
-    caret.sel = null; clipHeld = "";
+    caret.sel = null;
     const J2 = JSON.stringify;
     if (WIN) {
       check(got.selected === SEL && got.asked !== "{}" && /profiles|epoch/.test(got.asked) && got.reads === 0 && got.writes === 0 && !got.leaked,
         "2s1 a selection opens the picker on those words and asks the desk for what suggests from a message, read without the clipboard and written nowhere else, and nothing goes on the"
         + " clipboard at the press: " + J2(got));
-      check(none.selected === "" && none.reads === 1 && none.writes === 0 && refused.selected === "" && refused.reads === 1 && refused.writes === 0,
-        "2s2 nothing selected, or the helper refusing the control, opens on the clipboard as before: " + J2({ none, refused }));
-      check(hung.selected === "" && hung.reads === 1 && hung.writes === 0 && hung.ms < 1500,
-        "2s3 a helper that does not answer gives way to the clipboard within its wait: " + J2(hung));
+      check(none.selected === "" && none.reads === 0 && none.writes === 0 && refused.selected === "" && refused.reads === 0 && refused.writes === 0,
+        "2s2 nothing selected, or the helper refusing the control, opens with nothing to suggest from and reads no clipboard: " + J2({ none, refused }));
+      check(hung.selected === "" && hung.reads === 0 && hung.writes === 0 && hung.ms < 1500,
+        "2s3 a helper that does not answer leaves the picker opening within its wait, the clipboard unread: " + J2(hung));
     } else {
-      check(got.selected === "" && got.reads === 1, "2s1 not Windows: no helper, so the clipboard as before: " + J2(got));
+      check(got.selected === "" && got.reads === 0, "2s1 not Windows: no helper, so nothing to suggest from and no clipboard read: " + J2(got));
       check(true, "2s2 not Windows: no helper to refuse");
       check(true, "2s3 not Windows: no helper to wait for");
     }
@@ -1213,18 +1184,17 @@ try {
       const runToggle = async src => {
         const calls = [];
         new Function("pickWin", "pickOpening", "theWindow", "hidePickNote", "pickPress", "pickTarget", "caretWhich", "caretSelection",
-          "withClipText", "pickWithClip", "hidePicker", "pickTrace", "signinWorksNow", "focusDesk", src + "\npickToggle();")(
+          "pickWithClip", "hidePicker", "pickTrace", "signinWorksNow", "focusDesk", src + "\npickToggle();")(
           null, false, { isDestroyed: () => false }, () => {}, 0, null,
           () => Promise.resolve(null), () => Promise.resolve({ words: "the words", editable: true, fact: "editable", reason: "" }),
-          then => then("the clipboard"),
           (p, w, text, sel, editable) => calls.push([text, sel, editable]), () => {}, () => {}, () => true, () => {});
         await tick(20);
         return calls;
       };
       const kept = await runToggle(TOGGLE), wrong = firstLine.length === 1 ? await runToggle(rewritten) : [["the words", true, true]];
-      check(keptWait && !liftedWait && J2(kept) === J2([["the words", true, true]]) && J2(wrong) === J2([["the clipboard", false, null]]),
-        "2s4 lifting plant:selection-wait leaves the opening waiting on a silent helper, and rewriting plant:selection-first opens on the"
-        + " clipboard over a selection: " + J2({ keptWait, liftedWait, kept, wrong }));
+      check(keptWait && !liftedWait && J2(kept) === J2([["the words", true, true]]) && J2(wrong) === J2([["", false, null]]),
+        "2s4 lifting plant:selection-wait leaves the opening waiting on a silent helper, and rewriting plant:selection-first opens on"
+        + " nothing over a selection: " + J2({ keptWait, liftedWait, kept, wrong }));
     }
   }
 
@@ -1234,12 +1204,12 @@ try {
   {
     const traceAt = path.join(UD, "pick-trace.txt");
     const traceText = () => fs.existsSync(traceAt) ? fs.readFileSync(traceAt, "utf8") : "";
-    const LINE = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z) quick reply: (read-only|editable|unknown \((no selection|no text pattern|not supported|mixed|contradicted|clipboard|timeout|refused)\))$/;
+    const LINE = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z) quick reply: (read-only|editable|unknown \((no selection|no text pattern|not supported|mixed|contradicted|failed|timeout|refused)\))$/;
     const WORD = "quillfern";
     const saidFact = raw => { const line = String(raw || "").replace(/\n$/, ""); const m = LINE.exec(line); return m ? m[2] : "BAD " + JSON.stringify(line); };
     const openFact = async sel => {
       const before = traceText();
-      caret.sel = sel; clipHeld = "the kettle brews tea for the guests";
+      caret.sel = sel;
       const r0 = clipReads, o0 = opened.length, t0 = Date.now();
       held.get("Control+Shift+Space")();
       await until(() => opened.length > o0 && pw.visible, 5000);
@@ -1272,13 +1242,13 @@ try {
       const e1 = await openFact({ code: 1 }), e2 = await openFact({ code: 2 }), e3 = await openFact({ code: 3 });
       const e6 = await openFact({ code: 6 }), e70 = await openFact({ code: 70 });
       const bad = await openFact({ fact: "guessed", text: WORD + " guessed" }), hang = await openFact("hang");
-      check(e1.selected === "" && e1.editable === null && e1.reads === 1 && saidFact(e1.added) === "unknown (no selection)"
+      check(e1.selected === "" && e1.editable === null && e1.reads === 0 && saidFact(e1.added) === "unknown (no selection)"
         && e2.selected === "" && e2.editable === null && saidFact(e2.added) === "unknown (no selection)"
-        && e3.selected === "" && e3.editable === null && e3.reads === 1 && saidFact(e3.added) === "unknown (no text pattern)"
-        && e6.selected === "" && e6.editable === null && e6.reads === 1 && saidFact(e6.added) === "unknown (refused)"
-        && e70.selected === "" && e70.editable === null && e70.reads === 1 && saidFact(e70.added) === "unknown (clipboard)"
-        && bad.selected === "" && bad.editable === null && bad.reads === 1 && saidFact(bad.added) === "unknown (clipboard)"
-        && hang.selected === "" && hang.editable === null && hang.reads === 1 && hang.ms < 1500 && saidFact(hang.added) === "unknown (timeout)"
+        && e3.selected === "" && e3.editable === null && e3.reads === 0 && saidFact(e3.added) === "unknown (no text pattern)"
+        && e6.selected === "" && e6.editable === null && e6.reads === 0 && saidFact(e6.added) === "unknown (refused)"
+        && e70.selected === "" && e70.editable === null && e70.reads === 0 && saidFact(e70.added) === "unknown (failed)"
+        && bad.selected === "" && bad.editable === null && bad.reads === 0 && saidFact(bad.added) === "unknown (failed)"
+        && hang.selected === "" && hang.editable === null && hang.reads === 0 && hang.ms < 1500 && saidFact(hang.added) === "unknown (timeout)"
         && traceText().indexOf(WORD) < 0,
         "2e3 no selection, no text pattern, a refusal, a failed helper, a line the shell does not know, and no answer within 300 ms are unknown,"
         + " and the trace names which: " + JSON.stringify({ e1: saidFact(e1.added), e2: saidFact(e2.added), e3: saidFact(e3.added),
@@ -1296,7 +1266,7 @@ try {
       check(true, "2e3 not Windows: no helper to refuse or to time out");
       check(true, "2e4 not Windows: no helper, so no trace of a selection");
     }
-    caret.sel = null; clipHeld = "";
+    caret.sel = null;
     if (process.env.ETIUDA_PLANTS === "off") console.log("  NOT RUN  2e5 the editability field's two plants (ETIUDA_PLANTS=off)");
     else {
       const decl = (src, name) => { const at = src.indexOf("function " + name + "("); let i = src.indexOf("{", at), d = 0;
@@ -1307,7 +1277,7 @@ try {
       const runFact = src => src ? new Function("MESSAGE_MAX_CHARS", src + "\nreturn readSelectionFact;")(1500) : () => null;
       const keptF = FACT ? runFact(FACT)("ro\n" + WORD) : null;
       const turnedF = fieldHits.length === 1 && factMut !== FACT ? runFact(factMut)("ro\n" + WORD) : null;
-      const from = 'const allowed = reason === "no selection" || reason === "no text pattern" || reason === "not supported" || reason === "mixed" || reason === "contradicted" || reason === "clipboard" || reason === "timeout" || reason === "refused"; /* plant:editable-trace */';
+      const from = 'const allowed = reason === "no selection" || reason === "no text pattern" || reason === "not supported" || reason === "mixed" || reason === "contradicted" || reason === "failed" || reason === "timeout" || reason === "refused"; /* plant:editable-trace */';
       const traceHits = LINEF.split("\n").filter(l => l.indexOf("plant:editable-trace") >= 0);
       const lineMut = LINEF.replace(from, 'const allowed = true; /* plant:editable-trace */');
       const runLine = src => src ? new Function(src + "\nreturn pickFactLine;")() : () => "";
@@ -1315,15 +1285,15 @@ try {
       const leaked = traceHits.length === 1 && lineMut !== LINEF ? runLine(lineMut)("unknown", WORD) : "";
       check(fieldHits.length === 1 && keptF && keptF.editable === false && keptF.words === WORD
         && turnedF && turnedF.editable === null && turnedF.words === WORD
-        && traceHits.length === 1 && keptL === "unknown (clipboard)" && leaked.indexOf(WORD) >= 0,
+        && traceHits.length === 1 && keptL === "unknown (failed)" && leaked.indexOf(WORD) >= 0,
         "2e5 rewriting plant:editable-field reports a read-only selection as unknown, and rewriting plant:editable-trace lets the reason carry the words: "
         + JSON.stringify({ field: fieldHits.length, kept: keptF && keptF.editable, turned: turnedF && turnedF.editable, trace: traceHits.length, keptL, leaked }));
     }
   }
 
   /* NO KEY READS THE CLIPBOARD. Alt+V is pressed on both windows as Electron delivers a key: nothing is read,
-     no channel the shell opens is the clipboard's, and neither page's bridge offers a read. Openings read once
-     each, above; this sweep must not add another. */
+     no channel the shell opens is the clipboard's, and neither page's bridge offers a read. No opening reads it
+     either, above; this sweep must not add a read. */
   const readsAtSweep = clipReads;
   const ALT_V = { type: "keyDown", alt: true, control: false, meta: false, shift: false, code: "KeyV", isAutoRepeat: false };
   desk.fire("before-input-event", {}, ALT_V);
@@ -1337,6 +1307,10 @@ try {
   check(clipReads === readsAtSweep && clipDoors.length === 0 && clipVerbs.length === 0,
     "2v Alt+V on the desk's window and in the picker reads nothing, no channel is the clipboard's, and neither page is given a read: "
     + JSON.stringify({ reads: clipReads, channels: clipDoors, verbs: clipVerbs }));
+  /* qrw2: no opening in this whole run read the clipboard, and the desk has no door to note its own copies by. */
+  const PRE_QRW = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
+  check(clipReads === 0 && !("etiuda:own-text" in onH) && !/noteOwnText/.test(PRE_QRW),
+    "qrw2 no opening of the picker reads the clipboard, selected or not, and the own-text door is gone: " + JSON.stringify({ reads: clipReads, door: "etiuda:own-text" in onH, preload: /noteOwnText/.test(PRE_QRW) }));
 
   /* ---- 7, THE SHELL'S HALF (board 901), run here while the shell stands: the word after a pick, said where the
      picker stood in a window that takes neither the focus nor a click; the desk's own door; and Shift+Enter. ---- */
@@ -1433,7 +1407,7 @@ try {
     const RW_SEL = "hi sorry for late reply, we check your order tomorow", RW_OUT = "Hi, sorry for the late reply.\nWe will check it tomorrow.";
     const putRun = async (atOpen, atPut, result, config) => {
       SH.__rw.config(() => config === undefined ? { provider: "openai", endpoint: "https://api.openai.com/v1/", model: "m", key: "k", managed: {} } : config);
-      caret.there = true; caret.front = "4242 " + (process.pid + 1); caret.fail = false; caret.sel = atOpen; clipHeld = "";
+      caret.there = true; caret.front = "4242 " + (process.pid + 1); caret.fail = false; caret.sel = atOpen;
       if (pw.visible) { held.get("Control+Shift+Space")(); await until(() => !pw.visible); }
       const o0 = opened.length;
       held.get("Control+Shift+Space")();
@@ -1449,7 +1423,7 @@ try {
         note: nw && nw.visible ? noteSays(nw) : "" };
     };
     const same = await putRun(RW_SEL, RW_SEL, RW_OUT), moved = await putRun(RW_SEL, "a customer's message", RW_OUT);
-    const fromClip = await putRun(null, RW_SEL, RW_OUT), empty = await putRun(RW_SEL, RW_SEL, ""), off = await putRun(RW_SEL, RW_SEL, "", null);
+    const fromNone = await putRun(null, RW_SEL, RW_OUT), empty = await putRun(RW_SEL, RW_SEL, ""), off = await putRun(RW_SEL, RW_SEL, "", null);
     SH.__rw.config(() => null);
     caret.sel = null;
     const wantClip = SH.pickClipText(RW_OUT, process.platform);
@@ -1465,9 +1439,9 @@ try {
       check(same.got === false && same.runs.length === 0 && JSON.stringify(same.clip) === JSON.stringify([wantClip]), "7rw1 not Windows: no helper, the result on the clipboard: " + JSON.stringify(same));
       check(true, "7rw2 not Windows: no selection to read again");
     }
-    check(fromClip.got === false && fromClip.runs.filter(r => r === "selection" || r.indexOf("paste") === 0).length === 0
-      && fromClip.runs.indexOf("paste 4242") < 0 && JSON.stringify(fromClip.clip) === JSON.stringify([wantClip]) && fromClip.note === words.copied,
-      "7rw3 an opening on the clipboard, nothing selected, reads no selection at Enter and presses nothing: the result waits on the clipboard: " + JSON.stringify(fromClip));
+    check(fromNone.got === false && fromNone.runs.filter(r => r === "selection" || r.indexOf("paste") === 0).length === 0
+      && fromNone.runs.indexOf("paste 4242") < 0 && JSON.stringify(fromNone.clip) === JSON.stringify([wantClip]) && fromNone.note === words.copied,
+      "7rw3 an opening with nothing selected reads no selection at Enter and presses nothing: the result waits on the clipboard: " + JSON.stringify(fromNone));
     check(empty.got === false && empty.clip.length === 0 && empty.runs.filter(r => r !== "which" && r !== "selection").length === 0
       && off.offered === null && off.got === false && off.clip.length === 0,
       "7rw4 with no result kept nothing is written or pressed, and without a configuration the foot is not offered: " + JSON.stringify({ empty, off: off.offered }));
@@ -1478,9 +1452,9 @@ try {
       const body = at < 0 || end < 0 ? "" : SRC.slice(SRC.indexOf("{", at) + 1, end);
       const runPut = async src => {
         const ran = [];
-        const fn = new Function("e", "fromPicker", "pickerWorks", "pickReworded", "pickClipText", "pickSelectedNow", "pickTarget", "noteOwnText", "clipboard", "hidePicker",
+        const fn = new Function("e", "fromPicker", "pickerWorks", "pickReworded", "pickClipText", "pickSelectedNow", "pickTarget", "clipboard", "hidePicker",
           "showPickNote", "REWORD_PUT_WAIT_MS", "caretSelection", "caretPaste", src);
-        const got = await fn({}, () => true, () => true, RW_OUT, t => t, RW_SEL, "4242", () => {}, { writeText: () => ran.push("write") }, () => ran.push("hide"),
+        const got = await fn({}, () => true, () => true, RW_OUT, t => t, RW_SEL, "4242", { writeText: () => ran.push("write") }, () => ran.push("hide"),
           p => ran.push("note " + p), 1, () => Promise.resolve({ words: "a customer's message" }), () => ran.push("paste"));
         return { got, ran };
       };
@@ -1596,7 +1570,7 @@ try {
 
   /* 4s1 to 4s4: THE WORDS SELECTED ON THE SCREEN (Quick replies on the selection). The page is run again over a stand-in that
      also holds the note under the box. The words stand in the box with the note, and the box counts as at rest while they do:
-     the strip of what the shell suggested for them stands as for a copied message (a step up from the first row reaches it,
+     the strip of what the shell suggested for them stands (a step up from the first row reaches it,
      and Enter takes it, the agent's act), and nothing is searched or taken by itself. Typing over them hides the note and
      searches what is typed. 4s4 changes each of the two plants in a copy of the script and expects its leg red. */
   let runSelPage = null;
@@ -1818,6 +1792,101 @@ try {
   check(lastCall() === 'copy {"id":"a","vi":0}' && sgBtnPressed && sgBtnPressed.getAttribute("aria-pressed") === "true",
     "4s up, then Enter, then Enter copies row 0 and leaves the intent picked, counted once: " + lastCall());
 
+  /* ---- 4c. the suggested intents are one band of chips (board 1019 (6), direction A) ------------------------------------
+     The page's script is run over a stand-in that records what it draws and which keys it answers. The band's size is read
+     from the sheet the document carries, as arithmetic: no window opens here, so what the eye sees (seven whole replies
+     under a band of two lines at most, at the fixed 600 by 424) is held as the heights that add up to it. Alt+1 to Alt+5
+     take a chip as a click on it does; the arrows still step among the chips; nothing in the picker speaks of a copied message. */
+  {
+    const CHIPS = [{ id: "t:post", name: "Post" }, { id: "t:lamp", name: "Lamps" }, { id: "t:wick", name: "Wicks" },
+      { id: "t:glass", name: "Glass" }, { id: "t:oil", name: "Lamp oil" }, { id: "t:sixth", name: "Sixth" }];
+    const chipRun = async scriptText => {
+      const L = {}, q3 = { value: "", placeholder: "", focus() {}, setAttribute() {}, addEventListener: (t, fn) => { L[t] = fn; } };
+      let html = "";
+      const host = { el: null, insertBefore(el) { this.el = el; } };
+      const box3 = { parentNode: host, set innerHTML(v) { html = v; }, get innerHTML() { return html; }, setAttribute() {}, querySelectorAll: () => [], addEventListener() {} };
+      const calls = [];
+      let onOpen = null;
+      const W = { E_PICK: {
+        find: () => Promise.resolve(JSON.stringify({ rows: [R("found")] })),
+        takeSuggest: id => { calls.push("take " + id); return Promise.resolve(JSON.stringify({ rows: [R("s1")], picked: [id] })); },
+        copy: w => { calls.push("copy " + w); }, close() {}, ready() {}, onOpen: fn => { onOpen = fn; } } };
+      const D = { getElementById: id => (id === "q" ? q3 : id === "rows" ? box3 : null),
+        createElement: tag => ({ tagName: tag, id: "", className: "", title: "", textContent: "", type: "", children: [], attrs: {}, L: {},
+          setAttribute(k, v) { this.attrs[k] = String(v); if (k === "id") this.id = String(v); },
+          getAttribute(k) { return this.attrs[k] || ""; },
+          appendChild(c) { this.children.push(c); return c; }, remove() {}, addEventListener(t, fn) { this.L[t] = fn; } }),
+        documentElement: { style: { setProperty() {} }, dataset: {}, classList: { toggle() {} }, lang: "" } };
+      new Function("window", "document", scriptText)(W, D);
+      const key = (k, code, mods) => { let prevented = false;
+        L.keydown(Object.assign({ key: k, code: code, ctrlKey: false, altKey: false, metaKey: false, shiftKey: false, preventDefault() { prevented = true; } }, mods || {}));
+        return prevented; };
+      onOpen(JSON.stringify({ rows: pRows, suggest: CHIPS.slice(0, 5), words: { suggest: "Suggested", suggestTip: "tip" } }));
+      await tick(5);
+      const chips = () => host.el ? host.el.children.filter(c => c.tagName === "button") : [];
+      const alt = [];
+      for (let n = 1; n <= 6; n++) { const c0 = calls.length; const stopped = key(String(n), "Digit" + n, { altKey: true }); await tick(5); alt.push([n, calls.slice(c0).join(","), stopped]); }
+      const c1 = calls.length;
+      key("1", "Numpad1", { altKey: true, ctrlKey: true }); key("1", "Digit1", { altKey: true, shiftKey: true });
+      q3.value = "lamp"; key("1", "Digit1", { altKey: true }); q3.value = "";
+      await tick(5);
+      const ignored = calls.slice(c1);
+      const c2 = calls.length;
+      host.el.L.click({ target: { closest: () => chips()[1] }, ctrlKey: false });
+      await tick(5);
+      const clicked = calls.slice(c2);
+      const mark = () => chips().map(c => c.getAttribute("aria-selected")).join("");
+      key("ArrowRight", "ArrowRight"); const afterRight0 = mark();
+      key("ArrowUp", "ArrowUp"); key("ArrowUp", "ArrowUp"); const afterUp = mark();
+      key("ArrowRight", "ArrowRight"); const afterRight = mark(); key("ArrowRight", "ArrowRight"); const afterWrap = mark(); key("ArrowLeft", "ArrowLeft"); key("ArrowLeft", "ArrowLeft"); const afterLeft = mark();
+      return { alt, ignored, clicked, afterRight0, afterUp, afterRight, afterWrap, afterLeft, keys: chips().map(c => c.getAttribute("aria-keyshortcuts")),
+        names: chips().map(c => c.textContent), label: host.el.children[0] && host.el.children[0].textContent };
+    };
+    const J4c = JSON.stringify;
+    const chipsOn = await chipRun(script);
+    const wantAlt = [[1, "take t:post", true], [2, "take t:lamp", true], [3, "take t:wick", true], [4, "take t:glass", true], [5, "take t:oil", true], [6, "", false]];
+    check(J4c(chipsOn.alt) === J4c(wantAlt) && J4c(chipsOn.keys) === J4c(["Alt+1", "Alt+2", "Alt+3", "Alt+4", "Alt+5"])
+      && J4c(chipsOn.names) === J4c(["Post", "Lamps", "Wicks", "Glass", "Lamp oil"]) && chipsOn.label === "Suggested",
+      "4chips1 five chips under the label, and Alt+1 to Alt+5 take chip 1 to 5 as the key's own act, Alt+6 taking nothing: " + J4c(chipsOn));
+    check(chipsOn.ignored.length === 0 && J4c(chipsOn.clicked) === J4c(["take t:lamp"]) && chipsOn.afterRight0 === "falsefalsefalsefalsefalse"
+      && chipsOn.afterUp === "falsefalsefalsetruefalse" && chipsOn.afterRight === "falsefalsefalsefalsetrue" && chipsOn.afterWrap === "truefalsefalsefalsefalse" && chipsOn.afterLeft === "falsefalsefalsetruefalse",
+      "4chips2 Alt with Ctrl or Shift, or over a typed query, takes nothing; a click takes the chip as the row's Enter does; with a chip marked the"
+      + " arrows still step among them, Left and Right as Up and Down do: " + J4c(chipsOn));
+    const sheetOf = (d, sel) => { const i = d.indexOf("\n" + sel + "{"); return i < 0 ? "" : d.slice(i + sel.length + 2, d.indexOf("}", i)); };
+    const prop = (r, name) => { const m = new RegExp("(?:^|;)" + name + ":([^;]*)").exec(r); return m ? m[1].trim() : ""; };
+    const px = v => parseFloat(v) || 0;
+    const wrapOk = d => { const sgR = sheetOf(d, "#sg"), labR = sheetOf(d, "#sg .sg-lab"), btnR = sheetOf(d, "#sg button");
+      return /^flex$/.test(prop(sgR, "display")) && prop(sgR, "flex-wrap") === "wrap" && prop(sgR, "flex-direction") === "" && !/width:100%/.test(btnR)
+        && /max-width:calc\(33\.3+% - \d+px\)/.test(btnR) && prop(labR, "flex") === "0 0 100%"; };
+    check(wrapOk(doc),
+      "4chips3 the band is a wrapping row: each chip as wide as its words (never the full width), at most a third of the band so two lines hold"
+      + " five, the label on a line of its own: " + J4c({ sg: sheetOf(doc, "#sg"), lab: sheetOf(doc, "#sg .sg-lab"), btn: sheetOf(doc, "#sg button") }));
+    const mainSrc = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
+    const size = /const PICK_SIZE = \{ width: (\d+), height: (\d+) \}/.exec(mainSrc);
+    const sgR = sheetOf(doc, "#sg"), labR = sheetOf(doc, "#sg .sg-lab"), btnR = sheetOf(doc, "#sg button"), bodyR = sheetOf(doc, "body"),
+      topR = sheetOf(doc, "#top"), rowR = sheetOf(doc, "#rows li"), footR = sheetOf(doc, "footer");
+    const chipH = px(prop(btnR, "height")), gap = px(prop(sgR, "gap")), lab = px(prop(labR, "line-height"));
+    const band = lab + gap + 2 * chipH + gap, pad = px(prop(bodyR, "padding")), bodyGap = px(prop(bodyR, "gap")), top = px(prop(topR, "flex").split(" ")[2]);
+    const foot = px(prop(footR, "padding").split(" ")[0]) + 1 + Math.ceil(px(prop(footR, "font-size")) * 1.35);
+    const room = (size ? +size[2] : 0) - 2 * pad - top - band - foot - 3 * bodyGap, rowH = px(prop(rowR, "height"));
+    check(!!size && +size[1] === 600 && +size[2] === 424 && prop(sgR, "max-height") === band + "px" && chipH > 0 && rowH === 36 && room >= 7 * rowH,
+      "4chips4 at the fixed 600 by 424 the band is two lines at most and seven whole replies show beneath it: window " + J4c(size && size.slice(1, 3))
+      + ", band " + band + " (cap " + prop(sgR, "max-height") + "), room for the replies " + room + " against " + 7 * rowH);
+    if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  4chips5 the chips' two plants (ETIUDA_PLANTS=off)");
+    else {
+      const sLines = script.split("\n");
+      const altHits = sLines.filter(l => l.indexOf("plant:pick-chip-alt") >= 0).length;
+      const wrapLines = mainSrc.split("\n").filter(l => l.indexOf("plant:pick-chip-wrap") >= 0);
+      const noAlt = sLines.map(l => (l.indexOf("plant:pick-chip-alt") >= 0 ? l.replace("e.altKey &&", "false &&") : l)).join("\n");
+      const planted = await chipRun(noAlt);
+      const noWrap = doc.replace("\n#sg{" + sgR + "}", "\n#sg{" + sgR.replace("flex-wrap:wrap", "flex-wrap:nowrap") + "}");
+      check(altHits === 1 && noAlt !== script && J4c(planted.alt) !== J4c(wantAlt) && wrapLines.length === 1 && wrapLines[0].indexOf("flex-wrap:wrap") >= 0
+        && noWrap !== doc && !wrapOk(noWrap) && wrapOk(doc),
+        "4chips5 rewriting plant:pick-chip-alt leaves Alt+n taking nothing, and rewriting plant:pick-chip-wrap (the band's wrapping) is what 4chips3 reads red: "
+        + J4c({ altHits, wrapHits: wrapLines.length, alt: planted.alt }));
+    }
+  }
+
   /* ---- 5. what the shell may not do -------------------------------------------------------- */
   console.log("\n[5/7] what the shell may not do, read from its text with the comments taken out");
   /* THE COMMENTS ARE TAKEN OUT BY A PARSER, esbuild's own, which reprints the program without them and with its
@@ -1845,13 +1914,10 @@ try {
     .concat(blank(fs.readFileSync(path.join(ROOT, "src", "main.js"), "utf8"))).join("\n");
   const engineBare = mask(engineCode);
   const FORBID = /desktopCapturer|capturePage|getSources|getDisplayMedia|getUserMedia|clipboard\s*\.\s*read|clipboard-read|readText|readHTML|readImage|readRTF|readBookmark|readBuffer|readFindText|availableFormats|sendInputEvent|SendKeys|SendInput|keybd_event|mouse_event|SetWindowsHookEx|GetForegroundWindow|GetWindowText|WindowFromPoint|AttachThreadInput|uiohook|iohook|robotjs|nut-js|UIAutomation/g;
-  /* The one read is the picker's open. A second site still matches once that one is hidden. */
+  /* The shell reads the clipboard nowhere. A read planted beside its writes is found. */
   const clipSites = shellCode.match(/clipboard\s*\.\s*readText\s*\(\s*\)/g) || [];
-  const planted = shellCode.replace("clipboard.readText()", "clipboard.readText();clipboard.readText()");
-  const plantedSites = (planted.match(/clipboard\s*\.\s*readText\s*\(\s*\)/g) || []).length;
-  const plantedReach = (planted.replace("clipboard.readText()", "clipboard.kept()").match(FORBID) || []).length;
-  const scored = shellCode.replace("clipboard.readText()", "clipboard.kept()");
-  const reach = (scored + "\n" + engineCode).match(FORBID) || [];
+  const plantedReach = ((shellCode + "\nclipboard.readText();").match(FORBID) || []).length;
+  const reach = (shellCode + "\n" + engineCode).match(FORBID) || [];
   /* EVERY HANDLE ON THE CLIPBOARD IS ONE OF THE KNOWN ONES (board 818): a read through another name, as
      `const { clipboard: cb } = require("electron")` then `cb.read(...)`, names no API the list above knows. In the
      shell the name stands only as a member of a `require("electron")` destructure, taken whole, and before its one
@@ -1865,7 +1931,6 @@ try {
   const inSpan = i => spans.some(s => i >= s[0] && i < s[1]);
   const oddHandles = at(shellBare, /\bclipboard\b(?!-)/g).filter(i => {
     if (shellCode.startsWith("clipboard.writeText(", i)) return false;
-    if (shellCode.startsWith("clipboard.readText(", i)) return false;
     return !(inSpan(i) && /[{,]\s*$/.test(shellCode.slice(i - 2, i)) && /^clipboard\s*[,}]/.test(shellCode.slice(i, i + 11)));
   }).map(i => shellCode.slice(i, i + 24))
     .concat(at(shellBare, /\brequire\s*\(/g).filter(i => /^require\(\s*"electron"\s*\)/.test(shellCode.slice(i, i + 22)) && !inSpan(i)
@@ -1876,12 +1941,12 @@ try {
   check(reach.length === 0 && oddHandles.length === 0 && /clipboard/.test(shellCode) && /writeText/.test(shellCode),
     "5a no API in the shell or the engine reads another window, the screen or the clipboard, or presses a key itself, and the clipboard is"
     + " reached through no other name: " + (reach.concat(oddHandles).join(", ") || "none"));
-  check(clipSites.length === 1 && plantedSites === 2 && plantedReach > 0,
-    "5aa the shell reads the clipboard at one place, the picker's open, and a second read is refused: "
-    + clipSites.length + " site(s), planted " + plantedSites + ", forbid hits " + plantedReach);
+  check(clipSites.length === 0 && plantedReach > 0,
+    "5aa the shell reads the clipboard at no place, and a read planted in it is refused: "
+    + clipSites.length + " site(s), forbid hits on the plant " + plantedReach);
   const writes = shellCode.match(/clipboard\s*\.\s*write\w*\s*\(/g) || [];
   /* Two places since Enter after a reword: the desk's own copy, and the reword's result the shell itself kept (pickReworded). */
-  const putSite = /const text=pickClipText\(pickReworded,process\.platform\),was=pickSelectedNow,target=pickTarget;pickReworded="";noteOwnText\(text\);clipboard\.writeText\(text\);hidePicker\(true\);/.test(shellCode);
+  const putSite = /const text=pickClipText\(pickReworded,process\.platform\),was=pickSelectedNow,target=pickTarget;pickReworded="";clipboard\.writeText\(text\);hidePicker\(true\);/.test(shellCode);
   check(writes.length === 2 && /clipboard\.writeText\(pickClipText\(v\.text,\s*process\.platform\)\)/.test(shellCode) && putSite
     && (shellBare.match(/clipboard\.writeText\(/g) || []).length === 2,
     "5b the shell writes the clipboard at two places, the desk's own text and the reword's result it kept: " + writes.length + " write site(s), the put's " + putSite);

@@ -1661,15 +1661,17 @@ CASES.linkPage = async () => {
   storage.lsSet("eUiLang", "pl");
   let pl = "";
   try { pl = P.signinPanelHtml(P.signinDoor(P.signinRead(waitV))); } finally { storage.lsSet("eUiLang", "en"); }
-  /* Copy, through the host's own-text note the code's Copy uses. */
+  /* Copy, through the clipboard write the code's Copy makes. */
   const copied = [];
-  globalThis.window = { E_HOST: { noteOwnText: x => copied.push(x) } };
+  const navCopy = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  Object.defineProperty(globalThis, "navigator", { value: { clipboard: { writeText: x => { copied.push(x); return Promise.resolve(); } } }, configurable: true, writable: true });
+  globalThis.window = { isSecureContext: true };
   globalThis.document = { querySelector: () => null };
   try {
     P.signinChanged(waitV, false); P.signinAct("copylink");
     P.signinChanged({ offered: ["microsoft"], signedIn: "microsoft", code: CODE, seat: "held" }, false); P.signinAct("copylink"); P.signinAct("copy");
     P.signinChanged({ offered: ["microsoft"] }, false);
-  } finally { delete globalThis.window; delete globalThis.document; }
+  } finally { delete globalThis.window; delete globalThis.document; if (navCopy) Object.defineProperty(globalThis, "navigator", navCopy); else delete globalThis.navigator; }
   return d.moment === "waiting" && d.link === LINK_URL && panel.indexOf('</button></div><div class="sgn-link" data-signin-link>') > 0
     && panel.indexOf(field) > 0 && words(panel).indexOf(LINK_LINE) >= 0 && panel.lastIndexOf("data-signin-link") > panel.lastIndexOf('data-signin-act="stop"')
     && none.every(h => !/data-signin-link/.test(h)) && /data-signin-act="stop">Cancel<\/button><\/span><div class="sgn-link" data-signin-link>/.test(acct)
@@ -1800,7 +1802,7 @@ CASES.copiedLabel = async () => {
   const btn = () => { const set = new Set(); return { set, classList: { add: c => set.add(c), remove: c => set.delete(c), contains: c => set.has(c) } }; };
   let took = true;
   Object.defineProperty(globalThis, "navigator", { value: { clipboard: { writeText: () => took ? Promise.resolve() : Promise.reject(new Error("refused")) } }, configurable: true, writable: true });
-  globalThis.window = { isSecureContext: true, E_HOST: { noteOwnText() {} } };
+  globalThis.window = { isSecureContext: true };
   globalThis.document = { querySelector: () => null };
   const code = btn(), refused = btn(), link = btn();
   let during = false, after = true, linkDuring = false;
@@ -4218,9 +4220,9 @@ CASES.pickRefused = (s, swap) => {
   }
   const run = (works, visible) => {
     const st = { focus: 0, hide: 0, asked: 0, caret: 0, works };
-    const names = ["pickWin", "hidePicker", "theWindow", "signinWorksNow", "focusDesk", "hidePickNote", "caretWhich", "caretSelection", "pickTrace", "pickWithClip", "withClipText", "console"];
+    const names = ["pickWin", "hidePicker", "theWindow", "signinWorksNow", "focusDesk", "hidePickNote", "caretWhich", "caretSelection", "pickTrace", "pickWithClip", "console"];
     const vals = [{ isDestroyed: () => false, isVisible: () => visible === true }, () => { st.hide++; }, { isDestroyed: () => false }, () => { st.asked++; return st.works; },
-      () => { st.focus++; }, () => {}, () => { st.caret++; return Promise.resolve(null); }, () => new Promise(() => {}), () => {}, () => {}, () => {}, { error() {} }];
+      () => { st.focus++; }, () => {}, () => { st.caret++; return Promise.resolve(null); }, () => new Promise(() => {}), () => {}, () => {}, { error() {} }];
     const f = new Function(...names, "let pickOpening = false, pickPress = 0, pickTarget = null;\n" + text + "\npickToggle();\nreturn pickOpening;");
     st.opening = f(...vals);
     return st;

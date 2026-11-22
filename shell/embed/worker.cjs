@@ -1,6 +1,6 @@
 /* THE SUGGESTION WORKER, a process of its own beside the desk (shell/embed/suggest.cjs starts it): the model files are
  * checked against their pin, the runtime and the tokenizer are loaded from the folder the shell names, every intent's
- * passages are embedded, and then each copied message is answered with the five nearest intents.
+ * passages are embedded, and then each selection is answered with the five nearest intents.
  * A message is held only inside its own handler: it is never logged, written or sent anywhere but back as ids. */
 "use strict";
 
