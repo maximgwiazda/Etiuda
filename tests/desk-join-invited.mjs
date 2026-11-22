@@ -39,8 +39,8 @@ const MANAGE = fs.readFileSync(path.join(ROOT, "src", "modules", "manage.js"), "
 const MENUS = fs.readFileSync(path.join(ROOT, "src", "modules", "header-menus.js"), "utf8");
 const TEMPLATE = fs.readFileSync(path.join(ROOT, "src", "template.html"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const SHELL_PLANTS = 8, PAGE_PLANTS = 7;
-const EXPECTED = 9 + (PLANTS_OFF ? 0 : SHELL_PLANTS + PAGE_PLANTS);
+const SHELL_PLANTS = 10, PAGE_PLANTS = 9;
+const EXPECTED = 10 + (PLANTS_OFF ? 0 : SHELL_PLANTS + PAGE_PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -289,6 +289,33 @@ CASES.noPaste = () => {
     && !/openJoinPaste|joinDoorButton/.test(MANAGE) && cardActs === 0;
 };
 
+/* dji8: a lead with no name (the service may send none). Each line that names {LEAD} takes its own nameless form (the copywriter's
+   addendum of 08:14): the wait's second line takes the no-lead line, the invitation and the confirm their nameless lines; nothing is put
+   in the name's place, no sentence says "the team's lead" twice, and the shell keeps the nameless wait without writing it among the
+   leads an answer named, until a seat comes. English and Polish. */
+CASES.nameless = (pg) => {
+  const P = pg || PG, S = shellOf();
+  const sentences = h => words(h).split(/(?<=.)s+/);
+  const twice = h => sentences(h).some(x => (x.toLowerCase().split("the team's lead").length > 2) || (x.toLowerCase().split("lider zespołu").length > 2));
+  const inv = [{ n: 0, lead: "", team: "Front desk", until: UNTIL }];
+  const en = drawn(Object.assign({}, VIEWS.noteam, { invited: inv }), "en", pg), pl = drawn(Object.assign({}, VIEWS.none, { invited: inv }), "pl", pg);
+  const enRow = "This account is invited to join Front desk by its lead.", plRow = "Lider zaprasza to konto do zespołu. Zespół: Front desk.";
+  const rowOk = has(words(en.door), enRow) && has(words(en.acct), enRow) && has(words(pl.full), plRow) && has(words(pl.acct), plRow)
+    && !/ invites this account to join /.test(words(en.door + en.acct)) && !has(words(en.door + en.acct), "The team's lead invites");
+  const wv = Object.assign({}, VIEWS.noteam, { joinWait: "-" }), we = drawn(wv, "en", pg), wp = drawn(wv, "pl", pg);
+  const enWait = "Microsoft does not vouch for this account's address, so the team's lead confirms it next; this computer then takes its seat by itself. Nothing is needed here meanwhile.";
+  const plWait = "Microsoft nie poświadcza adresu tego konta, więc teraz potwierdza to lider zespołu. Potem ten komputer sam zajmie miejsce; tutaj nic nie trzeba robić.";
+  const waitOk = has(words(we.door), enWait) && has(words(we.acct), enWait) && has(words(wp.door), plWait) && !/s-,|: -./.test(words(we.door + we.acct + wp.door));
+  storage.lsSet("eUiLang", "en");
+  const say = P.signinSay("waiting", P.signinRead(VIEWS.full), { team: { lead: "" }, teamName: "Team" });
+  const sayOk = say[1] === "The sign-in worked. This computer takes a seat by itself as soon as one is free; nothing is needed here.";
+  const held = { invited: S.signinInvitedOf([{ licence: LICENCE, lead: { person: LEAD_P, name: null }, team: TEAM, label: "Front desk", until: UNTIL, confirm: true }]), asked: [] };
+  const w = S.signinJoinSettle(held, 0, "waiting");
+  const shellOk = w.joinWait === "-" && (w.asked || []).indexOf("-") < 0 && S.signinJoinWaitKept(w, { asked: [] }) === "-"
+    && S.signinJoinWaitKept(w, { asked: [], holding: { on: "trial" } }) === "-" && S.signinJoinWaitKept(w, { asked: [], holding: { on: "team" } }) === "";
+  return rowOk && waitOk && sayOk && shellOk && ![en.door, en.acct, pl.full, pl.acct, we.door, we.acct, wp.door].some(twice);
+};
+
 /* ---- the built page, in headless Chrome ----------------------------------------------------------------------------------- */
 async function builtPage() {
   const E = require("./engine.js");
@@ -368,6 +395,7 @@ check(await run("settle") && await run("pageWait"), "dji4 a Join answered waitin
 check(await run("pagePress"), "dji5 a refused Join says so in one line, where it was pressed, until the next act");
 check(await run("handoff"), "dji6 Buy's handoff to the order page is unchanged in shape: the fragment the shell builds from its own view");
 check(await run("pageWords"), "dji6b the door's and Account's words say how a seat comes now: a lead's invitation to the address, a link, or a purchase where Buy is shown; signed out, Buy says signing in comes first");
+check(await run("nameless"), "dji8 a lead with no name: the wait, the invitation and the confirm take their nameless forms, nothing stands in for the name, no sentence repeats the team's lead, English and Polish");
 check(await run("noPaste"), "dji7 no paste field outside the empty desk: Settings, the Library and the Menu draw no Join a team, and no request card offers the paste");
 
 /* ---- the plants ----------------------------------------------------------------------------------------------------------- */
@@ -389,12 +417,16 @@ if (!PLANTS_OFF && !sliced) {
     "return { kind: \"desk\", key: String(desk), licence: inv.licence, lead: inv.lead.person, t: t, sig: sig };"], "join", "join-body without the team: the ask would name none");
   await plantShell("djp4", ["if (res.status === 200 && j && j.ok === true && (j.state === \"accepted\" || j.state === \"waiting\")) return j.state; /* plant:join-answer */",
     "if (res.status === 200 && j && j.ok === true) return \"accepted\";"], "join", "join-answer: a waiting answer would read as accepted");
-  await plantShell("djp5", ["if (said === \"waiting\") Object.assign(out, { joinWait: lead, asked: asked.indexOf(lead) >= 0 ? asked : asked.concat([lead]).slice(0, 8) }); /* plant:join-wait */", ""],
+  await plantShell("djp5", ["if (said === \"waiting\") Object.assign(out, { joinWait: lead }, lead === \"-\" || asked.indexOf(lead) >= 0 ? {} : { asked: asked.concat([lead]).slice(0, 8) }); /* plant:join-wait */", ""],
     "settle", "join-wait cut: a confirm waiting would leave the desk saying nothing waits");
   await plantShell("djp6", ["storeServiceAt(\"ask\")].indexOf(String(url)) < 0", "].indexOf(String(url)) < 0"], "join", "the service's door without ask: the Join would never leave");
   await plantShell("djp7", ["return list.map((x, n) => Object.assign({ n: n, lead: x.lead.name, team: x.label || x.team || \"\", until: x.until }, x.confirm ? { confirm: true } : {})); /* plant:invited-view */",
     "return list.map((x, n) => Object.assign({ n: n, lead: x.lead.name, team: x.label || x.team || \"\", until: x.until, person: x.lead.person }, x.confirm ? { confirm: true } : {}));"],
     "shellInvited", "invited-view handing the pseudonym: the page would hold the lead's key");
+  await plantShell("djp16", ["if (w === \"-\") return ans && !(ans.holding && [\"team\", \"org\", \"own\"].indexOf(ans.holding.on) >= 0) ? w : \"\"; /* plant:join-wait-nameless */", ""],
+    "nameless", "join-wait-nameless cut: a nameless wait would be dropped at the next answer");
+  await plantShell("djp17", ["Object.assign(out, { joinWait: lead }, lead === \"-\" || asked.indexOf(lead) >= 0 ? {} : { asked: asked.concat([lead]).slice(0, 8) });",
+    "Object.assign(out, { joinWait: lead }, asked.indexOf(lead) >= 0 ? {} : { asked: asked.concat([lead]).slice(0, 8) });"], "nameless", "the nameless mark written among the leads: the door would name \"-\"");
   {
     let red = false;
     PRELOAD_SWAP = ["delete o.code; /* plant:page-view-code */", ""];
@@ -413,6 +445,9 @@ if (!PLANTS_OFF && !sliced) {
   await plantPage("djp15", ["return [t(\"No Etiuda licence has a seat for this account.\"), buyOffered() ? t(\"The sign-in worked. A seat comes from a team's lead, by an invitation to this account's email address or a link, or from a purchase; another account can be used meanwhile.\")",
     "return [t(\"No Etiuda licence has a seat for this account.\"), false ? t(\"The sign-in worked. A seat comes from a team's lead, by an invitation to this account's email address or a link, or from a purchase; another account can be used meanwhile.\")"],
     "pageWords", "the purchase named where Buy is not shown, or not where it is: the words would not follow Buy");
+  await plantPage("djp18", ["const line=named(x.lead ? named(t(\"{LEAD} invites this account to join {TEAM}.\"),\"{LEAD}\",x.lead) : t(\"This account is invited to join {TEAM} by its lead.\"),\"{TEAM}\",x.team||t(\"Team\")); /* plant:invite-nameless */",
+    "const line=named(named(t(\"{LEAD} invites this account to join {TEAM}.\"),\"{LEAD}\",x.lead||t(\"The team's lead\")),\"{TEAM}\",x.team||t(\"Team\"));"], "nameless", "invite-nameless: a stand-in in the name's place");
+  await plantPage("djp19", ["const hasName=!!v.joinWait && v.joinWait!==\"-\"; /* plant:wait-nameless */", "const hasName=!!v.joinWait;"], "nameless", "wait-nameless: the named confirm line with nothing to name");
 }
 
 console.log((failed ? "FAIL" : "ok") + " desk-join-invited: " + (asserted - failed) + "/" + asserted + " checks"

@@ -11593,9 +11593,11 @@ const signinInvitedWords = list => Array.isArray(list) && list.length ? { invite
 function signinInvitedView(list) {
   return list.map((x, n) => Object.assign({ n: n, lead: x.lead.name, team: x.label || x.team || "", until: x.until }, x.confirm ? { confirm: true } : {})); /* plant:invited-view */
 }
-/* The lead a Join answered "waiting" waits on, kept across an answer only while that answer still names an open request to them. */
+/* The lead a Join answered "waiting" waits on ("-" for a lead with no name), kept across an answer only while that answer still names an
+   open request to them; the nameless one while the answer seats the person on no team, organisation or licence of their own. */
 function signinJoinWaitKept(held, ans) {
   const w = held && typeof held.joinWait === "string" ? held.joinWait : "";
+  if (w === "-") return ans && !(ans.holding && ["team", "org", "own"].indexOf(ans.holding.on) >= 0) ? w : ""; /* plant:join-wait-nameless */
   return w && ans && Array.isArray(ans.asked) && ans.asked.indexOf(w) >= 0 ? w : "";
 }
 /* THE JOIN: the licence service's route ask (Studio's service/licence/requests.mjs askBytes), signed by the desk key: its line, then the
@@ -11626,7 +11628,7 @@ function signinJoinSettle(held, n, said) {
   const out = Object.assign({}, held, { invited: list.filter((x, i) => i !== n) }), lead = inv.lead.name || "-", asked = Array.isArray(held.asked) ? held.asked : [];
   delete out.joinWait;
   if (!out.invited.length) delete out.invited;
-  if (said === "waiting") Object.assign(out, { joinWait: lead, asked: asked.indexOf(lead) >= 0 ? asked : asked.concat([lead]).slice(0, 8) }); /* plant:join-wait */
+  if (said === "waiting") Object.assign(out, { joinWait: lead }, lead === "-" || asked.indexOf(lead) >= 0 ? {} : { asked: asked.concat([lead]).slice(0, 8) }); /* plant:join-wait */
   return out;
 }
 function signinTrialsOf(v) {

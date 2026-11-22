@@ -9644,7 +9644,8 @@ What is typed here stays in this browser.`;
     "The organisation's Etiuda licence seats the people its leads add.": "Licencja Etiudy tej organizacji daje miejsce osobom, które dodają jej liderzy.",
     "The team's lead invites this account by its email address, and the invitation appears here with one Join; a link from the lead, opened on this computer, does the same.": "Lider zespołu zaprasza to konto na jego adres e-mail, a zaproszenie pojawia się tutaj z jednym przyciskiem Dołącz; to samo daje link od lidera otwarty na tym komputerze.",
     "{PROVIDER} does not vouch for this account's address, so {LEAD}, the team's lead, confirms it next; this computer then takes its seat by itself. Nothing is needed here meanwhile.": "{PROVIDER} nie poświadcza adresu tego konta, więc teraz potwierdza to lider zespołu: {LEAD}. Potem ten komputer sam zajmie miejsce; tutaj nic nie trzeba robić.",
-    "The team's lead": "Lider zespołu",
+    "This account is invited to join {TEAM} by its lead.": "Lider zaprasza to konto do zespołu. Zespół: {TEAM}.",
+    "{PROVIDER} does not vouch for this account's address, so the team's lead confirms it next; this computer then takes its seat by itself. Nothing is needed here meanwhile.": "{PROVIDER} nie poświadcza adresu tego konta, więc teraz potwierdza to lider zespołu. Potem ten komputer sam zajmie miejsce; tutaj nic nie trzeba robić.",
     "This account's own trial is running.": "Trwa własny okres próbny tego konta.",
     "Fourteen days, until {DATE}, on up to three computers. A lead can add this account at any time, without waiting for the trial to end.": "Czternaście dni, do {DATE}, najwyżej na trzech komputerach. Lider może dodać to konto w każdej chwili, bez czekania na koniec okresu próbnego.",
     "The sign-in worked. This computer takes a seat by itself as soon as one is free; nothing is needed here.": "Logowanie się powiodło. Ten komputer sam zajmie miejsce, gdy tylko któreś się zwolni; tutaj nie trzeba nic robić.",
@@ -31297,18 +31298,19 @@ What is typed here stays in this browser.`;
     return (invited || []).map((x) => '<div class="sgn-code sgn-invite" data-signin-invite-row><span>' + esc(signinInvitedLine(x)) + '</span><button type="button" class="btn primary" data-signin-act="join" data-signin-invite="' + esc(String(x.n)) + '">' + esc(t("Join")) + "</button></div>").join("") + (refused ? signinJoinRefusedHtml() : "");
   }
   function signinInvitedLine(x) {
-    const line = named(named(t("{LEAD} invites this account to join {TEAM}."), "{LEAD}", x.lead || t("The team's lead")), "{TEAM}", x.team || t("Team"));
+    const line = named(x.lead ? named(t("{LEAD} invites this account to join {TEAM}."), "{LEAD}", x.lead) : t("This account is invited to join {TEAM} by its lead."), "{TEAM}", x.team || t("Team"));
     return x.until ? line + " " + named(t("Open until {DATE}."), "{DATE}", doorDay(x.until, Date.now())) : line;
   }
   function signinJoinRefusedHtml() {
     return '<p class="sgn-cap sgn-join-no" role="status">' + esc(t("The invitation could not be taken, so nothing has changed. The team's lead can send a new one.")) + "</p>";
   }
   function signinJoinWaitWords(v) {
+    const hasName = !!v.joinWait && v.joinWait !== "-";
     return [t("The request to join is waiting."), named(named(
-      t("{PROVIDER} does not vouch for this account's address, so {LEAD}, the team's lead, confirms it next; this computer then takes its seat by itself. Nothing is needed here meanwhile."),
+      hasName ? t("{PROVIDER} does not vouch for this account's address, so {LEAD}, the team's lead, confirms it next; this computer then takes its seat by itself. Nothing is needed here meanwhile.") : t("{PROVIDER} does not vouch for this account's address, so the team's lead confirms it next; this computer then takes its seat by itself. Nothing is needed here meanwhile."),
       "{PROVIDER}",
       SIGNIN_NAMES[v.signedIn] || ""
-    ), "{LEAD}", v.joinWait === "-" ? t("The team's lead") : v.joinWait)];
+    ), "{LEAD}", v.joinWait)];
   }
   function signinSeatTaken(ds) {
     return ds.state === "working" && (ds.seatOn === "team" || ds.seatOn === "org" || ds.seatOn === "own");

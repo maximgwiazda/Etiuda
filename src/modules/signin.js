@@ -751,7 +751,8 @@ function signinInvitedHtml(invited, refused){
     +(refused ? signinJoinRefusedHtml() : "");
 }
 function signinInvitedLine(x){
-  const line=named(named(t("{LEAD} invites this account to join {TEAM}."),"{LEAD}",x.lead||t("The team's lead")),"{TEAM}",x.team||t("Team"));
+  /* A lead with no name has the line's own nameless form; nothing stands in for the name. */
+  const line=named(x.lead ? named(t("{LEAD} invites this account to join {TEAM}."),"{LEAD}",x.lead) : t("This account is invited to join {TEAM} by its lead."),"{TEAM}",x.team||t("Team")); /* plant:invite-nameless */
   return x.until ? line+" "+named(t("Open until {DATE}."),"{DATE}",doorDay(x.until, Date.now())) : line;
 }
 function signinJoinRefusedHtml(){
@@ -759,8 +760,10 @@ function signinJoinRefusedHtml(){
 }
 /* The request a Join left waiting for the lead's confirm: the drawn head, and the line naming the provider and the lead. */
 function signinJoinWaitWords(v){
-  return [t("The request to join is waiting."), named(named(t("{PROVIDER} does not vouch for this account's address, so {LEAD}, the team's lead, confirms it next; this computer then takes its seat by itself. Nothing is needed here meanwhile."),
-    "{PROVIDER}",SIGNIN_NAMES[v.signedIn]||""),"{LEAD}",v.joinWait==="-" ? t("The team's lead") : v.joinWait)];
+  const hasName=!!v.joinWait && v.joinWait!=="-"; /* plant:wait-nameless */
+  return [t("The request to join is waiting."), named(named(hasName ? t("{PROVIDER} does not vouch for this account's address, so {LEAD}, the team's lead, confirms it next; this computer then takes its seat by itself. Nothing is needed here meanwhile.")
+    : t("{PROVIDER} does not vouch for this account's address, so the team's lead confirms it next; this computer then takes its seat by itself. Nothing is needed here meanwhile."),
+    "{PROVIDER}",SIGNIN_NAMES[v.signedIn]||""),"{LEAD}",v.joinWait)];
 }
 /* Whether the seat a Join waited for is here: a team's, the organisation's or the person's own licence. */
 function signinSeatTaken(ds){ return ds.state==="working" && (ds.seatOn==="team" || ds.seatOn==="org" || ds.seatOn==="own"); }
