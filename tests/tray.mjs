@@ -607,6 +607,16 @@ async function run() {
     check(wordsEn.every(w => mainText.includes('"' + w + '"')) && wordsPl.every(w => mainText.includes('"' + w + '"')),
       "tb12 the bubble's body and its quiet button are the copywriter's words, English and Polish");
 
+    const goOf = (src) => { try { return new Function(fnOf(src, "bubbleGo") + "\nreturn bubbleGo;")(); } catch (err) { return () => "threw: " + err.message; } };
+    const go = goOf(mainText);
+    const gos = ["bubble:ok", "bubble:off", "bubble:open", "bubble:evil", "bubble:ok ", "https://example.com/", "file:///c:/x", "", undefined, "BUBBLE:OK"].map((u) => go(u));
+    check(JSON.stringify(gos) === JSON.stringify(["ok", "off", "open", "", "", "", "", "", "", ""]),
+      "tb17 a press in the bubble is a link that is caught and never followed: only bubble:ok, bubble:off and bubble:open mean anything, any other address means nothing: " + JSON.stringify(gos));
+    const doc = fnOf(mainText, "bubbleDoc");
+    check(doc.length > 0 && !/<script/i.test(doc) && /href=\\?"bubble:off/.test(doc) && /href=\\?"bubble:ok/.test(doc) && /href=\\?"bubble:open/.test(doc)
+      && !/preload/.test(sb) && /will-navigate/.test(sb) && /bubbleGo\(/.test(sb),
+      "tb18 the bubble's page holds no script and its window no preload: its three presses are links the shell catches on navigation (the Don't show again button, OK, and the text)");
+
     /* the plants: each deciding line cut in memory, the reading made again */
     if (PLANTS_OFF) console.log("  NOT RUN tb13 to tb16, the bubble's plant proofs (ETIUDA_PLANTS=off)");
     else {

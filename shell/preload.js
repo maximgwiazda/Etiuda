@@ -6,18 +6,8 @@ const { contextBridge, ipcRenderer, webUtils } = require("electron");
 const rewordOf = (o) => { const v = o && typeof o === "object" ? o : {}, s = k => (typeof v[k] === "string" ? v[k] : ""); return { act: s("act"), words: s("words"), how: s("how"), to: s("to") }; };
 /* THE PICKER'S WINDOW is told so by the shell on its command line, and gets its own eight verbs and
    nothing of the desk's; main answers them only from that window, and the desk's only from the desk. */
-const PICKER_ARG = typeof process !== "undefined" && Array.isArray(process.argv) && process.argv.indexOf("--etiuda-picker") > -1;
-/* The tray bubble's window, told the same way, gets two verbs: a press on a button or its text, and the page's height. A small window of the shell's,
-   like the picker, so the desk's own verbs are not exposed to it. */
-const BUBBLE = typeof process !== "undefined" && Array.isArray(process.argv) && process.argv.indexOf("--etiuda-bubble") > -1;
-if (BUBBLE) {
-  contextBridge.exposeInMainWorld("E_BUBBLE", {
-    act: (go) => ipcRenderer.send("etiuda:bubble-act", String(go || "")),
-    size: (h) => ipcRenderer.send("etiuda:bubble-size", Number(h) || 0),
-  });
-}
-const PICKER = PICKER_ARG || BUBBLE;
-if (PICKER_ARG) {
+const PICKER = typeof process !== "undefined" && Array.isArray(process.argv) && process.argv.indexOf("--etiuda-picker") > -1;
+if (PICKER) {
   contextBridge.exposeInMainWorld("E_PICK", {
     find: (q) => ipcRenderer.invoke("etiuda:pick-find", String(q || "")).then(v => String(v || "null")),
     who: (name, q) => ipcRenderer.invoke("etiuda:pick-who", String(name || ""), String(q || "")).then(v => String(v || "null")),

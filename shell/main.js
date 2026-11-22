@@ -16304,10 +16304,6 @@ function bubbleAct(go) {
   hideTrayBubble();
   if (go === "open") showDesk(deskWindow());
 }
-function fromBubble(e) {
-  return !!bubbleWin && !bubbleWin.isDestroyed() && !!e.sender && e.sender.id === bubbleWin.webContents.id
-    && !!e.senderFrame && e.senderFrame.parent === null;
-}
 function hideTrayBubble() {
   clearTimeout(bubbleTimer);
   bubbleSized = null;
@@ -16317,27 +16313,18 @@ function hideTrayBubble() {
   bubbleWin = null;
   if (win && !win.isDestroyed()) { try { win.close(); } catch { /* closed already */ } }
 }
-/* Runs in the bubble's page: a press on a [data-go] button or on the text is told to the shell, and the page's height is
-   reported once so the window can be placed. */
-function bubblePage() {
-  var P = window.E_BUBBLE;
-  if (!P) return;
-  document.addEventListener("click", function (e) {
-    var t = e.target, b = t && t.closest ? t.closest("[data-go]") : null;
-    if (b) { P.act(b.getAttribute("data-go")); return; }
-    if (t && t.closest && t.closest(".bub-text")) P.act("open");
-  });
-  var el = document.querySelector(".bub");
-  P.size(el ? Math.ceil(el.getBoundingClientRect().height) : 0);
+/* A press in the bubble is a link to bubble:<word>, caught as a navigation and never followed: the page holds no script and the
+   window no preload, so nothing it holds reaches the shell but one of these three words. */
+function bubbleGo(url) {
+  const m = /^bubble:(ok|off|open)$/.exec(String(url || ""));
+  return m ? m[1] : "";
 }
-const BUBBLE_SCRIPT = "(" + bubblePage.toString() + ")();";
-const BUBBLE_HASH = "'sha256-" + crypto.createHash("sha256").update(BUBBLE_SCRIPT, "utf8").digest("base64") + "'";
 /* The bubble's document: the family's blue bubble as the picker's tour step draws it, its pointer on the tray icon where there is
    one (side above the bubble's edge, tip the pointer's place across it), the quiet button on the left and OK filled on the right. */
 function bubbleDoc(w, side, tip) {
   const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   return '<!DOCTYPE html>\n<html lang="en">\n<meta charset="utf-8">\n'
-    + '<meta http-equiv="Content-Security-Policy" content="' + policyFor([BUBBLE_HASH]) + '">\n'
+    + '<meta http-equiv="Content-Security-Policy" content="' + policyFor(["'none'"]) + '">\n'
     + '<title>Etiuda</title>\n<style>\n'
     + ':root{color-scheme:light;--bub:#2563eb;--bub-ink:#fff;--bub-dim:rgba(255,255,255,.92);--bub-shadow:rgba(37,99,235,.32);--radius-sm:8px;'
     + '--sans:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}\n'
@@ -16350,17 +16337,18 @@ function bubbleDoc(w, side, tip) {
     + 'h3{margin:0 0 6px;font:700 15.5px/1.3 var(--sans);letter-spacing:-.2px}\n'
     + 'p{margin:0 0 10px;font-size:13.5px;line-height:1.5;color:var(--bub-dim);text-wrap:balance}\n'
     + '.acts{display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-top:2px;padding-top:10px;border-top:1px solid rgba(255,255,255,.24)}\n'
-    + 'button{padding:7px 11px;border:1px solid transparent;border-radius:var(--radius-sm);background:rgba(0,0,0,.14);color:#fff;'
+    + 'a{color:inherit;text-decoration:none}.bub-text{display:block}\n'
+    + '.btn{display:inline-block;padding:7px 11px;border:1px solid transparent;border-radius:var(--radius-sm);background:rgba(0,0,0,.14);color:#fff;'
     + 'font:600 13px var(--sans);cursor:default;white-space:nowrap;outline:none}\n'
-    + 'button:hover{background:rgba(0,0,0,.26)}\n'
-    + 'button.primary{background:#fff;border-color:#fff;color:var(--bub)}\nbutton.primary:hover{background:#fff;filter:brightness(.94)}\n'
+    + '.btn:hover{background:rgba(0,0,0,.26)}\n'
+    + '.btn.primary{background:#fff;border-color:#fff;color:var(--bub)}\n.btn.primary:hover{background:#fff;filter:brightness(.94)}\n'
     + '.off{margin-right:auto}\n'
     + '</style>\n<body><div class="bub" role="status" data-side="' + side + '">'
-    + '<div class="bub-text"><h3>' + esc(w.trayKeepsRunning) + '</h3><p>' + esc(w.trayBubbleBody) + '</p></div>'
-    + '<div class="acts"><button type="button" class="off" data-go="off">' + esc(w.trayBubbleOff) + '</button>'
-    + '<button type="button" class="primary" data-go="ok">' + esc(w.trayBubbleOk) + '</button></div>'
+    + '<a class="bub-text" href="bubble:open" draggable="false"><h3>' + esc(w.trayKeepsRunning) + '</h3><p>' + esc(w.trayBubbleBody) + '</p></a>'
+    + '<div class="acts"><a role="button" class="btn off" href="bubble:off" draggable="false">' + esc(w.trayBubbleOff) + '</a>'
+    + '<a role="button" class="btn primary" href="bubble:ok" draggable="false">' + esc(w.trayBubbleOk) + '</a></div>'
     + '<i class="bub-tip" aria-hidden="true" style="left:' + (tip == null ? 0 : tip) + 'px"></i></div>\n'
-    + '<script>' + BUBBLE_SCRIPT + '</script>\n';
+    + '\n';
 }
 /* Made only here, shown without focus: the chat under it keeps both the focus and the keyboard. Esc is held with Windows only
    while it stands. Returns whether a window was made; the placing waits for the page's height (etiuda:bubble-size). */
@@ -16379,12 +16367,11 @@ function showTrayBubble(win) {
   const bw = new BrowserWindow({
     width: BUBBLE_W + 2 * BUBBLE_PAD, height: 160 + 2 * BUBBLE_PAD, show: false, frame: false, resizable: false, focusable: false,
     transparent: true, alwaysOnTop: true, skipTaskbar: true, minimizable: false, maximizable: false, fullscreenable: false, hasShadow: false,
-    title: "Etiuda", webPreferences: { preload: path.join(__dirname, "preload.js"), additionalArguments: ["--etiuda-bubble"],
-      sandbox: true, contextIsolation: true, nodeIntegration: false, webviewTag: false, webSecurity: true, spellcheck: false },
+    title: "Etiuda", webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, webviewTag: false, webSecurity: true, spellcheck: false },
   });
   bubbleWin = bw;
   bw.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-  bw.webContents.on("will-navigate", (e) => e.preventDefault());
+  bw.webContents.on("will-navigate", (e, url) => { e.preventDefault(); bubbleAct(bubbleGo(url || e.url)); });
   bw.on("closed", () => { if (bubbleWin === bw) hideTrayBubble(); });
   bubbleSized = (h) => {
     bubbleSized = null;
@@ -16400,11 +16387,13 @@ function showTrayBubble(win) {
     bubbleTimer = setTimeout(hideTrayBubble, BUBBLE_MS);
   };
   setTimeout(() => { if (bubbleSized && bubbleWin === bw) bubbleSized(160); }, 800);
+  bw.webContents.once("did-finish-load", () => {
+    bw.webContents.executeJavaScript("(function(){var e=document.querySelector('.bub');return e?Math.ceil(e.getBoundingClientRect().height):0})()")
+      .then((h) => { if (bubbleSized && bubbleWin === bw) bubbleSized(h); }, () => {});
+  });
   bw.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(bubbleDoc(w, first.side, first.tip)));
   return true;
 }
-ipcMain.on("etiuda:bubble-size", (e, h) => { if (fromBubble(e) && bubbleSized) bubbleSized(h); });
-ipcMain.on("etiuda:bubble-act", (e, go) => { if (fromBubble(e)) bubbleAct(String(go || "")); });
 /* The close's note: the bubble where it can be made and the person has not turned it off, else the Windows notification as before. */
 function firstCloseNote(win) {
   if (trayNoticeTold === true) return null; /* plant:bubble-once */
