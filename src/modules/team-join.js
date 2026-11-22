@@ -423,6 +423,31 @@ function relayElsewhereWords(l){
 }
 /* The team's row in Settings says both, for as long as the file names that relay. */
 function relayElsewhereNote(l){ const w=relayElsewhereWords(l); return w.lead+" "+w.body; }
+/* A team this desk holds through a shared folder, which Etiuda no longer follows: the copywriter's sentence, {TEAM} as the row names
+   the team, and where the folder's local copy still owes the share, that it stays here unsent. */
+function folderHeldWords(l){
+  const team=l&&l.lead?t("{LEAD}'s team").split("{LEAD}").join(l.lead):t("Team");
+  return {lead:t("{TEAM} worked through a shared folder, which Etiuda no longer follows: its catalog stays on this computer as it is, and a new invitation from the team's lead brings the team back.").split("{TEAM}").join(team),
+    body:l&&l.folderOwed?t("What this desk had not yet sent to the shared folder stays on this computer, unsent.") /* words: placeholder */:""};
+}
+function folderHeldNote(l){ const w=folderHeldWords(l); return w.body?w.lead+" "+w.body:w.lead; }
+/* And a notice once a run, as the relay's below: Dismiss takes it down for that run; the row still says it. */
+let folderHeldUp="";
+const folderHeldDismissed=new Set();
+function syncFolderHeld(){
+  if(typeof document==="undefined" || typeof document.getElementById!=="function" || typeof document.createElement!=="function") return;
+  const l=((joinNow&&joinNow.leads)||[]).filter(x=>x.folderHeld===true && !folderHeldDismissed.has(x.team))[0]||null;
+  const want=l?l.team:"", up=document.getElementById("eTeamFolderHeld");
+  if(want===folderHeldUp && (!want || up)) return;
+  if(up) dropNotice(up);
+  folderHeldUp=want;
+  if(!l) return;
+  const w=folderHeldWords(l);
+  eNotice("eTeamFolderHeld", w.lead, w.body, ()=>{
+      folderHeldDismissed.add(want);
+      if(folderHeldUp===want) folderHeldUp="";
+    });
+}
 /* And a notice, once a run for each such team: Dismiss takes it down for that run; the row still says it. */
 let elsewhereUp="";
 const elsewhereDismissed=new Set();
@@ -457,6 +482,8 @@ function joinTook(v,changed){
              if(typeof l.relay==="string" && l.relay) row.relay=String(l.relay);
              if(l.relayRemoved===true) row.relayRemoved=true;
              if(l.relayElsewhere===true) row.relayElsewhere=true; /* plant:elsewhere-kept */
+             if(l.folderHeld===true) row.folderHeld=true;
+             if(l.folderOwed===true) row.folderOwed=true;
              const head=headKept(l.head);
              if(head) row.head=head;
              const lapse=lapseKept(l.lapse);
@@ -491,6 +518,7 @@ function joinTook(v,changed){
   syncLapseNotice();
   syncRelayRemoved();
   syncRelayElsewhere(); /* plant:elsewhere-notice */
+  syncFolderHeld(); /* plant:folder-held-notice */
   syncForkNotice();
   syncStrandedNotice();
   const refusal=s.linkRefusal;
@@ -1075,4 +1103,4 @@ function shareDropItem(blobId){
   catch(e){ return Promise.resolve({ok:false}); }
 }
 
-export { lapseNote, shareRefusedNotes, relayElsewhereNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, teamPolicySaid, relayDesk, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, openJoinPaste, teamCanJoin, inviteHeld, noteCatalogCopy, joinTook, teamContent, teamContentNow, markCatalogPrivate, onContentChanged, openTeamBubble, closeTeamBubble, teamShareState, shareToTeammate, shareInboxList, shareKeepCard, shareKeptNote, shareDropItem };
+export { lapseNote, shareRefusedNotes, relayElsewhereNote, folderHeldNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, teamPolicySaid, relayDesk, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, openJoinPaste, teamCanJoin, inviteHeld, noteCatalogCopy, joinTook, teamContent, teamContentNow, markCatalogPrivate, onContentChanged, openTeamBubble, closeTeamBubble, teamShareState, shareToTeammate, shareInboxList, shareKeepCard, shareKeptNote, shareDropItem };

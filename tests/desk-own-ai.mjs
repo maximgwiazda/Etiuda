@@ -84,7 +84,7 @@ function deskAiModule(src) {
 }
 const DESK_AI_MODULE = deskAiModule(DESK_AI_SRC);
 const POLICY = ["const POLICY_KEY =", "const POLICY_LEAD_RE =", "const POLICY_HEAD =", "const POLICY_EXPORT_LINE =",
-  "function policyValues(", "function policyExpand(", "function policyRegSz(", "function policyFolderOk(", "function policyLeadOk(",
+  "function policyValues(", "function policyRegSz(", "function policyLeadOk(",
   "function policyNoUpdate(", "function joinPolicyFacts("];
 const DESK_AI = ["const DESK_AI_FILE =", "const DESK_AI_KEY_FILE =", "const DESK_AI_KIND =", "const DESK_AI_KEY_KIND =",
   "const DESK_AI_SERVICES =", "const DESK_AI_MODEL_MAX =", "const DESK_AI_KEY_MAX =", "const DESK_AI_CONTROL_RE =",

@@ -20,7 +20,7 @@ import { agentName, typeAgentName, agentNameNote, markAgentNameNoteSeen } from "
 import { eHost, eHasShared, E_AI_OFF_KEY, eAiOn, eAiModel, eTellAi, E_SEARCH_AI_OFF_KEY, eSearchOn, eTellSearch } from "./host.js";
 import { armSearch, clearSearchMeaning } from "./search-meaning.js";
 import { hooks } from "./hooks.js";
-import { lapseNote, shareRefusedNotes, relayElsewhereNote, teamLeads, teamPolicySaid, relayDesk, keySignHtml, forgetTeamLead, pickMovedFolder, onJoinPainted } from "./team-join.js";
+import { lapseNote, shareRefusedNotes, relayElsewhereNote, folderHeldNote, teamLeads, teamPolicySaid, relayDesk, keySignHtml, forgetTeamLead, pickMovedFolder, onJoinPainted } from "./team-join.js";
 import { pack } from "./pack.js";
 import { openScreenTab, registerScreen, screenOn, clearScreenOn } from "./screen-tabs.js";
 import { openAbout } from "./about.js";
@@ -203,6 +203,7 @@ function teamRowHtml(l,status,bar){
   if(l.asking) notes.push({text:t("On this network the team's updates arrive about once a minute, not live."),
     tip:t("This network does not let the live connection to the relay through, so Etiuda asks the relay about once a minute instead. Nothing is lost, and nothing needs doing.")});
   if(l.relayElsewhere) notes.push(relayElsewhereNote(l)); /* plant:elsewhere-row */
+  if(l.folderHeld) notes.push(folderHeldNote(l)); /* plant:folder-held-note */
   if(l.needsFolder) notes.push(t("This team now works from a shared folder. The team's lead can say which one; once it is open here with Open a folder, everything carries on as before."));
   if(l.reading) notes.push(l.reading);
   return '<div class="set-row"><div class="set-label">'+esc(l.lead?t("{LEAD}'s team").split("{LEAD}").join(l.lead):t("Team"))

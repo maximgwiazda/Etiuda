@@ -85,8 +85,8 @@ function load(src, markers, names, params, args) {
 }
 
 const POLICY_DECLS = ["const REG_TOOL =", "const POLICY_KEY =", "const POLICY_REREAD_MS =", "const POLICY_LOOK_MS =", "const POLICY_LOOK_GRACE_MS =", "const POLICY_LEAD_RE =", "const POLICY_WORDS =",
-  "const POLICY_HEAD =", "const POLICY_EXPORT_LINE =", "function policyValues(", "function policyExpand(",
-  "function policyRegSz(", "function policyFolderOk(", "function policyLeadOk(", "function policyNoUpdate(", "function joinPolicyFacts(",
+  "const POLICY_HEAD =", "const POLICY_EXPORT_LINE =", "function policyValues(",
+  "function policyRegSz(", "function policyLeadOk(", "function policyNoUpdate(", "function joinPolicyFacts(",
   "function policyWords(", "function joinPolicyFrom(", "const POLICY_AGAIN_FIRST_MS =",
   "let joinPolicyRead =", "function policyScratch(", "function policyScratchGone(", "function policyExported(", "function policyTake(",
   "function policyStamp(", "function policyAgainArm(", "function policyLookLater(", "function readJoinPolicy(", "function policyWaits(",

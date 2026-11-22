@@ -893,7 +893,7 @@ CASES.doorsKept = s => {
   return JSON.stringify(got.doors) === JSON.stringify(DOORS_TWO()) && JSON.stringify(dropped.doors) === "[]" && JSON.stringify(refused.doors) === JSON.stringify(DOORS_TWO())
     && !!back && JSON.stringify(back.doors) === JSON.stringify(DOORS_TWO()) && !!forged && JSON.stringify(forged.doors) === "[]";
 };
-const DOORJOIN_DECLS = ["function signinDoorsShown(", "function signinDoorJoin(", "function teamPinStands(", "function inviteDoor(", "function policySameFolder("];
+const DOORJOIN_DECLS = ["function signinDoorsShown(", "function signinDoorJoin(", "function teamPinStands(", "function inviteDoor("];
 const DOORJOIN_STANDS = ["init", "readDesk", "signinState", "branchIdentity", "signinCertOk", "pinnedLead", "joinView", "inviteBeforeFor", "joinCommit",
   "newestEpoch", "teamPins", "teamSeen", "teamPinFrom", "relayMirrorOf", "teamShown", "teamRelayGone", "relayCatalogNamed", "persistDeskEnvelope",
   "relayRun", "catalogFolderChanged", "leadPrint", "crypto", "URL", "Date", "signinDoorAddressOk", "SIGNIN_DESK_PACKED",

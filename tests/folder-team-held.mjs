@@ -241,7 +241,7 @@ try {
     both = api.joinPolicyFacts(regText([["TeamFolder", "D:\\Teams\\Ada"], ["LeadKey", HEX]]));
     alone = api.joinPolicyFacts(regText([["TeamFolder", "D:\\Teams\\Ada"]]));
   } catch (e) { both = { error: e.message }; }
-  check(!!both && both.folder === "" && both.lead === HEX && both.bad.length === 0 && !!alone && alone.folder === "" && alone.lead === "" && alone.bad.length === 0,
+  check(!!both && !both.folder && both.lead === HEX && both.bad.length === 0 && !!alone && !alone.folder && alone.lead === "" && alone.bad.length === 0,
     "fth7 a TeamFolder in machine policy is not read, and LeadKey stands alone: " + JSON.stringify({ both, alone: alone && { folder: alone.folder, lead: alone.lead, bad: alone.bad } }));
 
   /* fth8: the boot's look at the folder starts nothing that writes: share and mirror as they were. */

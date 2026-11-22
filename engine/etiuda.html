@@ -9801,6 +9801,8 @@ What is typed here stays in this browser.`;
     /* Claudette's words, 2026-11-17, a team file naming a relay this build does not use: one sentence and the next, on the row whole. */
     "The team file of {TEAM} names a relay this Etiuda does not use, so this desk does not follow it: it keeps its team, its catalog and its connection as they were, and sends nothing there.": "{TEAM} wskazuje w swoim pliku przekaźnik, z którego ta Etiuda nie korzysta, więc to stanowisko za nim nie podąża: zachowuje zespół, katalog i połączenie bez zmian i niczego tam nie wysyła.",
     "If the team moves back, nothing is needed; otherwise a new invitation from the team's lead is.": "Jeśli zespół wróci na poprzedni przekaźnik, nic nie trzeba robić; w przeciwnym razie potrzebne jest nowe zaproszenie od lidera zespołu.",
+    "{TEAM} worked through a shared folder, which Etiuda no longer follows: its catalog stays on this computer as it is, and a new invitation from the team's lead brings the team back.": "{TEAM} korzysta ze wspólnego folderu, którego Etiuda już nie obsługuje: katalog tego zespołu zostaje na tym komputerze bez zmian, a nowe zaproszenie od lidera zespołu przywróci zespół.",
+    "What this desk had not yet sent to the shared folder stays on this computer, unsent.": "To, czego to stanowisko nie zdążyło wysłać do wspólnego folderu, zostaje na tym komputerze, niewysłane.",
     "Another catalog of the team has a newer edition.": "Inny katalog zespołu ma nowsze wydanie.",
     "Other catalogs of the team with a newer edition: {N}.": "Inne katalogi zespołu z nowszym wydaniem: {N}.",
     "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.": "Na prośbę Studia lidera zespołu przesłano zespołowi kopię katalogu używanego na tym stanowisku.",
@@ -18330,6 +18332,7 @@ What is typed here stays in this browser.`;
   __export(team_join_exports, {
     closeJoinBubble: () => closeJoinBubble,
     closeTeamBubble: () => closeTeamBubble,
+    folderHeldNote: () => folderHeldNote,
     forgetTeamLead: () => forgetTeamLead,
     inviteHeld: () => inviteHeld,
     joinStands: () => joinStands,
@@ -18859,6 +18862,33 @@ What is typed here stays in this browser.`;
     const w = relayElsewhereWords(l);
     return w.lead + " " + w.body;
   }
+  function folderHeldWords(l) {
+    const team = l && l.lead ? t("{LEAD}'s team").split("{LEAD}").join(l.lead) : t("Team");
+    return {
+      lead: t("{TEAM} worked through a shared folder, which Etiuda no longer follows: its catalog stays on this computer as it is, and a new invitation from the team's lead brings the team back.").split("{TEAM}").join(team),
+      body: l && l.folderOwed ? t("What this desk had not yet sent to the shared folder stays on this computer, unsent.") : ""
+    };
+  }
+  function folderHeldNote(l) {
+    const w = folderHeldWords(l);
+    return w.body ? w.lead + " " + w.body : w.lead;
+  }
+  var folderHeldUp = "";
+  var folderHeldDismissed = /* @__PURE__ */ new Set();
+  function syncFolderHeld() {
+    if (typeof document === "undefined" || typeof document.getElementById !== "function" || typeof document.createElement !== "function") return;
+    const l = (joinNow && joinNow.leads || []).filter((x) => x.folderHeld === true && !folderHeldDismissed.has(x.team))[0] || null;
+    const want = l ? l.team : "", up = document.getElementById("eTeamFolderHeld");
+    if (want === folderHeldUp && (!want || up)) return;
+    if (up) dropNotice(up);
+    folderHeldUp = want;
+    if (!l) return;
+    const w = folderHeldWords(l);
+    eNotice("eTeamFolderHeld", w.lead, w.body, () => {
+      folderHeldDismissed.add(want);
+      if (folderHeldUp === want) folderHeldUp = "";
+    });
+  }
   var elsewhereUp = "";
   var elsewhereDismissed = /* @__PURE__ */ new Set();
   function syncRelayElsewhere() {
@@ -18900,6 +18930,8 @@ What is typed here stays in this browser.`;
         if (typeof l.relay === "string" && l.relay) row2.relay = String(l.relay);
         if (l.relayRemoved === true) row2.relayRemoved = true;
         if (l.relayElsewhere === true) row2.relayElsewhere = true;
+        if (l.folderHeld === true) row2.folderHeld = true;
+        if (l.folderOwed === true) row2.folderOwed = true;
         const head = headKept(l.head);
         if (head) row2.head = head;
         const lapse = lapseKept(l.lapse);
@@ -18939,6 +18971,7 @@ What is typed here stays in this browser.`;
     syncLapseNotice();
     syncRelayRemoved();
     syncRelayElsewhere();
+    syncFolderHeld();
     syncForkNotice();
     syncStrandedNotice();
     const refusal = s.linkRefusal;
@@ -42671,6 +42704,7 @@ What is typed here stays in this browser.`;
       tip: t("This network does not let the live connection to the relay through, so Etiuda asks the relay about once a minute instead. Nothing is lost, and nothing needs doing.")
     });
     if (l.relayElsewhere) notes.push(relayElsewhereNote(l));
+    if (l.folderHeld) notes.push(folderHeldNote(l));
     if (l.needsFolder) notes.push(t("This team now works from a shared folder. The team's lead can say which one; once it is open here with Open a folder, everything carries on as before."));
     if (l.reading) notes.push(l.reading);
     return '<div class="set-row"><div class="set-label">' + esc(l.lead ? t("{LEAD}'s team").split("{LEAD}").join(l.lead) : t("Team")) + notes.filter(Boolean).map((n) => typeof n === "object" ? '<small title="' + esc(n.tip) + '">' + esc(n.text) + "</small>" : "<small>" + esc(n) + "</small>").join("") + '</div><div class="set-ctl"><span class="e-lead-key">' + keySignHtml("studio", l.print) + "</span>" + (l.needsFolder ? '<button type="button" class="btn" data-team-pick-folder="' + esc(l.team) + '">' + esc(t("Open a folder")) + "</button>" : "") + (l.policy || l.waiting ? "" : '<button type="button" class="btn danger" data-leave-team="' + esc(l.team) + '">' + esc(t("Leave this team")) + "</button>") + "</div></div>";
