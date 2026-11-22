@@ -9641,8 +9641,8 @@ What is typed here stays in this browser.`;
     "On up to three computers; this is one of them.": "Na najwyżej trzech komputerach; to jeden z nich.",
     "Last checked": "Ostatnie sprawdzenie",
     "Sign out": "Wyloguj się",
-    "This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name, address and picture, and shows them only to the leads and administrator of the licence it asks to join.": "To stanowisko loguje się kontem Microsoft lub Google, aby zajmować swoje miejsce w licencji, i zleca sprawdzenie logowania na etiuda.dev. Usługa licencji przechowuje imię i nazwisko, adres e-mail i zdjęcie z tego konta i pokazuje je tylko liderom i administratorowi licencji, do której konto prosi o dołączenie.",
-    "This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The leads and administrator of the licence it joins see the account's name, address and picture.": "To stanowisko loguje się kontem Microsoft lub Google, aby zajmować swoje miejsce w licencji, i zleca sprawdzenie logowania na etiuda.dev. Liderzy i administrator licencji, do której dołącza, widzą imię i nazwisko, adres e-mail i zdjęcie z tego konta.",
+    "This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name and address, and shows them only to the leads and administrator of the licence it asks to join.": "To stanowisko loguje się kontem Microsoft lub Google, aby zajmować swoje miejsce w licencji, i zleca sprawdzenie logowania na etiuda.dev. Usługa licencji przechowuje imię i nazwisko oraz adres e-mail z tego konta i pokazuje je tylko liderom i administratorowi licencji, do której konto prosi o dołączenie.",
+    "This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The leads and administrator of the licence it joins see the account's name and address.": "To stanowisko loguje się kontem Microsoft lub Google, aby zajmować swoje miejsce w licencji, i zleca sprawdzenie logowania na etiuda.dev. Liderzy i administrator licencji, do której dołącza, widzą imię i nazwisko oraz adres e-mail z tego konta.",
     "Signing out ends this computer's sign-in and frees its place among the account's three; the seat stays the account's. The team's catalog and personal cards stay on the computer.": "Wylogowanie kończy logowanie na tym komputerze i zwalnia jego miejsce wśród trzech komputerów konta; miejsce w licencji zostaje przy koncie. Katalog zespołu i własne karty zostają na komputerze.",
     "today, {TIME}": "dziś, {TIME}",
     "No seat is free on the organisation's licence just now.": "W licencji organizacji nie ma teraz wolnego miejsca.",
@@ -31106,7 +31106,7 @@ What is typed here stays in this browser.`;
     const d = { state: ds.state, moment: door.moment || "" };
     const showSkip = d.state === "none" && (d.moment === "refused" || d.moment === "managed-refused");
     const offline = drawn.state === "first-offline" || ds.state === "first-offline";
-    const priv = t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The leads and administrator of the licence it joins see the account's name, address and picture.");
+    const priv = t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The leads and administrator of the licence it joins see the account's name and address.");
     let right = '<h2 class="fs-rh">' + esc(t("Signing in")) + "</h2>";
     if (offline) right += '<div class="door-off">' + DOOR_OFF_GLYPH + "<span>" + esc(t("Signing in needs an internet connection. The buttons appear here by themselves once this computer is online.")) + "</span></div>";
     else if (v.offered && v.offered.length) right += signinProvidersHtml(v.offered, false);
@@ -31207,7 +31207,7 @@ What is typed here stays in this browser.`;
         line: t("Your seat belongs to your account, so it comes with you to any computer you sign in on, up to three."),
         providers: v.offered,
         cap: signinCapHolds(v) ? t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.") : "",
-        privacy: t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name, address and picture, and shows them only to the leads and administrator of the licence it asks to join."),
+        privacy: t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name and address, and shows them only to the leads and administrator of the licence it asks to join."),
         foot: ""
       };
     }
@@ -42613,7 +42613,7 @@ What is typed here stays in this browser.`;
     } else h += signinIdentHtml({ initial: "", name: t("Not signed in"), sub: "" });
     h += accountManagedHtml(v);
     if (v.outOwed) h += '<p class="sgn-cap" data-signin-out-owed>' + esc(t("This computer is signed out. Its place among the account's three computers is freed by itself as soon as the sign-in service can be reached.")) + "</p>";
-    if (v.offered.length) h += "<div>" + (v.said === "signin-preview" ? "" : signinPreviewHtml(v)) + signinProvidersHtml(v.offered, true) + (signinCapHolds(v) ? '<p class="sgn-cap">' + esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.")) + "</p>" : "") + '<p class="sgn-cap">' + esc(t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name, address and picture, and shows them only to the leads and administrator of the licence it asks to join.")) + "</p></div>";
+    if (v.offered.length) h += "<div>" + (v.said === "signin-preview" ? "" : signinPreviewHtml(v)) + signinProvidersHtml(v.offered, true) + (signinCapHolds(v) ? '<p class="sgn-cap">' + esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.")) + "</p>" : "") + '<p class="sgn-cap">' + esc(t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name and address, and shows them only to the leads and administrator of the licence it asks to join.")) + "</p></div>";
     if (choosing && v.signedIn) h += '<span class="sgn-acts"><button type="button" class="btn" data-signin-act="keep">' + esc(t("Cancel")) + "</button></span>";
     return h + "</div>";
   }

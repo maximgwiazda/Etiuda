@@ -566,7 +566,7 @@ function doorFirstHtml(v, ds){
   const d={state:ds.state, moment:door.moment||""};
   const showSkip=(d.state==="none") && (d.moment==="refused" || d.moment==="managed-refused"); /* plant:door-no-skip */
   const offline=drawn.state==="first-offline" || ds.state==="first-offline";
-  const priv=t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The leads and administrator of the licence it joins see the account's name, address and picture."); /* plant:door-privacy-short */
+  const priv=t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The leads and administrator of the licence it joins see the account's name and address."); /* plant:door-privacy-short */
   let right='<h2 class="fs-rh">'+esc(t("Signing in"))+'</h2>';
   if(offline) right+='<div class="door-off">'+DOOR_OFF_GLYPH+'<span>'+esc(t("Signing in needs an internet connection. The buttons appear here by themselves once this computer is online."))+'</span></div>'; /* plant:door-off-glyph */
   else if(v.offered && v.offered.length) right+=signinProvidersHtml(v.offered, false);
@@ -654,7 +654,7 @@ function signinDoorOf(v){
     }
     return {moment:"before", heading:t("Sign in to Etiuda"),
       line:t("Your seat belongs to your account, so it comes with you to any computer you sign in on, up to three."),
-      providers:v.offered, cap:signinCapHolds(v) ? t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.") : "", privacy:t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name, address and picture, and shows them only to the leads and administrator of the licence it asks to join."),
+      providers:v.offered, cap:signinCapHolds(v) ? t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.") : "", privacy:t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name and address, and shows them only to the leads and administrator of the licence it asks to join."),
       foot:""};
   }
   const told=signinTold(v), toldDoor=()=>({moment:told.kind, ident, say:told.say, providers:told.providers ? v.offered : undefined, acts:told.acts.concat([acct])});

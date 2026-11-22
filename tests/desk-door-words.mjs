@@ -124,8 +124,8 @@ const W = {
     cH: "Etiuda works in its desktop app.",
     cL: "In a browser, no catalog opens.",
     dL: "This computer cannot keep a sign-in, so Etiuda asks for one again when the seat renews, at most every thirty days.",
-    privDoor: "This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The leads and administrator of the licence it joins see the account's name, address and picture.",
-    privAcct: "This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name, address and picture, and shows them only to the leads and administrator of the licence it asks to join.",
+    privDoor: "This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The leads and administrator of the licence it joins see the account's name and address.",
+    privAcct: "This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name and address, and shows them only to the leads and administrator of the licence it asks to join.",
     ask: `Ask ${LEAD}`,
     buy: "Buy",
     check: "Check now",
@@ -174,8 +174,8 @@ const W = {
     cH: "Etiuda działa w aplikacji na komputer.",
     cL: "W przeglądarce żaden katalog się nie otwiera.",
     dL: "Ten komputer nie może przechować logowania, więc Etiuda poprosi o nie ponownie przy odnowieniu miejsca, najwyżej co trzydzieści dni.",
-    privDoor: "To stanowisko loguje się kontem Microsoft lub Google, aby zajmować swoje miejsce w licencji, i zleca sprawdzenie logowania na etiuda.dev. Liderzy i administrator licencji, do której dołącza, widzą imię i nazwisko, adres e-mail i zdjęcie z tego konta.",
-    privAcct: "To stanowisko loguje się kontem Microsoft lub Google, aby zajmować swoje miejsce w licencji, i zleca sprawdzenie logowania na etiuda.dev. Usługa licencji przechowuje imię i nazwisko, adres e-mail i zdjęcie z tego konta i pokazuje je tylko liderom i administratorowi licencji, do której konto prosi o dołączenie.",
+    privDoor: "To stanowisko loguje się kontem Microsoft lub Google, aby zajmować swoje miejsce w licencji, i zleca sprawdzenie logowania na etiuda.dev. Liderzy i administrator licencji, do której dołącza, widzą imię i nazwisko oraz adres e-mail z tego konta.",
+    privAcct: "To stanowisko loguje się kontem Microsoft lub Google, aby zajmować swoje miejsce w licencji, i zleca sprawdzenie logowania na etiuda.dev. Usługa licencji przechowuje imię i nazwisko oraz adres e-mail z tego konta i pokazuje je tylko liderom i administratorowi licencji, do której konto prosi o dołączenie.",
     ask: `Poproś: ${LEAD}`,
     buy: "Kup",
     check: "Sprawdź teraz",
@@ -943,7 +943,7 @@ if (!PLANTS_OFF) {
     ["if(ds.state===\"working\") return {moment:\"working\", ident, heading:pair[0], line:pair[1], foot:deskSeatShort(ds), acts:[{act:\"check\", label:t(\"Check now\")}, acct]}; /* plant:door-panel-working */", "if(false) return {};"],
     "state6_en");
   await plant("ddp9", SIGNIN_PATH,
-    ["const priv=t(\"This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The leads and administrator of the licence it joins see the account's name, address and picture.\"); /* plant:door-privacy-short */", "const priv=t(\"This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev.\");"],
+    ["const priv=t(\"This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The leads and administrator of the licence it joins see the account's name and address.\"); /* plant:door-privacy-short */", "const priv=t(\"This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev.\");"],
     "state1_en");
   await plant("ddp10", SETTINGS_PATH,
     ["if(ds.state===\"ended\" || ds.state===\"working\"){ /* plant:account-seat-state */", "if(false){"],
@@ -952,7 +952,7 @@ if (!PLANTS_OFF) {
     ["rows.push({key:\"seat\", icon:\"check\", dot:ds.state===\"ended\", /* plant:account-seat-dot */", "rows.push({key:\"seat\", icon:\"check\", dot:false,"],
     "account_en");
   await plant("ddp12", SETTINGS_PATH,
-    ["+'<p class=\"sgn-cap\">'+esc(t(\"This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name, address and picture, and shows them only to the leads and administrator of the licence it asks to join.\"))+'</p></div>'; /* plant:account-privacy-full */", "+'<p class=\"sgn-cap\">'+esc(t(\"This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev.\"))+'</p></div>';"],
+    ["+'<p class=\"sgn-cap\">'+esc(t(\"This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name and address, and shows them only to the leads and administrator of the licence it asks to join.\"))+'</p></div>'; /* plant:account-privacy-full */", "+'<p class=\"sgn-cap\">'+esc(t(\"This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev.\"))+'</p></div>';"],
     "account_en");
   await plant("ddp18", SIGNIN_PATH,
     ["'<div class=\"door-off\">'+DOOR_OFF_GLYPH+'<span>'", "'<div class=\"door-off\"><span>'"],

@@ -326,7 +326,7 @@ try {
       "Signing in",
       "Sign in with Microsoft",
       "Sign in with Google",
-      "This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The leads and administrator of the licence it joins see the account's name, address and picture."
+      "This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The leads and administrator of the licence it joins see the account's name and address."
     ].every(s => ui.txt.includes(s)) && ui.rawTxt.includes("What happens") && !ui.txt.includes("HELD")
       && ["Sign in to Etiuda",
         "Your seat belongs to your account, so it comes with you to any computer you sign in on, up to three.",
@@ -369,7 +369,7 @@ try {
       ? ["Etiuda zaczyna się od zalogowania.", "W przeglądarce otwiera się strona logowania",
          "Tam wybiera się konto", "Etiuda sama przechodzi dalej", "Bez klucza licencji do pilnowania",
          "Logowanie",
-         "To stanowisko loguje się kontem Microsoft lub Google, aby zajmować swoje miejsce w licencji, i zleca sprawdzenie logowania na etiuda.dev. Liderzy i administrator licencji, do której dołącza, widzą imię i nazwisko, adres e-mail i zdjęcie z tego konta."].every(s => res.txt.includes(s))
+         "To stanowisko loguje się kontem Microsoft lub Google, aby zajmować swoje miejsce w licencji, i zleca sprawdzenie logowania na etiuda.dev. Liderzy i administrator licencji, do której dołącza, widzą imię i nazwisko oraz adres e-mail z tego konta."].every(s => res.txt.includes(s))
          && res.rawTxt.includes("Co się stanie")
          && ["Logowanie do Etiudy", "Nie teraz",
            "Stanowisko otworzy się bez zmian, a przycisk Zaloguj się zostaje na pasku u góry na później.",

@@ -332,7 +332,7 @@ function accountCardHtml(v){
   if(v.outOwed) h+='<p class="sgn-cap" data-signin-out-owed>'+esc(t("This computer is signed out. Its place among the account's three computers is freed by itself as soon as the sign-in service can be reached."))+'</p>';
   if(v.offered.length) h+='<div>'+(v.said==="signin-preview" ? "" : signinPreviewHtml(v))+signinProvidersHtml(v.offered, true)
     +(signinCapHolds(v) ? '<p class="sgn-cap">'+esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account."))+'</p>' : '') /* plant:card-cap */
-    +'<p class="sgn-cap">'+esc(t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name, address and picture, and shows them only to the leads and administrator of the licence it asks to join."))+'</p></div>'; /* plant:account-privacy-full */
+    +'<p class="sgn-cap">'+esc(t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name and address, and shows them only to the leads and administrator of the licence it asks to join."))+'</p></div>'; /* plant:account-privacy-full */
   if(choosing && v.signedIn) h+='<span class="sgn-acts"><button type="button" class="btn" data-signin-act="keep">'+esc(t("Cancel"))+'</button></span>';
   return h+'</div>';
 }
