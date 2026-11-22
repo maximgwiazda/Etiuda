@@ -27,7 +27,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 22;
+const EXPECTED = 24;
 
 const CARD = "The quay lamp is wrapped for the crossing.";
 
@@ -429,6 +429,22 @@ try {
     "pcm9 the statistics name the catalog in use, but never one marked Private (" + JSON.stringify({ priv: r9, open: r9o }) + ")");
   await planted("pcm9p", "plant:pcm-stats-private", "  if (data.catalog && data.catalog.id) {", src => pcm9(src, true),
     r => !!r.catalog, "the statistics name the Private catalog");
+  /* pcm9m: statistics written before the mark are written again at once without the catalog's name when it is marked. */
+  const pcm9m = async src => {
+    const u = await setup("pcm9m-" + (src ? "p" : "g"), { src });
+    u.box.D.api.setStats("lab", { from: "2026-11-01", to: "2026-11-30" });
+    u.box.D.api.writeStatsAnswer(JSON.stringify({ catalog: { id: "quay-held", rev: 4 }, cards: [{ id: "c-warm", n: 2 }], intents: [], misses: 0, langs: {} }), "", "close");
+    const file = path.join(ownDir(u.box.share, u.box.me.id), "stats.estat");
+    const read = () => { try { return JSON.parse(u.box.D.api.openStatsSealed(leadBox.privateKey, JSON.parse(fs.readFileSync(file, "utf8")), u.box.me.id)); } catch { return null; } };
+    const before = read();
+    await mark(u, "quay-held", true);
+    const after = read();
+    return { before: before ? before.catalog || null : null, after: after ? after.catalog || null : "unread", counts: !!after && Array.isArray(after.cards) && after.cards.length === 1 };
+  };
+  const r9m = await pcm9m();
+  check(!!r9m.before && r9m.after === null && r9m.counts,
+    "pcm9m statistics that named the catalog are written again without its name the moment it is marked Private (" + JSON.stringify(r9m) + ")");
+  await planted("pcm9mp", "plant:pcm-stats-mark", "    /* plant lifted */", pcm9m, r => !!r.after, "the statistics on the share still name it");
 
   /* Holds: a told desk with a personal catalog it has not marked still names it and answers the lead's box. */
   {

@@ -1853,6 +1853,7 @@ let statsPeriod = null;
 let statsHeld = null;
 let statsNoBoxSaid = "";
 let statsWroteKey = "";
+let statsWroteNamed = null;                    // {id, text}: the catalog the last statistics written named, and the page's text they came from
 /* The team, lead key id and box the last answer was sealed to, {team, keyId, box}, kept in stats-seal.json beside desk.json. */
 let statsSealedTo = null;
 let statsLastWrite = 0;
@@ -2276,6 +2277,16 @@ function statsSealNote(seal) {
   try { writeReplacing(path.join(app.getPath("userData"), "stats-seal.json"), JSON.stringify(statsSealedTo) + "\n"); }
   catch (e) { console.error("etiuda: the box statistics were sealed to could not be kept - " + e.message); }
 }
+/* Whether the statistics' catalog `id` is private here: the catalog in use, where it carries this id, as privateHere judges it
+   on the team; any other id by its stored chain and the marks. */
+function statsCatalogPrivate(id) {
+  const doc = loadedText ? catalogDocIn(loadedText) : null;
+  if (doc && doc.kind === "etiuda-catalog" && doc.id === id) {
+    const use = teamUse();
+    return use.member && use.seal ? privateHere(doc, use) : catalogMarkedPrivate(doc);
+  }
+  return privateChain(lineageOfId(id)).some(c => catalogPrivate.has(c));
+}
 function writeStatsAnswer(text, askId, forced) {
   const why = reasonForAsk(askId, forced);
   if (!statsSpan || !statsPeriod) return { ok: false };
@@ -2302,7 +2313,9 @@ function writeStatsAnswer(text, askId, forced) {
   /* The first day the page counted by day (board 521): a span that opens before it was not
      wholly counted, and the reader is told so rather than shown a short month as a quiet one. */
   if (ymdOk(data.since)) out.since = String(data.since);
-  if (data.catalog && data.catalog.id) {
+  /* A catalog marked private is never named to the lead (Claude alpha, 2026-11-22, board 1014): the counts go, its id and
+     edition do not. */
+  if (data.catalog && data.catalog.id && !statsCatalogPrivate(String(data.catalog.id))) { /* plant:pcm-stats-private */
     out.catalog = { id: String(data.catalog.id), rev: +data.catalog.rev || 0 };
   }
   /* "B after A" for the span (board 814): rebuilt row by row like the rest, and the key is written
@@ -2349,6 +2362,7 @@ function writeStatsAnswer(text, askId, forced) {
   }
   statsHeld = null;
   statsWroteKey = key;
+  statsWroteNamed = out.catalog ? { id: out.catalog.id, text: String(text || "") } : null;
   statsLastWrite = now.getTime();
   statsSealNote(got.seal);
   return { ok: true, sync: out.sync, syncMs: now.getTime(), why: why };
@@ -3665,11 +3679,13 @@ function writeInUse(pin, win) {
     if (!me) return;
     const doc = catalogDocIn(got.text);
     if (!doc || doc.kind !== "etiuda-catalog") return;
-    if (inUseKept && inUseKept.sha === pin && inUseKept.epoch === seal.epoch && inUseKept.team === seal.team) {
+    const names = inUseNames(doc, use);
+    if (inUseKept && inUseKept.sha === pin && inUseKept.epoch === seal.epoch && inUseKept.team === seal.team && !inUseKept.withheld === names) {
       keepLoadedCatalog(got.text, pin);
       tryCatalogAsk(win);
       return;
     }
+    if (!names) { withholdInUse(got, pin, seal); tryCatalogAsk(win); return; } /* plant:pcm-in-use-gate */
     inUseN = Math.max(Number.isInteger(inUseN) && inUseN >= 1 ? inUseN : 0, 0) + 1; /* plant:f9-desk-in-use-n */
     const cat = { id: typeof doc.id === "string" ? doc.id : "", rev: Number.isInteger(+doc.rev) ? +doc.rev : 0,
       sha256: pin, signer: catalogSignerOf(doc), source: got.source };
@@ -3699,20 +3715,41 @@ function writeInUse(pin, win) {
     heldInUse = { text: got.text, source: got.source };
   }
 }
+/* Whether in-use.ec may name `doc` to the team `use` names: a catalog that is the team's (teamListedDoc) always; a personal
+   catalog only once this desk is told for the team, so nothing about it leaves before the member has been told, and never one
+   marked private (Claude alpha, 2026-11-22, board 1014: a catalog marked Private is never named to the lead or the team). */
+function inUseNames(doc, use) {
+  if (teamListedDoc(doc, use)) return true;
+  return !catalogMarkedPrivate(doc) && contentApplies(use.seal.team);
+}
+/* The catalog in use is kept on this desk and named nowhere: in-use.ec goes from this desk's own folder, its removal owed to the
+   share as an eject's is, and the record says the pin is withheld, so a later tell or unmark names it. A removal that does not
+   land is held and tried again. */
+function withholdInUse(got, pin, seal) {
+  const at = branchDest(IN_USE_STEM);
+  if (!at) return;
+  try { unlinkOwn(at.dest); }
+  catch (e) { if (e.code !== "ENOENT") { heldInUse = { text: got.text, source: got.source }; return; } }
+  inUseKept = { sha: pin, epoch: seal.epoch, team: seal.team, source: got.source, withheld: true };
+  heldInUse = null;
+  persistDeskEnvelope();
+  keepLoadedCatalog(got.text, pin);
+}
 /* The team epoch moved, or this desk has only just become a member, and the page is not asked again.
    The catalog already loaded is sealed under the key held now. A stale file seals nothing. */
 let resealing = false;
 function resealHeld(win) {
   if (resealing || !loadedText) return;
-  let pin = "";
+  let pin = "", doc = null;
   try {
-    const doc = catalogDocIn(loadedText);
+    doc = catalogDocIn(loadedText);
     pin = doc ? signedSha(doc) : "";
   } catch { return; }
-  if (!PIN_RE.test(pin)) return;
+  if (!PIN_RE.test(pin) || !doc || doc.kind !== "etiuda-catalog") return;
   const use = teamUse();
   if (!use.member || use.stale || !use.seal) return;
-  if (inUseKept && inUseKept.sha === pin && inUseKept.epoch === use.seal.epoch && inUseKept.team === use.seal.team) return;
+  /* The same pin under the same key is written again only where whether it may be named has changed: told, marked, listed. */
+  if (inUseKept && inUseKept.sha === pin && inUseKept.epoch === use.seal.epoch && inUseKept.team === use.seal.team && !inUseKept.withheld === inUseNames(doc, use)) return; /* plant:pcm-reseal-judge */
   if (!handedUse.has(pin)) noteHanded(loadedText, sourceForText(loadedText));
   resealing = true;
   try { writeInUse(pin, win); }
@@ -3911,11 +3948,23 @@ function leadSignedPin(pin, leadPublic) {
   }
   return false;
 }
-/* Whether the private mark holds for `doc` against the team's list (Claude alpha's ruling of 2026-11-08 13:05, from Max's
-   "catalogs the team lists stay as they are"): only for a catalog the team does not list; off a team, `catalogs` is none. */
-function privateHere(doc, catalogs) {
-  if (chainListed(doc, catalogs)) return false; /* plant:s0b-private-listed */
+/* Whether the private mark holds for `doc` on the team `use` (teamUse) names (Claude alpha's ruling of 2026-11-08 13:05, from
+   Max's "catalogs the team lists stay as they are"): only for a catalog that is not the team's. The team's is what its lead
+   signed (teamListedDoc), never the bare id: a personal catalog under a listed id, or a copy whose first hop the lead did not
+   sign, keeps its mark (Claude alpha, 2026-11-22, on the test architect's probe of board 1014). Off a team, `use` is none. */
+function privateHere(doc, use) {
+  if (use && use.seal && teamListedDoc(doc, use)) return false; /* plant:s0b-private-listed plant:pcm-private-signed */
   return catalogMarkedPrivate(doc);
+}
+/* Whether catalog `id` is the team's here, as privateHere judges it: the team lists its stored chain, and where the catalog in
+   use carries this id, its lead signed it or the edition it grew from at its first hop (teamListedDoc). The catalog in use is
+   the one an answer, a working copy and in-use.ec are made from; with none under this id, the list alone decides. */
+function idTeamHere(id) {
+  if (!idListedHere(id)) return false;
+  const doc = loadedText ? catalogDocIn(loadedText) : null;
+  if (!doc || doc.kind !== "etiuda-catalog" || doc.id !== id) return true;
+  const use = teamUse();
+  return !(use.member && use.seal) || teamListedDoc(doc, use);
 }
 /* Whether the team at this folder lists catalog `id`, by its stored chain. */
 function idListedHere(id) {
@@ -3944,7 +3993,7 @@ function teamWriteHere() {
    team, as before but private. */
 function branchGate(doc) {
   const use = teamUse(), onTeam = !!(use.member && use.seal);
-  if (onTeam ? privateHere(doc, use.catalogs) : catalogMarkedPrivate(doc)) return { none: true }; /* plant:s0b-branch-private */
+  if (onTeam ? privateHere(doc, use) : catalogMarkedPrivate(doc)) return { none: true }; /* plant:s0b-branch-private */
   if (!onTeam && teamWriteHere()) return { hold: true }; /* plant:team-write-hold */
   if (!onTeam) return {};
   if (teamListedDoc(doc, use)) return {};
@@ -3995,8 +4044,9 @@ function withdrawClosed() {
   const use = teamUse();
   if (!use.member || !use.seal) return;
   const open = contentApplies(use.seal.team);
-  /* Only an answer sealed to the lead's box was about a catalog the team does not list, so only it answers to the private mark. */
-  if (answerKept && answerKept.lead && (!open || privateChain(answerKept.ids).some(id => catalogPrivate.has(id)))) removeAnswer(); /* plant:s0b-withdraw-answer */
+  /* A box answer goes once this desk is no longer told; any answer whose chain is now private goes, whatever seal it went under:
+     a team-key answer stops being the lead's own edition once the root is delisted (Claude alpha, 2026-11-22, board 1014). */
+  if (answerKept && ((answerKept.lead && !open) || answerPrivateNow(use))) removeAnswer(); /* plant:s0b-withdraw-answer plant:pcm-withdraw-any */
   /* A box answer this desk has no record of, one an earlier build wrote among them, goes too; a team-key answer stays. */
   if (!open && names.indexOf(ANSWER_NAME) >= 0 && boxAnswerHere(path.join(dir, ANSWER_NAME))) removeAnswer(); /* plant:s0b-withdraw-unkept */
   for (const n of names) {
@@ -4017,11 +4067,25 @@ function withdrawClosed() {
     if (gone) { try { unlinkOwn(file); } catch { /* the next pass tries again */ } } /* plant:s0b-withdraw-branch */
   }
 }
+/* Whether the kept answer is about a catalog now private: its chain carries a mark, and the edition it answered with is not the
+   team's (privateHere). An edition this desk no longer holds is taken as private, so the doubt takes the answer back. */
+function answerPrivateNow(use) {
+  if (!answerKept || !privateChain(answerKept.ids).some(id => catalogPrivate.has(id))) return false;
+  const pin = String(answerKept.sha || "");
+  let doc = null;
+  for (const t of [loadedText, (handedUse.get(pin) || {}).text]) {
+    const d = typeof t === "string" && t ? catalogDocIn(t) : null;
+    let sha = "";
+    try { sha = d ? signedSha(d) : ""; } catch { sha = ""; }
+    if (PIN_RE.test(pin) && sha === pin) { doc = d; break; }
+  }
+  return !doc || privateHere(doc, use);
+}
 function writeAnswer(use, pin, catalogDoc, toLead, askId) {
   const me = branchIdentity(true);
   const seal = use && use.seal;
   if (!me || !seal) return false;
-  if (privateHere(catalogDoc, use.catalogs)) return false; /* plant:s0b-private */
+  if (privateHere(catalogDoc, use)) return false; /* plant:s0b-private */
   if (toLead && !contentApplies(seal.team)) return false; /* plant:s0b-switch */
   const root = sharedFolderForWrite();
   if (!folderAnswers(root)) return false;
@@ -4035,7 +4099,7 @@ function writeAnswer(use, pin, catalogDoc, toLead, askId) {
   if (toLead) env = sealAnswerLead(seal.box, seal.team, String(seal.lead.keyId), me.id, inner); /* plant:s0-answer-lead */
   if (!env) env = sealCatalog(seal.key, seal.team, seal.epoch, inner);
   writeReplacing(at.dest, JSON.stringify(env, null, 1) + "\n");
-  answerKept = { ids: lineageOf(catalogDoc), lead: !!toLead };
+  answerKept = { ids: lineageOf(catalogDoc), lead: !!toLead, sha: pin };
   persistDeskEnvelope();
   return true;
 }
@@ -4104,7 +4168,7 @@ function tryCatalogAsk(win) {
     if (!PIN_RE.test(pin)) return;
     const listed = teamListedDoc(doc, use);
     if (ask.sha256 !== pin && !listed) return;
-    if (privateHere(doc, use.catalogs)) return; /* plant:s0b-private */
+    if (privateHere(doc, use)) return; /* plant:s0b-private */
     if (sealedForOther(doc, pin, use.seal.team)) return; /* plant:s0-other-team */
     if (!listed && !(ask.content && contentApplies(use.seal.team))) return; /* plant:s0b-switch */
     if (!listed && !/^[0-9a-f]{64}$/.test(String(use.seal.box || ""))) return;
@@ -7249,9 +7313,10 @@ function contentView(read) {
   const doc = read === undefined ? folderTeamDoc() : read;
   const pin = doc ? pinTrusted(doc.id) : null;
   const team = pin && pin.keyId === doc.lead.keyId && pin.public === doc.lead.public ? String(doc.id) : "";
-  /* `listed`: the team's catalogs, which the private mark is never offered on. */
+  /* `listed`: the team's catalogs, which the private mark is never offered on. `private`: the marks that hold, so the page is
+     never told Private for a catalog this desk sends as the team's (idTeamHere); a mark it leaves out stays kept. */
   return { team: team, told: contentApplies(team),
-    private: Array.from(catalogPrivate).sort(), listed: team && Array.isArray(doc.catalogs) ? doc.catalogs.map(String) : [] };
+    private: Array.from(catalogPrivate).filter(id => !team || !idTeamHere(id)).sort(), listed: team && Array.isArray(doc.catalogs) ? doc.catalogs.map(String) : [] }; /* plant:pcm-view-sent */
 }
 /* This desk was told for `team`: kept with the time it was told, so unlisted catalogs can be answered or shared. */
 function contentSaid(team) {
@@ -7265,14 +7330,17 @@ function contentSaid(team) {
 /* The agent marks a catalog private by its id, or takes the mark off. */
 function markPrivate(id, on) {
   id = String(id || "");
-  /* A catalog the team lists takes no mark: the request is ignored. */
-  if (CATALOG_ID_RE.test(id) && !(on && idListedHere(id))) { /* plant:s0b-mark-listed */
+  /* A catalog that is the team's, its lead's own signed edition or a copy grown from one, takes no mark: the request is
+     ignored. A personal catalog under a listed id takes it (idTeamHere). */
+  if (CATALOG_ID_RE.test(id) && !(on && idTeamHere(id))) { /* plant:s0b-mark-listed plant:pcm-mark-signed */
     if (on) catalogPrivate.add(id);
     else catalogPrivate.delete(id);
     persistDeskEnvelope();
     /* An answer whose catalog this desk did not record goes too, since it cannot be told apart. */
     if (on && !answerKept) removeAnswer();
     tryCatalogAsk(theWindow);
+    /* Statistics already on the share that name the catalog now private are written again at once without its name. */
+    if (on && statsWroteNamed && statsCatalogPrivate(statsWroteNamed.id)) writeStatsAnswer(statsWroteNamed.text, "", "close"); /* plant:pcm-stats-mark */
   }
   return contentView();
 }
@@ -8654,7 +8722,8 @@ function readDesk() {
       if (typeof c === "string" && c && typeof g === "string" && g && g !== c) catalogRoots[c] = g;
     });
     if (doc && table(doc.answerKept) && Array.isArray(doc.answerKept.ids))
-      answerKept = { ids: doc.answerKept.ids.filter(c => typeof c === "string" && c).slice(0, LINEAGE_HOPS), lead: doc.answerKept.lead === true };
+      answerKept = { ids: doc.answerKept.ids.filter(c => typeof c === "string" && c).slice(0, LINEAGE_HOPS), lead: doc.answerKept.lead === true,
+        sha: PIN_RE.test(String(doc.answerKept.sha || "")) ? String(doc.answerKept.sha) : "" };
     if (doc && Array.isArray(doc.catalogPrivate)) doc.catalogPrivate.forEach(c => { if (typeof c === "string" && CATALOG_ID_RE.test(c)) catalogPrivate.add(c); });
     if (doc && table(doc.teamRelayGone)) Object.keys(doc.teamRelayGone).forEach(t => {
       if (SEALED_TEAM_RE.test(t) && doc.teamRelayGone[t] === true) teamRelayGone[t] = true;
@@ -8691,6 +8760,7 @@ function readDesk() {
       if (PIN_RE.test(String(u.sha || "")) && Number.isInteger(u.epoch) && u.epoch >= 1 && SEALED_TEAM_RE.test(String(u.team || ""))) {
         inUseKept = { sha: String(u.sha), epoch: u.epoch, team: String(u.team) };
         if (u.source === "folder" || u.source === "opened" || u.source === "desk-file") inUseKept.source = u.source;
+        if (u.withheld === true) inUseKept.withheld = true;
       }
     }
     if (doc && Number.isInteger(doc.inUseN) && doc.inUseN >= 1 && doc.inUseN > inUseN) inUseN = doc.inUseN;
