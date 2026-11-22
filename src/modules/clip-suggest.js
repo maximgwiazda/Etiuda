@@ -414,7 +414,7 @@ function scoreSuggestions(text, model) {
   }
   const out = [];
   for (const [id, score] of combined) {
-    if (!(score > SUGGEST_SCORE_FLOOR)) continue;
+    if (!(score >= SUGGEST_SCORE_FLOOR)) continue;
     const p = profiles.get(id);
     out.push({ id, name: p && p.name ? p.name : id, score });
   }

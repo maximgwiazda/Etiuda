@@ -2,7 +2,7 @@
  *
  *   node tests/clip-suggest.mjs
  *
- * The strip is the intents whose score is above SUGGEST_SCORE_FLOOR, five at most. A selection is
+ * The strip is the intents whose score is at or above SUGGEST_SCORE_FLOOR, five at most. A selection is
  * scored whole: no length, word count or shape keeps it from the scorer. Nothing of it is kept after the score.
  */
 import { createRequire } from "node:module";
@@ -69,7 +69,8 @@ const labels = { suggest: "Suggested from the selected words", suggestTip: "None
 const model = buildSuggestModel(catalog, labels);
 const hidden = scoreSuggestions("please send brasswick soonish", model);
 const shown = scoreSuggestions("please mend lantern today", model);
-check(hidden.length === 0, "a tier-2 exact at the floor stays hidden: " + JSON.stringify(hidden));
+/* Moved 2026-11-22 (old: a tier-2 exact at the floor stays hidden; new: a selection matching only a card keyword, at the floor, is offered, Claude α on Max's "100% permissive if it's selected text"). */
+check(hidden.length === 1 && hidden[0].id === "t:wick" && hidden[0].score === SUGGEST_SCORE_FLOOR, "a tier-2 exact at the floor is offered: " + JSON.stringify(hidden));
 check(shown.length === 1 && shown[0].id === "t:wick" && shown[0].score > SUGGEST_SCORE_FLOOR && shown[0].name === "Wick trim",
   "a tier-1 exact above the floor is offered: " + JSON.stringify(shown));
 const nameScore = scoreSuggestions("Ada Maria Quinn", model);
