@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 /* The floor: every leg below runs, or the file says it did not complete. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 105 - 12 - 7 - 15 - 1; /* 12 retired with the folder team (RETIRED_TWO_TEAMS_ONE_FOLDER) and 7 with the conflict sibling of the team file and 16 with a folder team's head, ring and wait and the row's fork (each marked RETIRED); the plants of the fork and sibling scenes (14br to 14bx, 14cc, 14cj) are not yet retired with them */
+const EXPECTED = 105 - 12 - 7 - 15 - 1 - 6 - 2 + 2; /* 12 retired with the folder team (RETIRED_TWO_TEAMS_ONE_FOLDER), 7 with the conflict sibling of the team file, 16 with a folder team's head, ring and wait and the row's fork (each marked RETIRED); then the six fork and syncer plants (14br to 14bu, 14bv and 14bx; 14bv moved to relay-channel 939h3) and the two sibling plants (14cc, 14cj) retired, and 14by and 14cd moved back as page checks over a stand-in host */
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -1249,9 +1249,12 @@ try {
       "14bq a dismissed fork notice stays dismissed for that fork, a restart included: seen " + (dzRow && dzRow.fork && dzRow.fork.seen)
       + ", after the restart " + (dzFresh && dzFresh.fork && dzFresh.fork.seen));
 
-    /* The page: the team's notice in the copywriter's words, English for one fork and Polish for the other, and its
-       dismissal sent to the shell. A DOM as much as a lasting notice touches, as tests/relay-channel.mjs 978 draws it. */
-    {
+    /* The page's fork notice, over a stand-in host that answers every ask with the team's row as the shell gives it: the fork with its own key,
+       `seen` once "fork-seen" arrives for that team. A relay team's row has its fork from the relay channel; the shell's half (the fork reaching
+       the row, and the agent's dismissal marked seen and kept) is tests/relay-channel.mjs 939h2's. These checks (14by, 14cd, 14ce) were
+       driven by a folder team's fork through the shell; the page's half is what they hold now. A DOM as much as a lasting notice touches,
+       as tests/relay-channel.mjs 978 draws it. */
+    async function forkPageScene(TJ) {
       const nodes = new Map();
       const mk = tag => ({ tag, id: "", className: "", textContent: "", type: "", children: [], attrs: {}, style: {}, parent: null, onclick: null,
         classList: { add() {}, remove() {}, contains: () => false, toggle() {} },
@@ -1262,116 +1265,51 @@ try {
       const textOf = e => (e.textContent || "") + (e.children || []).map(textOf).join("");
       const pause = ms => new Promise(r => setTimeout(r, ms));
       const was = { document: globalThis.document, host: window.E_HOST, add: globalThis.addEventListener, remove: globalThis.removeEventListener };
-      const asked = [];
-      let shown = { en: "", pl: "" }, dismissed = false, seenAfter = null;
-      try {
-        const pl = await laterScene(null), pt = await twoScene(null);
-        let deskNow = pl, took = null;
-        globalThis.document = { body: mk("body"), documentElement: mk("html"), createElement: mk,
-          createTextNode: s => ({ textContent: String(s), children: [] }), getElementById: id => nodes.get(id) || null,
-          querySelector: () => null, querySelectorAll: () => [], addEventListener() {}, removeEventListener() {} };
-        globalThis.addEventListener = () => {};
-        globalThis.removeEventListener = () => {};
-        window.E_HOST = { teamJoin: (...a) => { asked.push(a[0]); return deskNow.w.D.ask("etiuda:team-join", ...a); }, onTeamJoin: fn => { took = fn; } };
-        const HK = await import(MOD("hooks.js"));
-        HK.hooks.render = () => {};
-        const ST = await import(MOD("storage.js")), TJ = await import(MOD("team-join.js"));
-        const notice = () => { const n = nodes.get("eTeamFork"); return n && n.children[0] ? textOf(n.children[0]) : ""; };
-        ST.lsSet("eUiLang", "en");
-        TJ.wireTeamJoin();
-        await pause(30);
-        shown.en = notice();
-        deskNow = pt;
-        ST.lsSet("eUiLang", "pl");
-        took(await pt.w.D.ask("etiuda:team-join", "state"));
-        await pause(30);
-        shown.pl = notice();
-        ST.lsSet("eUiLang", "en");
-        const buttons = [];
-        (function walk(e) { if (e.tag === "button") buttons.push(e); for (const c of e.children || []) walk(c); })(nodes.get("eTeamFork") || { children: [] });
-        if (buttons.length) { buttons[buttons.length - 1].onclick(); dismissed = true; }
-        await pause(30);
-        const r = await pt.w.row();
-        seenAfter = r && r.fork ? r.fork.seen : null;
-      } finally {
-        globalThis.document = was.document;
-        window.E_HOST = was.host;
-        globalThis.addEventListener = was.add;
-        globalThis.removeEventListener = was.remove;
-      }
       const LATER_EN = "Someone has used this team's old lead key to hand the team to another key as well, so that key is evidently in someone else's hands. This desk stays with the key it already follows, and the catalogs on it stay as they are. Tell the team's lead about it.";
       const TWO_PL = "Klucz lidera tego zespołu przekazano jednocześnie dwóm różnym nowym kluczom, więc stanowisko nie podąża za żadnym z nich. Katalogi na nim zostają bez zmian. Proszę powiedzieć o tym liderowi zespołu.";
-      /* RETIRED, P4 (no folder is read as a team): the row's fork notice (a key's handover seen twice, or a later one) was raised by the folder's own reading of a team file; a team file read from a relay's mirror raises it through the relay channel (tests/relay-channel.mjs), and the shell's heed no longer gives the row the fork. It said what its sentence below says. */
-      retire(shown.en === LATER_EN && shown.pl === TWO_PL && dismissed && asked.indexOf("fork-seen") >= 0 && seenAfter === true,
-        "14by the page shows the fork on the team's lasting notice in the copywriter's words, here one after the other in English and"
-        + " two at once in Polish, and a dismissal reaches the shell: English " + JSON.stringify(shown.en) + ", Polish " + JSON.stringify(shown.pl)
-        + ", dismissed " + dismissed + ", asked " + asked.filter(a => a === "fork-seen").length + ", seen " + seenAfter);
-    }
-
-    /* A dismissed fork stays dismissed. A later fork of the same kind, with its own key, is said.
-       The second file lands after a restart, which is when the shell says a new fork of a key it has
-       already followed. The page keeps the dismissal in its own memory across that restart. */
-    async function dismissedThenLater(TJ) {
-      const nodes = new Map();
-      const mk = tag => ({ tag, id: "", className: "", textContent: "", type: "", children: [], attrs: {}, style: {}, parent: null, onclick: null,
-        classList: { add() {}, remove() {}, contains: () => false, toggle() {} },
-        setAttribute(k, v) { this.attrs[k] = String(v); },
-        appendChild(c) { c.parent = this; this.children.push(c); if (c.id) nodes.set(c.id, c); return c; },
-        remove() { if (this.parent) this.parent.children = this.parent.children.filter(x => x !== this); if (this.id && nodes.get(this.id) === this) nodes.delete(this.id); this.parent = null; },
-        get firstChild() { return this.children[0] || null; } });
-      const textOf = e => (e.textContent || "") + (e.children || []).map(textOf).join("");
-      const pause = ms => new Promise(r => setTimeout(r, ms));
-      const hexKey = k => typeof k === "string" && /^[0-9a-f]{64}$/.test(k);
-      const was = { document: globalThis.document, host: window.E_HOST, add: globalThis.addEventListener, remove: globalThis.removeEventListener };
-      const LATER_EN = "Someone has used this team's old lead key to hand the team to another key as well, so that key is evidently in someone else's hands. This desk stays with the key it already follows, and the catalogs on it stay as they are. Tell the team's lead about it.";
-      const out = { firstShown: "", downAfter: true, secondShown: "", seenFirst: null, saidSecond: 0,
-        keyFirst: "", keySecond: "", envFirst: "", envSecond: "", secondSeen: null, secondKind: "", LATER_EN, hexKey };
+      const T = "t-" + crypto.randomBytes(4).toString("hex");
+      const keyN = n => crypto.createHash("sha256").update("fork " + n).digest("hex");
+      const asked = [];
+      let fork = { kind: "later", key: keyN(1), seen: false }, took = null;
+      const view = () => ({ leads: [Object.assign({ team: T, print: "0123456789abcdef", admitted: true, seen: true, lead: "Ada Quay", folder: "", relay: "relay.test" },
+        fork ? { fork: Object.assign({}, fork) } : {})] });
+      const out = { LATER_EN, TWO_PL, asked, firstShown: "", seenFirst: null, downAfter: null, stays: null, secondShown: "", secondKind: "", pl: "", keysDiffer: keyN(1) !== keyN(3) };
       try {
-        const w = await forkWorld(null);
-        put(w.FD, "etiuda-team.json", w.led(1, 2, [w.step(0, 1)]));
-        const followed = await w.opens(2) && w.pin() === w.L[1].public;
-        put(w.FD, "etiuda-team.json", w.led(2, 3, [w.step(0, 2)]));
-        await read(w.D, "lamps.ec");
-        const rowFirst = await w.row();
-        const firstLast = ((w.D.envelope().teamForks || {})[w.T] || {}).last;
-        out.envFirst = firstLast && firstLast.key || "";
-        out.keyFirst = rowFirst && rowFirst.fork ? rowFirst.fork.key || "" : "";
-        let took = null;
         globalThis.document = { body: mk("body"), documentElement: mk("html"), createElement: mk,
           createTextNode: s => ({ textContent: String(s), children: [] }), getElementById: id => nodes.get(id) || null,
           querySelector: () => null, querySelectorAll: () => [], addEventListener() {}, removeEventListener() {} };
         globalThis.addEventListener = () => {};
         globalThis.removeEventListener = () => {};
-        window.E_HOST = { teamJoin: (...a) => w.D.ask("etiuda:team-join", ...a), onTeamJoin: fn => { took = fn; } };
+        window.E_HOST = { teamJoin: (...a) => { asked.push(a.slice(0, 2)); if (a[0] === "fork-seen" && a[1] === T && fork) fork.seen = true; return Promise.resolve(view()); },
+          onTeamJoin: fn => { took = fn; } };
         const HK = await import(MOD("hooks.js"));
         HK.hooks.render = () => {};
-        const ST = await import(MOD("storage.js"));
-        const page = TJ || await import(MOD("team-join.js"));
+        const ST = await import(MOD("storage.js")), page = TJ || await import(MOD("team-join.js"));
         const notice = () => { const n = nodes.get("eTeamFork"); return n && n.children[0] ? textOf(n.children[0]) : ""; };
         ST.lsSet("eUiLang", "en");
         page.wireTeamJoin();
         await pause(30);
-        out.firstShown = followed && notice() === LATER_EN ? "shown" : notice();
+        out.firstShown = notice() === LATER_EN ? "shown" : notice();
         const buttons = [];
         (function walk(e) { if (e.tag === "button") buttons.push(e); for (const c of e.children || []) walk(c); })(nodes.get("eTeamFork") || { children: [] });
         if (buttons.length) buttons[buttons.length - 1].onclick();
         await pause(30);
-        const rowDismissed = await w.row();
-        out.seenFirst = rowDismissed && rowDismissed.fork ? rowDismissed.fork.seen : null;
+        out.seenFirst = fork.seen;
         out.downAfter = !nodes.get("eTeamFork");
-        w.restart();
-        put(w.FD, "etiuda-team.json", w.led(3, 3, [w.step(0, 3)]));
-        await read(w.D, "lamps.ec");
-        out.saidSecond = w.said(FORK_LATER);
-        const rowSecond = await w.row();
-        out.keySecond = rowSecond && rowSecond.fork ? rowSecond.fork.key || "" : "";
-        out.secondSeen = rowSecond && rowSecond.fork ? rowSecond.fork.seen : null;
-        out.secondKind = rowSecond && rowSecond.fork ? rowSecond.fork.kind : "";
-        const secondLast = ((w.D.envelope().teamForks || {})[w.T] || {}).last;
-        out.envSecond = secondLast && secondLast.key || "";
-        if (took) took(await w.D.ask("etiuda:team-join", "state"));
+        took(view());
+        await pause(30);
+        out.stays = !nodes.get("eTeamFork");
+        fork = { kind: "later", key: keyN(3), seen: false };
+        took(view());
         await pause(30);
         out.secondShown = notice();
+        out.secondKind = fork.kind;
+        fork = { kind: "two", key: keyN(2), seen: false };
+        ST.lsSet("eUiLang", "pl");
+        took(view());
+        await pause(30);
+        out.pl = notice();
+        ST.lsSet("eUiLang", "en");
       } finally {
         globalThis.document = was.document;
         window.E_HOST = was.host;
@@ -1381,17 +1319,21 @@ try {
       return out;
     }
     {
-      const d = await dismissedThenLater(null);
-      /* RETIRED, P4 (no folder is read as a team): the row's fork notice (a key's handover seen twice, or a later one) was raised by the folder's own reading of a team file; a team file read from a relay's mirror raises it through the relay channel (tests/relay-channel.mjs), and the shell's heed no longer gives the row the fork. It said what its sentence below says. */
-      retire(d.firstShown === "shown" && d.seenFirst === true && d.downAfter && d.saidSecond === 1
-        && d.hexKey(d.keyFirst) && d.hexKey(d.keySecond) && d.keyFirst !== d.keySecond && d.secondShown === d.LATER_EN,
-        "14cd a dismissed fork stays dismissed, and a second fork with a different key is said: first " + d.firstShown
-        + ", seen " + d.seenFirst + ", down " + d.downAfter + ", said after the restart " + d.saidSecond
-        + ", row keys differ " + (d.hexKey(d.keyFirst) && d.hexKey(d.keySecond) && d.keyFirst !== d.keySecond)
-        + ", envelope keys differ " + (d.hexKey(d.envFirst) && d.hexKey(d.envSecond) && d.envFirst !== d.envSecond)
-        + ", second kind " + d.secondKind + " seen " + d.secondSeen
+      const d = await forkPageScene(null);
+      /* MOVED, P4 (the row's fork was raised through the shell by a folder's own reading of a team file, which no folder has): the page's half stays, over a stand-in host.
+         Said before: "the page shows the fork on the team's lasting notice in the copywriter's words, here one after the other in English and two at once in
+         Polish, and a dismissal reaches the shell", through a folder team's shell. */
+      check(d.firstShown === "shown" && d.pl === d.TWO_PL && d.asked.some(a => a[0] === "fork-seen" && a[1] !== undefined) && d.seenFirst === true,
+        "14by the page shows the fork on the team's lasting notice in the copywriter's words, one fork in English and another in Polish, and a dismissal reaches the shell"
+        + " as fork-seen for the team: English " + JSON.stringify(d.firstShown) + ", Polish " + JSON.stringify(d.pl) + ", asked fork-seen "
+        + d.asked.filter(a => a[0] === "fork-seen").length + ", seen " + d.seenFirst);
+      /* MOVED likewise. Said before: "a dismissed fork stays dismissed, and a second fork with a different key is said", with the second file landing after a restart. */
+      check(d.firstShown === "shown" && d.seenFirst === true && d.downAfter === true && d.stays === true && d.keysDiffer && d.secondShown === d.LATER_EN,
+        "14cd a dismissed fork stays dismissed on the page, and a second fork of the same kind with a different key is said: first " + d.firstShown
+        + ", seen " + d.seenFirst + ", down " + d.downAfter + ", down at the next view " + d.stays + ", second kind " + d.secondKind
         + ", second " + JSON.stringify(d.secondShown));
     }
+
 
     /* The page, for a desk left behind (the test architect's E1 on the lead box): the team's row as the shell gives it
        (tests/relay-channel.mjs 939l drives the shell's half), shown in English, taken down by a view without it, shown again
@@ -1486,22 +1428,17 @@ try {
       } catch (e) { detail = e && e.stack ? e.stack : String(e); }
       return { turned, back: shaOf(src) === digest, detail };
     }
-    const lifts = [
-      ["14br", "main.js", "fork-in-desk", "shows no fork, so the desk says nothing of key 0 handed on twice and follows one of two successors",
-        async p => { const a = await laterScene(p), b = await heedScene(p); return a.saidFirst === 0 && b.pin !== b.w.L[0].public; }],
-      ["14bs", "main.js", "fork-once-desk", "says the same fork again after a restart",
-        async p => (await laterScene(p)).saidRestart > 0],
-      ["14bt", "main.js", "fork-was", "forgets the keys the desk followed, so after a restart key 0 handed to key 3 is not said",
-        async p => (await laterScene(p)).saidNew === 0],
-      ["14bu", "main.js", "fork-two-heed", "follows one of two successors the shell reads in its own look",
-        async p => { const h = await heedScene(p); return h.pin === h.w.L[1].public; }],
-      ["14bv", "main.js", "fork-row", "keeps the fork from the team's row, so the notice never shows",
-        async p => { const a = await laterScene(p); return a.saidFirst === 1 && !!a.rowFirst && !a.rowFirst.fork; }],
-      /* 14bw RETIRED with 14bq (the row's fork, which a team read from the relay's mirror no longer gets from the shell's heed): it said that lifting
-         plant:fork-seen in a scratch copy of shell/main.js forgets the dismissal. */
-      ["14bx", "folder/syncer.cjs", "syncer-fork-two", "lets the syncer take one of two successors in one sync into the copy the shell reads",
-        async p => { const t = await twoScene(p); return t.mirrorTeam !== t.w.L[0].keyId + ":1"; }],
-    ];
+    /* RETIRED, P4 (no folder is read as a team): the plants of the fork scenes and of the syncer's fork. Each said that lifting its plant undid what a folder
+       team's check held, and those checks are retired above (14bm and 14bq, the shell's half, came from the folder's own reading of a team file, which a relay team's
+       mirror never gives the shell: the relay channel judges a fork and writes no forked file there):
+         14br plant:fork-in-desk   "shows no fork, so the desk says nothing of key 0 handed on twice and follows one of two successors"
+         14bs plant:fork-once-desk "says the same fork again after a restart"
+         14bt plant:fork-was       "forgets the keys the desk followed, so after a restart key 0 handed to key 3 is not said"
+         14bu plant:fork-two-heed  "follows one of two successors the shell reads in its own look"
+         14bx plant:syncer-fork-two "lets the syncer take one of two successors in one sync into the copy the shell reads" (the syncer is no longer run)
+       14bv plant:fork-row and 14bw plant:fork-seen are MOVED to tests/relay-channel.mjs 939h3 and 939h4 (the row's fork and its dismissal, for a relay team). The
+       plants stay in shell/main.js and are removed with their dead code in P3 (folderForkSeen, forkChain, deskForkNoted's heed caller). */
+    const lifts = [];
     for (const [id, file, tag, what, fn] of lifts) {
       const r = await liftDesk(file, tag, fn);
       check(r.turned && r.back, id + " lifting plant:" + tag + " in shell/" + file + " " + what + ", and the product file is never written: "
@@ -1520,32 +1457,15 @@ try {
       const mod = await import(pathToFileURL(path.join(dir, file)).href);
       return { mod, same: fs.readFileSync(at).equals(before), detail: "loaded" };
     }
-    if (PLANTS_OFF) skip("14cc lifting plant:sib-handover in a scratch copy of shell/main.js leaves the desk on the old lead");
-    else {
-      const r = await liftDesk("main.js", "sib-handover", async p => {
-        const h = await handoverSibling(p);
-        return h.pin !== h.w.L[1].public;
-      });
-      check(r.turned && r.back,
-        "14cc lifting plant:sib-handover in a scratch copy of shell/main.js leaves the desk on the old lead, and the product file is never written: "
-        + r.detail + ", sha " + (r.back ? "restored" : "differs"));
-    }
-    if (PLANTS_OFF) skip("14cj lifting plant:sib-pin in a scratch copy of shell/main.js strands the desk on canonical L0 after L0 to L1");
-    else {
-      const r = await liftDesk("main.js", "sib-pin", async p => {
-        const s = await pinnedSibling(p);
-        return s.firstOpens && !s.sibL1Opens && !s.sibL2Opens && s.pin2 !== s.w.L[2].public;
-      });
-      check(r.turned && r.back,
-        "14cj lifting plant:sib-pin in a scratch copy of shell/main.js strands the desk on canonical L0 after L0 to L1, and the product file is never written: "
-        + r.detail + ", sha " + (r.back ? "restored" : "differs"));
-    }
+    /* RETIRED, P4 (a conflict sibling of the team file is no team file, the canonical alone is heeded): 14cc, "lifting plant:sib-handover in a scratch copy of
+       shell/main.js leaves the desk on the old lead", and 14cj, "lifting plant:sib-pin in a scratch copy of shell/main.js strands the desk on canonical L0 after
+       L0 to L1", each with its check above (14bn, 14bp, 14ca, 14cb, 14cf, 14cg, 14ci). */
     if (PLANTS_OFF) skip("14ce lifting plant:fork-note-key in a scratch copy of src/modules/team-join.js leaves the second fork unsaid");
     else {
       const planted = await plantedPage("team-join.js", "fork-note-key");
       let stayed = false;
       if (planted.mod) {
-        const d = await dismissedThenLater(planted.mod);
+        const d = await forkPageScene(planted.mod);
         stayed = d.firstShown === "shown" && d.seenFirst === true && d.downAfter && d.secondShown !== d.LATER_EN;
       }
       check(!!planted.mod && planted.same && stayed,
