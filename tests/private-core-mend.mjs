@@ -29,7 +29,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 40;
+const EXPECTED = 42;
 
 const CARD = "The quay lamp is wrapped for the crossing.";
 
@@ -76,7 +76,7 @@ function loadDesk(ud, src) {
   process.env.XDG_CURRENT_DESKTOP = "GNOME";
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
     (src || SRC) + "\nreturn { setDown: d => { folderDown = d; }, setStats: (s, p) => { statsSpan = s; statsPeriod = p; }, "
-      + "forgetStatsNamed: () => { statsWroteNamed = null; }, noteSharedWrote: (file, text) => historyKeep(file, text, true), "
+      + "forgetStatsNamed: () => { statsWroteNamed = null; statsNamedKept = null; }, noteSharedWrote: (file, text) => historyKeep(file, text, true), "
       + EXPOSE.map(n => n + ": typeof " + n + " === 'undefined' ? undefined : " + n).join(", ") + " };")(
     n => (n === "electron" ? electron : nodeRequire(n)),
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
@@ -514,6 +514,9 @@ try {
     u.box.D.api.forgetStatsNamed();
     await mark(u, "quay-held", true);
     const live = read();
+    /* Taken off with no span held, the file naming the catalog again first: one already emptied names nothing, and stays. */
+    await mark(u, "quay-held", false);
+    u.box.D.api.writeStatsAnswer(JSON.stringify({ catalog: { id: "quay-held", rev: 4 }, cards: [{ id: "c-warm", n: 2 }], intents: [], misses: 0, langs: {} }), "", "close");
     u.box.D.api.forgetStatsNamed();
     u.box.D.api.setStats("", null);
     await mark(u, "quay-held", true);
@@ -524,6 +527,30 @@ try {
     "pcm9s marking Private empties statistics the process has forgotten, and takes the file off once no span is held (" + JSON.stringify(r9s) + ")");
   await planted("pcm9sp", "plant:pcm-stats-mark", "    /* plant lifted */", pcm9s,
     r => !!(r.live && r.live.id) || r.dropped, "statistics the process forgot still name the catalog, or the file stays once the span is gone");
+
+  /* pcm9n (withdraw-names-only-private, review rho's narrowing of 5cf2f1e3): a mark on another catalog, in a process that has not
+     written the statistics itself, leaves statistics that name a catalog not private, span held or not. */
+  const pcm9n = async src => {
+    const u = await setup("pcm9n-" + (src ? "p" : "g"), { src });
+    u.box.D.api.setStats("lab", { from: "2026-11-01", to: "2026-11-30" });
+    const file = path.join(ownDir(u.box.share, u.box.me.id), "stats.estat");
+    const read = () => { try { return JSON.parse(u.box.D.api.openStatsSealed(leadBox.privateKey, JSON.parse(fs.readFileSync(file, "utf8")), u.box.me.id)); } catch { return null; } };
+    u.box.D.api.writeStatsAnswer(JSON.stringify({ catalog: { id: "quay-held", rev: 4 }, cards: [{ id: "c-warm", n: 2 }], intents: [], misses: 0, langs: {} }), "", "close");
+    u.box.D.api.forgetStatsNamed();
+    await mark(u, "quay-other", true);
+    const live = read();
+    u.box.D.api.forgetStatsNamed();
+    u.box.D.api.setStats("", null);
+    await mark(u, "quay-third", true);
+    const left = read();
+    return { live: live && live.catalog ? live.catalog.id : null, counts: !!live && Array.isArray(live.cards) && live.cards.length === 1,
+      kept: fs.existsSync(file), left: left && left.catalog ? left.catalog.id : null };
+  };
+  const r9n = await pcm9n();
+  check(r9n.live === "quay-held" && r9n.counts && r9n.kept && r9n.left === "quay-held",
+    "pcm9n withdraw-names-only-private marking another catalog Private leaves statistics that name a catalog not private, with their counts, in a process that did not write them, span held or not (" + JSON.stringify(r9n) + ")");
+  await planted("pcm9np", "plant:pcm-withdraw-named", "    /* plant lifted */", pcm9n,
+    r => r.live !== "quay-held" || !r.counts || !r.kept, "statistics naming a team catalog are emptied or taken off by a mark on another");
 
   /* pcm11: on a folder team, the root file this desk wrote goes, and only that file. No shared-write: that starts a worker. */
   const pcm11 = async src => {
