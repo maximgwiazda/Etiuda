@@ -28,7 +28,7 @@ const STAGING_RELAY = "https://etiuda.dev/relay-staging/v1";
 /* A test service build's fields, as tools/test-service.cjs packs them into the asar's package.json (tests/test-service.mjs). */
 const TEST_SERVICE_FIELDS = { service: "https://etiuda.dev/licence-staging/v1/",
   clientIds: { microsoft: "11111111-2222-3333-4444-555555555555", google: "1234567890-abcdefghij.apps.googleusercontent.com" },
-  order: "https://etiuda.dev/buy-staging/" };
+  order: "https://staging.etiuda.dev" };
 
 const safeStorage = {
   isEncryptionAvailable: () => true,

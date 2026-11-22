@@ -43,7 +43,7 @@ const SECRET = ["GOCSPX", "standin", "0123456789abcdef"].join("-");
 const LAB_SECRET = ["lab", "secret", "1"].join("-");
 const STAGING = "https://etiuda.dev/licence-staging/v1/";
 const LAB = { service: STAGING, clientIds: { microsoft: "11111111-2222-3333-4444-555555555555", google: "1234567890-abcdefghij.apps.googleusercontent.com" },
-  order: "https://etiuda.dev/buy-staging/" };
+  order: "https://staging.etiuda.dev" };
 const write = (name, text) => { const f = path.join(TMP, name); fs.writeFileSync(f, text); return f; };
 
 try {
@@ -61,8 +61,10 @@ try {
   check(refused.every(r => r === "refused"), "ts1b a lab file the desk's reader refuses stops the pack, five shapes: " + refused.join(","));
   const withSecret = JSON.stringify(Object.assign({}, LAB, { provider: { id: "lab", clientId: "lab-client-1", clientSecret: LAB_SECRET,
     issuer: "http://127.0.0.1:4567", authorize: "http://127.0.0.1:4567/authorize", token: "http://127.0.0.1:4567/token", scope: "openid" } }));
-  const holdsGoogle = JSON.stringify(Object.assign({}, LAB, { order: "https://etiuda.dev/" + SECRET.replace(/[^A-Za-z0-9._~-]/g, "") + "/" }));
-  const said = f => { try { TS.testServiceFields(f, read, SECRET.replace(/[^A-Za-z0-9._~-]/g, "")); return "taken"; } catch (e) { return e.message; } };
+  /* A lab file's order is an origin (7aa73820), so the secret rides in its host name, where the reader still takes it. */
+  const G = SECRET.toLowerCase().replace(/[^a-z0-9-]/g, "");
+  const holdsGoogle = JSON.stringify(Object.assign({}, LAB, { order: "https://" + G + ".etiuda.dev" }));
+  const said = f => { try { TS.testServiceFields(f, read, G); return "taken"; } catch (e) { return e.message; } };
   const s1 = said(withSecret), s2 = said(holdsGoogle);
   check(/client secret/.test(s1) && /Google's client secret/.test(s2) && [s1, s2].every(m => m.indexOf(LAB_SECRET) < 0 && m.indexOf(SECRET) < 0),
     "ts1c a provider's client secret, or Google's secret anywhere in what would be packed, stops the pack, naming no value");

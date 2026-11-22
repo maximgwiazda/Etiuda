@@ -21,7 +21,7 @@ function line(present, service) { return "Test service: " + (present ? "present,
 
 /* The shell's reader and the declarations it reaches, each sliced from shell/main.js by its first line, so the pack and the
    desk cannot disagree on what a lab file is. */
-const READER = ["const SIGNIN_CLIENT =", "const SIGNIN_SECRET_SHAPE =", "const ORDER_PAGE_SHAPE =", "function signinLabAt(",
+const READER = ["const SIGNIN_CLIENT =", "const SIGNIN_SECRET_SHAPE =", "const ORDER_PAGE_SHAPE =", "const ORDER_ORIGIN_SHAPE =", "function signinLabAt(",
   "function signinLabService(", "function signinLabRead("];
 function shellReader(mainText) {
   const src = String(mainText);
