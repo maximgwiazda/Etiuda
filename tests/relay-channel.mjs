@@ -63,7 +63,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 567;
+const EXPECTED = 573;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -8694,6 +8694,178 @@ if (partOn("pNor")) {
     }
   } catch (e) {
     check(false, "harness (the leg nor1a): " + (e && e.stack ? e.stack : e));
+  }
+}
+
+/* ---- one lead key on two computers across an epoch move (tce). The first moves the team's epoch while offline, taking one desk
+   off; the second, meanwhile, edits the team file at the old epoch and sends it with a copy for each desk its roster names. When
+   the first reconnects, the newer by epoch then rev stands: the relay's main team file, the second computer, each remaining desk's
+   own copy and a desk restored afterwards all reach the epoch-2 file, the desk taken off is never brought back and opens none of
+   it, and the second's edit is said once on the first and kept in its clash record. Keys of both epochs are made here. ---- */
+async function crossEpoch(mod) {
+  const LB = boxPair(), KM1 = crypto.randomBytes(32), KM2 = crypto.randomBytes(32);
+  const rt = hex(16), tm = { rt, id: "t-" + hex(8) };
+  const made = await admin("POST", "/relay/v1/teams", createBody(rt, R.clock.now));
+  if (made.status !== 200) throw new Error("a team for the cross-epoch leg was not made: " + JSON.stringify(made.json));
+  let devRev = 0;
+  const enrol = async (...ks) => {
+    devRev++;
+    const list = ks.map(k => ({ id: k.keyId, pub: k.pub, desk: k.keyId })), t = R.clock.now;
+    return admin("POST", "/relay/v1/t/" + rt + "/devices", { keys: list, rev: devRev, t, sig: signHex(LEAD, core.devicesBytes(rt, devRev, t, list)) });
+  };
+  const tag = rt.slice(0, 8);
+  const pinOf = () => ({ teamId: tm.id, rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } });
+  const doc = (epoch, rev, roster) => JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: tm.id, catalogs: ["quay-board"],
+    lead: { keyId: LEAD.keyId, public: LEAD.pub, box: LB.pub }, sealed: true, exportsSealed: false, epoch, rev,
+    channel: { kind: "relay", rt, url: URLV1 }, ring: RING, roster }, LEAD), null, 1) + "\n";
+  const entry = (d, key, epoch) => ({ desk: { id: d.k.keyId, key: d.k.pub, box: d.box.pub }, wrap: wrapFor(key, d.box.pub, tm.id, epoch, d.k.keyId) });
+  const desk = () => ({ k: keyPair(true), box: boxPair() });
+  const D1 = desk(), D2 = desk(), D3 = desk(), D4 = desk();
+  /* A computer of the lead's key: the one box, keys held by epoch, sealing under the newest. */
+  const leadOf = (name, held) => Object.assign(program(name + "-" + tag, LEAD, "root", { mod, rt, pin: pinOf, keyFor: e => held.get(e) || null,
+    sealEpoch: () => Math.max(...held.keys()), agree: agreeWith(LB) }), { held });
+  /* A desk: its own box, and its onTeam taking the key from its own wrap. */
+  const deskOf = (name, d, start) => {
+    const held = new Map(start || [[1, KM1]]), mirror = path.join(LAB, name + "-" + tag);
+    const heed = () => {
+      let t = null;
+      try { t = JSON.parse(read(mirror, C.TEAM_NAME)); } catch { return; }
+      const mine = t && Array.isArray(t.roster) ? t.roster.find(r => r && r.desk && r.desk.id === d.k.keyId) : null;
+      const key = mine ? unwrapWith(d.box, mine.wrap, tm.id, t.epoch, d.k.keyId) : null;
+      if (key) held.set(t.epoch, key);
+    };
+    return Object.assign(program(name + "-" + tag, d.k, "desk:" + d.k.keyId, { mod, rt, pin: pinOf, watch: false,
+      me: () => ({ keyId: d.k.keyId, public: d.k.pub, privateKey: d.k.privateKey, place: "desk:" + d.k.keyId, box: d.box.pub }),
+      keyFor: e => held.get(e) || null, sealEpoch: () => Math.max(...held.keys()), agree: agreeWith(d.box), onTeam: heed }), { held });
+  };
+  const of = text => { try { const t = JSON.parse(text); return { epoch: t.epoch, rev: t.rev, d3: t.roster.some(r => r.desk.id === D3.k.keyId) }; } catch { return null; } };
+  const at = p => of(read(p.mirror, C.TEAM_NAME));
+  await enrol(D1.k, D2.k, D3.k);
+  const ONE = doc(1, 1, [entry(D1, KM1, 1), entry(D2, KM1, 1), entry(D3, KM1, 1)]);
+  const a = leadOf("tce-a", new Map([[1, KM1]])), b = leadOf("tce-b", new Map([[1, KM1]]));
+  const d1 = deskOf("tce-d1", D1), d2 = deskOf("tce-d2", D2), d3 = deskOf("tce-d3", D3);
+  put(a.mirror, C.TEAM_NAME, ONE);
+  a.ch.start(); await settle(a);
+  b.ch.start(); await settle(b);
+  d1.ch.start(); d2.ch.start(); d3.ch.start();
+  await settle(d1, d2, d3);
+  const allOne = [a, b, d1, d2, d3].every(p => read(p.mirror, C.TEAM_NAME) === ONE);
+  /* The first, offline, takes D3 off: a new key, a roster without D3. */
+  a.t.down = true;
+  a.held.set(2, KM2);
+  const MOVED = doc(2, 1, [entry(D1, KM2, 2), entry(D2, KM2, 2)]);
+  put(a.mirror, C.TEAM_NAME, MOVED);
+  await settle(a);
+  /* The second, at the old epoch, adds D4 and sends it, with a copy for each desk its roster names. */
+  const EDIT = doc(1, 2, [entry(D1, KM1, 1), entry(D2, KM1, 1), entry(D3, KM1, 1), entry(D4, KM1, 1)]);
+  put(b.mirror, C.TEAM_NAME, EDIT);
+  await settle(b);
+  await settle(d1, d2, d3);
+  const tookEdit = [d1, d2, d3].map(p => at(p));
+  /* The first reconnects. Its Studio sends the device list of the newer file; the second's Studio holds the epoch-2 key, as the
+     lead's own records give it (outside the channel). */
+  a.t.down = false;
+  await enrol(D1.k, D2.k);
+  b.held.set(2, KM2);
+  const said0 = a.said.length, puts0 = a.t.log.length;
+  await settle(a);
+  await settle(b);
+  await settle(d1, d2, d3);
+  await settle(a, b, d1, d2, d3);
+  const clash = typeof a.prog.rootClash === "function" ? a.prog.rootClash().map(c => ({ path: c.path, kept: c.kept, here: c.here, team: c.team })) : null;
+  const out = { allOne, tookEdit, atA: at(a), atB: at(b), atD1: at(d1), atD2: at(d2), atD3: at(d3), d3Key2: !!d3.held.get(2),
+    d1Key2: !!d1.held.get(2), d2Key2: !!d2.held.get(2), clash,
+    said: a.said.slice(said0).filter(l => l.indexOf(C.TEAM_NAME) >= 0 && l.indexOf("changed on this computer and on another at once") >= 0),
+    waitsA: a.said.slice(said0).filter(l => l.indexOf(B.REASONS.superseded) >= 0).length,
+    putsBack: a.t.log.slice(puts0).filter(l => /^PUT b\//.test(l)).length };
+  /* A desk's upload after the reconnect is taken, sealed at the new epoch, and reaches the lead. */
+  const NOTE = "{\"inUse\":\"quay-board after the move\"}\n";
+  const d1s = d1.said.length;
+  put(d1.mirror, "desks/" + D1.k.keyId + "/in-use.ec", NOTE);
+  await settle(d1);
+  await settle(a);
+  out.deskUp = read(a.mirror, "desks/" + D1.k.keyId + "/in-use.ec") === NOTE;
+  out.deskRefused = d1.said.slice(d1s).length;
+  await a.ch.stop(); await b.ch.stop(); await d1.ch.stop(); await d2.ch.stop(); await d3.ch.stop();
+  /* The first started again on its record: the clash is still there to tell, and nothing more goes up. */
+  const again = leadOf("tce-a", new Map([[1, KM1], [2, KM2]]));
+  out.clashRestart = typeof again.prog.rootClash === "function" ? again.prog.rootClash().map(c => c.path + ":" + c.kept) : null;
+  /* The relay's main team file, read by a fresh profile of the lead's key holding both keys, which makes no desk's copy. */
+  const third = Object.assign(program("tce-c-" + tag, LEAD, "root", { mod, rt, pin: pinOf, keyFor: e => (e === 1 ? KM1 : e === 2 ? KM2 : null),
+    sealEpoch: () => 2 }), {});
+  third.ch.start(); await settle(third);
+  out.atRelay = at(third);
+  await third.ch.stop();
+  /* A desk opened afterwards on a fresh profile, holding both keys as its own records would, reads the relay's main team file. */
+  const late = deskOf("tce-d2r", D2, [[1, KM1], [2, KM2]]);
+  late.ch.start(); await settle(late);
+  out.atLate = at(late);
+  await late.ch.stop();
+  return out;
+}
+/* The control: one computer of the lead's key that sent its epoch-2 team file. An own team file at epoch 1, later by its counter,
+   that the relay serves afterwards is older than the last sent, so it is refused as before, the mirror keeps epoch 2, nothing is
+   sent and nothing is kept as a clash. */
+async function crossEpochSent(mod) {
+  const KM1 = crypto.randomBytes(32), KM2 = crypto.randomBytes(32), D = keyPair(true);
+  const tm = await freshTeam([D]);
+  const held = new Map([[1, KM1]]);
+  const a = opened(mod, "tce-s-" + tm.rt.slice(0, 8), tm, LEAD, "root", { keyFor: e => held.get(e) || null, sealEpoch: () => Math.max(...held.keys()) });
+  put(a.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, [member(D)]));
+  a.ch.start(); await a.ch.idle(); await once(a);
+  held.set(2, KM2);
+  const MOVED = teamBody(tm, 2, 1, [member(D)]);
+  put(a.mirror, C.TEAM_NAME, MOVED);
+  await once(a);
+  const sentAt2 = a.prog.state().sent[C.TEAM_NAME] && a.prog.state().sent[C.TEAM_NAME].epoch === 2;
+  const b = B.seal({ relayTeamId: tm.rt, epoch: 1, teamKey: KM1, writer: { keyId: LEAD.keyId, privateKey: LEAD.privateKey }, path: C.TEAM_NAME,
+    body: teamBody(tm, 1, 2, [member(D)]), counter: Date.now() + 5e6, kind: "file" });
+  const s = relayStore(tm.rt), seq = (s.get("seq") || 0) + 1, obj = tm.rt + "/" + b.id + "/" + hex(8);
+  R.bucket.objects.set(obj, Buffer.from(b.ciphertext));
+  s.put("blob:" + b.id, { id: b.id, supersedes: null, epoch: 1, writer: LEAD.keyId, counter: b.counter, del: false, size: b.ciphertext.length,
+    sig: b.signature, nonce: b.nonce, seq, at: R.clock.now, obj });
+  s.put("seq:" + String(seq).padStart(16, "0"), b.id);
+  s.put("seq", seq);
+  const at = a.t.log.length, said0 = a.said.length;
+  await once(a); await once(a);
+  const out = { sentAt2, fetched: a.t.log.slice(at).some(l => l === "GET b/" + b.id), kept: read(a.mirror, C.TEAM_NAME) === MOVED,
+    puts: a.t.log.slice(at).filter(l => /^PUT b\//.test(l)).length, clash: a.prog.rootClash ? a.prog.rootClash().length : null,
+    replay: a.said.slice(said0).some(l => l.indexOf(B.REASONS["replay-rev"]) >= 0) };
+  await a.ch.stop();
+  return out;
+}
+if (partOn("pTce")) {
+  try {
+    markPart("pTce");
+    const T = C.TEAM_NAME;
+    const x = await crossEpoch(C);
+    const two = o => !!o && o.epoch === 2 && o.rev === 1 && o.d3 === false;
+    check(x.allOne && JSON.stringify(x.tookEdit.map(o => o && o.rev)) === "[2,2,2]" && two(x.atA) && two(x.atRelay) && two(x.atB) && two(x.atD1) && two(x.atD2)
+      && x.putsBack >= 1 && x.waitsA === 0,
+      "tce1a the first computer's epoch move, made offline while the second edited the team file at the old epoch, stands after the reconnect: the relay's main team file, the second computer and each remaining desk hold epoch 2 rev 1: "
+      + JSON.stringify({ first: x.atA, relay: x.atRelay, second: x.atB, d1: x.atD1, d2: x.atD2, uploads: x.putsBack, waits: x.waitsA }));
+    const files = [x.atA, x.atRelay, x.atB, x.atD1, x.atD2, x.atLate];
+    check(files.every(o => !!o && o.d3 === false) && !x.d3Key2 && !!x.atD3 && x.atD3.epoch === 1,
+      "tce1b the desk the newer file took off is not brought back: no file the relay, either computer or a remaining desk holds names it, and it holds no epoch-2 key: "
+      + JSON.stringify({ names: files.map(o => o && o.d3), key: x.d3Key2, itsFile: x.atD3 }));
+    check(rootTold(x, T, "here", { epoch: 2, rev: 1 }, { epoch: 1, rev: 2 }),
+      "tce1c the second computer's edit at the old epoch, passed over, is said once on the first and kept in its clash record, after a restart too: "
+      + JSON.stringify({ clash: x.clash, said: x.said.length, restart: x.clashRestart }));
+    check(x.d1Key2 && x.d2Key2 && x.deskUp && x.deskRefused === 0 && two(x.atLate),
+      "tce1d each remaining desk takes the epoch-2 key from its own copy and its upload afterwards reaches the lead, and a desk opened afterwards reads epoch 2 from the relay: "
+      + JSON.stringify({ d1Key: x.d1Key2, d2Key: x.d2Key2, upload: x.deskUp, said: x.deskRefused, late: x.atLate }));
+    const c = await crossEpochSent(C);
+    check(c.sentAt2 && c.fetched && c.kept && c.puts === 0 && c.clash === 0 && c.replay,
+      "tce1f the control: an own epoch-1 team file the relay serves after this computer sent epoch 2 is refused as before, the mirror keeps epoch 2, nothing is sent or kept as a clash: "
+      + JSON.stringify(c));
+    if (PLANTS_OFF) skip("tce1e lifting plant:own-epoch-ahead leaves the relay's main team file at the old epoch");
+    else {
+      const p = await liftChannel("plant:own-epoch-ahead", async mod => { const y = await crossEpoch(mod); return !!y.atRelay && y.atRelay.epoch === 1 && y.atB.epoch === 1; });
+      check(p.turned && p.back, "tce1e lifting plant:own-epoch-ahead leaves the relay's main team file and the second computer at the old epoch, and the product file is never written: "
+        + p.detail + ", sha " + (p.back ? "restored" : "differs"));
+    }
+  } catch (e) {
+    check(false, "harness (the legs tce1a): " + (e && e.stack ? e.stack : e));
   }
 }
 
