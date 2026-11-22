@@ -307,7 +307,9 @@ try {
     const calls = [...src.matchAll(/(?<!function |[.\w])takeSuggest\(/g)].map(m => m.index);
     const byAgent = calls.every(i => {
       const before = src.slice(Math.max(0, i - 420), i);
-      return /addEventListener\("click", ev => \{[^}]*$/.test(before) || /if \(e\.key === "Enter"\) \{\s*e\.preventDefault\(\);\s*if \(sgAt >= 0[^\n]*$/.test(before);
+      return /addEventListener\("click", ev => \{[^}]*$/.test(before) || /if \(e\.key === "Enter"\) \{\s*e\.preventDefault\(\);\s*if \(sgAt >= 0[^\n]*$/.test(before)
+        /* Moved 2026-11-22 (fold 124; old: two calls, a click or Enter; new: three, the chips' Alt+1 to Alt+5 also the agent's own press, board 1019 (6)). */
+        || /if \(chip && e\.altKey && !e\.ctrlKey[^\n]*\n\s*e\.preventDefault\(\);\s*if \(suggest\[[^\n]*$/.test(before);
     });
     const takes = [...src.matchAll(/askDesk\("suggest-take"/g)].map(m => m.index);
     const inHandler = takes.length === 1 && /ipcMain\.handle\("etiuda:pick-intent", \(e, id, multi\) => \{\s*if \(!fromPicker\(e\)\) return "null";\s*return $/.test(src.slice(takes[0] - 160, takes[0]));
@@ -315,9 +317,9 @@ try {
   };
   const embedSrc = ["core.cjs", "suggest.cjs", "worker.cjs"].map(n => fs.readFileSync(path.join(EMBED, n), "utf8")).join("\n");
   const routes = pickRoutes(MAIN);
-  const e6ok = r => r.calls === 2 && r.byAgent && r.inHandler;
+  const e6ok = r => r.calls === 3 && r.byAgent && r.inHandler;
   check(e6ok(routes) && !/suggest-take|pick-intent|takeSuggest|pickIntent/.test(embedSrc),
-    "e6 a suggestion is taken only by the agent: " + routes.calls + " calls of takeSuggest in the picker, each under a click or Enter ("
+    "e6 a suggestion is taken only by the agent: " + routes.calls + " calls of takeSuggest in the picker, each under a click, Enter or Alt and a digit ("
     + routes.byAgent + "), suggest-take asked only by the picker's own handler (" + routes.inHandler + "), and nothing of the model reaches either");
   const anchor = "    suggest = Array.isArray(o.suggest) ? o.suggest.filter(s => s && s.id) : [];\n";
   const autoPick = MAIN.split(anchor).length === 2 ? pickRoutes(MAIN.replace(anchor, anchor + "    if (suggest.length) takeSuggest(suggest[0].id, false);\n")) : null;
