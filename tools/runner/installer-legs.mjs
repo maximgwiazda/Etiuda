@@ -1214,9 +1214,15 @@ async function netHosts(rec) {
   try {
     const pages = await b.pages();
     const page = pages.find((x) => /etiuda\.html/i.test(x.url())) || pages[0];
-    await page.evaluate(() => { const t = document.createElement("textarea"); t.id = "nhSpell"; t.spellcheck = true; document.body.appendChild(t); t.focus(); });
-    await page.keyboard.type("Wczoraj przyjechalem do domu, ale ksiązka zostala w samochodzie. ", { delay: 15 });
-    await page.keyboard.type("I recieved the parcle yesterday and the adress was rigth. ", { delay: 15 });
+    /* THE TEXT GOES IN AS TEXT, NOT AS KEYS (the test architect, 2026-11-21): on the hosted runner at 8700a8e0 the typing ended
+       "short", the desk's own key handlers and the seat door's focus taking keys meant for the field. sendCharacter inserts each
+       character into the focused field with no keydown, which is what spell-check reads, and the field is focused again before
+       each line, so a door that takes focus cannot swallow a line. */
+    await page.evaluate(() => { const t = document.createElement("textarea"); t.id = "nhSpell"; t.spellcheck = true; t.style.cssText = "position:fixed;left:8px;top:8px;width:420px;height:80px;z-index:2147483647"; document.body.appendChild(t); t.focus(); });
+    for (const line of ["Wczoraj przyjechalem do domu, ale ksiązka zostala w samochodzie. ", "I recieved the parcle yesterday and the adress was rigth. "]) {
+      await page.evaluate(() => { const t = document.getElementById("nhSpell"); if (t) t.focus(); });
+      for (const ch of line) { await page.keyboard.sendCharacter(ch); await sleep(15); }
+    }
     typed = await page.evaluate(() => String((document.getElementById("nhSpell") || {}).value || "").length > 60 ? "yes" : "short");
   } catch (e) { typed = "failed: " + oneLine(String(e && e.message || e)); }
   for (let t = 0; t < TYPED && !gone; t += 2000) await sleep(2000);
