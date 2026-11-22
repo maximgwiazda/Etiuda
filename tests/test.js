@@ -1476,7 +1476,7 @@ function adoptedTests() {
     chk("Switch sets the original aside, listed", api.listPersonalAside().map(r => r.id), ["mine-1"]);
     const ps = parts(api, w, ME, listFor(ME));
     chk("after Switch the original is a Personal row with its note and Put back in use", [ps.asideRows.length, /The team now publishes this catalog as &quot;Gift orders&quot;/.test(ps.asideRows[0] || ""),
-      /data-ec-restore="0"[^>]*title="Put back in use"/.test(ps.asideRows[0] || ""), ps.grouped], [1, true, true, true]);
+      /data-ec-restore="0"[^>]*>.*<span>Put back in use<\/span>/.test(ps.asideRows[0] || ""), ps.grouped], [1, true, true, true]);
     chk("after Switch a further listing does not tell it again", listing(api, w, ME, listFor(ME), [ROW]).due, false);
     /* a refused Switch: nothing changes and the bubble stays with a line */
     w = author(); w.trust = "invalid"; api = build(oSrc, fileSrc, w);
