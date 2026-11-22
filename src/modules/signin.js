@@ -519,10 +519,6 @@ function doorBandState(v){
     text:named(named(t("Seat ended {ENDED} · Etiuda stops {DATE}"),"{ENDED}",ended),"{DATE}",until),
     tip:named(t("This account's seat has ended; Etiuda stops on {DATE}."),"{DATE}",until)};
 }
-function doorAskLabel(lead){
-  if(!lead) return t("Ask a team's lead…"); /* plant:door-ask-noname */
-  return named(t("Ask {LEAD}"),"{LEAD}",lead);
-}
 function doorPress(label, solid, act){
   const buy=act==="buy"?' data-e-open="buy"':'';
   return '<button type="button" class="btn'+(solid?" primary":"")+'" data-signin-act="'+esc(act)+'"'+buy+'>'+esc(label)+'</button>';
@@ -585,13 +581,11 @@ function doorFirstHtml(v, ds){
 }
 function doorLaterHtml(v, ds){
   const pair=deskDoorLines(ds);
-  const askable=ds.state==="trial-over-org" || (ds.state==="stopped" && (ds.orgLicence || ds.seatOn==="team"));
   const checkFilled=ds.state==="waiting";
   let acts="";
   if(checkFilled) acts+=doorPress(t("Check now"), true, "check");
-  else if(askable) acts+=doorPress(doorAskLabel(ds.lead), true, "ask");
-  else acts+=doorPress(t("Buy"), true, "buy");
-  if(checkFilled || askable) acts+=doorPress(t("Buy"), false, "buy");
+  else acts+=doorPress(t("Buy"), true, "buy"); /* plant:door-no-ask */
+  if(checkFilled) acts+=doorPress(t("Buy"), false, "buy");
   const quiet=[];
   if(!checkFilled) quiet.push(doorTextPress(t("Check now"), "check"));
   quiet.push(doorTextPress(t("Use another account"), "another"));
@@ -669,13 +663,9 @@ function signinDoorOf(v){
   const ds=deskDoorState(v);
   if(ds.state==="ended"){
     const endedPair=deskDoorLines(ds);
-    const ask=!!(ds.orgLicence || ds.seatOn==="team");
-    const acts=[];
-    if(ask) acts.push({act:"ask", label:doorAskLabel(ds.lead), solid:true});
-    else acts.push({act:"check", label:t("Check now"), solid:true});
-    acts.push({act:"buy", label:t("Buy")});
-    if(ask) acts.push({act:"check", label:t("Check now")});
-    acts.push(acct);
+    /* No Ask press: the service's ask route is not what a lead's Roster reads under Asking to join, and this desk holds the leads' names, not
+       the pseudonyms the route names them by, so the press would do nothing (22 November 2026). */
+    const acts=[{act:"check", label:t("Check now"), solid:true}, {act:"buy", label:t("Buy")}, acct]; /* plant:panel-no-ask */
     return {moment:"ended", ident, heading:endedPair[0], line:endedPair[1], acts:acts};
   }
   const pair=deskDoorLines(ds);

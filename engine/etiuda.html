@@ -9812,8 +9812,6 @@ What is typed here stays in this browser.`;
     "The name on this desk": "Imię na tym stanowisku",
     "{NAME} comes from your account: the first name and the first letter of the surname. Replies that sign with your name use it, and the team's lead sees this desk by it. It can be changed here at any time.": "{NAME} pochodzi z konta: to imię i pierwsza litera nazwiska. Ta nazwa trafia do odpowiedzi podpisywanych imieniem, a lider zespołu widzi pod nią to stanowisko. Można ją zmienić tutaj w dowolnej chwili.",
     "{NAME} is the name on your account. Replies that sign with your name use it, and the team's lead sees this desk by it. It can be changed here at any time.": "{NAME} to nazwa z konta. Ta nazwa trafia do odpowiedzi podpisywanych imieniem, a lider zespołu widzi pod nią to stanowisko. Można ją zmienić tutaj w dowolnej chwili.",
-    "Ask {LEAD}": "Poproś: {LEAD}",
-    "Ask a team's lead…": "Poproś lidera zespołu…",
     "Etiuda starts with a sign-in.": "Etiuda zaczyna się od zalogowania.",
     "Signing in with Microsoft or Google gives this computer a seat: the team's, where its lead has admitted this account, or else a trial of fourteen days. Catalogs open once the seat is here.": "Zalogowanie kontem Microsoft lub Google daje temu komputerowi miejsce w licencji: w zespole, jeśli lider przyjął to konto, a w przeciwnym razie czternastodniowy okres próbny. Katalogi otwierają się, gdy miejsce już jest.",
     "Signing in needs an internet connection. The buttons appear here by themselves once this computer is online.": "Logowanie wymaga połączenia z internetem. Przyciski pojawią się tu same, gdy komputer będzie online.",
@@ -31042,10 +31040,6 @@ What is typed here stays in this browser.`;
       tip: named(t("This account's seat has ended; Etiuda stops on {DATE}."), "{DATE}", until)
     };
   }
-  function doorAskLabel(lead) {
-    if (!lead) return t("Ask a team's lead…");
-    return named(t("Ask {LEAD}"), "{LEAD}", lead);
-  }
   function doorPress(label2, solid, act) {
     const buy = act === "buy" ? ' data-e-open="buy"' : "";
     return '<button type="button" class="btn' + (solid ? " primary" : "") + '" data-signin-act="' + esc(act) + '"' + buy + ">" + esc(label2) + "</button>";
@@ -31104,13 +31098,11 @@ What is typed here stays in this browser.`;
   }
   function doorLaterHtml(v, ds) {
     const pair = deskDoorLines(ds);
-    const askable = ds.state === "trial-over-org" || ds.state === "stopped" && (ds.orgLicence || ds.seatOn === "team");
     const checkFilled = ds.state === "waiting";
     let acts = "";
     if (checkFilled) acts += doorPress(t("Check now"), true, "check");
-    else if (askable) acts += doorPress(doorAskLabel(ds.lead), true, "ask");
     else acts += doorPress(t("Buy"), true, "buy");
-    if (checkFilled || askable) acts += doorPress(t("Buy"), false, "buy");
+    if (checkFilled) acts += doorPress(t("Buy"), false, "buy");
     const quiet = [];
     if (!checkFilled) quiet.push(doorTextPress(t("Check now"), "check"));
     quiet.push(doorTextPress(t("Use another account"), "another"));
@@ -31204,13 +31196,7 @@ What is typed here stays in this browser.`;
     const ds = deskDoorState(v);
     if (ds.state === "ended") {
       const endedPair = deskDoorLines(ds);
-      const ask2 = !!(ds.orgLicence || ds.seatOn === "team");
-      const acts = [];
-      if (ask2) acts.push({ act: "ask", label: doorAskLabel(ds.lead), solid: true });
-      else acts.push({ act: "check", label: t("Check now"), solid: true });
-      acts.push({ act: "buy", label: t("Buy") });
-      if (ask2) acts.push({ act: "check", label: t("Check now") });
-      acts.push(acct);
+      const acts = [{ act: "check", label: t("Check now"), solid: true }, { act: "buy", label: t("Buy") }, acct];
       return { moment: "ended", ident, heading: endedPair[0], line: endedPair[1], acts };
     }
     const pair = deskDoorLines(ds);

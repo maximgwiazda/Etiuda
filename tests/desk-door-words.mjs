@@ -18,7 +18,7 @@ const SETTINGS_PATH = path.join(ROOT, "src", "modules", "settings.js");
 const TEMPLATE_PATH = path.join(ROOT, "src", "template.html");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
-const CHECKS = 44, PLANTS = 44;
+const CHECKS = 44, PLANTS = 43;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -457,12 +457,11 @@ for (const lang of ["en", "pl"]) {
     const txt = textOf(html);
     const w = W[lang];
     const dEnd = dayOf(T_DESK_END, lang);
-    const askFilled = new RegExp(`class="btn primary"[^>]*>${w.ask}<`).test(html);
-    const buyPlain = new RegExp(`class="btn"[^>]*>${w.buy}<`).test(html);
+    const buyFilled = new RegExp(`class="btn primary"[^>]*>${w.buy}<`).test(html);
     const quiet = html.includes("door-text") && txt.includes(w.check) && txt.includes(w.another) && txt.includes(w.out);
     const wayOut = html.includes("data-door-save") && html.includes("door-out") && txt.includes(w.aBtn) && txt.includes(w.aCap);
     return txt.includes(w.h3) && txt.includes(w.l3(dEnd)) && !html.includes("fs-steps") && !html.includes("fs-foot")
-      && askFilled && buyPlain && quiet && wayOut;
+      && buyFilled && !txt.includes(w.ask) && quiet && wayOut;
   };
   CASES["state3b_" + lang] = (pg = P) => {
     const html = doorHtml(pg, VIEWS.trialOver, lang);
@@ -477,7 +476,7 @@ for (const lang of ["en", "pl"]) {
   };
 }
 
-/* 7. State 5 ("stopped"): all 5 {WHY} sentences, filled button (Ask LEAD or Buy), quiet presses, way out. */
+/* 7. State 5 ("stopped"): all 5 {WHY} sentences, filled button (Buy), quiet presses, way out. */
 for (const lang of ["en", "pl"]) {
   CASES["state5_" + lang] = (pg = P) => {
     const w = W[lang];
@@ -485,7 +484,7 @@ for (const lang of ["en", "pl"]) {
     for (const on of ["trial", "studio-trial", "own", "team", "org"]) {
       const html = doorHtml(pg, VIEWS.stopped(on), lang);
       const txt = textOf(html);
-      const expectFilled = (on === "team" || on === "org") ? w.ask : w.buy;
+      const expectFilled = w.buy;
       const filledOk = new RegExp(`class="btn primary"[^>]*>${expectFilled}<`).test(html);
       const wayOut = html.includes("data-door-save") && txt.includes(w.aBtn) && txt.includes(w.aCap);
       if (!txt.includes(w.h5) || !txt.includes(w.l5(dStop, w.why5[on])) || !filledOk || !wayOut || html.includes("fs-steps")) return false;
@@ -504,7 +503,7 @@ for (const lang of ["en", "pl"]) {
     const bandOk = !!band && band.shown === true && band.dot === true && band.text === w.band4(eStr, uStr) && band.tip === w.tip4(uStr);
     const pHtml = panelHtml(pg, VIEWS.ended, lang);
     const pTxt = textOf(pHtml);
-    const hasBtns = new RegExp(`class="btn primary"[^>]*>${w.ask}<`).test(pHtml) && pTxt.includes(w.buy) && pTxt.includes(w.check) && pTxt.includes(w.acctSet);
+    const hasBtns = new RegExp(`class="btn primary"[^>]*>${w.check}<`).test(pHtml) && pTxt.includes(w.buy) && pTxt.includes(w.acctSet) && !pTxt.includes(w.ask);
     const noOrgPanel = panelHtml(pg, Object.assign({}, VIEWS.ended, { holding: { on: "own", ends: T_ENDS } }), lang, { noTeam: true });
     const noOrgBtns = new RegExp(`class="btn primary"[^>]*>${w.check}<`).test(noOrgPanel) && textOf(noOrgPanel).includes(w.buy) && textOf(noOrgPanel).includes(w.acctSet);
     return noDoor && bandOk && pTxt.includes(w.h4(eStr)) && pTxt.includes(w.l4(uStr)) && hasBtns && noOrgBtns;
@@ -616,9 +615,10 @@ CASES.panelRows = (pg = P) => {
   const own = split(panelHtml(pg, Object.assign({}, VIEWS.ended, { holding: { on: "own", ends: T_ENDS } }), "en", { noTeam: true }));
   const work = panelHtml(pg, VIEWS.working("own"), "en");
   if (!ask.on || !ask.rest || !own.on || !own.rest) return false;
-  const askOk = ask.on.includes('class="btn primary"') && ask.on.includes("Ask " + LEAD) && ask.on.includes(">Buy<")
-    && ask.on.indexOf("Check now") < 0 && ask.on.indexOf("Account settings") < 0
-    && ask.rest.includes(">Check now<") && ask.rest.includes(">Account settings<")
+  /* A team's lead on the panel no longer changes the rows: there is no Ask press, so it reads as the one without a team. */
+  const askOk = ask.on.includes('class="btn primary"') && ask.on.includes(">Check now<") && ask.on.includes(">Buy<")
+    && ask.on.indexOf("Ask ") < 0 && ask.on.indexOf("Account settings") < 0
+    && ask.rest.includes(">Account settings<") && ask.rest.indexOf("Check now") < 0
     && ask.rest.indexOf("btn primary") < 0 && ask.rest.indexOf(">Buy<") < 0;
   const ownOk = own.on.includes('class="btn primary"') && own.on.includes(">Check now<") && own.on.includes(">Buy<")
     && own.on.indexOf("Account settings") < 0
@@ -649,9 +649,9 @@ CASES.noName = (pg = P) => {
   const askPl = "Popro\u015b lidera zespo\u0142u\u2026";
   return en2.includes("once the team's lead accepts it") && en2.indexOf("once ,") < 0
     && pl2.includes("gdy lider zespo\u0142u j\u0105 przyjmie") && pl2.indexOf("gdy ,") < 0
-    && textOf(en3).includes(ask) && en3.indexOf(">Ask <") < 0
-    && textOf(pl3).includes(askPl) && pl3.indexOf(">Popro\u015b: <") < 0
-    && textOf(en4).includes(ask) && textOf(pl4).includes(askPl)
+    && !textOf(en3).includes(ask) && en3.indexOf(">Ask <") < 0
+    && !textOf(pl3).includes(askPl) && pl3.indexOf(">Popro\u015b: <") < 0
+    && !textOf(en4).includes(ask) && !textOf(pl4).includes(askPl)
     && en5.includes("the seat on the team ended") && en5.indexOf("leads ended") < 0
     && pl5.includes("wygas\u0142o miejsce w zespole") && pl5.indexOf("kt\u00f3ry prowadzi") < 0
     && en6.includes("waits for the team's lead") && en6.indexOf("waits for ,") < 0
@@ -799,8 +799,8 @@ const RUN_LIST = [
   ["dd6", "sentencesBC", "Sentences (b) and (c) (EN & PL): left heading and line, no steps/foot, empty right side"],
   ["dd7", "state2_en", "State 2 (EN): waiting heading/line, Check now filled, Buy plain, quiet text presses, no way out"],
   ["dd8", "state2_pl", "State 2 (PL): waiting heading/line, Check now filled, Buy plain, quiet text presses, no way out"],
-  ["dd9", "state3_en", "State 3 (EN): trial over (org), Ask {LEAD} filled, Buy plain, quiet presses, way out (a)"],
-  ["dd10", "state3_pl", "State 3 (PL): trial over (org), Ask {LEAD} filled, Buy plain, quiet presses, way out (a)"],
+  ["dd9", "state3_en", "State 3 (EN): trial over (org), Buy filled and no Ask press, quiet presses, way out (a)"],
+  ["dd10", "state3_pl", "State 3 (PL): trial over (org), Buy filled and no Ask press, quiet presses, way out (a)"],
   ["dd11", "state3b_en", "State 3b (EN): trial over (no org), Buy filled, quiet presses, way out (a)"],
   ["dd12", "state3b_pl", "State 3b (PL): trial over (no org), Buy filled, quiet presses, way out (a)"],
   ["dd13", "state5_en", "State 5 (EN): stopped with all five {WHY} values, filled press, way out (a)"],
@@ -939,9 +939,12 @@ if (!PLANTS_OFF) {
   await plant("ddp17", SIGNIN_PATH,
     ["if(d.moment===\"ended\") h+=signinEndedActsHtml(d.acts); /* plant:door-panel-rows */", "if(false) h+=signinEndedActsHtml(d.acts); /* plant:door-panel-rows */"],
     "panelRows");
-  await plant("ddp16", SIGNIN_PATH,
-    ["if(!lead) return t(\"Ask a team's lead…\"); /* plant:door-ask-noname */", "if(false) return t(\"Ask a team's lead…\"); /* plant:door-ask-noname */"],
-    "noName");
+  await plant("ddp60", SIGNIN_PATH,
+    ["else acts+=doorPress(t(\"Buy\"), true, \"buy\"); /* plant:door-no-ask */", "else if(ds.state===\"trial-over-org\") acts+=doorPress(t(\"Ask a team's lead…\"), true, \"ask\"); else acts+=doorPress(t(\"Buy\"), true, \"buy\");"],
+    "noAskDoor");
+  await plant("ddp61", SIGNIN_PATH,
+    ["const acts=[{act:\"check\", label:t(\"Check now\"), solid:true}, {act:\"buy\", label:t(\"Buy\")}, acct]; /* plant:panel-no-ask */", "const acts=[{act:\"ask\", label:t(\"Ask a team's lead…\"), solid:true}, {act:\"check\", label:t(\"Check now\")}, {act:\"buy\", label:t(\"Buy\")}, acct];"],
+    "noAskPanel");
   await plant("ddp15", SIGNIN_PATH,
     ["if(d.getFullYear()!==new Date(now>0?now:Date.now()).getFullYear()) opt.year=\"numeric\"; /* plant:door-day-year */", "if(false) opt.year=\"numeric\"; /* plant:door-day-year */"],
     "doorDates");
