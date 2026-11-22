@@ -50,8 +50,7 @@ const sha = f => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-sync-moments-"));
 const PAGE = fs.readFileSync(E.ENGINE_PATH, "utf8");
 fs.writeFileSync(path.join(lab, "etiuda.html"), PAGE);
-fs.writeFileSync(path.join(lab, "etiuda-catalog.js"),
-  "window.E_CATALOG = " + fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8") + ";\n");
+const SEED_CATALOG = fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8");
 const urlOf = name => "file:///" + path.join(lab, name).replace(/\\/g, "/");
 let browser = null;
 
@@ -90,6 +89,7 @@ async function boot({ lang = "en", theme = "light", page: name = "etiuda.html", 
       onStore: fn => { window.__st.tell = fn; },
     };
   }, lang, theme, view, seat);
+  await E.seedCatalog(page, SEED_CATALOG);
   await page.goto(urlOf(name), { waitUntil: "load", timeout: 60000 });
   await page.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   if (await page.$("#ecYes")) await page.click("#ecYes");

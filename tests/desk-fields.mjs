@@ -38,11 +38,10 @@ const at = argv.indexOf("--engine");
 const ENGINE = at >= 0 ? path.resolve(argv[at + 1]) : E.ENGINE_PATH;
 
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-fields-"));
+const SEED_CATALOG = fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8");
 const copyFiles = (dir, htmlText) => {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "etiuda.html"), htmlText);
-  fs.writeFileSync(path.join(dir, "etiuda-catalog.js"),
-    "window.E_CATALOG = " + fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8") + ";\n");
   return "file:///" + path.join(dir, "etiuda.html").replace(/\\/g, "/");
 };
 const url = copyFiles(lab, fs.readFileSync(ENGINE, "utf8"));
@@ -60,6 +59,7 @@ async function boot(browser, pageUrl, theme) {
     } catch (e) {}
   }, theme);
   await seatPage(p);
+  await E.seedCatalog(p, SEED_CATALOG);
   await p.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
   await p.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   if (await p.$("#ecYes")) await p.click("#ecYes");

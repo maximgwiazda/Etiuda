@@ -54,8 +54,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-982w-"));
 fs.copyFileSync(E.ENGINE_PATH, path.join(lab, "etiuda.html"));
-fs.writeFileSync(path.join(lab, "etiuda-catalog.js"),
-  "window.E_CATALOG = " + fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8") + ";\n");
+const SEED_CATALOG = fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8");
 const url = "file:///" + path.join(lab, "etiuda.html").replace(/\\/g, "/");
 let browser = null;
 
@@ -77,6 +76,7 @@ async function boot(viewport = { width: 1280, height: 900 }, more = [], pageUrl 
     } catch (e) {}
   }, more);
   await seatPage(page);
+  await E.seedCatalog(page, SEED_CATALOG);
   await page.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
   await page.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   const yes = await page.$("#ecYes");
@@ -568,6 +568,7 @@ try {
     window.E_HOST = { signinState: () => window.sgnView || seat, signIn: async () => window.sgnView || seat };
   }, s12Seat);
   await sp.setViewport({ width: 560, height: 900, deviceScaleFactor: 1 });
+  await E.seedCatalog(sp, SEED_CATALOG);
   await sp.goto(url, { waitUntil: "load", timeout: 60000 });
   await sp.waitForFunction(() => typeof openSettings === "function" && !!document.getElementById("list"), { timeout: 30000 });
   const sgnRead = (sp, view, w, lang) => sp.evaluate((view, lang) => {

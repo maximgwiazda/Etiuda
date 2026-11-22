@@ -59,6 +59,7 @@ try {
       return real(o);
     };
   });
+  await RUN.seed(p);
   await p.goto(RUN.url, { waitUntil: 'load', timeout: 90000 });
   await sleep(2400);
   const click = re => p.evaluate(s => {

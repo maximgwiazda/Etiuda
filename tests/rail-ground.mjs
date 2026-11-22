@@ -56,6 +56,7 @@ async function boot(theme) {
     } catch (e) {}
   }, theme);
   await seatPage(page);
+  await RUN.seed(page);
   await page.goto(RUN.url, { waitUntil: "load", timeout: 60000 });
   await require("./launch-wait.js").waitLaunchGone(page, { who: "tests/rail-ground.mjs" });
   await page.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });

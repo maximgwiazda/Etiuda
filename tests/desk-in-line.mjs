@@ -58,8 +58,7 @@ const STUDIO = {
 
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-in-line-"));
 fs.copyFileSync(ENGINE, path.join(lab, "etiuda.html"));
-fs.writeFileSync(path.join(lab, "etiuda-catalog.js"),
-  "window.E_CATALOG = " + fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8") + ";\n");
+const SEED_CATALOG = fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8");
 const url = "file:///" + path.join(lab, "etiuda.html").replace(/\\/g, "/");
 
 async function boot(browser, theme) {
@@ -71,6 +70,7 @@ async function boot(browser, theme) {
     try { for (const k of ["eTourDone_v3", "eTourInvite_v3", "eFirstSigninSeen", "eNameAsked"]) localStorage.setItem(k, "1"); localStorage.setItem("eTheme", theme); } catch (e) {}
   }, theme);
   await seatPage(p);
+  await E.seedCatalog(p, SEED_CATALOG);
   await p.goto(url, { waitUntil: "load", timeout: 60000 });
   await p.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   if (await p.$("#ecYes")) await p.click("#ecYes");

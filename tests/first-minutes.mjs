@@ -41,13 +41,14 @@ TEAM_OBJ.rev = 3;
 TEAM_OBJ.cards = TEAM_OBJ.cards.slice(0, 1);
 const TEAM_TEXT = JSON.stringify(TEAM_OBJ);
 
+/* The catalog each page's url is seeded with (E.seedCatalog); a url not here boots with none. */
+const CATALOG_AT = new Map();
 function writeEngine(dir, htmlText, withCatalogScript = false) {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "etiuda.html"), htmlText);
-  if (withCatalogScript) {
-    fs.writeFileSync(path.join(dir, "etiuda-catalog.js"), "window.E_CATALOG = " + SAMPLE_TEXT + ";\n");
-  }
-  return "file:///" + path.join(dir, "etiuda.html").replace(/\\/g, "/");
+  const url = "file:///" + path.join(dir, "etiuda.html").replace(/\\/g, "/");
+  if (withCatalogScript) CATALOG_AT.set(url, SAMPLE_TEXT);
+  return url;
 }
 
 const rawHtml = fs.readFileSync(ENGINE, "utf8");
@@ -56,8 +57,9 @@ const cleanSampleUrl = writeEngine(path.join(lab, "clean-sample"), rawHtml, true
 function writeTeamEngine(dir, htmlText) {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "etiuda.html"), htmlText);
-  fs.writeFileSync(path.join(dir, "etiuda-catalog.js"), "window.E_CATALOG = " + TEAM_TEXT + ";\n");
-  return "file:///" + path.join(dir, "etiuda.html").replace(/\\/g, "/");
+  const url = "file:///" + path.join(dir, "etiuda.html").replace(/\\/g, "/");
+  CATALOG_AT.set(url, TEAM_TEXT);
+  return url;
 }
 const cleanTeamUrl = writeTeamEngine(path.join(lab, "clean-team"), rawHtml);
 
@@ -87,6 +89,7 @@ async function bootCatalogTour(browser, pageUrl, { lang = "en", stepId = "cards"
     } catch (e) {}
   }, { lang, stepId });
   await seatPage(p);
+  await E.seedCatalog(p, CATALOG_AT.get(pageUrl));
   await p.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
   await p.waitForFunction(
     () => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0,
@@ -191,6 +194,7 @@ async function bootEmptyWithHost(browser, pageUrl, { lang = "en", files = [], ho
     }
   });
   await seatPage(p);
+  await E.seedCatalog(p, CATALOG_AT.get(pageUrl));
   await p.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
   await p.waitForFunction(() => !!document.querySelector("#tourRoot.on") && !!document.querySelector(".empty-desk"), { timeout: 30000 });
   const atName = await p.evaluate(() => !!document.getElementById("tourName"));
@@ -484,6 +488,7 @@ try {
         };
       }, lang);
       await seatPage(p);
+  await E.seedCatalog(p, CATALOG_AT.get(pageUrl));
   await p.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
       await p.waitForFunction(
         () => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0,
@@ -628,6 +633,7 @@ try {
         } catch (e) {}
       });
       await seatPage(p);
+  await E.seedCatalog(p, CATALOG_AT.get(pageUrl));
   await p.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
       await p.waitForFunction(
         () => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0,
@@ -716,6 +722,7 @@ try {
         } catch (e) {}
       }, lang);
       await seatPage(p);
+  await E.seedCatalog(p, CATALOG_AT.get(pageUrl));
   await p.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
       await p.waitForFunction(() => !!document.querySelector("#tourRoot.on") && !!document.getElementById("tourName"), { timeout: 20000 });
       await sleep(150);
@@ -837,6 +844,7 @@ try {
         };
       }, lang);
       await seatPage(p);
+      await E.seedCatalog(p, CATALOG_AT.get(cleanSampleUrl));
       await p.goto(cleanSampleUrl, { waitUntil: "load", timeout: 60000 });
       await p.waitForFunction(
         () => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0,

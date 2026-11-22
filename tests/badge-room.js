@@ -132,6 +132,7 @@ if (require.main === module) {
       p.on("pageerror", e => errs.push(String(e.message || e)));
       const M = require("./motion.js");
       await require("./seat-page.js").seatPage(p);
+      await RUN.seed(p);
       await M.boot(p, RUN.url);
       console.log("engine sha256 " + RUN.engineSha.slice(0, 12));
       const rows = await sweep(p, async w => { await p.setViewport({ width: w, height: 950 }); await sleep(500); });

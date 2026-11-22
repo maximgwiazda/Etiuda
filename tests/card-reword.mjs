@@ -49,8 +49,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-card-reword-"));
 const ENGINE = fs.readFileSync(E.ENGINE_PATH, "utf8");
-fs.writeFileSync(path.join(lab, "etiuda-catalog.js"),
-  "window.E_CATALOG = " + fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8") + ";\n");
+const SAMPLE = fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8");
 function pageFile(text, name) {
   const at = path.join(lab, name);
   fs.writeFileSync(at, text);
@@ -98,6 +97,7 @@ async function desk(o) {
     try { for (const [k, v] of [["eTourDone_v3", "1"], ["eTourInvite_v3", "1"], ["eAgent", "Bench Agent"], ["eNameAsked", "1"], ["eFirstSigninSeen", "1"]]) localStorage.setItem(k, v); } catch (e) {}
   });
   await seatPage(seed);
+  await E.seedCatalog(seed, SAMPLE);
   await seed.goto(opts.url, { waitUntil: "load", timeout: 60000 });
   await seed.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   if (await seed.$("#ecYes")) await seed.click("#ecYes");
@@ -127,6 +127,7 @@ async function desk(o) {
     try { Object.defineProperty(navigator, "clipboard", { value: { writeText: async s => { window.__clip.push(s); } }, configurable: true }); } catch (e) {}
   }, opts);
   await seatPage(page);
+  await E.seedCatalog(page, SAMPLE);
   await page.goto(opts.url, { waitUntil: "load", timeout: 60000 });
   await page.waitForFunction(() => document.querySelectorAll("#list .card").length > 0 && !document.querySelector(".e-launch-veil"), { timeout: 30000 });
   await page.evaluate(() => { document.documentElement.classList.add("e-still"); });

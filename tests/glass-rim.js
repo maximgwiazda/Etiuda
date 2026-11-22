@@ -367,6 +367,7 @@ async function atRatio(ratio, mode) {
       args: ["--hide-scrollbars", "--force-device-scale-factor=" + ratio, "--window-size=1500,950"], protocolTimeout: 120000 });
     const q = await b2.newPage();
     q.on("dialog", d => d.accept());
+    await RUN2.seed(q);
     await bootAndDismiss(q, RUN2.url);
     await q.addStyleTag({ content: FOOT_FULL });
     await setTheme(q, "dark");
@@ -484,6 +485,7 @@ async function surfaces() {
     const q = await b3.newPage();
     await q.setViewport({ width: 1500, height: 950, deviceScaleFactor: 1 });
     q.on("dialog", d => d.accept());
+    await RUN3.seed(q);
     await bootAndDismiss(q, RUN3.url);
     const out = { dark: {}, old: {}, light: {}, small: [] };
     await setTheme(q, "dark");
@@ -545,6 +547,7 @@ async function readMarked(pg, three, label) {
     p.on("dialog", d => d.accept());
     p.on("pageerror", e => errs.push("pageerror: " + String(e.message || e)));
     p.on("console", m => { if (m.type() === "error" && !/ERR_FILE_NOT_FOUND/.test(m.text())) errs.push("console: " + m.text().slice(0, 160)); });
+    await RUN.seed(p);
     await bootAndDismiss(p, RUN.url);
     console.log("  engine/etiuda.html sha256 " + RUN.engineSha.slice(0, 12) + ", " + await p.evaluate(() => document.querySelectorAll(".txt").length) + " macros");
 

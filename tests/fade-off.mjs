@@ -112,9 +112,9 @@ const planted = SHEET.replace("</style>", ".planted-a{white-space:nowrap;overflo
 const plantedF = sheetFaults(planted, CUT);
 check(plantedF.join("|") === "text-overflow:ellipsis|line-clamp|unmeasured .planted-a",
   "1d CONTROL: a planted rule with an ellipsis and an unmeasured clip, and a planted clamp, are all three found: " + JSON.stringify(plantedF));
-/* The markup the sheet ends on, where a planted element sits outside every style block and comment. */
-const TAIL = "<script src=\"etiuda-catalog.js\"></script>";
-if (!SHEET.includes(TAIL)) throw new Error("fade-off: the sheet no longer ends on its catalog script, so the plants below have no anchor");
+/* The markup the sheet ends on, where a planted element sits outside every style block and comment: the app's script tag. */
+const TAIL = "<script>\n/*@APP*/";
+if (SHEET.split(TAIL).length !== 2) throw new Error("fade-off: the sheet no longer ends on its app script exactly once, so the plants below have no anchor");
 const plants = {
   "capitals in a rule": h => h.replace("</style>", ".planted-c{TEXT-OVERFLOW:ELLIPSIS}\n</style>"),
   "a clamp in capitals": h => h.replace("</style>", ".planted-d{-WEBKIT-LINE-CLAMP:2}\n</style>"),

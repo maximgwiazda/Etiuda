@@ -49,10 +49,8 @@ const dirPlant = path.join(lab, "plant");
 fs.mkdirSync(dirMain, { recursive: true });
 fs.mkdirSync(dirPlant, { recursive: true });
 
-const sampleJs = "window.E_CATALOG = " + fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8") + ";\n";
+const SEED_CATALOG = fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8");
 fs.copyFileSync(E.ENGINE_PATH, path.join(dirMain, "etiuda.html"));
-fs.writeFileSync(path.join(dirMain, "etiuda-catalog.js"), sampleJs, "utf8");
-fs.writeFileSync(path.join(dirPlant, "etiuda-catalog.js"), sampleJs, "utf8");
 
 async function launch() {
   return puppeteer.launch({
@@ -85,6 +83,7 @@ async function openDesk(browser, url, opts = {}) {
     } catch (_) {}
   }, !!opts.empty);
   await seatPage(page);
+  if (!opts.empty) await E.seedCatalog(page, SEED_CATALOG);
   await page.goto(url, { waitUntil: "load" });
   if (!opts.empty) {
     await page.waitForSelector("#list .card", { timeout: 10000 }).catch(() => null);

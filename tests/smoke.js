@@ -414,6 +414,7 @@ const t0 = Date.now();
 
   /* Boot and adoption. */
   let e = since();
+  await RUN.seed(p);
   const bootLate = await bootAndDismiss(p, ENGINE, "the main page");
   console.log(WHICH.toUpperCase() + "  " + ENGINE);
   console.log("  engine/etiuda.html sha256 " + RUN.engineSha + (RUN.engineSha === RUN.copySha ? "" : "  COPY DIFFERS: " + RUN.copySha));
@@ -664,6 +665,7 @@ const t0 = Date.now();
     w.on("dialog", d => d.accept());
     w.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
     w.on("console", m => { if (m.type() === "error" && !/ERR_FILE_NOT_FOUND/.test(m.text())) errs.push("console: " + m.text().slice(0, 160)); });
+    await RUN.seed(w);
     walkLate = await bootAndDismiss(w, ENGINE, "the tour's own desk");
     const opened = await menuTour(w);
     await w.waitForFunction(() => sessionStorage.getItem("eTourAt") === "name", { timeout: 30000, polling: 100 }).catch(() => {});
@@ -1761,7 +1763,6 @@ const t0 = Date.now();
     let ctx = null;
     try {
       fs.copyFileSync(RUN.page, path.join(dir, "etiuda.html"));
-      fs.writeFileSync(path.join(dir, E.FIXTURE_FILE.catalog), body);
       ctx = b.createBrowserContext ? await b.createBrowserContext()
         : await b.createIncognitoBrowserContext();
       const q = await ctx.newPage();
@@ -1769,6 +1770,7 @@ const t0 = Date.now();
       await q.setViewport({ width: 1500, height: 950 });
       q.on("dialog", d => d.accept());
       q.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
+      await E.seedCatalog(q, body);
       /* Board item 630: the boot dance is the shared helper's, the same one the main page
          uses, so the two copies cannot drift apart again. Whatever it waited out comes back
          here and reaches this leg's own sentence. */
@@ -1907,7 +1909,6 @@ const t0 = Date.now();
     let ctx = null;
     try {
       fs.copyFileSync(RUN.page, path.join(dir, "etiuda.html"));
-      fs.writeFileSync(path.join(dir, E.FIXTURE_FILE.catalog), body);
       ctx = b.createBrowserContext ? await b.createBrowserContext()
         : await b.createIncognitoBrowserContext();
       const q = await ctx.newPage();
@@ -1916,6 +1917,7 @@ const t0 = Date.now();
       q.on("dialog", d => d.accept());
       q.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
       await q.evaluateOnNewDocument(l => { try { localStorage.setItem("eLang", l); } catch (e) {} }, seed);
+      await E.seedCatalog(q, body);
       lateFor.push.apply(lateFor, await bootAndDismiss(q,
         "file:///" + path.join(dir, "etiuda.html").replace(/\\/g, "/"), label));
       const maps = data ? tintMaps(data) : null;
@@ -3976,22 +3978,20 @@ const t0 = Date.now();
     const f3 = path.join(hunt, "f3");
     fs.mkdirSync(f3);
     fs.copyFileSync(RUN.page, path.join(f3, "etiuda.html"));
-    const sib = path.join(f3, E.FIXTURE_FILE.catalog);
     const chosen = Object.assign(JSON.parse(JSON.stringify(sampleData)), { id: "hunt-chosen", name: "Invented Chosen" });
     delete chosen.sample; delete chosen.hash;
-    fs.writeFileSync(sib, asSibling(chosen));
-    const q3 = await huntPage(f3, true);
+    const q3 = await huntPage(f3, true, q => E.seedCatalog(q, asSibling(chosen)));
     await upFor(q3, () => !!document.getElementById("ecYes"));
     await q3.click("#ecYes");
     await upFor(q3, () => document.querySelectorAll("#list .card[data-id]").length > 3);
     const sampleSib = Object.assign(JSON.parse(JSON.stringify(sampleData)), { sample: true });
-    fs.writeFileSync(sib, asSibling(sampleSib));
+    await E.seedCatalog(q3, asSibling(sampleSib));
     await q3.reload({ waitUntil: "load" });
     await upFor(q3, () => document.querySelectorAll("#list .card[data-id]").length > 3);
     const sampleOffered = await upFor(q3, () => !!document.getElementById("eCatalogOffer"), 4000);
     const other = Object.assign(JSON.parse(JSON.stringify(sampleData)), { id: "hunt-other", name: "Invented Other" });
     delete other.sample; delete other.hash;
-    fs.writeFileSync(sib, asSibling(other));
+    await E.seedCatalog(q3, asSibling(other));
     await q3.reload({ waitUntil: "load" });
     await upFor(q3, () => document.querySelectorAll("#list .card[data-id]").length > 3);
     const otherOffered = await upFor(q3, () => !!document.getElementById("eCatalogOffer"), 30000);
@@ -4024,6 +4024,7 @@ const t0 = Date.now();
           Object.defineProperty(Navigator.prototype, "language", { get: () => l[0], configurable: true });
         }, list);
         await seatPage(s);
+        await RUN.seed(s);
         await s.goto(RUN.url, { waitUntil: "load", timeout: 60000 });
         await require("./launch-wait.js").waitLaunchGone(s, { who: "tests/smoke.js bySystem" });
         await sleep(1800);
@@ -4068,6 +4069,7 @@ const t0 = Date.now();
     await hookInstall(o);
     o.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
     await seatPage(o);
+    await RUN.seed(o);
     await o.goto(RUN.url, { waitUntil: "load", timeout: 90000 });
     await require("./launch-wait.js").waitLaunchGone(o, { who: "tests/smoke.js comment language" });
     const base = {
@@ -4354,6 +4356,7 @@ const t0 = Date.now();
     q.on("dialog", d => d.accept());
     q.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
     await hookInstall(q);
+    await RUN.seed(q);
     const bootLate = await bootAndDismiss(q, RUN.url, "the address form");
     await q.evaluate(() => { const x = document.getElementById("eAgentModal"); if (x) x.remove(); });
     shown.bootLate = bootLate.length;
@@ -4635,6 +4638,7 @@ const t0 = Date.now();
     await m.setViewport(MOTION.VIEW);
     m.on("dialog", d => d.accept());
     m.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
+    await RUN.seed(m);
     const late = await bootAndDismiss(m, RUN.url, "the motion page");
     await m.evaluate(() => { const x = document.getElementById("eAgentModal"); if (x) x.remove(); });
     await m.evaluate(MOTION.instrument);
@@ -4666,6 +4670,7 @@ const t0 = Date.now();
     await g.setViewport({ width: 1500, height: 950 });
     g.on("dialog", d => d.accept());
     g.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
+    await RUN.seed(g);
     const late = await bootAndDismiss(g, RUN.url, "the badge page");
     await g.evaluate(() => { const x = document.getElementById("eAgentModal"); if (x) x.remove(); });
     if (late.length) console.log("  the badge page WAITED OUT: " + late.join("; "));

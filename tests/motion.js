@@ -715,6 +715,7 @@ if (require.main === module) {
       let view = SCALES[0];
       const errs = [];
       p.on("pageerror", e => errs.push(String(e.message || e)));
+      await RUN.seed(p);
       await boot(p, RUN.url);
       console.log("engine sha256 " + RUN.engineSha.slice(0, 12) + ", " + await p.evaluate(() => document.querySelectorAll(".card").length) + " cards");
       await p.evaluate(instrument);

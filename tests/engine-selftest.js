@@ -80,12 +80,14 @@ try {
   /* 8: the run folder, which is what keeps a catalog out of the tree. */
   r = run('const f=require("./engine.js").runFolder("catalog","sample");'
         + 'console.log(JSON.stringify({dir:f.dir,page:f.page,same:f.engineSha===f.copySha,'
-        + 'has:require("fs").readdirSync(f.dir).sort()}));f.drop();'
+        + 'has:require("fs").readdirSync(f.dir).sort(),catalog:f.catalog,seed:typeof f.seed}));f.drop();'
         + 'console.log("GONE " + !require("fs").existsSync(f.dir));', { ETIUDA_FIXTURES: good });
   let j = null; try { j = JSON.parse((r.out.match(/^\{.*\}$/m) || [])[0]); } catch (e) { /* reported by the check */ }
   ok(!!j && j.same, "the run folder's engine copy has the same sha256 as engine/etiuda.html");
-  ok(!!j && j.has.join(",") === "etiuda-catalog.js,etiuda.html,sample-catalog.js",
-     "the run folder holds the engine and only the fixtures asked for (" + (j ? j.has.join(", ") : r.out.trim()) + ")");
+  ok(!!j && j.has.join(",") === "etiuda.html,sample-catalog.js",
+     "the run folder holds the engine and only the fixtures asked for, no catalog beside it (" + (j ? j.has.join(", ") : r.out.trim()) + ")");
+  ok(!!j && j.catalog === fs.readFileSync(path.join(good, E.FIXTURE_FILE.catalog), "utf8") && j.seed === "function",
+     "the catalog asked for is handed to seed(page), the fixture's text whole");
   ok(!!j && !E.inside(E.ROOT, path.dirname(j.dir)), "the run folder is outside the repository");
   ok(/GONE true/.test(r.out), "drop() removes it");
 

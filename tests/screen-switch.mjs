@@ -42,8 +42,7 @@ const ENGINE = at >= 0 ? path.resolve(argv[at + 1]) : E.ENGINE_PATH;
 
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-screen-switch-"));
 fs.copyFileSync(ENGINE, path.join(lab, "etiuda.html"));
-fs.writeFileSync(path.join(lab, "etiuda-catalog.js"),
-  "window.E_CATALOG = " + fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8") + ";\n");
+const SEED_CATALOG = fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8");
 const url = "file:///" + path.join(lab, "etiuda.html").replace(/\\/g, "/");
 const median = a => { const s = a.slice().sort((x, y) => x - y); return s[(s.length - 1) >> 1]; };
 
@@ -61,6 +60,7 @@ try {
       .observe({ type: "event", durationThreshold: 16, buffered: true });
   });
   await seatPage(p);
+  await E.seedCatalog(p, SEED_CATALOG);
   await p.goto(url, { waitUntil: "load", timeout: 60000 });
   await p.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   if (await p.$("#ecYes")) await p.click("#ecYes");

@@ -49,8 +49,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-pick-reword-"));
 fs.copyFileSync(E.ENGINE_PATH, path.join(lab, "etiuda.html"));
-fs.writeFileSync(path.join(lab, "etiuda-catalog.js"),
-  "window.E_CATALOG = " + fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8") + ";\n");
+const SEED_CATALOG = fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8");
 const deskUrl = "file:///" + path.join(lab, "etiuda.html").replace(/\\/g, "/");
 const MAIN_SRC = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
 function pickerDocFile(src, name) {
@@ -99,6 +98,7 @@ async function deskOpen(lang, theme, url) {
       openPicker() {}, signinState: () => st, signIn: async () => st, signinCheck: async () => st };
   }, lang, theme);
   await seatPage(page);
+  await E.seedCatalog(page, SEED_CATALOG);
   await page.goto(url || deskUrl, { waitUntil: "load", timeout: 60000 });
   await page.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   if (await page.$("#ecYes")) await page.click("#ecYes");

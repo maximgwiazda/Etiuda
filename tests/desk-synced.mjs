@@ -51,8 +51,7 @@ const sha = f => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-synced-"));
 const PAGE = fs.readFileSync(E.ENGINE_PATH, "utf8");
 fs.writeFileSync(path.join(lab, "etiuda.html"), PAGE);
-fs.writeFileSync(path.join(lab, "etiuda-catalog.js"),
-  "window.E_CATALOG = " + fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8") + ";\n");
+const SEED_CATALOG = fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8");
 const urlOf = name => "file:///" + path.join(lab, name).replace(/\\/g, "/");
 let browser = null;
 
@@ -85,6 +84,7 @@ async function boot(name = "etiuda.html") {
     };
   });
   await seatPage(page);
+  await E.seedCatalog(page, SEED_CATALOG);
   await page.goto(urlOf(name), { waitUntil: "load", timeout: 60000 });
   await page.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   if (await page.$("#ecYes")) {
@@ -193,6 +193,7 @@ async function deskUnread(name) {
       };
     });
     await seatPage(page);
+    await E.seedCatalog(page, SEED_CATALOG);
   await page.goto(urlOf(name), { waitUntil: "load", timeout: 60000 });
     await sleep(1500);
     const r = await page.evaluate(() => {
