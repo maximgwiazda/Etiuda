@@ -595,8 +595,7 @@ function isV2(data) {
   return !!data && typeof data === "object" && +data.format === 2 && data.kind === "etiuda-catalog";
 }
 /* catalogPayload with a sealed envelope opened first, so every route hands the page the catalog inside and the page
-   reads it as it reads an unsealed file, signature and identity alike. One this desk holds no key for throws. An epoch
-   the team file has not named yet, on a folder team this desk already holds a key for, is the same throw marked to wait. */
+   reads it as it reads an unsealed file, signature and identity alike. One this desk holds no key for throws. */
 function catalogRead(text) {
   const got = catalogPayload(text);
   if (!got.data || typeof got.data !== "object" || got.data.kind !== SEALED_KIND) return got;
@@ -2980,7 +2979,7 @@ function sealFor(catalogId, pin, root) {
   let team = asked ? (editionTeam.get(asked) || "") : "";
   if (asked && (!team || pinsTorn(root, asked))) return null;
   let cover = team ? teamCovering(root, catalogId) : null;
-  /* The scan above stops once editionTeam holds the pin, so a folder team this run has not opened is read here. */
+  /* The scan above stops once editionTeam holds the pin, so a team this run has not opened is read here. */
   if (asked && cover && !(editionTeams.get(asked) && editionTeams.get(asked).has(String(cover.id)))) {
     ecFilesIn(root).forEach(f => ecFacts(f, "")); /* plant:seal-read */
   }
@@ -6873,7 +6872,7 @@ function headShown(team) {
   return null;
 }
 /* Where the relay team this desk follows stands past its grant, for the team row, as the channel judges it by the relay's
-   clock; `seen` once the agent has dismissed this step's notice. Nothing for a team inside its grant or a folder team. */
+   clock; `seen` once the agent has dismissed this step's notice. Nothing for a team inside its grant. */
 function lapseShown(team) {
   const here = relayHere();
   if (!here || here.team !== team || !relayChannel || typeof relayChannel.lapse !== "function") return null;
@@ -11683,7 +11682,7 @@ function signinSign(bytes) {
   const key = deskBranch ? openPrivate(deskBranch.sign.priv) : null;
   return key ? crypto.sign(null, bytes, key).toString("hex") : "";
 }
-/* Whether this desk has a team folder to write its seat into: a team whose lead it pinned, or a folder team it asks to join, so the
+/* Whether this desk has a team folder to write its seat into: a team whose lead it pinned, or a team it asks to join, so the
    lead's watch can read the seat beside the request. */
 function signinTeamHere() {
   if (pinnedLead()) return true;

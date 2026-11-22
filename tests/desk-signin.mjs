@@ -597,7 +597,7 @@ CASES.renewFail = async s => {
 const WIRE_DECLS = ["const SIGNIN_RENEW_MS =", "const SIGNIN_FIRST_MS =", "async function signinRenewNow(", "function armSigninRenew(", "function signinOutNow(",
   "function signinOutSend(", "function signinOutAgain(", "function signinLeave(", "function signinAccountKept(", "function signinPolicyRefuses(", "function signinOutWanted("];
 const WIRE_STANDS = ["harnessLaunch", "PLACED_ASIDE", "signinState", "signinOffered", "branchIdentity", "signinIo", "net", "signinRenewHeld",
-  "signinSave", "tellSignin", "setTimeout", "pinnedLead", "signinTeamHere", "fs", "path", "sharedFolderForWrite", "SEAT_NAME", "signinView", "signoutAsk", "signinLabHeld", "teamJoin", "cancelJoin", "sendJoin", "theWindow", "unlinkOwn", "stand", "signinRevokedNext",
+  "signinSave", "tellSignin", "setTimeout", "pinnedLead", "signinTeamHere", "fs", "path", "catalogFolder", "SEAT_NAME", "signinView", "signoutAsk", "signinLabHeld", "teamJoin", "cancelJoin", "sendJoin", "theWindow", "unlinkOwn", "stand", "signinRevokedNext",
   "storeTurn", "storeForget", "storeEndAgain", "storeLeaveNow"];
 /* The store's look after a renewal, its forgetting at a sign out, an owed store/end posted again and an owed leave tried again
    (tests/desk-store-shell.mjs holds them): counted, never run here. */
@@ -627,7 +627,7 @@ function wireStand(s, reply, serve) {
       tokenAsk: async () => { st.asked++; return reply ? reply() : answer({}); }, serviceAsk: async () => { st.posted++; return serve ? serve() : answer({}); } }),
     net: { fetch: () => { throw new Error("no network in a leg"); } },
     signinRenewHeld: s.signinRenewHeld, signinSave: () => { st.saves++; }, tellSignin: () => { st.tells++; },
-    pinnedLead: () => false, signinTeamHere: () => false, fs, path, sharedFolderForWrite: () => "", SEAT_NAME: "seat.json", signoutAsk: s.signoutAsk,
+    pinnedLead: () => false, signinTeamHere: () => false, fs, path, catalogFolder: () => "", SEAT_NAME: "seat.json", signoutAsk: s.signoutAsk,
     signinView: () => ({ offered: [], signedIn: st.store.held ? "microsoft" : "" }),
     teamJoin: null, cancelJoin: () => { st.cancels++; }, sendJoin: () => { st.sends++; }, theWindow: null, unlinkOwn: f => { st.unlinked.push(String(f)); },
     setTimeout: (fn, ms) => { st.timers.push({ fn, ms }); return { unref() {} }; },
@@ -673,7 +673,7 @@ CASES.renewWire = async (s, swap) => {
 
 /* ---- the seat's write, evaluated with stand-ins: the folder, the team, the files ---------------------------------------- */
 const FLUSH_DECLS = ["function signinTeamHere(", "function signinFlush("];
-const FLUSH_STANDS = ["signinState", "branchIdentity", "pinnedLead", "teamJoin", "sharedFolderForWrite", "folderAnswers", "fs", "path", "writeReplacing",
+const FLUSH_STANDS = ["signinState", "branchIdentity", "pinnedLead", "teamJoin", "catalogFolder", "folderAnswers", "fs", "path", "writeReplacing",
   "seatFileText", "SEAT_NAME", "console", "signinRevokedHas", "signinCertOk", "signinCertEarly", "Date"];
 /* `st`: {held, lead, join, root, files (a Set of paths), writes}; the desk's flush as the wiring has it, its mark kept between calls. */
 function loadFlush(s, st, swap) {
@@ -683,7 +683,7 @@ function loadFlush(s, st, swap) {
     text = text.replace(swap[0], swap[1]);
   }
   const vals = { signinState: () => ({ held: st.held }), branchIdentity: () => ({ id: DESK_ID, key: DESK_KEY }), pinnedLead: () => st.lead,
-    sharedFolderForWrite: () => st.root, folderAnswers: () => true, path,
+    catalogFolder: () => st.root, folderAnswers: () => true, path,
     fs: { existsSync: p => st.files.has(p), mkdirSync: () => {} }, writeReplacing: (p, t) => { st.files.add(p); st.writes.push({ p, t }); },
     seatFileText: s.seatFileText, SEAT_NAME: s.SEAT_NAME, console: { error() {} }, signinRevokedHas: s.signinRevokedHas, signinCertOk: s.signinCertOk, signinCertEarly: s.signinCertEarly,
     Date: { now: () => NOW } };
@@ -2379,8 +2379,9 @@ CASES.noKeyring = async (s, swapOrPage) => {
 const OTHER_LEAD = rawPub(crypto.generateKeyPairSync("ed25519").publicKey);
 const OTHER_KEY_ID = "studio-" + crypto.createHash("sha256").update(Buffer.from(OTHER_LEAD, "hex")).digest("hex").slice(0, 16);
 const shownOf = (s, over, swap) => { const q = doorJoinStand(over); return loadDoorJoin(s, q, swap).signinDoorsShown(q.held, NOW).map(d => d.n).join(); };
-/* Machine policy binds a door as it binds an invitation: none where it names a folder, only the named lead's where it names a lead,
-   none where it names both (a door has no folder); a press at a door it does not offer changes nothing. */
+/* Machine policy binds a door as it binds an invitation: only the named lead's where it names a lead; a press at a door it does not
+   offer changes nothing. Was also none where it names a folder, or both; now a team works over the relay only and a folder in the
+   policy is not read, so a folder binds nothing and both bind as the lead alone. */
 CASES.doorPolicy = (s, swap) => {
   const mixed = heldOf({ doors: [doorOf(), doorOf({ team: "t-fedcba9876543210", lead: OTHER_LEAD, keyId: OTHER_KEY_ID })] });
   const share = "\\\\server\\team";
@@ -2388,7 +2389,7 @@ CASES.doorPolicy = (s, swap) => {
   const lead = shownOf(s, { held: mixed, policy: { lead: DOOR_LEAD } }, swap), other = shownOf(s, { held: mixed, policy: { lead: OTHER_LEAD } }, swap);
   const both = shownOf(s, { held: mixed, policy: { lead: DOOR_LEAD, folder: share } }, swap);
   const q = doorJoinStand({ held: mixed, policy: { lead: OTHER_LEAD } }), x = loadDoorJoin(s, q, swap), r = x.signinDoorJoin(0);
-  return free === "0,1" && folder === "" && lead === "0" && other === "1" && both === ""
+  return free === "0,1" && folder === "0,1" && lead === "0" && other === "1" && both === "0"
     && !!r && r.refused === "door" && x.join() === null && Object.keys(q.pins).length === 0 && q.persists === 0;
 };
 /* No door while a pinned team stands (its roster still names this desk, or it holds no key yet, and the relay has not refused it);
@@ -2430,7 +2431,7 @@ function loadCancel(st, swap) {
     deskBranch: {}, unlinkOwn: f => { st.unlinked.push(f); }, joinFile: () => "/relay/" + RT + "/desks/" + DESK_ID + "/join.json", newestEpoch: () => 0,
     undoInvite: () => { st.undone++; }, persistDeskEnvelope: () => {}, joinView: () => ({ view: true }), endRefusedRelay: j => { st.ended.push(j); },
     requestSent: () => st.sent !== false, signinOutWanted: () => false, signinTeamHere: () => false, sendJoin: () => {}, storeForget: () => {}, signinOutSend: () => {} };
-  const body = "let deskKeys = {}, teamJoin = init.join, joinTold = true, signinWrote = \"\", theWindow = null, SEAT_NAME = \"seat.json\", path = null, sharedFolderForWrite = () => \"\";\n" + text + "\nreturn { cancelJoin, refusedWithdrawEnds, signinLeave, join: () => teamJoin };";
+  const body = "let deskKeys = {}, teamJoin = init.join, joinTold = true, signinWrote = \"\", theWindow = null, SEAT_NAME = \"seat.json\", path = null, catalogFolder = () => \"\";\n" + text + "\nreturn { cancelJoin, refusedWithdrawEnds, signinLeave, join: () => teamJoin };";
   return new Function(...CANCEL_STANDS, body)(...CANCEL_STANDS.map(n => vals[n]));
 }
 const cancelStand = (join, accepted) => ({ join, accepted, withdrawn: [], unlinked: [], undone: 0, ended: [] });
@@ -2473,7 +2474,7 @@ CASES.signoutUnlinkOwn = async (s, swap) => {
   const st = outStand(s);
   let raw = 0;
   st.signinTeamHere = () => true;
-  st.sharedFolderForWrite = () => path.join(path.sep, "share", "team");
+  st.catalogFolder = () => path.join(path.sep, "share", "team");
   st.fs = Object.assign({}, fs, { unlinkSync: () => { raw++; } });
   loadWire(st, swap).signinOutNow();
   await tick(5);
@@ -2559,7 +2560,7 @@ const SWITCH_STANDS = ["ipcMain", "fromEngine", "LINK_CLICK_MS", "signinState", 
   "sealsForReal", "safeStorage", "process", "branchIdentity", "signinIo", "storeOn", "signinFolderApart", "SIGNIN_FOLDER_LAND_MS", "signinAccessFor", "signinRun",
   "signinSeat", "signinSeatAccess", "storeTokenTake", "storeEndAgain", "storeLeaveNow", "signinFolderAfter", "storeTurn", "signinLanding", "signinSave",
   "signinKeep", "signinKept", "signinSame", "signinSettle", "harnessLaunch", "signinLabHeld", "teamJoin", "cancelJoin", "sendJoin", "theWindow", "pinnedLead",
-  "unlinkOwn", "path", "sharedFolderForWrite", "SEAT_NAME", "storeForget", "signoutAsk", "signinCertEarly", "signinRevokedHas", "signinCertOk", "folderAnswers",
+  "unlinkOwn", "path", "catalogFolder", "SEAT_NAME", "storeForget", "signoutAsk", "signinCertEarly", "signinRevokedHas", "signinCertOk", "folderAnswers",
   "fs", "writeReplacing", "seatFileText", "console", "signinRenewHeld", "signinRevokedNext", "signinClaims", "signinPinOk"];
 const SUB_B = "s-2";
 function switchStand(s, o) {
@@ -2582,7 +2583,7 @@ function switchStand(s, o) {
     signinKeep: (ss, pl, t) => (t ? "sealed:" + t : ""), signinKept: (ss, x) => String(x || "").replace(/^sealed:/, ""), signinSame: (a, b) => a === b,
     signinSettle: s.signinSettle, harnessLaunch: () => false, signinLabHeld: () => false, teamJoin: opt.join || null,
     cancelJoin: () => { st.cancels++; }, sendJoin: () => { st.sends++; }, theWindow: null, pinnedLead: () => (opt.join ? null : { team: TEAM }),
-    unlinkOwn: f => { st.unlinked.push(String(f) + " " + who()); }, path, sharedFolderForWrite: () => path.join(path.sep, "share", "team"), SEAT_NAME: "seat.json",
+    unlinkOwn: f => { st.unlinked.push(String(f) + " " + who()); }, path, catalogFolder: () => path.join(path.sep, "share", "team"), SEAT_NAME: "seat.json",
     storeForget: () => { st.forgets++; }, signoutAsk: async () => { const o = "signout/desk " + who(); st.order.push(o); await (st.outGate || tick(2)); st.order.push(o + " answered"); return st.outOk; },
     signinCertEarly: () => false, signinRevokedHas: () => false, signinCertOk: c => !!c, folderAnswers: () => true,
     fs: { existsSync: () => false, mkdirSync: () => {} }, writeReplacing: f => { st.writes.push(String(f)); }, seatFileText: s.seatFileText, console: { error() {} },
@@ -5670,7 +5671,7 @@ const LEGS = [
   ["ds16g", "stagingCmd", "tools/signin-staging.cmd is outside the packaged files and starts this tree's own Electron with a profile of its own, never the installed desk, with ETIUDA_SIGNIN_LAB for that start alone"],
   ["ds18a", "waitRead", "no free seat is a wait: the service's 200 with no certificate and the reason \"waiting\" is kept as the said reason with the refresh token, asking nobody; none without it stays no licence; the certificate after it ends the wait; a 409 \"full\" reads as before"],
   ["ds18b", "waitRenew", "the quiet renewal while waiting waits again with its token renewed and nobody asked, and seats the desk once a seat frees; an older service's \"full\" keeps its token as before"],
-  ["ds21a", "doorPolicy", "machine policy binds a door as an invitation: no door where it names a folder, only the named lead's where it names a lead, none where it names both; a press at a door not offered changes nothing"],
+  ["ds21a", "doorPolicy", "machine policy binds a door as an invitation: only the named lead's where it names a lead, a folder it names binding nothing; a press at a door not offered changes nothing"],
   ["ds21b", "doorPins", "no door while a pinned team stands; a team the roster or the relay took off leaves the doors; a door of a team pinned under another lead is not offered, under the same lead it is"],
   ["ds21c", "doorUnbar", "a team left, or whose key did not match, is offered at its door, and the press lifts the leave and the doubt after Cancel's snapshot has taken them"],
   ["ds21d", "doorCancel", "Cancel at a door the relay named withdraws the request there and keeps the join until the relay takes it; a door request never named or turned away goes at once; an accepted invitation as before"],
@@ -6306,7 +6307,7 @@ if (!PLANTS_OFF) {
   await plantWire("dsp97b", ["inviteAccepted(j) && requestSent(j)) return withdrawJoin(j); /* plant:h35-keep */", "inviteAccepted(j)) return withdrawJoin(j); /* plant:h35-keep */"], "cancelUnsent");
   await plantWire("dsp98", ["  if (j.refused !== true && j.invite.relay.door !== true) return false; /* plant:door-withdrawn-ends */", "  if (j.refused !== true) return false;"], "doorWithdrawnEnds");
   await plantWire("dsp99", ["  if (inv.withdrawing === true) return inv.rt === rt &&", "  if (false) return inv.rt === rt &&"], "doorWithdrawInvite");
-  await plantWire("dsp99a", ["try { unlinkOwn(path.join(sharedFolderForWrite(), \"desks\", me.id, SEAT_NAME)); }", "try { fs.unlinkSync(path.join(sharedFolderForWrite(), \"desks\", me.id, SEAT_NAME)); }"], "signoutUnlinkOwn");
+  await plantWire("dsp99a", ["try { unlinkOwn(path.join(catalogFolder(), \"desks\", me.id, SEAT_NAME)); }", "try { fs.unlinkSync(path.join(catalogFolder(), \"desks\", me.id, SEAT_NAME)); }"], "signoutUnlinkOwn");
   await plantWire("dsp99b", ["  signinRenewing = pending; /* plant:renew-marked */\n", ""], "signoutAfterRenew");
   await plantWire("dsp99c", ["const flight = (signinRenewing ? signinRenewing.then(send, send) : send()).then(ok => { /* plant:signout-after-renew */", "const flight = send().then(ok => {"], "signoutAfterRenew");
   await plant("dsp99d", ["  if (/^[0-9a-f]{64}$/.test(String(d.out))) out.out = String(d.out); /* plant:out-kept */\n", ""], "signoutOwed");
