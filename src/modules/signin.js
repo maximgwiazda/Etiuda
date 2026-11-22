@@ -709,7 +709,7 @@ function signinDoorOf(v){
   /* A desk-only licence has no lead to wait for, so it is not told to wait for one. */
   if(!p.team && v.reached && v.seat==="held") return {moment:"noteam", ident, heading:v.deskOnly ? t("Working without a team") : t("Signed in. No team yet"),
     line:v.deskOnly ? t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed.") /* plant:panel-desk-only */
-      : t("No team has admitted this account yet. A lead can invite it by its email address or send a link; the catalog then arrives by itself."),
+      : t("No team has admitted this account yet. A lead can invite it by its email address or send a link; the invitation then appears here with one Join."),
     acts:[{act:"check", label:t("Check now")}, acct]};
   const out={moment:"signed", ident, team:p.team ? p.teamName+(p.team.lead ? " · "+named(t("Led by {LEAD}"),"{LEAD}",p.team.lead) : "") : t("No team yet"), acts:[acct]};
   if(!v.reached){ out.moment="offline"; out.say=signinSay("offline", v); out.calm=true; out.acts=[{act:"check", label:t("Check now")}, acct]; }

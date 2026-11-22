@@ -448,8 +448,8 @@ CASES.waiting = async (s, set, pg) => {
 /* mm-p10 (finding 7, case A): on a managed computer, the Team row's "No team yet" hint never refers to "the code below",
    English and Polish; unmanaged still does. */
 const B3U = {
-  en: "No team has admitted this account yet. A lead can invite it by its email address or send a link; the catalog then arrives by itself.",
-  pl: "Żaden zespół nie przyjął jeszcze tego konta. Lider zespołu może zaprosić je na adres e-mail albo wysłać link; potem katalog przyjdzie sam.",
+  en: "No team has admitted this account yet. A lead can invite it by its email address or send a link; the invitation then appears here with one Join.",
+  pl: "Żaden zespół nie przyjął jeszcze tego konta. Lider zespołu może zaprosić je na adres e-mail albo wysłać link; zaproszenie pojawi się wtedy tutaj z jednym przyciskiem Dołącz.",
 };
 const B3 = {
   en: "No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself.",
@@ -757,8 +757,8 @@ if (!PLANTS_OFF && S) {
     try { red = SIGNIN.split(swap[0]).length === 2 && !(await CASES.noRoleWords(S, undefined, undefined, SIGNIN.replace(swap[0], swap[1]))); } catch (e) { red = false; }
     check(red, "mmp33 plant SupportContact dropped from the no-role line turns noRoleWords red");
   }
-  await plantPage("mmp43", [": row(\"team\",\"people\",t(\"No team yet\"),doorSaid||(signinManaged(v)?t(\"No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself.\"):t(\"No team has admitted this account yet. A lead can invite it by its email address or send a link; the catalog then arrives by itself.\")),\"\")); /* plant:no-team-managed */",
-    ": row(\"team\",\"people\",t(\"No team yet\"),doorSaid||t(\"No team has admitted this account yet. A lead can invite it by its email address or send a link; the catalog then arrives by itself.\"),\"\"));"], "noTeamManaged", "settings");
+  await plantPage("mmp43", [": row(\"team\",\"people\",t(\"No team yet\"),doorSaid||(signinManaged(v)?t(\"No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself.\"):t(\"No team has admitted this account yet. A lead can invite it by its email address or send a link; the invitation then appears here with one Join.\")),\"\")); /* plant:no-team-managed */",
+    ": row(\"team\",\"people\",t(\"No team yet\"),doorSaid||t(\"No team has admitted this account yet. A lead can invite it by its email address or send a link; the invitation then appears here with one Join.\"),\"\"));"], "noTeamManaged", "settings");
   await plantPage("mmp45", ["own:signinManaged(v)?null:v.seat===\"held\" && v.trialUntil ? signinOwnTrialWords(v, ds) : null}; /* plant:asklead-trial-managed */",
     "own:v.seat===\"held\" && v.trialUntil ? signinOwnTrialWords(v, ds) : null};"], "askLeadManaged", "signin");
   await plantPage("mmp46", ["    case \"seat-removed\": /* plant:seat-removed-contact */\n      { const c=v && v.managed ? v.managed.contact : \"\";",

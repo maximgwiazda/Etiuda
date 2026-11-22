@@ -277,7 +277,7 @@ CASES.pageWords = (pg) => {
     && has(words(noBuy), "A seat comes from a team's lead, by an invitation to this account's email address or a link; another account")
     && has(words(ask.door), "The team's lead invites this account by its email address, and the invitation appears here with one Join;")
     && has(words(full.door), "This computer takes a seat by itself as soon as one is free; nothing is needed here.")
-    && has(words(team.acct), "No team has admitted this account yet. A lead can invite it by its email address or send a link; the catalog then arrives by itself.")
+    && has(words(team.acct), "No team has admitted this account yet. A lead can invite it by its email address or send a link; the invitation then appears here with one Join.")
     && has(words(team.acct), "The order page opens in the browser, and the licence bought there is this account's.")
     && has(words(out.acct), "A licence is bought for the account signed in here, so signing in comes first.");
 };

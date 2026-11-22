@@ -363,7 +363,7 @@ function accountGroups(){
     rows.push(p.team ? row("team","people",t("Team"),doorSaid||(p.team.lead?t("Led by {LEAD}").split("{LEAD}").join(p.team.lead):""),val(teamNamed.team||p.teamName))
       : v.doors.length && v.seat==="held" ? row("team","people",t("A team on this licence"),doorSaid||t("This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation."),signinDoorsHtml(v.doors))
       : v.deskOnly && v.seat==="held" ? row("team","people",t("Working without a team"),doorSaid||t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed."),"") /* plant:account-desk-only */
-      : row("team","people",t("No team yet"),doorSaid||(signinManaged(v)?t("No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself."):t("No team has admitted this account yet. A lead can invite it by its email address or send a link; the catalog then arrives by itself.")),"")); /* plant:no-team-managed */
+      : row("team","people",t("No team yet"),doorSaid||(signinManaged(v)?t("No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself."):t("No team has admitted this account yet. A lead can invite it by its email address or send a link; the invitation then appears here with one Join.")),"")); /* plant:no-team-managed */
     /* A managed computer shows the provider it is held to. */
     if(v.managed && v.managed.provider) rows.push(row("signin","user",t("Sign-in"),"",lockedHtml(signinHeldTo(v.managed))));
     /* The invitations waiting, each with its Join (board 1017), and a Join that waits for the lead's confirm. */

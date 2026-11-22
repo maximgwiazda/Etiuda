@@ -2928,7 +2928,7 @@ CASES.testServiceAsar = async (s0, swap) => {
 const DESK_ONLY_EN = ["Working without a team", "This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed."];
 const DESK_ONLY_PL = ["Praca bez zespołu", "Ten komputer ma swoje miejsce w licencji, a Etiuda działa na własnym katalogu. Nic więcej nie trzeba."];
 /* Board 1017 moved this line, which once said a lead admits it by the code below. */
-const NO_TEAM_LINE = "No team has admitted this account yet. A lead can invite it by its email address or send a link; the catalog then arrives by itself.";
+const NO_TEAM_LINE = "No team has admitted this account yet. A lead can invite it by its email address or send a link; the invitation then appears here with one Join.";
 /* The shell's signinView over `held`, the rest stood in. */
 function viewOver(held, relaySeat) {
   const text = decl(MAIN, "function signinView(");
