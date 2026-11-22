@@ -10567,7 +10567,7 @@ let SIGNIN_PROVIDERS = Object.freeze({
   microsoft: Object.freeze({ clientId: "", clientSecret: "", issuer: "https://login.microsoftonline.com/{tenantid}/v2.0",
     authorize: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
     token: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-    scope: "openid profile email offline_access", refreshScope: "openid profile offline_access", /* plant:scope-ms-email */
+    scope: "openid profile email offline_access", refreshScope: "openid profile email offline_access", /* plant:scope-ms-email */
     extra: Object.freeze({ response_mode: "query", prompt: "select_account" }), service: "" }),
   /* Google: select_account alone. A consent prompt at every sign-in (decision 36) was withdrawn on measurement, 2026-11-13: a
      personal account signed in twice with select_account and kept a refresh token both times (a Workspace account unmeasured);

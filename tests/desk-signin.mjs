@@ -48,7 +48,7 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 317;
+const PLANTS = 318;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
@@ -497,7 +497,7 @@ CASES.loopFlow = async s => {
   return got.ok === true && code === "abc" && codes.join() === "400,400,303";
 };
 CASES.scopes = s => {
-  const ms = s.SIGNIN_PROVIDERS.microsoft, g = s.SIGNIN_PROVIDERS.google, want = "openid profile offline_access", wantIn = "openid profile email offline_access", gWant = "openid email profile";
+  const ms = s.SIGNIN_PROVIDERS.microsoft, g = s.SIGNIN_PROVIDERS.google, want = "openid profile email offline_access", wantIn = want, gWant = "openid email profile";
   const scopeOf = p => new URL(s.signinAuthorize(p, 50000, DESK_KEY).url).searchParams.get("scope");
   const refresh = new URLSearchParams(s.signinRefreshForm(MS, "rt").toString()).get("scope");
   return ms.scope === wantIn && ms.refreshScope === want && scopeOf(MS) === wantIn && refresh === want
@@ -1877,7 +1877,7 @@ const LAB_ROOT = "d".repeat(64), LAB_CLIENT = "lab-client-0123456789";
 function labFile(port, over, pover) {
   const at = "http://127.0.0.1:" + port, named = "https://oidc-lab.localhost:" + port;
   return Object.assign({ provider: Object.assign({ id: "lab", issuer: named, authorize: at + "/authorize", token: at + "/token", jwks: named + "/jwks",
-    clientId: LAB_CLIENT, scope: "openid profile offline_access" }, pover), service: at + "/licence/v1/", root: LAB_ROOT }, over);
+    clientId: LAB_CLIENT, scope: "openid profile email offline_access" }, pover), service: at + "/licence/v1/", root: LAB_ROOT }, over);
 }
 const labText = (port, over, pover) => JSON.stringify(labFile(port, over, pover));
 /* The file taken whole, its provider shaped as the shipped two are and the two doors under its service; refused whole where any
@@ -6046,7 +6046,8 @@ if (!PLANTS_OFF) {
   await plant("dsp18", ["if (!token || !sealsForReal(storage, platform)) return \"\"; /* plant:keep-real */", "if (!token) return \"\";"], "keep");
   await plant("dsp19", ["if (landed) { serve(res, 200, landed); shut(); } else held = res;", "if (landed) serve(res, 200, landed); else held = res;"], "loopOnce");
   await plant("dsp20", ["if (!ours) { serve(res, 400, \"earlier\"); return; } /* plant:loop-state */", ""], "loopStray");
-  await plant("dsp21", ["scope: \"openid profile email offline_access\", refreshScope: \"openid profile offline_access\", /* plant:scope-ms-email */", "scope: \"openid profile offline_access\", refreshScope: \"openid profile offline_access\","], "scopes");
+  await plant("dsp21", ["scope: \"openid profile email offline_access\", refreshScope: \"openid profile email offline_access\", /* plant:scope-ms-email */", "scope: \"openid profile offline_access\", refreshScope: \"openid profile email offline_access\","], "scopes");
+  await plant("dsp301", ["scope: \"openid profile email offline_access\", refreshScope: \"openid profile email offline_access\", /* plant:scope-ms-email */", "scope: \"openid profile email offline_access\", refreshScope: \"openid profile offline_access\","], "scopes");
   await plant("dsp300", ["scope: \"openid email profile\", refreshScope: \"\" /* plant:scope-google-email */", "scope: \"openid\", refreshScope: \"\""], "scopes");
   await plant("dsp22", ["const ans = await signinSeat(io, p.id, deskKey, got.idToken, \"\", now); /* plant:renew-seedless */",
     "const ans = await signinSeat(io, p.id, deskKey, got.idToken, held.seed, now);"], "renewWrite");
