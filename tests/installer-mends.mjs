@@ -271,7 +271,7 @@ const refuses = nsh => {
   const says = seen > g && b.slice(seen, quit).includes("MessageBox MB_OK|MB_ICONSTOP \"$(etiudaFolderNotOurs)\" /SD IDOK") && b[quit - 1] === "SetErrorLevel 2";
   const back = b.findIndex(l => l === "!insertmacro etiudaRenameRetry \"$etiudaAside\" \"$etiudaBase\"");
   const before = quit > -1 && quit < b.indexOf("CreateDirectory \"$etiudaStage\"") && back > -1 && g > back;
-  const words = (nsh.match(/LangString etiudaFolderNotOurs \$\{ID\} "[^"\n]+" ; placeholder: Claudette\n/g) || []).length === 2;
+  const words = (nsh.match(/LangString etiudaFolderNotOurs \$\{ID\} "[^"\n]+" ; (?:placeholder: Claudette|the copywriter's words, 2026-11-22 \(f0b458b49\))\n/g) || []).length === 2;
   return { ok: guard && says && before && words, guard, says, before, words };
 };
 const f1 = refuses(NSH);
@@ -288,7 +288,7 @@ const leftToItsOwner = nsh => {
   const cond = rest.indexOf("${If} $R9 != \"\""), w = rest.indexOf(RUNONCE);
   const said = rest.indexOf("StrCpy $etiudaFinishText \"$(etiudaOldCopyGoes)\"");
   const runsNothing = !rest.some(l => /uninstallOldVersion|ExecWait|\bExec\b|ExecShell|nsExec/.test(l));
-  const words = (nsh.match(/LangString etiudaOldCopyGoes \$\{ID\} "[^"\n]+" ; placeholder: Claudette\n/g) || []).length === 2;
+  const words = (nsh.match(/LangString etiudaOldCopyGoes \$\{ID\} "[^"\n]+" ; (?:placeholder: Claudette|the copywriter's words, 2026-11-22 \(f0b458b49\))\n/g) || []).length === 2;
   return { ok: cond > -1 && w > cond && said > cond && runsNothing && words, cond, w, said, runsNothing, words };
 };
 const o1 = leftToItsOwner(NSH);
