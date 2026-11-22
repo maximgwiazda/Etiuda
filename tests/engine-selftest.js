@@ -2372,8 +2372,15 @@ Module.prototype._compile = function (content, filename) {
     } else {
       fs.chmodSync(unreadableDir, 0);
     }
-    const rListing = run('const E = require("./engine.js"); const list = E.safeListing(' + JSON.stringify(unreadableDir) + '); console.log("EMPTY " + list.length);');
-    unreadableTested = rListing.code === 78 && rListing.out.indexOf("EMPTY") === -1;
+    /* The folder must really be unreadable to this account before its refusal means anything: a hosted runner's account reads
+       it through the deny (hosted-area run 44998023724, shard 5, the test architect, 2026-11-22), and there 36c is not run. */
+    let denied = false;
+    try { fs.readdirSync(unreadableDir); } catch (e) { denied = true; }
+    if (!denied) unreadableTested = null;
+    else {
+      const rListing = run('const E = require("./engine.js"); const list = E.safeListing(' + JSON.stringify(unreadableDir) + '); console.log("EMPTY " + list.length);');
+      unreadableTested = rListing.code === 78 && rListing.out.indexOf("EMPTY") === -1;
+    }
   } finally {
     if (process.platform === "win32") {
       try { execFileSync("icacls", [unreadableDir, "/remove:d", (process.env.USERNAME || "Everyone")], { windowsHide: true }); } catch (e) {}
@@ -2382,7 +2389,8 @@ Module.prototype._compile = function (content, filename) {
     }
     try { fs.rmdirSync(unreadableDir); } catch (e) {}
   }
-  ok(unreadableTested, "36c an unreadable stand-in folder refuses with exit 78 rather than returning an empty list");
+  if (unreadableTested === null) skip("36c NOT RUN: this account still reads a folder denied to it (an elevated runner), so no unreadable folder could be made");
+  else ok(unreadableTested, "36c an unreadable stand-in folder refuses with exit 78 rather than returning an empty list");
 
   /* 36d: The September case: a lab profile with a stale pair in parking and a genuine chain
      in the profile is never mixed, and the genuine chain ends where it began, by names, sizes and mtimes. */
