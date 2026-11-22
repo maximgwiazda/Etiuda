@@ -588,8 +588,8 @@ async function run() {
 
     const sb = fnOf(mainText, "showTrayBubble");
     check(sb.length > 0 && /focusable:\s*false/.test(sb) && /showInactive\(\)/.test(sb) && !/\.focus\(/.test(sb) && !/\.show\(\)/.test(sb)
-      && /getBounds\(/.test(sb) && /globalShortcut\.register\("Escape"/.test(sb) && /setTimeout\(/.test(sb),
-      "tb10 the bubble's window is not focusable and is shown inactive, never focused; it reads the tray's bounds, registers Esc while it stands and closes by itself");
+      && /getBounds\(/.test(sb) && !/globalShortcut/.test(sb) && !/globalShortcut/.test(fnOf(mainText, "hideTrayBubble")) && /setTimeout\(/.test(sb),
+      "tb10 the bubble's window is not focusable and is shown inactive, never focused; it reads the tray's bounds, registers no global shortcut, so Esc stays with the program in front, and closes by itself");
 
     const settingsSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"), "utf8");
     const langSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8");

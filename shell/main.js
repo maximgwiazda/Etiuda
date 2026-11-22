@@ -16294,7 +16294,7 @@ function firstCloseTraced(win) {
 /* THE TRAY BUBBLE: at the first close of a start the desk's own blue bubble stands over the tray icon, in place of Windows's
    notification. Once a start; Don't show again writes trayBubble false to the place file, which Settings reads and writes too. */
 const BUBBLE_W = 360, BUBBLE_PAD = 20, BUBBLE_MS = 9000;
-let bubbleWin = null, bubbleTimer = null, bubbleEsc = false, bubbleSized = null, bubbleDesk = null;
+let bubbleWin = null, bubbleTimer = null, bubbleSized = null, bubbleDesk = null;
 function bubbleOn() {
   return readWindowMeta().trayBubble !== false; /* plant:bubble-key */
 }
@@ -16307,7 +16307,6 @@ function bubbleAct(go) {
 function hideTrayBubble() {
   clearTimeout(bubbleTimer);
   bubbleSized = null;
-  if (bubbleEsc) { try { globalShortcut.unregister("Escape"); } catch { /* already gone */ } bubbleEsc = false; }
   if (bubbleDesk) { try { bubbleDesk.win.removeListener("show", bubbleDesk.fn); } catch { /* the window is gone */ } bubbleDesk = null; }
   const win = bubbleWin;
   bubbleWin = null;
@@ -16350,8 +16349,8 @@ function bubbleDoc(w, side, tip) {
     + '<i class="bub-tip" aria-hidden="true" style="left:' + (tip == null ? 0 : tip) + 'px"></i></div>\n'
     + '\n';
 }
-/* Made only here, shown without focus: the chat under it keeps both the focus and the keyboard. Esc is held with Windows only
-   while it stands. Returns whether a window was made; the placing waits for the page's height (etiuda:bubble-size). */
+/* Made only here, shown without focus: the chat under it keeps both the focus and the keyboard. No global shortcut is held, so Esc stays
+   with the program in front. Returns whether a window was made; the placing waits for the page's height (etiuda:bubble-size). */
 function showTrayBubble(win) {
   if (typeof BrowserWindow !== "function" || !screen) return false;
   hideTrayBubble();
@@ -16381,7 +16380,6 @@ function showTrayBubble(win) {
     bw.setBounds({ x: at.x - BUBBLE_PAD, y: at.y - BUBBLE_PAD, width: BUBBLE_W + 2 * BUBBLE_PAD, height: hh + 2 * BUBBLE_PAD });
     bw.setAlwaysOnTop(true, "pop-up-menu");
     bw.showInactive();
-    try { bubbleEsc = globalShortcut.register("Escape", hideTrayBubble); } catch { bubbleEsc = false; }
     const desk = liveWin(win) ? win : null;
     if (desk) { bubbleDesk = { win: desk, fn: hideTrayBubble }; desk.once("show", hideTrayBubble); }
     bubbleTimer = setTimeout(hideTrayBubble, BUBBLE_MS);
