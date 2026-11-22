@@ -63,7 +63,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 555;
+const EXPECTED = 560;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -3014,20 +3014,21 @@ if (deskOn()) try {
       }
       /* cfu2e to cfu2g, the page's half of the copy the channel kept: the row the shell sends carries the copy's file name, the page
          keeps it through its own reading of the answer and prints one sentence a copy in the desk's language, and prints none of it
-         where the row names none. The words are a placeholder until the copywriter's. */
+         where the row names none. KEPT_EN and KEPT_PL, and the count line in kam1, are the copywriter's words. */
       {
         const cfuFile = "guide (conflicted copy 2026-11-22).ec";
-        const KEPT_EN = cfuFile + " was kept on this computer and not sent to the team: another computer changed the same catalog at the same moment, and the team kept that computer's edition.";
-        const KEPT_PL = "Plik " + cfuFile + " zachowano na tym komputerze i nie wysłano go zespołowi: inny komputer zmienił ten sam katalog w tej samej chwili, a zespół zachował wydanie z tamtego komputera.";
+        const KEPT_EN = cfuFile + " was not sent to the team: the team's edition had changed in the meantime, from another computer or from an earlier send of this one. It is kept beside the catalog in the team's folder on this computer, and can be opened and published again if it is the edition wanted.";
+        const KEPT_PL = "Pliku " + cfuFile + " nie wysłano zespołowi: wydanie zespołu zmieniło się w międzyczasie, z innego komputera albo po wcześniejszym wysłaniu z tego. Plik zostaje obok katalogu w folderze zespołu na tym komputerze; można go otworzyć i opublikować ponownie, jeśli to właściwe wydanie.";
+        const KEPT_ANY_EN = "was not sent to the team: the team's edition had changed", KEPT_ANY_PL = "nie wysłano zespołowi: wydanie zespołu";
         const withKept = leads => (leads || []).map(l => l && l.team === TEAM2 ? Object.assign({}, l, { keptApart: [cfuFile] }) : l);
         const withPage = await pageHtml(withKept(freshLeads));
         const noPage = await pageHtml(freshLeads);
-        check(withPage.en.indexOf(KEPT_EN) >= 0 && withPage.pl.indexOf(KEPT_PL) >= 0 && noPage.en.indexOf("was kept on this computer") < 0 && noPage.pl.indexOf("zachowano na tym komputerze") < 0,
+        check(withPage.en.indexOf(KEPT_EN) >= 0 && withPage.pl.indexOf(KEPT_PL) >= 0 && noPage.en.indexOf(KEPT_ANY_EN) < 0 && noPage.pl.indexOf(KEPT_ANY_PL) < 0,
           "cfu2e a team row that names a kept copy shows, in English and in Polish, that the copy was kept on this computer and not sent, and a row that names none shows nothing of it: en "
-          + (withPage.en.indexOf(KEPT_EN) >= 0) + ", pl " + (withPage.pl.indexOf(KEPT_PL) >= 0) + ", none-row en " + (noPage.en.indexOf("was kept on this computer") >= 0)
-          + ", none-row pl " + (noPage.pl.indexOf("zachowano na tym komputerze") >= 0) + (pageErr ? " page " + pageErr.split("\n")[0] : ""));
+          + (withPage.en.indexOf(KEPT_EN) >= 0) + ", pl " + (withPage.pl.indexOf(KEPT_PL) >= 0) + ", none-row en " + (noPage.en.indexOf(KEPT_ANY_EN) >= 0)
+          + ", none-row pl " + (noPage.pl.indexOf(KEPT_ANY_PL) >= 0) + (pageErr ? " page " + pageErr.split("\n")[0] : ""));
         /* The page's modules copied whole beside a lifted line, loaded as a second page that reads the same row. */
-        const liftedPage = async (file, tag) => {
+        const liftedPage = async (file, tag, leadsFn) => {
           const lines = fs.readFileSync(path.join(ROOT, "src", "modules", file), "utf8").split(/\n/);
           const at = lines.findIndex(l => l.indexOf(tag) >= 0);
           if (at < 0) return null;
@@ -3045,7 +3046,7 @@ if (deskOn()) try {
           TJ2.wireTeamJoin();
           await wait(40);
           window.E_HOST = host;
-          if (took2) took2({ leads: withKept(freshLeads) });
+          if (took2) took2({ leads: (leadsFn || withKept)(freshLeads) });
           ST2.lsSet("eUiLang", "en");
           return shownText(SET2.settingsBodyHtml());
         };
@@ -3055,10 +3056,32 @@ if (deskOn()) try {
         } else {
           let shownEn = null, keptEn = null, err = "";
           try { shownEn = await liftedPage("settings.js", "plant:kept-apart-shown"); keptEn = await liftedPage("team-join.js", "plant:kept-apart-kept"); } catch (e) { err = e && e.stack ? e.stack : String(e); }
-          check(shownEn !== null && shownEn.indexOf("Newest edition Quay three") >= 0 && shownEn.indexOf("was kept on this computer") < 0 && !err, "cfu2f lifting plant:kept-apart-shown leaves the kept copy off the team's row on the page (FAIL cfu2e): "
-            + (shownEn === null ? "plant line absent" : "sentence " + (shownEn.indexOf("was kept on this computer") >= 0 ? "still there" : "gone")) + (err ? " " + err.split("\n")[0] : ""));
-          check(keptEn !== null && keptEn.indexOf("Newest edition Quay three") >= 0 && keptEn.indexOf("was kept on this computer") < 0 && !err, "cfu2g lifting plant:kept-apart-kept drops the kept copy from the row the page keeps (FAIL cfu2e): "
-            + (keptEn === null ? "plant line absent" : "sentence " + (keptEn.indexOf("was kept on this computer") >= 0 ? "still there" : "gone")) + (err ? " " + err.split("\n")[0] : ""));
+          check(shownEn !== null && shownEn.indexOf("Newest edition Quay three") >= 0 && shownEn.indexOf(KEPT_ANY_EN) < 0 && !err, "cfu2f lifting plant:kept-apart-shown leaves the kept copy off the team's row on the page (FAIL cfu2e): "
+            + (shownEn === null ? "plant line absent" : "sentence " + (shownEn.indexOf(KEPT_ANY_EN) >= 0 ? "still there" : "gone")) + (err ? " " + err.split("\n")[0] : ""));
+          check(keptEn !== null && keptEn.indexOf("Newest edition Quay three") >= 0 && keptEn.indexOf(KEPT_ANY_EN) < 0 && !err, "cfu2g lifting plant:kept-apart-kept drops the kept copy from the row the page keeps (FAIL cfu2e): "
+            + (keptEn === null ? "plant line absent" : "sentence " + (keptEn.indexOf(KEPT_ANY_EN) >= 0 ? "still there" : "gone")) + (err ? " " + err.split("\n")[0] : ""));
+        }
+        /* kam1: past the three copies the row names, one sentence counts the rest, in English and Polish, after the three; none where
+           the row counts none. */
+        const MORE_EN = "More files kept the same way: 2.", MORE_PL = "Więcej plików zachowanych w ten sam sposób: 2.";
+        const three = ["a (conflicted copy 2026-11-22).ec", "b (conflicted copy 2026-11-22).ec", cfuFile];
+        const withMore = leads => (leads || []).map(l => l && l.team === TEAM2 ? Object.assign({}, l, { keptApart: three, keptApartMore: 2 }) : l);
+        const morePage = await pageHtml(withMore(freshLeads));
+        const after = (h, a, b) => h.indexOf(a) >= 0 && h.indexOf(b) > h.indexOf(a);
+        check(after(morePage.en, KEPT_EN, MORE_EN) && after(morePage.pl, KEPT_PL, MORE_PL) && withPage.en.indexOf("More files kept the same way") < 0
+          && withPage.pl.indexOf("Więcej plików zachowanych") < 0,
+          "kam1a a team row that names three kept copies and counts two more shows the three sentences and then the count, in English and in Polish, and a row that counts none shows no count: en "
+          + after(morePage.en, KEPT_EN, MORE_EN) + ", pl " + after(morePage.pl, KEPT_PL, MORE_PL) + ", none-count en " + (withPage.en.indexOf("More files kept the same way") >= 0)
+          + (pageErr ? " page " + pageErr.split("\n")[0] : ""));
+        if (PLANTS_OFF) {
+          skip("kam1b lifting plant:kept-apart-more-shown leaves the count off the page");
+          skip("kam1c lifting plant:kept-apart-more-kept drops the count from the row the page keeps");
+        } else {
+          let ms = null, mk = null, merr = "";
+          try { ms = await liftedPage("team-join.js", "plant:kept-apart-more-shown", withMore); mk = await liftedPage("team-join.js", "plant:kept-apart-more-kept", withMore); } catch (e) { merr = e && e.stack ? e.stack : String(e); }
+          const noCount = h => h !== null && h.indexOf(KEPT_EN) >= 0 && h.indexOf("More files kept the same way") < 0;
+          check(noCount(ms) && !merr, "kam1b lifting plant:kept-apart-more-shown leaves the count off the page (FAIL kam1a): " + (ms === null ? "plant line absent" : "count " + (noCount(ms) ? "gone" : "still there or row missing")) + (merr ? " " + merr.split("\n")[0] : ""));
+          check(noCount(mk) && !merr, "kam1c lifting plant:kept-apart-more-kept drops the count from the row the page keeps (FAIL kam1a): " + (mk === null ? "plant line absent" : "count " + (noCount(mk) ? "gone" : "still there or row missing")) + (merr ? " " + merr.split("\n")[0] : ""));
         }
       }
       /* 962 stage 5, T4, the page's half of the head per catalog: the row keeps each catalog's entry the shell kept, and the note
@@ -3502,16 +3525,19 @@ if (deskOn()) try {
       /* cfu2c: the team's row names the copy the channel kept (the program's list, by file name, in the mirror) for as long as it
          sits there as kept. The stop is put in the channel's record as keepApart puts it (cfu2a drives the real parallel edit),
          because a desk that met one needs two computers of one key; the row is read through the shell's own answer. */
-      const cfuRow = async src => {
+      const cfuRow = async (src, extra) => {
         const d = await e6Desk("relay", src), ch = d.D.api.relayRun();
         const bytes = catOf(cfuName, 3);
-        fs.writeFileSync(path.join(d.mir, cfuCopy), bytes);
-        if (ch) ch.program.state().refused[cfuCopy] = { sha: sha(Buffer.from(bytes, "utf8")), why: "kept-apart" };
+        for (const name of [cfuCopy].concat(extra || [])) {
+          fs.writeFileSync(path.join(d.mir, name), bytes);
+          if (ch) ch.program.state().refused[name] = { sha: sha(Buffer.from(bytes, "utf8")), why: "kept-apart" };
+        }
         const rowNow = async () => {
           const v = await d.D.ask("etiuda:team-join", "leads");
           const r = ((v && v.leads) || []).filter(l => l && l.team === d.team)[0];
-          return r ? (r.keptApart || null) : undefined;
+          return r ? (extra ? { names: r.keptApart || null, more: r.keptApartMore === undefined ? null : r.keptApartMore } : (r.keptApart || null)) : undefined;
         };
+        if (extra) return { running: !!ch, row: await rowNow() };
         const shown = await rowNow();
         fs.unlinkSync(path.join(d.mir, cfuCopy));
         return { running: !!ch, shown, gone: await rowNow() };
@@ -3524,6 +3550,17 @@ if (deskOn()) try {
       else {
         const sr = lifted6("plant:kept-apart-row"), pr = sr ? await cfuRow(sr) : null;
         check(!!pr && pr.running && pr.shown === null, "cfu2d lifting plant:kept-apart-row leaves the copy off the team's row (FAIL cfu2c): " + (sr ? JSON.stringify(pr) : "plant line absent"));
+      }
+      /* kam2: with five copies kept, the shell's row names three and counts the other two; with one, it counts none (cfu2c). */
+      const kamExtra = [1, 2, 3, 4].map(n => cfuName + " (conflicted copy 2026-11-22 " + (n + 1) + ").ec");
+      const km2 = await cfuRow(undefined, kamExtra);
+      check(km2.running && km2.row && Array.isArray(km2.row.names) && km2.row.names.length === 3 && km2.row.more === 2,
+        "kam2a with five copies kept the team's row in the shell's answer names three and counts two more: " + JSON.stringify(km2));
+      if (PLANTS_OFF) skip("kam2b lifting plant:kept-apart-more-row leaves the count off the team's row");
+      else {
+        const sm = lifted6("plant:kept-apart-more-row"), pm = sm ? await cfuRow(sm, kamExtra) : null;
+        check(!!pm && pm.running && pm.row && pm.row.names && pm.row.names.length === 3 && pm.row.more === null,
+          "kam2b lifting plant:kept-apart-more-row leaves the count off the team's row (FAIL kam2a): " + (sm ? JSON.stringify(pm) : "plant line absent"));
       }
 
       if (PLANTS_OFF) {
