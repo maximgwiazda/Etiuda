@@ -274,7 +274,7 @@ CASES.paysPortal = () => {
     && !!bst && bst.offer === true && bok === true && bare.opened[0] === PORTAL && bare.page() === ""
     && !!nst && nst.offer === false && nok === false && N.opened.length === 0
     && !!mst && mst.offer === false && mok === false && M.opened.length === 0
-    && O.opened.length === 1 && O.opened[0] === ORDER && P.opened.length === 1 && P.opened[0] === ORDER + "#code=" + CODE;
+    && O.opened.length === 1 && O.opened[0] === ORDER + "/en/order/desk/" && P.opened.length === 1 && P.opened[0] === ORDER + "/en/order/desk/#code=" + CODE; /* the order page by the desk's language (orderPageFor), as b3 reads it */
 };
 /* The page, Account over a stand-in host: the Buy row of a person who already pays says so, with its button only where there is a portal
    (the shell builds the address, never the page), in Polish too; and a held payment is one line with its kind, its provider and its day. */
