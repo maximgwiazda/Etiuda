@@ -76,7 +76,7 @@ function loadDesk(ud, src) {
   process.env.XDG_CURRENT_DESKTOP = "GNOME";
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
     (src || SRC) + "\nreturn { setDown: d => { folderDown = d; }, setStats: (s, p) => { statsSpan = s; statsPeriod = p; }, "
-      + "forgetStatsNamed: () => { statsWroteNamed = null; if (typeof statsNamedKept !== "undefined") statsNamedKept = null; }, noteSharedWrote: (file, text) => historyKeep(file, text, true), "
+      + "forgetStatsNamed: () => { statsWroteNamed = null; if (typeof statsNamedKept !== 'undefined') statsNamedKept = null; }, noteSharedWrote: (file, text) => historyKeep(file, text, true), "
       + EXPOSE.map(n => n + ": typeof " + n + " === 'undefined' ? undefined : " + n).join(", ") + " };")(
     n => (n === "electron" ? electron : nodeRequire(n)),
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
