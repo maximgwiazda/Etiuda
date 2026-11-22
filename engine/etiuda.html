@@ -10485,6 +10485,10 @@ What is typed here stays in this browser.`;
     const p = (v) => String(v).padStart(2, "0");
     return x.getUTCFullYear() + "-" + p(x.getUTCMonth() + 1) + "-" + p(x.getUTCDate());
   }
+  var statsWithheld = null;
+  function setStatsWithheld(fn) {
+    statsWithheld = typeof fn === "function" ? fn : null;
+  }
   function statsDay(pack2, at) {
     const day = STATS_YMD.test(String(at || "")) ? String(at) : statsYmd();
     if (!pack2.days || typeof pack2.days !== "object" || Array.isArray(pack2.days)) pack2.days = {};
@@ -10500,6 +10504,12 @@ What is typed here stays in this browser.`;
       statsTouch(pack2, "*");
       statsCompact(pack2);
     } else statsTouch(pack2, day);
+    let held = false;
+    try {
+      held = !!(statsWithheld && statsWithheld());
+    } catch (e) {
+    }
+    if (held) b.x = 1;
     return b;
   }
   var STATS_TOUCHED = /* @__PURE__ */ new WeakMap();
@@ -10758,7 +10768,7 @@ What is typed here stays in this browser.`;
       misses = 0;
       suggestTaken = 0;
       suggestOpen = 0;
-      Object.keys(days).filter((d) => STATS_YMD.test(d) && d >= from && d <= to).sort().forEach((d) => {
+      Object.keys(days).filter((d) => STATS_YMD.test(d) && d >= from && d <= to && !(days[d] && days[d].x)).sort().forEach((d) => {
         const b = days[d] || {};
         suggestTaken += b.g | 0;
         suggestOpen += b.o | 0;
@@ -20588,6 +20598,7 @@ What is typed here stays in this browser.`;
     marked = !!id && !!(c && Array.isArray(c.private) && c.private.indexOf(id) >= 0);
     return marked;
   }
+  setStatsWithheld(sharePrivateNow);
   function sharePrivateLine() {
     return t("This catalog is private, so this card stays on this desk.");
   }

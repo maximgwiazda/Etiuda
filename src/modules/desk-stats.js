@@ -19,6 +19,11 @@ function statsDayBefore(ymd, n){
   const p=v=>String(v).padStart(2,"0");
   return x.getUTCFullYear()+"-"+p(x.getUTCMonth()+1)+"-"+p(x.getUTCDate());
 }
+/* A DAY COUNTED WHILE THE CATALOG IN USE IS PRIVATE is marked x, and an answer for a span leaves it out whole: the layer
+   is the catalog id's, which a team edition of that id reads too. The desk's own tallies and ranking keep it. The page's
+   view of the mark answers (setStatsWithheld). */
+let statsWithheld=null;
+function setStatsWithheld(fn){ statsWithheld=typeof fn==="function" ? fn : null; }
 /* A BUCKET NAMES AN ID BY ITS PLACE IN `pack.dayIds`, and holds c (cards), i (intents), m
    (misses) and l (languages): the counts are written on every copy, and a year of buckets
    spelling each id out every day is several times the size. `daysSince` is the earliest day
@@ -36,6 +41,9 @@ function statsDay(pack, at){
     statsTouch(pack, "*");
     statsCompact(pack);
   } else statsTouch(pack, day);
+  let held=false;
+  try{ held=!!(statsWithheld && statsWithheld()); }catch(e){}
+  if(held) b.x=1; /* plant:stats-day-private */
   return b;
 }
 /* WHICH DAYS HAVE BEEN WRITTEN INTO since the pack was last saved, so a save can leave the older
@@ -276,7 +284,7 @@ function statsDoc(pack, info){
     const days=(pack&&pack.days&&typeof pack.days==="object"&&!Array.isArray(pack.days))?pack.days:{};
     const ids=(pack&&Array.isArray(pack.dayIds))?pack.dayIds:[];
     uc={}; at={}; ic={}; lc={}; misses=0; suggestTaken=0; suggestOpen=0;
-    Object.keys(days).filter(d=>STATS_YMD.test(d)&&d>=from&&d<=to).sort().forEach(d=>{
+    Object.keys(days).filter(d=>STATS_YMD.test(d)&&d>=from&&d<=to&&!(days[d]&&days[d].x)).sort().forEach(d=>{ /* plant:stats-doc-private */
       const b=days[d]||{};
       suggestTaken+=b.g|0;
       suggestOpen+=b.o|0;
@@ -363,6 +371,7 @@ export {
   bumpSuggest,
   bumpSuggestOpen,
   bumpUse,
+  setStatsWithheld,
   statsDoc,
   statsLearntAfter,
   statsLift,

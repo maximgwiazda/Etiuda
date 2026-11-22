@@ -35,7 +35,7 @@ const check = (ok, what, detail) => {
 };
 const skip = what => { skipped++; console.log("  SKIP " + what); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 8;
+const EXPECTED = 11;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const clone = o => JSON.parse(JSON.stringify(o));
 
@@ -260,10 +260,20 @@ async function main() {
   {
     const r = privateDaySum(await statsModule(STATS_SRC));
     check(privateHeld(r), "private-layer-not-sent dem4a a span's answer leaves out the day counted while the catalog was private: one copy of card-1, no intent, no miss, one English, though the desk's own tally keeps all six", r);
+    for (const [from, to, line] of [
+      ["  if(held) b.x=1; /* plant:stats-day-private */", "  /* plant lifted */", "p dem4a the day not marked when counted while private (desk-stats.js statsDay) turns it red"],
+      ["&&!(days[d]&&days[d].x)).sort().forEach(d=>{ /* plant:stats-doc-private */", ").sort().forEach(d=>{", "p dem4a a marked day summed into the answer (desk-stats.js statsDoc) turns it red"]]) {
+      if (PLANTS_OFF) { skip(line); continue; }
+      const n = STATS_SRC.split(from).length - 1;
+      const pr = n === 1 ? privateDaySum(await statsModule(STATS_SRC.split(from).join(to))) : null;
+      check(!!pr && !privateHeld(pr), line, pr ? (privateHeld(pr) ? "still held: " + JSON.stringify(pr) : undefined) : "the plant's anchor is there " + n + " times");
+    }
   }
   {
     const on = await pickedDay("etiuda.html", true), off = await pickedDay("etiuda.html", false);
     check(on.day && on.withheld && off.day && !off.withheld, "private-layer-not-sent dem4b an intent picked while the shell's view marks the catalog in use private counts into a withheld day, and not without the mark", { on, off });
+    await pagePlant(statsLab, "setStatsWithheld(sharePrivateNow);", "void sharePrivateNow;", file => pickedDay(file, true), r => !r.withheld,
+      "p dem4b the page's view of the mark not handed to the counts (card-share.js) turns it red");
   }
 }
 

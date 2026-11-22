@@ -13,6 +13,7 @@ import { CONTENT_LANGS, CATS } from "./content-model.js";
 import { cardLang, cardTitle, findCard, parts } from "./card-model.js";
 import { movedCardIds } from "./card-order.js";
 import { catalogFromV2, catalogToV2, V2_FORMAT, V2_KIND } from "./catalog-v2.js";
+import { setStatsWithheld } from "./desk-stats.js";
 
 let shareOpenId="";
 let closeShareOut=null;
@@ -105,7 +106,7 @@ function wholeRefusalLine(reason){
   if(reason==="private") return t("This catalog is private, so this card stays on this desk.");
   return t("This card could not be sent just now.");
 }
-/* The catalog in use is marked private, so a card from it is not sent. */
+/* The catalog in use is marked private, so a card from it is not sent, and what is counted now is kept off the lead's answer. */
 function sharePrivateNow(){
   const cur=hooks.currentCatalog({asIs:true});
   const id=cur && cur.id ? String(cur.id) : "";
@@ -114,6 +115,7 @@ function sharePrivateNow(){
   marked=!!id && !!(c && Array.isArray(c.private) && c.private.indexOf(id)>=0); /* plant:pcm-share-page */
   return marked;
 }
+setStatsWithheld(sharePrivateNow);
 function sharePrivateLine(){
   return t("This catalog is private, so this card stays on this desk.");
 }
