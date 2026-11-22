@@ -378,8 +378,8 @@ function rowShareParts(id, pin, content){
 function openPrivateBubble(id, nowPriv){
   if(!id) return;
   const msg=nowPriv
-    ? t("The team's lead still sees this catalog's name and edition, but its content and this desk's changes to it are never sent. Marking it withdraws what this desk had shared of it; what the team's lead has already opened cannot be taken back.")
-    : t("This catalog is no longer private: the team's lead can now see its content and this desk's changes to it.");
+    ? t("The team's lead sees nothing of this catalog: not its name or edition, its content, this desk's changes to it, nor that it is used here. Marking it withdraws what this desk had shared of it; what the lead's Studio already received of it stays there.")
+    : t("This catalog is no longer private: the team's lead can now see it, its content and this desk's changes to it.");
   openTeamBubble({
     id:"ePrivateBubble",
     cls:"e-priv-bub",

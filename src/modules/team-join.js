@@ -610,7 +610,7 @@ function joinDoorButton(id){
   return '<button type="button" class="btn" id="'+esc(id)+'" title="'+esc(t("Paste the invitation from the team's lead."))+'">'+esc(t("Join a team"))+'</button>';
 }
 function joinDisclosure(){
-  return '<div class="e-join-meta">'+esc(t("Once this desk joins, the team's lead can see the catalogs it uses, their content included, and this desk's changes to them. The lead's Studio can take a copy of any of them at any time, without asking here: of a team catalog, one the lead publishes to the team, sealed for the team; of a personal catalog, any other on this desk, sealed for the lead alone. A personal catalog can be marked Private in the Library, under Catalog & data, and is then never sent, though the lead still sees its name and edition. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, and Studio shows them in the team's totals."))+'</div>';
+  return '<div class="e-join-meta">'+esc(t("Once this desk joins, the team's lead can see the catalogs it uses, their content included, and this desk's changes to them. The lead's Studio can take a copy of any of them at any time, without asking here: of a team catalog, one the lead publishes to the team, sealed for the team; of a personal catalog, any other on this desk, sealed for the lead alone. A personal catalog can be marked Private in the Library, under Catalog & data; the lead then sees nothing of it, not even that it is used. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses unless that catalog is Private, and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, none of them from a Private catalog, and Studio shows them in the team's totals."))+'</div>';
 }
 /* The name of a sync root's kind, as the absent-root sentence names it. */
 function joinKindWord(kind){
@@ -1029,7 +1029,7 @@ function syncToldNotice(){
     id:"eTeamTold",
     labelId:"etTitle",
     html:'<h3 id="etTitle">'+esc(t("What the team's lead can see has changed."))+'</h3>'
-      +'<p class="ec-sub">'+esc(t("From now on, the team's lead can see every catalog this desk uses, their content included, and this desk's changes to them: personal catalogs as well as team catalogs. A personal catalog can be marked Private in the Library, under Catalog & data, and is then never sent, though the lead still sees its name and edition. Nothing has been sent yet."))+'</p>'
+      +'<p class="ec-sub">'+esc(t("From now on, the team's lead can see every catalog this desk uses, their content included, and this desk's changes to them: personal catalogs as well as team catalogs. A personal catalog can be marked Private in the Library, under Catalog & data; the lead then sees nothing of it, not even that it is used. Nothing of this desk's personal catalogs has been sent yet."))+'</p>'
       +'<div class="tour-actions"><button type="button" class="btn primary" data-join="told-ok">'+esc(t("Understood"))+'</button></div>',
     onEscape:()=>dismiss(),
     onClose:()=>{ if(toldTeamOpen===want){ toldTeamOpen=""; toldLangOpen=""; } }

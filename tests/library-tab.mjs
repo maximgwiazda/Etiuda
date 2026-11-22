@@ -1080,8 +1080,8 @@ await checkAsync("L22 Catalog & data shows Private toggle on personal rows only,
     { name: "own.ec", mtime: 3000, cards: 2, edition: "rev 1", macros: 2, intents: 1, cats: 1, id: "cat-own", rev: 1, grew: null },
     { name: "priv.ec", mtime: 2000, cards: 2, edition: "rev 1", macros: 2, intents: 1, cats: 1, id: "cat-priv", rev: 1, grew: null },
   ];
-  const MARK_EN = "The team's lead still sees this catalog's name and edition, but its content and this desk's changes to it are never sent. Marking it withdraws what this desk had shared of it; what the team's lead has already opened cannot be taken back.";
-  const UNMARK_EN = "This catalog is no longer private: the team's lead can now see its content and this desk's changes to it.";
+  const MARK_EN = "The team's lead sees nothing of this catalog: not its name or edition, its content, this desk's changes to it, nor that it is used here. Marking it withdraws what this desk had shared of it; what the lead's Studio already received of it stays there.";
+  const UNMARK_EN = "This catalog is no longer private: the team's lead can now see it, its content and this desk's changes to it.";
   window.E_HOST = Object.assign({}, hadHost, {
     catalogFiles: () => Promise.resolve(FILES),
     branchIdentity: () => Promise.resolve(null),
