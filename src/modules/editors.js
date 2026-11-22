@@ -379,7 +379,7 @@ function openIntentEditor(idx, fromManage){
       /* Only what differs from the catalog's own wording is kept, so a field left as the catalog has it takes the next
          edition's (overrideAgainstBase in card-model.js, for a card). Nothing differing is no edit. */
       const at=intentIdxOfId(id), own={};
-      Object.keys(next).forEach(k=>{ if(next[k]!==String((BASE_STORE[k]||[])[at]||"").trim()) own[k]=next[k]; }); /* plant:intent-save-diff */
+      Object.keys(next).forEach(k=>{ if(next[k]!==String((BASE_STORE[k]||[])[at]||"").trim()) own[k]=next[k]; });
       if(Object.keys(own).length) pack.intentOverrides[id]=own;
       else delete pack.intentOverrides[id];
     }

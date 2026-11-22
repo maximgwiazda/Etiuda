@@ -18466,6 +18466,11 @@ What is typed here stays in this browser.`;
   function teamContentNow() {
     return contentNow;
   }
+  function inUsePrivateNow() {
+    const cur = hooks.storedCatalog(), id = cur && cur.id ? String(cur.id) : "";
+    return !!id && !!contentNow && contentNow.private.indexOf(id) >= 0;
+  }
+  setStatsWithheld(inUsePrivateNow);
   function teamContent() {
     if (!eHasJoin()) return Promise.resolve(null);
     let asked;
@@ -20598,7 +20603,6 @@ What is typed here stays in this browser.`;
     marked = !!id && !!(c && Array.isArray(c.private) && c.private.indexOf(id) >= 0);
     return marked;
   }
-  setStatsWithheld(sharePrivateNow);
   function sharePrivateLine() {
     return t("This catalog is private, so this card stays on this desk.");
   }

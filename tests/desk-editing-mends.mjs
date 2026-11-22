@@ -272,8 +272,8 @@ async function main() {
   {
     const on = await pickedDay("etiuda.html", true), off = await pickedDay("etiuda.html", false);
     check(on.day && on.withheld && off.day && !off.withheld, "private-layer-not-sent dem4b an intent picked while the shell's view marks the catalog in use private counts into a withheld day, and not without the mark", { on, off });
-    await pagePlant(statsLab, "setStatsWithheld(sharePrivateNow);", "void sharePrivateNow;", file => pickedDay(file, true), r => !r.withheld,
-      "p dem4b the page's view of the mark not handed to the counts (card-share.js) turns it red");
+    await pagePlant(statsLab, "setStatsWithheld(inUsePrivateNow);", "void inUsePrivateNow;", file => pickedDay(file, true), r => !r.withheld,
+      "p dem4b the page's view of the mark not handed to the counts (team-join.js) turns it red");
   }
 }
 

@@ -270,7 +270,7 @@ function edRetype(was, keep){
   const same=els.length===was.fields.length;
   els.forEach((el,i)=>{
     const k=edKeyOf(el);
-    const j=was.keys && k ? (once.has(k) && !twice.has(k) ? once.get(k) : -1) : (same ? i : -1); /* plant:ed-retype-key */
+    const j=was.keys && k ? (once.has(k) && !twice.has(k) ? once.get(k) : -1) : (same ? i : -1);
     if(j<0 || (keep && !keep.f(j))) return;
     const v=was.fields[j];
     if(el.type==="checkbox"||el.type==="radio"){ if(el.checked!==v){ el.checked=v; el.dispatchEvent(new Event("change",{bubbles:true})); } }

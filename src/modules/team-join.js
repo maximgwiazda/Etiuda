@@ -14,6 +14,7 @@ import { hooks } from "./hooks.js";
 import { ICON_LOCK, ICON_KEY, ICON_DESK } from "./icons.js";
 import { nsGet } from "./storage.js";
 import { eNotice, dropNotice } from "./pack.js";
+import { setStatsWithheld } from "./desk-stats.js";
 
 let joinNow=null;                 // the shell's last answer: {sealed:{file,team}|null, join:{...}|null, leads:[{team,print,admitted,seen,lead,folder,removed,policy}]}
 let joinShut="";                  // the answer the agent last hid the bubble on
@@ -93,6 +94,13 @@ function setContentNow(v){
   return contentNow;
 }
 function teamContentNow(){ return contentNow; }
+/* The catalog in use, by the id its layer is kept under, is marked private here: a day counted now is kept off the
+   lead's answer (desk-stats.js). */
+function inUsePrivateNow(){
+  const cur=hooks.storedCatalog(), id=cur && cur.id ? String(cur.id) : "";
+  return !!id && !!contentNow && contentNow.private.indexOf(id)>=0;
+}
+setStatsWithheld(inUsePrivateNow);
 function teamContent(){
   if(!eHasJoin()) return Promise.resolve(null);
   let asked;
