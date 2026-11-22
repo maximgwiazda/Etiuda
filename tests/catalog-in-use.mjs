@@ -25,7 +25,7 @@ const nodeRequire = createRequire(import.meta.url);
 import { relayizeDesk, relayMirrorOf, relayMirrorProgram, relayChannelOf } from "./relay-mirror-desk.mjs";
 let LEAD_PIN = null;
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 148;
+const EXPECTED = 148 - 1; /* 890v retired with the folder team's folder write; see its place */
 
 const JOIN_EN = "Once this desk joins, the team's lead can see the catalogs it uses, their content included, and this desk's changes to them. The lead's Studio can take a copy of any of them at any time, without asking here: of a team catalog, one the lead publishes to the team, sealed for the team; of a personal catalog, any other on this desk, sealed for the lead alone. A personal catalog can be marked Private in the Library, under Catalog & data; the lead then sees nothing of it, not even that it is used. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses unless that catalog is Private, and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, none of them from a Private catalog, and Studio shows them in the team's totals.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi katalogi, których używa to stanowisko, razem z ich treścią, oraz zmiany wprowadzone w nich na tym stanowisku. Studio lidera może w każdej chwili, bez pytania tutaj, pobrać kopię każdego z nich: katalogu zespołowego, czyli publikowanego przez lidera dla zespołu, zapieczętowaną dla zespołu, a katalogu osobistego, czyli każdego innego na tym stanowisku, zapieczętowaną wyłącznie dla lidera. Katalog osobisty można oznaczyć jako Prywatny w Bibliotece, w części Katalog i dane; lider nie widzi wtedy nic z niego, nawet tego, że jest używany. Studio lidera wymienia to stanowisko z nazwy, chyba że organizacja wyłączy nazwy, razem z używanym katalogiem i jego wydaniem, o ile nie jest to katalog prywatny, oraz z okresem zliczania, i wymienia je dalej, gdy przestanie się odzywać. Własne dane stanowiska trafiają do lidera zapieczętowane, bez żadnych danych z katalogu prywatnego, a Studio pokazuje je w sumach zespołu.";
@@ -445,7 +445,11 @@ try {
     syncMirror(box);
     syncMirror(box);
     box.D.api.tryCatalogAsk(box.D.win);
-    check(!fs.existsSync(ans), "890n when the ask is gone, the answer is removed");
+    /* 890n, moved: it said "when the ask is gone, the answer is removed", which held where the folder's listing was the truth about the asks (a withdrawn
+       file missed by two listings). A relay desk's mirror is not a listing of the asks: tryCatalogAsk removes no answer for an ask file that is gone
+       where the desk follows a relay (`if (!relayHere()) removeAnswer()`, plant:follow-ask-keep), and an ask ends by its expiry (890k) or by the lead's
+       signed withdrawal, so the answer already sent stays. The same line was held for a folder desk following to the relay by relay-desk-follow's 945s6 and 945s11 (retired). */
+    check(fs.existsSync(ans), "890n when the ask file is gone from a relay desk's mirror the answer already sent stays: it ends by the ask's expiry or its withdrawal, not by a missing file");
 
     box.D.api.watchCatalog(box.D.win);
     check(box.D.api.asksWatching() === true, "890o while the desk runs, catalog-asks is watched");
@@ -540,7 +544,12 @@ try {
     take(box.D, pinOf(box.D, bootedL || ""));
     const had = fs.existsSync(inUsePath(box.share, box.me.id));
     await box.D.ask("etiuda:team-join", "forget", box.team);
-    check(had && !fs.existsSync(inUsePath(box.share, box.me.id)) && !fs.existsSync(path.join(box.share, "desks", box.me.id, "in-use.ec"))
+    /* RETIRED, P4 (890v said: "forgetting the lead removes in-use.ec"): it held that a desk forgetting the lead of a folder team took its in-use note out of the
+       team's folder, by its own write there. On a relay team the note is in the desk's mirror, which forgetting sets aside, and the team's copy of it leaves the lead's reach
+       by the relay: a desk taken off gives back what it held, its blobs readable by the lead alone until they are deleted (relay/core.cjs), and the desk's leave goes
+       there (tests/relay-channel.mjs 987). No folder of the team is this desk's to write. What the desk's own mirror holds is printed, not asserted. */
+    console.log("  RETIRED 890v forgetting the lead removes in-use.ec; in the desk's own relay mirror the note " + (fs.existsSync(inUsePath(box.share, box.me.id)) ? "stays" : "is gone") + " after forgetting");
+    if (false) check(had && !fs.existsSync(inUsePath(box.share, box.me.id)) && !fs.existsSync(path.join(box.share, "desks", box.me.id, "in-use.ec"))
         && !box.D.envelope().inUse,
       "890v forgetting the lead removes in-use.ec");
 
@@ -822,7 +831,7 @@ try {
     const leadAfter = envAfter.teamPins && envAfter.teamPins[box.team] && envAfter.teamPins[box.team].public;
     const deskAfter = envAfter.branch && envAfter.branch.sign && envAfter.branch.sign.pub;
     check(!!leadPub && leadAfter === leadPub && !!deskPub && deskAfter === deskPub
-        && envAfter.keys && envAfter.keys.eAgent === "North desk" && envAfter.keys.eCatalogFolder === box.share
+        && envAfter.keys && envAfter.keys.eAgent === "North desk" && envAfter.keys.eCatalogFolder === envBefore.keys.eCatalogFolder
         && !envAfter.inUse && !namedAgain,
       "906c an eject keeps the lead, the team pin and the desk's key, and the envelope no longer names the catalog (lead "
       + (leadAfter === leadPub ? "kept" : "gone") + ", key " + (deskAfter === deskPub ? "kept" : "gone") + ")");
@@ -1042,7 +1051,8 @@ try {
     const hist = await arm("history");
     const olderText = textOf(catalog(1, { date: "2026-01-01", name: "North lamps old", card: "An older lamp waits." }));
     const newerText = textOf(catalog(3, { name: "North lamps new" }));
-    const histFile = path.join(hist.share, "board.ec");
+    /* The history is read at the file in the folder the desk reads, the relay mirror (it was the share). */
+    const histFile = path.join(relayMirrorOf(hist.D.ud, hist.team), "board.ec");
     put(hist.share, "board.ec", olderText);
     /* Untold here: telling the desk heeds the team before this leg keeps its history, and the leg reads the share's. */
     join(hist, 1, [entry(hist.D, hist.me, hist.key, hist.team, 1)], undefined, true);
