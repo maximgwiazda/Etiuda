@@ -536,6 +536,8 @@ function edPlaceSync(){
   const row=up.length*w+(up.length-1)*ED_GAP;
   if(row<=W-2*ED_EDGE){
     modalEl.classList.remove("ed-stack");
+    /* Measured uncapped: a stack's cap would otherwise set the row's top. */
+    up.forEach(r=>{ if(r.shell) r.shell.style.maxHeight=Math.max(0, foot-floor)+"px"; });
     const tall=Math.max.apply(null, up.map(r=>edElOf(r).offsetHeight));
     const top=Math.max(floor, Math.round((H-tall)/2)), x0=Math.round((W-row)/2);
     up.forEach((r,i)=>{

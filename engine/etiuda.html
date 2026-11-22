@@ -22556,6 +22556,9 @@ What is typed here stays in this browser.`;
     const row2 = up.length * w + (up.length - 1) * ED_GAP;
     if (row2 <= W - 2 * ED_EDGE) {
       modalEl.classList.remove("ed-stack");
+      up.forEach((r) => {
+        if (r.shell) r.shell.style.maxHeight = Math.max(0, foot - floor) + "px";
+      });
       const tall = Math.max.apply(null, up.map((r) => edElOf(r).offsetHeight));
       const top2 = Math.max(floor, Math.round((H - tall) / 2)), x0 = Math.round((W - row2) / 2);
       up.forEach((r, i) => {
