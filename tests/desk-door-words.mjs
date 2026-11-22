@@ -18,7 +18,7 @@ const SETTINGS_PATH = path.join(ROOT, "src", "modules", "settings.js");
 const TEMPLATE_PATH = path.join(ROOT, "src", "template.html");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
-const CHECKS = 44, PLANTS = 43;
+const CHECKS = 46, PLANTS = 47;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -69,7 +69,7 @@ function hostOn(signinObj, opts) {
   globalThis.window = {
     E_HOST: o.plainBrowser ? undefined : {
       signinState: () => signinObj,
-      buyState: () => ({ offer: true }),
+      buyState: () => ({ offer: o.noOrder ? false : true }),
       storeState: () => ({ shown: false })
     }
   };
@@ -789,6 +789,25 @@ CASES.noAskPanel = (pg = P) => {
   return new RegExp(`class="btn primary"[^>]*>${W.en.check}<`).test(en) && textOf(en).includes(W.en.buy) && textOf(en).includes(W.en.acctSet);
 };
 
+/* Buy follows the order page (22 November 2026, Claude alpha 01:57). Where none is set (tonight every build) the door and the ended panel draw no
+   Buy, in any state and either language, and the copywriter's one sentence stands in its place where the person has no seat (the door's
+   states and the ended panel); where one is set Buy draws as before and the sentence is not there. */
+const NOBUY = { en: "Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again.",
+  pl: "W tej wersji Etiudy nie ma zakupu. Miejsce w licencji daje lider zespołu: przynosi je zaproszenie od lidera, a przycisk Sprawdź teraz pozwala sprawdzić ponownie." };
+const buyIn = (html) => /data-e-open="buy"/.test(html) || />(Buy|Kup)</.test(html);
+const buyHolds = (render, later) => {
+  for (const lang of ["en", "pl"]) for (const noTeam of [false, true]) for (const v of ASK_VIEWS()) {
+    const withPage = render(P, v, lang, { noTeam }), without = render(P, v, lang, { noTeam, noOrder: true });
+    const isLater = later(withPage);
+    if (buyIn(without) || textOf(withPage).includes(NOBUY[lang])) return false;
+    if (textOf(without).includes(NOBUY[lang]) !== isLater) return false;
+    if (isLater && !buyIn(withPage)) return false;
+  }
+  return true;
+};
+CASES.noBuyDoor = (pg = P) => buyHolds(doorHtml, (h) => h.includes("door-quiet"));
+CASES.noBuyPanel = (pg = P) => buyHolds(panelHtml, (h) => h.includes("door-on-row"));
+
 /* Run all checks. */
 const RUN_LIST = [
   ["dd1", "seam", "deskDoorState(view) returns the closed state set and all word facts"],
@@ -826,8 +845,10 @@ const RUN_LIST = [
   ["dd39", "askLeadStudio_en", "licence line (EN): the ask-your-lead panel past the own fourteen days inside Studio's trial says Studio's trial, with the day, and not the own trial running"],
   ["dd40", "askLeadStudio_pl", "licence line (PL): the ask-your-lead panel past the own fourteen days inside Studio's trial says Studio's trial, with the day, and not the own trial running"],
   ["dd42", "askedDoor", "door (EN & PL): a person held at the door whose sign-in carried open join requests sees whom each waits on, one lead as the team's lead is told, several in one line with the plural heading, none as before"],
-  ["dd60", "noAskDoor", "door (EN & PL), every state: no Ask press that nothing answers, Buy filled where Ask stood"],
-  ["dd61", "noAskPanel", "panel (EN & PL), every state: no Ask press that nothing answers, Check now filled on the ended panel"],
+  ["dd60", "noAskDoor", "door (EN & PL), every state: no Ask press that nothing answers, Buy filled where Ask stood (an order page set)"],
+  ["dd61", "noAskPanel", "panel (EN & PL), every state: no Ask press that nothing answers, Check now filled and Buy beside it on the ended panel (an order page set)"],
+  ["dd62", "noBuyDoor", "door (EN & PL), every state: no Buy where no order page is set, the copywriter's sentence in its place where there is no seat, Buy as before where one is set"],
+  ["dd63", "noBuyPanel", "panel (EN & PL), every state: no Buy where no order page is set, the copywriter's sentence on the ended panel, Buy as before where one is set"],
   ["dd41", "noFamilyElsewhere", "licence line: the ended, waiting, trial-over and organisation panels carry no short-form foot, and the organisation's Seat row keeps an empty value"],
   ["dd34", "doorNotNoneWhenDue", "Argon 51 B2: deskDoorState never answers none while signed in and due (waiting, full, no licence, team seat marked by another key), and paintFirstSignin never draws the retired fallback"],
 ];
@@ -942,6 +963,18 @@ if (!PLANTS_OFF) {
   await plant("ddp60", SIGNIN_PATH,
     ["else acts+=doorPress(t(\"Buy\"), true, \"buy\"); /* plant:door-no-ask */", "else if(ds.state===\"trial-over-org\") acts+=doorPress(t(\"Ask a team's lead…\"), true, \"ask\"); else acts+=doorPress(t(\"Buy\"), true, \"buy\");"],
     "noAskDoor");
+  await plant("ddp62", SIGNIN_PATH,
+    ["  if(buyOffered()) acts+=doorPress(t(\"Buy\"), !checkFilled, \"buy\"); /* plant:door-buy-order */", "  if(true) acts+=doorPress(t(\"Buy\"), !checkFilled, \"buy\");"],
+    "noBuyDoor");
+  await plant("ddp63", SIGNIN_PATH,
+    ["  const note=buyOffered() ? \"\" : '<p class=\"sgn-cap door-nobuy\">'+esc(t(\"Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again.\"))+'</p>'; /* plant:door-nobuy-line */", "  const note=\"\";"],
+    "noBuyDoor");
+  await plant("ddp64", SIGNIN_PATH,
+    ["const acts=[{act:\"check\", label:t(\"Check now\"), solid:true}].concat(buyOffered() ? [{act:\"buy\", label:t(\"Buy\")}] : [], [acct]); /* plant:panel-buy-order */", "const acts=[{act:\"check\", label:t(\"Check now\"), solid:true}, {act:\"buy\", label:t(\"Buy\")}, acct];"],
+    "noBuyPanel");
+  await plant("ddp65", SIGNIN_PATH,
+    ["nobuy:buyOffered() ? \"\" : t(\"Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again.\"), /* plant:panel-nobuy-line */", "nobuy:\"\","],
+    "noBuyPanel");
   await plant("ddp61", SIGNIN_PATH,
     ["const acts=[{act:\"check\", label:t(\"Check now\"), solid:true}, {act:\"buy\", label:t(\"Buy\")}, acct]; /* plant:panel-no-ask */", "const acts=[{act:\"ask\", label:t(\"Ask a team's lead…\"), solid:true}, {act:\"check\", label:t(\"Check now\")}, {act:\"buy\", label:t(\"Buy\")}, acct];"],
     "noAskPanel");
