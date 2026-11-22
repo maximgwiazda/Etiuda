@@ -27,7 +27,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 26;
+const EXPECTED = 28;
 
 const CARD = "The quay lamp is wrapped for the crossing.";
 
@@ -474,6 +474,32 @@ try {
     "pcm9m statistics that named the catalog are written again with nothing of it, name or counts, the moment it is marked Private (" + JSON.stringify(r9m) + ")");
   await planted("pcm9mp", "plant:pcm-stats-mark", "    /* plant lifted */", pcm9m, r => !!r.after, "the statistics on the share still name it");
 
+  /* pcm10 (the test architect's HOLD 1, 2026-11-22): the page judges a row by the shell's own teamListedDoc answer, which contentView
+     sends as teamPins, the signed pins of the catalogs this desk holds that are the team's. The lead's signed edition under a listed
+     id is among them; a stranger-signed file under that id, and a copy whose first hop the lead did not sign, are not. The mark is
+     taken on the listed id while a personal catalog under it is held, even one not in use. */
+  const pcm10 = async src => {
+    const E = catalog(4, { id: "quay-held", card: "the lead's own card" });
+    const S = sign(catalog(4, { id: "quay-held", name: "Quay held, mine", card: MARK, unsigned: true }), other.privateKey, { keyId: "stranger" });
+    const F = catalog(5, { id: FORK, name: "Quay held, forked", card: MARK, unsigned: true });
+    F.grew = { id: "quay-held", rev: 4, sha: "sha256:" + "cd".repeat(32) };
+    const box = await arm("pcm10-" + (src ? "p" : "g"), src);
+    put(box.share, "quay-held.ec", textOf(E));
+    put(box.share, "quay-mine.ec", textOf(S));
+    put(box.share, "quay-fork.ec", textOf(F));
+    join(box, ["quay-held"]);
+    await box.D.ask("etiuda:team-join", "content-said", box.team, "");
+    const v = await box.D.ask("etiuda:team-join", "content");
+    const pins = Array.isArray(v.teamPins) ? v.teamPins : null;
+    const m = await box.D.ask("etiuda:team-join", "private", "quay-held", "on");
+    return { pins: !!pins, lead: !!pins && pins.indexOf(box.D.api.signedSha(E)) >= 0, stranger: !!pins && pins.indexOf(box.D.api.signedSha(S)) >= 0,
+      fork: !!pins && pins.indexOf(box.D.api.signedSha(F)) >= 0, markTaken: m.private.indexOf("quay-held") >= 0 };
+  };
+  const r10 = await pcm10();
+  check(r10.pins && r10.lead && !r10.stranger && !r10.fork && r10.markTaken,
+    "pcm10 contentView's teamPins holds the lead's signed edition under the listed id and neither a stranger-signed file under it nor an unsigned fork, and the mark is taken on that id (" + JSON.stringify(r10) + ")");
+  await planted("pcm10p", "plant:pcm-team-pins", "    /* plant lifted */", pcm10,
+    r => !r.lead || r.stranger || r.fork, "teamPins no longer follows teamListedDoc");
   /* Holds: a told desk with a personal catalog it has not marked still names it and answers the lead's box. */
   {
     const u = await setup("pcmh");
