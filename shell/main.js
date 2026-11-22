@@ -8145,7 +8145,7 @@ function relayRun() {
       /* The lead's box the invitation named, so this desk finds its own copy of the team file before it holds one (F6). */
       if (/^[0-9a-f]{64}$/.test(String(inv.box))) out.box = inv.box; /* plant:f6-box-lent */
       /* The lead key this desk pinned, which the token hello names so the relay refuses it, unspent, where it is not the team's lead. */
-      const pinNow = teamPins[team];
+      const pinNow = pinTrusted(team); /* the one place decides (join-policy 19u): a pin machine policy does not trust names no lead */
       if (pinNow && /^[0-9a-f]{64}$/.test(String(pinNow.public))) out.lead = pinNow.public; /* plant:token-lead-pin */
       return out;
     },
