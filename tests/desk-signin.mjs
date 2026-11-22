@@ -4938,7 +4938,7 @@ CASES.doorKeyboard = async (s, kdSwap) => {
       $: sel => (sel === "#firstSignin" ? fsEl : null),
       scCaptureId: "", SC_DEFS: [{ id: "escape", fixed: false, inField: true }, { id: "tabNext", fixed: false, inField: true }, { id: "find", fixed: false, inField: true }],
       intentEl: outsideEl,
-      tourActive: off, tourHasFocus: off, openCover: () => null, modalFront: off, factsPanelOpen: off,
+      tourActive: off, tourHasFocus: off, openCover: () => null, modalFront: off, edKeys: off, factsPanelOpen: off,
       eventMatchesAction: (e, id) => (id === "escape" && e.key === "Escape") || (id === "undo" && e.ctrlKey && e.key === "z")
         || (id === "tabNext" && e.ctrlKey && e.key === "Tab") || (id === "find" && e.ctrlKey && e.key === "k"),
       eHost: () => ({}),
