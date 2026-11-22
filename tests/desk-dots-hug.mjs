@@ -68,13 +68,11 @@ const at = argv.indexOf("--engine");
 const ENGINE = at >= 0 ? path.resolve(argv[at + 1]) : E.ENGINE_PATH;
 
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-dots-hug-"));
+const SEED_CATALOG = fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8");
+/* withCatalog is read again by boot, which seeds the page; nothing is written beside it. */
 const writeDeskFiles = (dir, htmlText, withCatalog) => {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "etiuda.html"), htmlText);
-  if (withCatalog) {
-    fs.writeFileSync(path.join(dir, "etiuda-catalog.js"),
-      "window.E_CATALOG = " + fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8") + ";\n");
-  }
   return "file:///" + path.join(dir, "etiuda.html").replace(/\\/g, "/");
 };
 
@@ -95,6 +93,7 @@ async function boot(browser, pageUrl, theme, lang, withCatalog, vp) {
     } catch (e) {}
   }, theme, lang);
   await seatPage(p);
+  if (withCatalog) await E.seedCatalog(p, SEED_CATALOG);
   await p.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
   if (withCatalog) {
     await p.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });

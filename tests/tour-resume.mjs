@@ -46,11 +46,9 @@ const profilePlant = path.join(lab, "prof-plant");
 for (const d of [dirEmpty, dirCat, dirPlant, profileEmpty, profileCat, profilePlant]) {
   fs.mkdirSync(d, { recursive: true });
 }
-const sampleJs = "window.E_CATALOG = " + fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8") + ";\n";
+const SEED_CATALOG = fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8");
 fs.copyFileSync(E.ENGINE_PATH, path.join(dirEmpty, "etiuda.html"));
 fs.copyFileSync(E.ENGINE_PATH, path.join(dirCat, "etiuda.html"));
-fs.writeFileSync(path.join(dirCat, "etiuda-catalog.js"), sampleJs, "utf8");
-fs.writeFileSync(path.join(dirPlant, "etiuda-catalog.js"), sampleJs, "utf8");
 
 const fileUrl = p => "file:///" + p.replace(/\\/g, "/");
 const urlEmpty = fileUrl(path.join(dirEmpty, "etiuda.html"));
@@ -69,6 +67,7 @@ async function openDesk(browser, url) {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 860, deviceScaleFactor: 1 });
   await seatPage(page);
+  if (url !== urlEmpty) await E.seedCatalog(page, SEED_CATALOG);
   await page.goto(url, { waitUntil: "load", timeout: 60000 });
   await page.waitForFunction(() => !document.querySelector(".e-launch-veil"), { timeout: 30000 }).catch(() => {});
   return page;

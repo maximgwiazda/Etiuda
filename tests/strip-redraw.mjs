@@ -35,8 +35,7 @@ const ENGINE = at >= 0 ? path.resolve(argv[at + 1]) : E.ENGINE_PATH;
 
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-strip-redraw-"));
 fs.copyFileSync(ENGINE, path.join(lab, "etiuda.html"));
-fs.writeFileSync(path.join(lab, "etiuda-catalog.js"),
-  "window.E_CATALOG = " + fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8") + ";\n");
+const SEED_CATALOG = fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8");
 const url = "file:///" + path.join(lab, "etiuda.html").replace(/\\/g, "/");
 
 let browser = null, done = false;
@@ -50,6 +49,7 @@ try {
     try { for (const k of ["eTourDone_v3", "eTourInvite_v3", "eFirstSigninSeen", "eNameAsked"]) localStorage.setItem(k, "1"); } catch (e) {}
   });
   await seatPage(p);
+  await E.seedCatalog(p, SEED_CATALOG);
   await p.goto(url, { waitUntil: "load", timeout: 60000 });
   await p.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   if (await p.$("#ecYes")) await p.click("#ecYes");
@@ -108,7 +108,6 @@ try {
   const langRun = async (html, tag, codes = CODES) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-tab-lang-" + tag + "-"));
     fs.writeFileSync(path.join(dir, "etiuda.html"), html);
-    fs.copyFileSync(path.join(lab, "etiuda-catalog.js"), path.join(dir, "etiuda-catalog.js"));
     const q = await browser.newPage();
     try {
       await q.setViewport({ width: 1280, height: 800 });
@@ -121,6 +120,7 @@ try {
         } catch (e) {}
       }, codes);
       await seatPage(q);
+      await E.seedCatalog(q, SEED_CATALOG);
       await q.goto("file:///" + path.join(dir, "etiuda.html").replace(/\\/g, "/"), { waitUntil: "load", timeout: 60000 });
       await q.waitForFunction((n) => document.querySelectorAll("#tabsBar .tab[data-tid]").length >= n, { timeout: 30000 }, codes.length);
       if (await q.$("#ecYes")) await q.click("#ecYes");

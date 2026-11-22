@@ -70,9 +70,8 @@ const labs = { plain: path.join(lab, "plain"), dated: path.join(lab, "dated") };
 for (const [k, dir] of Object.entries(labs)) {
   fs.mkdirSync(dir);
   fs.copyFileSync(E.ENGINE_PATH, path.join(dir, "etiuda.html"));
-  fs.writeFileSync(path.join(dir, "etiuda-catalog.js"),
-    "window.E_CATALOG = " + (k === "plain" ? sample : JSON.stringify(planted)) + ";\n");
 }
+const catalogOf = k => (k === "plain" ? sample : planted);
 const urlOf = k => "file:///" + path.join(labs[k], "etiuda.html").replace(/\\/g, "/");
 let browser = null;
 
@@ -86,6 +85,7 @@ async function boot(which, viewport, more = []) {
     } catch (e) {}
   }, more);
   await seatPage(page);
+  await E.seedCatalog(page, catalogOf(which));
   await page.goto(urlOf(which), { waitUntil: "load", timeout: 60000 });
   await page.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   const yes = await page.$("#ecYes");

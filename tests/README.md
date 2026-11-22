@@ -994,10 +994,12 @@ is the same document wrapped as `window.E_SAMPLE`, which a run folder holds as `
 `sample` is `v1/sample-catalog.js`. Case 32 of `engine-selftest.js` holds all three to the shipped
 bytes. The `sample-*` files still in the fixtures folder serve branches older than that change.
 
-**The name in the fixtures folder is not the name beside the engine.** A run folder gets the
-format 2 file under the sibling name the engine looks for, `etiuda-catalog.js`, because that
-name is written into the engine and one fixed name is what makes a sibling work with no
-configuration. `engine.js` holds both tables, `FIXTURE_FILE` and `SIBLING_AS`.
+**A catalog reaches a browser leg's page one way: `E.seedCatalog(page, catalog)`.** It is the
+desk's own way, the preload's: the catalog's JSON is parsed into `window.E_CATALOG` before the
+engine's first script runs (puppeteer's `evaluateOnNewDocument`). No leg writes a catalog beside
+the page, so no leg leans on the browser form's sibling script tag. A run folder holds the
+catalog key's text as `catalog` and hands it over with `seed(page)`; a non-catalog key, such as
+`sampleV2`, is still written beside the engine under its `SIBLING_AS` name.
 
 **Section 4 of `test.js` is still a format 1 linter** and still reads the format 1 file, which
 is why both are kept. The engine stopped reading that format on 2026-09-14; the linter follows
@@ -1005,7 +1007,7 @@ at the validation step, and until it does it lints a format nothing loads.
 
 The harness never copies any of them into this tree. `engine.js` builds a run folder in the
 system temp directory, puts the engine and the fixtures in it together, and removes it
-afterwards, because the engine loads its catalog as a sibling of the HTML file. A fixtures
+afterwards. A fixtures
 folder that resolves inside this repository is refused: the ignore file here is a blocklist held
 up by a filename convention, and content kept in the tree is one forced add from publication.
 

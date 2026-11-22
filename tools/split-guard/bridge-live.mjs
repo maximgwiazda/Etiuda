@@ -67,7 +67,9 @@ const html = template.split('/*@APP*/\n').join(built.outputFiles[0].text);
 const dir = mkdtempSync(join(tmpdir(), 'bridge-live-'));
 const page = join(dir, 'etiuda.html');
 writeFileSync(page, html, 'utf8');
-for (const f of ['etiuda-catalog.js', 'sample-catalog.js']) copyFileSync(join(FIX, f), join(dir, f));
+// No catalog beside the page: the fixtures' etiuda-catalog.js is format 1, which this engine never
+// reads, and a catalog reaches a page only through tests/engine.js seedCatalog.
+for (const f of ['sample-catalog.js']) copyFileSync(join(FIX, f), join(dir, f));
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let browser;

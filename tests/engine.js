@@ -7,7 +7,7 @@
  *
  * A catalog is somebody's content and this repository is public, so no fixture lives in the
  * tree. ETIUDA_FIXTURES names a folder outside it; the harness copies what it needs into a
- * temporary run folder, because the engine loads its catalog as a sibling of the HTML file.
+ * temporary run folder, and a catalog reaches the page through seedCatalog, below.
  *
  * Exit code 78 means the harness could not produce a verdict. A completed smoke run exits with
  * the number of failed checks, so a verdict and a refusal must not share a number: 78 is
@@ -52,7 +52,7 @@ const WRAP_AS = { sampleV2: "E_SAMPLE" };
    tolerate being changed. The two differ because the fixtures folder holds the format 1 file
    and the format 2 file it was converted into, and only one of them is the one this engine
    reads. */
-const SIBLING_AS = { catalogV2: "etiuda-catalog.js", sampleV2: "sample-catalog.js", sample: "sample-catalog.js" };
+const SIBLING_AS = { sampleV2: "sample-catalog.js", sample: "sample-catalog.js" };
 
 /* A refusal is printed in the shape the smoke log already uses, so the same grep that counts
    failures counts this one, and the last line says in words that no verdict was reached. */
@@ -1298,16 +1298,45 @@ function fixtures(...keys) {
   return out;
 }
 
-/* A run folder is a temp directory holding the engine under a plain name with its fixtures
-   beside it, which is the only shape the engine boots in: it loads its catalog as a sibling.
-   The caller removes it in a finally. Both digests are returned so a log names the bytes it
-   judged rather than the path it read them from. */
+/* THE ONE WAY A BROWSER LEG HANDS THE PAGE A CATALOG, the desk's: shell/preload.js parses its JSON
+   into window.E_CATALOG before the engine's first script, which is evaluateOnNewDocument here. No
+   leg writes a catalog beside the page. The seed holds for every later load of that page; seeding
+   again replaces it, null removes it. An object, a document's text, or it behind E_CATALOG =. */
+const SEEDED = new WeakMap();
+function catalogJson(catalog) {
+  if (catalog && typeof catalog === "object") return JSON.stringify(catalog);
+  const text = String(catalog).trim();
+  try { JSON.parse(text); return text; } catch (e) { /* a wrapper, below */ }
+  const at = text.indexOf("E_CATALOG"), eq = at > -1 ? text.indexOf("=", at) : -1;
+  const body = eq > -1 ? text.slice(eq + 1).trim().replace(/;\s*$/, "") : "";
+  try { JSON.parse(body); return body; } catch (e) {
+    throw new Error("seedCatalog: not a catalog document nor one behind window.E_CATALOG =");
+  }
+}
+async function seedCatalog(page, catalog) {
+  const prev = SEEDED.get(page);
+  if (prev) { await page.removeScriptToEvaluateOnNewDocument(prev); SEEDED.delete(page); }
+  if (catalog == null) return;
+  const json = catalogJson(catalog);
+  const { identifier } = await page.evaluateOnNewDocument(t => { window.E_CATALOG = JSON.parse(t); }, json);
+  SEEDED.set(page, identifier);
+}
+/* The fixture keys that are a catalog for the page: runFolder hands them to seedCatalog. */
+const SEED_KEYS = ["catalog", "catalogV2"];
+
+/* A run folder is a temp directory holding the engine under a plain name, with any fixture that
+   is not a catalog beside it. A catalog key is not written there: the folder's seed(page) hands
+   it to the page through seedCatalog. The caller removes it in a finally. Both digests are
+   returned so a log names the bytes it judged rather than the path it read them from. */
 function runFolder(...keys) {
   const src = enginePath(), got = fixtures(...keys);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-run-"));
   const page = path.join(dir, "etiuda.html");
   fs.copyFileSync(src, page);
+  const seedKey = keys.find(k => SEED_KEYS.indexOf(k) > -1);
+  const catalog = seedKey ? fs.readFileSync(got[seedKey], "utf8") : null;
   for (const k of keys) {
+    if (SEED_KEYS.indexOf(k) > -1) continue;
     const to = path.join(dir, SIBLING_AS[k] || FIXTURE_FILE[k]);
     /* The shipped document behind the global the engine reads a sibling script by. Its text is
        kept whole, so the evaluated object is the parsed document and nothing else. */
@@ -1315,7 +1344,8 @@ function runFolder(...keys) {
                                      + fs.readFileSync(got[k], "utf8").replace(/\s+$/, "") + ";\n");
     else fs.copyFileSync(got[k], to);
   }
-  return { dir, page, url: "file:///" + page.replace(/\\/g, "/"),
+  return { dir, page, url: "file:///" + page.replace(/\\/g, "/"), catalog,
+           seed: pg => seedCatalog(pg, catalog),
            engineSha: sha256(src), copySha: sha256(page),
            drop: () => fs.rmSync(dir, { recursive: true, force: true }) };
 }
@@ -1832,7 +1862,7 @@ module.exports = { shellAppFiles, copyShellApp, envWithoutWindowWord, NO_VERDICT
                    electronRunsLive, refuseWhileElectronLive, belowNormal, lowerTree,
                    NOT_PROVED_OFF_WINDOWS, offWindowsNotice,
                    suiteVerdict,
-                   refuse, sha256, enginePath, engineSource, fixturesDir, fixtures, runFolder, browserPath, inside,
+                   refuse, sha256, enginePath, engineSource, fixturesDir, fixtures, runFolder, seedCatalog, catalogJson, browserPath, inside,
                    sourceFiles, readSrc, templateParts, sourceDoc, spliceTie, removeLab,
                    ensureOutputs, OUTPUT_PATHS, BUILD_LOCK, JUDGED_VAR };
 /* A TRAP: reading E.ENGINE_PATH makes the outputs current first (ensureOutputs), because some forty legs copy or read the page

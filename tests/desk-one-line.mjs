@@ -180,6 +180,8 @@ async function bootPage(browser, url, width, height, dpr) {
     } catch (e) {}
   });
   await seatPage(page);
+  /* Every run folder here holds the same catalog, so the main one's seeds each page. */
+  await RUN.seed(page);
   await page.goto(url, { waitUntil: "load", timeout: 60000 });
   await require("./launch-wait.js").waitLaunchGone(page, { who: "tests/desk-one-line.mjs" });
   await page.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });

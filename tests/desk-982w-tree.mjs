@@ -84,8 +84,7 @@ try {
    ------------------------------------------------------------------------------------------------ */
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-982w-tree-"));
 fs.copyFileSync(E.ENGINE_PATH, path.join(lab, "etiuda.html"));
-fs.writeFileSync(path.join(lab, "etiuda-catalog.js"),
-  "window.E_CATALOG = " + fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8") + ";\n");
+const SEED_CATALOG = fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8");
 const url = "file:///" + path.join(lab, "etiuda.html").replace(/\\/g, "/");
 let browser = null;
 
@@ -107,6 +106,7 @@ async function boot(viewport = { width: 1280, height: 900 }, more = []) {
     } catch (e) {}
   }, more);
   await seatPage(page);
+  await E.seedCatalog(page, SEED_CATALOG);
   await page.goto(url, { waitUntil: "load", timeout: 60000 });
   await page.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   const yes = await page.$("#ecYes");

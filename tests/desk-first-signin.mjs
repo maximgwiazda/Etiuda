@@ -147,6 +147,7 @@ async function launchDeskPage(browser, cfg) {
       catalogMtime: c.catalogMtime || 0
     };
   }, cfg);
+  if (cfg.catalog) await E.seedCatalog(page, cfg.catalog);
   await page.goto(cfg.url || ENGINE_URL, { waitUntil: "domcontentloaded" });
   return { ctx, page };
 }
@@ -224,10 +225,10 @@ try {
   try {
     const sampleRaw = fs.readFileSync(path.join(ROOT, "shell", "sample-catalog.ec"), "utf8");
     fs.copyFileSync(path.join(ROOT, "engine", "etiuda.html"), path.join(labDir, "etiuda.html"));
-    fs.writeFileSync(path.join(labDir, "etiuda-catalog.js"), "window.E_CATALOG = " + sampleRaw + ";\n", "utf8");
     const labUrl = "file:///" + path.join(labDir, "etiuda.html").replace(/\\/g, "/");
     const { ctx, page } = await launchDeskPage(browser, {
       url: labUrl,
+      catalog: sampleRaw,
       desk: { eTourDone_v3: "1", eTourInvite_v3: "1" },
       signin: DOOR_VIEW({ offered: ["microsoft"] }),
       catalogFolder: labDir,

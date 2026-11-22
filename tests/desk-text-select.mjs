@@ -55,8 +55,7 @@ const ALLOWED_LIST = [
 
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-tsel-"));
 fs.copyFileSync(E.ENGINE_PATH, path.join(lab, "etiuda.html"));
-fs.writeFileSync(path.join(lab, "etiuda-catalog.js"),
-  "window.E_CATALOG = " + fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8") + ";\n");
+const SEED_CATALOG = fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8");
 const url = "file:///" + path.join(lab, "etiuda.html").replace(/\\/g, "/");
 
 const MAIN_SRC = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
@@ -110,6 +109,7 @@ async function newDeskPage(pageUrl, opts = {}) {
     };
   }, opts);
   if (!opts.firstOpening && !opts.signinState) await seatPage(page);
+  await E.seedCatalog(page, SEED_CATALOG);
   await page.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
   if (opts.firstOpening) {
     await page.waitForFunction(() => { const f = document.getElementById("firstSignin"); return !!f && !f.hidden && f.textContent.trim().length > 0; }, { timeout: 30000 });

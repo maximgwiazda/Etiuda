@@ -46,8 +46,7 @@ const ENGINE = at >= 0 ? path.resolve(argv[at + 1]) : E.ENGINE_PATH;
 const rawHtml = fs.readFileSync(ENGINE, "utf8");
 
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-tab-flicker-"));
-fs.writeFileSync(path.join(lab, "etiuda-catalog.js"),
-  "window.E_CATALOG = " + fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8") + ";\n");
+const SEED_CATALOG = fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8");
 
 const T = n => "#tabsBar .tab:not(.screen):nth-of-type(" + n + ") .tab-label";
 const L = '#tabsBar .tab.screen[data-sid="library"] .tab-label';
@@ -63,6 +62,7 @@ const boot = async (html, name) => {
     try { for (const k of ["eTourDone_v3", "eTourInvite_v3", "eFirstSigninSeen", "eNameAsked"]) localStorage.setItem(k, "1"); } catch (e) {}
   });
   await seatPage(p);
+  await E.seedCatalog(p, SEED_CATALOG);
   await p.goto("file:///" + path.join(lab, name + ".html").replace(/\\/g, "/"), { waitUntil: "load", timeout: 60000 });
   await p.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   if (await p.$("#ecYes")) await p.click("#ecYes");

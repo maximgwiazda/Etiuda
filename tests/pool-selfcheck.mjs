@@ -46,7 +46,6 @@ function makeDeskDir(htmlText) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-pool-selfcheck-"));
   fs.copyFileSync(ENGINE, path.join(dir, "etiuda.html"));
   if (htmlText != null) fs.writeFileSync(path.join(dir, "etiuda.html"), htmlText);
-  fs.writeFileSync(path.join(dir, "etiuda-catalog.js"), "window.E_CATALOG = " + sampleText + ";\n");
   return {
     dir,
     url: "file:///" + path.join(dir, "etiuda.html").replace(/\\/g, "/"),
@@ -63,6 +62,7 @@ async function openDesk(browser, url, width, height) {
     } catch (_) {}
   });
   await seatPage(page);
+  await E.seedCatalog(page, sampleText);
   await page.goto(url, { waitUntil: "load", timeout: 60000 });
   await page.waitForFunction(
     () => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0,

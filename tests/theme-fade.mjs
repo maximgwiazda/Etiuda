@@ -86,8 +86,7 @@ const shareIn = (m, set) => { let s = 0; m.forEach((v, k) => { if (set.has(k)) s
 
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-theme-fade-"));
 fs.copyFileSync(E.ENGINE_PATH, path.join(lab, "etiuda.html"));
-fs.writeFileSync(path.join(lab, "etiuda-catalog.js"),
-  "window.E_CATALOG = " + fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8") + ";\n");
+const SEED_CATALOG = fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8");
 const url = "file:///" + path.join(lab, "etiuda.html").replace(/\\/g, "/");
 
 let browser = null;
@@ -122,6 +121,7 @@ try {
       } catch (x) {}
     }, th);
     await seatPage(r);
+    await E.seedCatalog(r, SEED_CATALOG);
     await r.goto(url, { waitUntil: "load", timeout: 60000 });
     await require("./launch-wait.js").waitLaunchGone(r, { who: "tests/theme-fade.mjs palette" });
     await settled(r);
@@ -158,6 +158,7 @@ try {
     }).observe(document.documentElement, { attributes: true, attributeFilter: ["class"] }));
   });
   await seatPage(q);
+  await E.seedCatalog(q, SEED_CATALOG);
   await q.goto(url, { waitUntil: "load", timeout: 60000 });
   await require("./launch-wait.js").waitLaunchGone(q, { who: "tests/theme-fade.mjs tf1" });
   await settled(q);

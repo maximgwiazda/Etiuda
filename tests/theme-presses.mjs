@@ -66,6 +66,7 @@ try {
   });
 
   await seatPage(page);
+  await RUN.seed(page);
   await page.goto(RUN.url, { waitUntil: "load", timeout: 60000 });
   await require("./launch-wait.js").waitLaunchGone(page, { who: "tests/theme-presses.mjs" });
 

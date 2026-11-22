@@ -32,6 +32,7 @@ async function boot() {
     } catch (e) {}
   });
   await seatPage(page);
+  await RUN.seed(page);
   await page.goto(RUN.url, { waitUntil: "load", timeout: 60000 });
   await require("./launch-wait.js").waitLaunchGone(page, { who: "tests/theme-flip-hold.mjs" });
   await page.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });

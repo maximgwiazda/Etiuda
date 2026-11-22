@@ -103,10 +103,9 @@ const FIX = {
 function lab(enginePath) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-door-css-"));
   fs.copyFileSync(enginePath, path.join(dir, "etiuda.html"));
-  fs.writeFileSync(path.join(dir, "etiuda-catalog.js"),
-    "window.E_CATALOG = " + fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8") + ";\n");
   return dir;
 }
+const SEED_CATALOG = fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8");
 let browser = null;
 async function boot(dir) {
   const page = await browser.newPage();
@@ -118,6 +117,7 @@ async function boot(dir) {
     } catch (e) {}
   });
   await seatPage(page);
+  await E.seedCatalog(page, SEED_CATALOG);
   await page.goto("file:///" + path.join(dir, "etiuda.html").replace(/\\/g, "/"), { waitUntil: "load", timeout: 60000 });
   await page.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   const yes = await page.$("#ecYes");
@@ -277,8 +277,6 @@ try {
         if (html.split(from).length !== 2) throw new Error("plant anchor not unique");
         const d = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-door-css-p-")); scratch.push(d);
         fs.writeFileSync(path.join(d, "etiuda.html"), html.replace(from, () => to));
-        fs.writeFileSync(path.join(d, "etiuda-catalog.js"),
-          "window.E_CATALOG = " + fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8") + ";\n");
         const pg = await boot(d);
         red = !readChecks(await measure(pg))[which];
         await pg.close();

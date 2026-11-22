@@ -34,6 +34,7 @@ function main() {
     const errs = [];
     page.on("pageerror", e => errs.push(String(e && e.message || e)));
     await seatPage(page);
+    await run.seed(page);
     await page.goto(run.url, { waitUntil: "load", timeout: 90000 });
     await require("./launch-wait.js").waitLaunchGone(page, { who: "tests/tour-ring.js" });
     await reachNewCard(page);

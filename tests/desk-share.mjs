@@ -101,7 +101,6 @@ const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-share-"));
 const copyFiles = (dir, htmlText) => {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "etiuda.html"), htmlText);
-  fs.writeFileSync(path.join(dir, "etiuda-catalog.js"), "window.E_CATALOG = " + CATALOG + ";\n");
   return "file:///" + path.join(dir, "etiuda.html").replace(/\\/g, "/");
 };
 const RAW = fs.readFileSync(ENGINE, "utf8");
@@ -181,6 +180,7 @@ async function boot(pageUrl, { lang = "en", theme = "light", onTeam = true, inbo
     };
   }, lang, theme, onTeam, inbox, kept, off);
   await seatPage(p);
+  await E.seedCatalog(p, CATALOG);
   await p.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
   await p.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   if (await p.$("#ecYes")) await p.click("#ecYes");

@@ -51,8 +51,7 @@ const EXPECTED = 18;
 
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-bubbles-"));
 fs.copyFileSync(E.ENGINE_PATH, path.join(lab, "etiuda.html"));
-fs.writeFileSync(path.join(lab, "etiuda-catalog.js"),
-  "window.E_CATALOG = " + fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8") + ";\n");
+const SEED_CATALOG = fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8");
 const url = "file:///" + path.join(lab, "etiuda.html").replace(/\\/g, "/");
 let browser = null;
 
@@ -66,6 +65,7 @@ async function boot({ lang = "en", theme = "light", viewport = { width: 1280, he
     } catch (e) {}
   }, lang, theme);
   await seatPage(page);
+  await E.seedCatalog(page, SEED_CATALOG);
   await page.goto(url, { waitUntil: "load", timeout: 60000 });
   await page.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   if (await page.$("#ecYes")) await page.click("#ecYes");
@@ -421,6 +421,7 @@ async function runRescue(label) {
     Object.defineProperty(window, "localStorage", { get() { throw new DOMException("refused", "SecurityError"); } });
   });
   await seatPage(page);
+  await E.seedCatalog(page, SEED_CATALOG);
   await page.goto(url, { waitUntil: "load", timeout: 60000 });
   let r;
   try {
@@ -491,6 +492,7 @@ async function runQuickReplies(lang, theme) {
   let r = null;
   try {
     await seatPage(desk);
+    await E.seedCatalog(desk, SEED_CATALOG);
     await desk.goto(url, { waitUntil: "load", timeout: 60000 });
     await desk.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
     if (await desk.$("#ecYes")) await desk.click("#ecYes");
