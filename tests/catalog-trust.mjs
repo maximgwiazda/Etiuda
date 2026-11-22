@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
    none, the proxy keys are missing. Without it the shell's guard refuses the read and the policy reader says it could not read. */
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 24;
+const EXPECTED = 28;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -378,6 +378,118 @@ try {
         check(got === V2.V2_SIG_INVALID || got === V2.V2_SIG_UNKNOWN, "r16j rewriting plant:page-hex-case to lower case only reads the upper-case signature as not the lead's (FAIL r16i): " + got);
       }
     } finally { window.E_HOST.catalogLeads = leadsWas; }
+  }
+
+  /* Two teams on one desk, this folder's team file gone: only the lead pinned for this folder verifies here. A second shell
+     with its own handlers, so the plant does not replace the handlers the legs above already hold. */
+  {
+    const deskWas = fs.readFileSync(DESK, "utf8");
+    const pubA = pubHex(pair.publicKey), pubB = pubHex(stranger.publicKey);
+    const teamA = "t-" + crypto.randomBytes(8).toString("hex");
+    const teamB = "t-" + crypto.randomBytes(8).toString("hex");
+    const otherFolder = path.join(LAB, "other-team");
+    const mirror = path.join(UD, "folder-mirror", teamA);
+    fs.mkdirSync(otherFolder, { recursive: true });
+    fs.mkdirSync(mirror, { recursive: true });
+    const byA = sign(fixture, pair.privateKey);
+    const byB = sign(fixture, stranger.privateKey, "other-lead");
+    fs.writeFileSync(path.join(mirror, "own-lead.ec"), JSON.stringify(byA), "utf8");
+    fs.writeFileSync(path.join(mirror, "other-lead.ec"), JSON.stringify(byB), "utf8");
+    fs.writeFileSync(DESK, JSON.stringify({
+      kind: "etiuda-desk", schema: 1,
+      keys: { eCatalogFolder: CF, eUiLang: "en" },
+      teamPins: { [teamA]: { keyId: KEY_ID, public: pubA }, [teamB]: { keyId: "other-lead", public: pubB } },
+      teamShown: { [teamA]: { folder: CF }, [teamB]: { folder: otherFolder } }
+    }), "utf8");
+    const asideShell = (marker, edit) => {
+      const lines = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8").split("\n");
+      const at = lines.findIndex(l => l.indexOf("plant:" + marker) >= 0);
+      if (at < 0) return null;
+      const next = edit(lines[at]);
+      if (next == null || next === lines[at]) return null;
+      lines[at] = next;
+      const on = {}, invoke = {};
+      const electronAside = {
+        app: { getPath: () => UD, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop, getVersion: () => "0.0.0",
+               whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
+        ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
+        shell: { openPath: async () => "" },
+        BrowserWindow: inert, Menu: inert, dialog: dialogApi, net: inert, protocol: inert, session: inert,
+        screen: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" },
+      };
+      new Function("require", "__dirname", "__filename", "module", "exports", "console", lines.join("\n"))(
+        n => (n === "electron" ? electronAside : nodeRequire(n)), path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet);
+      return { on, invoke };
+    };
+    const ask = (handlers, ch, ...args) => handlers[ch](eventFor(ENGINE_FRAME), ...args);
+    try {
+      onHandlers["etiuda:desk"](eventFor(ENGINE_FRAME));
+      const leads = await ask(invokeHandlers, "etiuda:catalog-leads");
+      const pubs = (Array.isArray(leads) ? leads : []).map(l => l && l.public);
+      const onlyOwn = pubs.length === 1 && pubs[0] === pubA;
+      const stateB = await stateOf(JSON.stringify(byB)), stateA = await stateOf(JSON.stringify(byA));
+      const readB = await ask(invokeHandlers, "etiuda:catalog-read", "other-lead.ec", null, false, true);
+      const readA = await ask(invokeHandlers, "etiuda:catalog-read", "own-lead.ec", null, false, true);
+      const refused = !!readB && readB.text === "" && readB.why == null;
+      const handed = !!readA && typeof readA.text === "string" && readA.text.length > 0;
+      check(onlyOwn && stateB !== V2.V2_SIG_VALID && stateA === V2.V2_SIG_VALID && refused && handed,
+        "st1a with this folder's team file gone, only its own lead verifies: the page does not call the other team's signature valid,"
+        + " and an unasked read hands that file back empty while this team's file is handed back: leads " + pubs.length
+        + ", other " + stateB + ", own " + stateA + ", refused " + refused + ", handed " + handed);
+      if (process.env.ETIUDA_PLANTS === "off") { asserted++; console.log("  SKIP  st1b lifting plant:folder-publics-here (ETIUDA_PLANTS=off)"); }
+      else {
+        const aside = asideShell("folder-publics-here", () => "  void here; /* plant:folder-publics-here */");
+        let got = "plant line absent";
+        const leadsWas2 = window.E_HOST.catalogLeads;
+        try {
+          if (aside) {
+            aside.on["etiuda:desk"](eventFor(ENGINE_FRAME));
+            window.E_HOST.catalogLeads = () => aside.invoke["etiuda:catalog-leads"](eventFor(ENGINE_FRAME));
+            got = await stateOf(JSON.stringify(byB));
+          }
+        } finally { window.E_HOST.catalogLeads = leadsWas2; }
+        check(got === V2.V2_SIG_VALID, "st1b lifting plant:folder-publics-here lets the other team's lead read valid on the page (FAIL st1a): " + got);
+      }
+
+      const teamDoc = sign({
+        format: 1, kind: "etiuda-team", id: teamA, catalogs: [fixture.id],
+        lead: { keyId: KEY_ID, public: pubA }, sealed: false, epoch: 1, rev: 1, roster: []
+      }, pair.privateKey, KEY_ID);
+      fs.writeFileSync(path.join(mirror, "etiuda-team.json"), JSON.stringify(teamDoc), "utf8");
+      const Ch = nodeRequire(path.join(ROOT, "shell", "relay", "channel.cjs"));
+      const head = {
+        v: 1, team: teamA, epoch: 1, rev: 1, t: Date.now(),
+        editions: [{ catalog: fixture.id, rev: 3, edition: "North lamps", published: "2026-02-03" }],
+        sig: { alg: "Ed25519", keyId: KEY_ID }
+      };
+      head.sig.value = crypto.sign(null, Buffer.concat([Buffer.from(Ch.HEAD_PREFIX), Ch.signedBytes(head)]), pair.privateKey).toString("hex");
+      fs.writeFileSync(path.join(mirror, "etiuda-head.json"), JSON.stringify(head), "utf8");
+      const high = JSON.parse(JSON.stringify(fixture));
+      delete high.sig;
+      delete high.hash;
+      high.rev = 100;
+      fs.writeFileSync(path.join(mirror, "high-rev.ec"), JSON.stringify(high), "utf8");
+      const joined = await ask(invokeHandlers, "etiuda:team-join", "leads");
+      const row = ((joined && joined.leads) || []).filter(r => r && r.team === teamA)[0] || null;
+      check(!!row && !!row.head && row.head.edition === "North lamps",
+        "st2a an unsigned catalog at a higher rev in this folder leaves the lead's head on the team row: "
+        + (row && row.head ? row.head.edition : "no head"));
+      if (process.env.ETIUDA_PLANTS === "off") { asserted++; console.log("  SKIP  st2b lifting plant:head-unsigned-rev (ETIUDA_PLANTS=off)"); }
+      else {
+        const aside = asideShell("head-unsigned-rev", line => {
+          const opened = line.replace("facts.genuine && ", "");
+          return opened === line ? null : opened;
+        });
+        let shown = "plant line absent";
+        if (aside) {
+          aside.on["etiuda:desk"](eventFor(ENGINE_FRAME));
+          const again = await ask(aside.invoke, "etiuda:team-join", "leads");
+          const rowP = ((again && again.leads) || []).filter(r => r && r.team === teamA)[0] || null;
+          shown = rowP && rowP.head ? rowP.head.edition : "nothing";
+        }
+        check(shown === "nothing", "st2b lifting plant:head-unsigned-rev lets that unsigned rev blank the head (FAIL st2a): " + shown);
+      }
+    } finally { fs.writeFileSync(DESK, deskWas, "utf8"); }
   }
 } catch (e) {
   failed++;
