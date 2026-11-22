@@ -10185,7 +10185,6 @@ What is typed here stays in this browser.`;
     }
     return false;
   }
-  var hugSeq = 0;
   function hugDottedGround(root) {
     hugDottedGround.cardIn = 0;
     if (!root || root.nodeType !== 1 || typeof getComputedStyle !== "function") return 0;
@@ -10312,7 +10311,6 @@ What is typed here stays in this browser.`;
       }
       const hug = doc.createElement("span");
       hug.className = "e-dot-hug";
-      hug.style.zIndex = String(-1 - hugSeq++);
       const outer = insideFlex ? doc.createElement("span") : hug;
       if (insideFlex) {
         outer.className = "e-dot-flex";
@@ -10325,6 +10323,17 @@ What is typed here stays in this browser.`;
       for (let j = 0; j < run.length; j++) words.appendChild(run[j]);
       wrapped++;
     }
+    const grounds = [];
+    targets.forEach(({ ground }) => {
+      if (grounds.indexOf(ground) < 0) grounds.push(ground);
+    });
+    grounds.forEach((ground) => {
+      const ws = ground.querySelectorAll(".e-dot-hug > .e-dot-t");
+      for (let i = 0; i < ws.length; i++) {
+        const z = String(-1 - i), hug = ws[i].parentNode;
+        if (hug.style.zIndex !== z) hug.style.zIndex = z;
+      }
+    });
     return wrapped;
   }
   function translateChrome() {

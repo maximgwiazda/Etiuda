@@ -2215,7 +2215,6 @@ function dgRunHasWords(run){
   }
   return false;
 }
-let hugSeq=0;
 function hugDottedGround(root){
   hugDottedGround.cardIn=0;
   if(!root || root.nodeType!==1 || typeof getComputedStyle!=="function") return 0;
@@ -2337,9 +2336,6 @@ function hugDottedGround(root){
     }
     const hug=doc.createElement("span");
     hug.className="e-dot-hug";
-    /* each patch lies BELOW the one made before it, so a patch's spread never covers the words of the block above it (the descenders of a
-       heading reach to its foot; the next block's capitals start inside theirs): the upper patch paints over the lower's margin instead */
-    hug.style.zIndex=String(-1-(hugSeq++));
     const outer=insideFlex ? doc.createElement("span") : hug;
     if(insideFlex){ outer.className="e-dot-flex"; outer.appendChild(hug); }
     run[0].parentNode.insertBefore(outer, run[0]);
@@ -2350,6 +2346,17 @@ function hugDottedGround(root){
     for(let j=0;j<run.length;j++) words.appendChild(run[j]);
     wrapped++;
   }
+  /* each patch lies BELOW the one before it in its ground, so a patch's spread never covers the words of the block above it (a heading's
+     descenders reach to its foot): numbered by document order over the whole ground at every pass, so the same screen numbers the same */
+  const grounds=[];
+  targets.forEach(({ground})=>{ if(grounds.indexOf(ground)<0) grounds.push(ground); });
+  grounds.forEach(ground=>{
+    const ws=ground.querySelectorAll(".e-dot-hug > .e-dot-t");
+    for(let i=0;i<ws.length;i++){
+      const z=String(-1-i), hug=ws[i].parentNode;
+      if(hug.style.zIndex!==z) hug.style.zIndex=z;
+    }
+  });
   return wrapped;
 }
 /** The app's own furniture, never the catalog's content. */
