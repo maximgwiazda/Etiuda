@@ -551,7 +551,7 @@ async function run() {
       return { log: log, told: made ? made.told() : null, why: why };
     };
     const noteReads = (src) => ({
-      on: noteRun(src, "on", false, 3), off: noteRun(src, "off", false, 2), no: noteRun(src, "bubble-false", false, 2),
+      on: noteRun(src, "on", false, 3), off: noteRun(src, "off", false, 2), no: noteRun(src, "bubble-false", false, 1),
       throws: noteRun(src, "bubble-throws", false, 1), harness: noteRun(src, "on", true, 1),
     });
     const n = noteReads(mainText);

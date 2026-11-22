@@ -1187,6 +1187,8 @@ UI_STRINGS.pl={
   "Etiuda starts in the tray when this Windows account signs in.":"Etiuda uruchamia się w zasobniku po zalogowaniu do tego konta Windows.",
   "When the window closes":"Po zamknięciu okna",
   "Stay in the tray":"Zostaje w zasobniku",
+  "Say so at the first close":"Informuj przy pierwszym zamknięciu",
+  "Once each start, a blue bubble over the tray icon says Etiuda keeps running there. Don't show again in the bubble turns this off.":"Raz po każdym uruchomieniu niebieski dymek nad ikoną w zasobniku informuje, że Etiuda działa tam dalej. Przycisk Nie pokazuj więcej w dymku wyłącza tę opcję.",
   "Quit":"Kończy działanie",
   "Closing the window will quit Etiuda.":"Zamknięcie okna zakończy działanie Etiudy.",
   "In the tray, Etiuda still answers its shortcut and shows notifications.":"W zasobniku Etiuda nadal reaguje na swój skrót i pokazuje powiadomienia.",
