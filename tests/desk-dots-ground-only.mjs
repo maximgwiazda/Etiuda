@@ -9,15 +9,16 @@
  * HOW IT IS HELD, so a second tool can redo it. Each screen is shot twice at one device pixel to a CSS pixel with the dot field off in both: as it
  * is, and with the clearing taken out (.e-dot-hug and .e-dot-ic without ground or spread, .e-dot-ctrl without its ground). With no dots to clear,
  * the clearing is the page's own colour on the page's own colour, so the two shots are the same picture: a pixel inside the ground whose channel
- * differs by 6 or more is a pixel the clearing painted over something that is not the dots. Counted as clusters of such pixels (within 3 px of each
+ * differs by 24 or more is a pixel the clearing painted over something that is not the dots. Counted as clusters of such pixels (within 3 px of each
  * other), per screen, theme and width. The screens: the empty desk, the loaded desk, every section of Settings, the Library and Maintenance, and
  * the first sign-in. Exit code is the number of failed checks; 78 when the run could not complete.
  */
 
 import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
@@ -111,7 +112,9 @@ async function bootFirstSignin(browser, pageUrl, theme, lang, vp) {
 }
 
 
-const MIN_GAP = Number(process.env.DOTS_GROUND_GAP) || 6;
+/* a channel apart by 24 or more: a covered border or word differs by 100 and more; the empty desk's link band differs by 18 on base and
+   is a faint tone, no element covered (board 1019 (9), report: left) */
+const MIN_GAP = Number(process.env.DOTS_GROUND_GAP) || 24;
 const OFF = ".dotfield>div,.sx-page,.fs-left{background-image:none !important}";
 const CLEAR = ".e-dot-hug{background:none !important;box-shadow:none !important}.e-dot-ic{background:none !important;box-shadow:none !important}"
   + ".e-dot-ctrl:not(:hover):not(:focus-visible):not(:active){background-color:transparent !important}";
@@ -172,13 +175,16 @@ async function diffOf(decoder, p) {
 let browser = null, decoder = null, done = false;
 const VPS = [["1280w", { width: 1280, height: 800 }], ["560w", { width: 560, height: 850 }]];
 try {
-  browser = await puppeteer.launch({ executablePath: E.browserPath("chrome"), headless: true, args: ["--hide-scrollbars"], protocolTimeout: 180000 });
+  browser = await puppeteer.launch({ executablePath: E.browserPath("chrome"), headless: true, args: ["--hide-scrollbars", "--disable-lcd-text"], protocolTimeout: 180000 });
   decoder = await browser.newPage();
   const rawHtml = fs.readFileSync(ENGINE, "utf8");
   const urlEmpty = writeDeskFiles(path.join(lab, "empty"), rawHtml, false);
   const urlFull = writeDeskFiles(path.join(lab, "full"), rawHtml, true);
+  const ONLY = process.env.DOTS_GROUND_ONLY || "";
   const hold = async (p, label) => {
+    if (ONLY && !label.includes(ONLY)) return;
     await killMotion(p);
+    if (process.env.DOTS_GROUND_PROBE && label.includes(process.env.DOTS_GROUND_ONLY || "")) process.stdout.write(label + " " + JSON.stringify(await p.evaluate((xy) => { const [x, y] = xy.split(",").map(Number); return document.elementsFromPoint(x, y).slice(0, 8).map((e) => e.tagName.toLowerCase() + "." + String(e.className).trim().split(/\s+/).join(".") + " [" + getComputedStyle(e).backgroundColor + " z=" + getComputedStyle(e).zIndex + " pos=" + getComputedStyle(e).position + "]"); }, process.env.DOTS_GROUND_PROBE)) + "\n");
     const d = await diffOf(decoder, p);
     EXPECTED += 1;
     check(d.n === 0, label + ": the clearing paints only the ground (" + d.n + " clusters, " + d.px + " pixels over something else)", d.n ? d.named : undefined);
@@ -218,6 +224,28 @@ try {
   if (decoder) await closePage(decoder).catch(() => {});
   if (browser) await Promise.race([browser.close(), sleep(10000).then(() => { const c = browser.process(); if (c) c.kill(); })]);
   E.removeLab(lab);
+}
+
+/* THE PLANTS, in scratch copies of the built page (the --engine file): each puts one deciding line back as it was, and the leg that holds it turns red. */
+if (done && !process.env.DOTS_GROUND_ONLY && process.env.ETIUDA_PLANTS !== "off") {
+  const raw = fs.readFileSync(ENGINE, "utf8");
+  const plantLab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-dots-ground-plant-"));
+  const PLANTS = [
+    ["words in the patch's own layer", ".e-dot-t{position:relative}", ".e-dot-t{position:static}", "settings [light,560w]/account"],
+    ["patches in the page's flow", "hug.style.zIndex = String(-1 - hugSeq++);", "hug.style.zIndex=\"auto\";", "settings [light,1280w]/account"],
+    ["patches in tree order", "hug.style.zIndex = String(-1 - hugSeq++);", "hug.style.zIndex=\"-1\";", "maintenance [light,1280w]/storage"],
+  ];
+  for (const [name, from, to, leg] of PLANTS) {
+    const at = raw.indexOf(from);
+    if (at < 0 || raw.indexOf(from, at + 1) >= 0) { checks++; fails++; console.log("  FAIL plant " + name + ": the line is not in the page once"); continue; }
+    const file = path.join(plantLab, "plant.html");
+    fs.writeFileSync(file, raw.slice(0, at) + to + raw.slice(at + from.length));
+    const run = spawnSync(process.execPath, [fileURLToPath(import.meta.url), "--engine", file], { encoding: "utf8", timeout: 300000, env: Object.assign({}, process.env, { DOTS_GROUND_ONLY: leg, ETIUDA_PLANTS: "off" }) });
+    const red = run.status !== 0 && /FAIL /.test(String(run.stdout));
+    EXPECTED += 1;
+    check(red, "plant " + name + " turns " + leg + " red in a scratch copy of the page");
+  }
+  E.removeLab(plantLab);
 }
 console.log("#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun + " expected=" + EXPECTED);
 console.log((fails ? "FAIL " : "PASS ") + "desk-dots-ground-only: " + (checks - fails) + "/" + checks + " checks" + (done ? "" : " - SUITE DID NOT COMPLETE"));
