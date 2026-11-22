@@ -820,6 +820,7 @@ try {
     const inlineSample = [], hoverSample = [], pressSample = [], focusSample = [];
     const themeLightSample = [], themeDarkSample = [];
     let inlineSeen = 0, inlineFails = 0, hoverSeen = 0, hoverFails = 0;
+    const unpaired = [];
     let pressSeen = 0, pressFails = 0, focusSeen = 0, focusFails = 0;
     let themeLightSeen = 0, themeLightFails = 0, themeDarkSeen = 0, themeDarkFails = 0;
     let hugSteady = true;
@@ -857,10 +858,17 @@ try {
       for (const key of keys) {
         await openAll(which, key);
         const [lCur, dCur, lBase, dBase] = await Promise.all([listCtrls(curL), listCtrls(curD), listCtrls(baseL), listCtrls(baseD)]);
-        if (lCur.length !== lBase.length || dCur.length !== dBase.length || lCur.length !== dCur.length) {
+        /* The two current pages must agree, one tree in two themes. The base may differ by a control the product added or
+           removed since the baseline (the 1017 desk took the pasted invitation's control off Settings All and Account, Max's
+           ruling of 2026-11-22 02:12), so a current control is paired with the base's by its key, never by its place; one the
+           base lacks is listed and skips only the checks that compare with the base (the test architect, 2026-11-22). */
+        if (lCur.length !== dCur.length) {
           inlineFails = note(inlineSample, inlineFails, { screen: which + "/" + key, lengths: [lCur.length, lBase.length, dCur.length, dBase.length] });
           continue;
         }
+        if (lCur.length !== lBase.length || dCur.length !== dBase.length)
+          console.log("#base-differs " + JSON.stringify({ screen: which + "/" + key, lengths: [lCur.length, lBase.length, dCur.length, dBase.length] }));
+        const baseNL = new Map(lBase.map((c) => [ctrlKey(c), c.n])), baseND = new Map(dBase.map((c) => [ctrlKey(c), c.n]));
         const hugBeforeL = await curL.evaluate(() => window.hugDottedGround.n || 0);
         const hugBeforeD = await curD.evaluate(() => window.hugDottedGround.n || 0);
         await curL.evaluate(() => { document.documentElement.dataset.theme = "dark"; });
@@ -888,21 +896,24 @@ try {
           const k = ctrlKey(slot);
           if (seenKey.has(k)) continue;
           seenKey.add(k);
-          if (lCur[i].marked) {
-            const restB = await readPaint(bdpL, baseL, lCur[i].n, []);
-            const hoverB = await readPaint(bdpL, baseL, lCur[i].n, ["hover"]);
+          const bnL = baseNL.get(ctrlKey(lCur[i])), bnD = baseND.get(ctrlKey(dCur[i]));
+          if (lCur[i].marked && bnL === undefined) unpaired.push("light " + uname);
+          if (dCur[i].marked && bnD === undefined) unpaired.push("dark " + uname);
+          if (lCur[i].marked && bnL !== undefined) {
+            const restB = await readPaint(bdpL, baseL, bnL, []);
+            const hoverB = await readPaint(bdpL, baseL, bnL, ["hover"]);
             const hoverC = await readPaint(cdpL, curL, lCur[i].n, ["hover"]);
             const hd = paintDiff(hoverC, hoverB, ["backgroundColor", "backgroundImage"]);
             hoverSeen++;
             if (hd) hoverFails = note(hoverSample, hoverFails, { theme: "light", ctrl: uname, field: hd, got: hoverC && hoverC[hd], want: hoverB && hoverB[hd] });
             if (!lCur[i].disabled) {
-              const focusB = await readPaint(bdpL, baseL, lCur[i].n, ["focus-visible"]);
+              const focusB = await readPaint(bdpL, baseL, bnL, ["focus-visible"]);
               const focusC = await readPaint(cdpL, curL, lCur[i].n, ["focus-visible"]);
               const fd = paintDiff(focusC, focusB, ["backgroundColor", "backgroundImage"]);
               focusSeen++;
               if (fd) focusFails = note(focusSample, focusFails, { theme: "light", ctrl: uname, field: fd, got: focusC && focusC[fd], want: focusB && focusB[fd] });
             }
-            const activeB = await readPaint(bdpL, baseL, lCur[i].n, ["active"]);
+            const activeB = await readPaint(bdpL, baseL, bnL, ["active"]);
             const pressed = paintDiff(activeB, restB, ["backgroundColor", "backgroundImage", "filter"]);
             if (pressed) {
               const activeC = await readPaint(cdpL, curL, lCur[i].n, ["active"]);
@@ -916,21 +927,21 @@ try {
               console.log("#disabled-opacity " + JSON.stringify({ ctrl: uname, cur: restC && restC.opacity, base: restB.opacity }));
             }
           }
-          if (dCur[i].marked) {
-            const restB = await readPaint(bdpD, baseD, dCur[i].n, []);
-            const hoverB = await readPaint(bdpD, baseD, dCur[i].n, ["hover"]);
+          if (dCur[i].marked && bnD !== undefined) {
+            const restB = await readPaint(bdpD, baseD, bnD, []);
+            const hoverB = await readPaint(bdpD, baseD, bnD, ["hover"]);
             const hoverC = await readPaint(cdpD, curD, dCur[i].n, ["hover"]);
             const hd = paintDiff(hoverC, hoverB, ["backgroundColor", "backgroundImage"]);
             hoverSeen++;
             if (hd) hoverFails = note(hoverSample, hoverFails, { theme: "dark", ctrl: uname, field: hd, got: hoverC && hoverC[hd], want: hoverB && hoverB[hd] });
             if (!dCur[i].disabled) {
-              const focusB = await readPaint(bdpD, baseD, dCur[i].n, ["focus-visible"]);
+              const focusB = await readPaint(bdpD, baseD, bnD, ["focus-visible"]);
               const focusC = await readPaint(cdpD, curD, dCur[i].n, ["focus-visible"]);
               const fd = paintDiff(focusC, focusB, ["backgroundColor", "backgroundImage"]);
               focusSeen++;
               if (fd) focusFails = note(focusSample, focusFails, { theme: "dark", ctrl: uname, field: fd, got: focusC && focusC[fd], want: focusB && focusB[fd] });
             }
-            const activeB = await readPaint(bdpD, baseD, dCur[i].n, ["active"]);
+            const activeB = await readPaint(bdpD, baseD, bnD, ["active"]);
             const pressed = paintDiff(activeB, restB, ["backgroundColor", "backgroundImage", "filter"]);
             if (pressed) {
               const activeC = await readPaint(cdpD, curD, dCur[i].n, ["active"]);
@@ -1024,6 +1035,7 @@ try {
       themeLightSeen, themeLightFails, themeDarkSeen, themeDarkFails, hugSteady
     }));
     EXPECTED += 1;
+    console.log("#unpaired " + JSON.stringify(unpaired));
     check(inlineSeen > 0 && inlineFails === 0, "marked controls carry no inline background in either theme", inlineFails ? { inlineSeen, inlineFails, sample: inlineSample } : { inlineSeen });
     EXPECTED += 1;
     check(hoverSeen > 0 && hoverFails === 0, "hovered background matches the same control on f9d5cd8e", hoverFails ? { hoverSeen, hoverFails, sample: hoverSample } : { hoverSeen });
@@ -1211,23 +1223,11 @@ try {
         await closePage(pp);
       }
     }
-    EXPECTED += 1;
-    if (PLANTS_OFF) {
-      skip("plant-first-signin-dots: taking out the screen's cleared ground causes misses (ETIUDA_PLANTS=off)");
-    } else {
-      const re = /(function paintFirstSignin\s*\(\)\s*\{(?:(?!\n\s*function\s)[\s\S])*?)hugDottedGround\([^)]*\)\s*;/;
-      if (!re.test(rawHtml)) {
-        check(false, "plant-first-signin-dots: could not locate first-signin hugDottedGround call");
-      } else {
-        const planted = rawHtml.replace(re, "$10;");
-        const plantUrl = writeDeskFiles(path.join(lab, "plant-fs-dots"), planted, false);
-        const pp = await bootFirstSignin(browser, plantUrl, "light", "en", { width: 560, height: 850 });
-        const plantRes = await auditGround(pp, "plant-first-signin");
-        check(plantRes.counts.misses > 0 || plantRes.counts.wide > 0,
-          "plant-first-signin-dots: taking out the screen's cleared ground causes misses", plantRes.counts);
-        await closePage(pp);
-      }
-    }
+    /* plant-first-signin-dots is RETIRED (the test architect, 2026-11-22). It lifted paintFirstSignin's own hugDottedGround
+       and asked for misses, but the language pass (ui-lang.js, the walk that ends in hugDottedGround(root)) clears the same
+       ground again on every paint, so lifting the one call left 0 misses and the plant could never bite: red on main
+       since it was written. The screen's ground is held by the audit itself, which reads the first sign-in screen's misses
+       and wide patches on the real page; a plant there would have to lift both clearers, which tests no single line. */
   } catch (e) {
     EXPECTED += 1;
     check(false, "state and cost checks stopped", String((e && e.stack) || e).split("\n").slice(0, 6));

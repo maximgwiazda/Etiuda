@@ -2179,9 +2179,14 @@ const t0 = Date.now();
     window.E_HOST = wasHost;
     return { short, long };
   });
-  check(!!trim.long && trim.long.over > 0 && trim.long.dir === "rtl" && trim.long.ell !== "ellipsis" && trim.long.fade
-        && trim.long.cardOver === 0 && !!trim.short && trim.short.over === 0 && !trim.short.fade,
-    "a folder too long for the title line is trimmed at its front, faded there with no ellipsis, and widens nothing: "
+  /* MOVED FOR BOARD 1019 (7), the catalog rows redrawn to the designer's sheet: the folder line shows the whole path and wraps.
+     Old: "a folder too long for the title line is trimmed at its front, faded there with no ellipsis, and widens nothing".
+     New: the whole path is shown, long or short, nothing trimmed or faded, and it widens nothing. */
+  const LONG_DIR = "C:\\Users\\x\\Documents\\Company catalogues and archives 2026 and later, kept for every desk of the support team"
+    + " in each of its offices\\Etiuda live desk for the whole team and every colleague who answers by telephone, by chat and by mail";
+  check(!!trim.long && trim.long.txt === LONG_DIR && trim.long.over <= 0 && !trim.long.fade && trim.long.cardOver === 0
+        && !!trim.short && trim.short.txt === "C:\\Users\\x\\Documents\\Etiuda" && trim.short.over <= 0 && !trim.short.fade && trim.short.cardOver === 0,
+    "a folder of any length is shown whole on its line, nothing trimmed or faded, and widens nothing: "
     + JSON.stringify(trim));
   await p.keyboard.press("Escape"); await sleep(300);
   await p.keyboard.press("Escape"); await sleep(400);
