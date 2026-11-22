@@ -1234,9 +1234,9 @@ const placeEc = (dir, from, as, minutesOld) => {
     const exp = q("#mgExportCatalog"), imp = q("#mgImportCatalog"), close = q("#mgClose");
     const r = change ? change.getBoundingClientRect() : null;
     const got = { path: pathEl ? pathEl.title : null,
-                  short: pathEl ? pathEl.textContent : null,
+                  whole: pathEl ? pathEl.textContent : null,
                   button: !!change && !!r && r.width > 0 && r.height > 0,
-                  pencil: !!change && !!change.querySelector("svg"),
+                  worded: !!change && change.textContent.trim() === "Change folder…",
                   onBar: !!pathEl && !!change && !!pathEl.closest('details.manage-sec[data-mg="data"] .mg-data-bar')
                     && !!change.closest('details.manage-sec[data-mg="data"] .mg-data-bar'),
                   titleNames: [...document.querySelectorAll('details.manage-sec[data-mg="data"] > summary .ec-where .open-folder')]
@@ -1245,7 +1245,7 @@ const placeEc = (dir, from, as, minutesOld) => {
                   exportInRow: !!exp && !!exp.closest(".ec-row.is-loaded"),
                   importInRow: !!imp && !!imp.closest('.mg-data-acts .set-row[data-row="load"]'),
                   noClose: !close,
-                  oldOnes: ["#mgCatOpen"].filter(x => !!q(x)).length,
+                  openWord: !!q("#mgCatOpen") && q("#mgCatOpen").textContent.trim() === "Open folder",
                   strays: [...document.querySelectorAll('details.manage-sec[data-mg="data"] .manage-secbody > *')]
                             .map(n => n.className) };
     document.querySelector('#tabsBar .tab.screen[data-sid="library"] .tab-x').click(); await wait(600);
@@ -1256,9 +1256,9 @@ const placeEc = (dir, from, as, minutesOld) => {
                     .map(d => d.getAttribute("data-sx")) });
   });
   check(row.step === "open" && row.setFolds.indexOf("catalog") < 0 && row.path === catFolder("change")
-        && row.button && row.pencil && row.onBar && row.titleNames && row.exportInRow === row.loadedRow
+        && row.button && row.worded && row.whole === row.path && row.openWord && row.onBar && row.titleNames && row.exportInRow === row.loadedRow
         && row.importInRow
-        && row.noClose && row.oldOnes === 0 && row.strays.join(",") === "mg-data-bar,ec-list,mg-data-acts",
+        && row.noClose && row.strays.join(",") === "mg-data-bar ec-folder-bar,ec-list,mg-data-acts",
     "2h the folder is named and changed in the Library alone, on Catalog and data's bar (the title line naming it for search), with each act in"
     + " the home it belongs to and nothing floating in the body; Settings offers no catalog"
     + " section at all (452): " + JSON.stringify(row));
@@ -1831,10 +1831,8 @@ const placeEc = (dir, from, as, minutesOld) => {
                meta: (r.querySelector(".ec-meta") || {}).textContent || "",
                loaded: r.classList.contains("is-loaded"),
                tags: Array.from(r.querySelectorAll(".ec-tag")).map(t => t.textContent),
-               /* The loaded row says so with a mark since 2026-09-17, so what is read is the
-                  glyph and the name it carries rather than a word in a pill. */
-               tick: (r.querySelector(".ec-tick") || {}).getAttribute
-                 ? r.querySelector(".ec-tick").getAttribute("aria-label") : "",
+               /* The loaded row says so in words since board 1019 (7): a green In use beside its name. */
+               tick: (r.querySelector(".ec-inuse") || {}).textContent || "",
                act: Array.from(r.querySelectorAll("button.btn")).map(b => b.getAttribute("aria-label") || b.textContent).join("|"),
                box: (() => { const b = r.querySelector("button").getBoundingClientRect();
                              return [Math.round(b.width), Math.round(b.height)]; })(),
@@ -2078,7 +2076,7 @@ const placeEc = (dir, from, as, minutesOld) => {
      nothing has been edited on top of it, so the file it came out of already holds every word an
      export would write. The mark, not a word, is what says which row is loaded. */
   check(lib2.step === "open" && loadedRow.loaded && loadedRow.act === "Eject"
-        && loadedRow.tick === "Loaded" && loadedRow.tags.length === 0
+        && loadedRow.tick === "In use" && loadedRow.tags.length === 0
         && !otherRow.loaded && otherRow.act === "Load" && otherRow.tags.indexOf("Newer") > -1,
     "2q4 the loaded file is the marked row, and the only one carrying the acts that belong to a"
     + " loaded catalog, while the file written after it is marked newer and offers Load: "

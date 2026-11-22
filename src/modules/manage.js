@@ -9,7 +9,7 @@ import { v2ChangedAt } from "./catalog-v2.js";
 import { catToggle, closeModal, dressDialogInputs, modalFront, openCover, wireFolds } from "./dialog.js";
 import { markCutText } from "./cut-text.js";
 import { openIntentEditor, openCategoryEditor } from "./editors.js";
-import { ICON_CHEVRON_R, ICON_EYE_SHUT, ICON_EYE_OPEN, ICON_EDIT, ICON_TRASH, ICON_STAR_ON, ICON_STAR_OFF, ICON_PLUS, ICON_ROLE_ALWAYS } from "./icons.js";
+import { ICON_FOLDER, ICON_CHEVRON_R, ICON_EYE_SHUT, ICON_EYE_OPEN, ICON_EDIT, ICON_TRASH, ICON_STAR_ON, ICON_STAR_OFF, ICON_PLUS, ICON_ROLE_ALWAYS } from "./icons.js";
 import { intentNavName } from "./intent-text.js";
 import { askClearLocal, bringBackCleared, clearedHeld } from "./local-memory.js";
 import { mgReduceMotion, mgPinCard, E_EASE } from "./motion.js";
@@ -56,6 +56,18 @@ function catalogFolderTail(withId){
     +(eCatalogFolderPinned()?'':'<button type="button" class="btn icbtn ec-where-edit"'+editId+' title="'
     +esc(t("Change folder…"))+'" aria-label="'+esc(t("Change folder…"))+'">'
     +ICON_EDIT+'</button>')
+    +'</span>';
+}
+/* THE LIST'S FIRST LINE (board 1019 (7)): where catalog files are read from, the whole path, and the two ways to act on it. The path
+   still opens the folder when it is pressed, as it always did. Change folder is absent where policy sets the folder. */
+function catalogFolderBar(){
+  const dir=eCatalogFolder();
+  const path='<code class="open-folder" id="mgCatFolderPath" role="button" tabindex="0" title="'+esc(dir)+'" aria-label="'
+    +esc(t("Open this folder"))+': '+esc(dir)+'">'+esc(dir)+'</code>';
+  return ICON_FOLDER.replace('class="ic"','class="ic ec-folder-ic"')
+    +'<span class="ec-folder-line">'+esc(t("Catalog files are read from {PATH}")).split("{PATH}").join(path)+'</span>'
+    +'<span class="ec-folder-btns"><button type="button" class="btn" id="mgCatOpen">'+esc(t("Open folder"))+'</button>'
+    +(eCatalogFolderPinned()?'':'<button type="button" class="btn ec-where-edit" id="mgCatFolder">'+esc(t("Change folder…"))+'</button>')
     +'</span>';
 }
 /** One collapsible Manage section. `body` is trusted markup; `title` is not. */
@@ -1547,12 +1559,11 @@ function openManage(justHtml){
 
   let relayLead=null;
   relayLead=libraryRelayLead(); /* plant:library-relay-host */
-  const dataTail=relayLead
+  const relayTail=relayLead
     ? '<span class="ec-where"><small>'+esc(t("Relay: {HOST}").split("{HOST}").join(relayLead.relay))+'</small></span>'
-    : eCatalogFolder()
-    ? catalogFolderTail(true)
     : '';
-  const summaryTail=relayLead||!eCatalogFolder()?dataTail:catalogFolderTail(false);
+  const dataTail=relayTail || (eCatalogFolder() ? catalogFolderBar() : '');
+  const summaryTail=relayLead||!eCatalogFolder()?relayTail:catalogFolderTail(false);
 
   const mgBody=''+
     mgSec("catmac","Categories & cards",
@@ -1583,7 +1594,7 @@ function openManage(justHtml){
        bringing one in is the Library's, so it stands in the Library's bar. What is left here is
        the list, which is the answer to "what is on this desk". */
     mgSec("data","Catalog & data",
-      (dataTail ? '<div class="mg-data-bar">'+dataTail+'</div>' : '')+
+      (dataTail ? '<div class="mg-data-bar'+(relayTail?'':' ec-folder-bar')+'">'+dataTail+'</div>' : '')+
       '<div class="ec-list" id="mgCatList"></div>'+
       libraryActionsHtml(),
       null,
@@ -1847,6 +1858,8 @@ function wireLibrary(page){
      each stops the event before that happens. The path answers Enter and Space as well, the way
      the same control does on the empty screen - it is a code element, so nothing is given. */
   const openFolder=e=>{ e.preventDefault(); e.stopPropagation(); eOpenCatalogFolder(); };
+  const openBtn=$("#mgCatOpen");
+  if(openBtn) openBtn.onclick=openFolder;
   if(page && page.querySelectorAll) page.querySelectorAll("code.open-folder").forEach(fpath=>{
     fpath.onclick=openFolder;
     fpath.onkeydown=e=>{ if(e.key==="Enter"||(e.key===" "&&focusRingOn(fpath))){ e.preventDefault(); e.stopPropagation(); if(!e.repeat) openFolder(e); } };

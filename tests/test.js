@@ -1411,8 +1411,8 @@ function adoptedTests() {
     const fromOffer = ["const ADOPT_REFUSED=", "function adoptedMatches(", "function adoptedRow(", "function adoptedSeen(", "function adoptedMark(",
       "function adoptedArrived(", "function adoptedDue(", "function adoptedLead(", "function adoptedEdition(", "function adoptedDate(", "function adoptedFill(",
       "function adoptedBubbleHtml(", "function adoptedSwitch(", "function adoptedBubble(", "function asideTitle(", "function ecAdoptLineHtml(",
-      "function adoptedNoteHtml(", "function adoptedMadeHtml(", "function ecActHtml(", "function ecAsideRowHtml(", "function adoptedListParts(",
-      "function ecGroupHtml(", "function ecGroupedRows(", "function putBackInUse("];
+      "function adoptedNoteHtml(", "function adoptedMadeHtml(", "function ecActHtml(", "function ecMetaHtml(", "function ecAsideRowHtml(", "function adoptedListParts(",
+      "const EC_GROUP_SENTENCE=", "function ecGroupHtml(", "function ecGroupedRows(", "function putBackInUse("];
     return new Function("scope", "with(scope){\n" + fromFile.map(d => extractDecl(fSrc, d)).join("\n") + "\n" + fromOffer.map(d => extractDecl(oSrc, d)).join("\n")
       + "\nreturn {adoptedMatches, adoptedDue, adoptedSeen, adoptedBubble, adoptedListParts, ecGroupedRows, putBackInUse, listPersonalAside, storedCatalog, setAsidePersonal};\n}")(scope);
   };
@@ -1476,7 +1476,7 @@ function adoptedTests() {
     chk("Switch sets the original aside, listed", api.listPersonalAside().map(r => r.id), ["mine-1"]);
     const ps = parts(api, w, ME, listFor(ME));
     chk("after Switch the original is a Personal row with its note and Put back in use", [ps.asideRows.length, /The team now publishes this catalog as &quot;Gift orders&quot;/.test(ps.asideRows[0] || ""),
-      /data-ec-restore="0"[^>]*title="Put back in use"/.test(ps.asideRows[0] || ""), ps.grouped], [1, true, true, true]);
+      /data-ec-restore="0"[^>]*>.*<span>Put back in use<\/span>/.test(ps.asideRows[0] || ""), ps.grouped], [1, true, true, true]);
     chk("after Switch a further listing does not tell it again", listing(api, w, ME, listFor(ME), [ROW]).due, false);
     /* a refused Switch: nothing changes and the bubble stays with a line */
     w = author(); w.trust = "invalid"; api = build(oSrc, fileSrc, w);
@@ -1508,7 +1508,8 @@ function adoptedTests() {
     const top = (html, team) => ({ html, team });
     chk("the Library groups Team catalogs and Personal catalogs, set-aside rows under Personal, desks alone at the foot", api.ecGroupedRows(
       [top("T1", true), top("P1", false), top("T2", true)], [["d1"], [], []], ["alone"], ["A1"], true),
-      ["<div class=\"ec-group\">Team catalogs</div>", "T1", "d1", "T2", "<div class=\"ec-group\">Personal catalogs</div>", "P1", "A1", "alone"]);
+      ["<div class=\"ec-group\"><span>Team catalogs</span><small>Published by the team's lead; everyone on the team works from the same edition.</small></div>", "T1", "d1", "T2",
+       "<div class=\"ec-group\"><span>Personal catalogs</span><small>Your own; one marked Private is never sent to the team.</small></div>", "P1", "A1", "alone"]);
     chk("with nothing set aside and nothing adopted the list is as it always was", api.ecGroupedRows([top("T1", true), top("P1", false)], [["d1"], []], ["alone"], [], false),
       ["T1", "d1", "P1", "alone"]);
     /* class B: Put back in use over edits not yet exported */
@@ -5317,10 +5318,11 @@ function shippedFlagTests() {
   const PLS = new Function("const UI_STRINGS={};\n" + langSrc.slice(plAt, plEnd + 3) + "\nreturn UI_STRINGS.pl;")();
   const rowOf = (o, tr) => {
     try {
-      return new Function("t", "esc", "trustKeyHtml", "ecWatchHtml", "loadedTickHtml",
+      return new Function("t", "esc", "trustKeyHtml", "V2_SIG_VALID", "V2_SIG_NONE", "ICON_SUCCESS",
         "catalogEdited", "ICON_LOAD", "ICON_EJECT",
-        extractDecl(offer, "function ecRowHtml(") + "\n" + extractDecl(offer, "function ecActHtml(") + "\nreturn ecRowHtml;")(
-        tr, s => s, (s, id) => "<key " + s + "|" + id + ">", () => "", () => "", () => false, "<svg>load</svg>", "<svg>eject</svg>")(o);
+        ["function ecMetaHtml(", "function ecInUseHtml(", "function ecSigHtml(", "function ecRowHtml(", "function ecActHtml("].map(m => extractDecl(offer, m)).join("\n")
+        + "\nreturn ecRowHtml;")(
+        tr, s => s, (s, id) => "<key " + s + "|" + id + ">", "valid", "none", "<svg class=\"ic\">tick</svg>", () => false, "<svg>load</svg>", "<svg>eject</svg>")(o);
     } catch (e) { return "ecRowHtml did not run: " + e.message; }
   };
   const sheet = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
@@ -5329,20 +5331,24 @@ function shippedFlagTests() {
     /\.ec-row \.ec-act \.ic\{width:var\(--ec-glyph\);height:var\(--ec-glyph\)\}/].map(re => re.test(sheet));
   eq("a Library row's glyphs, the loaded mark, the key and Load or Eject, share one size above a toolbar icon's 15px",
     [+glyph > 15, sized], [true, [true, true, true]]);
-  const keyThenAct = html => ((/<key ([^>]*)><button[^>]*data-ec-(load|eject)/.exec(String(html)) || []).slice(1).join(" ")) || String(html).slice(0, 120);
-  eq("a Library row's signature is a key beside its Load or Eject, carrying the state and the print of the key the list hands it", [
-    keyThenAct(rowOf({ name: "team.ec", mtime: 5, trust: "valid", print: "87ad0879ac3e9ff6" }, s => s)),
-    keyThenAct(rowOf({ name: "team.ec", loaded: true, trust: "none" }, s => s))], ["valid|87ad0879ac3e9ff6 load", "none| eject"]);
+  const keyOf = html => ((/<key ([^>]*)>/.exec(String(html)) || [])[1]) || String(html).slice(0, 120);
+  const sigWords = html => ((/<span class="ec-sigw">([^<]*)<\/span>/.exec(String(html)) || [])[1]) || "";
+  eq("a Library row's signature is a key in the whose column, carrying the state and the print of the key the list hands it, and a team row says in words whose it is", [
+    keyOf(rowOf({ name: "team.ec", mtime: 5, trust: "valid", print: "87ad0879ac3e9ff6" }, s => s)),
+    keyOf(rowOf({ name: "team.ec", loaded: true, trust: "none" }, s => s)),
+    sigWords(rowOf({ name: "team.ec", team: true, trust: "valid" }, s => s)), sigWords(rowOf({ name: "team.ec", team: true, trust: "none" }, s => s)),
+    sigWords(rowOf({ name: "mine.ec", trust: "valid" }, s => s)), sigWords(rowOf({ name: "team.ec", team: true, trust: "invalid" }, s => s))],
+    ["valid|87ad0879ac3e9ff6", "none|", "Signed by the lead", "Not signed", "", ""]);
   const acts = html => (String(html).match(/<button[^>]*>[\s\S]*?<\/button>/g) || []).map(b => {
     const at = n => ((new RegExp(" " + n + "=\"([^\"]*)\"")).exec(b) || [])[1] || "";
     return [at("aria-label"), at("title"), b.replace(/^<button[^>]*>|<\/button>$/g, "")];
   });
   const en = s => s, pl = s => PLS[s] || s;
-  eq("a Library row's Load and Eject are glyph buttons keeping their word as tooltip and accessible name, in English and Polish", [
+  eq("a Library row's Load and Eject are each a word beside its glyph, the word the button's name, in English and Polish", [
     acts(rowOf({ name: "team.ec", mtime: 5 }, en)), acts(rowOf({ name: "team.ec", loaded: true }, en)),
     acts(rowOf({ name: "team.ec", mtime: 5 }, pl)), acts(rowOf({ name: "team.ec", loaded: true }, pl))], [
-    [["Load", "Load", "<svg>load</svg>"]], [["Eject", "Eject", "<svg>eject</svg>"]],
-    [["Wczytaj", "Wczytaj", "<svg>load</svg>"]], [["Odłącz", "Odłącz", "<svg>eject</svg>"]]]);
+    [["Load", "", "<svg>load</svg><span>Load</span>"]], [["Eject", "", "<svg>eject</svg><span>Eject</span>"]],
+    [["Wczytaj", "", "<svg>load</svg><span>Wczytaj</span>"]], [["Odłącz", "", "<svg>eject</svg><span>Odłącz</span>"]]]);
 }
 /* A DIALOG TAKES THE KEYBOARD (feel pass, focus on open): openDialog and tabTargetIn are sliced out of
    dialog.js and run on a small tree written here. What a real key does there is the verifier's. */

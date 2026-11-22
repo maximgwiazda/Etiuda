@@ -4402,6 +4402,54 @@ body.e-first-signin .stage>.dotfield{content-visibility:hidden}
 }
 .sx.lm-lib .sx-card .ec-list{margin:0}
 .sx.lm-lib .sx-card .ec-row{border:0;border-radius:0;margin:0;padding:14px 16px}
+/* THE CATALOG ROWS, drawn for the room the Library has now (board 1019 (7)). The list is one panel: its first line says where catalog
+   files are read from, then the groups, then rows that read across in columns - name, edition and date, contents, whose, the act.
+   Under about 760px of list the edition and the contents fold under the name, and whose and the act stay at the right. */
+.mg-data-bar.ec-folder-bar{justify-content:flex-start;gap:10px;flex-wrap:wrap;padding:12px 16px}
+.ec-folder-bar .ec-folder-ic{flex:0 0 auto;width:18px;height:18px;color:var(--dim)}
+.ec-folder-bar .ec-folder-line{flex:1 1 16em;min-width:0;font-size:13px;color:var(--dim)}
+.ec-folder-bar code.open-folder{font:600 12.5px var(--mono);color:var(--ink);overflow-wrap:anywhere;cursor:pointer;margin-left:4px}
+.ec-folder-bar code.open-folder:hover,.ec-folder-bar code.open-folder:focus-visible{text-decoration:underline}
+.ec-folder-bar .ec-folder-btns{flex:0 0 auto;display:flex;gap:8px}
+.ec-folder-bar .ec-folder-btns .btn{padding:4px 10px;font-size:12.5px}
+#mgCatList{container-type:inline-size}
+#mgCatList .ec-group{display:flex;align-items:baseline;flex-wrap:wrap;column-gap:12px;margin:0;padding:12px 16px 6px;border-top:1px solid var(--line)}
+#mgCatList .ec-group:first-child{border-top:0}
+#mgCatList .ec-group small{font:400 12px var(--sans);letter-spacing:0;text-transform:none;color:var(--dim)}
+#mgCatList .ec-row{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(7.5em,.55fr) minmax(12.5em,1fr) minmax(9em,.75fr) auto;
+  grid-template-areas:"name edn cnt who act";column-gap:16px;align-items:center;padding:12px 16px;border-top:1px solid var(--line)}
+#mgCatList .ec-group + .ec-row{border-top:0}
+#mgCatList .ec-row.ec-empty{display:block;margin:12px 16px;border-top:1px dashed var(--line-strong)}
+#mgCatList .ec-row.is-loaded{box-shadow:inset 3px 0 0 var(--go);background:color-mix(in srgb,var(--go) 7%,var(--panel))}
+#mgCatList .ec-row .ec-name{grid-area:name}
+#mgCatList .ec-row .ec-meta{display:contents}
+#mgCatList .ec-row .ec-edn{grid-area:edn}
+#mgCatList .ec-row .ec-cnt{grid-area:cnt}
+#mgCatList .ec-row .ec-sep{display:none}
+#mgCatList .ec-row .ec-edn,#mgCatList .ec-row .ec-cnt{color:var(--dim);font-size:12px;line-height:1.4}
+#mgCatList .ec-row .ec-whose{grid-area:who;display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0}
+#mgCatList .ec-row .ec-acts{grid-area:act;display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+#mgCatList .ec-row .ec-title{flex-wrap:wrap}
+#mgCatList .ec-row .ec-name b{white-space:normal;overflow-wrap:anywhere}
+#mgCatList .ec-row .ec-sfx,#mgCatList .ec-row .ec-set{color:var(--dim);font-size:12px}
+#mgCatList .ec-row .ec-sig{display:inline-flex;align-items:center;gap:5px;color:var(--dim);font-size:12px}
+#mgCatList .ec-row .ec-copyline{display:block;color:var(--dim);font-size:11.5px}
+#mgCatList .ec-row .btn.ec-act{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;font-size:12.5px}
+#mgCatList .ec-row .ec-act .ic{width:16px;height:16px}
+#mgCatList .ec-inuse{flex:0 0 auto;display:inline-flex;align-items:center;gap:3px;padding:1px 8px 1px 5px;border-radius:999px;
+  font:600 11px/1.5 var(--sans);color:var(--go);background:color-mix(in srgb,var(--go) 12%,transparent);
+  border:1px solid color-mix(in srgb,var(--go) 35%,transparent)}
+#mgCatList .ec-inuse .ec-tick{width:12px;height:12px}
+#mgCatList .ec-row.ec-desk{margin-left:0;padding-left:44px;border-style:solid;background:transparent}
+#mgCatList .ec-row.ec-desk.is-loaded{background:color-mix(in srgb,var(--go) 7%,var(--panel))}
+#mgCatList .ec-row.ec-desk::before{left:24px;top:0;bottom:50%;width:12px}
+#mgCatList .ec-row.ec-desk.ec-alone{padding-left:16px}
+@container (max-width:760px){
+  #mgCatList .ec-row{grid-template-columns:minmax(0,1fr) auto auto;grid-template-areas:"name who act" "meta who act";row-gap:2px}
+  #mgCatList .ec-row .ec-meta{display:block;grid-area:meta}
+  #mgCatList .ec-row .ec-sep{display:inline}
+  #mgCatList .ec-row .ec-edn,#mgCatList .ec-row .ec-cnt{grid-area:auto}
+}
 /* Finding 3: ROLE suggestions width and layout (3B) */
 .sx.lm-lib:not(.is-find) .sx-card:has(details[data-mg="who"]:not([hidden])),
 .sx.lm-lib:not(.is-find) .sx-card:has(.lw-role){background:none;border:0;border-radius:0;overflow:visible;box-shadow:none}
@@ -5519,6 +5567,7 @@ body.e-host .row .win-btn:focus-visible{outline-offset:-2px}
     ICON_EYE_OPEN: () => ICON_EYE_OPEN,
     ICON_EYE_SHUT: () => ICON_EYE_SHUT,
     ICON_FLAG: () => ICON_FLAG,
+    ICON_FOLDER: () => ICON_FOLDER,
     ICON_INTENT_LINK: () => ICON_INTENT_LINK,
     ICON_KEY: () => ICON_KEY,
     ICON_LINT_WARNING: () => ICON_LINT_WARNING,
@@ -5744,6 +5793,7 @@ body.e-host .row .win-btn:focus-visible{outline-offset:-2px}
   var ICON_LINT_WARNING = '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12.5 3.5l8.5 17h-17z"/><circle cx="12.5" cy="15.25" r="1.5" fill="currentColor" stroke="none"/></svg>';
   var ICON_SUCCESS = '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4.5 13.5l5 5 11-11"/></svg>';
   var ICON_LOAD = _svg("ic", '<path d="M10 3.6v8.6"/><path d="M6.5 8.9l3.5 3.5 3.5-3.5"/><path d="M3.6 12.6v2.1a1.7 1.7 0 0 0 1.7 1.7h9.4a1.7 1.7 0 0 0 1.7-1.7v-2.1"/>');
+  var ICON_FOLDER = _svg("ic", '<path d="M3.4 6.3a1.6 1.6 0 0 1 1.6-1.6h3l1.6 1.8H15a1.6 1.6 0 0 1 1.6 1.6v6.1a1.6 1.6 0 0 1-1.6 1.6H5a1.6 1.6 0 0 1-1.6-1.6z"/>');
   var ICON_EJECT = _svg("ic", '<path d="M10 4.2l5.6 6.6H4.4z"/><path d="M4.6 15.4h10.8"/>');
   var ICON_DESK = _svg("ic", '<rect x="3.2" y="7.4" width="10" height="6.6" rx="1.6"/><path d="M8.2 14v3.2M5.8 17.2h4.8M7.2 7.4V5.6a1.6 1.6 0 0 1 1.6-1.6h6.6a1.6 1.6 0 0 1 1.6 1.6v5a1.6 1.6 0 0 1-1.6 1.6h-2.2"/>');
   var ICON_LOOK = _svg("ic", '<path d="M1.9 10S5 5.1 10 5.1 18.1 10 18.1 10 15 14.9 10 14.9 1.9 10 1.9 10Z"/><circle cx="10" cy="10" r="2.5"/>');
@@ -8185,6 +8235,15 @@ What is typed here stays in this browser.`;
     "Written after the catalog you have": "Zapisany później niż wczytany katalog",
     "Open this folder": "Otwórz ten folder",
     "Change folder…": "Zmień folder…",
+    "Catalog files are read from {PATH}": "Pliki katalogów są wczytywane z folderu {PATH}",
+    "Open folder": "Otwórz folder",
+    "In use": "W użyciu",
+    "Published by the team's lead; everyone on the team works from the same edition.": "Publikuje je lider zespołu; cały zespół pracuje na tym samym wydaniu.",
+    "Your own; one marked Private is never sent to the team.": "Własne; katalog oznaczony jako Prywatny nigdy nie trafia do zespołu.",
+    "Signed by the lead": "Podpis lidera",
+    "Not signed": "Bez podpisu",
+    "Set aside": "Odłożony",
+    "(your own)": "(własny)",
     "Eject": "Odłącz",
     "Load": "Wczytaj",
     "Choose the folder Etiuda reads catalog files from": "Wybierz folder, z którego Etiuda czyta pliki katalogów",
@@ -39159,12 +39218,20 @@ What is typed here stays in this browser.`;
     const dir = eCatalogFolder(), sep = dir.indexOf("\\") > -1 ? "\\" : "/";
     return dir + sep + "desks" + sep + id;
   }
-  function ecWatchHtml() {
-    if (!(eWatchSupported() && eWatchName())) return "";
-    return '<small class="ec-watch">' + esc(t("Watching")) + " <code>" + esc(eWatchName()) + '</code> · <span class="acts"><button type="button" class="act" data-ec-check="1" title="' + esc(t("Read that file again and offer it if it has changed")) + '">' + esc(t("Check for updates")) + '</button><span class="sep" aria-hidden="true">·</span><button type="button" class="act" data-ec-unwatch="1">' + esc(t("Stop watching")) + "</button></span></small>";
+  function ecMetaHtml(o) {
+    const ed = o.ed || "", cnt = o.cnt != null && o.cnt !== "" ? o.cnt : ed ? "" : o.meta || "";
+    if (!ed && !cnt) return "";
+    return '<small class="ec-meta">' + (ed ? '<span class="ec-edn">' + ed + "</span>" : "") + (ed && cnt ? '<span class="ec-sep"> · </span>' : "") + (cnt ? '<span class="ec-cnt">' + cnt + "</span>" : "") + "</small>";
+  }
+  function ecInUseHtml() {
+    return '<span class="ec-inuse">' + ICON_SUCCESS.replace('class="ic"', 'class="ic ec-tick"') + esc(t("In use")) + "</span>";
+  }
+  function ecSigHtml(state, print, team) {
+    const word = !team ? "" : state === V2_SIG_VALID ? "Signed by the lead" : state === V2_SIG_NONE ? "Not signed" : "";
+    return '<span class="ec-sig">' + trustKeyHtml(state || "", print || "") + (word ? '<span class="ec-sigw">' + esc(t(word)) + "</span>" : "") + "</span>";
   }
   function ecRowHtml(o) {
-    return '<div class="ec-row' + (o.loaded ? " is-loaded" : "") + '"' + (o.file ? ' data-ec-file="' + esc(o.file) + '"' : "") + '><span class="ec-name"><span class="ec-title"><b>' + esc(o.name) + "</b>" + (o.lockHtml || "") + "</span>" + (o.meta ? '<small class="ec-meta">' + o.meta + "</small>" : "") + (o.loaded ? ecWatchHtml() : "") + (o.extra || "") + "</span>" + (o.loaded ? loadedTickHtml() : "") + (o.newer && !o.sample ? '<span class="ec-tag" title="' + esc(t("Written after the catalog you have")) + '">' + esc(t("Newer")) + "</span>" : "") + (o.loaded && catalogEdited() ? '<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="' + esc(t("Save everything loaded now as a catalog file, your edits merged in")) + '">' + esc(t("Export…")) + "</button>" : "") + (o.teamHtml || "") + trustKeyHtml(o.trust || "", o.print || "") + (o.loaded ? ecActHtml("Eject", ICON_EJECT, ' data-ec-eject="1"') : ecActHtml("Load", ICON_LOAD, ' data-ec-load="' + esc(o.name) + '" data-ec-at="' + (+o.mtime || 0) + '"')) + "</div>";
+    return '<div class="ec-row' + (o.loaded ? " is-loaded" : "") + '"' + (o.file ? ' data-ec-file="' + esc(o.file) + '"' : "") + '><span class="ec-name"><span class="ec-title"><b>' + esc(o.name) + "</b>" + (o.lockHtml || "") + (o.loaded ? ecInUseHtml() : "") + (o.newer && !o.sample ? '<span class="ec-tag" title="' + esc(t("Written after the catalog you have")) + '">' + esc(t("Newer")) + "</span>" : "") + "</span>" + (o.copy || "") + (o.extra || "") + "</span>" + ecMetaHtml(o) + '<span class="ec-whose">' + (o.teamHtml || "") + ecSigHtml(o.trust, o.print, !!o.team) + '</span><span class="ec-acts">' + (o.loaded && catalogEdited() ? '<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="' + esc(t("Save everything loaded now as a catalog file, your edits merged in")) + '">' + esc(t("Export…")) + "</button>" : "") + (o.loaded ? ecActHtml("Eject", ICON_EJECT, ' data-ec-eject="1"') : ecActHtml("Load", ICON_LOAD, ' data-ec-load="' + esc(o.name) + '" data-ec-at="' + (+o.mtime || 0) + '"')) + "</span></div>";
   }
   function ecExportHtml() {
     return catalogEdited() ? '<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="' + esc(t("Save everything loaded now as a catalog file, your edits merged in")) + '">' + esc(t("Export…")) + "</button>" : "";
@@ -39172,7 +39239,7 @@ What is typed here stays in this browser.`;
   function ecDeskRowHtml(f, o) {
     const who = deskName(f);
     const tip = t("Signed by {DESK}, key {KEY}. Only that teammate can change this file; anyone with the folder can read it.").split("{DESK}").join(who).split("{KEY}").join(deskKey(f));
-    return '<div class="ec-row ec-desk' + (o.nested ? "" : " ec-alone") + (o.loaded ? " is-loaded" : "") + '" data-ec-desk="' + o.at + '"><span class="ec-name"><b>' + esc(who) + (o.twin ? '<span class="ec-fp">' + esc(o.twin) + "</span>" : "") + '</b><small class="ec-meta">' + o.meta + "</small>" + (o.extra || "") + "</span>" + (o.loaded ? loadedTickHtml() + ecExportHtml() : "") + '<span class="ec-who" role="img" tabindex="0" aria-label="' + esc(who) + '" data-tip="' + esc(tip) + '" data-tip-key="' + esc(String(f.desk.id).slice(2)) + '" data-tip-kind="desk">' + ICON_DESK + "</span>" + ecActHtml("See what changed", ICON_LOOK, ' data-ec-look="' + o.at + '"') + (o.loaded ? ecActHtml("Eject", ICON_EJECT, ' data-ec-eject="1"') : ecActHtml("Work from this file", ICON_LOAD, ' data-ec-work="' + o.at + '"')) + "</div>";
+    return '<div class="ec-row ec-desk' + (o.nested ? "" : " ec-alone") + (o.loaded ? " is-loaded" : "") + '" data-ec-desk="' + o.at + '"><span class="ec-name"><span class="ec-title"><b>' + esc(who) + (o.twin ? '<span class="ec-fp">' + esc(o.twin) + "</span>" : "") + "</b>" + (o.loaded ? ecInUseHtml() : "") + "</span>" + (o.extra || "") + "</span>" + ecMetaHtml(o) + '<span class="ec-whose"><span class="ec-who" role="img" tabindex="0" aria-label="' + esc(who) + '" data-tip="' + esc(tip) + '" data-tip-key="' + esc(String(f.desk.id).slice(2)) + '" data-tip-kind="desk">' + ICON_DESK + '</span></span><span class="ec-acts">' + (o.loaded ? ecExportHtml() : "") + ecActHtml("See what changed", ICON_LOOK, ' data-ec-look="' + o.at + '"') + (o.loaded ? ecActHtml("Eject", ICON_EJECT, ' data-ec-eject="1"') : "") + "</span></div>";
   }
   function ecMineHtml(line, glyph, fault) {
     return '<small class="ec-mine"' + (fault ? ' data-ec-fault="' + esc(fault) + '"' : "") + ">" + (glyph ? ICON_DESK : "") + "<span>" + esc(line) + "</span></small>";
@@ -39217,18 +39284,14 @@ What is typed here stays in this browser.`;
   }
   function ecActHtml(word, icon, attrs) {
     const w = esc(t(word));
-    return '<button type="button" class="btn icbtn ec-act"' + attrs + ' title="' + w + '" aria-label="' + w + '">' + icon + "</button>";
+    return '<button type="button" class="btn ec-act"' + attrs + ' aria-label="' + w + '">' + icon + "<span>" + w + "</span></button>";
   }
   function ecEmptyHtml() {
     const dir = eCatalogFolder();
     if (!dir) return "";
     return '<div class="ec-row ec-empty">' + t("Catalog files in {FOLDER} appear here: load one from anywhere else, or put it in the folder.").split("{FOLDER}").join('<code class="open-folder" data-ec-open="1" role="button" tabindex="0" title="' + esc(dir) + '">' + esc(eCatalogFolderShort()) + "</code>") + "</div>";
   }
-  function loadedTickHtml() {
-    const name = esc(t("Loaded"));
-    return ICON_SUCCESS.replace('class="ic"', 'class="ic ec-tick"').replace(' aria-hidden="true"', ' role="img" aria-label="' + name + '"').replace("><path", "><title>" + name + "</title><path");
-  }
-  function ecMeta(stamp, f) {
+  function ecMeta(stamp, f, split) {
     const parts2 = [stamp, f.cards >= 0 ? catalogCountsLine(
       "{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
       f.cards,
@@ -39236,7 +39299,8 @@ What is typed here stays in this browser.`;
       f.intents,
       f.cats
     ) : ""].filter(Boolean).map(esc);
-    return parts2.concat(f.cards >= 0 ? ecAwaitingHtml(f.awaiting) : []).join(" · ");
+    const all = parts2.concat(f.cards >= 0 ? ecAwaitingHtml(f.awaiting) : []);
+    return split ? [stamp ? esc(stamp) : "", all.slice(stamp ? 1 : 0).join(" · ")] : all.join(" · ");
   }
   function liveAwaiting() {
     return CONTENT_LANGS.slice(1).map((code) => {
@@ -39252,19 +39316,18 @@ What is typed here stays in this browser.`;
     const gone = new Set(pack.intentRemoved || []);
     return intentOrder.filter((i) => !gone.has(intentIdAt(i))).length;
   }
-  function loadedMeta(stamp) {
+  function loadedMeta(stamp, split) {
     const held = editionNameOf({ version: E_CATALOG_VERSION, rev: E_CATALOG_REV }), ver = held.r != null || held.e ? editionLabel(held) : "";
-    const parts2 = [
-      ver || stamp,
-      catalogCountsLine(
-        "{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
-        (cards || []).length,
-        totalMacroCount(),
-        liveIntentCount(),
-        Object.keys(CATS).length
-      )
-    ].filter(Boolean).map(esc);
-    return parts2.concat(ecAwaitingHtml(liveAwaiting())).join(" · ");
+    const counts2 = catalogCountsLine(
+      "{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
+      (cards || []).length,
+      totalMacroCount(),
+      liveIntentCount(),
+      Object.keys(CATS).length
+    );
+    const parts2 = [ver || stamp, counts2].filter(Boolean).map(esc);
+    const all = parts2.concat(ecAwaitingHtml(liveAwaiting()));
+    return split ? [ver || stamp ? esc(ver || stamp) : "", all.slice(ver || stamp ? 1 : 0).join(" · ")] : all.join(" · ");
   }
   function ecCopyHtml(f) {
     return f.builtIn ? '<span class="ec-copy" data-ec-copy="builtin">' + esc(t("comes with Etiuda")) + "</span>" : "";
@@ -39280,6 +39343,7 @@ What is typed here stays in this browser.`;
     if (!content || !content.team || !id) return { lockHtml: "", teamHtml: "" };
     if (isTeamCatalogPin(pin, content)) {
       return {
+        team: true,
         lockHtml: "",
         teamHtml: '<span class="ec-team">' + sxIcon("people") + '<span data-i18n-text="Team catalog">' + esc(t("Team catalog")) + "</span></span>"
       };
@@ -39345,7 +39409,7 @@ What is typed here stays in this browser.`;
       const tops = files.map((f, i) => {
         const on = i === onAt;
         const stamp = catalogStamp(f.edition, f.mtime, f.rev);
-        const copy2 = ecCopyHtml(f), meta = on ? loadedMeta(stamp) : ecMeta(stamp, f);
+        const copy2 = ecCopyHtml(f), meta = on ? loadedMeta(stamp, true) : ecMeta(stamp, f, true);
         const share = rowShareParts(String(f.id || ""), f.sha, content);
         return { id: f.id, sha: f.sha, on, team: f.leadSigned === true, html: ecRowHtml({
           name: f.name,
@@ -39354,7 +39418,10 @@ What is typed here stays in this browser.`;
           loaded: on,
           newer: at > 0 && f.mtime > at,
           sample: !!f.sample,
-          meta: copy2 && meta ? copy2 + " · " + meta : copy2 || meta,
+          ed: meta[0],
+          cnt: meta[1],
+          copy: copy2 ? '<small class="ec-copyline">' + copy2 + "</small>" : "",
+          team: f.leadSigned === true,
           trust: on ? heldCatalogTrust() : "",
           print: on ? heldCatalogPrint() : "",
           extra: extraFor(f.id, on) + adoptFor(f.id, on, f.leadSigned === true),
@@ -39368,7 +39435,9 @@ What is typed here stays in this browser.`;
           name: shownCatalogName(catalogFileName()),
           loaded: true,
           newer: false,
-          meta: loadedMeta(""),
+          ed: loadedMeta("", true)[0],
+          cnt: loadedMeta("", true)[1],
+          team: !!(share && share.team),
           trust: heldCatalogTrust(),
           print: heldCatalogPrint(),
           extra: mineLine + adoptFor(heldId, true, false),
@@ -39385,12 +39454,14 @@ What is typed here stays in this browser.`;
         const g = f.grew, on = i === deskOn, stamp = catalogStamp(f.edition, f.mtime, f.rev);
         const of = g ? tops.map((x, k) => k).filter((k) => !!tops[k].id && tops[k].id === g.id) : [];
         const p = [of.find((k) => tops[k].on), of.find((k) => tops[k].sha === g.sha), of[0]].find((k) => k != null);
-        const meta = on ? loadedMeta(stamp) : p != null ? esc(stamp) : g ? ecMeta(stamp, f) : esc(t("A catalog of its own")) + " · " + ecMeta(stamp, f);
+        const split = on ? loadedMeta(stamp, true) : p != null ? [esc(stamp), ""] : ecMeta(stamp, f, true);
+        const meta = !on && p == null && !g ? [split[0], esc(t("A catalog of its own")) + (split[1] ? " · " + split[1] : "")] : split;
         (p != null ? under[p] : alone).push(ecDeskRowHtml(f, {
           at: i,
           nested: p != null,
           loaded: on,
-          meta,
+          ed: meta[0],
+          cnt: meta[1],
           extra: extraFor(f.id, on),
           twin: named2.get(deskName(f)) > 1 ? deskKey(f).slice(0, 4) : ""
         }));
@@ -39398,7 +39469,7 @@ What is typed here stays in this browser.`;
       });
       ecKeyBubClose();
       closeTeamBubble("ePrivateBubble");
-      const rows = ecGroupedRows(tops, under, alone, parts2.asideRows, parts2.grouped);
+      const rows = ecGroupedRows(tops, under, alone, parts2.asideRows, parts2.grouped || !!(content && content.team));
       if ((outboxUnread || takenBack) && !rows.some((r) => r.indexOf("data-ec-fault") >= 0)) rows.unshift(mineLine);
       box.innerHTML = rows.length ? rows.join("") : ecEmptyHtml();
       markCutText(box);
@@ -39422,22 +39493,23 @@ What is typed here stays in this browser.`;
       });
       nested.forEach((i) => deskChangeWords(desks[i], deskBase(desks[i], files, held)).then((words) => {
         const row2 = box.querySelector('[data-ec-desk="' + i + '"]'), meta = row2 && row2.querySelector(".ec-meta");
-        if (meta && words && words.length) meta.textContent = words.concat([catalogStamp(desks[i].edition, desks[i].mtime, desks[i].rev)]).join(" · ");
+        if (meta && words && words.length) {
+          const stamp = catalogStamp(desks[i].edition, desks[i].mtime, desks[i].rev);
+          meta.innerHTML = '<span class="ec-edn"></span><span class="ec-sep"> · </span><span class="ec-cnt"></span>';
+          meta.querySelector(".ec-edn").textContent = stamp;
+          meta.querySelector(".ec-cnt").textContent = words.join(" · ");
+        }
       }));
       box.querySelectorAll("button[data-ec-look]").forEach((b) => {
         const f = desks[+b.getAttribute("data-ec-look")];
         b.onclick = () => lookAtDesk(f, files, held);
       });
-      box.querySelectorAll("button[data-ec-work]").forEach((b) => {
-        const f = desks[+b.getAttribute("data-ec-work")];
-        b.onclick = () => loadCatalogFromFolder(f.name, f.mtime, f.desk.id);
-      });
       files.forEach((f, i) => ecFileTrust(f).then((r) => {
         const row2 = Array.from(box.querySelectorAll(".ec-row")).find((x) => x.getAttribute("data-ec-file") === f.name);
-        const key = row2 && row2.querySelector(".ec-key");
-        if (!key) return;
-        key.insertAdjacentHTML("beforebegin", trustKeyHtml(i === onAt ? heldCatalogTrust() : r.state, i === onAt ? heldCatalogPrint() : r.print));
-        key.remove();
+        const sig = row2 && row2.querySelector(".ec-sig");
+        if (!sig) return;
+        sig.insertAdjacentHTML("beforebegin", ecSigHtml(i === onAt ? heldCatalogTrust() : r.state, i === onAt ? heldCatalogPrint() : r.print, f.leadSigned === true));
+        sig.remove();
         wireEcKeys(row2);
       }));
       box.querySelectorAll("button[data-ec-load]").forEach((b) => {
@@ -39454,13 +39526,6 @@ What is typed here stays in this browser.`;
       });
       const exp = box.querySelector("button[data-ec-export]");
       if (exp) exp.onclick = () => exportCatalog();
-      const chk = box.querySelector("button[data-ec-check]");
-      if (chk) chk.onclick = () => eCheckWatchedFile(true);
-      const stop = box.querySelector("button[data-ec-unwatch]");
-      if (stop) stop.onclick = () => eWatchClear().then(() => {
-        toast(t("No longer watching that file."));
-        paintCatalogList();
-      });
       const dir = box.querySelector("[data-ec-open]");
       if (dir) wireFolderLink(dir);
     }, () => {
@@ -40168,8 +40233,8 @@ What is typed here stays in this browser.`;
   }
   function ecAsideRowHtml(r, i, note) {
     const stamp = catalogStamp(r.edition, r.at, r.rev);
-    const meta = [stamp, r.macros >= 0 ? catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}", r.cards, r.macros, r.intents, Math.max(0, r.cats)) : ""].filter(Boolean).map(esc).join(" · ");
-    return '<div class="ec-row ec-aside" data-ec-aside="' + i + '"><span class="ec-name"><b data-i18n-skip>' + esc(asideTitle(r)) + "</b>" + (meta ? '<small class="ec-meta">' + meta + "</small>" : "") + (note || "") + "</span>" + ecActHtml("Put back in use", ICON_LOAD, ' data-ec-restore="' + i + '"') + "</div>";
+    const counts2 = r.macros >= 0 ? catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}", r.cards, r.macros, r.intents, Math.max(0, r.cats)) : "";
+    return '<div class="ec-row ec-aside" data-ec-aside="' + i + '"><span class="ec-name"><span class="ec-title"><b data-i18n-skip>' + esc(asideTitle(r)) + '</b><span class="ec-sfx">' + esc(t("(your own)")) + "</span></span>" + (note || "") + "</span>" + ecMetaHtml({ ed: esc(stamp), cnt: esc(counts2) }) + '<span class="ec-whose"><span class="ec-set">' + esc(t("Set aside")) + '</span></span><span class="ec-acts">' + ecActHtml("Put back in use", ICON_LOAD, ' data-ec-restore="' + i + '"') + "</span></div>";
   }
   function adoptedListParts(adopted, me, held, looseId, aside, all, current) {
     const asideShown = aside.filter((r) => held ? String(held.id || "") !== r.id : r.id !== looseId);
@@ -40185,8 +40250,12 @@ What is typed here stays in this browser.`;
     const asideRows = asideShown.map((r, i) => ecAsideRowHtml(r, i, matches.filter((m) => m.aside === r.id && !m.current).map(noteFor2).join("")));
     return { matches, asideShown, asideRows, adoptFor, grouped: asideShown.length > 0 || matches.length > 0 };
   }
+  var EC_GROUP_SENTENCE = {
+    "Team catalogs": "Published by the team's lead; everyone on the team works from the same edition.",
+    "Personal catalogs": "Your own; one marked Private is never sent to the team."
+  };
   function ecGroupHtml(word) {
-    return '<div class="ec-group">' + esc(t(word)) + "</div>";
+    return '<div class="ec-group"><span>' + esc(t(word)) + "</span><small>" + esc(t(EC_GROUP_SENTENCE[word])) + "</small></div>";
   }
   function ecGroupedRows(tops, under, alone, asideRows, grouped) {
     const withUnder = (k) => [tops[k].html].concat(under[k]);
@@ -40545,6 +40614,11 @@ What is typed here stays in this browser.`;
     const pathId = withId ? ' id="mgCatFolderPath"' : "";
     const editId = withId ? ' id="mgCatFolder"' : "";
     return '<span class="ec-where"><code class="open-folder"' + pathId + ' role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '" aria-label="' + esc(t("Open this folder")) + ": " + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + "</code>" + (eCatalogFolderPinned() ? "" : '<button type="button" class="btn icbtn ec-where-edit"' + editId + ' title="' + esc(t("Change folder…")) + '" aria-label="' + esc(t("Change folder…")) + '">' + ICON_EDIT + "</button>") + "</span>";
+  }
+  function catalogFolderBar() {
+    const dir = eCatalogFolder();
+    const path = '<code class="open-folder" id="mgCatFolderPath" role="button" tabindex="0" title="' + esc(dir) + '" aria-label="' + esc(t("Open this folder")) + ": " + esc(dir) + '">' + esc(dir) + "</code>";
+    return ICON_FOLDER.replace('class="ic"', 'class="ic ec-folder-ic"') + '<span class="ec-folder-line">' + esc(t("Catalog files are read from {PATH}")).split("{PATH}").join(path) + '</span><span class="ec-folder-btns"><button type="button" class="btn" id="mgCatOpen">' + esc(t("Open folder")) + "</button>" + (eCatalogFolderPinned() ? "" : '<button type="button" class="btn ec-where-edit" id="mgCatFolder">' + esc(t("Change folder…")) + "</button>") + "</span>";
   }
   function mgSec(key, title, body, count, tail) {
     return '<details class="manage-sec" data-mg="' + esc(key) + '"' + (mgOpen.has(key) ? " open" : "") + '><summary><span class="acc-tw" aria-hidden="true">' + ICON_CHEVRON_R + "</span><h3>" + esc(title) + "</h3>" + (count != null ? '<span class="mg-count">' + esc(String(count)) + "</span>" : "") + (tail || "") + '</summary><div class="manage-secbody">' + body + "</div></details>";
@@ -41753,8 +41827,9 @@ What is typed here stays in this browser.`;
     const hiddenIntentCount = mgIntentIdxs.filter((i) => isIntentHiddenIdx(i)).length;
     let relayLead = null;
     relayLead = libraryRelayLead();
-    const dataTail = relayLead ? '<span class="ec-where"><small>' + esc(t("Relay: {HOST}").split("{HOST}").join(relayLead.relay)) + "</small></span>" : eCatalogFolder() ? catalogFolderTail(true) : "";
-    const summaryTail = relayLead || !eCatalogFolder() ? dataTail : catalogFolderTail(false);
+    const relayTail = relayLead ? '<span class="ec-where"><small>' + esc(t("Relay: {HOST}").split("{HOST}").join(relayLead.relay)) + "</small></span>" : "";
+    const dataTail = relayTail || (eCatalogFolder() ? catalogFolderBar() : "");
+    const summaryTail = relayLead || !eCatalogFolder() ? relayTail : catalogFolderTail(false);
     const mgBody = "" + mgSec(
       "catmac",
       "Categories & cards",
@@ -41790,7 +41865,7 @@ What is typed here stays in this browser.`;
     mgSec(
       "data",
       "Catalog & data",
-      (dataTail ? '<div class="mg-data-bar">' + dataTail + "</div>" : "") + '<div class="ec-list" id="mgCatList"></div>' + libraryActionsHtml(),
+      (dataTail ? '<div class="mg-data-bar' + (relayTail ? "" : " ec-folder-bar") + '">' + dataTail + "</div>" : "") + '<div class="ec-list" id="mgCatList"></div>' + libraryActionsHtml(),
       null,
       summaryTail
     );
@@ -42050,6 +42125,8 @@ What is typed here stays in this browser.`;
       e.stopPropagation();
       eOpenCatalogFolder();
     };
+    const openBtn = $("#mgCatOpen");
+    if (openBtn) openBtn.onclick = openFolder;
     if (page && page.querySelectorAll) page.querySelectorAll("code.open-folder").forEach((fpath) => {
       fpath.onclick = openFolder;
       fpath.onkeydown = (e) => {
