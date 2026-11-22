@@ -477,6 +477,9 @@ const LINK_NO_TEAM = "This invitation names no team this desk can join, so nothi
 const LINK_NO_TEAM_PL = "To zaproszenie nie wskazuje zespołu, do którego to stanowisko mogłoby dołączyć, więc niczego nie wysłano. Nowe wystawi lider zespołu.";
 const LINK_LONG = "This invitation is longer than Etiuda opens, so it was not opened. Ask your lead for a new one.";
 const LINK_LONG_PL = "To zaproszenie jest dłuższe, niż Etiuda może otworzyć, więc go nie otwarto. Nowe wystawi lider zespołu.";
+/* The copywriter's words; the relay's lead-other refusal is said in them too (joinLeadOther). */
+const LINK_KEY = "This invitation link does not match its team's lead: it may be damaged or altered, or the team may have a new lead since it was sent. Nothing was used or sent. A new link from the team's lead, or an invitation to this account's email address, works.";
+const LINK_KEY_PL = "Ten link z zaproszeniem nie zgadza się z liderem zespołu: mógł zostać uszkodzony albo zmieniony, albo zespół ma już innego lidera niż w chwili wysłania. Niczego nie użyto ani nie wysłano. Zadziała nowy link od lidera zespołu albo zaproszenie na adres e-mail tego konta.";
 function linkRefusal(en, pl) { return { refused: en, saidEn: en, saidPl: pl }; }
 function linkLooks(s) {
   const head = s.slice(0, 12).toLowerCase();
@@ -495,6 +498,7 @@ function linkFromArg(arg) {
   const parsed = inviteRead(handed, process.platform !== "win32");
   if (!parsed) return linkRefusal(LINK_FORM, LINK_FORM_PL);
   if (!parsed.relay) return linkRefusal(LINK_FOLDER, LINK_FOLDER_PL); /* plant:link-folder */
+  if (!inviteKeyHolds(parsed)) return linkRefusal(LINK_KEY, LINK_KEY_PL); /* plant:link-key */
   return { text: handed, parsed: parsed };
 }
 function linkArgFrom(argv) {
@@ -503,6 +507,23 @@ function linkArgFrom(argv) {
 }
 let pendingLink = null, pendingLinkArg = "";
 let heldLinkText = "", heldLinkView = null;
+/* Links a second launch hands over while the start's own link waits for the first window, and any after them: each is offered in
+   turn once the one before is answered, by Cancel or by a yes, and a repeat of one already waiting is not offered twice. */
+const linkQueue = [];
+function queueLink(arg) {
+  if (!pendingLinkArg && !linkQueue.length) return false;
+  if (arg !== pendingLinkArg && linkQueue.indexOf(arg) < 0) linkQueue.push(arg);
+  return true;
+}
+/* On the shell's next turn, so the answer to the press reaches the page before the next confirm does. */
+function offerNextLink() {
+  if (!linkQueue.length) return;
+  setTimeout(() => {
+    const next = linkQueue.shift();
+    try { if (next) acceptLink(next); }
+    catch (e) { console.error("etiuda: a waiting link could not be offered - " + (e && e.message || e)); }
+  }, 0);
+}
 /* What the page may see of a link: the lead's name, the team and the relay's host. The invitation
    text stays here, so a yes can name it and the secret never enters the renderer. */
 function linkOfferView(view, parsed) {
@@ -559,6 +580,7 @@ function declineHeldLink() {
   heldLinkView = null;
   pendingLink = null;
   pendingLinkArg = "";
+  offerNextLink(); /* plant:link-next-no */
   return joinView();
 }
 async function takeHeldLink(name) {
@@ -572,6 +594,7 @@ async function takeHeldLink(name) {
     heldLinkView = null;
     pendingLink = null;
     pendingLinkArg = "";
+    offerNextLink(); /* plant:link-next-yes */
   }
   return ans;
 }
@@ -6404,6 +6427,15 @@ function inviteRead(text, posix) {
   }
   return out;
 }
+/* Whether a relay invitation's lead key is the one its key id names, by any form the relay takes for a lead (relay/core.cjs
+   leadKeyMatches), so the key a yes pins is never a claim beside the id. A folder invitation's id is the share's to choose. */
+function inviteKeyHolds(parsed) {
+  if (!parsed || !parsed.relay) return true;
+  const pub = String(parsed.lead && parsed.lead.public || ""), id = String(parsed.lead && parsed.lead.keyId || "");
+  if (!/^[0-9a-f]{64}$/.test(pub)) return false;
+  const print = crypto.createHash("sha256").update(Buffer.from(pub, "hex")).digest("hex").slice(0, 16);
+  return id === pub || id === "k-" + print || id === "studio-" + print;
+}
 /* An invitation's relay as {rt, url, token, inv}, or null where any field is not that shape: the address as a team file's
    channel takes it (https, a host, a path), the token 32 bytes and the invitation's id 16, in lower-case hex. */
 function inviteRelay(r) {
@@ -6629,6 +6661,21 @@ function cancelJoin() {
   if (b && newestEpoch(j.team, wrapped) === (b.epoch || 0)) undoInvite(j.team, b, j.invite); /* plant:c7-cancel */
   persistDeskEnvelope();
   return joinView();
+}
+/* The relay refused this join's token hello because the lead key this desk pinned from the invitation is not the team's lead.
+   Nothing was spent and nothing reached the lead, so the request and all the invitation set go back as Cancel puts them, the
+   pin included, and the person is told in the link's own sentence. */
+function joinLeadOther(team) {
+  const j = teamJoin;
+  if (!j || j.team !== team || !j.invite || !j.invite.relay || j.invite.relay.door === true) return;
+  if (deskBranch) { try { unlinkOwn(joinFile()); } catch { /* gone already */ } }
+  teamJoin = null;
+  joinTold = false;
+  if (j.invite.before) undoInvite(team, j.invite.before, j.invite); /* plant:lead-other-undo */
+  persistDeskEnvelope();
+  console.error("etiuda: " + LINK_KEY + " " + LINK_KEY_PL);
+  heldLinkText = "";
+  handLinkView(Object.assign({}, joinView(), { linkRefusal: { en: LINK_KEY, pl: LINK_KEY_PL } }));
 }
 /* What an invitation changes for `team`, as this desk holds it before: an entry the desk did not hold is left out, and `epoch`
    is the newest key it held, the mark Cancel compares the key it holds then with. */
@@ -6979,6 +7026,7 @@ function readInvite(text, io) {
   const shut = inviteDoor(parsed);
   if (shut) return Object.assign({}, view, { refused: shut });
   if (!parsed) return Object.assign({}, view, { refused: "unread" });
+  if (!inviteKeyHolds(parsed)) return Object.assign({}, view, { refused: "unread" }); /* plant:read-key */
   const settled = inviteSettled(parsed.team, parsed.lead);
   if (settled && !inviteStranded(parsed)) return Object.assign({}, view, { refused: settled });
   /* A relay invitation is judged by what it is and not by how it arrived: the lead, the team and the relay's host, and no check
@@ -7081,6 +7129,7 @@ async function takeInvite(text, name, check) {
   const shut = inviteDoor(parsed);
   if (shut) return Object.assign({}, joinView(), { refused: shut });
   if (!parsed) return Object.assign({}, joinView(), { refused: "unread" });
+  if (!inviteKeyHolds(parsed)) return Object.assign({}, joinView(), { refused: "unread" }); /* plant:take-key */
   const settled = inviteSettled(parsed.team, parsed.lead);
   const stranded = !!settled && inviteStranded(parsed);
   if (settled && !stranded) return Object.assign({}, joinView(), { refused: settled });
@@ -8095,6 +8144,9 @@ function relayRun() {
       if (wrapKey && wrapKey.length === 32) out.wrapKey = wrapKey;
       /* The lead's box the invitation named, so this desk finds its own copy of the team file before it holds one (F6). */
       if (/^[0-9a-f]{64}$/.test(String(inv.box))) out.box = inv.box; /* plant:f6-box-lent */
+      /* The lead key this desk pinned, which the token hello names so the relay refuses it, unspent, where it is not the team's lead. */
+      const pinNow = teamPins[team];
+      if (pinNow && /^[0-9a-f]{64}$/.test(String(pinNow.public))) out.lead = pinNow.public; /* plant:token-lead-pin */
       return out;
     },
     /* The relay named this desk's request at the standing door: kept, and the request written with its seat and that id. */
@@ -8121,6 +8173,7 @@ function relayRun() {
     /* The relay refused this invitation's token, as spent or past its end, or turned a door request away. Kept with the request,
        and the page told now. */
     onInviteEnd: kind => {
+      if (kind === "other") { joinLeadOther(team); return; } /* plant:lead-other-join */
       const j = teamJoin, inv = j && j.team === team && j.invite && j.invite.relay;
       const known = kind === "used" || kind === "ended" || kind === "removed" || (kind === "turned" && !!inv && inv.door === true);
       if (!known || !inv || inv.end === kind) return;
@@ -17025,7 +17078,7 @@ function onSecondInstance(argv) {
     return;
   }
   const link = linkArgFrom(args);
-  if (link) acceptLink(link);
+  if (link && !queueLink(link)) acceptLink(link); /* plant:link-queue */
   const file = ecFromArgv(args);
   if (args.indexOf("--hidden") > -1) {
     if (file) offerFile(theWindow, file);

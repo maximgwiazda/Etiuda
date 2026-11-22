@@ -63,7 +63,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 533;
+const EXPECTED = 535;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -82,7 +82,7 @@ function markPart(id) {
 }
 /* One part, or several separated by commas. Empty runs every part, which is the release run. */
 const ONLY = new Set(String(process.env.RELAY_CHANNEL_ONLY || "").split(",").map((s) => s.trim()).filter(Boolean));
-const DESK_PARTS = new Set(["pDesk", "p962s5", "p962s6", "p944g", "p921", "p961re", "p978", "p989d", "p932m", "p939", "p987"]);
+const DESK_PARTS = new Set(["pDesk", "pLeadKey", "p962s5", "p962s6", "p944g", "p921", "p961re", "p978", "p989d", "p932m", "p939", "p987"]);
 function partOn(id) {
   return ONLY.size === 0 || ONLY.has(id);
 }
@@ -2168,6 +2168,69 @@ if (deskOn()) try {
       dropCopiedChannel();
     }
     return { turned: turned, back: sha(fs.readFileSync(file)) === digest, detail: detail };
+  }
+  /* A relay link with both its lead key id and its public key replaced, the id remade from the new key, which the desk's own reading
+     cannot tell from the genuine one. Its token hello names the lead key the desk pinned, and the relay refuses it as not the team's
+     lead before the token is spent; the desk lets the join and its pin go and says so in the link's sentence; the genuine invitation,
+     the same token, then joins under the real lead (jlk3). Each new line, lifted alone, turns that red (jlk4). */
+  if (partOn("pLeadKey")) {
+    const LINK_KEY_EN = "This invitation link does not match its team's lead: it may be damaged or altered, or the team may have a new lead since it was sent. Nothing was used or sent. A new link from the team's lead, or an invitation to this account's email address, works.";
+    const LINK_KEY_PL = "Ten link z zaproszeniem nie zgadza się z liderem zespołu: mógł zostać uszkodzony albo zmieniony, albo zespół ma już innego lidera niż w chwili wysłania. Niczego nie użyto ani nie wysłano. Zadziała nowy link od lidera zespołu albo zaproszenie na adres e-mail tego konta.";
+    let leadRuns = 0;
+    async function leadKeyRun(source) {
+      const genuine = await relayInviteOn(RT2, TEAM2);
+      const fake = keyPair(false);
+      const doc = JSON.parse(Buffer.from(genuine.text.slice("etiuda-join:".length), "base64url").toString("utf8"));
+      doc.lead = { keyId: "studio-" + sha(Buffer.from(fake.pub, "hex")).slice(0, 16), public: fake.pub, name: "Ada Quay" };
+      const crafted = "etiuda-join:" + Buffer.from(JSON.stringify(doc), "utf8").toString("base64url");
+      const n = leadRuns++;
+      const share = path.join(LAB, "lead-key-share-" + n);
+      fs.mkdirSync(share, { recursive: true });
+      const Dl = await newDesk("lead-key-" + n, share, source ? { source } : undefined);
+      const row = () => R.stores.get(RT2).get("inv:" + genuine.inv);
+      const drive = async () => { const ch = Dl.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); } };
+      const craftedTaken = await Dl.ask("etiuda:team-join", "invite", crafted, "Desk Eleven", "");
+      const pinnedFake = !!(Dl.envelope().teamPins && Dl.envelope().teamPins[TEAM2] && Dl.envelope().teamPins[TEAM2].public === fake.pub);
+      const letGo = await until(async () => { await drive(); const env = Dl.envelope(); return !env.teamJoin && !(env.teamPins && env.teamPins[TEAM2]); }, 8000);
+      const r1 = row();
+      const unspent = !!r1 && !r1.spent;
+      const said = Dl.said.some(l => l.indexOf(LINK_KEY_EN) >= 0 && l.indexOf(LINK_KEY_PL) >= 0);
+      const genuineTaken = await Dl.ask("etiuda:team-join", "invite", genuine.text, "Desk Eleven", "");
+      const spent = await until(async () => { await drive(); const r = row(); return !!r && r.spent === true; }, 8000);
+      const env2 = Dl.envelope();
+      const pin2 = env2.teamPins && env2.teamPins[TEAM2];
+      const joined = !!(env2.teamJoin && env2.teamJoin.team === TEAM2) && !!pin2 && pin2.public === LEAD.pub && !(env2.teamJoin.invite.relay.end);
+      const ok = !!craftedTaken && !craftedTaken.refused && pinnedFake && letGo && unspent && said
+        && !!genuineTaken && !genuineTaken.refused && spent && joined;
+      const note = "crafted " + (craftedTaken && craftedTaken.refused ? "refused " + craftedTaken.refused : "taken")
+        + (pinnedFake ? ", pinned to its key" : ", not pinned to its key") + ", " + (letGo ? "join and pin let go" : "join or pin kept")
+        + ", token " + (unspent ? "unspent" : "spent") + ", " + (said ? "said" : "not said")
+        + "; genuine " + (genuineTaken && genuineTaken.refused ? "refused " + genuineTaken.refused : "taken") + ", token " + (spent ? "spent" : "unspent")
+        + ", " + (joined ? "joined under the lead" : "not joined under the lead");
+      return { ok, note };
+    }
+    const leadNow = await leadKeyRun();
+    check(leadNow.ok,
+      "jlk3 a relay link with its lead key id and public key both replaced is taken, its token hello names the pinned key, and the relay refuses it "
+      + "before the token is spent; the desk lets the join and the pin go and says so, and the genuine invitation then joins under its lead: " + leadNow.note);
+    if (PLANTS_OFF) skip("jlk4 lifting each new line (the pinned key lent, sent, the refusal ended, the join let go, the invitation undone) turns jlk3 red");
+    else {
+      const notes = [];
+      let turned = true;
+      for (const tag of ["plant:token-lead-pin", "plant:lead-other-join", "plant:lead-other-undo"]) {
+        let note = "";
+        const p = await liftDesk(tag, async next => { const r = await leadKeyRun(next); note = r.note; return !r.ok; });
+        turned = turned && p.turned && p.back;
+        notes.push(tag + " " + (p.turned ? "the check lifted" : p.detail.split("\n")[0]) + " (" + note + ")" + (p.back ? "" : ", shell/main.js changed"));
+      }
+      for (const tag of ["plant:token-lead-sent", "plant:lead-other-end"]) {
+        let note = "";
+        const p = await liftChannel(tag, async () => { const r = await leadKeyRun(); note = r.note; return !r.ok; });
+        turned = turned && p.turned && p.back;
+        notes.push(tag + " " + (p.turned ? "the check lifted" : p.detail.split("\n")[0]) + " (" + note + ")" + (p.back ? "" : ", channel.cjs changed"));
+      }
+      check(turned, "jlk4 lifting each new line alone turns jlk3 red: " + notes.join("; "));
+    }
   }
   if (partOn("pDesk")) {
   const openPlant = await liftChannel("plant:wrap-open", async () => {

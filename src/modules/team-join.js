@@ -543,6 +543,7 @@ function joinTook(v,changed){
     const heldOffer={lead:String(offer.lead||""), team:String(offer.team||""), relay:String(offer.relay), link:true, code:"", left:String(offer.left||"")};
     if(joinDoorHolds()){ pendingInvite={kind:"link", offer:heldOffer}; whenJoinDoorOpens(replayPendingInvite); return joinNow; } /* plant:join-link-door */
     joinOffer=heldOffer;
+    joinShut=""; /* plant:link-unshut */ // a link's offer is not in the state a hidden bubble was shut at, so each new link is drawn
     joinRead="link"; joinBlob=""; joinTyped=""; joinWhy=""; joinLinkSaid=null;
     joinMode="confirm"; /* plant:link-page */
     paintJoin();
@@ -989,8 +990,13 @@ function openJoinBubble(){
   if(!b) return;
   const wrap=b.wrap, close=b.close;
   joinBubbleClose=close;
-  // Hiding the lead's key counts as having been shown it; the key stays in Settings. Hiding an invitation lets it go.
-  const hide=()=>{ joinShut=JSON.stringify(joinNow); dropInvite(); close(); joinPainted(); if(p.lead) joinAsk("seen",p.lead); };
+  // Hiding the lead's key counts as having been shown it; the key stays in Settings. Hiding an invitation lets it go, a link's in the shell too,
+  // as Cancel does, so a link waiting behind it is offered.
+  const hide=()=>{
+    const link=!!(joinOffer&&joinOffer.link) || (joinMode==="refused"&&joinWhy==="link");
+    joinShut=JSON.stringify(joinNow); dropInvite(); close(); joinPainted(); if(p.lead) joinAsk("seen",p.lead);
+    if(link) joinAsk("link-no"); /* plant:hide-link-no */
+  };
   wrap.querySelectorAll("[data-join], [data-join-paste], [data-join-check]").forEach(el=>{
     if(el.hasAttribute("data-join-paste")){ el.oninput=()=>{ joinBlob=String(el.value||""); }; return; }
     if(el.hasAttribute("data-join-check")){ el.oninput=()=>followCheck(wrap,el); return; }
