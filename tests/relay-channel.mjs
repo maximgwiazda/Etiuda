@@ -63,7 +63,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 533 - 24; /* 24 checks retired with the folder team: each is marked RETIRED at its place */
+const EXPECTED = 533 - 24 + 3; /* 24 checks retired with the folder team, each marked RETIRED at its place; 939h2 to 939h4 added: the row's fork for a relay team */
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -6676,6 +6676,15 @@ if (deskOn()) try {
       out.said = twoSaid();
       try { out.rev = JSON.parse(read(s.mirror, C.TEAM_NAME)).rev; } catch { out.rev = 0; }
       out.ok = out.thief === 200 && out.moved === 200 && out.pin === "K1" && out.channelPin === "K1" && out.fork === "two" && out.said >= 1 && out.rev === 2;
+      /* The team's row, which the shell composes from the channel's fork for the page's notice (it was held for a folder team by team-desk's
+         14bm, 14bq and 14cd, which a relay team's row is not read from): the fork it shows, and what the agent's dismissal keeps. */
+      const rowOf = async () => ((((await s.Dk.ask("etiuda:team-join", "leads")) || {}).leads) || []).find(l => l.team === s.team) || null;
+      const shownOf = r => (r && r.fork ? r.fork.kind + "/" + (r.fork.seen ? "seen" : "new") : "none");
+      out.row = shownOf(await rowOf());
+      await s.Dk.ask("etiuda:team-join", "fork-seen", s.team);
+      const after = await rowOf(), kept = (s.Dk.envelope().teamForks || {})[s.team];
+      out.dismissed = shownOf(after);
+      out.keptFork = !!kept && !!after && !!after.fork && kept.seen === after.fork.key;
       return out;
     } finally {
       await s.stop();
@@ -7125,6 +7134,22 @@ if (deskOn()) try {
       const i = await liftApp("plant:fork-two", async app => { const x = await forkOnRelay("939i", app, 8000); return x.synced && x.thief === 200 && x.moved === 200 && x.channelPin !== "K1"; });
       check(i.turned && i.back, "939i lifting plant:fork-two on the same path follows one of K1's two successors, and the product file is never written: "
         + i.detail + ", sha " + (i.back ? "restored" : "differs"));
+      /* The row's fork for a relay team, end to end (team-desk's 14bm, 14bq and 14cd held it for a folder team's row, retired with the folder team). */
+      check(!!h.x && h.x.row === "two/new" && h.x.dismissed === "two/seen" && h.x.keptFork === true,
+        "939h2 the team's row carries the fork the relay channel saw, once and not yet dismissed, and the agent's dismissal marks that fork seen on the row and is kept"
+        + " in the desk's record for it: row " + (h.x ? h.x.row + ", after the dismissal " + h.x.dismissed + ", kept " + h.x.keptFork : "") + (h.err ? ", " + h.err : ""));
+      if (PLANTS_OFF) skip("939h3 lifting plant:fork-row in a scratch copy of shell/main.js keeps the fork from the team's row");
+      else {
+        const r3 = await liftDesk("plant:fork-row", async next => { const x = await forkOnRelay("939h3", { src: next }, 8000); return x.synced && x.row === "none"; });
+        check(r3.turned && r3.back, "939h3 lifting plant:fork-row in a scratch copy of shell/main.js keeps the fork from the team's row, so the notice never shows, and the product file is never written: "
+          + r3.detail + ", sha " + (r3.back ? "restored" : "differs"));
+      }
+      if (PLANTS_OFF) skip("939h4 lifting plant:fork-seen in a scratch copy of shell/main.js forgets the dismissal");
+      else {
+        const r4 = await liftDesk("plant:fork-seen", async next => { const x = await forkOnRelay("939h4", { src: next }, 8000); return x.synced && x.row === "two/new" && x.dismissed !== "two/seen"; });
+        check(r4.turned && r4.back, "939h4 lifting plant:fork-seen in a scratch copy of shell/main.js forgets the dismissal, so the notice shows again, and the product file is never written: "
+          + r4.detail + ", sha " + (r4.back ? "restored" : "differs"));
+      }
     }
 
   
