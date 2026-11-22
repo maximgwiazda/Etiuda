@@ -775,10 +775,18 @@ function pinnedLeadPubs() {
 function teamParse(text) {
   try { return JSON.parse(String(text).replace(/^\uFEFF/, "").trim()); } catch { return null; }
 }
-/* The team file this folder is read as, the canonical file alone: `missing` where it is absent, `unreadable` where it would not
-   read. A conflict copy beside it is not a team file here: a team's file arrives over the relay. */
+/* Whether `root` is a team's place: a relay mirror, or the mirror a team moving to a folder waits in. No other folder is a team's,
+   so a team file there is no team's (teamTextChosen). */
+function teamPlaceAt(root) {
+  const r = path.resolve(String(root || ""));
+  if (r.indexOf(path.resolve(app.getPath("userData"), "relay") + path.sep) === 0) return true;
+  return Object.values(teamNeedsFolder).some(n => !!n && !!n.mirror && path.resolve(n.mirror) === r);
+}
+/* The team file this folder is read as, the canonical file alone: `missing` where it is absent or the folder is no team's place,
+   `unreadable` where it would not read. A conflict copy beside it is not a team file here: a team's file arrives over the relay. */
 function teamTextChosen(root) {
   const file = path.join(root, TEAM_NAME);
+  if (!teamPlaceAt(root)) return { file: file, text: null, doc: null, missing: true, unreadable: false }; /* plant:team-file-place */
   let text = null, missing = false, unreadable = false;
   try {
     if (fs.statSync(file).size <= TEAM_MAX) text = fs.readFileSync(file, "utf8");
@@ -4915,8 +4923,6 @@ function heedTeam() {
   if (deskKeys === undefined) deskKeys = readDesk();
   /* Nothing is pinned, barred or unbarred while machine policy has not answered; the file is heeded once it does. */
   if (policyWaits()) return; /* plant:heed-waits */
-  /* Only a relay team's mirror, or the mirror a moving team waits in, holds a team file heeded here: no folder is a team. */
-  if (!teamWriteHere()) return; /* plant:heed-relay-only */
   const root = catalogFolder();
   if (!folderAnswers(root)) return;
   const file = path.join(root, TEAM_NAME);
@@ -7006,11 +7012,12 @@ function policyHoldsTeam(t, named) {
   if (!pin || !named) return false;
   return !!named.lead && named.lead === pin.public;
 }
-/* A team this desk holds through a shared folder: pinned, its folder kept, and no relay. No folder is read as a team, so its row
-   says so (folderHeld), and what the folder's local copy still owed the share stays there, said on the row (folderOwed). */
+/* A team this desk holds through a shared folder: its folder kept, and no relay (leadsView asks it of the pinned teams alone). No
+   folder is read as a team, so its row says so (folderHeld), and what the folder's local copy still owed the share stays there,
+   said on the row (folderOwed). */
 function folderHeld(t) {
   const shown = teamShown[t];
-  if (!teamPins[t] || !shown || !shown.folder || shown.relay || teamRelayGone[t] === true || teamNeedsFolder[t]) return false;
+  if (!shown || !shown.folder || shown.relay || teamRelayGone[t] === true || teamNeedsFolder[t]) return false;
   if (teamChannel[t] && teamChannel[t].kind === "relay") return false;
   return path.resolve(shown.folder).indexOf(path.resolve(app.getPath("userData"), "relay") + path.sep) !== 0;
 }
@@ -7993,17 +8000,10 @@ function sharedHolds(held) {
   try { return JSON.parse(fs.readFileSync(held.lock, "utf8")).token === held.token; } catch { return false; }
 }
 /* The folder's team file, whole under the lead this desk pinned, says its catalogs stay sealed. */
-function shareMustSeal(root) {
-  heedTeam();
-  const doc = teamTextChosen(root).doc;
-  if (!doc || !teamWhole(doc) || doc.sealed !== true || doc.exportsSealed === false) return false;
-  const pinned = pinTrusted(doc.id);
-  return !!pinned && pinned.keyId === doc.lead.keyId && pinned.public === doc.lead.public;
-}
 /* Writes the page's merged catalog over the file it read, answered {ok, rev}, or {changed} where the file is no longer
    the one read, {busy} where another desk holds the lock, {taken} where a file to be created is already there, and
-   {refused} for a signed or sealed catalog on either side. A sealed team's share is written sealed, or refused,
-   and a relay mirror is refused outright, since a write there would stay on this desk. */
+   {refused} for a signed or sealed catalog on either side. A relay mirror is refused outright, since a write there would stay on
+   this desk, and so is a folder holding a team's file: no team works through a folder, so the change stays in the desk's own file. */
 function sharedWrite(name, text, sha, create) {
   if (relayHere()) return { ok: false, refused: true };
   const file = sharedFile(editionWriteName(name));
@@ -8013,11 +8013,12 @@ function sharedWrite(name, text, sha, create) {
   try { data = catalogPayload(text).data; } catch { return { ok: false }; }
   if (!isV2(data) || !historyFree(historyFacts(text))) return { ok: false, refused: true };
   const root = catalogFolder();
+  if (fs.existsSync(path.join(root, TEAM_NAME))) return { ok: false, refused: true, sealed: true }; /* plant:shared-team-folder */
   const seal = sealFor(String(data.id || ""), "", root);
   if (seal && !seal.plain) {
     try { text = JSON.stringify(sealCatalog(seal.key, seal.team, seal.epoch, text), null, 1) + "\n"; }
     catch { return { ok: false, refused: true, sealed: true }; }
-  } else if (!seal && shareMustSeal(root)) return { ok: false, refused: true, sealed: true };
+  }
   let held = null;
   try { held = sharedLock(file); }
   catch (e) { console.error("etiuda: the lock beside " + file + " could not be taken - " + e.message); }
@@ -13214,7 +13215,7 @@ function storeSyncFolder() {
   if (deskKeys === undefined) deskKeys = readDesk();
   if (relayHere() || Object.keys(teamNeedsFolder).length) return ""; /* plant:sync-team-folder */
   const root = catalogFolder();
-  if (Object.keys(teamPins).some(t => folderHeld(t) && path.resolve(teamShown[t].folder) === path.resolve(root))) return ""; /* plant:sync-held-folder */
+  if (Object.keys(teamShown).some(t => folderHeld(t) && path.resolve(teamShown[t].folder) === path.resolve(root))) return ""; /* plant:sync-held-folder */
   return root;
 }
 /* This desk's items that follow: its desk keys, and the catalog files at the top of the person's own catalog folder. Null while that

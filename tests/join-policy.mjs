@@ -105,16 +105,14 @@ const MEMBER_DECLS = ["const HPKE_KEM =", "const HPKE_SUITE =", "const SPKI_X255
 const SRC = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const HEX = "ab".repeat(32);
 const OTHER = "cd".repeat(32);
+/* Was the pair's four sentences, folder, lead, beside and unread. Now a team works over the relay only and TeamFolder is not read,
+   so its sentence and the pair's go. */
 const EN = {
-  folder: "The team folder set in Group Policy is not a full path, so this desk keeps the folder it already uses.",
   lead: "The team lead's key set in Group Policy is not written as 64 lowercase hexadecimal characters, so this desk does not trust it.",
-  beside: "The other value set beside it is not used either: the two are taken together or not at all.",
   unread: "The organisation's settings could not be read just now. Etiuda will try again.",
 };
 const PL = {
-  folder: "Folder zespołu ustawiony w zasadach grupy nie jest pełną ścieżką, więc stanowisko zostaje przy folderze, którego już używa.",
   lead: "Klucz lidera zespołu ustawiony w zasadach grupy nie ma postaci 64 małych znaków szesnastkowych, więc stanowisko go nie przyjmuje.",
-  beside: "Druga wartość ustawiona obok też nie zostanie użyta: obie są przyjmowane razem albo wcale.",
   unread: "Nie udało się teraz odczytać ustawień organizacji. Etiuda spróbuje ponownie.",
 };
 const FILE = "quay/etiuda-team.json";
@@ -191,17 +189,19 @@ const goodRows = [
   else {
     if (JSON.stringify(P.POLICY_WORDS.en) !== JSON.stringify(EN) || JSON.stringify(P.POLICY_WORDS.pl) !== JSON.stringify(PL))
       problems.push("the words in the shell are not the words this leg names");
-    for (const [folder, why] of goodRows) {
+    /* Was: a full path and the lead kept as the pair. Now: the lead alone is kept, and a TeamFolder beside it, a good path or a bad
+       one, is neither read nor said. */
+    for (const [folder, why] of goodRows.concat([["quay\\team", "a relative path"], ["   ", "spaces alone"]])) {
       for (const lang of ["en", "pl"]) {
         const got = P.joinPolicyFrom(exportText([["TeamFolder", "REG_SZ", folder], ["LeadKey", "REG_SZ", HEX]]), lang);
-        if (got.folder !== folder || got.lead !== HEX || got.said.length !== 0)
+        if (got.folder || got.lead !== HEX || got.said.length !== 0)
           problems.push(why + " " + lang + " " + JSON.stringify(got));
       }
     }
   }
   check(problems.length === 0,
-    "19a a full path and a 64 lower-case hex lead are kept as the export holds them, in both languages, and nothing is said: "
-    + (problems.join("; ") || goodRows.length + " paths"));
+    "19a a 64 lower-case hex lead is kept as the export holds it, in both languages, and a TeamFolder beside it is neither read nor said: "
+    + (problems.join("; ") || (goodRows.length + 2) + " folders beside it"));
 }
 
 {
@@ -209,32 +209,12 @@ const goodRows = [
   if (!P) problems.push(loadError);
   else {
     const alone = (rows, lang, subkeys) => P.joinPolicyFrom(exportText(rows, subkeys), lang || "en");
-    const none = (name, got) => { if (got.folder !== "" || got.lead !== "" || got.said.length !== 0) problems.push(name + " " + JSON.stringify(got)); };
+    const none = (name, got) => { if (got.folder || got.lead !== "" || got.said.length !== 0) problems.push(name + " " + JSON.stringify(got)); };
     /* A read in doubt is no policy, and is said as unread (the review 8 follow-up). */
-    const doubt = (name, got) => { if (got.folder !== "" || got.lead !== "" || JSON.stringify(got.said) !== JSON.stringify([EN.unread])) problems.push(name + " " + JSON.stringify(got)); };
-    const badFolder = [
-      ["quay\\team", "a relative path"],
-      ["D:\\Quay\\team\\..\\other", "a segment that walks out"],
-      ["D:\\Quay\\team ", "a trailing space"],
-      ["   D:\\Quay\\team", "leading spaces"],
-      ["\tD:\\Quay\\team", "a leading tab"],
-      ["   ", "spaces alone"],
-      ["D:\\Quay" + BEL + "team", "a control character"],
-      ["D:\\Quay\rteam", "a carriage return inside"],
-      ["D:\\Quay\r\nteam", "a line break inside, which the export carries across two lines"],
-      ["C:", "a drive with no slash"],
-      ["/home/team", "a path from another system"],
-      ["//quay/share/team", "a share written with forward slashes"],
-      ["\\\\quay\\share\\..\\other", "a share segment that walks out"],
-      ["D:\\Quay\\team:notes", "a colon in a later segment"],
-      ["\\\\quay\\share\\team:notes", "a colon in a share's segment"],
-      ["D:\\Quay\\team*", "a character a path cannot hold"],
-      ["D:\\" + "a".repeat(1022), "a path of 1025 characters"],
-    ];
-    for (const [folder, why] of badFolder) {
-      const got = alone([["TeamFolder", "REG_SZ", folder]]);
-      if (got.folder !== "" || got.lead !== "" || saidOf(got) !== EN.folder) problems.push(why + " " + JSON.stringify(got));
-    }
+    const doubt = (name, got) => { if (got.folder || got.lead !== "" || JSON.stringify(got.said) !== JSON.stringify([EN.unread])) problems.push(name + " " + JSON.stringify(got)); };
+    /* Was: each bad TeamFolder said, and dropping a good lead beside it. Now: TeamFolder is not read, so none is said. */
+    none("a TeamFolder alone", alone([["TeamFolder", "REG_SZ", "quay\\team"]]));
+    none("a TeamFolder as a number", alone([["TeamFolder", "REG_DWORD", 1]]));
     const badLead = [
       ["AB".repeat(32), "upper case"],
       [HEX + "a", "65 characters"],
@@ -246,42 +226,24 @@ const goodRows = [
     ];
     for (const [lead, why] of badLead) {
       const got = alone([["LeadKey", "REG_SZ", lead]]);
-      if (got.folder !== "" || got.lead !== "" || saidOf(got) !== EN.lead) problems.push(why + " " + JSON.stringify(got));
+      if (got.folder || got.lead !== "" || saidOf(got) !== EN.lead) problems.push(why + " " + JSON.stringify(got));
     }
-    const dword = alone([["TeamFolder", "REG_DWORD", 1]]);
-    if (dword.folder !== "" || saidOf(dword) !== EN.folder) problems.push("dword " + JSON.stringify(dword));
-    const expand = alone([["TeamFolder", "REG_EXPAND_SZ", "%NO_SUCH_FOLDER%\\team"], ["LeadKey", "REG_SZ", HEX]]);
-    if (expand.folder !== "" || expand.lead !== "" || saidOf(expand) !== EN.folder + "|" + EN.beside)
-      problems.push("expand " + JSON.stringify(expand));
     const expandLead = alone([["TeamFolder", "REG_SZ", "D:\\Quay\\team"], ["LeadKey", "REG_EXPAND_SZ", "%NO_SUCH_LEAD%"]]);
-    if (expandLead.folder !== "" || expandLead.lead !== "" || saidOf(expandLead) !== EN.lead + "|" + EN.beside)
+    if (expandLead.folder || expandLead.lead !== "" || saidOf(expandLead) !== EN.lead)
       problems.push("an expandable lead " + JSON.stringify(expandLead));
     const multiLead = alone([["LeadKey", "REG_MULTI_SZ", HEX]]);
     if (multiLead.lead !== "" || saidOf(multiLead) !== EN.lead) problems.push("a multiple-string lead " + JSON.stringify(multiLead));
-    const halfLead = alone([["TeamFolder", "REG_SZ", "D:\\Quay\\team"], ["LeadKey", "REG_SZ", "AB".repeat(32)]]);
-    if (halfLead.folder !== "" || halfLead.lead !== "" || saidOf(halfLead) !== EN.lead + "|" + EN.beside)
-      problems.push("bad lead drops the folder " + JSON.stringify(halfLead));
-    const halfFolder = alone([["TeamFolder", "REG_SZ", "quay\\team"], ["LeadKey", "REG_SZ", HEX]]);
-    if (halfFolder.folder !== "" || halfFolder.lead !== "" || saidOf(halfFolder) !== EN.folder + "|" + EN.beside)
-      problems.push("bad folder drops the lead " + JSON.stringify(halfFolder));
-    const both = alone([["TeamFolder", "REG_SZ", "quay\\team"], ["LeadKey", "REG_SZ", "NO"]]);
-    if (both.folder !== "" || both.lead !== "" || saidOf(both) !== EN.folder + "|" + EN.lead || both.said.indexOf(EN.beside) >= 0)
-      problems.push("both bad " + JSON.stringify(both));
-    const onlyFolder = alone([["TeamFolder", "REG_SZ", "D:\\Quay\\team"]]);
-    if (onlyFolder.folder !== "D:\\Quay\\team" || onlyFolder.lead !== "" || onlyFolder.said.length !== 0)
-      problems.push("folder alone " + JSON.stringify(onlyFolder));
+    const badFolderGoodLead = alone([["TeamFolder", "REG_SZ", "quay\\team"], ["LeadKey", "REG_SZ", HEX]]);
+    if (badFolderGoodLead.folder || badFolderGoodLead.lead !== HEX || badFolderGoodLead.said.length !== 0)
+      problems.push("a bad folder beside a good lead " + JSON.stringify(badFolderGoodLead));
     const onlyLead = alone([["LeadKey", "REG_SZ", HEX]]);
-    if (onlyLead.lead !== HEX || onlyLead.folder !== "" || onlyLead.said.length !== 0)
+    if (onlyLead.lead !== HEX || onlyLead.folder || onlyLead.said.length !== 0)
       problems.push("lead alone " + JSON.stringify(onlyLead));
     const blank = alone([["TeamFolder", "REG_SZ", ""], ["LeadKey", "REG_SZ", "   "]]);
-    if (blank.folder !== "" || blank.lead !== "" || saidOf(blank) !== EN.lead) problems.push("blank " + JSON.stringify(blank));
-    const spacedFolder = alone([["TeamFolder", "REG_SZ", "   "], ["LeadKey", "REG_SZ", HEX]]);
-    if (spacedFolder.folder !== "" || spacedFolder.lead !== "" || saidOf(spacedFolder) !== EN.folder + "|" + EN.beside)
-      problems.push("spaces for a folder beside a good lead " + JSON.stringify(spacedFolder));
+    if (blank.folder || blank.lead !== "" || saidOf(blank) !== EN.lead) problems.push("blank " + JSON.stringify(blank));
     const cased = alone([["teamfolder", "REG_SZ", "D:\\Quay\\team"], ["LEADKEY", "REG_SZ", HEX]]);
-    if (cased.folder !== "D:\\Quay\\team" || cased.lead !== HEX) problems.push("names in another case " + JSON.stringify(cased));
-    const others = alone([["@", "REG_SZ", "D:\\Elsewhere"], ["Other", "REG_DWORD", 1], ["TeamFolder", "REG_SZ", "D:\\Quay\\team"]]);
-    if (others.folder !== "D:\\Quay\\team" || others.said.length !== 0) problems.push("other values beside " + JSON.stringify(others));
+    if (cased.folder || cased.lead !== HEX) problems.push("names in another case " + JSON.stringify(cased));
+    none("other values beside", alone([["@", "REG_SZ", "D:\\Elsewhere"], ["Other", "REG_DWORD", 1], ["TeamFolder", "REG_SZ", "D:\\Quay\\team"]]));
     none("a subkey's own values", alone([], "en", { Old: [["TeamFolder", "REG_SZ", "D:\\Quay\\team"], ["LeadKey", "REG_SZ", HEX]] }));
     none("the default value", alone([["@", "REG_SZ", "D:\\Quay\\team"]]));
     none("empty", P.joinPolicyFrom("", "en"));
@@ -297,15 +259,15 @@ const goodRows = [
     doubt("no version line", P.joinPolicyFrom(text.slice(text.indexOf("\r\n") + 2), "en"));
     doubt("a file cut short", P.joinPolicyFrom(text.slice(0, text.indexOf("\"D:\\\\Quay") + 6), "en"));
     doubt("one name twice", P.joinPolicyFrom(text.replace(own, own + "\"teamfolder\"=\"D:\\\\Other\"\r\n"), "en"));
-    const polish = alone([["TeamFolder", "REG_SZ", "quay\\team"]], "pl");
-    if (saidOf(polish) !== PL.folder || polish.said[0] === EN.folder || !/[ąćęłńóśźż]/i.test(polish.said[0]))
+    const polish = alone([["LeadKey", "REG_SZ", "NO"]], "pl");
+    if (saidOf(polish) !== PL.lead || polish.said[0] === EN.lead || !/[ąćęłńóśźż]/i.test(polish.said[0]))
       problems.push("polish " + JSON.stringify(polish.said));
     const otherLang = alone([["LeadKey", "REG_SZ", "NO"]], "xx");
     if (saidOf(otherLang) !== EN.lead) problems.push("other language " + JSON.stringify(otherLang.said));
   }
   check(problems.length === 0,
-    "19b a value is taken whole or not at all: a bad one is said and ignored, one bad value of a pair leaves the other"
-    + " unused, and a read holding anything reg does not write is not used: " + (problems.join("; ") || "none half used"));
+    "19b a value is taken whole or not at all: a bad lead is said and ignored, a TeamFolder is neither read nor said, and a read"
+    + " holding anything reg does not write is not used: " + (problems.join("; ") || "none half used"));
 }
 
 const pubHex = k => k.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
@@ -535,15 +497,15 @@ function shape(r) {
     const calls = [];
     const win = reader2((file, args, opt) => {
       calls.push({ file: file, args: args.slice(), opt: opt });
-      fs.writeFileSync(args[2], exportBytes([["TeamFolder", "REG_SZ", calls.length === 1 ? "D:\\First" : "D:\\Second"], ["LeadKey", "REG_SZ", HEX]]));
+      fs.writeFileSync(args[2], exportBytes([["LeadKey", "REG_SZ", calls.length === 1 ? HEX : OTHER]]));
       return null;
     });
     const got = ["en", "pl", "en"].map(l => win.readJoinPolicy(l));
     const c = calls[0] || { args: [] }, scratch = String(c.args[2] || "");
     if (calls.length !== 1 || c.file !== REG_EXE || JSON.stringify(c.args) !== JSON.stringify(["export", ASKED, scratch, "/y"])
         || path.resolve(path.dirname(path.dirname(scratch))) !== tmp || !c.opt || c.opt.windowsHide !== true || c.opt.timeout !== 5000
-        || !quiet(c.opt.stdio) || got.some(g => g.folder !== "D:\\First" || g.lead !== HEX))
-      problems.push("read once " + JSON.stringify(calls.map(x => [x.file, x.args, x.opt])) + " " + JSON.stringify(got.map(g => g.folder)));
+        || !quiet(c.opt.stdio) || got.some(g => g.lead !== HEX))
+      problems.push("read once " + JSON.stringify(calls.map(x => [x.file, x.args, x.opt])) + " " + JSON.stringify(got.map(g => g.lead === HEX)));
     if (scratch && (fs.existsSync(scratch) || fs.existsSync(path.dirname(scratch)))) problems.push("the scratch file stayed");
     let asked = 0, badScratch = "";
     const badLead = reader2((file, args) => {
@@ -562,21 +524,21 @@ function shape(r) {
     const broken = reader2((file, args) => { threw++; thrownAt = String(args[2]); throw new Error("missing"); });
     const none = broken.readJoinPolicy("en");
     broken.readJoinPolicy("pl");
-    if (threw !== 1 || none.folder !== "" || none.lead !== "" || saidOf(none) !== EN.unread || !thrownAt || fs.existsSync(path.dirname(thrownAt)))
+    if (threw !== 1 || !!none.folder || none.lead !== "" || saidOf(none) !== EN.unread || !thrownAt || fs.existsSync(path.dirname(thrownAt)))
       problems.push("throw " + threw + " " + JSON.stringify(none));
     const unmarked = reader2((file, args) => {
       fs.writeFileSync(args[2], exportText([["TeamFolder", "REG_SZ", "D:\\Quay\\team"], ["LeadKey", "REG_SZ", HEX]]), "utf8");
       return null;
     }).readJoinPolicy("en");
-    if (unmarked.folder !== "" || unmarked.lead !== "") problems.push("a file that is not UTF-16 was read " + JSON.stringify(unmarked));
+    if (!!unmarked.folder || unmarked.lead !== "") problems.push("a file that is not UTF-16 was read " + JSON.stringify(unmarked));
     /* The old door's input, another key's console print, is no export of this key: no policy, and nothing said. */
     const dump = "\r\nHKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings\r\n    ProxyEnable    REG_DWORD    0x0\r\n    ProxyServer    REG_SZ    http://127.0.0.1:9\r\n";
     const proxy = P.joinPolicyFrom(dump, "pl");
-    if (proxy.folder !== "" || proxy.lead !== "" || JSON.stringify(proxy.said) !== JSON.stringify([PL.unread])) problems.push("proxy dump " + JSON.stringify(proxy));
+    if (!!proxy.folder || proxy.lead !== "" || JSON.stringify(proxy.said) !== JSON.stringify([PL.unread])) problems.push("proxy dump " + JSON.stringify(proxy));
     let linuxCalls = 0, made = 0;
     const counting = Object.assign(Object.create(fs), { mkdtempSync: (...a) => { made++; return fs.mkdtempSync(...a); } });
     const off = reader2(() => { linuxCalls++; return null; }, "linux", counting).readJoinPolicy("en");
-    if (linuxCalls !== 0 || made !== 0 || off.folder !== "" || off.lead !== "") problems.push("linux calls " + linuxCalls + " folders " + made);
+    if (linuxCalls !== 0 || made !== 0 || !!off.folder || off.lead !== "") problems.push("linux calls " + linuxCalls + " folders " + made);
   }
   check(problems.length === 0,
     "19e the reader starts reg.exe at its fixed path, exporting this one key to a scratch file in a folder of the temp folder"
@@ -668,8 +630,8 @@ let templateDocs = null;
   }
   /* What the template offers, each policy beside what reads it, so none is a setting nothing reads. All are machine policy
      under the one key both programs read; the registry compares keys without case.
-     - The desk, shell/main.js: TeamFolder and LeadKey (joinPolicyFacts), DeskNoUpdateCheck (policyNoUpdate); checked
-       below against the shell's own text.
+     - The desk, shell/main.js: LeadKey (joinPolicyFacts), DeskNoUpdateCheck (policyNoUpdate); checked below against the shell's
+       own text. TeamFolder left with the shared folder: a team works over the relay only, and it is not offered again.
      - A managed installation (decision 49), read by both programs: Managed, SharedComputer, AllowPersonalAccounts, SigninProvider,
        SigninTenant and SupportContact (the desk's managedPolicyFrom, Studio's own reader of the same six); NonPersistent and
        NonPersistentNewDesk, the desk's alone (section 12).
@@ -683,7 +645,7 @@ let templateDocs = null;
      ignores any other value and a typed one is a typo waiting. */
   const KEY = "software\\policies\\etiuda";
   const WANT = {
-    TeamFolder: { text: "1024", desk: true }, LeadKey: { text: "64", desk: true },
+    LeadKey: { text: "64", desk: true },
     DeskNoUpdateCheck: { onOff: true, desk: true }, StudioNoUpdateCheck: { onOff: true },
     DeskOrganisationModel: { onOff: true },
     AiProvider: { list: ["openai", "anthropic", "google", "azure", "compatible"] },
@@ -806,7 +768,7 @@ let templateDocs = null;
   templateDocs = doc;
   if (order.en && order.pl && order.en.join() !== order.pl.join()) problems.push("en and pl ids in another order");
   if (raw.pl && (!raw.pl.includes("stanowisko") || !/[ąćęłńóśźż]/i.test(raw.pl))) problems.push("polish copy");
-  if (raw.en && !raw.en.includes("full path") && !raw.en.includes("Full path")) problems.push("english copy");
+  if (raw.en && !raw.en.includes("lowercase hexadecimal")) problems.push("english copy");
   check(problems.length === 0,
     "19f the template parses, its strings and presentations match the ADMX one for one in English and in Polish, each"
     + " policy writes its own value under the key both programs read, as a text box, a 1-or-0 switch or the list of"
@@ -962,7 +924,7 @@ function scratchGone(reg, problems, name) {
       const D = asWindows(() => loadDesk("page-" + page, deskIn("en"), reg));
       desks.push(D);
       const got = asWindows(() => D.api.catalogFolder());
-      if (got !== POLISH || reg.asked().length !== 1 || policySaid(D).length)
+      if (got !== mine || reg.asked().length !== 0 || policySaid(D).length)
         problems.push("code page " + page + ": " + JSON.stringify(got) + " in " + reg.asked().length + " call(s)");
       scratchGone(reg, problems, "code page " + page);
     }
@@ -970,37 +932,42 @@ function scratchGone(reg, problems, name) {
     const L = asWindows(() => loadDesk("languages", deskIn("en"), moving));
     desks.push(L);
     const seen = asWindows(() => ["en", "pl", "en"].map(l => { L.api.setLang(l); return L.api.catalogFolder(); }));
-    if (seen.join("|") !== "D:\\First|D:\\First|D:\\First" || moving.asked().length !== 1)
+    if (seen.some(f => f !== mine) || moving.asked().length !== 0)
       problems.push("a language changed: " + JSON.stringify(seen) + " in " + moving.asked().length + " call(s)");
     for (const [name, rows, want] of [
-      ["leading spaces", [["TeamFolder", "REG_SZ", "   D:\\Quay\\team"], ["LeadKey", "REG_SZ", HEX]], [PL.folder, PL.beside]],
-      ["a line break inside", [["TeamFolder", "REG_SZ", "D:\\Quay\r\nteam"], ["LeadKey", "REG_SZ", HEX]], [PL.folder, PL.beside]],
-      ["spaces for a lead", [["TeamFolder", "REG_SZ", "D:\\Quay\\team"], ["LeadKey", "REG_SZ", "   "]], [PL.lead, PL.beside]],
+      ["leading spaces", [["TeamFolder", "REG_SZ", "   D:\\Quay\\team"], ["LeadKey", "REG_SZ", HEX]], []],
+      ["a line break inside", [["TeamFolder", "REG_SZ", "D:\\Quay\r\nteam"], ["LeadKey", "REG_SZ", HEX]], []],
+      ["spaces for a lead", [["TeamFolder", "REG_SZ", "D:\\Quay\\team"], ["LeadKey", "REG_SZ", "   "]], [PL.lead]],
     ]) {
       const reg = standInReg({ rows: rows }, 65001);
       const D = asWindows(() => loadDesk("bad-" + desks.length, deskIn("pl"), reg));
       desks.push(D);
       const folders = asWindows(() => {
         const out = [D.api.catalogFolder()];
+        D.api.joinView();
         D.api.setLang("en");
+        D.api.joinView();
         out.push(D.api.catalogFolder(), D.api.catalogFolder());
         return out;
       });
-      if (folders.some(f => f !== mine) || JSON.stringify(policySaid(D)) !== JSON.stringify(want))
+      if (folders.some(f => f !== mine) || reg.asked().length !== 1 || JSON.stringify(policySaid(D)) !== JSON.stringify(want))
         problems.push(name + ": " + JSON.stringify(folders.map(f => (f === mine ? "the desk's" : f))) + " said " + JSON.stringify(policySaid(D)));
     }
     const absent = standInReg(null, 65001);
     const N = asWindows(() => loadDesk("absent", deskIn("en"), absent));
     desks.push(N);
     const plain = asWindows(() => [N.api.catalogFolder(), N.api.catalogFolder()]);
-    if (plain.some(f => f !== mine) || absent.asked().length !== 1 || policySaid(N).length) problems.push("no key " + JSON.stringify(plain));
+    if (plain.some(f => f !== mine) || absent.asked().length !== 0 || policySaid(N).length) problems.push("no key " + JSON.stringify(plain));
     const leaked = desks.reduce((out, D) => out.concat(D.said), []).map(s => s.split(LAB).join("<lab>"))
       .filter(s => /Quay|Dzia|Ksi|First|Second/.test(s) || s.includes(HEX));
     if (leaked.length) problems.push("the policy's text in what the shell said: " + leaked.length + " line(s)");
   } catch (e) { problems.push("harness: " + ((e && e.stack) || e)); }
+  /* Was: the shell's catalog folder is the one the key's TeamFolder holds, the key read once. Now a team works over the relay
+     only: the catalog folder is the desk's own whatever TeamFolder holds and asks nothing of the key; the join view reads it once
+     whatever the language and says a bad lead once in the desk's language. */
   check(problems.length === 0,
-    "19g the shell's catalog folder is the one the key holds whatever the console's code page, read once whatever the"
-    + " language, a bad value said once in the desk's language and none taken, and nothing of the key said: "
+    "19g the shell's catalog folder is the desk's own whatever the key's TeamFolder holds, whatever the console's code page, and asks"
+    + " nothing of the key; the join view reads it once whatever the language, a bad lead said once in the desk's language, and nothing of the key said: "
     + (problems.join("; ") || "852 and 437 alike"));
 }
 
@@ -1010,20 +977,28 @@ function scratchGone(reg, problems, name) {
     const signedBytes = load(SRC, ["function canonJson(", "function signedBytesOf("], ["signedBytesOf"], ["crypto", "Buffer"], [crypto, Buffer]).signedBytesOf;
     const A = crypto.generateKeyPairSync("ed25519"), B = crypto.generateKeyPairSync("ed25519");
     const leadA = { keyId: "quay-old", public: pubHex(A.publicKey) }, leadB = { keyId: "quay-new", public: pubHex(B.publicKey) };
+    const RT1 = hex(16), RELAY = "https://etiuda.dev/relay/v1";
     const teamText = (id, who, priv, epoch) => {
       const body = { format: 1, kind: "etiuda-team", id: id, catalogs: ["lamp-shop"], lead: who, sealed: true, exportsSealed: false,
-        epoch: epoch || 1, roster: [] };
+        epoch: epoch || 1, roster: [], channel: { kind: "relay", rt: RT1, url: RELAY } };
       body.sig = { alg: "Ed25519", keyId: who.keyId };
       body.sig.value = crypto.sign(null, signedBytes(body), priv).toString("hex");
       return JSON.stringify(body, null, 1) + "\n";
     };
     const policyB = { rows: [["LeadKey", "REG_SZ", leadB.public]] };
-    /* A pin of A kept from before, A's file in the folder, and policy naming B. */
-    const T1 = "t-" + hex(8), F1 = path.join(LAB, "kept-folder"), file1 = path.join(F1, "etiuda-team.json");
-    fs.mkdirSync(F1, { recursive: true });
-    fs.writeFileSync(file1, teamText(T1, leadA, A.privateKey), "utf8");
-    const keptDesk = { keys: { eCatalogFolder: F1, eUiLang: "en" }, teamPins: { [T1]: leadA } };
-    const D = asWindows(() => loadDesk("kept", keptDesk, standInReg(policyB, 65001)));
+    /* Was: A's file in the desk's folder. Now a team works over the relay only: a relay team T1 pinned by A's invitation, A's file in
+       its relay mirror, and policy naming B. The desk does not follow T1 while policy names another lead, so it heeds and says
+       nothing of that file, and the file covers nothing. */
+    const T1 = "t-" + hex(8);
+    const keptDesk = name => {
+      const F = path.join(LAB, name, "relay", RT1);
+      fs.mkdirSync(F, { recursive: true });
+      fs.writeFileSync(path.join(F, "etiuda-team.json"), teamText(T1, leadA, A.privateKey), "utf8");
+      return { F: F, desk: { keys: { eCatalogFolder: path.join(LAB, name + "-own"), eUiLang: "en" }, teamPins: { [T1]: leadA },
+        teamPinFrom: { [T1]: "invite" }, teamChannel: { [T1]: { kind: "relay", rt: RT1, url: RELAY } } } };
+    };
+    const kd = keptDesk("kept"), F1 = kd.F, file1 = path.join(F1, "etiuda-team.json");
+    const D = asWindows(() => loadDesk("kept", kd.desk, standInReg(policyB, 65001)));
     const sentence = "ERR etiuda: " + file1 + " is signed by a key other than the lead's this desk trusts for team " + T1 + ", so nothing in it is used";
     const covers = asWindows(() => {
       D.api.heedTeam();
@@ -1033,27 +1008,30 @@ function scratchGone(reg, problems, name) {
       return [first, D.api.teamCovering(F1, "lamp-shop")];
     });
     const told = D.said.filter(s => s === sentence).length, pins = D.envelope().teamPins || {};
-    if (covers.some(c => c !== null) || told !== 1 || !pins[T1] || pins[T1].public !== leadA.public)
+    const followed = asWindows(() => D.api.catalogFolder()) === F1;
+    if (covers.some(c => c !== null) || told !== 0 || followed || !pins[T1] || pins[T1].public !== leadA.public)
       problems.push("a kept pin of another key: covered " + covers.map(c => (c ? "by its file" : "by nothing")).join(", ")
-        + ", said " + told + " time(s), pin " + (pins[T1] && pins[T1].public === leadA.public ? "kept" : "lost"));
-    /* The control: the same desk with no policy is covered by that file, so the null above is the policy's doing. */
-    const C = asWindows(() => loadDesk("kept-control", keptDesk, standInReg(null, 65001)));
-    const plain = asWindows(() => { C.api.heedTeam(); return C.api.teamCovering(F1, "lamp-shop"); });
+        + ", said " + told + " time(s), followed " + followed + ", pin " + (pins[T1] && pins[T1].public === leadA.public ? "kept" : "lost"));
+    /* The control: the same desk with no policy follows T1 and is covered by that file, so the null above is the policy's doing. */
+    const kc = keptDesk("kept-control");
+    const C = asWindows(() => loadDesk("kept-control", kc.desk, standInReg(null, 65001)));
+    const plain = asWindows(() => { C.api.heedTeam(); return C.api.catalogFolder() === kc.F ? C.api.teamCovering(kc.F, "lamp-shop") : null; });
     if (!plain || plain.lead.public !== leadA.public) problems.push("the control: no policy, and the kept pin's file covers nothing");
-    /* A team this desk barred, B's file, policy naming B: the first heed is under the policy, so the bar lifts and B is pinned. */
+    /* Was: a team this desk barred, B's file in its folder, policy naming B: the first heed under the policy lifts the bar and pins B.
+       Now no folder is read as a team: B's file in the desk's folder pins nothing, and the bar stays. */
     const T2 = "t-" + hex(8), F2 = path.join(LAB, "barred-folder");
     fs.mkdirSync(F2, { recursive: true });
     fs.writeFileSync(path.join(F2, "etiuda-team.json"), teamText(T2, leadB, B.privateKey), "utf8");
     const E = asWindows(() => loadDesk("barred", { keys: { eCatalogFolder: F2, eUiLang: "en" }, teamBarred: [T2] }, standInReg(policyB, 65001)));
     const coverB = asWindows(() => { E.api.heedTeam(); return E.api.teamCovering(F2, "lamp-shop"); });
     const env = E.envelope(), pinsB = env.teamPins || {};
-    if (!pinsB[T2] || pinsB[T2].public !== leadB.public || (env.teamBarred || []).indexOf(T2) >= 0 || !coverB || coverB.lead.public !== leadB.public)
-      problems.push("a barred team under its policy lead: pin " + (pinsB[T2] ? "set" : "missing") + ", barred "
+    if (pinsB[T2] || coverB)
+      problems.push("a barred team's file in a plain folder under its policy lead: pin " + (pinsB[T2] ? "set" : "missing") + ", barred "
         + ((env.teamBarred || []).indexOf(T2) >= 0) + ", covered " + !!coverB);
   } catch (e) { problems.push("harness: " + ((e && e.stack) || e)); }
   check(problems.length === 0,
-    "19h a policy lead outranks a pin kept for another key: that key's file covers nothing and is said once, the kept pin"
-    + " stays for when the policy goes, and a barred team's file under the policy lead is pinned: "
+    "19h a policy lead outranks a pin kept for another key: the relay team under that key is not followed and its file covers"
+    + " nothing, the kept pin stays for when the policy goes, and a barred team's file in a plain folder pins nothing: "
     + (problems.join("; ") || "the policy's lead alone"));
 }
 
@@ -1067,33 +1045,35 @@ function scratchGone(reg, problems, name) {
         ["TeamFolder", "REG_EXPAND_SZ", "%TEST_POLICY_SHARE%\\team"],
         ["LeadKey", "REG_SZ", HEX]
       ]), "en");
-      if (got.folder !== "D:\\Quay\\team" || got.lead !== HEX || got.said.length !== 0)
-        problems.push("expanded values not taken: " + JSON.stringify(got));
+      if (got.folder || got.lead !== HEX || got.said.length !== 0)
+        problems.push("an expandable folder was read: " + JSON.stringify(got));
       const gotLiteral = P.joinPolicyFrom(exportText([
         ["TeamFolder", "REG_EXPAND_SZ", "D:\\Quay\\team"],
         ["LeadKey", "REG_SZ", HEX]
       ]), "en");
-      if (gotLiteral.folder !== "D:\\Quay\\team" || gotLiteral.lead !== HEX || gotLiteral.said.length !== 0)
-        problems.push("literal expand not taken: " + JSON.stringify(gotLiteral));
+      if (gotLiteral.folder || gotLiteral.lead !== HEX || gotLiteral.said.length !== 0)
+        problems.push("a literal expandable folder was read: " + JSON.stringify(gotLiteral));
       const gotUnresolved = P.joinPolicyFrom(exportText([
         ["TeamFolder", "REG_EXPAND_SZ", "D:\\%UNRESOLVED_POLICY_X%\\team"],
         ["LeadKey", "REG_SZ", HEX]
       ]), "en");
-      if (gotUnresolved.folder !== "" || gotUnresolved.lead !== "" || saidOf(gotUnresolved) !== EN.folder + "|" + EN.beside)
-        problems.push("unresolved variable not counted as bad: " + JSON.stringify(gotUnresolved));
+      if (!!gotUnresolved.folder || gotUnresolved.lead !== HEX || gotUnresolved.said.length !== 0)
+        problems.push("an unresolved variable was said or dropped the lead: " + JSON.stringify(gotUnresolved));
       const gotToString = P.joinPolicyFrom(exportText([
         ["TeamFolder", "REG_EXPAND_SZ", "D:\\%toString%\\team"],
         ["LeadKey", "REG_SZ", HEX]
       ]), "en");
-      if (gotToString.folder !== "" || gotToString.lead !== "" || saidOf(gotToString) !== EN.folder + "|" + EN.beside)
-        problems.push("prototype toString reached: " + JSON.stringify(gotToString));
+      if (!!gotToString.folder || gotToString.lead !== HEX || gotToString.said.length !== 0)
+        problems.push("an inherited name was said or dropped the lead: " + JSON.stringify(gotToString));
     } finally {
       delete process.env.TEST_POLICY_SHARE;
     }
   }
+  /* Was: an expandable TeamFolder filled from the environment, unresolved variables and inherited names bad. Now TeamFolder is not
+     read at all, so none of the four is filled, said or let drop the lead beside it. */
   check(problems.length === 0,
-    "19j an expandable TeamFolder is filled from the environment, its variables matched without regard to case, while unresolved variables and inherited names are bad (the lead is 19l's): "
-    + (problems.join("; ") || "expanded"));
+    "19j an expandable TeamFolder is neither filled from the environment nor said, whatever its variables, and the lead beside it is kept (the lead's own expansion is 19l's): "
+    + (problems.join("; ") || "four folders unread"));
 }
 
 /* 19k: DeskNoUpdateCheck, the administrator's switch for the hourly look for a new version (Claude α's decision 10,
@@ -1118,12 +1098,12 @@ function scratchGone(reg, problems, name) {
     for (const [rows, want, why] of cases) if (off(rows) !== want) problems.push(why + " reads " + off(rows));
     const both = P.joinPolicyFrom(exportText([["DeskNoUpdateCheck", "REG_DWORD", 1], ["TeamFolder", "REG_SZ", "D:\\Quay\\team"],
       ["LeadKey", "REG_SZ", HEX]]), "en");
-    if (!both.noUpdate || both.folder !== "D:\\Quay\\team" || both.lead !== HEX || both.said.length !== 0)
+    if (!both.noUpdate || both.folder || both.lead !== HEX || both.said.length !== 0)
       problems.push("beside the team values " + JSON.stringify(both));
     const badBeside = P.joinPolicyFrom(exportText([["DeskNoUpdateCheck", "REG_DWORD", 1], ["LeadKey", "REG_SZ", "AB".repeat(32)]]), "en");
     if (!badBeside.noUpdate) problems.push("a bad team value beside it voids the switch " + JSON.stringify(badBeside));
     const dwordFolder = P.joinPolicyFrom(exportText([["TeamFolder", "REG_DWORD", 1]]), "en");
-    if (dwordFolder.folder !== "" || saidOf(dwordFolder) !== EN.folder) problems.push("a DWORD folder " + JSON.stringify(dwordFolder));
+    if (!!dwordFolder.folder || dwordFolder.said.length !== 0) problems.push("a DWORD folder " + JSON.stringify(dwordFolder));
   }
   check(problems.length === 0, "19k DeskNoUpdateCheck turns the version look off for anything but 0, a DWORD read for its number: "
     + (problems.join("; ") || "nine values and two beside the team pair as they should be"));
@@ -1131,19 +1111,19 @@ function scratchGone(reg, problems, name) {
 
 /* 19l: AN EXPANDABLE LEAD IS TAKEN AS WRITTEN (Grok's review 8, finding 1). A variable in the person's environment never
    becomes the lead this desk trusts: one that would expand to a good key is the bad lead said, and 64 lower-case hex written
-   into an expandable value is taken. The folder is still filled from the environment (19j). Lifting plant:lead-as-written
+   into an expandable value is taken. Lifting plant:lead-as-written
    expands the lead again, and the leg goes red. */
 function leadFromEnvironment(Pd) {
   const problems = [];
   process.env.TEST_POLICY_LEAD_19L = HEX;
   try {
     const named = Pd.joinPolicyFrom(exportText([["TeamFolder", "REG_SZ", "D:\\Quay\\team"], ["LeadKey", "REG_EXPAND_SZ", "%TEST_POLICY_LEAD_19L%"]]), "en");
-    if (named.lead !== "" || named.folder !== "" || saidOf(named) !== EN.lead + "|" + EN.beside)
+    if (named.lead !== "" || !!named.folder || saidOf(named) !== EN.lead)
       problems.push("a variable became the lead " + JSON.stringify(named));
     const alone = Pd.joinPolicyFrom(exportText([["LeadKey", "REG_EXPAND_SZ", "%TEST_POLICY_LEAD_19L%"]]), "en");
     if (alone.lead !== "" || saidOf(alone) !== EN.lead) problems.push("a variable alone became the lead " + JSON.stringify(alone));
     const written = Pd.joinPolicyFrom(exportText([["TeamFolder", "REG_SZ", "D:\\Quay\\team"], ["LeadKey", "REG_EXPAND_SZ", HEX]]), "en");
-    if (written.lead !== HEX || written.folder !== "D:\\Quay\\team" || written.said.length !== 0)
+    if (written.lead !== HEX || written.folder || written.said.length !== 0)
       problems.push("a key written into an expandable value was not taken " + JSON.stringify(written));
   } finally { delete process.env.TEST_POLICY_LEAD_19L; }
   return problems;
@@ -1155,7 +1135,7 @@ function leadFromEnvironment(Pd) {
   if (PLANTS_OFF) skip("19l lifting plant:lead-as-written fills the lead from the environment again (ETIUDA_PLANTS=off)");
   else {
     const src = liftPlant(SRC, "lead-as-written",
-      "    if (lead.type === \"REG_SZ\" ? policyLeadOk(lead.value) : lead.type === \"REG_EXPAND_SZ\" && policyLeadOk(policyExpand(lead.value))) { leadOk = true; leadValue = lead.type === \"REG_SZ\" ? lead.value : policyExpand(lead.value); }");
+      "    if ((lead.type === \"REG_SZ\" || lead.type === \"REG_EXPAND_SZ\") && policyLeadOk(lead.value.replace(/%([^%]+)%/g, (m, n) => process.env[n] || m))) leadValue = lead.value.replace(/%([^%]+)%/g, (m, n) => process.env[n] || m);");
     let turned = [];
     try { turned = src ? leadFromEnvironment(load(src, POLICY_DECLS.filter(m => src.indexOf(m) >= 0), ["joinPolicyFrom"], POLICY_NAMES, [() => "", { platform: "linux", env: process.env }, fs, os, path])) : []; }
     catch (e) { turned = []; problems.push("the lifted copy: " + e.message); }
@@ -1180,7 +1160,7 @@ function policyToPage(shell) {
     return { D: D, view: asWindows(() => D.api.joinView()) || {} };
   };
   const bad = viewOf({ rows: [["TeamFolder", "REG_SZ", "D:\\Quay\\team"], ["LeadKey", "REG_SZ", "   "]] }, "pl");
-  if (JSON.stringify(bad.view.policySaid) !== JSON.stringify([PL.lead, PL.beside])) problems.push("a bad lead's sentences " + JSON.stringify(bad.view.policySaid));
+  if (JSON.stringify(bad.view.policySaid) !== JSON.stringify([PL.lead])) problems.push("a bad lead's sentences " + JSON.stringify(bad.view.policySaid));
   const good = viewOf({ rows: [["TeamFolder", "REG_SZ", mine], ["LeadKey", "REG_SZ", HEX]] }, "en");
   if (good.view.policySaid !== undefined) problems.push("a good key said " + JSON.stringify(good.view.policySaid));
   const late = viewOf("late", "en"), absent = viewOf(null, "en");
@@ -1193,7 +1173,7 @@ function policyToPage(shell) {
   let problems = [];
   try { problems = policyToPage(null); } catch (e) { problems.push("harness: " + ((e && e.stack) || e)); }
   check(problems.length === 0, "19m a bad policy value's sentences reach the join view in the desk's language, a good key's none, and a read"
-    + " reg did not finish is said once as unread where a key that is not there is not: " + (problems.join("; ") || "two sentences in Polish, one unread line"));
+    + " reg did not finish is said once as unread where a key that is not there is not: " + (problems.join("; ") || "one sentence in Polish, one unread line"));
   if (PLANTS_OFF) skip("19m lifting plant:policy-said-view and plant:policy-unread each turns 19m red (ETIUDA_PLANTS=off)");
   else {
     const lifts = [["policy-said-view", "  /* plant lifted */"], ["policy-unread", "      } catch { text = \"\"; }"]].map(([name, line]) => {
@@ -1273,35 +1253,36 @@ function holdsRunGood(src, dir) {
   const reader = sync => load(src, POLICY_DECLS.concat(["function updateLookOff("]).filter(m => src.indexOf(m) >= 0),
     ["readJoinPolicy", "updateLookOff"], POLICY_NAMES, [sync, { platform: "win32" }, fs, { tmpdir: () => tmp }, path, app, (f, t) => fs.writeFileSync(f, t), later]);
   const late = () => { const e = new Error("spawnSync reg.exe ETIMEDOUT"); e.code = "ETIMEDOUT"; e.status = null; throw e; };
-  const rows = folder => [["TeamFolder", "REG_SZ", folder], ["LeadKey", "REG_SZ", HEX], ["DeskNoUpdateCheck", "REG_DWORD", 1]];
+  const rows = lead => [["LeadKey", "REG_SZ", lead], ["DeskNoUpdateCheck", "REG_DWORD", 1]];
+  const MOVED = "ef".repeat(32);
   const planted = JSON.stringify({ format: 1, kind: "etiuda-policy-last-good", folder: "E:\\Mine", lead: OTHER, bad: [], noUpdate: false,
     values: { teamfolder: { type: "REG_SZ", value: "E:\\Mine" }, leadkey: { type: "REG_SZ", value: OTHER }, allowpersonalaccounts: { type: "dword", value: "1" } } });
   const plantedFile = path.join(dir, "policy-last-good.json");
   fs.writeFileSync(plantedFile, planted, "utf8");
   const first = reader(late).readJoinPolicy("pl");
-  if (first.folder !== "" || first.lead !== "" || first.unread !== true || first.held === true || first.said.indexOf(PL.unread) < 0)
+  if (!!first.folder || first.lead !== "" || first.unread !== true || first.held === true || first.said.indexOf(PL.unread) < 0)
     problems.push("a first read that failed beside a planted copy " + JSON.stringify({ folder: first.folder, lead: first.lead === OTHER ? "the planted lead" : first.lead, unread: first.unread, held: first.held }));
   const realNow = Date.now;
   let shift = 0;
   Date.now = () => realNow() + shift;
   try {
-    const R = reader((file, args) => { fs.writeFileSync(args[2], exportBytes(rows("D:\\Quay\\team"))); return null; });
+    const R = reader((file, args) => { fs.writeFileSync(args[2], exportBytes(rows(HEX))); return null; });
     const good = R.readJoinPolicy("en");
-    if (good.folder !== "D:\\Quay\\team" || good.lead !== HEX || good.unread) problems.push("the good read " + JSON.stringify(good));
+    if (good.lead !== HEX || good.unread) problems.push("the good read " + JSON.stringify(good));
     shift = 61 * 1000;
     R.readJoinPolicy("en");
     if (queue.length !== 1) problems.push(queue.length + " look(s) asked a minute on, not 1");
     else answer(queue.shift(), "late");
     const held = R.readJoinPolicy("pl"), lookOff = R.updateLookOff();
-    if (held.folder !== "D:\\Quay\\team" || held.lead !== HEX || held.noUpdate !== true || held.unread !== true || held.held !== true
+    if (held.lead !== HEX || held.noUpdate !== true || held.unread !== true || held.held !== true
         || held.said.indexOf(PL.unread) < 0 || lookOff !== true)
-      problems.push("a look that failed after this run's good read " + JSON.stringify({ folder: held.folder, lead: held.lead === HEX, noUpdate: held.noUpdate, unread: held.unread, held: held.held, lookOff: lookOff }));
+      problems.push("a look that failed after this run's good read " + JSON.stringify({ lead: held.lead === HEX, noUpdate: held.noUpdate, unread: held.unread, held: held.held, lookOff: lookOff }));
     shift = 2 * 61 * 1000;
     R.readJoinPolicy("en");
-    if (queue.length) answer(queue.shift(), rows("D:\\Quay\\moved"));
+    if (queue.length) answer(queue.shift(), rows(MOVED));
     const moved = R.readJoinPolicy("en");
-    if (moved.folder !== "D:\\Quay\\moved" || moved.unread !== false || moved.said.length !== 0)
-      problems.push("a later good read " + JSON.stringify({ folder: moved.folder, unread: moved.unread, said: moved.said }));
+    if (moved.lead !== MOVED || moved.unread !== false || moved.said.length !== 0)
+      problems.push("a later good read " + JSON.stringify({ lead: moved.lead === MOVED, unread: moved.unread, said: moved.said }));
   } finally { Date.now = realNow; while (queue.length) answer(queue.shift(), "late"); }
   const left = fs.readdirSync(dir);
   if (left.length !== 1 || fs.readFileSync(plantedFile, "utf8") !== planted) problems.push("the user-data folder holds " + JSON.stringify(left) + " after the runs, not the planted file alone and unchanged");
@@ -1335,21 +1316,25 @@ const IT_ROWS = [["Managed", "REG_DWORD", 1], ["SigninProvider", "REG_SZ", "micr
    answer that tightens the desk refuses its Sign out. */
 const HELD_FILE = JSON.stringify({ format: 2, held: { provider: "microsoft", seed: "5".repeat(64), refresh: "", sub: "sealed-sub", seated: true } });
 let waitDesks = 0;
-/* A desk with a sign-in held, the organisation's model chosen with a key kept for its address, and a team pinned, over `reg`. */
+/* A desk with a sign-in held, the organisation's model chosen with a key kept for its address, and a relay team pinned by invitation
+   (was a team pinned beside a team file in the desk's folder; no folder is read as a team now), over `reg`. */
 function waitDesk(reg, shell) {
-  const name = "wait-" + (waitDesks++), ud = path.join(LAB, name), mine = path.join(LAB, name + "-folder");
+  const name = "wait-" + (waitDesks++), ud = path.join(LAB, name), mine = path.join(LAB, name + "-folder"), rt = hex(16);
   fs.mkdirSync(ud, { recursive: true });
   fs.mkdirSync(mine, { recursive: true });
+  fs.mkdirSync(path.join(ud, "relay", rt), { recursive: true });
   fs.writeFileSync(path.join(ud, "signin.json"), HELD_FILE, "utf8");
+  fs.writeFileSync(path.join(ud, "relay", rt, "etiuda-team.json"), "{}", "utf8");
   const T = "t-" + hex(8);
-  const L = asWindows(() => loadDesk(name, { keys: { eCatalogFolder: mine, eUiLang: "en" }, teamPins: { [T]: { keyId: "quay", public: HEX } } }, reg, shell));
+  const L = asWindows(() => loadDesk(name, { keys: { eCatalogFolder: mine, eUiLang: "en" }, teamPins: { [T]: { keyId: "quay", public: HEX } },
+    teamPinFrom: { [T]: "invite" }, teamChannel: { [T]: { kind: "relay", rt: rt, url: "https://etiuda.dev/relay/v1" } } }, reg, shell));
   const D = Object.assign({}, L, L.api);
   const at = D.peek("DESK_AI_SERVICES.openai.endpoint");
   const seal = text => Buffer.from(Buffer.from(String(text), "utf8").map(b => b ^ 0x5a)).toString("base64");
   fs.writeFileSync(path.join(ud, "desk-ai.json"), JSON.stringify({ format: 1, kind: "etiuda-desk-ai", choice: "organisation", provider: "openai", endpoint: "", model: "m" }), "utf8");
   fs.writeFileSync(path.join(ud, "desk-ai-key.json"), JSON.stringify({ format: 1, kind: "etiuda-desk-ai-key", sealed: seal(JSON.stringify({ for: at, key: "k-planted-4410" })) }), "utf8");
   fs.writeFileSync(path.join(mine, "etiuda-team.json"), "{}", "utf8");
-  return Object.assign(D, { team: T, folder: mine });
+  return Object.assign(D, { team: T, folder: mine, rt: rt });
 }
 /* What the desk does that policy could forbid, read through the shell's own functions. */
 function forbiddenNow(D) {
@@ -1362,9 +1347,13 @@ function forbiddenNow(D) {
       ai: D.peek("deskAiConfig()") !== null, store: D.peek("storePolicyNow().on") === true, lookOff: D.peek("updateLookOff()"),
       invite: D.peek("inviteDoor({ lead: { public: " + JSON.stringify(HEX) + " } })"),
     };
-    D.peek("teamStamp = ''");
-    D.heedTeam();
+    /* A relay withdrawal still owed keeps the team's mirror the catalog folder whatever trust policy leaves the pin, so the heed there
+       is stopped by the policy's own wait alone (plant:heed-waits); the join is put back after. */
+    D.peek("globalThis.__keptJoin = teamJoin; teamJoin = { team: " + JSON.stringify(D.team) + ", invite: { relay: { rt: " + JSON.stringify(D.rt)
+      + ", url: 'https://etiuda.dev/relay/v1', withdrawing: true } } }; teamStamp = ''; 0");
+    try { D.heedTeam(); } catch { /* the stamp below says whether the file was read */ }
     out.heeded = D.peek("teamStamp") !== "";
+    D.peek("teamJoin = globalThis.__keptJoin; delete globalThis.__keptJoin; 0");
     const row = (D.joinView().leads || [])[0] || {};
     out.leaveShown = row.policy !== true && row.waiting !== true;
     D.peek("forgetLead(" + JSON.stringify(D.team) + ", true)");
@@ -1568,7 +1557,17 @@ function leadReads(shell) {
     fs.writeFileSync(path.join(F, "etiuda-team.json"), JSON.stringify(teamFile, null, 1) + "\n", "utf8");
     return F;
   };
-  const K = name => { const F = folderWithFile(name); return { keys: { eCatalogFolder: F, eUiLang: "en" }, teamPins: { [T1]: leadA } }; };
+  /* Was: K pinned A for T1 with A's file in its folder. Now no folder is a team's: A's file is in the relay mirror a withdrawal still
+     owed keeps as K's catalog folder (withdrawing, below), whatever trust policy leaves the pin. */
+  const rtK = hex(16);
+  const K = name => {
+    const F = path.join(LAB, name, "relay", rtK);
+    fs.mkdirSync(F, { recursive: true });
+    fs.writeFileSync(path.join(F, "etiuda-team.json"), JSON.stringify(teamFile, null, 1) + "\n", "utf8");
+    return { keys: { eCatalogFolder: path.join(LAB, name + "-own"), eUiLang: "en" }, teamPins: { [T1]: leadA } };
+  };
+  const withdrawing = D => D.peek("teamJoin = { team: " + JSON.stringify(T1) + ", invite: { relay: { rt: " + JSON.stringify(rtK)
+    + ", url: 'https://etiuda.dev/relay/v1', withdrawing: true } } }; 0");
   const S = name => { const F = folderWithFile(name); return { keys: { eCatalogFolder: F, eUiLang: "en" }, teamPins: { [T1]: leadA }, teamShown: { [T1]: { folder: F } } }; };
   const R = name => { const F = folderWithFile(name); return { keys: { eCatalogFolder: F, eUiLang: "en" }, teamPins: { [T2]: leadA }, teamPinFrom: { [T2]: "invite" },
     teamChannel: { [T2]: { kind: "relay", rt: rt, url: "https://etiuda.dev/relay/v1" } } }; };
@@ -1594,11 +1593,13 @@ function leadReads(shell) {
   const catOk = (D, cat) => D.peek("catalogLeadOk(" + JSON.stringify(cat) + ")");
   const reads = registry => {
     const out = desk(K, registry, D => {
+      withdrawing(D);
       const pl = D.peek("pinnedLead()");
       return { catA: catOk(D, catA), catB: catOk(D, catB), pageA: D.peek("leadsForPage()").some(k => k.public === leadA.public), lead: pl ? pl.public : "",
         pins: Object.keys(D.envelope().teamPins || {}).length + Object.keys(D.peek("teamPins")).length, told: (D.joinView().leads || []).filter(r => r.otherLead === true).length };
     });
-    out.folderTeam = desk(S, registry, D => { const ft = D.peek("folderTeamHere()"); return ft ? ft.team : ""; });
+    /* Was folderTeamHere's team. Now no folder is a team's: the folder team S held reads its own folder, under any policy. */
+    out.folderTeam = desk(S, registry, D => (D.peek("catalogFolder()") === D.peek("rawCatalogFolder()") ? "" : D.peek("catalogFolder()")));
     out.relay = desk(R, registry, D => D.peek("relayFollowed(" + JSON.stringify(T2) + ")"));
     return out;
   };
@@ -1608,13 +1609,15 @@ function leadReads(shell) {
     const off = Object.keys(want).filter(k => got[k] !== want[k]);
     if (off.length) problems.push(what + ": " + off.map(k => k + " " + JSON.stringify(got[k] === leadA.public ? "A" : got[k] === leadB.public ? "B" : got[k])).join(", "));
   };
-  /* Policy names B over pins of A: nothing of A's is trusted on any reading path, through a restart, and the pins stay. */
+  /* Policy names B over pins of A: nothing of A's is trusted on any reading path, through a restart, and the pins stay. Was: B's
+     catalog trusted by none either, A's team file in K's folder naming T1's lead. Now the policy lets K's withdrawal under A go, so
+     K reads its own folder, where no team file is a team's, and B's catalog is the policy lead's, as with no pin at all (below). */
   for (const run of ["first", "restart"]) {
-    same(reads(policy(leadB)), { catA: "", catB: "", pageA: false, folderTeam: "", relay: false, lead: "", pins: 2, told: 1 }, "policy names B over pins of A (" + run + ")");
+    same(reads(policy(leadB)), { catA: "", catB: leadB.public, pageA: false, folderTeam: "", relay: false, lead: "", pins: 2, told: 1 }, "policy names B over pins of A (" + run + ")");
   }
-  /* The controls: no policy, and a policy naming A itself, trust A on every path as the desk always did. pinnedLead is not read
-     there: a heeded file makes T1 a folder team, whose folder is its mirror, empty here. */
-  const trusted = { catA: leadA.public, catB: "", pageA: true, folderTeam: T1, relay: true, pins: 2, told: 0 };
+  /* The controls: no policy, and a policy naming A itself, trust A on every path as the desk always did. pinnedLead is not
+     compared there. */
+  const trusted = { catA: leadA.public, catB: "", pageA: true, folderTeam: "", relay: true, pins: 2, told: 0 };
   same(reads(null), trusted, "the control, no policy");
   same(reads(policy(leadA)), trusted, "the control, policy naming A");
   /* While policy has not answered, no lead is trusted on any reading path. */
@@ -1630,20 +1633,20 @@ function leadReads(shell) {
 {
   let problems = [];
   try { problems = leadReads(null); } catch (e) { problems.push("harness: " + ((e && e.stack) || e)); }
-  check(problems.length === 0, "19t a policy lead other than a kept pin's: catalogLeadOk, leadsForPage, folderTeamHere, relayFollowed and pinnedLead"
+  check(problems.length === 0, "19t a policy lead other than a kept pin's: catalogLeadOk, leadsForPage, relayFollowed and pinnedLead"
     + " trust nothing of the kept lead's, through a restart, the pins kept and the team rows told; no pin, the policy's lead alone; while"
-    + " policy has not answered, no lead: " + (problems.join("; ") || "the policy's lead alone"));
+    + " policy has not answered, no lead; and a folder team held reads its own folder under any of them: " + (problems.join("; ") || "the policy's lead alone"));
   if (PLANTS_OFF) skip("19t lifting each of the one place's guards turns 19t red (ETIUDA_PLANTS=off)");
   else {
     const lifts = [["pin-policy-lead", "  return pin;"], ["pin-waits", "  void 0;"], ["leads-wait", "  void 0;"], ["leads-policy", "    void 0;"],
-      ["folder-publics-trusted", "  const pin = teamPins[doc.id];"], ["folder-team-trusted", "    void 0;"], ["follow-trusted", "  const pin = teamPins[team];"]].map(([name, line]) => {
+      ["folder-publics-trusted", "  const pin = teamPins[doc.id];"], ["follow-trusted", "  const pin = teamPins[team];"]].map(([name, line]) => {
       const src = liftPlant(SHELL, name, line);
       if (!src) return name + " not on exactly one line";
       let p = [];
       try { p = leadReads(src); } catch (e) { p = ["harness: " + e.message]; }
       return p.length ? "" : name + " lifted and 19t still green";
     }).filter(Boolean);
-    check(lifts.length === 0, "19t lifting each of pin-policy-lead, pin-waits, leads-wait, leads-policy, folder-publics-trusted, folder-team-trusted"
+    check(lifts.length === 0, "19t lifting each of pin-policy-lead, pin-waits, leads-wait, leads-policy, folder-publics-trusted"
       + " and follow-trusted turns 19t red: " + (lifts.join("; ") || "each red"));
   }
 }
@@ -1663,12 +1666,12 @@ const PIN_KEEPERS = {
   signinDoorsShown: "offers no door against any kept pin", teamPinStands: "any kept pin hides the doors",
   checkInviteRefusal: "ends a join on a refusal its lead signed", leadForPause: "reads a pause, which only stops",
   relayRingAt: "any kept pin on the relay believes no ring", forkChain: "says a fork, trusting nothing",
-  teamWriteHere: "where a write goes", pickMovedFolder: "a moved team's folder, outranked by the policy's",
+  pickMovedFolder: "a moved team's folder",
   storeSetAside: "keeps the floors under kept pins",
 };
-/* Each lists the kept pins to choose among them, so it must take each through pinTrusted: folderTeamHere the folder team here,
-   deskRoster the rosters whose desks' files are handed on (any kept pin narrows that). */
-const PIN_LISTERS = ["folderTeamHere", "deskRoster"];
+/* Each lists the kept pins to choose among them, so it must take each through pinTrusted: deskRoster the rosters whose desks'
+   files are handed on (any kept pin narrows that). */
+const PIN_LISTERS = ["deskRoster"];
 function pinReaders(src) {
   const lines = src.replace(/\/\*[\s\S]*?\*\//g, c => c.replace(/[^\n]/g, " ")).split("\n");
   const out = new Map();

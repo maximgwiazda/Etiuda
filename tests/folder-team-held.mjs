@@ -24,7 +24,7 @@ const MODS = path.join(ROOT, "src", "modules"), MOD_DIR = pathToFileURL(MODS).hr
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 13;
+const EXPECTED = 17;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -35,8 +35,10 @@ function check(ok, line) {
 function skip(line) { skipped++; console.log("  SKIP  " + line); }
 
 const LAB = createLab("etiuda-folder-team-held-");
-const SRC = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
-const EXPOSE = ["catalogFolder", "teamWriteHere", "heedTeam", "leadsView", "joinPolicyFacts", "armFolder", "teamRoster", "teamEpochSeen"];
+/* ETIUDA_SHELL_MAIN names another shell/main.js to judge, as tests/team-desk.mjs takes it: a tree before this one, for its reds. */
+const SRC = fs.readFileSync(process.env.ETIUDA_SHELL_MAIN || path.join(ROOT, "shell", "main.js"), "utf8");
+const EXPOSE = ["catalogFolder", "teamWriteHere", "heedTeam", "leadsView", "joinPolicyFacts", "armFolder", "teamRoster", "teamEpochSeen",
+  "pinnedLead", "sharedWrite"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -87,6 +89,10 @@ const edition = () => sign({ format: 2, kind: "etiuda-catalog", id: "wick-board"
   langs: [{ code: "en", label: "EN" }], tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers" } }],
   cards: [{ id: "c-wick", shelf: "t-op", bodyShape: "plain", title: { en: "Wick" }, body: { en: "A wick." } }] });
 
+/* A plain catalog, unsigned, as a shared write takes one. */
+const sharedText = () => JSON.stringify({ format: 2, kind: "etiuda-catalog", id: "loose-lamps", rev: 1, name: "Loose Lamps", date: "2026-04-01",
+  langs: [{ code: "en", label: "EN" }], tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers" } }],
+  cards: [{ id: "c-lamp", shelf: "t-op", bodyShape: "plain", title: { en: "Lamp" }, body: { en: "A lamp." } }] });
 /* Every file under `dir`, as relative path, size and digest, sorted. */
 function listing(dir) {
   const out = [];
@@ -244,6 +250,24 @@ try {
   check(!!both && !both.folder && both.lead === HEX && both.bad.length === 0 && !!alone && !alone.folder && alone.lead === "" && alone.bad.length === 0,
     "fth7 a TeamFolder in machine policy is not read, and LeadKey stands alone: " + JSON.stringify({ both, alone: alone && { folder: alone.folder, lead: alone.lead, bad: alone.bad } }));
 
+  /* fth14: no team file in the held team's folder is read as the team's, though its pin is kept: no lead is read from it. */
+  let lead = null;
+  try { lead = api.pinnedLead(); } catch (e) { lead = { threw: e.message }; }
+  check(lead === null, "fth14 the held team's file in its folder names no lead this desk joined under, its pin kept: " + JSON.stringify(lead));
+
+  /* fth15: a shared write into a folder holding a team's file is refused and writes nothing there, a desk that pins no team
+     included (the held desk's own is listed by fth8). */
+  const C = makeDesk("pinless", false);
+  fs.writeFileSync(path.join(C.ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: C.share, eUiLang: "en" } }), "utf8");
+  let wrote = null, wroteHeld = null;
+  try {
+    wroteHeld = await api.sharedWrite("loose.ec", sharedText(), "", true);
+    wrote = await loadDesk(C.ud).api.sharedWrite("loose.ec", sharedText(), "", true);
+  } catch (e) { wrote = { threw: e.message }; }
+  check(!!wrote && wrote.ok === false && wrote.refused === true && !fs.existsSync(path.join(C.share, "loose.ec"))
+    && !!wroteHeld && wroteHeld.ok === false && !fs.existsSync(path.join(A.share, "loose.ec")),
+    "fth15 a shared write into a folder holding a team's file is refused and writes nothing there: " + JSON.stringify({ pinless: wrote, held: wroteHeld }));
+
   /* fth8: the boot's look at the folder starts nothing that writes: share and mirror as they were. */
   try { await api.armFolder(null); } catch { /* the look's own refusal is not this check's */ }
   await new Promise(r => setTimeout(r, 300));
@@ -266,16 +290,23 @@ try {
     lines.splice(at, 1);
     const P = makeDesk("plant-" + tag, true);
     const d = loadDesk(P.ud, lines.join("\n"));
+    d.src = lines.join("\n");
     return (await judge(d, P)) ? "the check lifted" : "the check still held";
   };
   const shellPlants = [
-    ["fth10", "heed-relay-only", async (d, P) => {
+    ["fth10", "team-file-place", async (d, P) => {
       for (const root of [P.share, P.mirror]) fs.writeFileSync(path.join(root, "etiuda-team.json"), JSON.stringify(teamFile(2, [{ desk: { id: OTHER_DESK } }])), "utf8");
       d.api.heedTeam();
       return !!d.api.teamRoster[TEAM];
     }, "fth3"],
     ["fth11", "folder-held-row", async d => { const r = (await d.ask("etiuda:team-join", "leads")).leads.filter(x => x.team === TEAM)[0]; return !r || r.folderHeld !== true; }, "fth4"],
-    ["fth12", "folder-owed-row", async d => { const r = (await d.ask("etiuda:team-join", "leads")).leads.filter(x => x.team === TEAM)[0]; return !r || r.folderOwed !== true; }, "fth5"]];
+    ["fth12", "folder-owed-row", async d => { const r = (await d.ask("etiuda:team-join", "leads")).leads.filter(x => x.team === TEAM)[0]; return !r || r.folderOwed !== true; }, "fth5"],
+    ["fth16", "team-file-place", async d => d.api.pinnedLead() !== null, "fth14"],
+    ["fth17", "shared-team-folder", async (d, P) => {
+      fs.writeFileSync(path.join(P.ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: P.share, eUiLang: "en" } }), "utf8");
+      const r = await loadDesk(P.ud, d.src).api.sharedWrite("loose.ec", sharedText(), "", true);
+      return !!r && r.ok === true && fs.existsSync(path.join(P.share, "loose.ec"));
+    }, "fth15"]];
   for (const [id, tag, judge, of] of shellPlants) {
     if (PLANTS_OFF) { skip(id + " lifting plant:" + tag + " turns " + of + " red"); continue; }
     let detail = "";
