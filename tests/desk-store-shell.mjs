@@ -313,7 +313,7 @@ async function scopesOnScene(src) {
   const scopeOf = u => new URL(u).searchParams.get("scope"), formScope = f => new URLSearchParams(f).get("scope");
   const policy = { plain: T.storeOnFor(null, false).on, managedUnset: T.storeOnFor({ managed: { type: "dword", value: "1" } }, false).on,
     managedOn: T.storeOnFor({ managed: { type: "dword", value: "1" }, personalstore: { type: "REG_SZ", value: "on" } }, false).on, personOff: T.storeOnFor(null, true).on };
-  const ok = scopeOf(m.url) === "openid profile email offline_access" && formScope(m.form) === "openid profile offline_access Files.ReadWrite.AppFolder"
+  const ok = scopeOf(m.url) === "openid profile email offline_access" && formScope(m.form) === "openid profile email offline_access Files.ReadWrite.AppFolder"
     && scopeOf(gg.url) === "openid email profile" && formScope(gg.form) === null && gg.form === todayForm(T, g)
     && T.signinIo({ loop: null }).store === false && policy.plain === true && policy.managedUnset === false && policy.managedOn === true && policy.personOff === false;
   return { ok, detail: brief({ ms: scopeOf(m.url), msRefresh: formScope(m.form), google: scopeOf(gg.url), googleRefresh: formScope(gg.form), ioStore: T.signinIo({ loop: null }).store, policy }) };
@@ -353,7 +353,7 @@ async function refusedScene(src) {
   const r = await renewScene(src, { refuseFolder: true });
   const scopes = r.world.forms.map(f => new URLSearchParams(f).get("scope"));
   const ok = r.said === "renewed" && !!r.held && !!r.held.cert && !!r.now && r.now.state === "unavailable" && r.now.why === "ungiven" && r.now.say === "ungiven"
-    && scopes.join() === "openid profile offline_access Files.ReadWrite.AppFolder,openid profile offline_access" && r.world.graph.length === 0 && r.world.service.length === 1;
+    && scopes.join() === "openid profile email offline_access Files.ReadWrite.AppFolder,openid profile email offline_access" && r.world.graph.length === 0 && r.world.service.length === 1;
   return { ok, detail: brief({ said: r.said, seat: !!(r.held && r.held.cert), state: r.now && r.now.state, why: r.now && r.now.why, scopes, folderAsks: r.world.graph.length }) };
 }
 async function tokenScene(src) {
@@ -1695,7 +1695,7 @@ async function switchMidLookScene(src) {
    the loopback's landing to ask the folder alone; a refusal, or an administrator's approval needed, leaves the desk signed in and says
    "consent" once; a renewal asks the folder quietly and never opens a browser. The browser is a stand-in over real HTTP to the loopback. */
 const MS_AUTH = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
-const TODAY_MS = "openid profile email offline_access", TODAY_REFRESH = "openid profile offline_access", FOLDER_ALONE = "openid Files.ReadWrite.AppFolder";
+const TODAY_MS = "openid profile email offline_access", TODAY_REFRESH = "openid profile email offline_access", FOLDER_ALONE = "openid Files.ReadWrite.AppFolder";
 const labOf = () => ({ service: STAGING, clientIds: { microsoft: MS_CLIENT, google: G_CLIENT }, root: rawPub(LAB_ROOT.publicKey) });
 function loopGet(port, at) {
   return new Promise(resolve => {
