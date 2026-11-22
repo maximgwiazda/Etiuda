@@ -8067,6 +8067,7 @@ const CARD_B = {
   const hadMotion = ST.lsGet("eMotionOff");
 
   try {
+    /* moved, board 1018 (fold 125), old and new: 983a "the title bar drags only once the pointer has gone 4 px" -> "no editor is dragged: a press and a move of any length on its title bar leave it where the rule put it, the pointer not captured". */
     check("dialog.js", "983a no editor is dragged: a press and a move of any length on its title bar leave it where the rule put it, the pointer not captured (board 1018)",
       () => {
         fresh(); open("card");
@@ -8078,6 +8079,7 @@ const CARD_B = {
         return eq([c0, at().join(","), placed(), captured.length].join(" || "), "360,150 || 360,150 || false || 0");
       });
 
+    /* moved, board 1018 (fold 125), old and new: 983m "selection is off for the drag ... html.eddrag" -> "with no drag there is no drag state: html.eddrag never set, and the sheet no longer carries it". */
     check("dialog.js", "983m with no drag there is no drag state: a press and a move on an editor never set html.eddrag, and the sheet no longer carries it (board 1018)",
       () => {
         fresh(); open("card");
@@ -8090,6 +8092,7 @@ const CARD_B = {
         return eq([during, html.contains("eddrag"), tpl.indexOf("html.eddrag") >= 0].join("|"), "false|false|false");
       });
 
+    /* moved, board 1018 (fold 125), old and new: 983n "an editor that fills the window's width is kept centred sideways and still drags up and down" -> "stands centred, and a drag moves it neither way, narrow or wide". */
     check("dialog.js", "983n an editor that fills the window's width stands centred, and a drag moves it neither way, narrow or wide (board 1018)",
       () => {
         fresh(); view.W = 546; open("card");
@@ -8104,6 +8107,7 @@ const CARD_B = {
     /* ---- The desk in front (board 983 stage 2): since board 1018 that is every editor minimised. */
     const openEd = (place, vals, more) => open(place, Object.assign({ wire: () => { modalCard.kids[0].fields = vals.map(mkField); } }, more || {}));
 
+    /* moved, board 1018 (fold 125), old and new: 983r1 "a click on the dimmed desk puts the desk in front ... below 800 px too" -> "minimises every editor and does nothing else ... in a narrow window too". */
     check("dialog.js", "983r1 a click on the dimmed desk minimises every editor and does nothing else, the keyboard back on the desk, in a narrow window too (board 1018)",
       () => {
         fresh(); openEd("card", ["a"]);
@@ -8121,6 +8125,7 @@ const CARD_B = {
           "false,true,false,true,true || true,,true,false|true|true|true || true,,true,false || true || false");
       });
 
+    /* moved, board 1018 (fold 125), old and new: 983r2 "a press on a resting editor brings it in front ... goes back to its place" -> "minimised, an editor is out of sight and takes no press; the action button brings it back at the rule's place". */
     check("dialog.js", "983r2 minimised by the desk's click, an editor is out of sight and takes no press; the action button brings it back in front, at the rule's place (board 1018)",
       () => {
         fresh(); openEd("card", ["a"]);
@@ -8131,6 +8136,7 @@ const CARD_B = {
         return eq([gone, rests(), modalCard.classList.contains("ed-min"), at().join(",") === c0].join(" || "), "true|true || false,true,false,true || false || true");
       });
 
+    /* moved, board 1018 (fold 125), old and new: 983r3 "resting, an editor over the header stands 8 px under the tools' row" -> "minimised, it takes no room over the desk; back in front it is centred as before". */
     check("dialog.js", "983r3 minimised, an editor takes no room over the desk, so nothing stands it clear of the header; back in front it is centred as before (board 1018)",
       () => {
         fresh(); view.ch = 700; openEd("card", ["a"]);
@@ -8193,6 +8199,7 @@ const CARD_B = {
       });
 
 
+    /* moved, board 1018 (fold 125), old and new: 983r8 "the resting layer stands above ... the dim lifts" -> the same layering, its cards out of sight and taking no press (the resting look's lines replaced by `.ed-min{display:none}` and the rest layer's own line). */
     check("dialog.js", "983r8 minimised, the shared window stands above the cards, the rail, the pills and the floating buttons and under the desk's own overlays, its cards out of sight and taking no press; the header rises over it while one of its popovers is open; the dim lifts on the scrim tier (board 1018)",
       () => {
         const tpl = fs.readFileSync(join(HERE, "..", "src", "template.html"), "utf8");
@@ -8423,6 +8430,7 @@ const CARD_B = {
         return eq([two, modalEl.shells.length, titleOf(modalCard)].join(" || "), "1|true|typed in the card|Edit intent|true || 1 || Edit intent");
       });
 
+    /* moved, board 1018 (fold 125), old and new: 983w2 "from inside an editor the next stands beside it, 12 px apart: right, else left, else slides, else stepped" -> "takes its place by the rule: side by side, 24 px apart, centred, else a stack". */
     check("dialog.js", "983w2 from inside an editor the next takes its place by the rule: side by side, tops level, 24 px apart and centred as a group while the window holds both, else a stack, the one in hand in front (board 1018)",
       () => {
         const beside = W => {
@@ -8435,6 +8443,7 @@ const CARD_B = {
           "620,200 > 912,200 > Edit card 328 200 || 360,200 > 652,200 > Edit card 68 200 || 220,200 > 220,78 > Edit card 220 44");
       });
 
+    /* moved, board 1018 (fold 125), old and new: 983w3 "from the desk a new window stands at its kind's place, stepped" -> "from the desk too a new window takes its place by the rule". */
     check("dialog.js", "983w3 from the desk too a new window takes its place by the rule, the two side by side where they fit (board 1018)",
       () => {
         fresh(); openK("card", "c1");
@@ -8442,6 +8451,7 @@ const CARD_B = {
         return eq([at().join(","), shellAt()].join(" | "), "652,150 | Edit card 68 150");
       });
 
+    /* moved, board 1018 (fold 125), old and new: 983w4 "a press ... brings it forward where it stood; F6 walks the desk, then each editor" -> "brings it forward, nothing moving; F6 walks the editors showing, then the desk, and from the desk does what the button does; closing the last one showing leaves the desk in front". */
     check("dialog.js", "983w4 a press on an editor standing aside brings it forward, nothing moving; F6 walks the editors showing in the order opened, then the desk, and from the desk does what the action button does; closing the last one showing leaves the desk in front (board 1018)",
       () => {
         fresh(); view.W = 1800; openK("card", "c1"); openK("category", "k1");
@@ -8502,6 +8512,7 @@ const CARD_B = {
     /* ---- A narrow window: once bars below 800 px (board 983), since board 1018 the stack. */
     const narrowOpen = () => { fresh(); view.W = 546; view.H = 900; };
 
+    /* moved, board 1018 (fold 125), old and new: 983b1 to b8, the narrow window's bars (40 px bars, stacked 8 px apart, bar X, bar role) -> the narrow window's stack: minimise as in a wide one; two stacked, front a head under; head press and X; three stacked, most recent nearest; the front's room a head shorter per editor behind; crossing the room stacks and unstacks; minimised not modal, back by F6 modal; an X acts on the click. */
     check("dialog.js", "983b1 in a narrow window the desk's click minimises the editor as in a wide one: the scrim gone, the desk whole, nothing typed lost (board 1018)",
       () => {
         narrowOpen(); openK("card", "c1");
@@ -8581,6 +8592,7 @@ const CARD_B = {
         return eq([pressed, [modalEl.shells.length, titleOf(modalCard), DL.edResting()].join("|")].join(" || "), "1|Edit card|false || 0|Edit intent|false");
       });
 
+    /* moved, board 1018 (fold 125), old and new: 983w9 "a press on the title bar ... starts its drag in the same press" -> "a press anywhere ... brings it forward and moves nothing". */
     check("dialog.js", "983w9 a press anywhere on an editor standing aside, its title bar included, brings it forward and moves nothing (board 1018)",
       () => {
         fresh(); view.W = 1800; openK("card", "c1"); openK("category", "k1");
@@ -8610,6 +8622,7 @@ const CARD_B = {
       return at().join(",");
     };
 
+    /* moved, board 1018 (fold 125), old and new: 983t1 "... at its place" -> "... at the place the rule gives it"; 983w5, w6, t1, t4: the edOpenBeside call removed, expectations unchanged. */
     check("dialog.js", "983t1 closing every editor at once leaves one Undo, which brings back each editor that held typing, with it, at the place the rule gives it, the one in hand in front again (board 1018)",
       () => tourWith(() => {
         const intentAt = twoTyped(), n = bubbles.length;
@@ -8645,6 +8658,7 @@ const CARD_B = {
         return eq([modalEl.hidden, bubbles.length - n].join("|"), "true|0");
       }));
 
+    /* moved, board 1018 (fold 125), old and new: 983w8 "its edit row opening the editor beside" -> "opening the editor, which takes its own place" (edOpenBeside gone). */
     check("dialog.js", "983w8 every named thing an editor lists has the menu its own panel gives, by the same builder, its edit row opening the editor, which takes its own place (board 1018), F2 at its right, F2 and the menu keys on a focused one too, the menu above every editor; the tour closes every editor; the one in hand wears the accent line",
       () => {
         const rd = n => fs.readFileSync(join(MODDIR, n), "utf8");
@@ -8664,6 +8678,7 @@ const CARD_B = {
         return eq(got.join(","), "true,3,true,true,true,true,true,true,2");
       });
 
+    /* moved, board 1018 (fold 125), old and new: 983b "its buttons, a field, touch and the right button never start a drag; the name inside the bar does" -> "no press starts a drag, the name included; nothing stored". */
     check("dialog.js", "983b no press starts a drag, on its buttons, a field or the name, by touch or the right button: the editor stays where the rule put it and nothing is stored (board 1018)",
       () => {
         fresh(); open("card");
@@ -8676,6 +8691,7 @@ const CARD_B = {
         return eq([at().join(","), placed(), store(), captured.length].join("|"), c0 + "|false||0");
       });
 
+    /* moved, board 1018 (fold 125), old and new: 983c "it stays wholly inside the window, 8 px from each edge" -> "nothing can take it out: a drag toward either corner leaves it centred". */
     check("dialog.js", "983c it stays wholly inside the window, which nothing can now take it out of: a drag toward either corner leaves it centred, whatever the band's height (board 1018)",
       () => {
         fresh(); open("card");
@@ -8688,6 +8704,7 @@ const CARD_B = {
         return eq([topLeft, botRight, at().join(",")].join(" | "), "360,150 | 360,150 | 360,150");
       });
 
+    /* moved, board 1018 (fold 125), old and new: 983d "a smaller window pushes a moved editor back in, a larger gives back its place" -> "a smaller or larger window keeps one editor centred; nothing stored". */
     check("dialog.js", "983d a smaller window keeps one editor centred, and so does a larger one; nothing is stored (board 1018)",
       () => {
         fresh(); open("card");
@@ -8698,6 +8715,7 @@ const CARD_B = {
         return eq([small, at().join(","), store()].join(" | "), "170,50 | 360,150 | ");
       });
 
+    /* moved, board 1018 (fold 125), old and new: 983e "the place is kept per kind ... read back after a restart" -> "no place is kept or read; a stored one is neither read nor touched". */
     check("dialog.js", "983e no place is kept or read: each kind opens centred after closing and reopening, and a place a previous run stored is neither read nor touched (board 1018)",
       () => {
         fresh(); open("card");
@@ -8715,6 +8733,7 @@ const CARD_B = {
         return eq([intent, card, placed(), at().join(","), store() === raw].join(" | "), "false|360,150 | false|360,150 | false | 360,150 | true");
       });
 
+    /* moved, board 1018 (fold 125), old and new: 983f "a malformed store is refused kind by kind" -> "whatever the store holds, an editor opens centred and the store is not read or rewritten". */
     check("dialog.js", "983f whatever the store holds, well formed or not, an editor opens centred and the store is neither read nor rewritten (board 1018)",
       () => {
         const out = [];
@@ -8722,6 +8741,7 @@ const CARD_B = {
         return eq(out.join(" "), "false:360,150:true false:360,150:true false:360,150:true false:360,150:true");
       });
 
+    /* moved, board 1018 (fold 125), old and new: 983g "a double click on the title bar puts it back in the centre ... gliding" -> "does nothing: no place to forget, nothing glides". */
     check("dialog.js", "983g a double click on the title bar does nothing: there is no place to forget and nothing glides (board 1018)",
       () => {
         fresh(); open("card");
@@ -8734,6 +8754,7 @@ const CARD_B = {
         return eq([placed(), at().join(","), animated.length, store()].join(" | "), "false | " + c0 + " | 0 | ");
       });
 
+    /* moved, board 1018 (fold 125), old and new: 983h "a double click straight after a drag is not a reset" -> "a drag then a double click leave it where the rule put it". */
     check("dialog.js", "983h a drag then a double click leave the editor where the rule put it (board 1018)",
       () => {
         fresh(); open("card");
@@ -8744,6 +8765,7 @@ const CARD_B = {
         return eq([placed(), at().join(",") === c0].join("|"), "false|true");
       });
 
+    /* moved, board 1018 (fold 125), old and new: 983i "Prev, Next and the reopening stand where the editor stood" -> "stand where the rule puts it: alone, centred for its height". */
     check("dialog.js", "983i Prev, Next and the reopening after a first Save stand where the rule puts the editor: alone, centred for its own height (board 1018)",
       () => {
         fresh();
@@ -8759,6 +8781,7 @@ const CARD_B = {
         return eq([stood, afterNext, afterPrev, at().join(","), placed()].join("|"), "360,140|360,110|360,140|360,140|false");
       });
 
+    /* moved, board 1018 (fold 125), old and new: 983l "an entry tall enough to nudge the editor up glides from where the last was painted" -> "an entry of another height is centred anew, never placed". */
     check("dialog.js", "983l an entry of another height is centred anew, the editor never placed and nothing set for a glide from a placed top (board 1018)",
       () => {
         fresh();
@@ -8771,6 +8794,7 @@ const CARD_B = {
         return eq([at()[1], placed(), modalCard.style.transformOrigin].join("|"), "110|false|");
       });
 
+    /* moved, board 1018 (fold 125), old and new: 983j "a moved editor keeps its top and grows downward" -> "an editor alone grows about its centre; the placed rule stays on the sheet for rows and stacks". */
     check("dialog.js", "983j an editor alone grows about its centre as every dialog does, never placed; the placed rule stays on the sheet for editors side by side or stacked (board 1018)",
       () => {
         fresh(); open("card");
@@ -8783,6 +8807,7 @@ const CARD_B = {
         return eq([alone, sheet].join(" || "), "false||||75 || true,true");
       });
 
+    /* moved, board 1018 (fold 125), old and new: 983k "a dialog opened after a moved editor stands centred and does not drag" -> "one opened over editors side by side stands centred and does not drag". */
     check("dialog.js", "983k every other dialog stays centred and fixed: none names a place, and one opened over editors standing side by side stands centred and does not drag (board 1018)",
       () => {
         /* A place is named in an openDialog config, so only the modules that open one are read. */
