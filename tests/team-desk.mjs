@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 /* The floor: every leg below runs, or the file says it did not complete. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 105 - 12 - 7; /* 12 retired with the folder team (RETIRED_TWO_TEAMS_ONE_FOLDER) and 7 with the conflict sibling of the team file (each marked RETIRED) */
+const EXPECTED = 105 - 12 - 7 - 15; /* 12 retired with the folder team (RETIRED_TWO_TEAMS_ONE_FOLDER) and 7 with the conflict sibling of the team file and 15 with a folder team's head, ring and wait and the row's fork (each marked RETIRED); the plants of the fork and sibling scenes (14br to 14bx, 14cc, 14cj) are not yet retired with them */
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -1048,7 +1048,8 @@ try {
     }
 
     const ls = await laterScene(null);
-    check(ls.w.admitted && ls.followed && !ls.k2Opens && ls.pinAfter === ls.w.L[1].public && ls.saidFirst === 1
+    /* RETIRED, P4 (no folder is read as a team): the row's fork notice (a key's handover seen twice, or a later one) was raised by the folder's own reading of a team file; a team file read from a relay's mirror raises it through the relay channel (tests/relay-channel.mjs), and the shell's heed no longer gives the row the fork. It said what its sentence below says. */
+    retire(ls.w.admitted && ls.followed && !ls.k2Opens && ls.pinAfter === ls.w.L[1].public && ls.saidFirst === 1
       && !!ls.rowFirst && !!ls.rowFirst.fork && ls.rowFirst.fork.kind === "later" && ls.rowFirst.fork.seen === false
       && ls.saidAgain === 1 && ls.saidRestart === 0 && !!ls.rowRestart && !!ls.rowRestart.fork && ls.saidNew === 1 && ls.pinEnd === ls.w.L[1].public,
       "14bm a desk that followed key 0 to key 1 and then sees a genuine handover of key 0 to key 2 stays on key 1, says so once and"
@@ -1243,7 +1244,8 @@ try {
     dz.w.restart();
     await read(dz.w.D, "lamps.ec");
     const dzFresh = await dz.w.row();
-    check(!!dzRow && !!dzRow.fork && dzRow.fork.seen === true && !!dzFresh && !!dzFresh.fork && dzFresh.fork.seen === true,
+    /* RETIRED, P4 (no folder is read as a team): the row's fork notice (a key's handover seen twice, or a later one) was raised by the folder's own reading of a team file; a team file read from a relay's mirror raises it through the relay channel (tests/relay-channel.mjs), and the shell's heed no longer gives the row the fork. It said what its sentence below says. */
+    retire(!!dzRow && !!dzRow.fork && dzRow.fork.seen === true && !!dzFresh && !!dzFresh.fork && dzFresh.fork.seen === true,
       "14bq a dismissed fork notice stays dismissed for that fork, a restart included: seen " + (dzRow && dzRow.fork && dzRow.fork.seen)
       + ", after the restart " + (dzFresh && dzFresh.fork && dzFresh.fork.seen));
 
@@ -1299,7 +1301,8 @@ try {
       }
       const LATER_EN = "Someone has used this team's old lead key to hand the team to another key as well, so that key is evidently in someone else's hands. This desk stays with the key it already follows, and the catalogs on it stay as they are. Tell the team's lead about it.";
       const TWO_PL = "Klucz lidera tego zespołu przekazano jednocześnie dwóm różnym nowym kluczom, więc stanowisko nie podąża za żadnym z nich. Katalogi na nim zostają bez zmian. Proszę powiedzieć o tym liderowi zespołu.";
-      check(shown.en === LATER_EN && shown.pl === TWO_PL && dismissed && asked.indexOf("fork-seen") >= 0 && seenAfter === true,
+      /* RETIRED, P4 (no folder is read as a team): the row's fork notice (a key's handover seen twice, or a later one) was raised by the folder's own reading of a team file; a team file read from a relay's mirror raises it through the relay channel (tests/relay-channel.mjs), and the shell's heed no longer gives the row the fork. It said what its sentence below says. */
+      retire(shown.en === LATER_EN && shown.pl === TWO_PL && dismissed && asked.indexOf("fork-seen") >= 0 && seenAfter === true,
         "14by the page shows the fork on the team's lasting notice in the copywriter's words, here one after the other in English and"
         + " two at once in Polish, and a dismissal reaches the shell: English " + JSON.stringify(shown.en) + ", Polish " + JSON.stringify(shown.pl)
         + ", dismissed " + dismissed + ", asked " + asked.filter(a => a === "fork-seen").length + ", seen " + seenAfter);
@@ -1379,7 +1382,8 @@ try {
     }
     {
       const d = await dismissedThenLater(null);
-      check(d.firstShown === "shown" && d.seenFirst === true && d.downAfter && d.saidSecond === 1
+      /* RETIRED, P4 (no folder is read as a team): the row's fork notice (a key's handover seen twice, or a later one) was raised by the folder's own reading of a team file; a team file read from a relay's mirror raises it through the relay channel (tests/relay-channel.mjs), and the shell's heed no longer gives the row the fork. It said what its sentence below says. */
+      retire(d.firstShown === "shown" && d.seenFirst === true && d.downAfter && d.saidSecond === 1
         && d.hexKey(d.keyFirst) && d.hexKey(d.keySecond) && d.keyFirst !== d.keySecond && d.secondShown === d.LATER_EN,
         "14cd a dismissed fork stays dismissed, and a second fork with a different key is said: first " + d.firstShown
         + ", seen " + d.seenFirst + ", down " + d.downAfter + ", said after the restart " + d.saidSecond
@@ -1584,7 +1588,8 @@ try {
   await read(DF6, "lamps.ec");
   const ringAsked = await DF6.ask("etiuda:catalog-ring");
   const ringRead = DF6.api.readRing();
-  check(ringAsked === JSON.stringify(embeddedRing) && JSON.stringify(ringRead) === JSON.stringify(embeddedRing),
+  /* RETIRED, P4 (no folder is read as a team): a folder team's head, ring, epoch wait and first listing were read off its team file in the share (the seal wait and the folder's own ring and head are gone; relay-channel's head and ring checks hold a team's). It said what its sentence below says. */
+  retire(ringAsked === JSON.stringify(embeddedRing) && JSON.stringify(ringRead) === JSON.stringify(embeddedRing),
     "14bb a folder team file with an embedded ring is read from the team file itself, with no loose etiuda-ring.json: "
     + (ringAsked === JSON.stringify(embeddedRing) ? "embedded" : "missed"));
 
@@ -1615,7 +1620,8 @@ try {
   put(F6, "etiuda-head.json", JSON.stringify(freshHead));
   const leads1 = await DF6.ask("etiuda:team-join", "leads");
   const row1 = ((leads1 && leads1.leads) || []).find(r => r.team === T6);
-  check(!!row1 && !!row1.head && row1.head.edition === "Lamp Shop v3" && row1.head.published === "2026-02-03" && row1.head.t === headNow,
+  /* RETIRED, P4 (no folder is read as a team): a folder team's head, ring, epoch wait and first listing were read off its team file in the share (the seal wait and the folder's own ring and head are gone; relay-channel's head and ring checks hold a team's). It said what its sentence below says. */
+  retire(!!row1 && !!row1.head && row1.head.edition === "Lamp Shop v3" && row1.head.published === "2026-02-03" && row1.head.t === headNow,
     "14bd a newer genuine etiuda-head.json on a folder team shows its edition and publish time in leadsView(): "
     + (row1 && row1.head ? row1.head.edition + " / " + row1.head.published : "no head"));
 
@@ -1624,7 +1630,8 @@ try {
   const lowHead = makeHead(T6, [{ catalog: "lamp-shop", rev: 4, edition: "Lamp Shop v4", published: "2026-02-04" }], headNow + 500, null, null, 1);
   put(F6, "etiuda-head.json", JSON.stringify(lowHead));
   const rowLow = (((await DF6.ask("etiuda:team-join", "leads")) || {}).leads || []).find(r => r.team === T6);
-  check(!!rowLow && !rowLow.head, "962s5t6 a genuine newer head below the folder team file's epoch shows nothing in leadsView(): "
+  /* RETIRED, P4 (no folder is read as a team): a folder team's head, ring, epoch wait and first listing were read off its team file in the share (the seal wait and the folder's own ring and head are gone; relay-channel's head and ring checks hold a team's). It said what its sentence below says. */
+  retire(!!rowLow && !rowLow.head, "962s5t6 a genuine newer head below the folder team file's epoch shows nothing in leadsView(): "
     + (rowLow && rowLow.head ? rowLow.head.edition : "nothing"));
   if (PLANTS_OFF) skip("962s5t7 lifting plant:folder-head-epoch shows the head below the team file's epoch");
   else {
@@ -1646,7 +1653,8 @@ try {
   put(F6, "etiuda-head.json", JSON.stringify(forgedHead));
   const leadsForged = await DF6.ask("etiuda:team-join", "leads");
   const rowForged = ((leadsForged && leadsForged.leads) || []).find(r => r.team === T6);
-  check(!!rowForged && !rowForged.head,
+  /* RETIRED, P4 (no folder is read as a team): a folder team's head, ring, epoch wait and first listing were read off its team file in the share (the seal wait and the folder's own ring and head are gone; relay-channel's head and ring checks hold a team's). It said what its sentence below says. */
+  retire(!!rowForged && !rowForged.head,
     "14bj a forged etiuda-head.json on a folder team shows nothing in leadsView(): "
     + (rowForged && !rowForged.head ? "nothing shown" : "showed head"));
 
@@ -1655,7 +1663,8 @@ try {
   put(F6, "etiuda-head.json", JSON.stringify(foreignHead));
   const leadsForeign = await DF6.ask("etiuda:team-join", "leads");
   const rowForeign = ((leadsForeign && leadsForeign.leads) || []).find(r => r.team === T6);
-  check(!!rowForeign && !rowForeign.head,
+  /* RETIRED, P4 (no folder is read as a team): a folder team's head, ring, epoch wait and first listing were read off its team file in the share (the seal wait and the folder's own ring and head are gone; relay-channel's head and ring checks hold a team's). It said what its sentence below says. */
+  retire(!!rowForeign && !rowForeign.head,
     "14bk a foreign-key etiuda-head.json on a folder team shows nothing in leadsView(): "
     + (rowForeign && !rowForeign.head ? "nothing shown" : "showed head"));
 
@@ -1665,7 +1674,8 @@ try {
   put(F6, "etiuda-head.json", JSON.stringify(olderHead));
   const leadsOlder = await DF6.ask("etiuda:team-join", "leads");
   const rowOlder = ((leadsOlder && leadsOlder.leads) || []).find(r => r.team === T6);
-  check(!!rowOlder && !rowOlder.head,
+  /* RETIRED, P4 (no folder is read as a team): a folder team's head, ring, epoch wait and first listing were read off its team file in the share (the seal wait and the folder's own ring and head are gone; relay-channel's head and ring checks hold a team's). It said what its sentence below says. */
+  retire(!!rowOlder && !rowOlder.head,
     "14bl an older etiuda-head.json (rev 1 below the desk's rev 2) on a folder team shows nothing in leadsView(): "
     + (rowOlder && !rowOlder.head ? "nothing shown" : "showed head"));
 
@@ -1677,7 +1687,8 @@ try {
   const chWithRing = chProg.readRing({ teamDoc: folderDocWithRing, looseRing: looseRing });
   const chLoose = chProg.readRing({ teamDoc: folderDocNoRing, looseRing: looseRing });
   const chNone = chProg.readRing({ teamDoc: folderDocNoRing, looseRing: null });
-  check(chWithRing.source === "team" && JSON.stringify(chWithRing.ring) === JSON.stringify(embeddedRing)
+  /* RETIRED, P4 (no folder is read as a team): a folder team's head, ring, epoch wait and first listing were read off its team file in the share (the seal wait and the folder's own ring and head are gone; relay-channel's head and ring checks hold a team's). It said what its sentence below says. */
+  retire(chWithRing.source === "team" && JSON.stringify(chWithRing.ring) === JSON.stringify(embeddedRing)
     && chLoose.source === "loose" && JSON.stringify(chLoose.ring) === JSON.stringify(looseRing)
     && chNone.source === "none" && chNone.ring === null,
     "14bh channel.cjs readRing accepts embedded ring in folder teamDoc and falls back to looseRing without one: "
@@ -1692,7 +1703,8 @@ try {
   const ownOnRelay = relayProg.readRing({ teamDoc: relayDoc, looseRing: looseRing });
   const bareOnRelay = relayProg.readRing({ teamDoc: bareRelayDoc, looseRing: looseRing });
   const loadedFolder = relayProg.loadTeamFile(folderDocWithRing);
-  check(folderOnRelay.source === "loose" && JSON.stringify(folderOnRelay.ring) === JSON.stringify(looseRing)
+  /* RETIRED, P4 (no folder is read as a team): a folder team's head, ring, epoch wait and first listing were read off its team file in the share (the seal wait and the folder's own ring and head are gone; relay-channel's head and ring checks hold a team's). It said what its sentence below says. */
+  retire(folderOnRelay.source === "loose" && JSON.stringify(folderOnRelay.ring) === JSON.stringify(looseRing)
     && ownOnRelay.source === "team" && JSON.stringify(ownOnRelay.ring) === JSON.stringify(embeddedRing)
     && bareOnRelay.source === "none" && bareOnRelay.ring === null
     && loadedFolder.ok === false && loadedFolder.reason === "wrong-team",
@@ -1726,7 +1738,8 @@ try {
     DA.api.catalogChanged(winA);
     const openedNew = DA.api.readCatalog();
     const offers = sentA.filter(a => a[0] === "etiuda:catalog-file");
-    check(quiet && held === A2.trim() && openedNew === A3.trim() && offers.some(a => a[1] === A3.trim() && a[2] === "lamps.ec")
+    /* RETIRED, P4 (no folder is read as a team): a folder team's head, ring, epoch wait and first listing were read off its team file in the share (the seal wait and the folder's own ring and head are gone; relay-channel's head and ring checks hold a team's). It said what its sentence below says. */
+    retire(quiet && held === A2.trim() && openedNew === A3.trim() && offers.some(a => a[1] === A3.trim() && a[2] === "lamps.ec")
       && !keyMiss(DA),
       "14be an edition sealed one epoch ahead of the team file keeps the edition in use and says nothing, and opens once"
       + " the file lands: held " + (held === A2.trim() ? "yes" : "no") + ", quiet " + (quiet ? "yes" : "no")
@@ -1762,7 +1775,8 @@ try {
       lateSaid = !!(lateJoin && lateJoin.sealed && lateJoin.sealed.team === TEAM) && keyMiss(DB);
       lateFile = lateJoin && lateJoin.sealed ? lateJoin.sealed.file : "";
     } finally { Date.now = realNow; }
-    check(earlyQuiet && midQuiet && lateSaid && lateFile === "lamps.ec",
+    /* RETIRED, P4 (no folder is read as a team): a folder team's head, ring, epoch wait and first listing were read off its team file in the share (the seal wait and the folder's own ring and head are gone; relay-channel's head and ring checks hold a team's). It said what its sentence below says. */
+    retire(earlyQuiet && midQuiet && lateSaid && lateFile === "lamps.ec",
       "14bf a team file that never comes keeps the edition until the wait's last moment and then says this desk holds no"
       + " key, naming the file: quiet before " + (earlyQuiet ? "yes" : "no") + ", at "
       + (WAIT_MS - 1) + " ms " + (midQuiet ? "yes" : "no") + ", at " + WAIT_MS + " ms "
@@ -1837,13 +1851,15 @@ try {
       shown = d.api.readCatalog();
       const reading = d.said.some(l => l.indexOf("still reading the team's shared folder") >= 0);
       const slate = d.said.some(l => l.indexOf("no catalog found") >= 0);
-      check(!!s && before === 0 && early == null && shareClosed && reading && !slate && shown === A1.trim(),
+      /* RETIRED, P4 (no folder is read as a team): a folder team's head, ring, epoch wait and first listing were read off its team file in the share (the seal wait and the folder's own ring and head are gone; relay-channel's head and ring checks hold a team's). It said what its sentence below says. */
+      retire(!!s && before === 0 && early == null && shareClosed && reading && !slate && shown === A1.trim(),
         "14ch a desk started on a folder team reads nothing under the share before the first listing lands (" + before
         + (before ? ": " + hits.slice(0, before).join("; ") : "") + "), says it is still reading, and then the catalog shows (shown "
         + (shown === A1.trim()) + ", share closed " + shareClosed + ")");
     } catch (e) {
       err = String(e && e.stack || e);
-      check(false, "14ch a desk started on a folder team reads nothing under the share before the first listing lands: " + err);
+      /* RETIRED, P4 (no folder is read as a team): a folder team's head, ring, epoch wait and first listing were read off its team file in the share (the seal wait and the folder's own ring and head are gone; relay-channel's head and ring checks hold a team's). It said what its sentence below says. */
+      retire(false, "14ch a desk started on a folder team reads nothing under the share before the first listing lands: " + err);
     } finally {
       for (const n of spyNames) fs[n] = spyOrig[n];
       try { if (s && typeof s.stop === "function") s.stop(); } catch {}
