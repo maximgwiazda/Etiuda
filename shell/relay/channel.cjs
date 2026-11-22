@@ -34,8 +34,8 @@
    other's uploads. A blob of this key that the record does not show is judged and applied as anyone's is, and once more
    against the record: not later than what this computer last sent for the path, it is older and changes nothing; later,
    but the mirror holds neither its bytes nor what was last sent there, the path changed on two computers, and ownHeld says which
-   stands. Else it is written and recorded as sent, so the next edit replaces it and the chain
-   stays one. The record is the sent paths as before, and `clash` for a root file both changed; a state written earlier reads
+   stands, the team file across an epoch move too (landTeam). Else it is written and recorded as sent, so the next edit
+   replaces it and the chain stays one. The record is the sent paths as before, and `clash` for a root file both changed; a state written earlier reads
    as it did.
 
    AN EPOCH MOVE (F1 of the slice 1 review). The team file of a new epoch carries each remaining desk's wrap of the new key,
@@ -1220,6 +1220,12 @@ function createProgram(opts) {
       return { ok: true, path: TEAM_NAME, same: true };
     }
     const held = heldTeam();
+    /* This key's own file at an older epoch than an edit here never sent (a move made offline, met by the other computer's edit
+       at the old epoch): the same rule as within an epoch (ownHeld), so the edit, the newer by epoch, takes that blob as the last
+       sent and replaces it at the relay, and the other is said and kept. Anything else at an older epoch is a replay. */
+    let ahead = null;
+    ahead = held && t.epoch < held.epoch && ownOf(ctx, r) ? ownHeld(r, pathKey(TEAM_NAME)) : null; /* plant:own-epoch-ahead */
+    if (ahead && ahead.kept) return ahead;
     if (held && t.epoch < held.epoch) return R("replay-rev"); /* plant:epoch-hold */
     const lr = B.revLoad(st.revs, revKey(t));
     if (!lr.ok) return lr; /* plant:team-rev */
