@@ -13,6 +13,8 @@
  * the link, it shows the link's confirm, asks no check code and joins on yes; a folder invitation keeps its code (3hp). The paste box
  * reads the https form as the same invitation, and no other https address (3hr).
  * The person's Cancel on a link confirm lets the link go in the shell (3hq).
+ * A relay invitation whose lead key is not the one its key id names is refused before anything is pinned or spent (3hs), and a
+ * second link handed over before the first window loaded is offered after the first is answered (3ht).
  */
 process.removeAllListeners("warning");
 process.on("warning", () => {});
@@ -32,7 +34,7 @@ if (process.env.ETIUDA_PLANTS_COPY !== "1") {
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 
-const EXPECTED = 32;
+const EXPECTED = 34;
 const LINK_FOLDER = "A folder invitation is pasted in Etiuda, not opened from a link.";
 const LINK_FOLDER_PL = "Zaproszenie do folderu wkleja się w Etiudzie; z odnośnika się go nie otwiera.";
 const LINK_FORM = "Etiuda cannot read this link, so nothing was opened or sent. The invitation can be pasted in Etiuda instead.";
@@ -41,6 +43,8 @@ const LINK_NO_TEAM = "This invitation names no team this desk can join, so nothi
 const LINK_NO_TEAM_PL = "To zaproszenie nie wskazuje zespołu, do którego to stanowisko mogłoby dołączyć, więc niczego nie wysłano. Nowe wystawi lider zespołu.";
 const LINK_LONG = "This invitation is longer than Etiuda opens, so it was not opened. Ask your lead for a new one.";
 const LINK_LONG_PL = "To zaproszenie jest dłuższe, niż Etiuda może otworzyć, więc go nie otwarto. Nowe wystawi lider zespołu.";
+const LINK_KEY = "This invitation carries a lead's key that does not belong to its lead, so it was not used and nothing was sent. Ask your lead for a new one.";
+const LINK_KEY_PL = "To zaproszenie zawiera klucz, który nie należy do jego lidera, więc go nie użyto i niczego nie wysłano. Nowe wystawi lider zespołu.";
 const WIN_LOG = "Windows did not make this desk the program that opens an etiuda: link";
 const HOST = "relay.example";
 const RELAY_URL = "https://" + HOST + "/v1";
@@ -222,10 +226,13 @@ async function liftAsync(tag, fn, file, replacement) {
 }
 
 const hex = n => crypto.randomBytes(n).toString("hex");
+/* A relay team's lead key id is the one Studio makes of its public half, as the relay requires of it (relay/core.cjs leadKeyMatches). */
+const studioIdOf = pub => "studio-" + crypto.createHash("sha256").update(Buffer.from(pub, "hex")).digest("hex").slice(0, 16);
 function relayDoc() {
+  const pub = hex(32);
   return {
     team: "t-" + hex(8), secret: hex(16),
-    lead: { keyId: "quay-lead", public: hex(32), name: LEAD },
+    lead: { keyId: studioIdOf(pub), public: pub, name: LEAD },
     relay: { rt: hex(16), url: RELAY_URL, token: hex(32), inv: hex(16) },
   };
 }
@@ -1069,6 +1076,96 @@ try {
     + "; lifting the https line at plant:paste-https: " + httpsLift.detail + ", sha " + (httpsLift.back ? "restored" : "differs")
     + "; loosening its host and path there: " + hostLoose.detail + " (" + hostLifted + "), sha " + (hostLoose.back ? "restored" : "differs")
     + "; lifting its cap there: " + capLoose.detail + " (" + capLifted + "), sha " + (capLoose.back ? "restored" : "differs"));
+
+  /* A crafted link: the genuine invitation with only its lead's public key replaced, the key id, the team, the relay, the token and
+     the secret left as they were. Its link is refused in its own two sentences before any confirm, the same text pasted is refused at
+     read and at yes, and nothing is pinned or written; the genuine link then shows its confirm and joins on yes, pinned under its own
+     lead (3hs). */
+  const crafted = JSON.parse(JSON.stringify(doc));
+  crafted.lead.public = hex(32);
+  const craftedArg = "etiuda:join#" + pack(crafted), craftedText = "etiuda-join:" + pack(crafted);
+  async function craftedRun(src) {
+    const L = loadShell({ lock: false, src: src });
+    L.api.bindWindow(L.win);
+    const said0 = L.said.length, sent0 = L.sent.length;
+    const got = L.api.acceptLink(craftedArg);
+    const lines = L.said.slice(said0);
+    const views = L.sent.slice(sent0).filter(m => m[0] === "etiuda:team-join");
+    const v = views.length === 1 && views[0][1] ? views[0][1] : null;
+    const linkRefused = !!(got && got.confirm !== true && got.refused === LINK_KEY && hasBoth(lines, LINK_KEY, LINK_KEY_PL)
+      && v && v.linkRefusal && v.linkRefusal.en === LINK_KEY && v.linkRefusal.pl === LINK_KEY_PL && !v.offer && L.api.heldText() === "");
+    const read = await L.join("read", craftedText);
+    const pasted = await L.join("invite", craftedText, "Ola", "");
+    const pastedTaken = takenOf(L, pasted);
+    const pasteRefused = !!(read && !read.offer && read.refused) && !!pastedTaken.refused && !pastedTaken.kept && !pastedTaken.mirror;
+    const untouched = fs.readFileSync(path.join(L.ud, "desk.json"), "utf8") === L.desk;
+    const first = L.api.acceptLink(exactArg);
+    const taken = takenOf(L, await L.join("link", "", "Ola"));
+    let env = null;
+    try { env = JSON.parse(fs.readFileSync(path.join(L.ud, "desk.json"), "utf8")); } catch (e) { env = null; }
+    const pin = env && env.teamPins ? env.teamPins[doc.team] : null;
+    const genuine = !!(first && first.confirm === true) && joinedClean(taken) && !!pin
+      && pin.keyId === doc.lead.keyId && pin.public === doc.lead.public;
+    const said = got ? (got.confirm === true ? "confirm" : String(got.refused || "nothing")) : "nothing";
+    return { ok: linkRefused && pasteRefused && untouched && genuine,
+      note: "link " + (linkRefused ? "refused in its sentences" : said.slice(0, 60)) + ", read "
+        + (read ? (read.refused || (read.offer ? "offered" : "nothing")) : "nothing") + ", pasted yes " + sayTaken(pastedTaken)
+        + ", desk " + (untouched ? "untouched" : "written") + ", genuine " + sayTaken(taken)
+        + (pin ? (pin.public === doc.lead.public ? " under its lead" : " under another key") : " with no pin") };
+  }
+  const craftedNow = await craftedRun(undefined);
+  const keyNotes = [];
+  let keyTurned = true;
+  for (const tag of ["plant:link-key", "plant:read-key", "plant:take-key"]) {
+    let note = "";
+    const p = await liftAsync(tag, async src => { const r = await craftedRun(src); note = r.note; return !r.ok; }, MAIN);
+    keyTurned = keyTurned && p.turned && p.back;
+    keyNotes.push(tag + " " + p.detail + (note ? " (" + note + ")" : "") + ", sha " + (p.back ? "restored" : "differs"));
+  }
+  check(craftedNow.ok && keyTurned,
+    "3hs a link whose lead key is not the one its key id names is refused in its own sentences, EN and PL, before any confirm, the same text "
+    + "pasted is refused at read and at yes, nothing pinned or written, and the genuine invitation then joins under its own lead: " + craftedNow.note
+    + "; lifting " + keyNotes.join("; "));
+
+  /* Two links at a cold start: the desk started by link A, and link B handed over twice by second launches before the window loaded.
+     A is offered at load and B waits; B is offered once, when A is answered by Cancel or by a yes, so neither is dropped (3ht). */
+  const docB = relayDoc();
+  const argB = "etiuda:join#" + pack(docB), textB = "etiuda-join:" + pack(docB);
+  async function queueRun(src, answer) {
+    const L = withArgv(["Etiuda.exe", exactArg], () => loadShell({ lock: true, packaged: true, src: src }));
+    const h = (L.ons["second-instance"] || [])[0] || null;
+    if (h) { h({}, ["Etiuda.exe", argB]); h({}, ["Etiuda.exe", argB]); }
+    const offers = () => L.sent.filter(m => m[0] === "etiuda:team-join" && m[1] && m[1].offer).map(m => m[1].offer.team);
+    const early = offers().length;
+    L.api.bindWindow(L.win);
+    L.api.handHeldLink(L.win);
+    const atLoad = offers();
+    const ans = answer === "yes" ? await L.join("link", "", "Ola") : await L.join("link-no");
+    await settle();
+    const after = offers();
+    const joined = answer !== "yes" || joinedClean(takenOf(L, ans));
+    const ok = !!h && early === 0 && atLoad.length === 1 && atLoad[0] === doc.team && joined
+      && after.length === 2 && after[1] === docB.team && L.api.heldText() === textB;
+    const name = t => (t === doc.team ? "A" : t === docB.team ? "B" : "?");
+    return { ok, note: answer + ": at load [" + atLoad.map(name).join(",") + "], after [" + after.map(name).join(",") + "]"
+      + (joined ? "" : ", A not joined") + (L.api.heldText() === textB ? ", B held" : ", B not held") };
+  }
+  const queueNo = await queueRun(undefined, "no"), queueYes = await queueRun(undefined, "yes");
+  const queueNotes = [];
+  let queueTurned = true;
+  for (const [tag, line] of [["plant:link-queue", "  if (link) acceptLink(link);"], ["plant:link-next-no"], ["plant:link-next-yes"]]) {
+    let note = "";
+    const p = await liftAsync(tag, async src => {
+      const a = await queueRun(src, "no"), b = await queueRun(src, "yes");
+      note = a.note + "; " + b.note;
+      return !(a.ok && b.ok);
+    }, MAIN, line);
+    queueTurned = queueTurned && p.turned && p.back;
+    queueNotes.push(tag + " " + p.detail + (note ? " (" + note + ")" : "") + ", sha " + (p.back ? "restored" : "differs"));
+  }
+  check(queueNo.ok && queueYes.ok && queueTurned,
+    "3ht a second link handed over before the first window loaded waits behind the start's link and is offered once, when that one is "
+    + "answered by Cancel or by a yes: " + queueNo.note + "; " + queueYes.note + "; lifting " + queueNotes.join("; "));
 
   check(regStand.held(), "3h0 every reg call was answered by the stand-in (" + regStand.said() + ")");
 } finally {
