@@ -52,7 +52,7 @@ const PLANTS = 318;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 211 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 215 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -5456,6 +5456,82 @@ CASES.browserDoor = async (s, swap) => {
     if (!hadDoc) delete globalThis.document; else globalThis.document = prevDoc;
   }
 };
+/* A LEAD'S ACT ENDS THE SEAT (class A, the desk's half; Claude alpha's ruling of 22 November 2026): a certificate's remaining life is a
+   grace for a seat that still stands, never against a lead who freed it or withdrew its person. The service's answer to that renewal is
+   its own "signin" (tests/signin-answers.json: "a renewal of a seat its lead freed"); every other answer keeps the certificate as before. */
+const FREED_EN = ["The team's lead has taken back this computer's seat.",
+  "Once a lead gives this account a seat again, signing in again opens the catalogs. Nothing on this computer is lost meanwhile."];
+const FREED_PL = ["Lider zespołu odebrał miejsce tego komputera.",
+  "Gdy lider znów da temu kontu miejsce, ponowne zalogowanie się otworzy katalogi. Do tego czasu nic na tym komputerze nie przepada."];
+const FREED_TEAM = { on: "team", ends: NOW + 99 * DAY_MS, lead: "Ada" };
+/* The freed answer, read as the service gives it, sets the certificate and its doors aside and stamps `freed` with the desk's time, at a
+   settle and at a quiet renewal alike: the desk works no more, the view says so, the file keeps the mark and no certificate, and the
+   next certificate clears it. */
+CASES.freedEnds = async s => {
+  const c = ANSWER_CASES.find(x => x.case === "signin");
+  if (!c) return false;
+  const ans = s.signinAnswer({ status: c.status, bytes: Buffer.from(JSON.stringify(c.body)) }, DESK_KEY);
+  const before = heldOf({ seated: true, doors: [], holding: FREED_TEAM });
+  const h = s.signinSettle(before, ans, NOW, NOW + 7);
+  const io = Object.assign(renewIo(answer({ id_token: jwt(msClaims(undefined)) }), answer({ ok: false, reason: "signin" }, 403)), { deskNow: () => NOW + 9 });
+  const renewed = await s.signinRenewHeld(io, MS, DESK_KEY, heldOf({ seated: true }), () => NOW);
+  const v = s.signinViewOf(h, viewFacts({ last: before.cert.until }));
+  const back = s.signinFileRead(s.signinFileText({ held: h })).held;
+  const again = s.signinSettle(h, { ok: true, code: CODE, cert: cert({ issued: NOW + 10 }), doors: [] }, NOW + 10);
+  return ans.ok === false && ans.reason === "signin" && h.cert === null && Array.isArray(h.doors) && h.doors.length === 0 && h.doorsSig === "" && h.freed === NOW + 7
+    && h.refresh === "" && h.ask === true && s.signinWorks(h, DESK_KEY, NOW + 8) === false
+    && v.works === false && v.freed === NOW + 7 && v.seat === "none" && v.stoppedAt > 0
+    && renewed.said === "signin" && renewed.held.cert === null && renewed.held.freed === NOW + 9
+    && !!back && back.cert === null && back.freed === NOW + 7 && !!again.cert && !("freed" in again);
+};
+/* What the person has stays: the freed renewal, through the shell's own wiring, keeps the account, its code, its seat's and trials' words
+   and the store's offer, removes and writes no file, and neither leaves nor forgets the store, so personal catalogs, the store and any
+   editor's text stay on disk and come back with a seat. */
+CASES.freedKeeps = async (s, swap) => {
+  const ops = [];
+  const watched = new Proxy(fs, { get: (t, k) => /^(unlink|rm|rmdir|writeFile|appendFile|rename|truncate|copyFile|cp)/.test(String(k)) ? (...a) => { ops.push(String(k)); } : t[k] });
+  const st = wireStand(s, () => answer({ id_token: jwt(msClaims(undefined, Date.now())) }), () => answer({ ok: false, reason: "signin" }, 403));
+  st.fs = watched;
+  st.storeForget = () => { st.forgets = (st.forgets || 0) + 1; };
+  const before = heldOf({ seated: true, holding: FREED_TEAM, trials: { desk: NOW - DAY_MS }, storeOffer: true });
+  st.store.held = before;
+  const said = await loadWire(st, swap).signinRenewNow();
+  const h = st.store.held, same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  return said === "signin" && !!h && h.cert === null && h.freed > 0 && h.provider === "microsoft" && h.sub === before.sub && h.seed === before.seed && h.code === CODE
+    && h.seated === true && same(h.holding, before.holding) && same(h.trials, before.trials) && h.storeOffer === true
+    && ops.length === 0 && st.unlinked.length === 0 && !st.storeLeaves && !st.storeTurns && !st.forgets && st.saves >= 1 && st.tells >= 1;
+};
+/* The door says it plainly, in English and Polish, on the full screen and in the panel, with a press to sign in again; a desk stopped for
+   any other reason is told as before. */
+CASES.freedDoor = async (s, page) => {
+  const pg = page || P;
+  if (!pg) return false;
+  const storage = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
+  const words = h => String(h).replace(/<[^>]*>/g, " ").replace(/&#39;/g, "'").replace(/&amp;/g, "&").replace(/\s+/g, " ");
+  const h = s.signinSettle(heldOf({ seated: true, holding: FREED_TEAM }), { ok: false, reason: "signin" }, NOW, NOW + 7);
+  const v = pg.signinRead(s.signinViewOf(h, viewFacts({ last: NOW + 30 * DAY_MS })));
+  const ds = pg.deskDoorState(v), pair = pg.deskDoorLines(ds), html = pg.firstSigninHtml(v), screen = words(html), panel = pg.signinDoor(v);
+  const stopped = pg.deskDoorState(pg.signinRead(s.signinViewOf(heldOf({ seated: true, cert: null, holding: FREED_TEAM }), viewFacts({ last: NOW }))));
+  storage.lsSet("eUiLang", "pl");
+  let plPair = null, plScreen = "";
+  try { plPair = pg.deskDoorLines(pg.deskDoorState(v)); plScreen = words(pg.firstSigninHtml(v)); } finally { storage.lsSet("eUiLang", "en"); }
+  return ds.state === "freed" && pair[0] === FREED_EN[0] && pair[1] === FREED_EN[1] && screen.indexOf(FREED_EN[0]) >= 0 && screen.indexOf(FREED_EN[1]) >= 0
+    && /data-signin-act="another"[^>]*>Sign in again</.test(html) && screen.indexOf("has stopped") < 0
+    && !!panel && panel.moment === "freed" && panel.heading === FREED_EN[0] && panel.line === FREED_EN[1] && Array.isArray(panel.providers) && panel.providers.join() === "microsoft"
+    && !!plPair && plPair[0] === FREED_PL[0] && plPair[1] === FREED_PL[1] && plScreen.indexOf(FREED_PL[0]) >= 0 && plScreen.indexOf("Zaloguj się ponownie") >= 0
+    && stopped.state === "stopped";
+};
+/* Every other refusal, the wait, the service's none (a lapsed payment, `ended` as before) and a provider's refusal keep the certificate,
+   the desk working on it, and stamp nothing. */
+CASES.freedOthers = async s => {
+  const h = heldOf({ seated: true });
+  const keeps = r => !!r && r.cert === h.cert && !("freed" in r) && s.signinWorks(r, DESK_KEY, NOW + 8) === true;
+  const refused = ["unreached", "full", "token", "desks", "no-role"].map(reason => s.signinSettle(h, { ok: false, reason }, NOW, NOW + 7));
+  const wait = s.signinSettle(h, { ok: true, code: CODE, cert: null, waiting: true }, NOW, NOW + 7);
+  const lapsed = s.signinSettle(h, { ok: true, code: CODE, cert: null }, NOW, NOW + 7);
+  const provider = await s.signinRenewHeld(renewIo(answer({ error: "invalid_grant" }, 400), answer({})), MS, DESK_KEY, h, () => NOW);
+  return refused.every(keeps) && keeps(wait) && keeps(lapsed) && lapsed.ended === NOW + 7 && keeps(provider.held) && provider.said !== "signin";
+};
 const LEGS = [
   ["ds1a", "offered", "as shipped no client id is configured and nothing is offered; a configured table offers what it configures, in order"],
   ["ds1b", "noHintStart", "an invitation naming providers carries no sign-in hint: the team's start is retired"],
@@ -5657,6 +5733,10 @@ const LEGS = [
   ["dsg10", "browserDoor", "B-3a2b: plain browser build with no host has deskWorks false, firstSigninDue and doorHolds true, raises browser door in EN and PL with inert data-door-save and no provider/Not now/Escape, and seated host stand-in works as before"],
   ["dsg11", "settleClockIssued", "Argon 51 M1: settle and kept-file path compare against clock.issued so null held cert or older cert in signin.json cannot revive the desk"],
   ["dsg12", "stateKeyRestoreAndTell", "Argon 51 M2: unopenable key then old key restored keeps works:true and preserves disk cert on tick; key arrival tells the page"],
+  ["dsfe1", "freedEnds", "class A, the desk's half: the service's freed answer at a renewal sets the certificate and its doors aside, freed stamped with the desk's time, so the desk stops at once; the view, the file and the next certificate agree"],
+  ["dsfe2", "freedKeeps", "a freed renewal keeps the account, its code, its words and the store's offer, writes and removes no file, and neither leaves nor forgets the store"],
+  ["dsfe3", "freedDoor", "a freed desk's door says the team's lead has taken back this computer's seat and what to do, EN and PL, screen and panel, with Sign in again; another stop is told as before"],
+  ["dsfe4", "freedOthers", "every other refusal, the wait, the service's none (ended as before) and a provider's refusal keep the certificate working and stamp nothing"],
 ];
 for (let [id, name, line] of LEGS) {
   let ok = false;
