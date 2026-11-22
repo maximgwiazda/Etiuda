@@ -157,6 +157,8 @@ const PING_MS = 30 * 1000;
 const SEAT_RENEW_MS = 30 * 1000;
 const RETRY_MIN_MS = 2000, RETRY_MAX_MS = 60 * 1000;
 const TMP_RE = /\.tmp$/i;
+/* The stop recorded for a copy keepApart made: a judgement of this program, kept like not-text. */
+const KEPT_APART = "kept-apart";
 const HEX32 = /^[0-9a-f]{32}$/, HEX64 = /^[0-9a-f]{64}$/;
 /* The relay's stamp of one copy of a team, told at each session (relay/core.cjs create). */
 const MADE_RE = /^[0-9a-f]{16}$/;
@@ -546,9 +548,11 @@ function stateOf(x, now) {
   if (table(x.sentInv)) for (const h of Object.keys(x.sentInv)) if (HEX32.test(h)) s.sentInv[h] = sentOf(x.sentInv[h]);
   /* A file stopped is kept with the refusal that stopped it; a record of any other, one written before F4 included, is let
      go, so a file a refusal that lifts once stopped goes again. */
+  let local = ["not-text"];
+  local = ["not-text", KEPT_APART]; /* plant:apart-kept */
   if (table(x.refused)) for (const k of Object.keys(x.refused)) {
     const r = x.refused[k];
-    if (table(r) && typeof r.sha === "string" && STOPS.concat(["not-text"]).indexOf(r.why) >= 0) {
+    if (table(r) && typeof r.sha === "string" && STOPS.concat(local).indexOf(r.why) >= 0) {
       const key = pathKey(k);
       if (!s.refused[key]) s.refused[key] = { sha: r.sha, why: r.why }; /* plant:refused-kept */
     }
@@ -1012,10 +1016,10 @@ function createProgram(opts) {
 
   /* A blob of this program's own key that its record does not show it sent, judged against that record before it is written.
      Not later than the last upload recorded for the path: older, and nothing changes. Later, but the mirror holds neither
-     its bytes nor the bytes last sent there: an edit waits to go up. That edit stays; the blob is taken as the last sent,
-     so the edit's upload replaces it and the path keeps one chain. Null: it is written as any blob is. The record keeps one
-     upload a path, and the relay keeps one live blob a chain and takes a key's counters in order, so an older own blob is
-     only ever one a relay put back or a fork a lost state left. */
+     its bytes nor the bytes last sent there: the path changed here and on another computer of this key, and the relay
+     serves the other. That blob is written; the bytes here are kept beside it first (keepApart) and never replace it. The
+     team file and the head keep the edit and take the blob as the last sent, as their own judgements order them. Null: it
+     is written as any blob is. The relay keeps one live blob a chain and takes a key's counters in order. */
   function ownHeld(r, key) {
     const base = has(st.sent, key) ? st.sent[key] : null;
     if (base && !later(r, base)) return { ok: true, path: r.path, stale: true }; /* plant:own-older */
@@ -1024,8 +1028,34 @@ function createProgram(opts) {
     const want = r.kind === "delete" ? null : sha256(Buffer.from(r.body, "utf8"));
     const sent = base && !base.del ? base.sha : null;
     const edit = have !== want && have !== sent;
-    if (edit) { sentFrom(r, key); persist(); return { ok: true, path: r.path, stale: true, kept: true }; } /* plant:own-edit */
+    let parallel = false;
+    parallel = edit && key !== pathKey(TEAM_NAME) && key !== pathKey(HEAD_NAME); /* plant:own-parallel */
+    if (edit && !parallel) { sentFrom(r, key); persist(); return { ok: true, path: r.path, stale: true, kept: true }; } /* plant:own-edit */
+    let kept = true;
+    kept = !parallel || now == null || keepApart(r.path, now); /* plant:own-apart */
+    if (!kept) return { ok: false, reason: "unwritten", said: "That file could not be written into the mirror.", served: false };
     return null;
+  }
+
+  /* Bytes of `rel` kept beside it under a sync client's conflict name, which the desk and Studio read as a copy of that file and
+     not a second catalog; stopped by content hash, so they never go up, and said once. False where they could not be written. */
+  function keepApart(rel, bytes) {
+    const cut = rel.lastIndexOf("/") + 1, name = rel.slice(cut), dot = name.lastIndexOf(".");
+    const stem = dot > 0 ? name.slice(0, dot) : name, ext = dot > 0 ? name.slice(dot) : "";
+    const when = new Date(clock()), day = Number.isNaN(when.getTime()) ? "" : " " + when.toISOString().slice(0, 10);
+    let copy = null;
+    for (let n = 1; n <= 99 && !copy; n++) {
+      const c = rel.slice(0, cut) + stem + " (conflicted copy" + day + (n > 1 ? " " + n : "") + ")" + ext;
+      if (io.read(c) == null && !has(st.applied, pathKey(c)) && !has(st.sent, pathKey(c))) copy = c;
+    }
+    if (!copy) return false;
+    try { io.write(copy, bytes); }
+    catch (e) { say(copy + " could not be written into the mirror - " + (e && e.message)); return false; }
+    st.refused[pathKey(copy)] = { sha: sha256(toBytes(bytes)), why: KEPT_APART };
+    persist();
+    say(rel + " changed on this computer and on another at once; the other's is the team's, and this computer's is kept beside it as "
+      + copy + ", which stays on this computer");
+    return true;
   }
 
   /* A counter this key already used, whether the blob landed or a newer one of its path passed over it. The next upload

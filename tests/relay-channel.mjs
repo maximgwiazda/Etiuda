@@ -7949,7 +7949,7 @@ if (partOn("p923g")) {
    so the cycle that the edit starts does not write the older bytes back over it. Three cycles would hide the loss:
    the second would consume the program's own blob before the edit. The edit has three guards now: the record that shows
    the blob sent (plant:own-skip), the refusal of a blob not later than the last one sent (plant:own-older), and the edit
-   kept where the mirror holds neither the blob's bytes nor the last sent (plant:own-edit); 953c lifts all three. ---- */
+   kept as a copy where the mirror holds neither the blob's bytes nor the last sent (plant:own-apart); 953c lifts all three. ---- */
 async function once(p) { p.ch.kick(); await p.ch.idle(); }
 async function keptEdit(mod) {
   const k1 = crypto.randomBytes(32);
@@ -7989,7 +7989,8 @@ async function keptEdit(mod) {
   await once(desk);
   await once(lead);
   const out = { leadMirror: read(lead.mirror, "guide.ec"), guideAtDesk, deskOfLead: read(desk.mirror, "guide.ec"),
-    leadSent: leadOnEdit, deskMirror: read(desk.mirror, rel), leadOfDesk: read(lead.mirror, rel), deskSent };
+    leadSent: leadOnEdit, deskMirror: read(desk.mirror, rel), leadOfDesk: read(lead.mirror, rel), deskSent,
+    copies: fs.readdirSync(lead.mirror).concat(fs.readdirSync(path.join(desk.mirror, "desks", deskKey.keyId))).filter(n => /conflicted copy/.test(n)).length };
   await lead.ch.stop();
   await desk.ch.stop();
   return out;
@@ -8004,12 +8005,12 @@ if (partOn("p953")) {
     check(edit.leadMirror === "e2\n" && edit.deskOfLead === "e2\n" && edit.guideAtDesk === "e2\n" && edit.leadSent === 1,
       "953b the lead's edition is sent, edited, and one cycle run: the edit is kept and sent: mirror " + JSON.stringify(edit.leadMirror)
       + ", at the desk " + JSON.stringify(edit.deskOfLead) + ", uploads on that cycle " + edit.leadSent);
-    const planted = await liftChannel(["plant:own-skip", "plant:own-older", "plant:own-edit"], async mod => {
+    const planted = await liftChannel(["plant:own-skip", "plant:own-older", "plant:own-apart"], async mod => {
       const x = await keptEdit(mod);
       return x.deskMirror === "v1\n" && x.leadOfDesk === "v1\n" && x.deskSent === 0
-        && x.leadMirror === "e1\n" && x.deskOfLead === "e1\n" && x.leadSent === 0;
+        && x.leadMirror === "e1\n" && x.deskOfLead === "e1\n" && x.leadSent === 0 && x.copies === 0;
     });
-    check(planted.turned && planted.back, "953c lifting plant:own-skip, plant:own-older and plant:own-edit together writes the sent copy over the edit, on the desk and on the lead, and the product file is never written: "
+    check(planted.turned && planted.back, "953c lifting plant:own-skip, plant:own-older and plant:own-apart together writes the sent copy over the edit and keeps no copy of it, on the desk and on the lead, and the product file is never written: "
       + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
   } catch (e) {
     check(false, "harness (the leg 953a): " + (e && e.stack ? e.stack : e));
@@ -8022,7 +8023,7 @@ if (partOn("p953")) {
    fetches its team file and its other files back; one key on two computers has two records, so each fetches the other's
    uploads. An own blob fetched this way is judged and applied as anyone's is: one not later than what this computer last
    sent for that path is refused as older and changes nothing, and one that would overwrite an edit still waiting to go up
-   leaves the edit where it is and becomes the blob that edit replaces. ---- */
+   is written, the edit kept beside it as a conflict copy that is never sent (the relay's blob stays live; nor1 below). ---- */
 
   const OWN_G1 = "guide one, written before the profile was lost\n", OWN_G2 = "guide two, an edit made on the new profile\n";
 
@@ -8042,6 +8043,8 @@ async function ownSetup(mod) {
 
 
   const liveBy = (tm, writer) => blobsOn(tm.rt, writer).filter(v => !v.del).length;
+  /* The bytes of the one conflict copy of guide.ec in a mirror, or null where there is none or more than one. */
+  const keptCopy = dir => { const n = fs.readdirSync(dir).filter(x => /^guide \(conflicted copy[^)]*\)\.ec$/.test(x)); return n.length === 1 ? read(dir, n[0]) : null; };
 /* The lead uploads its team file, a guide and a note, and its profile is lost: a new profile of the same key, an empty
    mirror and an empty record, catches up. */
 async function ownRestore(mod) {
@@ -8151,8 +8154,8 @@ async function ownClockBehind(mod) {
   await b.ch.stop();
   return out;
 }
-/* A restored profile whose mirror already holds a newer edit of the guide: the edit stays, goes up, and replaces the blob
-   it was not told of. A third profile then reads the edit from the relay. */
+/* A restored profile whose mirror already holds an edit of the guide its record never sent: the relay's guide is written, the
+   edit is kept beside it as a conflict copy and not sent. A third profile then reads the relay's guide. */
 async function ownKeptRestore(mod) {
   const { tm, mk, teamText } = await ownSetup(mod);
   const first = mk("own-k1");
@@ -8169,7 +8172,7 @@ async function ownKeptRestore(mod) {
   await once(again);
   await once(again);
   const mirror = read(again.mirror, "guide.ec"), team = read(again.mirror, C.TEAM_NAME) === teamText, puts = putsOf(again);
-  const chain = liveBy(tm, LEAD.keyId);
+  const chain = liveBy(tm, LEAD.keyId), copy = keptCopy(again.mirror);
   await again.ch.stop();
   const third = mk("own-k3");
   third.ch.start();
@@ -8177,7 +8180,7 @@ async function ownKeptRestore(mod) {
   await once(third);
   const relayHolds = read(third.mirror, "guide.ec");
   await third.ch.stop();
-  return { mirror, team, puts, chain, relayHolds };
+  return { mirror, team, puts, chain, relayHolds, copy };
 }
 /* One key on two computers: the second's upload arrives while the first holds an edit not yet sent. */
 async function ownKeptTwo(mod) {
@@ -8196,7 +8199,7 @@ async function ownKeptTwo(mod) {
   await once(a);
   const keptA = read(a.mirror, "guide.ec");
   await once(b);
-  const out = { keptA, atB: read(b.mirror, "guide.ec"), chain: liveBy(tm, LEAD.keyId), fromA };
+  const out = { keptA, atB: read(b.mirror, "guide.ec"), chain: liveBy(tm, LEAD.keyId), fromA, fromB, copyA: keptCopy(a.mirror), copyB: keptCopy(b.mirror) };
   await a.ch.stop(); await b.ch.stop();
   return out;
 }
@@ -8248,13 +8251,13 @@ if (partOn("p970")) {
     check(skipPlant.turned && skipPlant.back, "970q lifting plant:own-skip fetches the program's own upload in the cycle that lists it, and the product file is never written: "
       + skipPlant.detail + ", sha " + (skipPlant.back ? "restored" : "differs"));
     const e = await ownKeptRestore(C);
-    check(e.mirror === OWN_G2 && e.team && e.puts === 1 && e.chain === 2 && e.relayHolds === OWN_G2,
-      "970d an own blob fetched on a restored profile does not overwrite a newer edit already in its mirror: the edit stays, goes up once as the replacement of that blob, and a third profile reads it from the relay: mirror "
-      + JSON.stringify(e.mirror) + ", uploads " + e.puts + ", live blobs " + e.chain + ", the relay holds " + JSON.stringify(e.relayHolds));
+    check(e.mirror === OWN_G1 && e.copy === OWN_G2 && e.team && e.puts === 0 && e.chain === 2 && e.relayHolds === OWN_G1,
+      "970d an own blob fetched on a restored profile whose mirror holds an edit its record never sent: the relay's blob is written and stays live, the edit is kept beside it as a conflict copy and goes nowhere, and a third profile reads the relay's: mirror "
+      + JSON.stringify(e.mirror) + ", copy " + JSON.stringify(e.copy) + ", uploads " + e.puts + ", live blobs " + e.chain + ", the relay holds " + JSON.stringify(e.relayHolds));
     const w = await ownKeptTwo(C);
-    check(w.keptA === w.fromA && w.atB === w.fromA && w.chain === 2,
-      "970e the second computer's upload does not overwrite the first's edit still waiting to go up: the edit stays, replaces that upload, and reaches the second computer: first " + JSON.stringify(w.keptA)
-      + ", second " + JSON.stringify(w.atB) + ", live blobs " + w.chain);
+    check(w.keptA === w.fromB && w.copyA === w.fromA && w.atB === w.fromB && w.copyB === null && w.chain === 2,
+      "970e the second computer's upload, met by the first's edit still waiting to go up, stays live: the first takes it, keeps its edit beside it as a conflict copy, and sends nothing over it: first " + JSON.stringify(w.keptA)
+      + ", its copy " + JSON.stringify(w.copyA) + ", second " + JSON.stringify(w.atB) + ", copy at the second " + JSON.stringify(w.copyB) + ", live blobs " + w.chain);
     const o = await ownOlder(C);
     check(o.fetched && o.mirror === OWN_G2 && o.unchanged && o.puts === 0,
       "970f an own blob older than the one last sent for its path, put back by the relay, is fetched, refused as older and changes nothing: fetched " + o.fetched + ", mirror "
@@ -8268,11 +8271,11 @@ if (partOn("p970")) {
     const olderPlant = await liftChannel("plant:own-older", async mod => (await ownOlder(mod)).mirror === OWN_G1);
     check(olderPlant.turned && olderPlant.back, "970h lifting plant:own-older writes the older own blob over the newer guide, and the product file is never written: "
       + olderPlant.detail + ", sha " + (olderPlant.back ? "restored" : "differs"));
-    const editPlant = await liftChannel("plant:own-edit", async mod => {
+    const editPlant = await liftChannel("plant:own-apart", async mod => {
       const x = await ownKeptRestore(mod), y = await ownKeptTwo(mod);
-      return x.mirror !== OWN_G2 && y.keptA !== y.fromA;
+      return x.mirror === OWN_G1 && x.copy === null && y.keptA === y.fromB && y.copyA === null;
     });
-    check(editPlant.turned && editPlant.back, "970i lifting plant:own-edit writes the fetched own blob over the edit waiting to go up, on the restored profile and on the first computer, and the product file is never written: "
+    check(editPlant.turned && editPlant.back, "970i lifting plant:own-apart writes the fetched own blob over the edit waiting to go up and keeps no copy, on the restored profile and on the first computer, and the product file is never written: "
       + editPlant.detail + ", sha " + (editPlant.back ? "restored" : "differs"));
   } catch (e) {
     check(false, "harness (the legs 970a): " + (e && e.stack ? e.stack : e));
