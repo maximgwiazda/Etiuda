@@ -1829,7 +1829,7 @@ UI_STRINGS.pl={
   "Catalogs open here again once {LEAD}, the team's lead, accepts it. Etiuda's own fourteen days ended on {DESK_END}.":"Katalogi znów otworzą się tutaj, gdy {LEAD}, lider zespołu, ją przyjmie. Własne czternaście dni Etiudy skończyły się {DESK_END}.",
   "The requests to join are waiting.":"Prośby o dołączenie czekają.",
   "Catalogs open here again once one of these leads accepts a request: {LEADS}. Etiuda's own fourteen days ended on {DESK_END}.":"Katalogi znów otworzą się tutaj, gdy któryś z tych liderów przyjmie prośbę: {LEADS}. Własne czternaście dni Etiudy skończyły się {DESK_END}.",
-  "Day {N} of 14, until {DESK_END}. The requests to join wait for {LEADS}, and Etiuda works meanwhile.":"Dzień {N} z 14, do {DESK_END}. Prośby o dołączenie czekają na odpowiedź jednego z liderów: {LEADS}, a Etiuda w tym czasie działa.",
+  "Day {N} of 14, until {DESK_END}. Etiuda works meanwhile; the requests to join wait for one of these leads: {LEADS}.":"Dzień {N} z 14, do {DESK_END}. Etiuda w tym czasie działa; prośby o dołączenie czekają na odpowiedź jednego z liderów: {LEADS}.",
   "Catalogs open here again once the team's lead accepts it. Etiuda's own fourteen days ended on {DESK_END}.":"Katalogi znów otworzą się tutaj, gdy lider zespołu ją przyjmie. Własne czternaście dni Etiudy skończyły się {DESK_END}.",
   "Etiuda's trial has ended.":"Okres próbny Etiudy się skończył.",
   "It ended on {DESK_END}. This account's organisation holds an Etiuda licence, so a team's lead can admit this account; buying a licence opens the catalogs again too.":"Skończył się {DESK_END}. Organizacja tego konta ma licencję Etiudy, więc lider zespołu może przyjąć to konto; katalogi otworzy też zakup licencji.",

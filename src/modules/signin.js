@@ -503,7 +503,7 @@ function deskDoorLines(ds){
   if(ds.state==="working" && ds.seatOn==="org") return [t("This account has a seat on its organisation's licence."),
     fill(t("It renews by itself; the licence runs until {ENDS}."), {"{ENDS}":ends})];
   if(ds.state==="working" && ds.waitingOnLead && ds.askedMany) return ["",
-    fill(t("Day {N} of 14, until {DESK_END}. The requests to join wait for {LEADS}, and Etiuda works meanwhile."), {"{N}":n, "{DESK_END}":desk, "{LEADS}":ds.askedMany})];
+    fill(t("Day {N} of 14, until {DESK_END}. Etiuda works meanwhile; the requests to join wait for one of these leads: {LEADS}."), {"{N}":n, "{DESK_END}":desk, "{LEADS}":ds.askedMany})];
   if(ds.state==="working" && ds.waitingOnLead) return ["",
     lead ? fill(t("Day {N} of 14, until {DESK_END}. The request to join waits for {LEAD}, and Etiuda works meanwhile."), {"{N}":n, "{DESK_END}":desk, "{LEAD}":lead})
       : fill(t("Day {N} of 14, until {DESK_END}. The request to join waits for the team's lead, and Etiuda works meanwhile."), {"{N}":n, "{DESK_END}":desk})];
