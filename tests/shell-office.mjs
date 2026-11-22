@@ -1280,7 +1280,8 @@ try {
      The shell is loaded with fromEngine and fromPicker each marking the event they are asked about,
      and every channel it registers is called once with a message from a page that is not the engine.
      A channel must have asked, must have answered with a refusal, and must have touched no file. */
-  const SENDER = { engine: "function fromEngine(e) {", picker: "function fromPicker(e) {" };
+  const SENDER = { engine: "function fromEngine(e) {", picker: "function fromPicker(e) {", bubble: "function fromBubble(e) {" };
+  const BUBBLE_CHANNELS = ["etiuda:bubble-act", "etiuda:bubble-size"];
   const PICKER_CHANNELS = ["etiuda:pick-close", "etiuda:pick-copy", "etiuda:pick-find", "etiuda:pick-grow", "etiuda:pick-intent", "etiuda:pick-lang", "etiuda:pick-put", "etiuda:pick-ready", "etiuda:pick-reword", "etiuda:pick-rows", "etiuda:pick-tab", "etiuda:pick-tour", "etiuda:pick-who"];
   const sourceChannels = src => src.split("\n").filter(l => /\bipcMain\.(?:on|once|handle|handleOnce)\(/.test(l) && !/^\s*(\/\/|\/?\*)/.test(l)).length;
   const marked = src => Object.keys(SENDER).reduce((out, k) => {
@@ -1322,10 +1323,11 @@ try {
       "7b every channel asks who is speaking before it answers a page that is not the engine: " + A.rows.length
       + " channel(s), never asked " + JSON.stringify(unasked(A)));
     const viaPicker = A.rows.filter(r => r.asked.indexOf("picker") > -1).map(r => r.ch).sort();
-    const notEngine = A.rows.filter(r => r.asked.indexOf("engine") < 0 && PICKER_CHANNELS.indexOf(r.ch) < 0).map(r => r.ch);
-    check(notEngine.length === 0 && JSON.stringify(viaPicker) === JSON.stringify(PICKER_CHANNELS),
-      "7c fromEngine is the question every channel asks except the picker's own thirteen, which ask fromPicker: without it "
-      + JSON.stringify(notEngine) + ", asking the picker " + JSON.stringify(viaPicker));
+    const notEngine = A.rows.filter(r => r.asked.indexOf("engine") < 0 && PICKER_CHANNELS.indexOf(r.ch) < 0 && BUBBLE_CHANNELS.indexOf(r.ch) < 0).map(r => r.ch);
+    const viaBubble = A.rows.filter(r => r.asked.indexOf("bubble") > -1).map(r => r.ch).sort();
+    check(notEngine.length === 0 && JSON.stringify(viaPicker) === JSON.stringify(PICKER_CHANNELS) && JSON.stringify(viaBubble) === JSON.stringify(BUBBLE_CHANNELS),
+      "7c fromEngine is the question every channel asks except the picker's own thirteen, which ask fromPicker, and the tray bubble's two, which ask fromBubble: without it "
+      + JSON.stringify(notEngine) + ", asking the picker " + JSON.stringify(viaPicker) + ", asking the bubble " + JSON.stringify(viaBubble));
     check(unrefused(A).length === 0,
       "7d and the answer to a stranger is a refusal that has touched no file: " + JSON.stringify(unrefused(A)));
 
