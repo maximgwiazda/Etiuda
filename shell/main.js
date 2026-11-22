@@ -248,7 +248,7 @@ function rawCatalogFolder() {
   return (typeof set === "string" && set.trim()) ? set.trim() : defaultCatalogFolder();
 }
 /* The catalog folder: a relay team's mirror, the mirror a team moving to a folder waits in, else the person's own setting.
-   A team held through a shared folder is not read as a team (heldFolderTeams): its folder is a plain catalog folder. */
+   A team held through a shared folder is not read as a team (folderHeld): its folder is a plain catalog folder. */
 function catalogFolder() {
   if (deskKeys === undefined) deskKeys = readDesk();
   /* On the relay the team folder is the mirror the channel layer keeps, beside the desk's own file (shell/relay/channel.cjs). */
@@ -1822,7 +1822,13 @@ function mirrorOwes(file) {
     if (s) s.owe(inside); else FolderSyncer().noteOwed(mirror, inside); /* plant:mirror-owes */
   } catch (e) { console.error("etiuda: a write into the team's mirror could not be noted for the team's folder - " + (e && e.message)); }
 }
+/* Whether `file` lies in the folder of a team held through a shared folder (folderHeld), where nothing of this desk's is removed. */
+function inHeldFolder(file) {
+  const f = path.resolve(String(file));
+  return Object.keys(teamShown).some(t => folderHeld(t) && f.indexOf(path.resolve(teamShown[t].folder) + path.sep) === 0);
+}
 function unlinkOwn(file) {
+  if (inHeldFolder(file)) return; /* plant:held-folder-kept */
   fs.unlinkSync(file);
   mirrorOwes(file);
 }

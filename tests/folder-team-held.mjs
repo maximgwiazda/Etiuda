@@ -24,7 +24,7 @@ const MODS = path.join(ROOT, "src", "modules"), MOD_DIR = pathToFileURL(MODS).hr
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 17;
+const EXPECTED = 19;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -38,7 +38,7 @@ const LAB = createLab("etiuda-folder-team-held-");
 /* ETIUDA_SHELL_MAIN names another shell/main.js to judge, as tests/team-desk.mjs takes it: a tree before this one, for its reds. */
 const SRC = fs.readFileSync(process.env.ETIUDA_SHELL_MAIN || path.join(ROOT, "shell", "main.js"), "utf8");
 const EXPOSE = ["catalogFolder", "teamWriteHere", "heedTeam", "leadsView", "joinPolicyFacts", "armFolder", "teamRoster", "teamEpochSeen",
-  "pinnedLead", "sharedWrite"];
+  "pinnedLead", "sharedWrite", "unlinkOwn"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -268,6 +268,11 @@ try {
     && !!wroteHeld && wroteHeld.ok === false && !fs.existsSync(path.join(A.share, "loose.ec")),
     "fth15 a shared write into a folder holding a team's file is refused and writes nothing there: " + JSON.stringify({ pinless: wrote, held: wroteHeld }));
 
+  /* fth18: this desk's own removal leaves a file in the held team's folder where it is. */
+  const ownNote = path.join(A.share, "desks", OTHER_DESK, "note.txt");
+  try { api.unlinkOwn(ownNote); } catch { /* a refusal that throws is not a removal */ }
+  check(fs.existsSync(ownNote), "fth18 this desk's own removal takes nothing out of the held team's folder: " + (fs.existsSync(ownNote) ? "kept" : "removed"));
+
   /* fth8: the boot's look at the folder starts nothing that writes: share and mirror as they were. */
   try { await api.armFolder(null); } catch { /* the look's own refusal is not this check's */ }
   await new Promise(r => setTimeout(r, 300));
@@ -302,6 +307,7 @@ try {
     ["fth11", "folder-held-row", async d => { const r = (await d.ask("etiuda:team-join", "leads")).leads.filter(x => x.team === TEAM)[0]; return !r || r.folderHeld !== true; }, "fth4"],
     ["fth12", "folder-owed-row", async d => { const r = (await d.ask("etiuda:team-join", "leads")).leads.filter(x => x.team === TEAM)[0]; return !r || r.folderOwed !== true; }, "fth5"],
     ["fth16", "team-file-place", async d => d.api.pinnedLead() !== null, "fth14"],
+    ["fth19", "held-folder-kept", async (d, P) => { const f = path.join(P.share, "desks", OTHER_DESK, "note.txt"); try { d.api.unlinkOwn(f); } catch { /* kept */ } return !fs.existsSync(f); }, "fth18"],
     ["fth17", "shared-team-folder", async (d, P) => {
       fs.writeFileSync(path.join(P.ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: P.share, eUiLang: "en" } }), "utf8");
       const r = await loadDesk(P.ud, d.src).api.sharedWrite("loose.ec", sharedText(), "", true);
