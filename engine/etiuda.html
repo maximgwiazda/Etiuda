@@ -19447,11 +19447,13 @@ What is typed here stays in this browser.`;
     const wrap = b.wrap, close = b.close;
     joinBubbleClose = close;
     const hide = () => {
+      const link = !!(joinOffer && joinOffer.link) || joinMode === "refused" && joinWhy === "link";
       joinShut = JSON.stringify(joinNow);
       dropInvite();
       close();
       joinPainted();
       if (p.lead) joinAsk("seen", p.lead);
+      if (link) joinAsk("link-no");
     };
     wrap.querySelectorAll("[data-join], [data-join-paste], [data-join-check]").forEach((el) => {
       if (el.hasAttribute("data-join-paste")) {
