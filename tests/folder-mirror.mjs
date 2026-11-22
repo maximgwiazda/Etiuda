@@ -35,7 +35,16 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 191;
+/* RETIRED, P4 (no folder is read as a team, and the folder syncer is never started): every check below guards a folder team's mirror, outbox or
+ * syncer through the shell (a desk on a shared folder reads from the mirror the syncer keeps, writes to it and owes the share through the outbox,
+ * the syncer's listings, put-backs, conflict siblings, links, seat and ask files for that team), or the syncer program run for such a team. They
+ * were 191 checks, and with the shell no longer starting a syncer the first of them failed (26 red) and the next threw (folderMirrorHere is gone).
+ * The body is kept under the switch as the record of what each held (its sentences are the old ones): the retirement is the whole leg, and
+ * P3, which removes the syncer, removes this file with it. The syncer's own legs that need no shell (tests/syncer-invariants.mjs,
+ * syncer-outbox-unread.mjs, syncer-rename-busy.mjs) stand. The leg still starts and makes its lab, so tests/relay-channel-clean.mjs, which
+ * holds that every lab leg removes its folder on every exit path, holds this one too. */
+const FOLDER_MIRROR_RETIRED = true;
+const EXPECTED = FOLDER_MIRROR_RETIRED ? 0 : 191;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const { offWindows } = nodeRequire("./off-windows.cjs");
@@ -190,6 +199,11 @@ function seal(key, epoch, docText, teamId) {
 }
 
 async function run() {
+  if (FOLDER_MIRROR_RETIRED) {
+    console.log("  RETIRED the folder team's mirror, outbox and syncer legs (191 checks) with the folder team: see FOLDER_MIRROR_RETIRED");
+    console.log("#counts checks=0 skipped=0 failures=0 expected=0");
+    process.exit(0);
+  }
   const SHARE = folder("share");
   const CAT_A1 = text(catalog("lamp-shop", 1, "Lamp Shop", "2026-02-01"));
   const CAT_A2 = text(catalog("lamp-shop", 2, "Lamp Shop", "2026-02-02"));
