@@ -35,7 +35,7 @@ const check = (ok, what, detail) => {
 };
 const skip = what => { skipped++; console.log("  SKIP " + what); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 6;
+const EXPECTED = 7;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const clone = o => JSON.parse(JSON.stringify(o));
 
@@ -221,10 +221,28 @@ async function pickedDay(file, marked) {
   });
 }
 
+/* A deciding line lifted in a copy of the built page, beside the lab's catalog: the scene run on it must turn red. */
+async function pagePlant(dir, from, to, run, red, line) {
+  if (PLANTS_OFF) { skip(line); return; }
+  const n = PAGE.split(from).length - 1;
+  let ok = false, detail = "the plant's anchor is there " + n + " times";
+  if (n === 1) {
+    const file = "planted-" + checks + ".html";
+    fs.writeFileSync(path.join(dir, file), PAGE.split(from).join(to));
+    const r = await run(file);
+    ok = red(r);
+    detail = "still held: " + JSON.stringify(r);
+  }
+  check(ok, line, ok ? undefined : detail);
+}
+
 async function main() {
   {
     const r = await retyped("etiuda.html");
     check(retypeHeld(r), "ed-retype-by-field an open intent editor's typing stays in the box it was typed in when an edition makes the comment row appear, and Save stores the Polish name and clause as typed", r);
+    await pagePlant(retypeLab, "const j = was.keys && k ? once.has(k) && !twice.has(k) ? once.get(k) : -1 : same ? i : -1;",
+      "const j = i < was.fields.length ? i : -1;", retyped, r => !retypeHeld(r),
+      "p ed-retype-by-field the typing put back by place, not by the field's id (dialog.js edRetype), turns it red");
   }
   {
     const r = await savedDiff("etiuda.html");
