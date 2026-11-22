@@ -5527,6 +5527,8 @@ const CARD_B = {
     check("context-menu.js", "1012x3 an intent's menu picks it, alone or with the others, and names the star's three jobs, each pressed with the modifier its gesture needs; a hidden one offers only to show it again",
       () => eq([intentNames, (rowEl.pressed || []).join(), [fav, edi, hid].map(x => (x.pressed || []).join()).join(), hiddenNames].join("|"),
         "Pick this intent|Pick it with the others|-|Add to Favourites|Edit this intent|Hide this intent|click,ctrl+click|click,ctrl+click,shift+click|Pick this intent|-|Show this intent again"));
+    check("context-menu.js", "1016t1 a hidden intent's menu is built as it is shown, with no row pushed only to be filtered out again",
+      () => { const cm = (globalThis.__fs || (globalThis.__fs = createRequire(import.meta.url)("node:fs"))).readFileSync(join(MODDIR, "context-menu.js"), "utf8"); return eq([cm.indexOf("hidden:true"), cm.indexOf("r.hidden")].join(), "-1,-1"); });
 
     const pencil = node({});
     const pill = node({}, { dataset: { k: "cx-orders" }, querySelector: s => (s === "[data-editcat]" ? pencil : null) });
