@@ -1649,10 +1649,10 @@ async function perUserAtSignIn(rec) {
 
   /* The sign-in's stand-in: the value's own command line, run with a restricted token, its groups written first. */
   /* Two witnesses of the token: whoami's groups (with its errors) and "net session", which answers 0 only to an elevated administrator.
-     Both files go to the run's artifact. */
+     Both files go to the run's artifact. Windows' own by full path: the runner's PATH finds Git's whoami first. */
   const cmd = path.join(LAB, "signin-standin.cmd"), groups = path.join(OUT, "signin-groups.txt"), exitFile = path.join(LAB, "signin-exit.txt");
   const netFile = path.join(OUT, "signin-net-session.txt");
-  fs.writeFileSync(cmd, ["@echo off", 'whoami /groups > "' + groups + '" 2>&1', 'net session >nul 2>&1', '>"' + netFile + '" echo %ERRORLEVEL%', value, '>"' + exitFile + '" echo %ERRORLEVEL%'].join("\r\n") + "\r\n");
+  fs.writeFileSync(cmd, ["@echo off", '"%SystemRoot%\\System32\\whoami.exe" /groups > "' + groups + '" 2>&1', '"%SystemRoot%\\System32\\net.exe" session >nul 2>&1', '>"' + netFile + '" echo %ERRORLEVEL%', value, '>"' + exitFile + '" echo %ERRORLEVEL%'].join("\r\n") + "\r\n");
   const ra = spawnSync("runas.exe", ["/trustlevel:0x20000", cmd], { encoding: "utf8", windowsHide: true, timeout: 60000 });
   rec.f("runas", oneLine((ra.stdout || "") + " " + (ra.stderr || "")) || "status " + ra.status);
   for (let i = 0; i < 300 && ra.status === 0 && !fs.existsSync(exitFile); i++) await sleep(1000);
