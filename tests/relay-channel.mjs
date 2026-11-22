@@ -63,7 +63,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 533;
+const EXPECTED = 540;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -8296,6 +8296,101 @@ if (partOn("p970o")) {
       + clockPlant.detail + ", sha " + (clockPlant.back ? "restored" : "differs"));
   } catch (e) {
     check(false, "harness (the leg 970o): " + (e && e.stack ? e.stack : e));
+  }
+}
+
+/* ---- one key on two computers, the first offline (Studio publish B1, engine half). Both hold rev 1. The first, offline, writes
+   its own rev 2 from that mirror; the second publishes its rev 2 to the relay. When the first reconnects, the relay's rev 2 stays
+   live and becomes the first computer's file too, and the first computer's own rev 2 is kept beside it under a sync client's
+   conflict name, said once, and never sent, a restart included. Invented editions only. ---- */
+const NOR_R1 = "{\"kind\":\"etiuda-catalog\",\"rev\":1,\"note\":\"the edition both computers hold\"}\n";
+const NOR_B2 = "{\"kind\":\"etiuda-catalog\",\"rev\":2,\"note\":\"published on the second computer\"}\n";
+const NOR_A2 = "{\"kind\":\"etiuda-catalog\",\"rev\":2,\"note\":\"written on the first computer while it was offline\"}\n";
+async function parallelOffline(mod) {
+  const { tm, mk, teamText } = await ownSetup(mod);
+  const a = mk("nor-a"), b = mk("nor-b");
+  put(a.mirror, C.TEAM_NAME, teamText);
+  put(a.mirror, "guide.ec", NOR_R1);
+  a.ch.start(); b.ch.start();
+  await a.ch.idle(); await b.ch.idle();
+  await once(a);
+  await once(b);
+  const bothR1 = read(a.mirror, "guide.ec") === NOR_R1 && read(b.mirror, "guide.ec") === NOR_R1;
+  a.t.down = true;
+  put(a.mirror, "guide.ec", NOR_A2);
+  await once(a);
+  put(b.mirror, "guide.ec", NOR_B2);
+  await once(b);
+  a.t.down = false;
+  const at = a.t.log.length;
+  await once(a);
+  await once(a);
+  const putsBack = a.t.log.slice(at).filter(l => /^PUT b\//.test(l)).length;
+  await once(b);
+  const copies = fs.readdirSync(a.mirror).filter(n => n !== "guide.ec" && /\.ec$/.test(n));
+  const copy = copies.length === 1 ? copies[0] : null;
+  const out = { bothR1, putsBack, copies, copy, copyBytes: copy ? read(a.mirror, copy) : null, guideA: read(a.mirror, "guide.ec"),
+    guideB: read(b.mirror, "guide.ec"), copyAtB: copy ? read(b.mirror, copy) : null, chain: liveBy(tm, LEAD.keyId),
+    said: a.said.filter(l => l.indexOf("guide.ec") >= 0 && !!copy && l.indexOf(copy) >= 0).length };
+  await a.ch.stop();
+  /* The same computer started again on its record: the copy still goes nowhere. */
+  const again = mk("nor-a");
+  again.ch.start();
+  await again.ch.idle();
+  await once(again);
+  out.putsRestart = putsOf(again);
+  await again.ch.stop();
+  await b.ch.stop();
+  const third = mk("nor-c");
+  third.ch.start();
+  await third.ch.idle();
+  await once(third);
+  out.relayHolds = read(third.mirror, "guide.ec");
+  out.copyAtThird = copy ? read(third.mirror, copy) : null;
+  await third.ch.stop();
+  return out;
+}
+if (partOn("pNor")) {
+  try {
+    markPart("pNor");
+    const n = await parallelOffline(C);
+    check(n.bothR1 && n.putsBack === 0 && n.relayHolds === NOR_B2 && n.guideB === NOR_B2 && n.guideA === NOR_B2 && n.chain === 2,
+      "nor1a the second computer's rev 2 stays live when the first, which wrote its own rev 2 offline from rev 1, reconnects: uploads from the first after it reconnects "
+      + n.putsBack + ", the relay holds " + JSON.stringify(n.relayHolds) + ", the second's file " + JSON.stringify(n.guideB)
+      + ", the first's file " + JSON.stringify(n.guideA) + ", live blobs " + n.chain);
+    check(!!n.copy && n.copyBytes === NOR_A2 && /^guide \(.*conflicted copy.*\)\.ec$/.test(n.copy),
+      "nor1b the first computer's own rev 2 is kept beside the live one, whole, under a sync client's conflict name of guide.ec: copies " + JSON.stringify(n.copies)
+      + ", its bytes " + JSON.stringify(n.copyBytes));
+    check(!!n.copy && n.copyAtB === null && n.copyAtThird === null && n.putsBack === 0 && n.putsRestart === 0,
+      "nor1c the kept copy is never sent, before or after a restart: at the second computer " + JSON.stringify(n.copyAtB) + ", at a third profile "
+      + JSON.stringify(n.copyAtThird) + ", uploads after reconnecting " + n.putsBack + ", after the restart " + n.putsRestart);
+    check(n.said === 1, "nor1d the first computer says once that guide.ec changed on two computers and where its own copy is kept: lines " + n.said);
+    if (PLANTS_OFF) skip("nor1e lifting plant:own-parallel sends the first computer's rev 2 over the second's");
+    else {
+      const p = await liftChannel("plant:own-parallel", async mod => (await parallelOffline(mod)).relayHolds === NOR_A2);
+      check(p.turned && p.back, "nor1e lifting plant:own-parallel sends the first computer's rev 2 over the second's, which the relay then no longer serves, and the product file is never written: "
+        + p.detail + ", sha " + (p.back ? "restored" : "differs"));
+    }
+    if (PLANTS_OFF) skip("nor1f lifting plant:own-apart writes the second computer's rev 2 over the first's and keeps no copy");
+    else {
+      const p = await liftChannel("plant:own-apart", async mod => {
+        const x = await parallelOffline(mod);
+        return x.relayHolds === NOR_B2 && x.guideA === NOR_B2 && x.copies.length === 0;
+      });
+      check(p.turned && p.back, "nor1f lifting plant:own-apart writes the second computer's rev 2 over the first's and keeps no copy, and the product file is never written: "
+        + p.detail + ", sha " + (p.back ? "restored" : "differs"));
+    }
+    if (PLANTS_OFF) skip("nor1g lifting plant:apart-kept forgets at a restart that the copy stays, so it is sent");
+    else {
+      const p = await liftChannel("plant:apart-kept", async mod => {
+        const x = await parallelOffline(mod);
+        return x.putsRestart > 0 && x.copyAtThird === NOR_A2;
+      });
+      check(p.turned && p.back, "nor1g lifting plant:apart-kept forgets at a restart that the copy stays, so it is sent, and the product file is never written: "
+        + p.detail + ", sha " + (p.back ? "restored" : "differs"));
+    }
+  } catch (e) {
+    check(false, "harness (the leg nor1a): " + (e && e.stack ? e.stack : e));
   }
 }
 
