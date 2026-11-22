@@ -423,7 +423,7 @@ function boot(){
   dialog.wireModalX();
   dialog.wireModalBody();
   dialog.wireFocusModality();
-  dialog.wireDialogDrag();
+  dialog.wireEditorPlace();
   dialog.wireEditorRest();
   /* THE SCRIM DOES NOT CLOSE. Every dialog here carries an X, and the editors carry Cancel and
      Save: a click that lands beside the card is a miss, not an instruction, and answering it by

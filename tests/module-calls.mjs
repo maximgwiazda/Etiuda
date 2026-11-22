@@ -8036,7 +8036,7 @@ const CARD_B = {
   globalThis.getComputedStyle = el => (el === modalCard ? { maxWidth: "560px" } : {});
   Dom.grabDom();
   let unwired = "";
-  try { (DL.wireEditorPlace || DL.wireDialogDrag)(); } catch (e) { unwired = "wireEditorPlace: " + e.message; }
+  try { DL.wireEditorPlace(); } catch (e) { unwired = "wireEditorPlace: " + e.message; }
   try { DL.wireModalX(); } catch (e) { unwired = unwired || "wireModalX: " + e.message; }
   try { DL.wireEditorRest(); } catch (e) { unwired = unwired || "wireEditorRest: " + e.message; }
   const fire = (k, e) => (heard["capture:" + k] || []).concat(heard[k] || []).forEach(fn => fn(Object.assign({ button: 0, pointerType: "mouse", pointerId: 7, target: name }, e)));

@@ -239,6 +239,7 @@ function fillProseIcons(root){
 }
 const ICON_CHEVRON_R=_svg("ic ic-sm",'<path d="M8 5l5 5-5 5"/>');
 const ICON_X=_svg("ic ic-sm",'<path d="M5 5l10 10M15 5L5 15"/>');
+const ICON_MIN=_svg("ic ic-sm",'<path d="M5 10h10"/>');
 /* Both states. The body is CAT_ICONS.lock's plus a keyhole; only the shackle differs -
    open swings one leg up and ends PAST the leg it left (a shackle a pixel short reads as
    a drawing error). THE KEYHOLE IS A FILLED PIP, not a ring: at ~1.1 device px per unit a
@@ -298,7 +299,7 @@ export {
   ICON_ALL, catIconInner, CAT_ICONS, CAT_ICONS_CATALOG, CAT_COLORS_CATALOG, setCatalogCatLooks,
   CAT_LABELS_PL, CAT_LABELS_BY_LANG, setCatalogCatLabels, E_HUE_CYCLE, E_HUE_NAMES, CAT_ICON_MUSIC, CAT_ICON_KEYS,
   CAT_ICON_HINTS, ICON_STAR_ON, ICON_STAR_OFF, ICON_FLAG, ICON_INTENT_LINK, ICON_PLUS, fillProseIcons,
-  ICON_CHEVRON_R, ICON_X, ICON_LOCK, ICON_LOCK_OPEN, ICON_TAB_X, ICON_TAB_ADD,
+  ICON_CHEVRON_R, ICON_X, ICON_MIN, ICON_LOCK, ICON_LOCK_OPEN, ICON_TAB_X, ICON_TAB_ADD,
   ICON_AWAITING, ICON_LINT_WARNING, ICON_SUCCESS, ICON_LOAD, ICON_EJECT, ICON_KEY,
   ICON_TEAM, ICON_STAMP, ICON_DESK, ICON_LOOK, ICON_SHARE,
 };

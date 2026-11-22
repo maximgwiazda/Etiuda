@@ -16,7 +16,6 @@ import { entrySel, intentIdxs, cats } from "./app-state.js";
 import { isCollapsed } from "./collapse.js";
 import { animateFoldAll } from "./list-pointer.js";
 import { tabs, addTab, closeTabById, closeOtherTabs, reopenClosedTab, closedTabCount, beginTabRename, clearTabRename } from "./tabs.js";
-import { edOpenBeside } from "./dialog.js";
 import { intentIdAt, intentIdxOfId } from "./intent-id.js";
 import { hooks } from "./hooks.js";
 import { pickCategory } from "./pills-bar.js";
@@ -46,10 +45,10 @@ const deskRail=si=>document.querySelector('#intentRail .rail-item[data-si="'+si+
 const deskCard=id=>list ? list.querySelector('.card[data-id="'+cssEsc(String(id))+'"]') : null;
 
 /* WHAT AN EDITOR LISTS: a category chip, a linked intent, a next reply, each with the menu its own panel gives (the same
-   builder, on the desk's own pill, rail row or reply), its edit row opening the editor beside the one in hand (dialog.js,
-   edOpenBeside). Where the desk is not showing that thing, the edit row alone. A field keeps the shell's edit menu. */
+   builder, on the desk's own pill, rail row or reply), its edit row opening that editor, which takes its own place (dialog.js,
+   edPlaceSync). Where the desk is not showing that thing, the edit row alone. A field keeps the shell's edit menu. */
 function besideRows(rows, label, open){
-  const act=()=>{ edOpenBeside(); open(); };
+  const act=()=>open();
   const out=(rows||[]).map(r=>(r && r.key==="F2") ? Object.assign({}, r, {act:act}) : r);
   if(!out.some(r=>r && r.key==="F2")) out.push("-", {label:t(label), key:"F2", act:act});
   return out;

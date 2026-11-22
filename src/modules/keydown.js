@@ -1,7 +1,7 @@
 /* The document's own keydown, in two listeners: the capture pass that belongs to the
    shortcuts screen while a chord is being rebound, and the pass every other key goes
    through. */
-import { dismissModal, edF6, modalFront, modalTabTarget, openCover, tabTargetIn } from "./dialog.js";
+import { dismissModal, edF6, edKeys, modalFront, modalTabTarget, openCover, tabTargetIn } from "./dialog.js";
 import { ctxEditorAct } from "./context-menu.js";
 import { closeFactsPanel, factsPanelOpen } from "./facts.js";
 import { openMaintenance } from "./maintenance.js";
@@ -188,7 +188,10 @@ function wireGlobalKeydown(){
       return;
     }
 
-    /* A resting editor holds no key: the desk in front has them all. */
+    /* Esc held closes every editor, the minimised among them, and the showcase holds the keyboard (dialog.js, edKeys). */
+    if(edKeys(e)) return;
+
+    /* A minimised editor holds no key: the desk in front has them all. */
     if(modalFront()){
       // Escape is the keyboard's X, and goes where the X goes - back one screen, then out.
       if(e.key==="Escape"){ e.preventDefault(); dismissModal(); }
