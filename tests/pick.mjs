@@ -1959,6 +1959,9 @@ try {
     "node:http",
     /* node:net and node:stream, only in shell/proxy-net.cjs: the relay socket's tunnel through a proxy, and a call's answer read as a stream. */
     "node:net", "node:stream",
+    /* original-fs, Electron's own fs that sees app.asar as the file it is, only to walk the installed copy aside (the installer's
+       old-copy-kept); it reaches no window, screen, clipboard or key. */
+    "original-fs",
     /* A person's store's key life: node:crypto alone, its requests through what the shell hands it; no window, screen, clipboard or key. */
     "./sync/store.cjs",
     /* Its sync: node:crypto, node:fs and node:path over the store's own mirror; no window, screen, clipboard or key. */
