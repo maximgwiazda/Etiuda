@@ -17,6 +17,7 @@ import { list, $ } from "./dom.js";
 import { t, uiLang, hugDottedGround } from "./ui-lang.js";
 import { catIconSvg, catSlot } from "./cat-identity.js";
 import { chordChips } from "./shortcuts.js";
+import { ICON_TEAM } from "./icons.js";
 import { applyCardColumns, remPx } from "./columns.js";
 import { groupKeyOf, COLLAPSE_BAND, COLLAPSE_FAV, isCollapsed, collapseCtrlHtml } from "./collapse.js";
 import { isFavourite, ePackEpoch, pack } from "./pack.js";
@@ -36,10 +37,9 @@ import { scheduleCutScan } from "./cut-text.js";
 import { markSearchHits } from "./search-marks.js";
 import { syncEmptyMark } from "./empty-mark.js";
 import { closeNotePane } from "./note-pane.js";
-import { E_CATALOG_SCRIPT, eCatalogFolder, eCatalogFolderShort, eFolderHoldsCatalog, wireFolderLink } from "./host.js";
 import { cards, intentIdxs, setShown, shown, cats, setPendingScrollHit, putEntrySel, lang, entrySel, pendingScrollHit, semiKind, cardCounts, wholeThingEmpty } from "./app-state.js";
 import { hooks } from "./hooks.js";
-import { teamJoinShown, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, openJoinPaste, teamCanJoin } from "./team-join.js";
+import { teamJoinShown, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, teamCanJoin } from "./team-join.js";
 import { mixCards, scheduleSearchRank } from "./search-meaning.js";
 // The render pass: filter, order, group, and hand the list the items it should hold. Every
 // surface that changes what is shown ends here, and this is the only writer of `shown`.
@@ -151,26 +151,19 @@ function render(){
       : (wholeThingEmpty() && teamJoinShown()) ? teamJoinEmptyHtml()
       : (wholeThingEmpty()
         ? '<div class="empty empty-desk">'
-          + '<h2 class="p1">' + esc(t("Etiuda is ready for its first replies.")) + '</h2>'
-          + '<button type="button" class="btn p1" id="emptyLoad">' + esc(t("Load catalog file")) + '</button>'
-          + '<div class="mid-or p1"><a href="#" id="emptyAddCard" class="quiet-link" role="button">' + esc(t("or add a card to a category")) + '</a></div>'
+          + '<h2>' + esc(t("Etiuda is ready for its first replies.")) + '</h2>'
           + (teamCanJoin()
-            ? '<button type="button" class="btn p2" id="emptyJoin">' + esc(t("Join a team")) + '</button>'
-            : '')
-          + '<div class="mid-folder p2">'
-          + (eCatalogFolder()
-            ? (eFolderHoldsCatalog()
-              ? t("Etiuda offers you the newest catalog file from {FOLDER}; one kept anywhere else loads with Load catalog file.")
-              : t("There is no catalog file in {FOLDER} yet. One kept anywhere else loads with Load catalog file."))
-                .split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button"'
-                  +' tabindex="0" title="'+esc(eCatalogFolder())+'">'
-                  +esc(eCatalogFolderShort())+'</code>')
-            : location.protocol==="file:"
-            ? esc(t("A catalog file next to Etiuda loads by itself when it is called"))+' '
-              +'<code>'+esc(E_CATALOG_SCRIPT)+'</code>. '
-              +esc(t("Under any other name, bring it in with Load catalog file."))
-            : esc(t("The catalog you load stays in this browser, ready whenever you come back.")))
-          + '</div></div>'
+            ? '<p class="e-lede">' + esc(t("Most people answer from their team's catalog. Joining the team brings it to this desk, with every update after.")) + '</p>' /* plant:empty-lede */
+              + '<div class="e-joinp" id="emptyJoinPanel">'
+              + '<div class="e-join-t">' + ICON_TEAM + esc(t("Join your team")) + '</div>' /* plant:empty-panel-head */
+              + '<p>' + esc(t("The team's lead invites this account by its email address, and the invitation appears here with one Join; a link from the lead, opened on this computer, does the same.")) + '</p>' /* plant:empty-panel-line */
+              + '<div class="e-joinp-slot" id="emptyInvite"></div>' /* plant:empty-slot */
+              + '<div class="e-joinp-hint">' + esc(t("No invitation yet? The team's lead sends one.")) + '</div>' /* plant:empty-hint */
+              + '</div>'
+              + '<div class="mid-or">' + esc(t("Working on your own?")) + ' ' /* plant:empty-quiet */
+              + '<button type="button" class="btn" id="emptyLoad">' + esc(t("Load catalog file")) + '</button></div>'
+            : '<button type="button" class="btn" id="emptyLoad">' + esc(t("Load catalog file")) + '</button>')
+          + '</div>'
         /* A chosen category with nothing in it: the same quiet drawing as the other empty
            states, but the category's own icon, so it says WHICH shelf is bare. Only when the
            category really holds no cards; filtered to nothing is a different sentence, and
@@ -184,17 +177,6 @@ function render(){
     wireTeamJoinEmpty(list.querySelector(".e-join"));
     const ei=$("#emptyLoad");
     if(ei) ei.onclick=hooks.importCatalogHere;
-    const ej=$("#emptyJoin");
-    if(ej) ej.onclick=openJoinPaste;
-    const ef=$("#emptyCatFolder");
-    if(ef) wireFolderLink(ef);
-    const ea=$("#emptyAddCard");
-    if(ea) ea.onclick=e=>{
-      e.preventDefault();
-      const b=$("#addCardFab");
-      if(b && !b.hidden) b.click();
-      else if(hooks.openCardEditor) hooks.openCardEditor(null);
-    };
     hooks.syncAddFab();
     hooks.syncNextDock();
     applyCardColumns();

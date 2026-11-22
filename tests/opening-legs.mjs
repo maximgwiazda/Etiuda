@@ -7,7 +7,7 @@
  *   957o2 the landing on the corner mark: the drawn mark's last frame of the flight sits on the .brand svg's box (centre within 1 px, size within 2 per cent), and the hand-over shows no jump in the corner mark's phase
  *   957o3 a key, a click and the wheel each end the opening at once, the window shown
  *   957o4 reduced motion: no opening, the window shown as soon as the page is ready, its corner mark still
- *   957o5 the empty desk's middle in both themes: the figure absent, the column's order, the button filled in the ink with readable text (contrast measured), the catalog-folder line present and byte for byte as now decided
+ *   957o5 the empty desk's middle in both themes: the figure absent, the column's order, the button filled in the ink with readable text (contrast measured), no add-a-card line and no folder line (the old sentences: the add-a-card line present, the catalog-folder line present byte for byte; moved on Max's word of 2026-11-22)
  *   957o6 a frame that throws still gives way
  *   957o7 no frames and a ready that never comes gives way by the failsafe
  *   957o8 reduced motion: a ready that never comes gives way by the failsafe
@@ -324,7 +324,7 @@ async function run() {
           const h2 = emptyDesk.querySelector("h2");
           const btn = emptyDesk.querySelector("#emptyLoad");
           const orText = emptyDesk.querySelector(".mid-or");
-          const catLine = emptyDesk.querySelector(".open-folder, #emptyCatFolder");
+          const panel = emptyDesk.querySelector("#emptyJoinPanel");
 
           const h2Text = h2 ? h2.textContent.trim() : "";
           const btnText = btn ? btn.textContent.trim() : "";
@@ -332,14 +332,10 @@ async function run() {
 
           // Check DOM order
           let inOrder = false;
-          if (h2 && btn && orText) {
-            const h2Pos = h2.compareDocumentPosition(btn);
-            const btnPos = btn.compareDocumentPosition(orText);
-            inOrder = (h2Pos & Node.DOCUMENT_POSITION_FOLLOWING) && (btnPos & Node.DOCUMENT_POSITION_FOLLOWING);
-            if (catLine) {
-              const catPos = orText.compareDocumentPosition(catLine);
-              inOrder = inOrder && (catPos & Node.DOCUMENT_POSITION_FOLLOWING);
-            }
+          if (h2 && btn) {
+            inOrder = !!(h2.compareDocumentPosition(btn) & Node.DOCUMENT_POSITION_FOLLOWING);
+            if (panel) inOrder = inOrder && !!(h2.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING)
+              && !!(panel.compareDocumentPosition(btn) & Node.DOCUMENT_POSITION_FOLLOWING);
           }
 
           // 3. Button filled in ink with readable text (contrast measured)
@@ -347,12 +343,11 @@ async function run() {
           const bgCol = btnStyle ? btnStyle.backgroundColor : "";
           const textCol = btnStyle ? btnStyle.color : "";
 
-          // 4. Catalog-folder line present and byte-for-byte as decided
-          const folderBranchPresent = emptyDesk.textContent.includes("Under any other name, bring it in with Load catalog file.")
-            || emptyDesk.textContent.includes("loads with Load catalog file.")
-            || emptyDesk.textContent.includes("The catalog you load stays in this browser, ready whenever you come back.");
+          // 4. The folder line and the add-a-card line are gone
+          const folderBranchPresent = !emptyDesk.querySelector(".mid-folder, #emptyCatFolder, #emptyAddCard")
+            && !/catalog file in|loads with Load catalog file|add a card to a category/.test(emptyDesk.textContent);
 
-          const orLinkPresent = orText && (orText.querySelector("a, button, [role='button']") || orText.classList.contains("link"));
+          const orLinkPresent = !!btn;
 
           return {
             found: true,
@@ -380,12 +375,11 @@ async function run() {
         && light.inOrder && dark.inOrder
         && light.h2Text === "Etiuda is ready for its first replies." && dark.h2Text === "Etiuda is ready for its first replies."
         && light.btnText === "Load catalog file" && dark.btnText === "Load catalog file"
-        && light.orContent.includes("or add a card to a category") && dark.orContent.includes("or add a card to a category")
         && lightContrast >= 4.5 && darkContrast >= 4.5
         && light.folderBranchPresent && dark.folderBranchPresent
         && light.orLinkPresent && dark.orLinkPresent;
 
-      check(ok5, "957o5 the empty desk's middle in both themes: the figure absent, the column's order, the button filled in the ink with readable text (contrast measured), the catalog-folder line present and byte for byte as now decided");
+      check(ok5, "957o5 the empty desk's middle in both themes: the figure absent, the column's order, the button filled in the ink with readable text (contrast measured), no folder line and no add-a-card line");
       await page.close();
     }
 
@@ -572,12 +566,9 @@ async function run() {
       const offerEn = "offers you the newest catalog";
       const offerPl = "proponuje najnowszy";
       const ok9 = ready && emptyEn.listed && heldSent && quietSent && againSent
-        && emptyEn.folder.length > 0 && heldEn.folder.length > 0
-        && emptyPl.folder.length > 0 && heldPl.folder.length > 0
-        && !emptyEn.text.includes(offerEn) && heldEn.text.includes(offerEn)
-        && !emptyPl.text.includes(offerPl) && heldPl.text.includes(offerPl);
-      check(ok9, "1110o9 a folder that holds nothing does not say a catalog is offered; a listing that holds one does, in English and in Polish"
-        + " (ready " + ready + ", listed " + emptyEn.listed
+        && [emptyEn, heldEn, emptyPl, heldPl].every(d => d.folder === "" && !d.text.includes(offerEn) && !d.text.includes(offerPl)
+          && !/catalog file in|pliku katalogu./.test(d.text));
+      check(ok9, "1110o9 the empty desk draws no folder line: a listing that holds nothing and one that holds a catalog leave it the same, in English and in Polish (was: a folder that holds nothing does not say a catalog is offered; a listing that holds one does; moved on Max's word of 2026-11-22)" + " (ready " + ready + ", listed " + emptyEn.listed
         + ", empty-en " + JSON.stringify(emptyEn.text.slice(0, 140))
         + ", held-en " + JSON.stringify(heldEn.text.slice(0, 140))
         + ", empty-pl " + JSON.stringify(emptyPl.text.slice(0, 140))

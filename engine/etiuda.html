@@ -2458,11 +2458,16 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
 .empty-desk h2{font:600 26px/1.25 "Segoe UI Variable Display","Segoe UI",sans-serif;margin:0 0 22px;letter-spacing:-.2px;color:var(--ink)}
 .empty-desk #emptyLoad{display:inline-flex;align-items:center;justify-content:center;gap:10px;border:0;border-radius:10px;background:#0e67d8;color:#fff;font:600 16px "Segoe UI Variable Text","Segoe UI",sans-serif;padding:13px 26px;box-shadow:0 6px 18px rgba(14,103,216,.25);cursor:pointer}
 :root[data-theme=dark] .empty-desk #emptyLoad{background:#409afc;color:#0b0d12;box-shadow:0 6px 18px rgba(64,154,252,.25)}
-.empty-desk .mid-or{margin-top:12px;font-size:14px;color:var(--dim)}
-.empty-desk .mid-or a{color:inherit;text-decoration:none;border-bottom:1px solid currentColor;cursor:pointer}
-.empty-desk .mid-or a:hover{color:var(--accent)}
-.empty-desk #emptyJoin{margin-top:16px}
-.empty-desk .mid-folder{margin-top:28px;font-size:12.5px;color:color-mix(in srgb,var(--ink) 75%,var(--bg))}
+.empty-desk .e-lede{margin:-8px auto 22px;max-width:560px;font-size:14px;color:var(--dim)}
+.empty-desk .e-joinp{box-sizing:border-box;width:min(560px,100%);padding:22px 24px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);box-shadow:0 6px 24px rgba(15,23,42,.08);color:var(--dim)}
+.empty-desk .e-joinp p{margin:8px auto 0;font-size:13px}
+.empty-desk .e-joinp .e-join-t{font-size:16px}
+.empty-desk .e-joinp-slot:empty{display:none}
+.empty-desk .e-joinp-hint{margin-top:14px;font-size:12.5px;color:color-mix(in srgb,var(--dim) 85%,var(--bg))}
+.empty-desk .mid-or{margin-top:26px;font-size:14px;color:var(--dim);display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap}
+.empty-desk .mid-or #emptyLoad{padding:7px 12px;border:1px solid var(--line-strong);border-radius:var(--radius-sm);background:var(--panel);color:var(--ink);font:600 13px var(--sans);box-shadow:none}
+:root[data-theme=dark] .empty-desk .mid-or #emptyLoad{background:var(--panel);color:var(--ink);box-shadow:none}
+.empty-desk .mid-or #emptyLoad:hover,.empty-desk .mid-or #emptyLoad:focus-visible{color:var(--accent);background:var(--accent-soft)}
 /* THE LAUNCH (launch-mark.js): opening variant A, turning over window ground, landing on the corner mark; nothing of the UI before landing. --e-launch-out is the give-way fade. */
 .e-launch-veil{position:fixed;inset:0;z-index:100;width:100vw;height:100vh;background:var(--bg);display:block;
   margin:0;padding:0;overflow:hidden;transition:opacity var(--e-launch-out,.35s) ease-out}
@@ -8226,9 +8231,11 @@ What is typed here stays in this browser.`;
     "Press": "Naciśnij",
     "{KEY} clears the search and the intents and shows every card.": "{KEY} czyści wyszukiwanie i intencje i pokazuje wszystkie karty.",
     "Etiuda is ready for its first replies.": "Etiuda czeka na pierwsze odpowiedzi.",
-    "or add a card to a category": "albo dodaj kartę do kategorii",
-    "A catalog file next to Etiuda loads by itself when it is called": "Plik katalogu leżący obok Etiudy wczytuje się sam, gdy nazywa się",
-    "Under any other name, bring it in with Load catalog file.": "Plik o innej nazwie można wczytać przyciskiem Wczytaj plik katalogu.",
+    "Most people answer from their team's catalog. Joining the team brings it to this desk, with every update after.": "Większość osób odpowiada z katalogu swojego zespołu. Po dołączeniu do zespołu katalog trafia na to stanowisko, a z nim każda kolejna aktualizacja.",
+    "Join your team": "Dołącz do zespołu",
+    "The team's lead invites this account by its email address, and the invitation appears here with one Join; a link from the lead, opened on this computer, does the same.": "Lider zespołu zaprasza to konto na jego adres e-mail, a zaproszenie pojawia się tutaj z jednym przyciskiem Dołącz; to samo daje link od lidera otwarty na tym komputerze.",
+    "No invitation yet? The team's lead sends one.": "Nie ma jeszcze zaproszenia? Wysyła je lider zespołu.",
+    "Working on your own?": "Praca bez zespołu?",
     "Catalog files": "Pliki katalogów",
     "Loaded": "Wczytany",
     "Newer": "Nowszy",
@@ -9421,9 +9428,6 @@ What is typed here stays in this browser.`;
     "Once the window is open, the tour goes inside with it.": "Po otwarciu okna przewodnik zajrzy do środka.",
     "The tour carries on once this window is closed.": "Przewodnik ruszy dalej, gdy to okno się zamknie.",
     'That is the whole tour. <b>Show tour…</b> in the <span data-icon="settings"></span> Menu brings it back, and <b>Settings</b> lists every shortcut.': 'To cały przewodnik. <b>Pokaż przewodnik…</b> w <span data-icon="settings"></span> Menu otwiera go ponownie, a wszystkie skróty są w <b>Ustawieniach</b>.',
-    "Etiuda offers you the newest catalog file from {FOLDER}; one kept anywhere else loads with Load catalog file.": "Etiuda proponuje najnowszy plik katalogu z {FOLDER}; plik z innego miejsca można wczytać przyciskiem Wczytaj plik katalogu.",
-    "There is no catalog file in {FOLDER} yet. One kept anywhere else loads with Load catalog file.": "W folderze {FOLDER} nie ma jeszcze pliku katalogu. Plik z innego miejsca można wczytać przyciskiem Wczytaj plik katalogu.",
-    "The catalog you load stays in this browser, ready whenever you come back.": "Wczytany katalog zostaje w tej przeglądarce i czeka na powrót.",
     "Load catalog file…": "Wczytaj plik katalogu…",
     "Saved copies…": "Zapisane kopie…",
     "Saved copies": "Zapisane kopie",
@@ -29841,21 +29845,10 @@ What is typed here stays in this browser.`;
     setShown(mixed || ranked.hits);
     if (!shown.length) {
       const oneCat = cats.length === 1 ? cats[0] : null;
-      list.innerHTML = terms.length ? searchMissHtml() : wholeThingEmpty() && teamReadingEmptyHtml() ? teamReadingEmptyHtml() : wholeThingEmpty() && teamJoinShown() ? teamJoinEmptyHtml() : wholeThingEmpty() ? '<div class="empty empty-desk"><h2 class="p1">' + esc(t("Etiuda is ready for its first replies.")) + '</h2><button type="button" class="btn p1" id="emptyLoad">' + esc(t("Load catalog file")) + '</button><div class="mid-or p1"><a href="#" id="emptyAddCard" class="quiet-link" role="button">' + esc(t("or add a card to a category")) + "</a></div>" + (teamCanJoin() ? '<button type="button" class="btn p2" id="emptyJoin">' + esc(t("Join a team")) + "</button>" : "") + '<div class="mid-folder p2">' + (eCatalogFolder() ? (eFolderHoldsCatalog() ? t("Etiuda offers you the newest catalog file from {FOLDER}; one kept anywhere else loads with Load catalog file.") : t("There is no catalog file in {FOLDER} yet. One kept anywhere else loads with Load catalog file.")).split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + "</code>") : location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>" + esc(E_CATALOG_SCRIPT) + "</code>. " + esc(t("Under any other name, bring it in with Load catalog file.")) : esc(t("The catalog you load stays in this browser, ready whenever you come back."))) + "</div></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
+      list.innerHTML = terms.length ? searchMissHtml() : wholeThingEmpty() && teamReadingEmptyHtml() ? teamReadingEmptyHtml() : wholeThingEmpty() && teamJoinShown() ? teamJoinEmptyHtml() : wholeThingEmpty() ? '<div class="empty empty-desk"><h2>' + esc(t("Etiuda is ready for its first replies.")) + "</h2>" + (teamCanJoin() ? '<p class="e-lede">' + esc(t("Most people answer from their team's catalog. Joining the team brings it to this desk, with every update after.")) + '</p><div class="e-joinp" id="emptyJoinPanel"><div class="e-join-t">' + ICON_TEAM + esc(t("Join your team")) + "</div><p>" + esc(t("The team's lead invites this account by its email address, and the invitation appears here with one Join; a link from the lead, opened on this computer, does the same.")) + '</p><div class="e-joinp-slot" id="emptyInvite"></div><div class="e-joinp-hint">' + esc(t("No invitation yet? The team's lead sends one.")) + '</div></div><div class="mid-or">' + esc(t("Working on your own?")) + ' <button type="button" class="btn" id="emptyLoad">' + esc(t("Load catalog file")) + "</button></div>" : '<button type="button" class="btn" id="emptyLoad">' + esc(t("Load catalog file")) + "</button>") + "</div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
       wireTeamJoinEmpty(list.querySelector(".e-join"));
       const ei = $("#emptyLoad");
       if (ei) ei.onclick = hooks.importCatalogHere;
-      const ej = $("#emptyJoin");
-      if (ej) ej.onclick = openJoinPaste;
-      const ef = $("#emptyCatFolder");
-      if (ef) wireFolderLink(ef);
-      const ea = $("#emptyAddCard");
-      if (ea) ea.onclick = (e) => {
-        e.preventDefault();
-        const b = $("#addCardFab");
-        if (b && !b.hidden) b.click();
-        else if (hooks.openCardEditor) hooks.openCardEditor(null);
-      };
       hooks.syncAddFab();
       hooks.syncNextDock();
       applyCardColumns();

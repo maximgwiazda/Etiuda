@@ -18,7 +18,8 @@ const { seatPage } = require("./seat-page.js");
 const puppeteer = require("puppeteer-core");
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 45;
+// H (the empty desk) now records one check, where it recorded two.
+const EXPECTED = 44;
 let fails = 0, checks = 0, skipped = 0;
 
 function check(ok, what, detail) {
@@ -1391,77 +1392,22 @@ async function runSuite(browser, enginePath, opts = {}) {
     await page.close().catch(() => {});
   }
 
-  // --- H. Empty desk role="button" link (#emptyAddCard) ---
+  // --- H. Empty desk: the role="button" add-a-card link (#emptyAddCard) is gone (Max, 2026-11-22: "It was introduced back in
+  //     the archaic times when there was no create a card action button in the bottom right corner."); what stands is Load catalog file, a native button ---
   const emptyDir = path.join(path.dirname(enginePath), "empty-sub");
   fs.mkdirSync(emptyDir, { recursive: true });
   fs.copyFileSync(enginePath, path.join(emptyDir, "etiuda.html"));
   const pageEmpty = await openDesk(browser, fileUrl(path.join(emptyDir, "etiuda.html")), { empty: true, incognito: true });
   try {
-    await pageEmpty.waitForSelector("#emptyAddCard", { timeout: 6000 });
-    const hitE = await tabTo(pageEmpty, "#emptyAddCard");
-    await pageEmpty.keyboard.press("Enter");
-    await sleep(100);
-    const afterE = await pageEmpty.evaluate(() => ({
-      modalOpen: !document.getElementById("modal")?.hidden,
-      lanes: document.body.classList.contains("e-lanes")
+    await pageEmpty.waitForSelector("#emptyLoad", { timeout: 6000 });
+    const shape = await pageEmpty.evaluate(() => ({
+      addCard: !!document.getElementById("emptyAddCard"),
+      loadTag: document.getElementById("emptyLoad")?.tagName || ""
     }));
-    await pageEmpty.keyboard.press("Escape").catch(() => {});
-    await sleep(80);
-
-    const hitS = await tabTo(pageEmpty, "#emptyAddCard");
-    await pageEmpty.keyboard.press("Space");
-    await sleep(100);
-    const afterS = await pageEmpty.evaluate(() => ({
-      modalOpen: !document.getElementById("modal")?.hidden,
-      lanes: document.body.classList.contains("e-lanes")
-    }));
-    if (afterS.modalOpen) { await pageEmpty.keyboard.press("Escape").catch(() => {}); await sleep(80); }
-    if (afterS.lanes) { await pageEmpty.keyboard.press("Space"); await sleep(80); }
-
     rec(
-      hitE && hitS && afterE.modalOpen && !afterE.lanes && afterS.modalOpen && !afterS.lanes,
-      "empty desk: #emptyAddCard (role=button link) Space opens editor like Enter",
-      { hitE, afterE, hitS, afterS }
-    );
-
-    // Pointer click on #emptyAddCard (dismissed with Escape -> focus returns without ring) vs Tab
-    await pageEmpty.click("#emptyAddCard");
-    await pageEmpty.waitForSelector("#modal:not([hidden]) #modalCard", { timeout: 3000 });
-    await sleep(80);
-    await pageEmpty.keyboard.press("Escape");
-    await settleAfterEscape(pageEmpty);
-    const afterEsc = await pageEmpty.evaluate(() => ({
-      id: document.activeElement?.id || "",
-      fv: !!document.activeElement?.matches(":focus-visible"),
-      modalHidden: !!document.getElementById("modal")?.hidden
-    }));
-    const fvPtr = await ringNow(pageEmpty);
-    await pageEmpty.keyboard.press("Space");
-    await sleep(100);
-    const ptrSpace = await pageEmpty.evaluate(() => ({
-      modalOpen: !document.getElementById("modal")?.hidden,
-      lanes: document.body.classList.contains("e-lanes")
-    }));
-    if (ptrSpace.modalOpen) { await pageEmpty.keyboard.press("Escape").catch(() => {}); await sleep(80); }
-    if (ptrSpace.lanes) { await pageEmpty.keyboard.press("Space"); await sleep(80); }
-
-    const hitTab = await tabTo(pageEmpty, "#emptyAddCard");
-    const fvTab = await ringNow(pageEmpty);
-    await pageEmpty.keyboard.press("Space");
-    await sleep(100);
-    const tabSpace = await pageEmpty.evaluate(() => ({
-      modalOpen: !document.getElementById("modal")?.hidden,
-      lanes: document.body.classList.contains("e-lanes")
-    }));
-    if (tabSpace.modalOpen) { await pageEmpty.keyboard.press("Escape").catch(() => {}); await sleep(80); }
-    if (tabSpace.lanes) { await pageEmpty.keyboard.press("Space"); await sleep(80); }
-
-    rec(
-      afterEsc.id === "emptyAddCard" && !afterEsc.fv && afterEsc.modalHidden &&
-        ptrSpace.lanes && !ptrSpace.modalOpen && hitTab && tabSpace.modalOpen && !tabSpace.lanes &&
-        fvPtr === ptrSpace.modalOpen && fvTab === tabSpace.modalOpen && fvTab && !fvPtr,
-      "pointer vs tab (role=button): #emptyAddCard clicked+Escape+Space switches lanes; Tab+Space opens editor; pressed iff ringed before the key",
-      { afterEsc, fvPtr, ptrSpace, hitTab, fvTab, tabSpace }
+      !shape.addCard && shape.loadTag === "BUTTON",
+      "empty desk: no #emptyAddCard link is drawn, and Load catalog file is a native button",
+      shape
     );
   } finally {
     await pageEmpty.close().catch(() => {});
