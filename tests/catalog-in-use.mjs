@@ -1053,6 +1053,8 @@ try {
     put(hist.share, "board.ec", newerText);
     await hist.D.ask("etiuda:catalog-files");
     await tick();
+    /* Told now, after the history is kept: an untold desk names no personal catalog in in-use.ec (board 1014, 2026-11-22). */
+    await hist.D.ask("etiuda:team-join", "content-said", hist.team, "");
     const histBoot = hist.D.sync("etiuda:catalog");
     const histPin = pinOf(hist.D, histBoot || "");
     take(hist.D, histPin);
@@ -1664,10 +1666,11 @@ try {
       const kept = (listedP.box.D.envelope().catalogPrivate || []).length;
       const env = unlistedP.box.D.envelope().catalogPrivate || [];
       const useDoc = openSealedDoc(unlistedP.box.D, inUsePath(unlistedP.box.share, unlistedP.box.me.id), unlistedP.box.key);
-      const nowhere = !!useDoc && !/private/i.test(JSON.stringify(useDoc)) && !/private/i.test(JSON.stringify(fs.readdirSync(unlistedP.box.share)));
+      /* A catalog marked private is not named in in-use.ec at all (board 1014, 2026-11-22; it was named, with no word of the mark). */
+      const nowhere = !useDoc && !/private/i.test(JSON.stringify(fs.readdirSync(unlistedP.box.share)));
       check(!unlistedP.written && listedP.written && !grown.written && Array.isArray(view.private) && view.private.length === 0 && freed.written && !!freed.team && grownFreed.written
           && kept === 0 && env.length === 1 && env[0] === "quay-held" && nowhere,
-        "b0d a catalog the team does not list, marked private, is answered to nobody, nor a copy grown from it; a listed one takes no mark and is answered (round six); the mark is kept in the desk envelope alone, and taken off, the catalog is answered ("
+        "b0d a catalog the team does not list, marked private, is answered to nobody, nor a copy grown from it, nor named in in-use.ec; a listed one takes no mark and is answered (round six); the mark is kept in the desk envelope alone, and taken off, the catalog is answered ("
         + [unlistedP.written, listedP.written, grown.written, freed.written, grownFreed.written].join(",") + ")");
       if (PLANTS_OFF) skip("b0j lifting plant:s0b-private turns b0d red: a catalog marked private is answered");
       else {
@@ -2449,11 +2452,15 @@ try {
         putAsk(box, "Asklistedmark", pin, 1);
         box.D.api.tryCatalogAsk(box.D.win);
         const ans = answerPath(box.share, box.me.id);
-        await writeCopy(box, "98989898", "quay-held");
+        /* The copy grows from the lead's own signed edition (grew.sha its pin), which is what makes it the team's (board 1014,
+           2026-11-22): a copy whose first hop the lead did not sign is personal, and the mark holds for it. */
+        const copy = branchDoc(box, "98989898", "quay-held");
+        copy.grew.sha = pin;
+        await box.D.ask("etiuda:branch-write", "quay-98989898", JSON.stringify(copy));
         return { team: !!openSealedDoc(box.D, ans, box.key), copy: fs.existsSync(branchAt(box, "98989898")) };
       };
       const m = await listedMark("r6-listed-mark");
-      check(m.team && m.copy, "r6a a listed catalog the desk holds a private mark for is answered under the team key, and its copy written, as any listed one (" + JSON.stringify(m) + ")");
+      check(m.team && m.copy, "r6a a listed catalog the desk holds a private mark for is answered under the team key, and its copy grown from the lead's edition written, as any listed one (" + JSON.stringify(m) + ")");
       if (PLANTS_OFF) skip("r6b letting the mark override the list turns r6a red");
       else {
         const NL6 = String.fromCharCode(10);
@@ -2478,7 +2485,8 @@ try {
         const NL6 = String.fromCharCode(10);
         const planted = SRC.split(NL6).map(l => l.indexOf("plant:s0b-mark-listed") >= 0 ? "  if (CATALOG_ID_RE.test(id)) {" : l).join(NL6);
         const p = planted !== SRC ? await markOn("r6-mark-on-plant", planted) : null;
-        check(!!p && p.listedTaken, "r6d lifting plant:s0b-mark-listed turns r6c red: the listed catalog takes the mark (" + (p ? JSON.stringify(p) : "plant not found") + ")");
+        /* Read from the envelope: the view lists only the marks that hold (board 1014, 2026-11-22), so it hides this one. */
+        check(!!p && p.stored.split(",").indexOf("quay-held") >= 0, "r6d lifting plant:s0b-mark-listed turns r6c red: the listed catalog takes the mark, kept in the envelope (" + (p ? JSON.stringify(p) : "plant not found") + ")");
       }
     }
     {

@@ -4401,7 +4401,7 @@ function memberHeed(doc, state, seen) {
   const said = [];
   const ret = (extra) => Object.assign({ state: out, key: null, said: said, stampClear: false, changed: false,
     stop: false, needKey: false, team: "", epoch: 0, keep: false, unbar: false, pinned: false }, extra);
-  if (!teamWhole(doc)) { /* defence in depth: the team-file reader (plant:s0b-floor-doc) already refuses a file that is not whole */
+  if (!teamWhole(doc)) { /* defence in depth: the team-file reader (its plant is s0b-floor-doc) already refuses a file that is not whole */
     said.push(file + " is not a team file whole under its lead's key, so nothing in it is used");
     return ret({ stop: true });
   }
