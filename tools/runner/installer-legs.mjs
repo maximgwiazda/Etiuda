@@ -1648,8 +1648,11 @@ async function perUserAtSignIn(rec) {
   }
 
   /* The sign-in's stand-in: the value's own command line, run with a restricted token, its groups written first. */
-  const cmd = path.join(LAB, "signin-standin.cmd"), groups = path.join(LAB, "signin-groups.txt"), exitFile = path.join(LAB, "signin-exit.txt");
-  fs.writeFileSync(cmd, ["@echo off", 'whoami /groups /fo csv > "' + groups + '"', value, '>"' + exitFile + '" echo %ERRORLEVEL%'].join("\r\n") + "\r\n");
+  /* Two witnesses of the token: whoami's groups (with its errors) and "net session", which answers 0 only to an elevated administrator.
+     Both files go to the run's artifact. */
+  const cmd = path.join(LAB, "signin-standin.cmd"), groups = path.join(OUT, "signin-groups.txt"), exitFile = path.join(LAB, "signin-exit.txt");
+  const netFile = path.join(OUT, "signin-net-session.txt");
+  fs.writeFileSync(cmd, ["@echo off", 'whoami /groups > "' + groups + '" 2>&1', 'net session >nul 2>&1', '>"' + netFile + '" echo %ERRORLEVEL%', value, '>"' + exitFile + '" echo %ERRORLEVEL%'].join("\r\n") + "\r\n");
   const ra = spawnSync("runas.exe", ["/trustlevel:0x20000", cmd], { encoding: "utf8", windowsHide: true, timeout: 60000 });
   rec.f("runas", oneLine((ra.stdout || "") + " " + (ra.stderr || "")) || "status " + ra.status);
   for (let i = 0; i < 300 && ra.status === 0 && !fs.existsSync(exitFile); i++) await sleep(1000);
@@ -1659,7 +1662,10 @@ async function perUserAtSignIn(rec) {
   const g = fs.existsSync(groups) ? fs.readFileSync(groups, "utf8") : "";
   const admRow = g.split(/\r?\n/).find((l) => /BUILTIN\\Administrators/i.test(l)) || "";
   const label = (/Mandatory Label\\(\w+) Mandatory Level/i.exec(g) || [])[1] || "unread";
-  const unelevated = /deny only/i.test(admRow) || /^(medium|low)$/i.test(label);
+  const net = fs.existsSync(netFile) ? parseInt(fs.readFileSync(netFile, "utf8"), 10) : NaN;
+  const read = !!admRow || label !== "unread";
+  const unelevated = (/deny only/i.test(admRow) || /^(medium|low)$/i.test(label)) && net !== 0;
+  rec.f("standin-net-session", Number.isNaN(net) ? "unread" : net); rec.f("standin-groups-bytes", g.length);
   rec.f("standin-administrators", admRow ? (/deny only/i.test(admRow) ? "deny only" : "enabled") : "absent"); rec.f("standin-integrity", label);
   const sx = parseInt(fs.readFileSync(exitFile, "utf8"), 10);
   const goneIn = await goneWithin(n.dir, 120);
@@ -1670,8 +1676,11 @@ async function perUserAtSignIn(rec) {
   };
   rec.f("standin-exit", sx); rec.f("per-user-folder-gone", yes(after.folder)); rec.f("hkcu-entry-gone", yes(after.entry)); rec.f("data-file-kept", yes(after.marker));
   rec.f("all-users-intact", yes(after.allUsers)); rec.f("all-users-shortcuts", yes(after.links));
-  if (!unelevated && !(after.exit === 0 && after.folder && after.entry && after.marker && after.allUsers && after.links))
-    throw new NoVerdict("the install part held; the stand-in ran with Administrators " + (admRow ? "enabled" : "absent") + " at " + label + " integrity, so it says nothing of ordinary rights, and it ended " + sx);
+  const removed = after.exit === 0 && after.folder && after.entry && after.marker && after.allUsers && after.links;
+  /* A token not shown to be ordinary says nothing of ordinary rights: no verdict where the line otherwise did all it should. */
+  if (!unelevated && removed)
+    throw new NoVerdict("the install part held and the line removed the per-user copy, kept the data and left the all-users copy whole; but the stand-in's token was not shown to be ordinary (Administrators "
+      + (admRow ? (/deny only/i.test(admRow) ? "deny only" : "enabled") : read ? "absent" : "unread") + ", " + label + " integrity, net session " + (Number.isNaN(net) ? "unread" : net) + "), so ordinary rights are unproven");
   const ok = unelevated && after.exit === 0 && after.folder && after.entry && after.marker && after.allUsers && after.links;
   rec.end(ok, (ok ? "elevated all-users over a per-user copy wrote " + JSON.stringify(value) + " to HKCU RunOnce and ran nothing of that copy; the line, run with a restricted token, removed the per-user copy and its entry with exit 0, kept the data file, and left the all-users copy and its shortcuts whole"
     : "the line, run with a restricted token (" + label + " integrity, unelevated " + yes(unelevated) + "): exit " + sx + ", per-user folder gone " + yes(after.folder) + ", HKCU entry gone " + yes(after.entry)
