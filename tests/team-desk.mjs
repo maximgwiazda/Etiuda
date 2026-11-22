@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 /* The floor: every leg below runs, or the file says it did not complete. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 105 - 12 - 7 - 15; /* 12 retired with the folder team (RETIRED_TWO_TEAMS_ONE_FOLDER) and 7 with the conflict sibling of the team file and 15 with a folder team's head, ring and wait and the row's fork (each marked RETIRED); the plants of the fork and sibling scenes (14br to 14bx, 14cc, 14cj) are not yet retired with them */
+const EXPECTED = 105 - 12 - 7 - 15 - 1; /* 12 retired with the folder team (RETIRED_TWO_TEAMS_ONE_FOLDER) and 7 with the conflict sibling of the team file and 16 with a folder team's head, ring and wait and the row's fork (each marked RETIRED); the plants of the fork and sibling scenes (14br to 14bx, 14cc, 14cj) are not yet retired with them */
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -1497,8 +1497,8 @@ try {
         async p => { const h = await heedScene(p); return h.pin === h.w.L[1].public; }],
       ["14bv", "main.js", "fork-row", "keeps the fork from the team's row, so the notice never shows",
         async p => { const a = await laterScene(p); return a.saidFirst === 1 && !!a.rowFirst && !a.rowFirst.fork; }],
-      ["14bw", "main.js", "fork-seen", "forgets the dismissal",
-        async p => { const a = await laterScene(p); await a.w.D.ask("etiuda:team-join", "fork-seen", a.w.T); const r = await a.w.row(); return !!r && !!r.fork && r.fork.seen === false; }],
+      /* 14bw RETIRED with 14bq (the row's fork, which a team read from the relay's mirror no longer gets from the shell's heed): it said that lifting
+         plant:fork-seen in a scratch copy of shell/main.js forgets the dismissal. */
       ["14bx", "folder/syncer.cjs", "syncer-fork-two", "lets the syncer take one of two successors in one sync into the copy the shell reads",
         async p => { const t = await twoScene(p); return t.mirrorTeam !== t.w.L[0].keyId + ":1"; }],
     ];
