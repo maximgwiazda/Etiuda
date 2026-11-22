@@ -1460,6 +1460,8 @@ html.e-still .sgn-run::after{animation:none;transform:translateX(80%)}
 .sgn-code{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 12px;margin-top:10px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
 .sgn-code code,.sgn-mono{font:600 14.5px var(--mono);letter-spacing:.04em;color:var(--ink);white-space:nowrap}
 .sgn-code code{flex:1 1 auto;font-size:13px;letter-spacing:.02em}
+.sgn-invite span{flex:1 1 12em;font-size:13.5px;line-height:1.45;color:var(--ink)}
+.sgn-join-no{margin-top:8px}
 .sgn-val{font-size:13.5px;color:var(--ink)}
 .sgn-lock{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--dim)}
 .sgn-lock .ic{width:13px;height:13px}
@@ -5323,7 +5325,6 @@ body.e-host .row .win-btn:focus-visible{outline-offset:-2px}
           <div class="menu-sep" id="menuUpdateSep" hidden></div>
           <button type="button" role="menuitem" data-act="manage" title="Edit, hide or restore every card, intent and category">Library…</button>
           <button type="button" role="menuitem" data-act="settings" title="Interface language, appearance and keyboard shortcuts">Settings…</button>
-          <button type="button" role="menuitem" data-act="join" id="menuJoin" hidden title="Paste the invitation from the team's lead.">Join a team</button>
           <!-- Only where the host has a picker, its words and combination drawn in header-menus.js. -->
           <button type="button" role="menuitem" data-act="picker" id="menuPicker" hidden></button>
           <!-- Maintenance has NO menu entry: F2 opens it, and the Keyboard shortcuts screen is
@@ -8806,7 +8807,6 @@ What is typed here stays in this browser.`;
     "On a team, the changes this desk shared with the team's lead go too, any the lead has not yet reviewed included.": "W zespole znikają też zmiany, które to stanowisko udostępniło liderowi zespołu, także te, których lider jeszcze nie przejrzał.",
     "The catalog file, the team, the licence, the folder setting and the agent's name stay. Undo brings the changes back on this desk until Etiuda closes; after a restart, nothing comes back.": "Plik katalogu, zespół, licencja, ustawienie folderu i imię agenta zostają. Przycisk Cofnij przywraca zmiany na tym stanowisku do zamknięcia Etiudy; po ponownym uruchomieniu nic już nie wróci.",
     "Loads a catalog file from this computer.": "Wczytuje plik katalogu z tego komputera.",
-    "Joins a team with an invitation from its lead.": "Dołącza do zespołu na podstawie zaproszenia od lidera.",
     "Eject catalog": "Odłącz katalog",
     "Catalog ejected": "Odłączono katalog",
     "Local changes cleared": "Wyczyszczono zmiany lokalne",
@@ -9562,22 +9562,25 @@ What is typed here stays in this browser.`;
     "This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation.": "Ta licencja ma zespół na przekaźniku. Jeśli lider zespołu przyjął już to konto, po prośbie o dołączenie ten komputer wejdzie, gdy Studio lidera zobaczy prośbę; w przeciwnym razie lider może wysłać zaproszenie.",
     "This team is no longer offered here, or this computer is already in a team, so nothing was sent.": "Ten zespół nie jest już tu proponowany albo ten komputer należy już do zespołu, więc nic nie wysłano.",
     "The team did not let this computer in. Its lead can send an invitation instead.": "Zespół nie wpuścił tego komputera. Jego lider może zamiast tego wysłać zaproszenie.",
-    "No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself.": "Żaden zespół nie przyjął jeszcze tego konta. Gdy lider zespołu przyjmie je po kodzie poniżej, katalog przyjdzie sam.",
+    "No team has admitted this account yet. A lead can invite it by its email address or send a link; the invitation then appears here with one Join.": "Żaden zespół nie przyjął jeszcze tego konta. Lider zespołu może zaprosić je na adres e-mail albo wysłać link; zaproszenie pojawi się wtedy tutaj z jednym przyciskiem Dołącz.",
     "No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself.": "Żaden zespół nie przyjął jeszcze tego konta. Gdy lider zespołu je przyjmie, katalog przyjdzie sam.",
     "This account is signed in, and no team has admitted it yet. Once a lead admits it, the catalog arrives by itself.": "To konto jest zalogowane, ale żaden zespół jeszcze go nie przyjął. Gdy lider zespołu je przyjmie, katalog przyjdzie sam.",
-    "Your sign-in code": "Kod logowania",
-    "Not a secret. It tells a team's lead which account is yours.": "To nie tajemnica. Po nim lider zespołu rozpoznaje, czyje to konto.",
+    "Invitation": "Zaproszenie",
+    "Join": "Dołącz",
+    "{LEAD} invites this account to join {TEAM}.": "{LEAD} zaprasza to konto do zespołu. Zespół: {TEAM}.",
+    "Open until {DATE}.": "Ważne do {DATE}.",
+    "The invitation could not be taken, so nothing has changed. The team's lead can send a new one.": "Nie udało się przyjąć zaproszenia, więc nic się nie zmieniło. Lider zespołu może wysłać nowe.",
     "Check now": "Sprawdź teraz",
     "Licence for one person": "Licencja dla jednej osoby",
     "Licence": "Licencja",
-    "The order page opens in the browser with this account's sign-in code filled in; typing another person's code buys the licence for them instead.": "Strona zamówienia otworzy się w przeglądarce z wpisanym kodem logowania tego konta; po wpisaniu kodu innej osoby licencja zostanie kupiona dla niej.",
-    "The order page opens in the browser and asks for the sign-in code of the person the licence is for, which Etiuda shows them after their first sign-in.": "Strona zamówienia otworzy się w przeglądarce i poprosi o kod logowania osoby, dla której jest licencja; Etiuda pokazuje go tej osobie po jej pierwszym zalogowaniu.",
+    "The order page opens in the browser, and the licence bought there is this account's.": "Strona zamówienia otworzy się w przeglądarce, a kupiona tam licencja będzie należeć do tego konta.",
+    "A licence is bought for the account signed in here, so signing in comes first.": "Licencję kupuje się dla konta zalogowanego na tym komputerze, więc najpierw trzeba się zalogować.",
     "Buy": "Kup",
-    "Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again.": "W tej wersji Etiudy nie ma zakupu. Miejsce w licencji daje lider zespołu: przynosi je zaproszenie od lidera, a przycisk Sprawdź teraz pozwala sprawdzić ponownie.",
+    "Buying is not available in this build of Etiuda. A seat comes from a team's lead: the lead's invitation appears here with one Join, and Check now looks for it again.": "W tej wersji Etiudy nie ma zakupu. Miejsce w licencji daje lider zespołu: jego zaproszenie pojawia się tutaj z jednym przyciskiem Dołącz, a przycisk Sprawdź teraz szuka go ponownie.",
     "The sign-in service could not be reached.": "Nie udało się połączyć z usługą logowania.",
     "Nothing changed: this computer is not signed in, and Etiuda works as before.": "Nic się nie zmieniło: ten komputer nie jest zalogowany, a Etiuda działa jak dotąd.",
     "{TEAM} has no free seat just now.": "{TEAM} nie ma teraz wolnego miejsca.",
-    "The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and {LEAD}, the team's lead, sees this account's sign-in code among those who have signed in.": "Logowanie się powiodło. Ten komputer sam zajmie miejsce, gdy tylko któreś się zwolni; nikt nie musi nic robić, a lider zespołu, {LEAD}, widzi kod logowania tego konta wśród osób, które się zalogowały.",
+    "The sign-in worked. This computer takes a seat by itself as soon as one is free; nothing is needed here. The team's lead: {LEAD}.": "Logowanie się powiodło. Ten komputer sam zajmie miejsce, gdy tylko któreś się zwolni; tutaj nie trzeba nic robić. Lider zespołu: {LEAD}.",
     "This account is signed in on three computers already.": "To konto jest już zalogowane na trzech komputerach.",
     "A seat holds three computers. Signing out on one of the others frees its place, and this computer checks again by itself.": "Miejsce w licencji obejmuje trzy komputery. Wylogowanie się na jednym z pozostałych zwolni jego miejsce, a ten komputer sam sprawdzi ponownie.",
     "The sign-in service did not accept this account's sign-in.": "Usługa logowania nie przyjęła logowania tego konta.",
@@ -9602,7 +9605,8 @@ What is typed here stays in this browser.`;
     "Its IT department can allow it; another account can be used meanwhile.": "Może to zmienić jej dział IT; do tego czasu można użyć innego konta.",
     "To ask for access: {CONTACT}. Another account can be used meanwhile.": "W sprawie dostępu: {CONTACT}. Do tego czasu można użyć innego konta.",
     "No Etiuda licence has a seat for this account.": "Żadna licencja Etiudy nie ma miejsca dla tego konta.",
-    "The sign-in worked. A seat comes from a trial, a purchase, or a team's lead admitting the account; another account can be used meanwhile.": "Logowanie się powiodło. Miejsce daje okres próbny, zakup albo przyjęcie konta przez lidera zespołu; do tego czasu można użyć innego konta.",
+    "The sign-in worked. A seat comes from a team's lead, by an invitation to this account's email address or a link, or from a purchase; another account can be used meanwhile.": "Logowanie się powiodło. Miejsce w licencji daje lider zespołu, zaproszeniem na adres e-mail tego konta albo linkiem, albo zakup; tymczasem można użyć innego konta.",
+    "The sign-in worked. A seat comes from a team's lead, by an invitation to this account's email address or a link; another account can be used meanwhile.": "Logowanie się powiodło. Miejsce w licencji daje lider zespołu, zaproszeniem na adres e-mail tego konta albo linkiem; tymczasem można użyć innego konta.",
     "The sign-in service cannot be reached just now.": "Usługa logowania jest teraz nieosiągalna.",
     "Etiuda keeps working with the catalog it has. Last checked {WHEN}.": "Etiuda działa dalej na katalogu, który już ma. Ostatnie sprawdzenie: {WHEN}.",
     "service not reached just now": "usługa chwilowo nieosiągalna",
@@ -9728,10 +9732,13 @@ What is typed here stays in this browser.`;
     "No seat is free on the organisation's licence just now.": "W licencji organizacji nie ma teraz wolnego miejsca.",
     // the copywriter's, the four lines below
     "The organisation's Etiuda licence seats the people its leads add.": "Licencja Etiudy tej organizacji daje miejsce osobom, które dodają jej liderzy.",
-    "Give the team's lead this code. Once added, this desk takes its seat by itself; nothing more is needed here.": "Wystarczy podać liderowi zespołu ten kod. Po dodaniu to stanowisko samo zajmie miejsce w licencji; tutaj nie trzeba robić nic więcej.",
+    "The team's lead invites this account by its email address, and the invitation appears here with one Join; a link from the lead, opened on this computer, does the same.": "Lider zespołu zaprasza to konto na jego adres e-mail, a zaproszenie pojawia się tutaj z jednym przyciskiem Dołącz; to samo daje link od lidera otwarty na tym komputerze.",
+    "{PROVIDER} does not vouch for this account's address, so {LEAD}, the team's lead, confirms it next; this computer then takes its seat by itself. Nothing is needed here meanwhile.": "{PROVIDER} nie poświadcza adresu tego konta, więc teraz potwierdza to lider zespołu: {LEAD}. Potem ten komputer sam zajmie miejsce; tutaj nic nie trzeba robić.",
+    "This account is invited to join {TEAM} by its lead.": "Lider zaprasza to konto do zespołu. Zespół: {TEAM}.",
+    "{PROVIDER} does not vouch for this account's address, so the team's lead confirms it next; this computer then takes its seat by itself. Nothing is needed here meanwhile.": "{PROVIDER} nie poświadcza adresu tego konta, więc teraz potwierdza to lider zespołu. Potem ten komputer sam zajmie miejsce; tutaj nic nie trzeba robić.",
     "This account's own trial is running.": "Trwa własny okres próbny tego konta.",
     "Fourteen days, until {DATE}, on up to three computers. A lead can add this account at any time, without waiting for the trial to end.": "Czternaście dni, do {DATE}, najwyżej na trzech komputerach. Lider może dodać to konto w każdej chwili, bez czekania na koniec okresu próbnego.",
-    "The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and the team's lead sees this account's sign-in code among those who have signed in.": "Logowanie się powiodło. Ten komputer sam zajmie miejsce, gdy tylko któreś się zwolni; nikt nie musi nic robić, a lider zespołu widzi kod logowania tego konta wśród osób, które się zalogowały.",
+    "The sign-in worked. This computer takes a seat by itself as soon as one is free; nothing is needed here.": "Logowanie się powiodło. Ten komputer sam zajmie miejsce, gdy tylko któreś się zwolni; tutaj nie trzeba nic robić.",
     "This desk's seat is due for renewal.": "Miejsce w licencji dla tego stanowiska czeka na odnowienie.",
     "It renews by itself the next time the sign-in service answers. Everything on this desk works as before.": "Odnowi się samo, gdy usługa logowania znów odpowie. Wszystko na tym stanowisku działa jak dotąd.",
     "This computer could not renew its sign-in by itself.": "Ten komputer nie zdołał sam odnowić logowania.",
@@ -9909,7 +9916,7 @@ What is typed here stays in this browser.`;
     "{NAME} comes from your account: the first name and the first letter of the surname. Replies that sign with your name use it, and the team's lead sees this desk by it. It can be changed here at any time.": "{NAME} pochodzi z konta: to imię i pierwsza litera nazwiska. Ta nazwa trafia do odpowiedzi podpisywanych imieniem, a lider zespołu widzi pod nią to stanowisko. Można ją zmienić tutaj w dowolnej chwili.",
     "{NAME} is the name on your account. Replies that sign with your name use it, and the team's lead sees this desk by it. It can be changed here at any time.": "{NAME} to nazwa z konta. Ta nazwa trafia do odpowiedzi podpisywanych imieniem, a lider zespołu widzi pod nią to stanowisko. Można ją zmienić tutaj w dowolnej chwili.",
     "Etiuda starts with a sign-in.": "Etiuda zaczyna się od zalogowania.",
-    "Signing in with Microsoft or Google gives this computer a seat: the team's, where its lead has admitted this account, or else a trial of fourteen days. Catalogs open once the seat is here.": "Zalogowanie kontem Microsoft lub Google daje temu komputerowi miejsce w licencji: w zespole, jeśli lider przyjął to konto, a w przeciwnym razie czternastodniowy okres próbny. Katalogi otwierają się, gdy miejsce już jest.",
+    "Signing in with Microsoft or Google gives this computer a seat: the team's, where this account is already admitted, or else a trial of fourteen days. A lead's invitation then appears here with one Join. Catalogs open once the seat is here.": "Zalogowanie kontem Microsoft lub Google daje temu komputerowi miejsce w licencji: w zespole, jeśli to konto jest już do niego przyjęte, a w przeciwnym razie czternastodniowy okres próbny. Zaproszenie od lidera pojawi się wtedy tutaj z jednym przyciskiem Dołącz. Katalogi otwierają się, gdy miejsce już jest.",
     "Signing in needs an internet connection. The buttons appear here by themselves once this computer is online.": "Logowanie wymaga połączenia z internetem. Przyciski pojawią się tu same, gdy komputer będzie online.",
     "The request to join is waiting.": "Prośba o dołączenie czeka.",
     "Catalogs open here again once {LEAD}, the team's lead, accepts it. Etiuda's own fourteen days ended on {DESK_END}.": "Katalogi znów otworzą się tutaj, gdy {LEAD}, lider zespołu, ją przyjmie. Własne czternaście dni Etiudy skończyły się {DESK_END}.",
@@ -18314,7 +18321,6 @@ What is typed here stays in this browser.`;
     closeTeamBubble: () => closeTeamBubble,
     forgetTeamLead: () => forgetTeamLead,
     inviteHeld: () => inviteHeld,
-    joinDoorButton: () => joinDoorButton,
     joinStands: () => joinStands,
     joinTook: () => joinTook,
     keySignHtml: () => keySignHtml,
@@ -18501,7 +18507,6 @@ What is typed here stays in this browser.`;
     return asked.then((v) => joinTook(v, typeof before === "function" && before(v)), () => {
       const shown2 = joinMode !== "";
       dropInvite();
-      syncJoinDoor();
       if (shown2) repaintJoin();
       return null;
     });
@@ -18657,13 +18662,6 @@ What is typed here stays in this browser.`;
     if (j.doubted === true) row2.doubted = true;
     if (j.paused === true) row2.paused = true;
     return row2;
-  }
-  function syncJoinDoor() {
-    try {
-      const el = document.getElementById("menuJoin");
-      if (el) el.hidden = !teamCanJoin();
-    } catch (e) {
-    }
   }
   function headKept(h) {
     if (!h || typeof h !== "object") return null;
@@ -18927,7 +18925,6 @@ What is typed here stays in this browser.`;
         hooks.loadCatalogFromFolder(s.opens.file, 0);
       }
     }
-    syncJoinDoor();
     syncLapseNotice();
     syncRelayRemoved();
     syncRelayElsewhere();
@@ -19059,10 +19056,6 @@ What is typed here stays in this browser.`;
     joinMode = "paste";
     repaintJoin();
   }
-  function joinDoorButton(id) {
-    if (!teamCanJoin()) return "";
-    return '<button type="button" class="btn" id="' + esc(id) + '" title="' + esc(t("Paste the invitation from the team's lead.")) + '">' + esc(t("Join a team")) + "</button>";
-  }
   function joinDisclosure() {
     return '<div class="e-join-meta">' + esc(t("Once this desk joins, the team's lead can see the catalogs it uses, their content included, and this desk's changes to them. The lead's Studio can take a copy of any of them at any time, without asking here: of a team catalog, one the lead publishes to the team, sealed for the team; of a personal catalog, any other on this desk, sealed for the lead alone. A personal catalog can be marked Private in the Library, under Catalog & data; the lead then sees nothing of it, not even that it is used. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses unless that catalog is Private, and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, none of them from a Private catalog, and Studio shows them in the team's totals.")) + "</div>";
   }
@@ -19156,7 +19149,7 @@ What is typed here stays in this browser.`;
           title: t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
           line: cause + " " + status + " " + forward,
           body: meta,
-          acts: [["join", t("Join a team")], ["load", t("Load another catalog file")]]
+          acts: [["load", t("Load another catalog file")]]
         };
       }
       let backTitle = t("Joining {LEAD}'s team").split("{LEAD}").join(lead);
@@ -19172,7 +19165,7 @@ What is typed here stays in this browser.`;
         title: t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
         line: t("The relay no longer holds this request, so it could not be withdrawn there. The team's lead may still see it until it expires. To join after all, a new invitation from the team's lead is needed."),
         body: meta,
-        acts: [["join", t("Join a team")], ["load", t("Load another catalog file")]]
+        acts: [["load", t("Load another catalog file")]]
       };
       if (j.withdrawing === true && j.readonly === true) return {
         title: backTitle,
@@ -19236,7 +19229,7 @@ What is typed here stays in this browser.`;
       acts: [["cancel", t("Cancel the request")]]
     };
     const ask2 = '<div class="e-join-meta">' + esc(t("Asks as {NAME}, the name in Settings.").split("{NAME}").join(who)) + "</div>" + joinDisclosure();
-    const acts = [["ask", t("Ask to join")], ["join", t("Join a team")], ["load", t("Load another catalog file")]];
+    const acts = [["ask", t("Ask to join")], ["load", t("Load another catalog file")]];
     const gone = s ? (joinNow && joinNow.leads || []).filter((x) => x.team === s.team && x.removed)[0] : null;
     if (gone) {
       const title = gone.lead ? t("{LEAD}'s team no longer includes this desk").split("{LEAD}").join(gone.lead) : t("The team no longer includes this desk");
@@ -30522,7 +30515,6 @@ What is typed here stays in this browser.`;
     return {
       offered: Array.isArray(o.offered) ? o.offered.filter(known) : [],
       signedIn,
-      code: signedIn && /^[0-9A-Z]{16}$/.test(String(o.code)) ? String(o.code) : "",
       seat: o.seat === "held" || o.seat === "lapsed" || o.seat === "none" ? o.seat : "",
       deskOnly: !!signedIn && o.deskOnly === true,
       askLead: !!signedIn && o.askLead === true,
@@ -30530,6 +30522,10 @@ What is typed here stays in this browser.`;
       /* The leads an open join request waits on, as the service names them (the shell keeps plain names only); none where it names none. */
       asked: signedIn && Array.isArray(o.asked) ? o.asked.filter((n) => typeof n === "string" && n && n.length <= 120).slice(0, 8) : [],
       /* plant:read-asked */
+      /* The invitations waiting for this account, by their place in the shell's list (board 1017), and the lead a Join waits on. */
+      invited: signedIn ? signinInvitedRead(o.invited) : [],
+      /* plant:read-invited */
+      joinWait: signedIn && typeof o.joinWait === "string" && o.joinWait.length <= 120 ? o.joinWait : "",
       /* The service said this account's organisation holds its licence (a managed tenant), and why where it also owns one. */
       licenceManaged: o.licenceManaged === true,
       cause: o.licenceManaged === true && (o.cause === "own-licence" || o.cause === "assigned") ? o.cause : "",
@@ -30571,6 +30567,11 @@ What is typed here stays in this browser.`;
       registered: o.registered === true
       /* plant:read-registered */
     };
+  }
+  function signinInvitedRead(v) {
+    if (!Array.isArray(v)) return [];
+    const name = (s) => typeof s === "string" && s.length <= 120 ? s : "";
+    return v.filter((x) => x && Number.isInteger(x.n) && x.n >= 0 && x.n < 8).slice(0, 8).map((x) => ({ n: x.n, lead: name(x.lead), team: name(x.team), until: signinTimeRead(x.until), confirm: x.confirm === true }));
   }
   function signinTimeRead(v) {
     return Number.isSafeInteger(v) && v > 0 && v <= 864e13 ? v : 0;
@@ -30832,9 +30833,6 @@ What is typed here stays in this browser.`;
       named(t("Fourteen days, until {DATE}, on up to three computers. A lead can add this account at any time, without waiting for the trial to end."), "{DATE}", signinDay(v.trialUntil))
     ];
   }
-  function signinCodeText(code) {
-    return String(code || "").replace(/(.{4})(?=.)/g, "$1 ");
-  }
   function signinDay(at) {
     return new Date(at).toLocaleDateString(uiLang() === "pl" ? "pl-PL" : "en-GB", { day: "numeric", month: "short" });
   }
@@ -30864,7 +30862,6 @@ What is typed here stays in this browser.`;
       name,
       sub: prov ? named(t("Signed in with {PROVIDER}"), "{PROVIDER}", prov) + (v.reached ? "" : " · " + t("service not reached just now")) : "",
       off: !v.reached,
-      code: v.code,
       team,
       teamName: team ? team.lead ? named(t("{LEAD}'s team"), "{LEAD}", team.lead) : t("Team") : ""
     };
@@ -30904,14 +30901,14 @@ What is typed here stays in this browser.`;
         return [t("This account is already in use on three computers."), t("Signing out on one of them makes room here, and so does a computer left unused for 30 days; then Try again.")];
       case "waiting":
       case "full":
-        return p && p.team && p.team.lead ? [named(t("{TEAM} has no free seat just now."), "{TEAM}", p.teamName), named(t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and {LEAD}, the team's lead, sees this account's sign-in code among those who have signed in."), "{LEAD}", p.team.lead)] : [t("No seat is free on the organisation's licence just now."), t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and the team's lead sees this account's sign-in code among those who have signed in.")];
+        return p && p.team && p.team.lead ? [named(t("{TEAM} has no free seat just now."), "{TEAM}", p.teamName), named(t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nothing is needed here. The team's lead: {LEAD}."), "{LEAD}", p.team.lead)] : [t("No seat is free on the organisation's licence just now."), t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nothing is needed here.")];
       case "asklead":
         return [
           t("The organisation's Etiuda licence seats the people its leads add."),
-          signinManaged(v) ? t("This account is signed in, and no team has admitted it yet. Once a lead admits it, the catalog arrives by itself.") : t("Give the team's lead this code. Once added, this desk takes its seat by itself; nothing more is needed here.")
+          signinManaged(v) ? t("This account is signed in, and no team has admitted it yet. Once a lead admits it, the catalog arrives by itself.") : t("The team's lead invites this account by its email address, and the invitation appears here with one Join; a link from the lead, opened on this computer, does the same.")
         ];
       case "nolicence":
-        return [t("No Etiuda licence has a seat for this account."), t("The sign-in worked. A seat comes from a trial, a purchase, or a team's lead admitting the account; another account can be used meanwhile.")];
+        return [t("No Etiuda licence has a seat for this account."), buyOffered() ? t("The sign-in worked. A seat comes from a team's lead, by an invitation to this account's email address or a link, or from a purchase; another account can be used meanwhile.") : t("The sign-in worked. A seat comes from a team's lead, by an invitation to this account's email address or a link; another account can be used meanwhile.")];
       case "offline":
         return [t("The sign-in service cannot be reached just now."), named(t("Etiuda keeps working with the catalog it has. Last checked {WHEN}."), "{WHEN}", signinWhen(v.at))];
       case "lapsed":
@@ -30988,7 +30985,7 @@ What is typed here stays in this browser.`;
     const asked = Array.isArray(v.asked) ? v.asked : [];
     const lead = seat && seat.lead || team && team.lead || (asked.length === 1 ? asked[0] : "");
     const askedMany = !(seat && seat.lead) && !(team && team.lead) && asked.length > 1 ? asked.join(", ") : "";
-    const waitingOnLead = !!(v.askLead || signinNoSeat(v));
+    const waitingOnLead = !!(v.askLead || signinNoSeat(v) || v.joinWait);
     const orgLicence = !!v.licenceManaged;
     const trialOver = seatOn === "trial" || !seatOn && deskEnd > 0;
     const trialOpen = trialOver && !(seatOn && v.stoppedAt > 0);
@@ -31050,7 +31047,7 @@ What is typed here stays in this browser.`;
     const fill2 = (s, map) => Object.keys(map).reduce((a, k) => a.split(k).join(map[k]), s);
     if (ds.state === "first" || ds.state === "first-offline") return [
       t("Etiuda starts with a sign-in."),
-      t("Signing in with Microsoft or Google gives this computer a seat: the team's, where its lead has admitted this account, or else a trial of fourteen days. Catalogs open once the seat is here.")
+      t("Signing in with Microsoft or Google gives this computer a seat: the team's, where this account is already admitted, or else a trial of fourteen days. A lead's invitation then appears here with one Join. Catalogs open once the seat is here.")
     ];
     if (ds.state === "waiting" && ds.askedMany) return [
       t("The requests to join are waiting."),
@@ -31189,7 +31186,7 @@ What is typed here stays in this browser.`;
     let acts = "";
     if (checkFilled) acts += doorPress(t("Check now"), true, "check");
     if (buyOffered()) acts += doorPress(t("Buy"), !checkFilled, "buy");
-    const note = buyOffered() ? "" : '<p class="sgn-cap door-nobuy">' + esc(t("Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again.")) + "</p>";
+    const note = buyOffered() ? "" : '<p class="sgn-cap door-nobuy">' + esc(t("Buying is not available in this build of Etiuda. A seat comes from a team's lead: the lead's invitation appears here with one Join, and Check now looks for it again.")) + "</p>";
     const quiet = [];
     if (!checkFilled) quiet.push(doorTextPress(t("Check now"), "check"));
     quiet.push(doorTextPress(t("Use another account"), "another"));
@@ -31197,7 +31194,7 @@ What is typed here stays in this browser.`;
     const out = ds.state !== "waiting";
     const wayOut = out ? '<div class="door-out"><button type="button" class="btn" data-door-save>' + esc(t("Save your own work as files…")) + '</button><p class="sgn-cap">' + esc(t("What this account made here can still be saved as files, in a folder of your choice: its own cards, its edits to a catalog's cards, and the flags it raised. Catalogs themselves are not saved.")) + "</p></div>" : "";
     const p = signinParts(v);
-    const right = signinIdentHtml({ initial: p.initial, name: p.name, sub: p.sub, off: p.off }) + '<div class="sgn-acts door-acts">' + acts + "</div>" + note + '<div class="door-quiet">' + quiet.join("") + "</div>" + wayOut;
+    const right = signinIdentHtml({ initial: p.initial, name: p.name, sub: p.sub, off: p.off }) + (v.invited && v.invited.length ? signinInvitedHtml(v.invited, signinJoinRefused) : signinJoinRefused ? signinJoinRefusedHtml() : "") + '<div class="sgn-acts door-acts">' + acts + "</div>" + note + '<div class="door-quiet">' + quiet.join("") + "</div>" + wayOut;
     const left = '<h1 id="fsHeading">' + esc(pair[0]) + '</h1><p class="fs-lede">' + esc(pair[1]) + "</p>";
     return doorScreen(left, right, "");
   }
@@ -31219,6 +31216,10 @@ What is typed here stays in this browser.`;
   }
   function signinDoor(v) {
     const d = signinDoorOf(v);
+    if (d && v.signedIn && v.invited && v.invited.length && ["waiting", "pressed", "policy-waiting", "stranded"].indexOf(d.moment) < 0) {
+      d.invited = v.invited;
+      d.joinSaid = signinJoinRefused;
+    } else if (d && v.signedIn && signinJoinRefused) d.joinSaid = true;
     if (d && v.signedIn && signinDoorRefused) {
       d.say = signinSay("door", v);
       d.calm = false;
@@ -31290,18 +31291,17 @@ What is typed here stays in this browser.`;
         heading: endedPair[0],
         line: endedPair[1],
         acts,
-        nobuy: buyOffered() ? "" : t("Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again.")
+        nobuy: buyOffered() ? "" : t("Buying is not available in this build of Etiuda. A seat comes from a team's lead: the lead's invitation appears here with one Join, and Check now looks for it again.")
         /* plant:panel-nobuy-line */
       };
     }
+    if (v.joinWait && !signinSeatTaken(ds)) return { moment: "joinwait", ident, say: signinJoinWaitWords(v), acts: [{ act: "check", label: t("Check now") }, acct] };
     const pair = deskDoorLines(ds);
     if (ds.state === "working") return { moment: "working", ident, heading: pair[0], line: pair[1], foot: deskSeatShort(ds), acts: [{ act: "check", label: t("Check now") }, acct] };
     if (v.askLead) return {
       moment: "asklead",
       ident,
       say: signinSay("asklead", v),
-      code: signinManaged(v) ? "" : v.code,
-      /* plant:asklead-code-managed */
       acts: [{ act: "check", label: t("Check now") }, acct],
       own: signinManaged(v) ? null : v.seat === "held" && v.trialUntil ? signinOwnTrialWords(v, ds) : null
     };
@@ -31309,8 +31309,6 @@ What is typed here stays in this browser.`;
       moment: "nolicence",
       ident,
       say: signinSay("nolicence", v),
-      code: signinManaged(v) ? "" : v.code,
-      /* plant:code-managed */
       acts: [{ act: "check", label: t("Check now"), solid: true }, acct]
     };
     if (signinManaged(v) && v.reached && v.seat === "held" && !(!p.team && v.doors.length)) return {
@@ -31332,8 +31330,7 @@ What is typed here stays in this browser.`;
       moment: "noteam",
       ident,
       heading: v.deskOnly ? t("Working without a team") : t("Signed in. No team yet"),
-      line: v.deskOnly ? t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed.") : t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself."),
-      code: v.code,
+      line: v.deskOnly ? t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed.") : t("No team has admitted this account yet. A lead can invite it by its email address or send a link; the invitation then appears here with one Join."),
       acts: [{ act: "check", label: t("Check now") }, acct]
     };
     const out = { moment: "signed", ident, team: p.team ? p.teamName + (p.team.lead ? " · " + named(t("Led by {LEAD}"), "{LEAD}", p.team.lead) : "") : t("No team yet"), acts: [acct] };
@@ -31368,8 +31365,26 @@ What is typed here stays in this browser.`;
   function signinCopyHtml(act) {
     return '<button type="button" class="btn sgn-copy" data-signin-act="' + esc(act) + '"><span>' + esc(t("Copy")) + "</span><span>" + esc(t("Copied")) + "</span></button>";
   }
-  function signinCodeHtml(code, label2) {
-    return '<div class="sgn-code">' + (label2 ? '<span class="k">' + esc(label2) + "</span>" : "") + "<code>" + esc(signinCodeText(code)) + "</code>" + signinCopyHtml("copy") + "</div>";
+  function signinInvitedHtml(invited, refused) {
+    return (invited || []).map((x) => '<div class="sgn-code sgn-invite" data-signin-invite-row><span>' + esc(signinInvitedLine(x)) + '</span><button type="button" class="btn primary" data-signin-act="join" data-signin-invite="' + esc(String(x.n)) + '">' + esc(t("Join")) + "</button></div>").join("") + (refused ? signinJoinRefusedHtml() : "");
+  }
+  function signinInvitedLine(x) {
+    const line = named(x.lead ? named(t("{LEAD} invites this account to join {TEAM}."), "{LEAD}", x.lead) : t("This account is invited to join {TEAM} by its lead."), "{TEAM}", x.team || t("Team"));
+    return x.until ? line + " " + named(t("Open until {DATE}."), "{DATE}", doorDay(x.until, Date.now())) : line;
+  }
+  function signinJoinRefusedHtml() {
+    return '<p class="sgn-cap sgn-join-no" role="status">' + esc(t("The invitation could not be taken, so nothing has changed. The team's lead can send a new one.")) + "</p>";
+  }
+  function signinJoinWaitWords(v) {
+    const hasName = !!v.joinWait && v.joinWait !== "-";
+    return [t("The request to join is waiting."), named(named(
+      hasName ? t("{PROVIDER} does not vouch for this account's address, so {LEAD}, the team's lead, confirms it next; this computer then takes its seat by itself. Nothing is needed here meanwhile.") : t("{PROVIDER} does not vouch for this account's address, so the team's lead confirms it next; this computer then takes its seat by itself. Nothing is needed here meanwhile."),
+      "{PROVIDER}",
+      SIGNIN_NAMES[v.signedIn] || ""
+    ), "{LEAD}", v.joinWait)];
+  }
+  function signinSeatTaken(ds) {
+    return ds.state === "working" && (ds.seatOn === "team" || ds.seatOn === "org" || ds.seatOn === "own");
   }
   function signinDoorsHtml(doors) {
     return doors.map((d) => '<div class="sgn-code" data-signin-door-row><span class="k">' + esc(d.host) + "</span><code>" + esc(d.print) + '</code><button type="button" class="btn primary" data-signin-act="door" data-signin-door="' + esc(String(d.n)) + '">' + esc(t("Ask to join")) + "</button></div>").join("");
@@ -31398,7 +31413,8 @@ What is typed here stays in this browser.`;
     if (d.wait) h += '<div class="sgn-wait">' + esc(d.wait) + '</div><div class="sgn-run" aria-hidden="true"></div>';
     if (d.team) h += '<p class="sgn-ln">' + esc(d.team) + "</p>";
     if (d.say) h += '<p class="sgn-say' + (d.calm ? " calm" : "") + '"><b>' + esc(d.say[0]) + "</b><span>" + esc(d.say[1]) + "</span></p>";
-    if (d.code) h += signinCodeHtml(d.code, "");
+    if (d.invited && d.invited.length) h += signinInvitedHtml(d.invited, d.joinSaid);
+    else if (d.joinSaid) h += signinJoinRefusedHtml();
     if (d.doors && d.doors.length) h += signinDoorsHtml(d.doors);
     if (d.providers && d.providers.length) h += signinProvidersHtml(d.providers, false);
     if (d.cap) h += '<p class="sgn-cap">' + esc(d.cap) + "</p>";
@@ -31416,6 +31432,7 @@ What is typed here stays in this browser.`;
   var signinOpen = false;
   var signinChoosing = false;
   var signinDoorRefused = false;
+  var signinJoinRefused = false;
   var signinTellers = [];
   function signinOnChange(fn) {
     if (typeof fn === "function") signinTellers.push(fn);
@@ -31464,6 +31481,10 @@ What is typed here stays in this browser.`;
   }
   function openSigninPanel() {
     signinOpen = true;
+    if (signinV.invited.length) {
+      inviteShut = inviteKey(signinV);
+      if (inviteClose) inviteClose();
+    }
     paintSigninPanel();
     paintSigninButton();
     const btn = $2("#signinBtn");
@@ -31518,6 +31539,7 @@ What is typed here stays in this browser.`;
     if (deskWorks() && firstSigninWaits.length) tellFirstSigninClosed();
     if (answered && signinShown(signinV) && !signinV.busy) signinOpen = true;
     if (signinOpen) paintSigninPanel();
+    syncInviteAsk();
     signinTell();
   }
   function signinCall(name, arg) {
@@ -31546,6 +31568,7 @@ What is typed here stays in this browser.`;
   }
   function signinAct(act, btn) {
     signinDoorRefused = false;
+    signinJoinRefused = false;
     if (act === "account") {
       closeSigninPanel();
       if (typeof hooks.openSettings === "function") hooks.openSettings("account");
@@ -31554,10 +31577,19 @@ What is typed here stays in this browser.`;
     if (act === "save-own") {
       return typeof hooks.saveOwnWork === "function" ? hooks.saveOwnWork() : Promise.resolve(null);
     }
-    if (act === "copy" || act === "copylink") {
-      return signinCopy(act === "copy" ? signinV.code : signinV.busy ? signinV.link : "").then((ok) => {
+    if (act === "copylink") {
+      return signinCopy(signinV.busy ? signinV.link : "").then((ok) => {
         if (ok) signinCopied(btn);
         return ok;
+      });
+    }
+    if (act === "join") {
+      const n = Number(btn && btn.getAttribute ? btn.getAttribute("data-signin-invite") : NaN);
+      if (!Number.isInteger(n)) return Promise.resolve(null);
+      return signinCall("signinJoin", n).then((r) => {
+        signinJoinRefused = !!(r && r.refused);
+        signinChanged(signinNow(), false);
+        return r;
       });
     }
     if (act === "choose") {
@@ -31614,6 +31646,55 @@ What is typed here stays in this browser.`;
   }
   function signinChoosingNow() {
     return signinChoosing;
+  }
+  function signinJoinRefusedNow() {
+    return signinJoinRefused;
+  }
+  var inviteShut = "";
+  var inviteClose = null;
+  function inviteKey(v) {
+    return JSON.stringify((v.invited || []).map((x) => [x.n, x.lead, x.team]));
+  }
+  function syncInviteAsk() {
+    if (typeof document === "undefined" || typeof document.createElement !== "function") return;
+    const v = signinV, btn = $2("#signinBtn"), panel = $2("#signinPanel");
+    const want = v.signedIn && (v.invited.length && inviteKey(v) !== inviteShut || signinJoinRefused && !!inviteClose) && !signinOpen && !(panel && !panel.hidden) && !firstSigninOpen && !!btn && btn.getClientRects().length > 0 && !document.getElementById("eSyncWhose");
+    if (inviteClose) inviteClose();
+    if (!want) return;
+    const el = document.createElement("div");
+    el.className = "bub bub-ask e-invite-bub";
+    el.id = "eInviteAsk";
+    el.setAttribute("role", "dialog");
+    el.setAttribute("aria-labelledby", "eInviteAskT");
+    el.innerHTML = '<h3 id="eInviteAskT">' + esc(t("Invitation")) + "</h3>" + signinInvitedHtml(v.invited, signinJoinRefused) + '<div class="tour-actions"><button type="button" class="btn" data-invite-shut>' + esc(t("Not now")) + "</button></div>";
+    const key = inviteKey(v);
+    const close = () => {
+      removeEventListener("keydown", onEsc, true);
+      if (inviteClose === close) inviteClose = null;
+      if (dropHang) dropHang();
+      el.remove();
+    };
+    const shut = () => {
+      inviteShut = key;
+      signinJoinRefused = false;
+      close();
+    };
+    const onEsc = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        shut();
+      }
+    };
+    addEventListener("keydown", onEsc, true);
+    el.addEventListener("click", (e) => {
+      const b = e.target && e.target.closest ? e.target.closest("button") : null;
+      if (b && b.hasAttribute("data-invite-shut")) shut();
+    });
+    signinClicks(el);
+    inviteClose = close;
+    document.body.appendChild(el);
+    const dropHang = hangBubble(el, () => $2("#signinBtn"), { width: 380 });
   }
   function signinDoorRefusedNow() {
     return signinDoorRefused;
@@ -31964,6 +32045,7 @@ What is typed here stays in this browser.`;
     }, true);
     paintSigninButton();
     syncSay(syncNow());
+    syncInviteAsk();
   }
 
   // src/modules/header-menus.js
@@ -32026,12 +32108,11 @@ What is typed here stays in this browser.`;
       const b = e.target.closest("button[data-act]");
       if (!b) return;
       const act = b.dataset.act;
-      if (act === "settings" || act === "manage" || act === "tour" || act === "about" || act === "join" || act === "picker") menuReturn = null;
+      if (act === "settings" || act === "manage" || act === "tour" || act === "about" || act === "picker") menuReturn = null;
       if (act === "settings") menuScreen(hooks.openSettings);
       else if (act === "manage") menuScreen(hooks.openManage);
       else if (act === "tour") menuScreen(hooks.startTour);
       else if (act === "about") menuScreen(openAbout);
-      else if (act === "join") menuScreen(openJoinPaste);
       else if (act === "rail") {
         toggleRail();
       } else if (act === "pills") {
@@ -42130,8 +42211,6 @@ What is typed here stays in this browser.`;
     $("#mgAddCat").onclick = () => startMgCatAdd();
     wireRolePage(page);
     $("#mgImportCatalog").onclick = importCatalogHere;
-    const joinBtn = $("#mgJoinTeam");
-    if (joinBtn) joinBtn.onclick = () => openJoinPaste();
     if ($("#mgHistory")) $("#mgHistory").onclick = () => {
       libView = "history";
       paintLibrary();
@@ -42382,14 +42461,13 @@ What is typed here stays in this browser.`;
     return '<div class="set-row" data-row="' + esc(key) + '">' + lmIcon(icon) + '<div class="set-label">' + esc(title) + "<small>" + esc(hint) + '</small></div><div class="set-ctl">' + ctl + "</div></div>";
   }
   function libraryActionsHtml() {
-    const join = joinDoorButton("mgJoinTeam");
     return '<div class="mg-data-acts">' + libraryActRow(
       "load",
       "data",
       t("Load catalog file"),
       t("Loads a catalog file from this computer."),
       '<button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Load catalog file…</button>'
-    ) + (join ? libraryActRow("join", "teams", t("Join a team"), t("Joins a team with an invitation from its lead."), join) : "") + (eHasHistory() ? libraryActRow(
+    ) + (eHasHistory() ? libraryActRow(
       "history",
       "refresh",
       t("Saved copies"),
@@ -42696,7 +42774,7 @@ What is typed here stays in this browser.`;
       "buy",
       "forward",
       t("Licence for one person"),
-      v.signedIn ? t("The order page opens in the browser with this account's sign-in code filled in; typing another person's code buys the licence for them instead.") : t("The order page opens in the browser and asks for the sign-in code of the person the licence is for, which Etiuda shows them after their first sign-in."),
+      v.signedIn ? t("The order page opens in the browser, and the licence bought there is this account's.") : t("A licence is bought for the account signed in here, so signing in comes first."),
       '<button type="button" class="btn" data-e-open="buy">' + esc(t("Buy")) + "</button>"
     );
   }
@@ -42712,16 +42790,20 @@ What is typed here stays in this browser.`;
       const p = signinParts(v), val = (x) => '<span class="sgn-val">' + esc(x) + "</span>", join = (pair) => pair[0] + " " + pair[1];
       const doorSaid = signinDoorRefusedNow() ? signinSay("door", v)[0] : "";
       const teamNamed = teamLeads().find((x) => x && !x.removed && x.team) || {};
-      rows.push(p.team ? row("team", "people", t("Team"), doorSaid || (p.team.lead ? t("Led by {LEAD}").split("{LEAD}").join(p.team.lead) : ""), val(teamNamed.team || p.teamName)) : v.doors.length && v.seat === "held" ? row("team", "people", t("A team on this licence"), doorSaid || t("This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation."), signinDoorsHtml(v.doors)) : v.deskOnly && v.seat === "held" ? row("team", "people", t("Working without a team"), doorSaid || t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed."), "") : row("team", "people", t("No team yet"), doorSaid || (signinManaged(v) ? t("No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself.") : t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself.")), ""));
+      rows.push(p.team ? row("team", "people", t("Team"), doorSaid || (p.team.lead ? t("Led by {LEAD}").split("{LEAD}").join(p.team.lead) : ""), val(teamNamed.team || p.teamName)) : v.doors.length && v.seat === "held" ? row("team", "people", t("A team on this licence"), doorSaid || t("This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation."), signinDoorsHtml(v.doors)) : v.deskOnly && v.seat === "held" ? row("team", "people", t("Working without a team"), doorSaid || t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed."), "") : row("team", "people", t("No team yet"), doorSaid || (signinManaged(v) ? t("No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself.") : t("No team has admitted this account yet. A lead can invite it by its email address or send a link; the invitation then appears here with one Join.")), ""));
       if (v.managed && v.managed.provider) rows.push(row("signin", "user", t("Sign-in"), "", lockedHtml(signinHeldTo(v.managed))));
-      if (v.code && !signinManaged(v)) rows.push(row(
-        "code",
-        "code",
-        t("Your sign-in code"),
-        /* plant:code-row-managed */
-        t("Not a secret. It tells a team's lead which account is yours."),
-        '<code class="sgn-mono">' + esc(signinCodeText(v.code)) + "</code>" + signinCopyHtml("copy")
-      ));
+      v.invited.forEach((x) => rows.push(row(
+        "invited",
+        "people",
+        t("Invitation"),
+        signinInvitedLine(x),
+        '<button type="button" class="btn primary" data-signin-act="join" data-signin-invite="' + esc(String(x.n)) + '">' + esc(t("Join")) + "</button>"
+      )));
+      if (signinJoinRefusedNow()) rows.push({ key: "joinno", html: signinJoinRefusedHtml() });
+      if (v.joinWait) {
+        const w = signinJoinWaitWords(v);
+        rows.push(row("joinwait", "people", w[0], w[1], ""));
+      }
       const ds = deskDoorState(v);
       if (ds.state === "ended" || ds.state === "working") {
         const seatPair = deskDoorLines(ds), seatShort = deskSeatShort(ds);
@@ -43024,9 +43106,7 @@ What is typed here stays in this browser.`;
     ].filter(Boolean);
   }
   function teamsGroups() {
-    const joinDoor = joinDoorButton("setJoinTeam");
     const rows = teamLeads().map((l, i, all) => ({ key: "team", html: teamRowHtml(l, i === all.findIndex((x) => !x.removed) ? t("The team's lead can see the catalogs this desk uses, their content included, and this desk's changes to them. The lead's Studio can take a copy of any of them at any time, without asking here: of a team catalog, one the lead publishes to the team, sealed for the team; of a personal catalog, any other on this desk, sealed for the lead alone. A personal catalog can be marked Private in the Library, under Catalog & data; the lead then sees nothing of it, not even that it is used. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses unless that catalog is Private, and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, none of them from a Private catalog, and Studio shows them in the team's totals.") : "", i === all.findIndex((x) => !x.policy)) }));
-    if (joinDoor) rows.push({ key: "join", html: '<div class="set-row" data-row="join">' + sxIcon("desks") + '<div class="set-label">' + esc(t("Team")) + '</div><div class="set-ctl">' + joinDoor + "</div></div>" });
     const policySaid = teamPolicySaid();
     if (policySaid.length) rows.unshift({ key: "teampolicy", html: '<div class="set-row" data-row="teampolicy">' + sxIcon("desks") + '<div class="set-label">' + esc(t("Team")) + policySaid.map((l) => "<small>" + esc(l) + "</small>").join("") + "</div></div>" });
     if (eHasShared() && !relayDesk()) rows.push(row(
@@ -43603,8 +43683,6 @@ What is typed here stays in this browser.`;
     wireTeamRows(box);
     wireOrgModelRow(box);
     wireAccountRows(box);
-    const joinBtn = box.querySelector("#setJoinTeam");
-    if (joinBtn) joinBtn.onclick = () => openJoinPaste();
     const nameBox = box.querySelector("#setAgentName");
     if (nameBox) nameBox.oninput = () => typeAgentName(nameBox.value);
     const act = (id, fn) => {

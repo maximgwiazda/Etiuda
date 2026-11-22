@@ -1,6 +1,6 @@
 /* THE PERSON'S OWN SIGN-IN ON THE PAGE (board 980): what the shell says of it, the door in the header and the words of each
    moment. The shell holds the tokens, the browser, the service and seat.json; the page is told the providers offered, who is
-   signed in by provider, the sign-in code and how the seat stands, and shows nothing where no provider is offered, so a desk
+   signed in by provider and how the seat stands, and shows nothing where no provider is offered, so a desk
    with no registration configured looks as it did. Settings' Account draws the same view with signinParts. */
 import { $ as $dom } from "./dom.js";
 /* The page draws only where there is a document: headless, every handle is none and the paint passes by. */
@@ -25,13 +25,15 @@ function signinRead(v){
   return {
     offered: Array.isArray(o.offered) ? o.offered.filter(known) : [],
     signedIn: signedIn,
-    code: signedIn && /^[0-9A-Z]{16}$/.test(String(o.code)) ? String(o.code) : "",
     seat: o.seat==="held" || o.seat==="lapsed" || o.seat==="none" ? o.seat : "",
     deskOnly: !!signedIn && o.deskOnly===true,
     askLead: !!signedIn && o.askLead===true,
     trialUntil: !!signedIn && Number.isFinite(o.trialUntil) && o.trialUntil>0 ? o.trialUntil : 0,
     /* The leads an open join request waits on, as the service names them (the shell keeps plain names only); none where it names none. */
     asked: signedIn && Array.isArray(o.asked) ? o.asked.filter(n=>typeof n==="string" && n && n.length<=120).slice(0,8) : [], /* plant:read-asked */
+    /* The invitations waiting for this account, by their place in the shell's list (board 1017), and the lead a Join waits on. */
+    invited: signedIn ? signinInvitedRead(o.invited) : [], /* plant:read-invited */
+    joinWait: signedIn && typeof o.joinWait==="string" && o.joinWait.length<=120 ? o.joinWait : "",
     /* The service said this account's organisation holds its licence (a managed tenant), and why where it also owns one. */
     licenceManaged: o.licenceManaged===true,
     cause: o.licenceManaged===true && (o.cause==="own-licence" || o.cause==="assigned") ? o.cause : "",
@@ -69,6 +71,12 @@ function signinRead(v){
     trials: signedIn ? signinTrialsRead(o.trials) : null,
     registered: o.registered===true /* plant:read-registered */
   };
+}
+function signinInvitedRead(v){
+  if(!Array.isArray(v)) return [];
+  const name=s=>typeof s==="string" && s.length<=120 ? s : "";
+  return v.filter(x=>x && Number.isInteger(x.n) && x.n>=0 && x.n<8).slice(0,8)
+    .map(x=>({n:x.n, lead:name(x.lead), team:name(x.team), until:signinTimeRead(x.until), confirm:x.confirm===true}));
 }
 function signinTimeRead(v){ return Number.isSafeInteger(v) && v>0 && v<=8.64e15 ? v : 0; } /* plant:read-time */
 const SIGNIN_HOLDING_ON=["trial", "studio-trial", "own", "team", "org"];
@@ -279,8 +287,6 @@ function signinOwnTrialWords(v, ds){
   return [t("This account's own trial is running."),
     named(t("Fourteen days, until {DATE}, on up to three computers. A lead can add this account at any time, without waiting for the trial to end."),"{DATE}",signinDay(v.trialUntil))];
 }
-/* The code in four groups of four, as it is read aloud; Copy takes it without the spaces. */
-function signinCodeText(code){ return String(code||"").replace(/(.{4})(?=.)/g,"$1 "); }
 /* A day as the panel says one: "27 Nov". */
 function signinDay(at){
   return new Date(at).toLocaleDateString(uiLang()==="pl" ? "pl-PL" : "en-GB",{day:"numeric", month:"short"});
@@ -304,7 +310,7 @@ function signinTeam(){
   return l ? {lead:String(l.lead||""), team:String(l.team||"")} : null;
 }
 const named=(s,k,v)=>String(s).split(k).join(v);
-/* The parts every form draws from: who (the initial, the person's own name, the provider's name), the code, the team. Nothing in it
+/* The parts every form draws from: who (the initial, the person's own name, the provider's name), the team. Nothing in it
    came from the provider but which provider it is. */
 function signinParts(v){
   const name=String(agentName()||"").trim(), prov=SIGNIN_NAMES[v.signedIn]||"";
@@ -314,7 +320,6 @@ function signinParts(v){
     name: name,
     sub: prov ? named(t("Signed in with {PROVIDER}"),"{PROVIDER}",prov)+(v.reached ? "" : " · "+t("service not reached just now")) : "",
     off: !v.reached,
-    code: v.code,
     team: team,
     teamName: team ? (team.lead ? named(t("{LEAD}'s team"),"{LEAD}",team.lead) : t("Team")) : ""
   };
@@ -348,14 +353,15 @@ function signinSay(reason, v, p){
       return [t("This account is already in use on three computers."), t("Signing out on one of them makes room here, and so does a computer left unused for 30 days; then Try again.")];
     case "waiting": case "full": /* plant:wait-say */
       return p && p.team && p.team.lead
-        ? [named(t("{TEAM} has no free seat just now."),"{TEAM}",p.teamName), named(t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and {LEAD}, the team's lead, sees this account's sign-in code among those who have signed in."),"{LEAD}",p.team.lead)]
-        : [t("No seat is free on the organisation's licence just now."), t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and the team's lead sees this account's sign-in code among those who have signed in.")];
+        ? [named(t("{TEAM} has no free seat just now."),"{TEAM}",p.teamName), named(t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nothing is needed here. The team's lead: {LEAD}."),"{LEAD}",p.team.lead)]
+        : [t("No seat is free on the organisation's licence just now."), t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nothing is needed here.")];
     case "asklead":
       return [t("The organisation's Etiuda licence seats the people its leads add."),
         signinManaged(v) ? t("This account is signed in, and no team has admitted it yet. Once a lead admits it, the catalog arrives by itself.") /* plant:asklead-line-managed */
-          : t("Give the team's lead this code. Once added, this desk takes its seat by itself; nothing more is needed here.")];
+          : t("The team's lead invites this account by its email address, and the invitation appears here with one Join; a link from the lead, opened on this computer, does the same.")];
     case "nolicence":
-      return [t("No Etiuda licence has a seat for this account."), t("The sign-in worked. A seat comes from a trial, a purchase, or a team's lead admitting the account; another account can be used meanwhile.")];
+      return [t("No Etiuda licence has a seat for this account."), buyOffered() ? t("The sign-in worked. A seat comes from a team's lead, by an invitation to this account's email address or a link, or from a purchase; another account can be used meanwhile.")
+        : t("The sign-in worked. A seat comes from a team's lead, by an invitation to this account's email address or a link; another account can be used meanwhile.")];
     case "offline":
       return [t("The sign-in service cannot be reached just now."), named(t("Etiuda keeps working with the catalog it has. Last checked {WHEN}."),"{WHEN}",signinWhen(v.at))];
     case "lapsed":
@@ -423,7 +429,7 @@ function deskDoorState(v){
   const asked=Array.isArray(v.asked) ? v.asked : [];
   const lead=(seat&&seat.lead)||(team&&team.lead)||(asked.length===1 ? asked[0] : ""); /* plant:door-asked-lead */
   const askedMany=!(seat&&seat.lead) && !(team&&team.lead) && asked.length>1 ? asked.join(", ") : ""; /* plant:door-asked-many */
-  const waitingOnLead=!!(v.askLead || signinNoSeat(v)); /* B-3a feeds this */ /* plant:door-waiting-noseat */
+  const waitingOnLead=!!(v.askLead || signinNoSeat(v) || v.joinWait); /* B-3a feeds this */ /* plant:door-waiting-noseat */
   const orgLicence=!!v.licenceManaged; /* B-3a feeds this */
   const trialOver=seatOn==="trial" || (!seatOn && deskEnd>0); /* plant:door-trial-over */
   /* The ask is read before a stop. A trial with no seat held is read before a stop; a trial seat that has stopped is the stop. */
@@ -473,7 +479,7 @@ function deskDoorLines(ds){
   const stopped=dayAt(ds.stoppedAt);
   const fill=(s, map)=>Object.keys(map).reduce((a,k)=>a.split(k).join(map[k]), s);
   if(ds.state==="first" || ds.state==="first-offline") return [t("Etiuda starts with a sign-in."),
-    t("Signing in with Microsoft or Google gives this computer a seat: the team's, where its lead has admitted this account, or else a trial of fourteen days. Catalogs open once the seat is here.")];
+    t("Signing in with Microsoft or Google gives this computer a seat: the team's, where this account is already admitted, or else a trial of fourteen days. A lead's invitation then appears here with one Join. Catalogs open once the seat is here.")];
   if(ds.state==="waiting" && ds.askedMany) return [t("The requests to join are waiting."), /* plant:door-asked-head */
     fill(t("Catalogs open here again once one of these leads accepts a request: {LEADS}. Etiuda's own fourteen days ended on {DESK_END}."), {"{LEADS}":ds.askedMany, "{DESK_END}":desk})];
   if(ds.state==="waiting") return [t("The request to join is waiting."),
@@ -591,7 +597,7 @@ function doorLaterHtml(v, ds){
   if(checkFilled) acts+=doorPress(t("Check now"), true, "check");
   if(buyOffered()) acts+=doorPress(t("Buy"), !checkFilled, "buy"); /* plant:door-buy-order */
   /* Where no order page is set the person with no seat is told what brings one (the copywriter's words, 22 November 2026). */
-  const note=buyOffered() ? "" : '<p class="sgn-cap door-nobuy">'+esc(t("Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again."))+'</p>'; /* plant:door-nobuy-line */
+  const note=buyOffered() ? "" : '<p class="sgn-cap door-nobuy">'+esc(t("Buying is not available in this build of Etiuda. A seat comes from a team's lead: the lead's invitation appears here with one Join, and Check now looks for it again."))+'</p>'; /* plant:door-nobuy-line */
   const quiet=[];
   if(!checkFilled) quiet.push(doorTextPress(t("Check now"), "check"));
   quiet.push(doorTextPress(t("Use another account"), "another"));
@@ -600,6 +606,7 @@ function doorLaterHtml(v, ds){
   const wayOut=out ? '<div class="door-out"><button type="button" class="btn" data-door-save>'+esc(t("Save your own work as files…"))+'</button><p class="sgn-cap">'+esc(t("What this account made here can still be saved as files, in a folder of your choice: its own cards, its edits to a catalog's cards, and the flags it raised. Catalogs themselves are not saved."))+'</p></div>' : "";
   const p=signinParts(v);
   const right=signinIdentHtml({initial:p.initial, name:p.name, sub:p.sub, off:p.off})
+    +(v.invited && v.invited.length ? signinInvitedHtml(v.invited, signinJoinRefused) : signinJoinRefused ? signinJoinRefusedHtml() : "")
     +'<div class="sgn-acts door-acts">'+acts+'</div>'+note+'<div class="door-quiet">'+quiet.join("")+'</div>'+wayOut;
   const left='<h1 id="fsHeading">'+esc(pair[0])+'</h1><p class="fs-lede">'+esc(pair[1])+'</p>';
   return doorScreen(left, right, "");
@@ -627,6 +634,9 @@ function paintDoorBand(){
    press's, whose heading is the line. */
 function signinDoor(v){
   const d=signinDoorOf(v);
+  /* The invitations waiting, wherever a signed-in door stands but a sign-in in the browser or a refusal of it. */
+  if(d && v.signedIn && v.invited && v.invited.length && ["waiting","pressed","policy-waiting","stranded"].indexOf(d.moment)<0){ d.invited=v.invited; d.joinSaid=signinJoinRefused; }
+  else if(d && v.signedIn && signinJoinRefused) d.joinSaid=true;
   if(d && v.signedIn && signinDoorRefused){ d.say=signinSay("door", v); d.calm=false; }
   if(d && v.preview && v.said!=="signin-preview") d.preview=t("Preview only.")+" "+t("Sign-in is not set up yet, so nothing here is sent.");
   return d;
@@ -673,20 +683,20 @@ function signinDoorOf(v){
        the pseudonyms the route names them by, so the press would do nothing (22 November 2026). */
     const acts=[{act:"check", label:t("Check now"), solid:true}].concat(buyOffered() ? [{act:"buy", label:t("Buy")}] : [], [acct]); /* plant:panel-buy-order */
     return {moment:"ended", ident, heading:endedPair[0], line:endedPair[1], acts:acts,
-      nobuy:buyOffered() ? "" : t("Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again."), /* plant:panel-nobuy-line */
+      nobuy:buyOffered() ? "" : t("Buying is not available in this build of Etiuda. A seat comes from a team's lead: the lead's invitation appears here with one Join, and Check now looks for it again."), /* plant:panel-nobuy-line */
     };
   }
+  /* A Join waiting for the lead's confirm, said until the seat comes, whatever the trial does meanwhile. */
+  if(v.joinWait && !signinSeatTaken(ds)) return {moment:"joinwait", ident, say:signinJoinWaitWords(v), acts:[{act:"check", label:t("Check now")}, acct]}; /* plant:joinwait-moment */
   const pair=deskDoorLines(ds);
   if(ds.state==="working") return {moment:"working", ident, heading:pair[0], line:pair[1], foot:deskSeatShort(ds), acts:[{act:"check", label:t("Check now")}, acct]}; /* plant:door-panel-working */
-  /* ASK YOUR LEAD: the organisation's licence seats the people its
-     leads add, so the code is given to a lead; beside it, never in its place, the person's own trial where it runs, which the service
-     started at the sign-in. */
-  if(v.askLead) return {moment:"asklead", ident, say:signinSay("asklead", v), code:signinManaged(v)?"":v.code, /* plant:asklead-code-managed */
+  /* ASK YOUR LEAD: the organisation's licence seats the people its leads add; beside it, never in its place, the person's own trial
+     where it runs, which the service started at the sign-in. */
+  if(v.askLead) return {moment:"asklead", ident, say:signinSay("asklead", v),
     acts:[{act:"check", label:t("Check now")}, acct],
     own:signinManaged(v)?null:v.seat==="held" && v.trialUntil ? signinOwnTrialWords(v, ds) : null}; /* plant:asklead-trial-managed */
-  /* No certificate: the service found no licence with a seat for this account. The code still shows, since a lead admits by it, save on
-     a managed computer, where nobody is admitted by code. */
-  if(v.seat==="none" || !v.seat) return {moment:"nolicence", ident, say:signinSay("nolicence", v), code:signinManaged(v) ? "" : v.code, /* plant:code-managed */
+  /* No certificate: the service found no licence with a seat for this account. */
+  if(v.seat==="none" || !v.seat) return {moment:"nolicence", ident, say:signinSay("nolicence", v),
     acts:[{act:"check", label:t("Check now"), solid:true}, acct]};
   /* A managed computer's seat, as the product designer drew it: who decides, and the seat with when it was last checked; no code and no button. */
   if(signinManaged(v) && v.reached && v.seat==="held" && !(!p.team && v.doors.length)) return {moment:"managed", ident, /* plant:door-managed */
@@ -699,7 +709,7 @@ function signinDoorOf(v){
   /* A desk-only licence has no lead to wait for, so it is not told to wait for one. */
   if(!p.team && v.reached && v.seat==="held") return {moment:"noteam", ident, heading:v.deskOnly ? t("Working without a team") : t("Signed in. No team yet"),
     line:v.deskOnly ? t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed.") /* plant:panel-desk-only */
-      : t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself."), code:v.code,
+      : t("No team has admitted this account yet. A lead can invite it by its email address or send a link; the invitation then appears here with one Join."),
     acts:[{act:"check", label:t("Check now")}, acct]};
   const out={moment:"signed", ident, team:p.team ? p.teamName+(p.team.lead ? " · "+named(t("Led by {LEAD}"),"{LEAD}",p.team.lead) : "") : t("No team yet"), acts:[acct]};
   if(!v.reached){ out.moment="offline"; out.say=signinSay("offline", v); out.calm=true; out.acts=[{act:"check", label:t("Check now")}, acct]; }
@@ -733,10 +743,30 @@ function signinIdentHtml(ident){
 function signinCopyHtml(act){
   return '<button type="button" class="btn sgn-copy" data-signin-act="'+esc(act)+'"><span>'+esc(t("Copy"))+'</span><span>'+esc(t("Copied"))+'</span></button>';
 }
-function signinCodeHtml(code, label){
-  return '<div class="sgn-code">'+(label?'<span class="k">'+esc(label)+'</span>':'')+'<code>'+esc(signinCodeText(code))+'</code>'
-    +signinCopyHtml("copy")+'</div>';
+/* THE JOIN ROWS (board 1017): each waiting invitation, who invites and to which team, with one Join naming its place; under them the
+   refusal's one line where the last Join was refused. In the row's own form, as the doors are drawn. */
+function signinInvitedHtml(invited, refused){
+  return (invited||[]).map(x=>'<div class="sgn-code sgn-invite" data-signin-invite-row><span>'+esc(signinInvitedLine(x))+'</span>'
+    +'<button type="button" class="btn primary" data-signin-act="join" data-signin-invite="'+esc(String(x.n))+'">'+esc(t("Join"))+'</button></div>').join("")
+    +(refused ? signinJoinRefusedHtml() : "");
 }
+function signinInvitedLine(x){
+  /* A lead with no name has the line's own nameless form; nothing stands in for the name. */
+  const line=named(x.lead ? named(t("{LEAD} invites this account to join {TEAM}."),"{LEAD}",x.lead) : t("This account is invited to join {TEAM} by its lead."),"{TEAM}",x.team||t("Team")); /* plant:invite-nameless */
+  return x.until ? line+" "+named(t("Open until {DATE}."),"{DATE}",doorDay(x.until, Date.now())) : line;
+}
+function signinJoinRefusedHtml(){
+  return '<p class="sgn-cap sgn-join-no" role="status">'+esc(t("The invitation could not be taken, so nothing has changed. The team's lead can send a new one."))+'</p>';
+}
+/* The request a Join left waiting for the lead's confirm: the drawn head, and the line naming the provider and the lead. */
+function signinJoinWaitWords(v){
+  const hasName=!!v.joinWait && v.joinWait!=="-"; /* plant:wait-nameless */
+  return [t("The request to join is waiting."), named(named(hasName ? t("{PROVIDER} does not vouch for this account's address, so {LEAD}, the team's lead, confirms it next; this computer then takes its seat by itself. Nothing is needed here meanwhile.")
+    : t("{PROVIDER} does not vouch for this account's address, so the team's lead confirms it next; this computer then takes its seat by itself. Nothing is needed here meanwhile."),
+    "{PROVIDER}",SIGNIN_NAMES[v.signedIn]||""),"{LEAD}",v.joinWait)];
+}
+/* Whether the seat a Join waited for is here: a team's, the organisation's or the person's own licence. */
+function signinSeatTaken(ds){ return ds.state==="working" && (ds.seatOn==="team" || ds.seatOn==="org" || ds.seatOn==="own"); }
 /* The doors offered, one row each in the code's own row: the relay's host, the lead's print, and Ask to join. */
 function signinDoorsHtml(doors){
   return doors.map(d=>'<div class="sgn-code" data-signin-door-row><span class="k">'+esc(d.host)+'</span><code>'+esc(d.print)+'</code>'
@@ -776,7 +806,8 @@ function signinPanelHtml(d){
   if(d.wait) h+='<div class="sgn-wait">'+esc(d.wait)+'</div><div class="sgn-run" aria-hidden="true"></div>';
   if(d.team) h+='<p class="sgn-ln">'+esc(d.team)+'</p>';
   if(d.say) h+='<p class="sgn-say'+(d.calm?' calm':'')+'"><b>'+esc(d.say[0])+'</b><span>'+esc(d.say[1])+'</span></p>';
-  if(d.code) h+=signinCodeHtml(d.code, "");
+  if(d.invited && d.invited.length) h+=signinInvitedHtml(d.invited, d.joinSaid); /* plant:panel-invited */
+  else if(d.joinSaid) h+=signinJoinRefusedHtml();
   if(d.doors && d.doors.length) h+=signinDoorsHtml(d.doors);
   if(d.providers && d.providers.length) h+=signinProvidersHtml(d.providers, false);
   if(d.cap) h+='<p class="sgn-cap">'+esc(d.cap)+'</p>';
@@ -796,6 +827,8 @@ function signinPanelHtml(d){
 let signinOpen=false, signinChoosing=false;
 /* A press at a door the shell refused, said where it was pressed until the next act or the panel closes. */
 let signinDoorRefused=false;
+/* A Join the shell answered refused, said under the invitations until the next act. */
+let signinJoinRefused=false;
 /* Who else draws the view: Settings registers its repaint here, so this module imports nothing above it. */
 const signinTellers=[];
 function signinOnChange(fn){ if(typeof fn==="function") signinTellers.push(fn); }
@@ -830,6 +863,7 @@ function paintSigninPanel(){
 }
 function openSigninPanel(){
   signinOpen=true;
+  if(signinV.invited.length){ inviteShut=inviteKey(signinV); if(inviteClose) inviteClose(); }
   paintSigninPanel();
   paintSigninButton();
   const btn=$("#signinBtn");
@@ -866,6 +900,7 @@ function signinChanged(v, answered){
   if(deskWorks() && firstSigninWaits.length) tellFirstSigninClosed();
   if(answered && signinShown(signinV) && !signinV.busy) signinOpen=true;
   if(signinOpen) paintSigninPanel();
+  syncInviteAsk();
   signinTell();
 }
 function signinCall(name, arg){
@@ -890,10 +925,16 @@ function signinCopied(btn){
 /* One act of the door or of Account, by its data-signin-act; `btn` the button pressed. */
 function signinAct(act, btn){
   signinDoorRefused=false;
+  signinJoinRefused=false;
   if(act==="account"){ closeSigninPanel(); if(typeof hooks.openSettings==="function") hooks.openSettings("account"); return; }
   if(act==="save-own"){ return typeof hooks.saveOwnWork==="function" ? hooks.saveOwnWork() : Promise.resolve(null); }
-  if(act==="copy" || act==="copylink"){
-    return signinCopy(act==="copy" ? signinV.code : signinV.busy ? signinV.link : "").then(ok=>{ if(ok) signinCopied(btn); return ok; });
+  if(act==="copylink"){
+    return signinCopy(signinV.busy ? signinV.link : "").then(ok=>{ if(ok) signinCopied(btn); return ok; });
+  }
+  if(act==="join"){
+    const n=Number(btn && btn.getAttribute ? btn.getAttribute("data-signin-invite") : NaN);
+    if(!Number.isInteger(n)) return Promise.resolve(null);
+    return signinCall("signinJoin", n).then(r=>{ signinJoinRefused=!!(r && r.refused); signinChanged(signinNow(), false); return r; }); /* plant:join-act */
   }
   if(act==="choose"){ signinChoosing=true; signinV=Object.assign({}, signinV, {said:""}); paintSigninPanel(); if(firstSigninOpen) paintFirstSignin(); signinTell(); return; }
   if(act==="stop"){ signinCall("signinStop"); return; }
@@ -915,6 +956,36 @@ function signinStart(id, here){
   signinCall("signIn", id).then(v=>{ if(v) signinChanged(v, here!=="account"); });
 }
 function signinChoosingNow(){ return signinChoosing; }
+function signinJoinRefusedNow(){ return signinJoinRefused; }
+/* THE INVITATIONS ASKED FROM THE ACCOUNT BUTTON (board 1017): a blue bubble hung from it while invitations wait and the panel is shut,
+   one row each with its Join, the refusal's line under them; Not now leaves these invitations to the panel and Account for this run. */
+let inviteShut="", inviteClose=null;
+function inviteKey(v){ return JSON.stringify((v.invited||[]).map(x=>[x.n, x.lead, x.team])); }
+function syncInviteAsk(){
+  if(typeof document==="undefined" || typeof document.createElement!=="function") return;
+  const v=signinV, btn=$("#signinBtn"), panel=$("#signinPanel");
+  const want=v.signedIn && ((v.invited.length && inviteKey(v)!==inviteShut) || (signinJoinRefused && !!inviteClose)) && !signinOpen && !(panel && !panel.hidden)
+    && !firstSigninOpen && !!btn && btn.getClientRects().length>0 && !document.getElementById("eSyncWhose");
+  if(inviteClose) inviteClose();
+  if(!want) return;
+  const el=document.createElement("div");
+  el.className="bub bub-ask e-invite-bub";
+  el.id="eInviteAsk";
+  el.setAttribute("role","dialog");
+  el.setAttribute("aria-labelledby","eInviteAskT");
+  el.innerHTML='<h3 id="eInviteAskT">'+esc(t("Invitation"))+'</h3>'+signinInvitedHtml(v.invited, signinJoinRefused)
+    +'<div class="tour-actions"><button type="button" class="btn" data-invite-shut>'+esc(t("Not now"))+'</button></div>';
+  const key=inviteKey(v);
+  const close=()=>{ removeEventListener("keydown", onEsc, true); if(inviteClose===close) inviteClose=null; if(dropHang) dropHang(); el.remove(); };
+  const shut=()=>{ inviteShut=key; signinJoinRefused=false; close(); };
+  const onEsc=e=>{ if(e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); shut(); } };
+  addEventListener("keydown", onEsc, true);
+  el.addEventListener("click", e=>{ const b=e.target && e.target.closest ? e.target.closest("button") : null; if(b && b.hasAttribute("data-invite-shut")) shut(); });
+  signinClicks(el);
+  inviteClose=close;
+  document.body.appendChild(el);
+  const dropHang=hangBubble(el, ()=>$("#signinBtn"), {width:380});
+}
 function signinDoorRefusedNow(){ return signinDoorRefused; }
 /* A click in the link's field selects all of it. */
 function signinLinkSelect(f){ try{ f.select(); }catch(e){ /* a field gone with the wait */ } }
@@ -1186,6 +1257,7 @@ function wireSignin(){
   }, true);
   paintSigninButton();
   syncSay(syncNow());
+  syncInviteAsk();
 }
 
 export {
@@ -1206,8 +1278,11 @@ export {
   signinChanged,
   signinChoosingNow,
   signinClicks,
-  signinCodeHtml,
-  signinCodeText,
+  signinInvitedHtml,
+  signinInvitedLine,
+  signinJoinRefusedHtml,
+  signinJoinRefusedNow,
+  signinJoinWaitWords,
   signinCopyHtml,
   SIGNIN_COPIED_MS,
   signinDoor,

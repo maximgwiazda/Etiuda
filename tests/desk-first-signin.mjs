@@ -320,7 +320,8 @@ try {
       "fs3a 52px mark present with no wavy underline, cut through a mask id of its own while the header's id stands once in the document");
     const hasAllEn = [
       "Etiuda starts with a sign-in.",
-      "Signing in with Microsoft or Google gives this computer a seat: the team's, where its lead has admitted this account, or else a trial of fourteen days. Catalogs open once the seat is here.",
+      /* Board 1017 moved this line (the copywriter, 09:13): once "where its lead has admitted this account". */
+      "Signing in with Microsoft or Google gives this computer a seat: the team's, where this account is already admitted, or else a trial of fourteen days. A lead's invitation then appears here with one Join. Catalogs open once the seat is here.",
       "The browser opens the sign-in page",
       "You choose your account there",
       "Etiuda carries on here by itself",

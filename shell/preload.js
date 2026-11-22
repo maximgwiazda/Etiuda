@@ -3,6 +3,8 @@
 const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 /* What a reword hands the shell: act, words, how and to, each a string, and nothing else of the page's. */
+/* The sign-in view as the page is handed it: never the sign-in code, which the shell alone hands to Buy (board 1017). */
+const pageView = (v) => { if (!v || typeof v !== "object") return v; const o = Object.assign({}, v); delete o.code; /* plant:page-view-code */ return o; };
 const rewordOf = (o) => { const v = o && typeof o === "object" ? o : {}, s = k => (typeof v[k] === "string" ? v[k] : ""); return { act: s("act"), words: s("words"), how: s("how"), to: s("to") }; };
 /* THE PICKER'S WINDOW is told so by the shell on its command line, and gets its own eight verbs and
    nothing of the desk's; main answers them only from that window, and the desk's only from the desk. */
@@ -302,13 +304,15 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   onUpdate: (fn) => ipcRenderer.on("etiuda:update", (_e, v) => { try { fn(v && typeof v === "object" ? v : {}); } catch { /* the page has gone */ } }),
   openUpdatePage: () => ipcRenderer.invoke("etiuda:update-open"),
   /* The person's own sign-in (board 980): the providers offered and how it stands, never a token or a name. */
-  signinState: () => ipcRenderer.sendSync("etiuda:signin-state"),
-  signIn: (provider) => ipcRenderer.invoke("etiuda:signin", String(provider || "")),
+  signinState: () => pageView(ipcRenderer.sendSync("etiuda:signin-state")),
+  signIn: (provider) => ipcRenderer.invoke("etiuda:signin", String(provider || "")).then(pageView),
   signinStop: () => ipcRenderer.invoke("etiuda:signin-stop"),
-  signinOut: () => ipcRenderer.invoke("etiuda:signin-out"),
+  signinOut: () => ipcRenderer.invoke("etiuda:signin-out").then(pageView),
   /* A join at the door the person pressed among those the sign-in handed (board 980, the door-finding), by its place in the list. */
   signinDoor: (n) => ipcRenderer.invoke("etiuda:signin-door", n),
-  signinCheck: () => ipcRenderer.invoke("etiuda:signin-check"),
+  signinCheck: () => ipcRenderer.invoke("etiuda:signin-check").then(pageView),
+  /* Join, the one press on a lead's invitation to this account's address, by its place in the list: {joined} or {refused}. */
+  signinJoin: (n) => ipcRenderer.invoke("etiuda:signin-join", n).then(pageView),
   signinAgain: () => ipcRenderer.invoke("etiuda:signin-again"),
   /* Sync's folder consent asked again, for a click on the switch's On (data-e-open="store-on"): "asked", or why not. */
   storeConsent: () => ipcRenderer.invoke("etiuda:store-consent"),
@@ -323,7 +327,7 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   storeSaid: () => ipcRenderer.sendSync("etiuda:store-said"),
   storeOpened: () => ipcRenderer.sendSync("etiuda:store-opened"),
   onStore: (fn) => ipcRenderer.on("etiuda:store", () => { try { fn(); } catch { /* the page has gone */ } }),
-  onSignin: (fn) => ipcRenderer.on("etiuda:signin", (_e, v) => { try { fn(v && typeof v === "object" ? v : {}); } catch { /* the page has gone */ } }),
+  onSignin: (fn) => ipcRenderer.on("etiuda:signin", (_e, v) => { try { fn(v && typeof v === "object" ? pageView(v) : {}); } catch { /* the page has gone */ } }),
   /* A proxy's question for a user name and password, as {id, host, port, again}, and the page's answer to it by id;
      an empty user name is "Not now". The answer is handed to the shell and kept nowhere on this side. */
   onProxyAsk: (fn) => ipcRenderer.on("etiuda:proxy-ask", (_e, v) => {

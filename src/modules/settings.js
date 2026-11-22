@@ -20,7 +20,7 @@ import { agentName, typeAgentName, agentNameNote, markAgentNameNoteSeen } from "
 import { eHost, eHasShared, E_AI_OFF_KEY, eAiOn, eAiModel, eTellAi, E_SEARCH_AI_OFF_KEY, eSearchOn, eTellSearch } from "./host.js";
 import { armSearch, clearSearchMeaning } from "./search-meaning.js";
 import { hooks } from "./hooks.js";
-import { lapseNote, shareRefusedNotes, relayElsewhereNote, teamLeads, teamPolicySaid, relayDesk, keySignHtml, forgetTeamLead, pickMovedFolder, joinDoorButton, openJoinPaste, onJoinPainted } from "./team-join.js";
+import { lapseNote, shareRefusedNotes, relayElsewhereNote, teamLeads, teamPolicySaid, relayDesk, keySignHtml, forgetTeamLead, pickMovedFolder, onJoinPainted } from "./team-join.js";
 import { pack } from "./pack.js";
 import { openScreenTab, registerScreen, screenOn, clearScreenOn } from "./screen-tabs.js";
 import { openAbout } from "./about.js";
@@ -31,8 +31,8 @@ import { sxIcon } from "./sx-icons.js";
 import { focusKey, focusSame, originOf } from "./dom.js";
 import { orgModel, orgRanks, orgSaid, rewordSent, syncOrgMark } from "./org-model.js";
 import { rewordState, rewordSwitchSet } from "./card-reword.js";
-import { SIGNIN_NAMES, signinNow, signinShown, signinParts, signinSay, signinNoSeat, signinTold, signinActsHtml, signinWhen, signinProvidersHtml, signinIdentHtml, signinCodeText, signinChoosingNow, signinDoorsHtml, signinDoorRefusedNow,
-  signinAct, signinStart, signinOnChange, signinPreviewHtml, signinLinkHtml, signinLinkSelect, signinCopyHtml, signinManaged, signinKeepsAccount,
+import { SIGNIN_NAMES, signinNow, signinShown, signinParts, signinSay, signinNoSeat, signinTold, signinActsHtml, signinWhen, signinProvidersHtml, signinIdentHtml, signinInvitedLine, signinJoinRefusedNow, signinJoinRefusedHtml, signinJoinWaitWords, signinChoosingNow, signinDoorsHtml, signinDoorRefusedNow,
+  signinAct, signinStart, signinOnChange, signinPreviewHtml, signinLinkHtml, signinLinkSelect, signinManaged, signinKeepsAccount,
   signinCapHolds, signinStranded, signinStrandedWords, signinWaiting, signinWaitingWords, syncNow, syncLine, syncSet, syncOnChange, syncOpened, syncConsent, askSyncWhose,
   deskDoorState, deskDoorLines, deskSeatShort, buyOffered } from "./signin.js";
 import { hangBubble } from "./bubble.js";
@@ -338,8 +338,8 @@ function accountCardHtml(v){
 }
 /* Buy, where the shell names an order page (shell/main.js orderAddress); the shell builds the address, so the page names none. */
 function buyRow(v){
-  return row("buy","forward",t("Licence for one person"),v.signedIn ? t("The order page opens in the browser with this account's sign-in code filled in; typing another person's code buys the licence for them instead.")
-    : t("The order page opens in the browser and asks for the sign-in code of the person the licence is for, which Etiuda shows them after their first sign-in."),
+  return row("buy","forward",t("Licence for one person"),v.signedIn ? t("The order page opens in the browser, and the licence bought there is this account's.")
+    : t("A licence is bought for the account signed in here, so signing in comes first."),
     '<button type="button" class="btn" data-e-open="buy">'+esc(t("Buy"))+'</button>');
 }
 function accountGroups(){
@@ -363,11 +363,14 @@ function accountGroups(){
     rows.push(p.team ? row("team","people",t("Team"),doorSaid||(p.team.lead?t("Led by {LEAD}").split("{LEAD}").join(p.team.lead):""),val(teamNamed.team||p.teamName))
       : v.doors.length && v.seat==="held" ? row("team","people",t("A team on this licence"),doorSaid||t("This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation."),signinDoorsHtml(v.doors))
       : v.deskOnly && v.seat==="held" ? row("team","people",t("Working without a team"),doorSaid||t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed."),"") /* plant:account-desk-only */
-      : row("team","people",t("No team yet"),doorSaid||(signinManaged(v)?t("No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself."):t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself.")),"")); /* plant:no-team-managed */
-    /* A managed computer shows the provider it is held to in the code's place, since nobody there is admitted by code. */
+      : row("team","people",t("No team yet"),doorSaid||(signinManaged(v)?t("No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself."):t("No team has admitted this account yet. A lead can invite it by its email address or send a link; the invitation then appears here with one Join.")),"")); /* plant:no-team-managed */
+    /* A managed computer shows the provider it is held to. */
     if(v.managed && v.managed.provider) rows.push(row("signin","user",t("Sign-in"),"",lockedHtml(signinHeldTo(v.managed))));
-    if(v.code && !signinManaged(v)) rows.push(row("code","code",t("Your sign-in code"), /* plant:code-row-managed */t("Not a secret. It tells a team's lead which account is yours."),
-      '<code class="sgn-mono">'+esc(signinCodeText(v.code))+'</code>'+signinCopyHtml("copy")));
+    /* The invitations waiting, each with its Join (board 1017), and a Join that waits for the lead's confirm. */
+    v.invited.forEach(x=>rows.push(row("invited","people",t("Invitation"),signinInvitedLine(x),
+      '<button type="button" class="btn primary" data-signin-act="join" data-signin-invite="'+esc(String(x.n))+'">'+esc(t("Join"))+'</button>')));
+    if(signinJoinRefusedNow()) rows.push({key:"joinno", html:signinJoinRefusedHtml()});
+    if(v.joinWait){ const w=signinJoinWaitWords(v); rows.push(row("joinwait","people",w[0],w[1],"")); }
     const ds=deskDoorState(v);
     if(ds.state==="ended" || ds.state==="working"){ /* plant:account-seat-state */
       const seatPair=deskDoorLines(ds), seatShort=deskSeatShort(ds);
@@ -558,11 +561,9 @@ function keysGroups(){
   ].filter(Boolean);
 }
 function teamsGroups(){
-  const joinDoor=joinDoorButton("setJoinTeam");
   /* One row per team this desk trusts a lead for; what the lead sees is said once, on the first team that still lists it,
      and the way back after leaving once, on the first row that offers Leave. */
   const rows=teamLeads().map((l,i,all)=>({key:"team", html:teamRowHtml(l, i===all.findIndex(x=>!x.removed)?t("The team's lead can see the catalogs this desk uses, their content included, and this desk's changes to them. The lead's Studio can take a copy of any of them at any time, without asking here: of a team catalog, one the lead publishes to the team, sealed for the team; of a personal catalog, any other on this desk, sealed for the lead alone. A personal catalog can be marked Private in the Library, under Catalog & data; the lead then sees nothing of it, not even that it is used. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses unless that catalog is Private, and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, none of them from a Private catalog, and Studio shows them in the team's totals."):"", i===all.findIndex(x=>!x.policy))}));
-  if(joinDoor) rows.push({key:"join", html:'<div class="set-row" data-row="join">'+sxIcon("desks")+'<div class="set-label">'+esc(t("Team"))+'</div><div class="set-ctl">'+joinDoor+'</div></div>'});
   /* What machine policy set and this desk cannot use, in the shell's own words, first in the section. */
   const policySaid=teamPolicySaid();
   if(policySaid.length) rows.unshift({key:"teampolicy", html:'<div class="set-row" data-row="teampolicy">'+sxIcon("desks")+'<div class="set-label">'+esc(t("Team"))
@@ -1085,8 +1086,6 @@ function wirePage(box){
   wireTeamRows(box);
   wireOrgModelRow(box);
   wireAccountRows(box);
-  const joinBtn=box.querySelector("#setJoinTeam");
-  if(joinBtn) joinBtn.onclick=()=>openJoinPaste();
   /* Stored on the keystroke, like every other row here: there is no Save on this screen. */
   const nameBox=box.querySelector("#setAgentName");
   if(nameBox) nameBox.oninput=()=>typeAgentName(nameBox.value);

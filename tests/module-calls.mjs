@@ -6208,7 +6208,8 @@ const CARD_B = {
     setHotkey: () => ({ ok: true }), sharedRead: () => null, sharedWrite: () => null, teamJoin: () => Promise.resolve({}) };
   Dom.grabDom();
   /* What the dialog held, by the mark each row's control carries in its markup: the rows of today's dialog. */
-  const DIALOG_ROWS = ['id="setAgentName"', 'id="setUiLang"', 'id="setJoinTeam"', 'data-seg="sharededit"', 'data-seg="theme"',
+  /* Board 1017 took Join a team (id="setJoinTeam", the paste) out of the rows: the paste stands on the empty desk alone. */
+  const DIALOG_ROWS = ['id="setAgentName"', 'id="setUiLang"', 'data-seg="sharededit"', 'data-seg="theme"',
     'data-seg="glass"', 'data-seg="motion"', 'data-seg="cols"', 'id="setColFloor"', 'data-seg="raillock"', 'data-seg="pillslock"',
     'data-seg="notehover"', 'data-seg="deck"', 'id="setHotkey"', 'id="scListInline"', 'id="setReset"'];
   const count = (h, s) => h.split(s).length - 1;

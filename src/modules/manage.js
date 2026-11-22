@@ -35,7 +35,7 @@ import { paintCatalogList } from "./catalog-offer.js";
 import { eHasHistory, openHistory } from "./catalog-history.js";
 import { eCatalogFolder, eCatalogFolderPinned, eCatalogFolderShort, eChooseCatalogFolder, eHost, eOpenCatalogFolder } from "./host.js";
 import { cards, catOrder, mgOpen, cardCounts } from "./app-state.js";
-import { joinDoorButton, openJoinPaste, teamLeads } from "./team-join.js";
+import { teamLeads } from "./team-join.js";
 import { openScreenTab, registerScreen, screenOn } from "./screen-tabs.js";
 import { lmIcon } from "./lm-icon.js";
 import { openMaintenance } from "./maintenance.js";
@@ -1849,9 +1849,6 @@ function wireLibrary(page){
   $("#mgAddCat").onclick=()=>startMgCatAdd();
   wireRolePage(page);
   $("#mgImportCatalog").onclick=importCatalogHere;
-  /* Join sits beside Load. It does not replace the catalog this desk has open. */
-  const joinBtn=$("#mgJoinTeam");
-  if(joinBtn) joinBtn.onclick=()=>openJoinPaste();
   if($("#mgHistory")) $("#mgHistory").onclick=()=>{ libView="history"; paintLibrary(); };
   paintCatalogList();
   /* BOTH LIVE INSIDE A SUMMARY, where a click is the browser's own way of folding the section:
@@ -2075,18 +2072,15 @@ function wireLibrary(page){
 
 function libraryBodyHtml(){ return openManage(true); }
 
-/* WHAT ACTS ON THE WHOLE LIBRARY, as rows of the Catalog and data page in the Settings row's own form. Join
-   sits beside Load and does not replace the catalog this desk has open. */
+/* WHAT ACTS ON THE WHOLE LIBRARY, as rows of the Catalog and data page in the Settings row's own form. */
 function libraryActRow(key,icon,title,hint,ctl){
   return '<div class="set-row" data-row="'+esc(key)+'">'+lmIcon(icon)+'<div class="set-label">'+esc(title)
     +'<small>'+esc(hint)+'</small></div><div class="set-ctl">'+ctl+'</div></div>';
 }
 function libraryActionsHtml(){
-  const join=joinDoorButton("mgJoinTeam");
   return '<div class="mg-data-acts">'
     +libraryActRow("load","data",t("Load catalog file"),t("Loads a catalog file from this computer."),
       '<button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Load catalog file…</button>')
-    +(join?libraryActRow("join","teams",t("Join a team"),t("Joins a team with an invitation from its lead."),join):'')
     +(eHasHistory()?libraryActRow("history","refresh",t("Saved copies"),t("Each catalog file this desk opens or saves leaves a copy here, kept for 30 days."),
       '<button type="button" class="btn" id="mgHistory">'+esc(t("Saved copies…"))+'</button>'):'')
     +(clearedHeld()
