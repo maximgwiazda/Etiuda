@@ -1297,7 +1297,7 @@ UI_STRINGS.pl={
   "Password":"Hasło",
   "Beside the customer's name there is now a wheel: it chooses who in the team this reply names.":"Obok imienia klienta jest teraz kółko: wybiera się nim osobę z zespołu, którą wymienia ta odpowiedź.",
   "No catalog loaded":"Nie wczytano katalogu",
-  "Test build: sign-in goes to Etiuda's test service, not the real one.":"Wersja testowa: logowanie trafia do testowej usługi Etiudy, nie do prawdziwej.",
+  "Test service":"Usługa testowa",
   "This catalog has changed since it was loaded.":"Ten katalog zmienił się od czasu wczytania.",
   "This file is an earlier edition than the one loaded now.":"Ten plik to wcześniejsze wydanie niż wczytane teraz.",
   "The tour of Etiuda's controls, one at a time":"Przewodnik po Etiudzie, krok po kroku",

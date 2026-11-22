@@ -546,16 +546,16 @@ function dispatchTabChord(shift){
   }catch(e){}
 }
 
-/* THE TEST SERVICE BAND: where the shell says this is a test service build, one line above the header on every screen, which
-   nothing dismisses. Its English stays its source, so the chrome sweep turns it with the language (translateChrome). */
-const TEST_BAND_EN="Test build: sign-in goes to Etiuda's test service, not the real one.";
+/* THE TEST SERVICE BAND: where the shell says this is a test service build, a small dim mark in the window's bottom right corner,
+   which covers nothing and takes no room. Its English stays its source, so the chrome sweep turns it with the language (translateChrome). */
+const TEST_BAND_EN="Test service";
 function testServiceBand(doc){
   if(!doc || !doc.body || doc.getElementById("eTestBand")) return null;
   const el=doc.createElement("div");
   el.id="eTestBand";
   el.setAttribute("role","note");
   el.setAttribute("data-i18n-text",TEST_BAND_EN);
-  el.textContent=t("Test build: sign-in goes to Etiuda's test service, not the real one."); /* the literal i18n-scan reads; ts5b holds it to TEST_BAND_EN */
+  el.textContent=t("Test service"); /* the literal i18n-scan reads; ts5b holds it to TEST_BAND_EN */
   doc.body.insertBefore(el,doc.body.firstChild);
   doc.body.classList.add("e-test-service");
   return el;
