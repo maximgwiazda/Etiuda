@@ -798,6 +798,8 @@ function createCore(deps) {
     if (newly.length) {
       const team = store.get("team") || {}, pubOf = id => (team.lead && id === team.lead.keyId ? team.lead.pub : (store.get("dev:" + id) || {}).pub);
       for (const [k, s] of store.list("ses:")) if (s && s.key && newly.indexOf(pubOf(s.key)) > -1) store.del(k); /* plant:freed-sessions */
+      /* An invitation's session holds no key of its own; the seat its hello carried names the desk. */
+      for (const [k, s] of store.list("ses:")) if (s && !s.key && s.inv && plain(s.seat) && newly.indexOf(s.seat.pub) > -1) store.del(k); /* plant:freed-invite-sessions */
     }
   }
   /* A desk's or a Studio's session on a team whose grant carries seats, before it is issued: `cert` judged by certWhy for the seats' licence, its run
@@ -812,12 +814,7 @@ function createCore(deps) {
       return ordinary;
     }
     const now = clock();
-    /* A pooled desk the service freed (its person's place taken by another pooled desk) is refused outright while the grant names it,
-       on a certificate issued before it was freed; one issued since (its person came back to it) is judged as any other. */
-    const named = Array.isArray(seats.freed) ? seats.freed.find(f => plain(f) && f.key === deskPub) : undefined;
-    let since = false;
-    since = !!named && plain(cert) && Number.isSafeInteger(cert.issued) && cert.issued >= named.at; /* plant:freed-issued */
-    if (named && !since) return no("seat-lapsed"); /* plant:seat-freed */
+    if (freedBefore(cert, deskPub)) return no("seat-lapsed"); /* plant:seat-freed */
     if (cert === undefined || certWhy(cert, deskPub, [seats.licence], now, roots, revokedNow(), true) !== null) return no("seat-lapsed"); /* plant:seat-cert */
     const seat = seatOf(cert, deskPub);
     if (now < cert.until) {
@@ -829,10 +826,23 @@ function createCore(deps) {
     return ran.ok ? { ok: true, seat, note: null } : ran;
   }
 
+  /* A pooled desk the service freed (its person's place taken by another pooled desk) is refused outright while the grant names it,
+     on a certificate issued before it was freed; one issued since (its person came back to it) is judged as any other. The one rule
+     for every hello that reads the team (seatGate, anySeat, the door's reopening of a token's request) and for a key's session. */
+  function freedBefore(cert, deskPub) {
+    const seats = store.get("seats");
+    const named = plain(seats) && Array.isArray(seats.freed) ? seats.freed.find(f => plain(f) && f.key === deskPub) : undefined;
+    let since = false;
+    since = !!named && plain(cert) && Number.isSafeInteger(cert.issued) && cert.issued >= named.at; /* plant:freed-issued */
+    return !!named && !since;
+  }
+
   /* THE ORDINARY ARM: a current certificate of any licence for this desk key (seatCertWhy), on a team without seats and at every invitation's
-     hello. It writes nothing; its session keeps the seat and ends at the certificate's end (`end`, as a store's), re-judged by seatLapsed. */
+     hello, never on a key the grant names as freed (freedBefore). It writes nothing; its session keeps the seat and ends at the
+     certificate's end (`end`, as a store's), re-judged by seatLapsed. */
   function anySeat(cert, deskPub) {
     if (seatCertWhy(cert, deskPub, clock(), roots, revokedNow()) !== null) return no("seat-lapsed");
+    if (freedBefore(cert, deskPub)) return no("seat-lapsed"); /* plant:invite-freed */
     const out = { ok: true, seat: seatOf(cert, deskPub), note: null };
     out.end = cert.until; /* plant:seat-session-cap */
     return out;
@@ -1124,7 +1134,7 @@ function createCore(deps) {
       }
       for (const [id, v] of next) { store.put("dev:" + id, v); store.del("gone:" + id); }
       /* A key taken off gives back what it held: its blobs leave the team's counts at once, are listed and fetched by the lead
-         alone for REMOVED_KEEP_MS of time the team can read, and are deleted at the first list or upload after it. No tombstone
+         alone (an addressed one by its addressee alone) for REMOVED_KEEP_MS of time the team can read, and are deleted at the first list or upload after it. No tombstone
          is kept, so the key put back starts its chains again. */
       const freed = [], heldUntil = clock() + REMOVED_KEEP_MS;
       let grace = false;
@@ -1586,10 +1596,13 @@ function createCore(deps) {
        session keeps the certificate it knocked with, as an invitation's keeps its seat, and ends at its end. */
     const knocked = { ok: true, seat: seatOf(b.door, b.pub), end: b.door.until };
     const bound = boundInvite(b.key);
-    if (bound && bound.inv.pub === b.pub)
+    if (bound && bound.inv.pub === b.pub) {
+      /* A token's request reads the team, so a freed key reopens it no more than anySeat lets it resume; a door request reads its answer alone. */
+      if (bound.inv.door !== true && freedBefore(b.door, b.pub)) return no("seat-lapsed"); /* plant:door-freed */
       return issue(b.challenge, seated({ key: null, inv: bound.id, bound: b.key, letGo: bound.inv.uploaded === true }, knocked), () => {
         for (const [k, x] of store.list("ses:")) if (x.inv === bound.id) store.del(k);
       });
+    }
     const lapsedDoor = lapseGate(true);
     if (lapsedDoor) return lapsedDoor; /* plant:door-lapse */
     const now = clock(), mark = personMark(team, b.door.person);
@@ -1816,8 +1829,7 @@ function createCore(deps) {
     if (!plain(seats)) return ordinaryLapsed(s);
     const seat = s.seat;
     if (!plain(seat) || seat.licence !== seats.licence) return no("seat-lapsed");
-    const named = Array.isArray(seats.freed) ? seats.freed.find(f => plain(f) && f.key === seat.pub) : undefined;
-    if (named && !(seat.issued >= named.at)) return no("seat-lapsed");
+    if (freedBefore(seat, seat.pub)) return no("seat-lapsed");
     const now = clock();
     if (now < seat.until) return null;
     const ran = seatRunOut(seats, seat, now, false);
@@ -1923,10 +1935,14 @@ function createCore(deps) {
       }
       if (!fill) break;
     }
-    if (!readsHeld(s)) return { ok: true, items, lapse: told() };
-    /* A removed desk's blobs hold no seq row, so they join the lead's page in seq order, and never past a full page's last row. */
+    /* A removed desk's held blobs: the lead's session lists those addressed to nobody, and an addressee's session those addressed to its desk. */
+    const lead = readsHeld(s);
+    if (!lead && me === null) return { ok: true, items, lapse: told() };
+    let heldMine = h => toOf(h) === null && lead;
+    heldMine = h => (toOf(h) === null ? lead : toOf(h) === me); /* plant:held-to-since */
+    /* A removed desk's blobs hold no seq row, so they join the page in seq order, and never past a full page's last row. */
     const top = ended ? Infinity : last, rows = items.length;
-    for (const [, h] of store.list("held:")) if (h && h.seq > after && h.seq <= top && heldLive(h, now) && toOf(h) === null) items.push({ seq: h.seq, meta: served(h) });
+    for (const [, h] of store.list("held:")) if (h && h.seq > after && h.seq <= top && heldLive(h, now) && heldMine(h)) items.push({ seq: h.seq, meta: served(h) });
     if (items.length === rows) return { ok: true, items, lapse: told() };
     items.sort((x, y) => x.seq - y.seq);
     return { ok: true, items: items.slice(0, sinceMax), lapse: told() };
@@ -1961,8 +1977,10 @@ function createCore(deps) {
     }
     if (m && isAnswer(m)) return no("missing");
     if (m) return { ok: true, meta: served(m), obj: m.obj };
-    const h = is(HEX32, id) && readsHeld(s) ? store.get("held:" + id) : undefined;
-    if (h && heldLive(h, now) && toOf(h) === null) return { ok: true, meta: served(h), obj: h.obj };
+    const h = is(HEX32, id) ? store.get("held:" + id) : undefined;
+    let heldMine = !!h && toOf(h) === null && readsHeld(s);
+    heldMine = !!h && (toOf(h) === null ? readsHeld(s) : toOf(h) === deskOfKey(s.key)); /* plant:held-to-blob */
+    if (heldMine && heldLive(h, now)) return { ok: true, meta: served(h), obj: h.obj };
     const tomb = is(HEX32, id) ? store.get("tomb:" + id) : undefined;
     if (tomb && now <= tomb.until) return no(tomb.why);
     return no("missing");
@@ -2243,8 +2261,8 @@ function createCore(deps) {
     drop.push(m.obj);
   }
 
-  /* A removed desk's blob, counted toward nothing and served to the lead alone until heldUntil: its seq row goes, so no other
-     list pages over it, and its own expiry row deletes it then. */
+  /* A removed desk's blob, counted toward nothing and served to the lead alone until heldUntil (an addressed one to its addressee
+     alone): its seq row goes, so no other list pages over it, and its own expiry row deletes it then. */
   function hold(m, until) {
     store.del("blob:" + m.id);
     noteBlobs(-1);
