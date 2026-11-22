@@ -25,7 +25,7 @@ const nodeRequire = createRequire(import.meta.url);
 import { relayizeDesk, relayMirrorOf, relayMirrorProgram, relayChannelOf } from "./relay-mirror-desk.mjs";
 let LEAD_PIN = null;
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 148 - 1; /* 890v retired with the folder team's folder write; see its place */
+const EXPECTED = 148 - 1 - 1; /* 890v retired with the folder team's folder write, r16b with the forged ring file; see their places */
 
 const JOIN_EN = "Once this desk joins, the team's lead can see the catalogs it uses, their content included, and this desk's changes to them. The lead's Studio can take a copy of any of them at any time, without asking here: of a team catalog, one the lead publishes to the team, sealed for the team; of a personal catalog, any other on this desk, sealed for the lead alone. A personal catalog can be marked Private in the Library, under Catalog & data; the lead then sees nothing of it, not even that it is used. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses unless that catalog is Private, and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, none of them from a Private catalog, and Studio shows them in the team's totals.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi katalogi, których używa to stanowisko, razem z ich treścią, oraz zmiany wprowadzone w nich na tym stanowisku. Studio lidera może w każdej chwili, bez pytania tutaj, pobrać kopię każdego z nich: katalogu zespołowego, czyli publikowanego przez lidera dla zespołu, zapieczętowaną dla zespołu, a katalogu osobistego, czyli każdego innego na tym stanowisku, zapieczętowaną wyłącznie dla lidera. Katalog osobisty można oznaczyć jako Prywatny w Bibliotece, w części Katalog i dane; lider nie widzi wtedy nic z niego, nawet tego, że jest używany. Studio lidera wymienia to stanowisko z nazwy, chyba że organizacja wyłączy nazwy, razem z używanym katalogiem i jego wydaniem, o ile nie jest to katalog prywatny, oraz z okresem zliczania, i wymienia je dalej, gdy przestanie się odzywać. Własne dane stanowiska trafiają do lidera zapieczętowane, bez żadnych danych z katalogu prywatnego, a Studio pokazuje je w sumach zespołu.";
@@ -255,16 +255,9 @@ try {
     check(r.took && r.signer === "" && !r.floored,
       "r16a a catalog signed under the lead's key id by a key only the share's ring file names is recorded with no signer, and moves no rev floor: "
       + JSON.stringify(r));
-    if (PLANTS_OFF) skip("r16b rewriting plant:trusted-pub-lead to the ring's check names the lead as that catalog's signer");
-    else {
-      const from = "pinnedLeadPubs().length ? catalogLeadOk(data) : catalogSigValid(data)";
-      const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:trusted-pub-lead") >= 0);
-      let p = null;
-      if (at >= 0 && lines[at].split(from).length === 2) { lines[at] = lines[at].replace(from, () => "catalogSigValid(data)"); p = await forgedRing("ring-forge-plant", lines.join("\n")); }
-      check(!!p && p.took && p.signer === LEAD.keyId, "r16b rewriting plant:trusted-pub-lead to the ring's check names the lead as that catalog's signer (FAIL r16a): "
-        + JSON.stringify(p));
-    }
+    /* RETIRED, P4 (no ring file is believed for a team): r16b, "rewriting plant:trusted-pub-lead to the ring's check names the lead as that catalog's signer (FAIL r16a)". It lifted the line that keeps a pinned lead's catalogs to the lead's own check, so that a share's ring file (r16a's forged ring) named the lead's key id for another key. A relay team's ring is the signed team file's own, never a ring file in the mirror, so the forged ring this scene writes is read nowhere and the plant, which rewrites the line to the ring's check, leaves the signer empty: it no longer has a scene to turn red. */
   }
+
 
   /* ---- r16c: the listing tells the page which files the pinned lead signed, and only those (Grok's review 16, finding 1) ---- */
   const leadRows = async (name, src) => {

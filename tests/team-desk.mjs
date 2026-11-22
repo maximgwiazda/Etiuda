@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 /* The floor: every leg below runs, or the file says it did not complete. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 105 - 12 - 7 - 15 - 1 - 6 - 2 + 2; /* 12 retired with the folder team (RETIRED_TWO_TEAMS_ONE_FOLDER), 7 with the conflict sibling of the team file, 16 with a folder team's head, ring and wait and the row's fork (each marked RETIRED); then the six fork and syncer plants (14br to 14bu, 14bv and 14bx; 14bv moved to relay-channel 939h3) and the two sibling plants (14cc, 14cj) retired, and 14by and 14cd moved back as page checks over a stand-in host */
+const EXPECTED = 105 - 12 - 7 - 15 - 1 - 6 - 2 + 2 - 1; /* 12 retired with the folder team (RETIRED_TWO_TEAMS_ONE_FOLDER), 7 with the conflict sibling of the team file, 16 with a folder team's head, ring and wait and the row's fork (each marked RETIRED); then the six fork and syncer plants (14br to 14bu, 14bv and 14bx; 14bv moved to relay-channel 939h3) and the two sibling plants (14cc, 14cj) retired, and 14by and 14cd moved back as page checks over a stand-in host, and 962s5t7 (its plant line is gone) retired */
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -1553,19 +1553,7 @@ try {
   /* RETIRED, P4 (no folder is read as a team): a folder team's head, ring, epoch wait and first listing were read off its team file in the share (the seal wait and the folder's own ring and head are gone; relay-channel's head and ring checks hold a team's). It said what its sentence below says. */
   retire(!!rowLow && !rowLow.head, "962s5t6 a genuine newer head below the folder team file's epoch shows nothing in leadsView(): "
     + (rowLow && rowLow.head ? rowLow.head.edition : "nothing"));
-  if (PLANTS_OFF) skip("962s5t7 lifting plant:folder-head-epoch shows the head below the team file's epoch");
-  else {
-    const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:folder-head-epoch") >= 0);
-    let shown = "plant line absent";
-    if (at >= 0) {
-      lines.splice(at, 1);
-      const DP = loadDesk(DF6.ud, null, { src: lines.join("\n") });
-      await DP.ask("etiuda:branch-identity", true);
-      const rowP = (((await DP.ask("etiuda:team-join", "leads")) || {}).leads || []).find(r => r.team === T6);
-      shown = rowP && rowP.head ? rowP.head.edition : "nothing";
-    }
-    check(shown === "Lamp Shop v4", "962s5t7 lifting plant:folder-head-epoch shows the head below the team file's epoch (FAIL 962s5t6): " + shown);
-  }
+  /* RETIRED, P4 (no folder is read as a team): 962s5t7, "lifting plant:folder-head-epoch shows the head below the team file's epoch (FAIL 962s5t6)". The plant line is gone from shell/main.js with the folder's head (the check above it, 962s5t6, is retired), so the lift had no line to take (plant line absent). */
 
   // 14bj: forged head shows nothing in leadsView()
   const forgedHead = JSON.parse(JSON.stringify(freshHead));
