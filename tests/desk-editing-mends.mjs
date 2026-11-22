@@ -37,7 +37,7 @@ const check = (ok, what, detail) => {
 };
 const skip = what => { skipped++; console.log("  SKIP " + what); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 13;
+const EXPECTED = 14;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const clone = o => JSON.parse(JSON.stringify(o));
 
@@ -289,6 +289,9 @@ async function main() {
     const u = await radioKept("etiuda.html", "undo"), b = await radioKept("etiuda.html", "back");
     check(radioHeld(u), "ed-radio-undo a form of address chosen in the card editor survives the Undo of moving on without saving", u);
     check(radioHeld(b), "ed-radio-back a form of address chosen in the card editor survives in a window brought back after a close", b);
+    await pagePlant(radioLab, 'return el.type === "checkbox" || el.type === "radio" ? String(el.name || "") + "=" + String(el.value) : String(el.name || "");',
+      'return String(el.name || "");', async file => ({ u: await radioKept(file, "undo"), b: await radioKept(file, "back") }),
+      r => !radioHeld(r.u) && !radioHeld(r.b), "p ed-radio-undo ed-radio-back a box or radio keyed by its name alone (dialog.js edKeyOf) turns both red");
   }
   {
     const found = resetPromisers();

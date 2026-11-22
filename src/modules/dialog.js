@@ -247,10 +247,14 @@ function edFormState(root){
   return out.join("\u0001");
 }
 function edMarkClean(){ edBaseline=edFormState(); edBaseTyped=edTyped(); }
-/* The typing itself, to be put back: every field's value in document order, its id (or name), and which of the
-   segmented buttons carried .on. A field is put back by its id, so a row that appears or goes between two
-   arrivals moves no typing into another box; one with neither is matched by place, only while the shape holds. */
-function edKeyOf(el){ return String(el.id||el.name||""); }
+/* The typing itself, to be put back: every field's value in document order, its key, and which of the segmented
+   buttons carried .on. A field is put back by its key, so a row that appears or goes between two arrivals moves no
+   typing into another box: its id, else for a box or a radio its name and value, since a group shares one name.
+   A field with no key is matched by place, only while the shape holds; a key the form holds twice, by nothing. */
+function edKeyOf(el){
+  if(el.id) return String(el.id);
+  return (el.type==="checkbox"||el.type==="radio") ? String(el.name||"")+"="+String(el.value) : String(el.name||"");
+}
 function edTyped(root){
   root=root||modalCard;
   if(!root) return null;

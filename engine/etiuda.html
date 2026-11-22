@@ -22357,7 +22357,8 @@ What is typed here stays in this browser.`;
     edBaseTyped = edTyped();
   }
   function edKeyOf(el) {
-    return String(el.id || el.name || "");
+    if (el.id) return String(el.id);
+    return el.type === "checkbox" || el.type === "radio" ? String(el.name || "") + "=" + String(el.value) : String(el.name || "");
   }
   function edTyped(root) {
     root = root || modalCard;
