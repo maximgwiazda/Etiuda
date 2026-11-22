@@ -28,9 +28,9 @@ const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 8;
+const PLANTS = 10;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 10 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 12 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -75,7 +75,9 @@ function shellOf(o) {
     ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { handle[ch] = fn; } },
     fromEngine: e => !!(e && e.engine),
     shell: { openExternal: async u => { opened.push(u); } },
-    signinView: () => ({ code: typeof opt.code === "function" ? opt.code() : opt.code || "", licenceManaged: opt.managed === true }),
+    signinView: () => ({ code: typeof opt.code === "function" ? opt.code() : opt.code || "", licenceManaged: opt.managed === true, signedIn: opt.signedIn === true ? "microsoft" : "" }),
+    /* The held seat's own account of what it pays (board 1020): {provider, portal?} where a subscription pays the person's licence. */
+    signinPaysNow: () => opt.pays || null,
   };
   const names = Object.keys(env);
   const body = "let SIGNIN_PROVIDERS = Object.freeze({ microsoft: Object.freeze({ clientId: \"\" }), google: Object.freeze({ clientId: \"\" }) }),"
@@ -229,6 +231,64 @@ CASES.pagePress = () => {
   return !!block && /h\.openBuyPage\(\)/.test(block) && !/https?:|window\.open|location/.test(block) && !/window\.open\(|location\.href\s*=/.test(SETTINGS);
 };
 
+/* Board 1020: the account already pays (the service's "pays", deskOnly). A press of Buy goes to the subscription's portal, the provider's
+   own address and no sign-in code after it, even where no order page is named; with no portal the shell offers nothing, so a second checkout
+   is never reached, even where the order page is named; a managed tenant, or nobody signed in, is as before. */
+const PORTAL = "https://billing.stripe.com/p/login/test_aB3dE5gH7jK9mN1pQ3rS5tU7";
+CASES.paysPortal = () => {
+  const lab = labWith({ order: ORDER });
+  const S = shellOf({ lab, code: CODE, signedIn: true, pays: { provider: "stripe", portal: PORTAL } });
+  const st = S.state(); S.click(); const ok = S.open();
+  const bare = shellOf({ code: CODE, signedIn: true, pays: { provider: "stripe", portal: PORTAL } });
+  const bst = bare.state(); bare.click(); const bok = bare.open();
+  const N = shellOf({ lab, code: CODE, signedIn: true, pays: { provider: "paddle" } });
+  const nst = N.state(); N.click(); const nok = N.open();
+  const M = shellOf({ lab, code: CODE, signedIn: true, managed: true, pays: { provider: "stripe", portal: PORTAL } });
+  const mst = M.state(); M.click(); const mok = M.open();
+  const O = shellOf({ lab, code: "", signedIn: false, pays: { provider: "stripe", portal: PORTAL } });
+  O.click(); O.open();
+  const P = shellOf({ lab, code: CODE, signedIn: true });
+  P.click(); P.open();
+  return !!st && st.offer === true && ok === true && S.opened.length === 1 && S.opened[0] === PORTAL
+    && !!bst && bst.offer === true && bok === true && bare.opened[0] === PORTAL && bare.page() === ""
+    && !!nst && nst.offer === false && nok === false && N.opened.length === 0
+    && !!mst && mst.offer === false && mok === false && M.opened.length === 0
+    && O.opened.length === 1 && O.opened[0] === ORDER && P.opened.length === 1 && P.opened[0] === ORDER + "#code=" + CODE;
+};
+/* The page, Account over a stand-in host: the Buy row of a person who already pays says so, with its button only where there is a portal
+   (the shell builds the address, never the page), in Polish too; and a held payment is one line with its kind, its provider and its day. */
+const buyLineOf = html => { const m = /<div class="set-row" data-row="buy">[\s\S]*?<div class="set-ctl">[\s\S]*?<\/div><\/div>/.exec(String(html)); return m ? m[0] : ""; };
+const heldLineOf = html => { const m = /<div class="set-row" data-row="payment">[\s\S]*?<div class="set-ctl">[\s\S]*?<\/div><\/div>/.exec(String(html)); return m ? m[0] : ""; };
+CASES.paysPage = async () => {
+  const storage = await import(MOD("storage.js"));
+  const withPays = portal => Object.assign({}, signed, { buy: { pays: { provider: "stripe", portal } } });
+  const heldAt = (kind, provider) => Object.assign({}, signed, { buy: { held: { kind, provider: provider || "stripe", at: Date.UTC(2026, 10, 22, 9) } } });
+  storage.lsSet("eUiLang", "en");
+  const yes = buyLineOf(await acctOf(withPays(true), OFFER)), no = buyLineOf(await acctOf(withPays(false), NO_OFFER));
+  const plain = buyLineOf(await acctOf(signed, OFFER)), outRow = buyLineOf(await acctOf(Object.assign({}, signedOut, { buy: { pays: { provider: "stripe", portal: true } } }), OFFER));
+  const day = (lang) => new Date(Date.UTC(2026, 10, 22, 9)).toLocaleDateString(lang, { day: "numeric", month: "short", year: "numeric" });
+  const lines = {};
+  for (const k of ["already-pays", "managed", "review", "pending"]) lines[k] = words(heldLineOf(await acctOf(heldAt(k), OFFER)));
+  const paddle = words(heldLineOf(await acctOf(heldAt("pending", "paddle"), OFFER)));
+  const quiet = heldLineOf(await acctOf(signed, OFFER)), managedHeld = heldLineOf(await acctOf(Object.assign({}, heldAt("review"), { licenceManaged: true }), OFFER));
+  storage.lsSet("eUiLang", "pl");
+  let plYes = "", plNo = "", plHeld = "";
+  try { plYes = buyLineOf(await acctOf(withPays(true), OFFER)); plNo = buyLineOf(await acctOf(withPays(false), NO_OFFER)); plHeld = words(heldLineOf(await acctOf(heldAt("review"), OFFER))); }
+  finally { storage.lsSet("eUiLang", "en"); }
+  return /data-e-open="buy">Add seats…</.test(yes) && words(yes).indexOf("This account already pays for its licence, so this opens its subscription at Stripe instead of a second order; seats are added there.") >= 0
+    && no !== "" && !/data-e-open="buy"/.test(no) && !/<button/.test(no) && words(no).indexOf("This account already pays for its licence, and a licence holds one subscription, so no second order is taken.") >= 0
+    && words(no).indexOf("{CONTACT}") < 0 && words(no).indexOf("Seats are added to the subscription") < 0
+    && yes.indexOf("http") < 0 && yes.indexOf(CODE) < 0 && /data-e-open="buy">Buy</.test(plain) && /data-e-open="buy">Buy</.test(outRow) && outRow.indexOf("already pays") < 0
+    && lines["already-pays"].indexOf("A second payment from this account, of " + day("en-GB") + ", is held: the licence it already pays for takes more seats at Stripe instead, and the second payment is refunded.") >= 0
+    && lines.managed.indexOf("A payment from this account, of " + day("en-GB") + ", is held, because this account's organisation holds its Etiuda licence. It is refunded or attached by hand, and this line then goes by itself.") >= 0
+    && lines.review.indexOf("A payment from this account, of " + day("en-GB") + ", is held for a look by hand. It is refunded or attached to a licence, and this line then goes by itself.") >= 0
+    && lines.pending.indexOf("Stripe has not yet confirmed this account's payment of " + day("en-GB") + ". The licence comes by itself once it does.") >= 0
+    && paddle.indexOf("Paddle has not yet confirmed") >= 0 && quiet === "" && managedHeld !== ""
+    && /data-e-open="buy">Dodaj miejsca…</.test(plYes) && words(plYes).indexOf("To konto już płaci za licencję, więc ten przycisk otwiera jego subskrypcję w serwisie Stripe zamiast drugiego zamówienia; tam dodaje się miejsca.") >= 0
+    && !/<button/.test(plNo) && words(plNo).indexOf("To konto już płaci za licencję, a jedna licencja ma jedną subskrypcję, więc drugiego zamówienia nie ma.") >= 0
+    && plHeld.indexOf("Płatność z tego konta, z " + day("pl-PL") + ", jest wstrzymana do ręcznego sprawdzenia. Zostanie zwrócona albo przypisana do licencji, a wtedy ten wiersz sam zniknie.") >= 0;
+};
+
 /* b10: where the service said the account's organisation holds its licence (a managed tenant), on any computer, the shell offers no order
    page and a press opens nothing, and Account draws no Buy, signed in or out, saying instead that the organisation holds the licence;
    and why, where the person also bought one of their own (placeholder words, the copywriter's to write). */
@@ -254,6 +314,8 @@ const LEGS = [
   ["b5", "shape", "the order page is etiuda.dev's over https with no port, user, query or fragment; a lab file naming another is refused whole"],
   ["b6", "preload", "the preload tells main of a trusted click on Buy alone; E_HOST asks the state and the open"],
   ["b7", "pagePress", "the page's Buy asks the shell's open and names no address"],
+  ["b11", "paysPortal", "a person who already pays: Buy goes to the subscription's portal alone, offers nothing where there is none, never an order page; managed, signed out and a non-payer as before"],
+  ["b12", "paysPage", "Account says the person already pays, its button only with a portal, and draws a held payment as one line by kind, in English and Polish"],
   ["b10", "managed", "a managed tenant's account: no order page offered, a press opens nothing, Account draws no Buy but who holds the licence, and why"],
 ];
 if (sliced) console.log("  (the slices did not load: " + sliced + ")");
@@ -288,6 +350,10 @@ if (!PLANTS_OFF && !sliced) {
     "buy-click-frame cut: a click from another frame would let the page out");
   await plant("bp6", ["openExternally(u); /* plant:buy-open */", "handOut(u);"], "nothingElse",
     "buy-open past the link rule: an open with no click would reach the browser");
+  await plant("bp9", ["if (pays) return pays.portal || \"\"; /* plant:buy-pays */", "if (pays && pays.portal) return pays.portal;"], "paysPortal",
+    "buy-pays falling through to the order page where there is no portal: a second checkout");
+  await plant("bp10", ["const pays = v && v.signedIn ? signinPaysNow() : null; /* plant:pays-signed */", "const pays = v ? signinPaysNow() : null;"], "paysPortal",
+    "pays read with nobody signed in: a held seat's portal handed to another sign-in");
   await plant("bp8", ["if (buyManaged(v) || (v && v.licenceManaged)) return \"\"; /* plant:buy-managed */", "if (buyManaged(v)) return \"\";"], "managed",
     "the order page handed to a managed tenant's account turns b10 red");
   await plant("bp7", ["let ORDER_PAGE = \"\";", "let ORDER_PAGE = \"" + ORDER + "\";"], "absent",

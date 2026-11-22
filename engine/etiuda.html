@@ -9483,6 +9483,14 @@ What is typed here stays in this browser.`;
     "The order page opens in the browser with this account's sign-in code filled in; typing another person's code buys the licence for them instead.": "Strona zamówienia otworzy się w przeglądarce z wpisanym kodem logowania tego konta; po wpisaniu kodu innej osoby licencja zostanie kupiona dla niej.",
     "The order page opens in the browser and asks for the sign-in code of the person the licence is for, which Etiuda shows them after their first sign-in.": "Strona zamówienia otworzy się w przeglądarce i poprosi o kod logowania osoby, dla której jest licencja; Etiuda pokazuje go tej osobie po jej pierwszym zalogowaniu.",
     "Buy": "Kup",
+    "This account already pays for its licence, so this opens its subscription at {PROVIDER} instead of a second order; seats are added there.": "To konto już płaci za licencję, więc ten przycisk otwiera jego subskrypcję w serwisie {PROVIDER} zamiast drugiego zamówienia; tam dodaje się miejsca.",
+    "Add seats…": "Dodaj miejsca…",
+    "This account already pays for its licence, and a licence holds one subscription, so no second order is taken.": "To konto już płaci za licencję, a jedna licencja ma jedną subskrypcję, więc drugiego zamówienia nie ma.",
+    "A second payment from this account, of {DATE}, is held: the licence it already pays for takes more seats at {PROVIDER} instead, and the second payment is refunded.": "Druga płatność z tego konta, z {DATE}, jest wstrzymana: licencja, za którą to konto już płaci, przyjmuje dodatkowe miejsca w serwisie {PROVIDER}, a druga płatność zostanie zwrócona.",
+    "A payment from this account, of {DATE}, is held, because this account's organisation holds its Etiuda licence. It is refunded or attached by hand, and this line then goes by itself.": "Płatność z tego konta, z {DATE}, jest wstrzymana, bo licencję Etiudy dla tego konta ma jego organizacja. Zostanie zwrócona albo przypisana ręcznie, a wtedy ten wiersz sam zniknie.",
+    "A payment from this account, of {DATE}, is held for a look by hand. It is refunded or attached to a licence, and this line then goes by itself.": "Płatność z tego konta, z {DATE}, jest wstrzymana do ręcznego sprawdzenia. Zostanie zwrócona albo przypisana do licencji, a wtedy ten wiersz sam zniknie.",
+    "{PROVIDER} has not yet confirmed this account's payment of {DATE}. The licence comes by itself once it does.": "{PROVIDER} nie potwierdził jeszcze płatności tego konta z {DATE}. Licencja przyjdzie sama, gdy to nastąpi.",
+    "Payment": "Płatność",
     "Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again.": "W tej wersji Etiudy nie ma zakupu. Miejsce w licencji daje lider zespołu: przynosi je zaproszenie od lidera, a przycisk Sprawdź teraz pozwala sprawdzić ponownie.",
     "The sign-in service could not be reached.": "Nie udało się połączyć z usługą logowania.",
     "Nothing changed: this computer is not signed in, and Etiuda works as before.": "Nic się nie zmieniło: ten komputer nie jest zalogowany, a Etiuda działa jak dotąd.",
@@ -30444,6 +30452,13 @@ What is typed here stays in this browser.`;
   // src/modules/signin.js
   var $2 = (s) => typeof document === "undefined" ? null : $(s);
   var SIGNIN_NAMES = { microsoft: "Microsoft", google: "Google", lab: "Lab" };
+  function signinPayRead(b) {
+    if (!b || typeof b !== "object") return null;
+    const prov = (p2) => p2 === "stripe" || p2 === "paddle";
+    const p = b.pays && typeof b.pays === "object" && prov(b.pays.provider) ? { provider: b.pays.provider, portal: b.pays.portal === true } : null;
+    const h = b.held && typeof b.held === "object" && prov(b.held.provider) && Number.isSafeInteger(b.held.at) && b.held.at > 0 && (b.held.kind === "already-pays" || b.held.kind === "managed" || b.held.kind === "review" || b.held.kind === "pending") ? { kind: b.held.kind, provider: b.held.provider, at: b.held.at } : null;
+    return p || h ? Object.assign({}, p ? { pays: p } : {}, h ? { held: h } : {}) : null;
+  }
   function signinRead(v) {
     const o = v && typeof v === "object" ? v : {};
     const known = (id) => Object.prototype.hasOwnProperty.call(SIGNIN_NAMES, id);
@@ -30461,6 +30476,8 @@ What is typed here stays in this browser.`;
       /* plant:read-asked */
       /* The service said this account's organisation holds its licence (a managed tenant), and why where it also owns one. */
       licenceManaged: o.licenceManaged === true,
+      buy: signedIn ? signinPayRead(o.buy) : null,
+      /* plant:read-buy */
       cause: o.licenceManaged === true && (o.cause === "own-licence" || o.cause === "assigned") ? o.cause : "",
       at: Number.isFinite(o.at) ? o.at : 0,
       reached: o.reached !== false,
@@ -42602,7 +42619,40 @@ What is typed here stays in this browser.`;
     if (choosing && v.signedIn) h += '<span class="sgn-acts"><button type="button" class="btn" data-signin-act="keep">' + esc(t("Cancel")) + "</button></span>";
     return h + "</div>";
   }
+  function buyPays(v) {
+    return !!(v && v.signedIn && v.buy && v.buy.pays);
+  }
+  var PAY_NAMES = { stripe: "Stripe", paddle: "Paddle" };
+  function payName(p) {
+    return PAY_NAMES[p] || "";
+  }
+  function payDay(at) {
+    return new Date(at).toLocaleDateString(uiLang() === "pl" ? "pl-PL" : "en-GB", { day: "numeric", month: "short", year: "numeric" });
+  }
+  function buyPaysRow(v) {
+    const p = v.buy.pays, who = payName(p.provider);
+    return p.portal ? row(
+      "buy",
+      "forward",
+      t("Licence for one person"),
+      t("This account already pays for its licence, so this opens its subscription at {PROVIDER} instead of a second order; seats are added there.").split("{PROVIDER}").join(who),
+      /* words: Claudette, 2026-11-22 */
+      '<button type="button" class="btn" data-e-open="buy">' + esc(t("Add seats…")) + "</button>"
+    ) : row("buy", "forward", t("Licence for one person"), t("This account already pays for its licence, and a licence holds one subscription, so no second order is taken."), "");
+  }
+  var PAY_HELD_LINES = {
+    "already-pays": "A second payment from this account, of {DATE}, is held: the licence it already pays for takes more seats at {PROVIDER} instead, and the second payment is refunded.",
+    "managed": "A payment from this account, of {DATE}, is held, because this account's organisation holds its Etiuda licence. It is refunded or attached by hand, and this line then goes by itself.",
+    "review": "A payment from this account, of {DATE}, is held for a look by hand. It is refunded or attached to a licence, and this line then goes by itself.",
+    "pending": "{PROVIDER} has not yet confirmed this account's payment of {DATE}. The licence comes by itself once it does."
+  };
+  function payHeldRow(h) {
+    const line = PAY_HELD_LINES[h.kind];
+    if (!line) return null;
+    return row("payment", "forward", t("Payment"), t(line).split("{DATE}").join(payDay(h.at)).split("{PROVIDER}").join(payName(h.provider)), "");
+  }
   function buyRow(v) {
+    if (buyPays(v)) return buyPaysRow(v);
     return row(
       "buy",
       "forward",
@@ -42616,7 +42666,7 @@ What is typed here stays in this browser.`;
     const v = signinNow(), groups = [];
     if (signinShown(v) || signinManaged(v)) groups.push({ rows: [], after: accountCardHtml(v) });
     const stranded = signinStranded(v) && !signinWaiting(v);
-    const rows = [name], buy = !stranded && buyOffered() && !v.busy && !signinManaged(v) && !v.licenceManaged;
+    const rows = [name], buy = !stranded && (buyOffered() || buyPays(v)) && !v.busy && !signinManaged(v) && !v.licenceManaged;
     const held = !stranded && v.licenceManaged ? row("buy", "forward", t("Licence for one person"), t("Your organisation holds the Etiuda licence for this account, so there is nothing to buy here."), "") : null;
     const cause = v.cause === "own-licence" ? t("Your organisation's licence follows the roles its IT department assigns, and this account has none, so it keeps its seat on the licence bought before.") : v.cause === "assigned" ? t("Your organisation has given this account a role, so it uses the organisation's licence; its seat on the licence bought before is not used meanwhile.") : "";
     if (!stranded && v.signedIn && !signinChoosingNow()) {
@@ -42652,6 +42702,8 @@ What is typed here stays in this browser.`;
       if (cause) rows.push(row("cause", "check", t("Licence"), cause, ""));
       if (buy) rows.push(buyRow(v));
       else if (held) rows.push(held);
+      const payHeld = v.buy && v.buy.held ? payHeldRow(v.buy.held) : null;
+      if (payHeld) rows.push(payHeld);
       rows.push(row(
         "checked",
         "clock",

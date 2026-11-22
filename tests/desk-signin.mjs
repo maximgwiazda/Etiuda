@@ -406,7 +406,7 @@ CASES.buyWords = s => {
   const skip = stray({ held: [E("mystery"), { kind: "review", provider: "elsewhere", at: NOW }, E("review", 0), E("review", 1.5), null, E("managed", NOW - 5), E("pending")] });
   const none = [{ held: E("review") }, { held: [] }, { held: [E("mystery")] }, { held: "review" }].map(o => stray(o).buy);
   const wait = s.signinAnswer(strayAnswer({ ok: true, certificate: null, code: CODE, reason: "waiting", held: [E("already-pays")] }), DESK_KEY, true);
-  const held0 = Object.assign(HELD_BEFORE(), { cert: null, code: CODE });
+  const held0 = heldOf({ cert: null });
   const h1 = s.signinSettle(held0, yes, NOW), h2 = s.signinSettle(h1, { ok: false, reason: "unreached" }, NOW), h3 = s.signinSettle(h2, stray({}), NOW);
   const h4 = s.signinSettle(h3, stray({ pays: { deskOnly: { provider: "stripe" } }, held: [E("pending")] }), NOW);
   const back = h => s.signinFileRead(s.signinFileText({ held: h })).held;
@@ -5887,9 +5887,9 @@ const outside = outsideNames(MAIN);
 /* And to write the seat after a request to join and a folder change (ds10b), and to knock at a relay team's door with the
    certificate and write the request there (ds11d), and for Buy to carry the sign-in code to the order page (tests/desk-buy.mjs), none
    of which gates anything; and to hand a team's relay its seat on a licence that follows Entra, which the relay judges and nothing
-   on the desk waits on (tests/relay-seats.mjs d1a to d3a). */
+   on the desk waits on (tests/relay-seats.mjs d1a to d3a), and for Buy to go to the portal of an account that already pays (tests/desk-buy.mjs b11). */
 const expectOutside = ["signinListen", "armSigninRenew", "signinFlush", "signinFlush", "signinDoorInvite", "signinDoorKept", "signinView", "signinWorksNow", "signinWorksNow",
-  "signinRelaySeatIo", "signinRelaySeatIo", "signinPressNow"];
+  "signinRelaySeatIo", "signinRelaySeatIo", "signinPressNow", "signinPaysNow"];
 check(outside.slice().sort().join() === expectOutside.slice().sort().join(),
   "ds5a nothing local is gated: outside its section the shell names the sign-in only to require its loopback, to arm the renewal, to write the seat after a join and to press on Ask again: " + outside.join(" "));
 const modules = fs.readdirSync(path.join(ROOT, "src", "modules")).filter(n => n.endsWith(".js"));
