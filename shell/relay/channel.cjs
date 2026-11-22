@@ -450,6 +450,10 @@ function readState(file) {
 
 /* Where a root file stands in its own order: a team file by epoch then rev, the head by its time. */
 const rootOrderOk = o => table(o) && (Number.isFinite(o.t) || (Number.isSafeInteger(o.epoch) && o.epoch >= 1 && Number.isSafeInteger(o.rev) && o.rev >= 0));
+/* The ids of `a` that `b` does not hold, once each and in order; a clash keeps at most DROPPED_MAX. */
+const onlyIn = (a, b) => [...new Set(a.filter(x => b.indexOf(x) < 0))].sort();
+const isDeskId = d => typeof d === "string" && (/^k-[0-9a-f]{16}$/.test(d) || B.isId(d));
+const DROPPED_MAX = 512;
 const rootOrderOf = o => (Number.isFinite(o.t) ? { t: o.t } : { epoch: o.epoch, rev: o.rev });
 const rootAhead = (a, b) => (Number.isFinite(a.t) ? a.t > b.t : a.epoch > b.epoch || (a.epoch === b.epoch && a.rev > b.rev));
 const rootSaid = o => (Number.isFinite(o.t) ? new Date(o.t).toISOString() : "rev " + o.rev + " at key number " + o.epoch);
@@ -574,7 +578,8 @@ function stateOf(x, now) {
   if (table(x.clash)) for (const k of [TEAM_NAME, HEAD_NAME]) {
     const c = x.clash[k];
     if (table(c) && (c.kept === "here" || c.kept === "team") && Number.isFinite(c.at) && rootOrderOk(c.here) && rootOrderOk(c.team))
-      s.clash[k] = { kept: c.kept, here: rootOrderOf(c.here), team: rootOrderOf(c.team), at: c.at };
+      s.clash[k] = Object.assign({ kept: c.kept, here: rootOrderOf(c.here), team: rootOrderOf(c.team), at: c.at },
+        Array.isArray(c.dropped) ? { dropped: onlyIn(c.dropped.filter(isDeskId), []).slice(0, DROPPED_MAX) } : {});
   }
   if (table(x.ahead)) {
     if (Array.isArray(x.ahead.held)) s.ahead.held = heldOf(x.ahead.held); /* plant:ahead-kept */
@@ -1048,7 +1053,7 @@ function createProgram(opts) {
     const root = edit && !parallel ? rootHere(r, rootName === HEAD_NAME, now) : null;
     let here = !!root;
     here = !!root && root.here; /* plant:own-root-newer */
-    if (root && root.orders) rootClash(rootName, root.orders, here); /* plant:root-clash */
+    if (root && root.orders) rootClash(rootName, root.orders, here, root.dropped); /* plant:root-clash */
     if (here) { sentFrom(r, key); persist(); return { ok: true, path: r.path, stale: true, kept: true }; } /* plant:own-edit */
     let kept = true;
     kept = !parallel || now == null || keepApart(r.path, now); /* plant:own-apart */
@@ -1062,7 +1067,7 @@ function createProgram(opts) {
   function rootHere(r, head, now) {
     const gone = r.kind === "delete";
     if (gone) return { here: true, orders: null };
-    let theirs = null, mine = null;
+    let theirs = null, mine = null, ids = null;
     if (head) {
       const h = headJudged(r.body, false);
       if (!h.ok) return { here: true, orders: null };
@@ -1075,14 +1080,21 @@ function createProgram(opts) {
       theirs = { epoch: t.epoch, rev: t.rev };
       const m = now == null ? null : judgedBytes(now);
       mine = m ? { epoch: m.epoch, rev: m.rev } : null;
+      ids = m ? { here: rosterOf(m.doc).map(d => d.deskId), team: rosterOf(t.doc).map(d => d.deskId) } : null;
     }
     if (!mine) return { here: false, orders: null };
-    return { here: rootAhead(mine, theirs), orders: { here: mine, team: theirs } };
+    const here = rootAhead(mine, theirs);
+    /* Of the team file, each member the passed-over roster names and the standing one does not, so none goes in silence. */
+    let dropped;
+    dropped = ids ? onlyIn(here ? ids.team : ids.here, here ? ids.here : ids.team) : undefined; /* plant:clash-dropped */
+    return { here, orders: { here: mine, team: theirs }, dropped };
   }
 
-  /* Both computers changed a root file: the one passed over is said once and kept for the lead's Studio to tell (rootClash). */
-  function rootClash(rel, orders, here) {
+  /* Both computers changed a root file: the one passed over is said once and kept for the lead's Studio to tell (rootClash), with,
+     for the team file, the members only it named (`dropped`): a member the other computer added, or one the standing file took off. */
+  function rootClash(rel, orders, here, dropped) {
     st.clash[rel] = { kept: here ? "here" : "team", here: orders.here, team: orders.team, at: clock() };
+    if (Array.isArray(dropped)) st.clash[rel].dropped = dropped;
     persist();
     say(here
       ? rel + " changed on this computer and on another at once; this computer's (" + rootSaid(orders.here) + ") is the newer and replaces the team's ("
