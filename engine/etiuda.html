@@ -37383,7 +37383,12 @@ What is typed here stays in this browser.`;
         }
         pack.intentCustom[ix] = Object.assign({ id }, next);
       } else {
-        pack.intentOverrides[id] = Object.assign({}, next);
+        const at = intentIdxOfId(id), own = {};
+        Object.keys(next).forEach((k) => {
+          if (next[k] !== String((BASE_STORE[k] || [])[at] || "").trim()) own[k] = next[k];
+        });
+        if (Object.keys(own).length) pack.intentOverrides[id] = own;
+        else delete pack.intentOverrides[id];
       }
       savePack();
       refreshAfterIntents();

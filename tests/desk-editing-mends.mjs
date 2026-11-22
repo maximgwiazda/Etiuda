@@ -35,7 +35,7 @@ const check = (ok, what, detail) => {
 };
 const skip = what => { skipped++; console.log("  SKIP " + what); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 7;
+const EXPECTED = 8;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const clone = o => JSON.parse(JSON.stringify(o));
 
@@ -247,6 +247,8 @@ async function main() {
   {
     const r = await savedDiff("etiuda.html");
     check(diffHeld(r), "intent-save-diff Save after one clause stores that clause alone, and the next edition's name, Polish clause and comment show beside it", r);
+    await pagePlant(diffLab, 'if (next[k] !== String((BASE_STORE[k] || [])[at] || "").trim()) own[k] = next[k];', "own[k] = next[k];",
+      savedDiff, r => !diffHeld(r), "p intent-save-diff every field stored again on Save (editors.js, the intent's Save) turns it red");
   }
   {
     const found = resetPromisers();
