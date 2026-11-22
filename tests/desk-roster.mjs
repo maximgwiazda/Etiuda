@@ -45,7 +45,15 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
+/* A desk that pins a team is put on the team's relay mirror (tests/relay-mirror-desk.mjs): the share a leg names stands for the relay's
+   copy of the team, carried to a desk's mirror and back by the stand-in. It was the desk's folder-mirror and the folder syncer. */
+import { relayizeDesk, relayMirrorOf, relayMirrorProgram, relayChannelOf } from "./relay-mirror-desk.mjs";
+let LEAD_PIN = null;
+const carry = (d, store, team) => {
+  if (!d.relayProgram || d.relayStore !== store) { d.relayStore = store; d.relayProgram = relayMirrorProgram({ store: store, mirror: relayMirrorOf(d.ud, team) }); }
+  d.relayProgram.syncOnce();
+  d.relayProgram.syncOnce();
+};
 const PLANTS = process.env.ETIUDA_PLANTS !== "off";
 const EXPECTED = 31 + (PLANTS ? 2 : 0);
 
@@ -75,6 +83,7 @@ const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
 const eventFor = () => ({ sender: { id: 1, once: noop }, senderFrame: ENGINE_FRAME, returnValue: undefined });
 
 function loadDesk(ud, opened, srcText) {
+  relayizeDesk(ud);
   const said = [], on = {}, invoke = {};
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop, info: noop };
   const safeStorage = {
@@ -122,11 +131,13 @@ function loadDesk(ud, opened, srcText) {
   const pick = file => { pickBox.answer = { canceled: false, filePaths: [file] }; };
   return { api, ask, on, invoke, said, ud, envFile, sent, win, pick };
 }
-function newDesk(name, dir) {
+/* `team` named: the desk pins its lead (LEAD, once the leg has made it) under that team, as a desk joined by invitation does. */
+function newDesk(name, dir, team) {
   const ud = path.join(LAB, name);
   fs.mkdirSync(ud, { recursive: true });
   fs.writeFileSync(path.join(ud, "desk.json"),
-    JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: dir, eUiLang: "en" } }), "utf8");
+    JSON.stringify(Object.assign({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: dir, eUiLang: "en" } },
+      team ? { teamPins: { [team]: { keyId: LEAD_PIN.keyId, public: LEAD_PIN.public } } } : {})), "utf8");
   return loadDesk(ud);
 }
 const folder = name => { const f = path.join(LAB, name); fs.mkdirSync(f, { recursive: true }); return f; };
@@ -150,6 +161,7 @@ try {
   const pubHex = k => k.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
   const lead = crypto.generateKeyPairSync("ed25519");
   const LEAD = { keyId: "roster-lead", public: pubHex(lead.publicKey) };
+  LEAD_PIN = LEAD;
   const sign = doc => {
     const o = JSON.parse(JSON.stringify(doc));
     delete o.sig;
@@ -168,7 +180,7 @@ try {
   const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
   const teamFile = (epoch, roster) => textOf(sign({
     format: 1, kind: "etiuda-team", id: TEAM, catalogs: ["roster-board"], lead: LEAD,
-    sealed: true, exportsSealed: false, epoch, roster,
+    sealed: true, exportsSealed: false, epoch, roster, channel: relayChannelOf(TEAM),
   }));
   const entry = (D, who, key, epoch) => ({ desk: { id: who.id, key: who.key, box: who.box }, wrap: D.api.wrapTeamKey(key, who.box, TEAM, epoch, who.id) });
   const facts = t => { try { const d = JSON.parse(t); return { rev: d.rev, name: d.name || "" }; } catch { return { rev: null, name: "" }; } };
@@ -194,24 +206,14 @@ try {
   /* ---- a team of three at epoch 1: the author, the colleague, and the desk later removed -------------------- */
   SHARE = folder("share");
   put(SHARE, "etiuda-ring.json", RING);
-  const A = newDesk("author", SHARE), C = newDesk("colleague", SHARE), R = newDesk("removed", SHARE);
+  const A = newDesk("author", SHARE, TEAM), C = newDesk("colleague", SHARE, TEAM), R = newDesk("removed", SHARE, TEAM);
   const a = await A.ask("etiuda:branch-identity", true), c = await C.ask("etiuda:branch-identity", true),
     r = await R.ask("etiuda:branch-identity", true);
   const K1 = crypto.randomBytes(32), K2 = crypto.randomBytes(32), K3 = crypto.randomBytes(32);
   syncShare = () => {
     for (const d of [A, C, R]) {
       if (!d || !d.ud) continue;
-      const mirror = syncerMod.folderMirrorOf(d.ud, TEAM);
-      const prog = syncerMod.createFolderProgram({
-        team: TEAM,
-        folder: SHARE,
-        mirror: mirror,
-        pin: LEAD,
-        keyFor: (epoch) => (epoch === 1 ? K1 : epoch === 2 ? K2 : epoch === 3 ? K3 : null),
-        checks: d.api.deskTrustChecks(),
-      });
-      prog.syncOnce();
-      prog.syncOnce();
+      carry(d, SHARE, TEAM);
     }
   };
   syncShare();
@@ -391,7 +393,7 @@ try {
         fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(env));
         const P = loadDesk(ud, undefined, src);
         /* The planted desk reads its own mirror of the folder, so the team file it is to heed is written there. */
-        const mirror = syncerMod.folderMirrorOf(ud, TEAM);
+        const mirror = relayMirrorOf(ud, TEAM);
         fs.mkdirSync(mirror, { recursive: true });
         for (const f of ["etiuda-ring.json", "board.ec"]) fs.copyFileSync(path.join(SHARE, f), path.join(mirror, f));
         if (fileText !== null) fs.writeFileSync(path.join(mirror, "etiuda-team.json"), fileText || team3, "utf8"); // null: the desk heeds nothing, only reads its file back
@@ -485,18 +487,9 @@ try {
     env.teamEpochSeen = Object.assign({}, env.teamEpochSeen, { [TEAM]: 2 });
     env.keys = Object.assign({}, env.keys, { eCatalogFolder: H1 });
     fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(env));
+    const holderH1 = { ud };
     syncH1 = () => {
-      const mirror = syncerMod.folderMirrorOf(ud, TEAM);
-      const prog = syncerMod.createFolderProgram({
-        team: TEAM,
-        folder: H1,
-        mirror: mirror,
-        pin: LEAD,
-        keyFor: (epoch) => (epoch === 1 ? K1 : epoch === 2 ? K2 : epoch === 3 ? K3 : null),
-        checks: A.api.deskTrustChecks(),
-      });
-      prog.syncOnce();
-      prog.syncOnce();
+      carry(holderH1, H1, TEAM);
     };
     syncH1();
     const H = loadDesk(ud);
@@ -533,18 +526,9 @@ try {
     env.teamEpochSeen = Object.assign({}, env.teamEpochSeen, { [TEAM]: 2 });
     env.teamRoster = { [TEAM]: { epoch: 2, desks: [a.id, c.id] } };
     fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(env));
+    const holderROUTE = { ud };
     syncRoute = () => {
-      const mirror = syncerMod.folderMirrorOf(ud, TEAM);
-      const prog = syncerMod.createFolderProgram({
-        team: TEAM,
-        folder: ROUTE,
-        mirror: mirror,
-        pin: LEAD,
-        keyFor: (epoch) => (epoch === 1 ? K1 : epoch === 2 ? K2 : epoch === 3 ? K3 : null),
-        checks: A.api.deskTrustChecks(),
-      });
-      prog.syncOnce();
-      prog.syncOnce();
+      carry(holderROUTE, ROUTE, TEAM);
     };
     syncRoute();
     const P = loadDesk(ud);
