@@ -276,6 +276,8 @@ const ICON_SUCCESS='<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focus
 /* A catalog's two acts in the Library: an arrow into a tray, and the eject mark. */
 const ICON_LOAD=_svg("ic",'<path d="M10 3.6v8.6"/><path d="M6.5 8.9l3.5 3.5 3.5-3.5"/>'
   +'<path d="M3.6 12.6v2.1a1.7 1.7 0 0 0 1.7 1.7h9.4a1.7 1.7 0 0 0 1.7-1.7v-2.1"/>');
+/* The folder the catalogs are read from, on the Library's first line. */
+const ICON_FOLDER=_svg("ic",'<path d="M3.4 6.3a1.6 1.6 0 0 1 1.6-1.6h3l1.6 1.8H15a1.6 1.6 0 0 1 1.6 1.6v6.1a1.6 1.6 0 0 1-1.6 1.6H5a1.6 1.6 0 0 1-1.6-1.6z"/>');
 const ICON_EJECT=_svg("ic",'<path d="M10 4.2l5.6 6.6H4.4z"/><path d="M4.6 15.4h10.8"/>');
 /* A colleague's desk file in the Library: the desk that wrote it, Studio's desks drawing on this grid, and the eye that
    looks at it, the hide eye's drawing at the acts' size. */
@@ -298,7 +300,7 @@ export {
   ICON_ALL, catIconInner, CAT_ICONS, CAT_ICONS_CATALOG, CAT_COLORS_CATALOG, setCatalogCatLooks,
   CAT_LABELS_PL, CAT_LABELS_BY_LANG, setCatalogCatLabels, E_HUE_CYCLE, E_HUE_NAMES, CAT_ICON_MUSIC, CAT_ICON_KEYS,
   CAT_ICON_HINTS, ICON_STAR_ON, ICON_STAR_OFF, ICON_FLAG, ICON_INTENT_LINK, ICON_PLUS, fillProseIcons,
-  ICON_CHEVRON_R, ICON_X, ICON_LOCK, ICON_LOCK_OPEN, ICON_TAB_X, ICON_TAB_ADD,
+  ICON_CHEVRON_R, ICON_X, ICON_FOLDER, ICON_LOCK, ICON_LOCK_OPEN, ICON_TAB_X, ICON_TAB_ADD,
   ICON_AWAITING, ICON_LINT_WARNING, ICON_SUCCESS, ICON_LOAD, ICON_EJECT, ICON_KEY,
   ICON_TEAM, ICON_STAMP, ICON_DESK, ICON_LOOK, ICON_SHARE,
 };

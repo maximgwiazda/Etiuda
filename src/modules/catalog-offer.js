@@ -30,7 +30,7 @@ import { pack } from "./pack.js";
 import { ICON_AWAITING, ICON_SUCCESS, ICON_LOAD, ICON_EJECT, ICON_DESK, ICON_LOOK, ICON_LOCK, ICON_TEAM } from "./icons.js";
 import { sxIcon } from "./sx-icons.js";
 import { keyTipHtml, leadKeyText, leadsNow, teamLeads, teamContent, teamContentNow, markCatalogPrivate, onContentChanged, openTeamBubble, closeTeamBubble } from "./team-join.js";
-import { V2_SIG_VALID, v2RingRead, v2SigState, v2SignedBytes } from "./catalog-v2.js";
+import { V2_SIG_VALID, V2_SIG_NONE, v2RingRead, v2SigState, v2SignedBytes } from "./catalog-v2.js";
 import { editionChanges } from "./edition-changes.js";
 import { editionOfferHtml, openEditionPanel, repaintEditionRows, editionCountWords } from "./edition-panel.js";
 import { editionMarksFrom, keepEditionMarks, putEditionMarksBack, editionSay } from "./edition-marks.js";
@@ -167,33 +167,34 @@ function deskFolderOf(id){
    in the folder, newest first as the host sorts them, the loaded one marked; what is loaded but
    is not one of those files takes a row of its own at the head, and that row is the only one a
    browser has. Repainting is free from anywhere: with no list on screen this does nothing. */
-/* A WATCHED FILE IS A FACT ABOUT THE LOADED CATALOG, so it is that row's third line rather
-   than a strip under the list: the two acts it offers are words in the sentence they belong to,
-   which is the only place they mean anything. The pair travels as one - letting it break where
-   it liked put a leading middle dot at the head of a line. */
-function ecWatchHtml(){
-  if(!(eWatchSupported() && eWatchName())) return "";
-  return '<small class="ec-watch">'+esc(t("Watching"))+' <code>'+esc(eWatchName())+'</code> · '
-    +'<span class="acts"><button type="button" class="act" data-ec-check="1" title="'
-      +esc(t("Read that file again and offer it if it has changed"))+'">'
-      +esc(t("Check for updates"))+'</button>'
-    +'<span class="sep" aria-hidden="true">·</span>'
-    +'<button type="button" class="act" data-ec-unwatch="1">'+esc(t("Stop watching"))
-    +'</button></span></small>';
+/* THE ROW READS ACROSS IN COLUMNS (board 1019 (7)): the name, with a green "In use" for the catalog in use; the edition and its
+   date; the contents; whose it is; and the acts, each a word beside its glyph. `ed` and `cnt` are the two halves of what the row
+   says about the file, and under about 760px the list folds them under the name. */
+function ecMetaHtml(o){
+  const ed=o.ed||"", cnt=o.cnt!=null && o.cnt!=="" ? o.cnt : (ed ? "" : (o.meta||""));
+  if(!ed && !cnt) return "";
+  return '<small class="ec-meta">'+(ed?'<span class="ec-edn">'+ed+'</span>':'')
+    +(ed && cnt?'<span class="ec-sep"> · </span>':'')+(cnt?'<span class="ec-cnt">'+cnt+'</span>':'')+'</small>';
+}
+/* The green mark and word of the catalog in use. The tick is only drawn: the word is the name. */
+function ecInUseHtml(){
+  return '<span class="ec-inuse">'+ICON_SUCCESS.replace('class="ic"','class="ic ec-tick"')+esc(t("In use"))+'</span>';
+}
+/* A team catalog's key says in words whose it is signed by, from the state the row has: the lead's, or none. Other answers keep
+   the glyph and its bubble alone. */
+function ecSigHtml(state,print,team){
+  const word=!team ? "" : state===V2_SIG_VALID ? "Signed by the lead" : state===V2_SIG_NONE ? "Not signed" : "";
+  return '<span class="ec-sig">'+trustKeyHtml(state||"",print||"")+(word?'<span class="ec-sigw">'+esc(t(word))+'</span>':'')+'</span>';
 }
 function ecRowHtml(o){
   return '<div class="ec-row'+(o.loaded?" is-loaded":"")+'"'+(o.file?' data-ec-file="'+esc(o.file)+'"':'')+'>'
-    +'<span class="ec-name"><span class="ec-title"><b>'+esc(o.name)+'</b>'+(o.lockHtml||'')+'</span>'
-    +(o.meta?'<small class="ec-meta">'+o.meta+'</small>':'')
-    +(o.loaded?ecWatchHtml():'')+(o.extra||'')+'</span>'
-    /* A MARK RATHER THAN A WORD on the loaded row, and no tag at all on the sample. The row
-       carrying the acts is the one with the least room, and a pill beside them wrapped the line
-       of counts underneath. The sample is still never told it is Newer - it arrives after
-       whatever is already in the folder and it is nobody's update. ICON_SUCCESS is the drawing;
-       the site owns the name. */
-    +(o.loaded?loadedTickHtml():'')
+    +'<span class="ec-name"><span class="ec-title"><b>'+esc(o.name)+'</b>'+(o.lockHtml||'')+(o.loaded?ecInUseHtml():'')
     +(o.newer&&!o.sample?'<span class="ec-tag" title="'+esc(t("Written after the catalog you have"))+'">'
-        +esc(t("Newer"))+'</span>':'')
+        +esc(t("Newer"))+'</span>':'')+'</span>'
+    +(o.copy||'')+(o.extra||'')+'</span>'
+    +ecMetaHtml(o)
+    +'<span class="ec-whose">'+(o.teamHtml||'')+ecSigHtml(o.trust,o.print,!!o.team)+'</span>'
+    +'<span class="ec-acts">'
     /* EXPORT IS THERE WHEN THERE IS SOMETHING TO EXPORT: with no edit of this desk's own on
        top of it, the file this catalog came out of already holds every word the export would
        write, and the button is a third act competing for the row's width. */
@@ -201,12 +202,10 @@ function ecRowHtml(o){
       ?'<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="'
         +esc(t("Save everything loaded now as a catalog file, your edits merged in"))+'">'
         +esc(t("Export…"))+'</button>':'')
-    +(o.teamHtml||'')
-    +trustKeyHtml(o.trust||"",o.print||"")
     +(o.loaded
       ?ecActHtml("Eject",ICON_EJECT,' data-ec-eject="1"')
       :ecActHtml("Load",ICON_LOAD,' data-ec-load="'+esc(o.name)+'" data-ec-at="'+(+o.mtime||0)+'"'))
-    +'</div>';
+    +'</span></div>';
 }
 // The loaded row's Export as ecRowHtml writes it inline, which tests/test.js slices with no helper beside it.
 function ecExportHtml(){
@@ -215,21 +214,23 @@ function ecExportHtml(){
       +esc(t("Save everything loaded now as a catalog file, your edits merged in"))+'">'
       +esc(t("Export…"))+'</button>':'';
 }
-/* A COLLEAGUE'S ROW: the desk's name, with the first four of its key where two desks share one, the desk's glyph where a
-   catalog wears its key, Look, and Work from it where Load would be. `at` is the row's place in the list of desks. */
+/* A COLLEAGUE'S ROW: the desk's name, with the first four of its key where two desks share one, the desk's glyph for whose it is,
+   and See what changed. A file of a colleague's is looked at, never worked from: no row offers that (board 1016). `at` is the
+   row's place in the list of desks. */
 function ecDeskRowHtml(f,o){
   const who=deskName(f);
   const tip=t("Signed by {DESK}, key {KEY}. Only that teammate can change this file; anyone with the folder can read it.")
     .split("{DESK}").join(who).split("{KEY}").join(deskKey(f));
   return '<div class="ec-row ec-desk'+(o.nested?'':' ec-alone')+(o.loaded?' is-loaded':'')+'" data-ec-desk="'+o.at+'">'
-    +'<span class="ec-name"><b>'+esc(who)+(o.twin?'<span class="ec-fp">'+esc(o.twin)+'</span>':'')+'</b>'
-    +'<small class="ec-meta">'+o.meta+'</small>'+(o.extra||'')+'</span>'
-    +(o.loaded?loadedTickHtml()+ecExportHtml():'')
-    +'<span class="ec-who" role="img" tabindex="0" aria-label="'+esc(who)+'" data-tip="'+esc(tip)+'" data-tip-key="'
-      +esc(String(f.desk.id).slice(2))+'" data-tip-kind="desk">'+ICON_DESK+'</span>'
+    +'<span class="ec-name"><span class="ec-title"><b>'+esc(who)+(o.twin?'<span class="ec-fp">'+esc(o.twin)+'</span>':'')+'</b>'
+    +(o.loaded?ecInUseHtml():'')+'</span>'+(o.extra||'')+'</span>'
+    +ecMetaHtml(o)
+    +'<span class="ec-whose"><span class="ec-who" role="img" tabindex="0" aria-label="'+esc(who)+'" data-tip="'+esc(tip)+'" data-tip-key="'
+      +esc(String(f.desk.id).slice(2))+'" data-tip-kind="desk">'+ICON_DESK+'</span></span>'
+    +'<span class="ec-acts">'+(o.loaded?ecExportHtml():'')
     +ecActHtml("See what changed",ICON_LOOK,' data-ec-look="'+o.at+'"')
-    +(o.loaded?ecActHtml("Eject",ICON_EJECT,' data-ec-eject="1"'):ecActHtml("Work from this file",ICON_LOAD,' data-ec-work="'+o.at+'"'))
-    +'</div>';
+    +(o.loaded?ecActHtml("Eject",ICON_EJECT,' data-ec-eject="1"'):'')
+    +'</span></div>';
 }
 function ecMineHtml(line,glyph,fault){
   return '<small class="ec-mine"'+(fault?' data-ec-fault="'+esc(fault)+'"':'')+'>'+(glyph?ICON_DESK:'')+'<span>'+esc(line)+'</span></small>';
@@ -270,10 +271,10 @@ function wireEcKeys(box){
     k.onmouseleave=k.onblur=ecKeyBubClose;
   });
 }
-/* A GLYPH BUTTON KEEPS ITS WORD, as its tooltip and as its accessible name. */
+/* EVERY ACT IS A WORD BESIDE ITS GLYPH, and the word is the button's name. */
 function ecActHtml(word,icon,attrs){
   const w=esc(t(word));
-  return '<button type="button" class="btn icbtn ec-act"'+attrs+' title="'+w+'" aria-label="'+w+'">'+icon+'</button>';
+  return '<button type="button" class="btn ec-act"'+attrs+' aria-label="'+w+'">'+icon+'<span>'+w+'</span></button>';
 }
 /* AN EMPTY FOLDER IS A ROW-SHAPED PLACEHOLDER and carries no button: what to do about it is
    already on the bar below, and a second Import here would be the same act twice on one
@@ -300,12 +301,14 @@ function loadedTickHtml(){
    in shell/main.js. A count of -1 is a file the host could not read as a catalog, and the row
    then says what it does know rather than a nought that would be untrue. The awaiting phrases
    follow the counts on that same rule, and a file awaiting nothing carries none. */
-function ecMeta(stamp,f){
+function ecMeta(stamp,f,split){
   const parts=[stamp, f.cards>=0
     ? catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
         f.cards, f.macros, f.intents, f.cats)
     : ""].filter(Boolean).map(esc);
-  return parts.concat(f.cards>=0?ecAwaitingHtml(f.awaiting):[]).join(" · ");
+  const all=parts.concat(f.cards>=0?ecAwaitingHtml(f.awaiting):[]);
+  /* The row draws the edition and the contents in their own columns, so `split` hands back the two. */
+  return split ? [stamp ? esc(stamp) : "", all.slice(stamp?1:0).join(" · ")] : all.join(" · ");
 }
 /* THE AWAITING COUNT OF THE CATALOG IN USE, board 505's rule read off the desk rather than off a
    file: one entry per language declared past the primary, holding the cards carrying no text in
@@ -338,13 +341,13 @@ function liveIntentCount(){
    this list used to carry, which are the catalog with this desk's own edits in it - so this row
    is about the catalog in use and every other row is about a file on disk. `stamp` is what the
    file has to offer where the applied catalog names no edition. */
-function loadedMeta(stamp){
+function loadedMeta(stamp,split){
   const held=editionNameOf({version:E_CATALOG_VERSION, rev:E_CATALOG_REV}), ver=(held.r!=null || held.e)?editionLabel(held):"";
-  const parts=[ver||stamp,
-    catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
-      (cards||[]).length, totalMacroCount(), liveIntentCount(), Object.keys(CATS).length)]
-    .filter(Boolean).map(esc);
-  return parts.concat(ecAwaitingHtml(liveAwaiting())).join(" · ");
+  const counts=catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
+      (cards||[]).length, totalMacroCount(), liveIntentCount(), Object.keys(CATS).length);
+  const parts=[ver||stamp, counts].filter(Boolean).map(esc);
+  const all=parts.concat(ecAwaitingHtml(liveAwaiting()));
+  return split ? [(ver||stamp) ? esc(ver||stamp) : "", all.slice((ver||stamp)?1:0).join(" · ")] : all.join(" · ");
 }
 /* The one copy a row names is the one Etiuda ships; a folder's file of the same name is a plain row. */
 function ecCopyHtml(f){
@@ -363,6 +366,7 @@ function rowShareParts(id, pin, content){
   if(!content || !content.team || !id) return {lockHtml:"", teamHtml:""};
   if(isTeamCatalogPin(pin, content)){
     return {
+      team:true,
       lockHtml:"",
       teamHtml:'<span class="ec-team">'+sxIcon("people")+'<span data-i18n-text="Team catalog">'+esc(t("Team catalog"))+'</span></span>'
     };
@@ -456,10 +460,10 @@ function paintCatalogList(){
     const tops=files.map((f,i)=>{
       const on=i===onAt;
       const stamp=catalogStamp(f.edition,f.mtime,f.rev);
-      const copy=ecCopyHtml(f), meta=on?loadedMeta(stamp):ecMeta(stamp,f);
+      const copy=ecCopyHtml(f), meta=on?loadedMeta(stamp,true):ecMeta(stamp,f,true);
       const share=rowShareParts(String(f.id||""),f.sha,content);
       return {id:f.id, sha:f.sha, on:on, team:f.leadSigned===true, html:ecRowHtml({ name:f.name, file:f.name, mtime:f.mtime, loaded:on, newer:at>0 && f.mtime>at,
-        sample:!!f.sample, meta:copy&&meta ? copy+" · "+meta : copy||meta, trust:on?heldCatalogTrust():"", print:on?heldCatalogPrint():"", extra:extraFor(f.id,on)+adoptFor(f.id,on,f.leadSigned===true),
+        sample:!!f.sample, ed:meta[0], cnt:meta[1], copy:copy?'<small class="ec-copyline">'+copy+'</small>':"", team:f.leadSigned===true, trust:on?heldCatalogTrust():"", print:on?heldCatalogPrint():"", extra:extraFor(f.id,on)+adoptFor(f.id,on,f.leadSigned===true),
         lockHtml:share.lockHtml, teamHtml:share.teamHtml })};
     });
     /* THE CATALOG IN USE ALWAYS HAS A ROW, even where no file in the folder is it: a browser's
@@ -469,7 +473,7 @@ function paintCatalogList(){
     if((held||catalogLoaded()||(cards||[]).length) && onAt<0 && deskOn<0){
       const share=rowShareParts(heldId,held&&held.pin,content);
       tops.unshift({id:heldId, sha:String(held&&held.pin||""), on:true, html:ecRowHtml({ name:shownCatalogName(catalogFileName()),
-        loaded:true, newer:false, meta:loadedMeta(""), trust:heldCatalogTrust(), print:heldCatalogPrint(), extra:mineLine+adoptFor(heldId,true,false),
+        loaded:true, newer:false, ed:loadedMeta("",true)[0], cnt:loadedMeta("",true)[1], team:!!(share && share.team), trust:heldCatalogTrust(), print:heldCatalogPrint(), extra:mineLine+adoptFor(heldId,true,false),
         lockHtml:share.lockHtml, teamHtml:share.teamHtml })});
     }
     /* Under the catalog each grew from: the row in use, else the edition it grew from, else the newest of that catalog.
@@ -480,14 +484,15 @@ function paintCatalogList(){
       const g=f.grew, on=i===deskOn, stamp=catalogStamp(f.edition,f.mtime,f.rev);
       const of=g ? tops.map((x,k)=>k).filter(k=>!!tops[k].id && tops[k].id===g.id) : [];
       const p=[of.find(k=>tops[k].on), of.find(k=>tops[k].sha===g.sha), of[0]].find(k=>k!=null);
-      const meta=on ? loadedMeta(stamp) : p!=null ? esc(stamp) : g ? ecMeta(stamp,f) : esc(t("A catalog of its own"))+" · "+ecMeta(stamp,f);
-      (p!=null?under[p]:alone).push(ecDeskRowHtml(f,{at:i, nested:p!=null, loaded:on, meta:meta, extra:extraFor(f.id,on),
+      const split=on ? loadedMeta(stamp,true) : p!=null ? [esc(stamp),""] : ecMeta(stamp,f,true);
+      const meta=(!on && p==null && !g) ? [split[0], esc(t("A catalog of its own"))+(split[1]?" · "+split[1]:"")] : split;
+      (p!=null?under[p]:alone).push(ecDeskRowHtml(f,{at:i, nested:p!=null, loaded:on, ed:meta[0], cnt:meta[1], extra:extraFor(f.id,on),
         twin:named.get(deskName(f))>1 ? deskKey(f).slice(0,4) : ""}));
       if(p!=null && !on) nested.push(i);
     });
     ecKeyBubClose();
     closeTeamBubble("ePrivateBubble");
-    const rows=ecGroupedRows(tops,under,alone,parts.asideRows,parts.grouped);
+    const rows=ecGroupedRows(tops,under,alone,parts.asideRows,parts.grouped || !!(content && content.team)); /* the headings stand wherever the desk is on a team */
     /* With no catalog in use the line has no row to stand under, and the fault is still said. */
     if((outboxUnread || takenBack) && !rows.some(r=>r.indexOf("data-ec-fault")>=0)) rows.unshift(mineLine);
     box.innerHTML=rows.length?rows.join(""):ecEmptyHtml();
@@ -509,24 +514,25 @@ function paintCatalogList(){
     // A hanging row's line says what that desk changed, once both files have been read.
     nested.forEach(i=>deskChangeWords(desks[i],deskBase(desks[i],files,held)).then(words=>{
       const row=box.querySelector('[data-ec-desk="'+i+'"]'), meta=row && row.querySelector(".ec-meta");
-      if(meta && words && words.length) meta.textContent=words.concat([catalogStamp(desks[i].edition,desks[i].mtime,desks[i].rev)]).join(" · ");
+      if(meta && words && words.length){
+        const stamp=catalogStamp(desks[i].edition,desks[i].mtime,desks[i].rev);
+        meta.innerHTML='<span class="ec-edn"></span><span class="ec-sep"> · </span><span class="ec-cnt"></span>';
+        meta.querySelector(".ec-edn").textContent=stamp;
+        meta.querySelector(".ec-cnt").textContent=words.join(" · ");
+      }
     }));
     box.querySelectorAll("button[data-ec-look]").forEach(b=>{
       const f=desks[+b.getAttribute("data-ec-look")];
       b.onclick=()=>lookAtDesk(f,files,held);
     });
-    box.querySelectorAll("button[data-ec-work]").forEach(b=>{
-      const f=desks[+b.getAttribute("data-ec-work")];
-      b.onclick=()=>loadCatalogFromFolder(f.name,f.mtime,f.desk.id);
-    });
     /* Each file's key arrives when its check does; the loaded row keeps the state the desk holds,
        which the recheck above keeps current, and takes only the key's name from its file. */
     files.forEach((f,i)=>ecFileTrust(f).then(r=>{
       const row=Array.from(box.querySelectorAll(".ec-row")).find(x=>x.getAttribute("data-ec-file")===f.name);
-      const key=row && row.querySelector(".ec-key");
-      if(!key) return;
-      key.insertAdjacentHTML("beforebegin",trustKeyHtml(i===onAt?heldCatalogTrust():r.state,i===onAt?heldCatalogPrint():r.print));
-      key.remove();
+      const sig=row && row.querySelector(".ec-sig");
+      if(!sig) return;
+      sig.insertAdjacentHTML("beforebegin",ecSigHtml(i===onAt?heldCatalogTrust():r.state,i===onAt?heldCatalogPrint():r.print,f.leadSigned===true));
+      sig.remove();
       wireEcKeys(row);
     }));
     box.querySelectorAll("button[data-ec-load]").forEach(b=>{
@@ -543,13 +549,6 @@ function paintCatalogList(){
        finished wiring itself: the host answers the folder asynchronously. */
     const exp=box.querySelector("button[data-ec-export]");
     if(exp) exp.onclick=()=>exportCatalog();
-    const chk=box.querySelector("button[data-ec-check]");
-    if(chk) chk.onclick=()=>eCheckWatchedFile(true);
-    const stop=box.querySelector("button[data-ec-unwatch]");
-    if(stop) stop.onclick=()=>eWatchClear().then(()=>{
-      toast(t("No longer watching that file."));
-      paintCatalogList();
-    });
     const dir=box.querySelector("[data-ec-open]");
     if(dir) wireFolderLink(dir);
   },()=>{ listFetchingContent=false; });
@@ -1271,11 +1270,12 @@ function adoptedMadeHtml(title,lead){
 }
 function ecAsideRowHtml(r,i,note){
   const stamp=catalogStamp(r.edition,r.at,r.rev);
-  const meta=[stamp, r.macros>=0 ? catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",r.cards,r.macros,r.intents,Math.max(0,r.cats)) : ""]
-    .filter(Boolean).map(esc).join(" · ");
-  return '<div class="ec-row ec-aside" data-ec-aside="'+i+'"><span class="ec-name"><b data-i18n-skip>'+esc(asideTitle(r))+'</b>'
-    +(meta?'<small class="ec-meta">'+meta+'</small>':'')+(note||'')+'</span>'
-    +ecActHtml("Put back in use",ICON_LOAD,' data-ec-restore="'+i+'"')+'</div>';
+  const counts=r.macros>=0 ? catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",r.cards,r.macros,r.intents,Math.max(0,r.cats)) : "";
+  return '<div class="ec-row ec-aside" data-ec-aside="'+i+'"><span class="ec-name"><span class="ec-title"><b data-i18n-skip>'+esc(asideTitle(r))+'</b>'
+    +'<span class="ec-sfx">'+esc(t("(your own)"))+'</span></span>'+(note||'')+'</span>'
+    +ecMetaHtml({ed:esc(stamp), cnt:esc(counts)})
+    +'<span class="ec-whose"><span class="ec-set">'+esc(t("Set aside"))+'</span></span>'
+    +'<span class="ec-acts">'+ecActHtml("Put back in use",ICON_LOAD,' data-ec-restore="'+i+'"')+'</span></div>';
 }
 /* What the Library's list adds for board 1015: the set-aside rows less the one in use, each with its note where the team took it up,
    and adoptFor(id, on, teamRow), the lines a top row carries: "Made from" on the team's row, the note on the row in use where that is
@@ -1292,7 +1292,14 @@ function adoptedListParts(adopted,me,held,looseId,aside,all,current){
   const asideRows=asideShown.map((r,i)=>ecAsideRowHtml(r,i,matches.filter(m=>m.aside===r.id && !m.current).map(noteFor).join("")));
   return {matches, asideShown, asideRows, adoptFor, grouped:asideShown.length>0 || matches.length>0};
 }
-function ecGroupHtml(word){ return '<div class="ec-group">'+esc(t(word))+'</div>'; }
+/* A group's heading, and its one plain sentence beside it. */
+const EC_GROUP_SENTENCE={
+  "Team catalogs":"Published by the team's lead; everyone on the team works from the same edition.",
+  "Personal catalogs":"Your own; one marked Private is never sent to the team."
+};
+function ecGroupHtml(word){
+  return '<div class="ec-group"><span>'+esc(t(word))+'</span><small>'+esc(t(EC_GROUP_SENTENCE[word]))+'</small></div>';
+}
 /* The rows in two groups where the desk holds a catalog set aside or one the team took up, and as they always were otherwise. A row is
    the team's where the lead signed its file. */
 function ecGroupedRows(tops,under,alone,asideRows,grouped){

@@ -639,7 +639,12 @@ async function launch(plan) {
     forgetlook: async () => { (await import(MOD("desk-look.js"))).forgetLookEdits(); },
     ownclear: () => { delete (PACK.pack.overrides || {})[plan.card]; PACK.savePack(); },
     edback2: () => { doc.getElementById("edKeep").onclick(); obs.read.back = { modal: modalUp(), backs: obs.backs }; },
-    work: at => { const b = doc.querySelector("button[data-ec-work=\"" + at + "\"]"); if (!b) throw new Error("no Work on row " + at); b.onclick(); },
+    // A colleague's row offers no Work from this file (board 1016): the file is worked from through the panel's own button, as the Look offers it.
+    work: async at => {
+      const b = doc.querySelector("button[data-ec-look=\"" + at + "\"]"); if (!b) throw new Error("no Look on row " + at);
+      b.onclick(); await settle();
+      const w = doc.getElementById("edLoad"); if (!w) throw new Error("no Work from this file on the panel of row " + at); w.onclick();
+    },
     over: () => { obs.read.over = JSON.parse(JSON.stringify(PACK.pack.overrides || {})); obs.read.heldId = String((CAT.storedCatalog() || {}).id || ""); },
     // A colleague's file landing while the Library is open, and the list read as it then stands, painted by nothing here.
     drop: () => {
@@ -1287,12 +1292,12 @@ async function parent() {
     const rowOf = (rows, four) => rows.find(r => r.desk && r.fp === four) || {};
     const olaRow = rowOf(rows75, ola1.four), ola2Row = rowOf(rows75, ola2.four), p75 = rows75.find(r => r.name === "Piotr, a teammate") || {};
     check(same(rows75.map(r => r.name), ["lamp.ec", "Ola, a teammate", "Ola, a teammate", "Piotr, a teammate"]) && rows75[0].loaded
-      && !olaRow.alone && !ola2Row.alone && p75.alone && deskRows.every(r => r.file === null) && same(olaRow.acts, ["See what changed", "Work from this file"]),
-      "75a the colleagues' files hang under the catalog in use, the one grown from nothing stands alone at the foot, each with Look and Work from it; this desk's own file and one claiming the id in use have no row: "
+      && !olaRow.alone && !ola2Row.alone && p75.alone && deskRows.every(r => r.file === null) && same(olaRow.acts, ["See what changed"]),
+      "75a the colleagues' files hang under the catalog in use, the one grown from nothing stands alone at the foot, each with See what changed and no Work from this file (board 1016); this desk's own file and one claiming the id in use have no row: "
       + JSON.stringify(rows75.map(r => [r.name, r.fp, r.alone, r.acts.join("/")])));
     check(olaRow.fp === ola1.four && ola2Row.fp === ola2.four && p75.fp === "" && olaRow.tip.indexOf(grouped(ola1.id)) > -1 && /^Signed by Ola, a teammate, key /.test(olaRow.tip),
       "75b two desks of one name each carry the first four of their key, and the desk's glyph names its key in four groups: " + JSON.stringify([olaRow.fp, ola2Row.fp, p75.fp, olaRow.tip]));
-    check(same(rows75[0].mine, ["Your edits are with the team"]) && /^1 changed · 1 new · /.test(olaRow.meta) && /^A catalog of its own · /.test(p75.meta),
+    check(same(rows75[0].mine, ["Your edits are with the team"]) && /^rev 1 (2026-09-01) · 1 changed · 1 new$/.test(olaRow.meta) && /^rev 1 (2026-09-01) · A catalog of its own · /.test(p75.meta),
       "75c the loaded row says this desk's edits are in the folder under its desk's name; a hanging row says what that desk changed, and one grown from nothing says so: "
       + JSON.stringify([rows75[0].mine, olaRow.meta, p75.meta]));
 
@@ -1498,7 +1503,7 @@ async function parent() {
     check(rd(L7, "over") && rd(L7, "heldId") === ola1.doc.id && L7.fileAtStart === "" && L7.fromAtEnd === "lamp-" + sha8(ID) + ".ec"
       && olaRow7.loaded && same(olaRow7.acts, ["See what changed", "Eject"]) && rows7.filter(r => r.loaded).length === 1 && !rows7[0].loaded
       && same(rows7[0].mine, ["Your edits to it come back when it is loaded again"]) && same(rd(L7, "over"), {}),
-      "75h Work from it makes that desk's file the catalog in use, its row the loaded one and no other; no file of the folder is named in use, and the team's catalog says this desk's edits wait for it: "
+      "75h Work from this file, on the Look panel, makes that desk's file the catalog in use, its row the loaded one and no other; no file of the folder is named in use, and the team's catalog says this desk's edits wait for it: "
       + JSON.stringify({ held: rd(L7, "heldId"), file: L7.fileAtStart, from: L7.fromAtEnd, rows: rows7.map(r => [r.name, r.loaded, r.mine]), over: rd(L7, "over") }));
     const L8 = run(lab75, ["desk", "rows", "load:lamp.ec", "settle", "yes", "settle"], true);
     const L9 = run(lab75, ["desk", "over"], true);

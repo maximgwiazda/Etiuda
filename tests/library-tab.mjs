@@ -1278,6 +1278,88 @@ await checkAsync("L24 a row is the team's by the shell's teamPins: a listed id u
   }
 });
 
+/* Board 1019 (7): the catalog rows redrawn for the room the Library has now. The list's first line says where catalog files are read from,
+   with the whole path and its two buttons; the rows read across in columns, each act a word beside its glyph, the one in use marked in
+   words; the two groups stand wherever the desk is on a team and nowhere else; nothing offers to work from a teammate's file. */
+await checkAsync("L25 the catalog rows read across in columns, each act a word, In use in words, the groups on a team only, the folder named on the first line", async () => {
+  if (wired) return wired;
+  const CAT = await import(MOD("catalog.js"));
+  const CO = await import(MOD("catalog-offer.js"));
+  const TJ = await import(MOD("team-join.js"));
+  const ST = await import(MOD("storage.js"));
+  const RP = await import(MOD("repaint.js"));
+  const hadHost = window.E_HOST;
+  const hadUi = ST.lsGet("eUiLang");
+  const hadCatalog = ST.lsGet("eCatalog");
+  const hadCatalogFile = ST.lsGet("eCatalogFile");
+  const P_LEAD = "sha256:" + "4".repeat(64);
+  const DIR = "C:\Users\Ada\Documents\Etiuda";
+  const FILES = [
+    { name: "lead.ec", mtime: 4000, cards: 2, edition: "rev 1", macros: 2, intents: 1, cats: 1, id: "cat-lead", rev: 1, grew: null, sha: P_LEAD, leadSigned: true },
+    { name: "mine.ec", mtime: 3500, cards: 3, edition: "rev 2", macros: 3, intents: 1, cats: 1, id: "cat-mine", rev: 2, grew: null },
+    { name: "other.ec", mtime: 3000, cards: 1, edition: "rev 1", macros: 1, intents: 1, cats: 1, id: "cat-other", rev: 1, grew: null },
+  ];
+  let contentState = { team: "", told: true, private: [], listed: [], teamPins: [] };
+  const give = () => Promise.resolve(JSON.parse(JSON.stringify(contentState)));
+  const hostWith = extra => Object.assign({}, hadHost, {
+    catalogFolder: DIR,
+    catalogFiles: () => Promise.resolve(FILES),
+    branchIdentity: () => Promise.resolve(null),
+    catalogLeads: () => [],
+    teamJoin: (op) => (op === "content" ? give() : Promise.resolve({ sealed: null, join: null, leads: [] })),
+    onTeamJoin: () => {},
+    onCatalogCopy: () => {},
+  }, extra || {});
+  window.E_HOST = hostWith();
+  const paint = async () => { MG.openManage(); await TJ.teamContent(); await CO.paintCatalogList(); await settle(); };
+  try {
+    ST.lsSet("eUiLang", "en");
+    RP.setUiLang("en");
+    CAT.storeCatalog({ format: 2, kind: "etiuda-catalog", id: "cat-mine", rev: 2, name: "Mine", langs: [{ code: "en", label: "EN" }], tags: [], cards: [] });
+    ST.lsSet("eCatalogFile", "mine.ec");
+    CO.paintCatNow();
+    await paint();
+    const box = host().querySelector("#mgCatList");
+    if (!box) return "no #mgCatList";
+    const word = el => (el ? el.textContent : "").replace(/\s+/g, " ").trim();
+    const groups = () => box.querySelectorAll(".ec-group").map(g => word(g.querySelector("span")));
+    const none = groups();
+    contentState = { team: "t-l25", told: true, private: [], listed: ["cat-lead"], teamPins: [P_LEAD] };
+    await paint();
+    const on = groups();
+    const rowOf = f => box.querySelector('.ec-row[data-ec-file="' + f + '"]');
+    const rows = FILES.map(f => rowOf(f.name));
+    if (rows.some(r => !r)) return "missing rows";
+    const actWords = rows.map(r => word(r.querySelector(".ec-act")));
+    const namesOk = rows.every(r => { const a = r.querySelector(".ec-act"); return a && a.getAttribute("aria-label") === word(a); });
+    const cols = rows.every(r => [".ec-name", ".ec-edn", ".ec-cnt", ".ec-whose", ".ec-acts"].every(s => !!r.querySelector(s)));
+    const pills = box.querySelectorAll(".ec-inuse").map(p => word(p));
+    const pillRow = word(rowOf("mine.ec").querySelector(".ec-inuse"));
+    const gone = !box.querySelector("[data-ec-work]") && !box.querySelector(".ec-watch") && !box.querySelector("[data-ec-check]");
+    /* The first line of the list. */
+    const bar = host().querySelector(".mg-data-bar");
+    const pathEl = host().querySelector("#mgCatFolderPath");
+    const line = word(bar && bar.querySelector(".ec-folder-line"));
+    const open = word(host().querySelector("#mgCatOpen")), change = word(host().querySelector("#mgCatFolder"));
+    window.E_HOST = hostWith({ catalogFolderPolicy: DIR });
+    await paint();
+    const pinned = { open: word(host().querySelector("#mgCatOpen")), change: !!host().querySelector("#mgCatFolder") };
+    /* Under about 760px of list the edition and the contents fold under the name. */
+    const tpl = fs.readFileSync(path.join(ROOT, "src", "template.html"), "utf8");
+    const fold = /@container \(max-width:760px\)\{[^@]*#mgCatList \.ec-row \.ec-meta\{display:block;grid-area:meta\}/.test(tpl);
+    const got = { none, on, actWords, namesOk, cols, pills, pillRow, gone, line, path: word(pathEl), open, change, pinned, fold };
+    const want = { none: [], on: ["Team catalogs", "Personal catalogs"], actWords: ["Load", "Eject", "Load"], namesOk: true, cols: true, pills: ["In use"], pillRow: "In use", gone: true,
+      line: "Catalog files are read from " + DIR, path: DIR, open: "Open folder", change: "Change folder…", pinned: { open: "Open folder", change: false }, fold: true };
+    return JSON.stringify(got) === JSON.stringify(want) || JSON.stringify(got);
+  } finally {
+    window.E_HOST = hadHost;
+    try { if (hadCatalog == null) ST.lsDel("eCatalog"); else ST.lsSet("eCatalog", hadCatalog); } catch (e) {}
+    try { if (hadCatalogFile == null) ST.lsDel("eCatalogFile"); else ST.lsSet("eCatalogFile", hadCatalogFile); } catch (e) {}
+    try { if (hadUi == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", hadUi); } catch (e) {}
+    try { RP.setUiLang(hadUi === "pl" ? "pl" : "en"); } catch (e) {}
+  }
+});
+
 /* ================================================================================================
    THE FAILURE PATHS: each plant lifted in a scratch copy of src/, the leg it guards run there by a child.
    ================================================================================================ */
@@ -1294,6 +1376,16 @@ const PLANTS = [
   { tag: "bar-private-lock", file: "catalog-offer.js", leg: "L22" },
   { tag: "told-bubble-said", file: "team-join.js", leg: "L23" },
   { tag: "page-team-by-shell", file: "catalog-offer.js", leg: "L24" },
+  { tag: "catrows-act-word", file: "catalog-offer.js", leg: "L25",
+    lift: src => src.includes("+icon+'<span>'+w+'</span></button>'") ? src.replace("+icon+'<span>'+w+'</span></button>'","+icon+'</button>'") : null },
+  { tag: "catrows-groups-on-team", file: "catalog-offer.js", leg: "L25",
+    lift: src => src.includes("parts.grouped || !!(content && content.team)") ? src.replace("parts.grouped || !!(content && content.team)","parts.grouped") : null },
+  { tag: "catrows-in-use-word", file: "catalog-offer.js", leg: "L25",
+    lift: src => src.includes("(o.loaded?ecInUseHtml():'')+'<span class=\"ec-tag\"") || src.includes("(o.loaded?ecInUseHtml():'')") ? src.replace("+(o.loaded?ecInUseHtml():'')
+    +(o.newer","
+    +(o.newer") : null },
+  { tag: "catrows-folder-open", file: "manage.js", leg: "L25",
+    lift: src => src.includes("id=\"mgCatOpen\"") ? src.replace("id=\"mgCatOpen\"","id=\"mgCatOpenX\"") : null },
 ];
 if (childAt < 0) {
   for (const p of PLANTS) {
