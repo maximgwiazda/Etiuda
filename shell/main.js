@@ -7363,14 +7363,14 @@ function contentView(read) {
   const doc = read === undefined ? folderTeamDoc() : read;
   const pin = doc ? pinTrusted(doc.id) : null;
   const team = pin && pin.keyId === doc.lead.keyId && pin.public === doc.lead.public ? String(doc.id) : "";
-  /* `listed`: the team's catalogs, by id. `teamPins`: the signed pins of the catalogs this desk holds that are the team's, by the
+  /* `listed`: the team's catalogs, by id. `teamCatalogPins`: the signed pins of the catalogs this desk holds that are the team's, by the
      shell's own teamListedDoc (heldJudged), which is all the page reads to say a row is the team's. `private`: the marks that hold,
      so the page is never told Private for a catalog this desk sends as the team's (idTeamHere); a mark it leaves out stays kept. */
   const use = team ? teamUse() : null;
   const judged = use && use.member && use.seal && use.seal.team === team ? heldJudged(use) : [];
   return { team: team, told: contentApplies(team),
     private: Array.from(catalogPrivate).filter(id => !team || !idTeamHere(id, judged)).sort(), listed: team && Array.isArray(doc.catalogs) ? doc.catalogs.map(String) : [], /* plant:pcm-view-sent */
-    teamPins: judged.filter(h => h.team).map(h => h.pin).sort() };
+    teamCatalogPins: judged.filter(h => h.team).map(h => h.pin).sort() };
 }
 /* This desk was told for `team`: kept with the time it was told, so unlisted catalogs can be answered or shared. */
 function contentSaid(team) {

@@ -1121,9 +1121,9 @@ await checkAsync("L22 Catalog & data shows Private toggle on personal rows only,
       return "off-team showed controls: " + JSON.stringify({ offSw, offTeamLbl, offListLock, offBarLock: !!offBarLock });
     }
     /* On-team: team.ec and team-fork.ec have Team catalog and no switch; own.ec has unchecked switch; priv.ec has checked switch + lock; bar has lock.
-       Board 1014, 2026-11-22: a row is the team's because the shell's teamPins names its pin (it was by its id or grew chain reaching a
+       Board 1014, 2026-11-22: a row is the team's because the shell's teamCatalogPins names its pin (it was by its id or grew chain reaching a
        listed id); the two team rows are named there. */
-    contentState = { team: "t-lib", told: true, private: ["cat-priv"], listed: ["cat-team"], teamPins: ["sha256:" + "e".repeat(64), "sha256:" + "f".repeat(64)] };
+    contentState = { team: "t-lib", told: true, private: ["cat-priv"], listed: ["cat-team"], teamCatalogPins: ["sha256:" + "e".repeat(64), "sha256:" + "f".repeat(64)] };
     await TJ.teamContent();
     await CO.paintCatalogList();
     CO.paintCatPrivate();
@@ -1212,10 +1212,10 @@ await checkAsync("L23 one-time told notice opens from #catNow once and sends con
 });
 
 /* The test architect's HOLD 1 on board 1014 (2026-11-22): a row is the team's only where the shell says so, by its own teamListedDoc
-   answer sent in contentView as teamPins (the signed pins of the team's catalogs this desk holds). A stranger-signed file under a
+   answer sent in contentView as teamCatalogPins (the signed pins of the team's catalogs this desk holds). A stranger-signed file under a
    listed id, and a copy whose first hop the lead did not sign, are personal rows with the Private switch and lock; the lead's signed
    edition is unchanged; and when the shell's answer changes, the page follows it, never a rule of its own. */
-await checkAsync("L24 a row is the team's by the shell's teamPins: a listed id unsigned by the lead is personal, with its switch and lock, and the page follows the shell", async () => {
+await checkAsync("L24 a row is the team's by the shell's teamCatalogPins: a listed id unsigned by the lead is personal, with its switch and lock, and the page follows the shell", async () => {
   if (wired) return wired;
   const CAT = await import(MOD("catalog.js"));
   const CO = await import(MOD("catalog-offer.js"));
@@ -1232,7 +1232,7 @@ await checkAsync("L24 a row is the team's by the shell's teamPins: a listed id u
     { name: "stranger.ec", mtime: 3500, cards: 2, edition: "rev 1", macros: 2, intents: 1, cats: 1, id: "cat-team", rev: 1, grew: null, sha: P_STR },
     { name: "fork.ec", mtime: 3000, cards: 2, edition: "rev 1", macros: 2, intents: 1, cats: 1, id: "cat-fork", rev: 1, grew: { id: "cat-team", rev: 1, sha: "c".repeat(64) }, sha: P_FORK },
   ];
-  let contentState = { team: "t-l24", told: true, private: [], listed: ["cat-team"], teamPins: [P_LEAD] };
+  let contentState = { team: "t-l24", told: true, private: [], listed: ["cat-team"], teamCatalogPins: [P_LEAD] };
   const give = () => Promise.resolve(JSON.parse(JSON.stringify(contentState)));
   window.E_HOST = Object.assign({}, hadHost, {
     catalogFiles: () => Promise.resolve(FILES),
@@ -1264,7 +1264,7 @@ await checkAsync("L24 a row is the team's by the shell's teamPins: a listed id u
     const marked = { stranger: !!sw(rowOf("stranger.ec")) && sw(rowOf("stranger.ec")).checked && !!rowOf("stranger.ec").querySelector(".ec-lock"),
       lead: team(rowOf("lead.ec")) && !rowOf("lead.ec").querySelector(".ec-lock"), bar: !!doc.querySelector("#catNow .cn-lock") };
     /* The shell's answer changes: every row it names is the team's, with no switch and no lock. */
-    contentState = Object.assign({}, contentState, { private: [], teamPins: [P_LEAD, P_STR, P_FORK] });
+    contentState = Object.assign({}, contentState, { private: [], teamCatalogPins: [P_LEAD, P_STR, P_FORK] });
     await paint();
     const follows = { stranger: team(rowOf("stranger.ec")), fork: team(rowOf("fork.ec")), bar: !doc.querySelector("#catNow .cn-lock") };
     const ok = first.lead && first.stranger && first.fork && marked.stranger && marked.lead && marked.bar && follows.stranger && follows.fork && follows.bar;

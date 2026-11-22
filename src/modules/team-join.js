@@ -80,7 +80,7 @@ function normalizeContent(v){
     told:told,
     private:Array.isArray(v.private)?v.private.map(String):[],
     listed:Array.isArray(v.listed)?v.listed.map(String):[],
-    teamPins:Array.isArray(v.teamPins)?v.teamPins.map(String):[]
+    teamCatalogPins:Array.isArray(v.teamCatalogPins)?v.teamCatalogPins.map(String):[]
   };
 }
 function setContentNow(v){

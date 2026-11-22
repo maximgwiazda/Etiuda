@@ -18345,7 +18345,7 @@ What is typed here stays in this browser.`;
       told,
       private: Array.isArray(v.private) ? v.private.map(String) : [],
       listed: Array.isArray(v.listed) ? v.listed.map(String) : [],
-      teamPins: Array.isArray(v.teamPins) ? v.teamPins.map(String) : []
+      teamCatalogPins: Array.isArray(v.teamCatalogPins) ? v.teamCatalogPins.map(String) : []
     };
   }
   function setContentNow(v) {
@@ -39293,7 +39293,7 @@ What is typed here stays in this browser.`;
   var listFetchingContent = false;
   function isTeamCatalogPin(pin, content) {
     let team = false;
-    team = !!pin && !!content && Array.isArray(content.teamPins) && content.teamPins.indexOf(String(pin)) >= 0;
+    team = !!pin && !!content && Array.isArray(content.teamCatalogPins) && content.teamCatalogPins.indexOf(String(pin)) >= 0;
     return team;
   }
   function rowShareParts(id, pin, content) {

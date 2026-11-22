@@ -352,11 +352,11 @@ function ecCopyHtml(f){
 }
 let paintListSeq=0, listFetchingContent=false;
 /* Whether a row's catalog is the team's: the shell's own answer, teamListedDoc over the file the row is, sent in the content view as
-   teamPins (the signed pins of the team's catalogs this desk holds). The page never derives the rule itself: a catalog under a listed
+   teamCatalogPins (the signed pins of the team's catalogs this desk holds). The page never derives the rule itself: a catalog under a listed
    id that the lead did not sign, or a copy whose first hop the lead did not sign, is personal (board 1014, 2026-11-22). */
 function isTeamCatalogPin(pin, content){
   let team=false;
-  team=!!pin && !!content && Array.isArray(content.teamPins) && content.teamPins.indexOf(String(pin))>=0; /* plant:page-team-by-shell */
+  team=!!pin && !!content && Array.isArray(content.teamCatalogPins) && content.teamCatalogPins.indexOf(String(pin))>=0; /* plant:page-team-by-shell */
   return team;
 }
 function rowShareParts(id, pin, content){
