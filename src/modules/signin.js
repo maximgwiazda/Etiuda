@@ -30,6 +30,8 @@ function signinRead(v){
     deskOnly: !!signedIn && o.deskOnly===true,
     askLead: !!signedIn && o.askLead===true,
     trialUntil: !!signedIn && Number.isFinite(o.trialUntil) && o.trialUntil>0 ? o.trialUntil : 0,
+    /* The leads an open join request waits on, as the service names them (the shell keeps plain names only); none where it names none. */
+    asked: signedIn && Array.isArray(o.asked) ? o.asked.filter(n=>typeof n==="string" && n && n.length<=120).slice(0,8) : [], /* plant:read-asked */
     /* The service said this account's organisation holds its licence (a managed tenant), and why where it also owns one. */
     licenceManaged: o.licenceManaged===true,
     cause: o.licenceManaged===true && (o.cause==="own-licence" || o.cause==="assigned") ? o.cause : "",
@@ -418,7 +420,9 @@ function deskDoorState(v){
   const studioEnd=(v.trials&&v.trials.studio)||0;
   const ends=seat&&seat.ends?seat.ends:0;
   const team=signinTeam();
-  const lead=(seat&&seat.lead)||(team&&team.lead)||"";
+  const asked=Array.isArray(v.asked) ? v.asked : [];
+  const lead=(seat&&seat.lead)||(team&&team.lead)||(asked.length===1 ? asked[0] : ""); /* plant:door-asked-lead */
+  const askedMany=!(seat&&seat.lead) && !(team&&team.lead) && asked.length>1 ? asked.join(", ") : ""; /* plant:door-asked-many */
   const waitingOnLead=!!(v.askLead || signinNoSeat(v)); /* B-3a feeds this */ /* plant:door-waiting-noseat */
   const orgLicence=!!v.licenceManaged; /* B-3a feeds this */
   const trialOver=seatOn==="trial" || (!seatOn && deskEnd>0); /* plant:door-trial-over */
@@ -439,7 +443,7 @@ function deskDoorState(v){
   else if(!works && !v.signedIn && !v.busy && FAIL_FIRST.indexOf(v.said)<0 && v.offered.length && v.registered && !v.online && !signinWaiting(v) && !signinStranded(v)) state="first-offline"; /* plant:door-first-offline */
   else if(!works && !v.signedIn && !v.busy && FAIL_FIRST.indexOf(v.said)<0 && v.offered.length && v.registered && v.online && !signinWaiting(v) && !signinStranded(v)) state="first";
   return {state:state, lead:lead, deskEnd:deskEnd, studioEnd:studioEnd, ended:v.ended||0, until:v.until||0,
-    stoppedAt:v.stoppedAt||0, why:seatOn, seatOn:seatOn, ends:ends, day:day, waitingOnLead:waitingOnLead,
+    stoppedAt:v.stoppedAt||0, why:seatOn, seatOn:seatOn, ends:ends, day:day, waitingOnLead:waitingOnLead, askedMany:askedMany,
     orgLicence:orgLicence, online:v.online!==false, now:v.now||0};
 }
 function deskWhySentence(on, lead){
@@ -470,6 +474,8 @@ function deskDoorLines(ds){
   const fill=(s, map)=>Object.keys(map).reduce((a,k)=>a.split(k).join(map[k]), s);
   if(ds.state==="first" || ds.state==="first-offline") return [t("Etiuda starts with a sign-in."),
     t("Signing in with Microsoft or Google gives this computer a seat: the team's, where its lead has admitted this account, or else a trial of fourteen days. Catalogs open once the seat is here.")];
+  if(ds.state==="waiting" && ds.askedMany) return [t("The requests to join are waiting."), /* plant:door-asked-head */
+    fill(t("Catalogs open here again once one of these leads accepts a request: {LEADS}. Etiuda's own fourteen days ended on {DESK_END}."), {"{LEADS}":ds.askedMany, "{DESK_END}":desk})];
   if(ds.state==="waiting") return [t("The request to join is waiting."),
     lead ? fill(t("Catalogs open here again once {LEAD}, the team's lead, accepts it. Etiuda's own fourteen days ended on {DESK_END}."), {"{LEAD}":lead, "{DESK_END}":desk})
       : fill(t("Catalogs open here again once the team's lead accepts it. Etiuda's own fourteen days ended on {DESK_END}."), {"{DESK_END}":desk})];
@@ -496,6 +502,8 @@ function deskDoorLines(ds){
   }
   if(ds.state==="working" && ds.seatOn==="org") return [t("This account has a seat on its organisation's licence."),
     fill(t("It renews by itself; the licence runs until {ENDS}."), {"{ENDS}":ends})];
+  if(ds.state==="working" && ds.waitingOnLead && ds.askedMany) return ["",
+    fill(t("Day {N} of 14, until {DESK_END}. Etiuda works meanwhile; the requests to join wait for one of these leads: {LEADS}."), {"{N}":n, "{DESK_END}":desk, "{LEADS}":ds.askedMany})];
   if(ds.state==="working" && ds.waitingOnLead) return ["",
     lead ? fill(t("Day {N} of 14, until {DESK_END}. The request to join waits for {LEAD}, and Etiuda works meanwhile."), {"{N}":n, "{DESK_END}":desk, "{LEAD}":lead})
       : fill(t("Day {N} of 14, until {DESK_END}. The request to join waits for the team's lead, and Etiuda works meanwhile."), {"{N}":n, "{DESK_END}":desk})];
@@ -510,10 +518,6 @@ function doorBandState(v){
   return {shown:true, dot:true,
     text:named(named(t("Seat ended {ENDED} · Etiuda stops {DATE}"),"{ENDED}",ended),"{DATE}",until),
     tip:named(t("This account's seat has ended; Etiuda stops on {DATE}."),"{DATE}",until)};
-}
-function doorAskLabel(lead){
-  if(!lead) return t("Ask a team's lead…"); /* plant:door-ask-noname */
-  return named(t("Ask {LEAD}"),"{LEAD}",lead);
 }
 function doorPress(label, solid, act){
   const buy=act==="buy"?' data-e-open="buy"':'';
@@ -575,15 +579,19 @@ function doorFirstHtml(v, ds){
   const foot='<p class="fs-foot">'+esc(t("No licence key to keep"))+'</p>';
   return doorScreen(left, right, foot);
 }
+/* Whether the shell names an order page (shell/main.js buyAddress); none is set in a build without one, and then Buy is drawn nowhere. */
+function buyOffered(){
+  const h=eHost();
+  try{ const s=h && typeof h.buyState==="function" ? h.buyState() : null; return !!(s && s.offer===true); }catch(e){ return false; }
+}
 function doorLaterHtml(v, ds){
   const pair=deskDoorLines(ds);
-  const askable=ds.state==="trial-over-org" || (ds.state==="stopped" && (ds.orgLicence || ds.seatOn==="team"));
   const checkFilled=ds.state==="waiting";
   let acts="";
   if(checkFilled) acts+=doorPress(t("Check now"), true, "check");
-  else if(askable) acts+=doorPress(doorAskLabel(ds.lead), true, "ask");
-  else acts+=doorPress(t("Buy"), true, "buy");
-  if(checkFilled || askable) acts+=doorPress(t("Buy"), false, "buy");
+  if(buyOffered()) acts+=doorPress(t("Buy"), !checkFilled, "buy"); /* plant:door-buy-order */
+  /* Where no order page is set the person with no seat is told what brings one (the copywriter's words, 22 November 2026). */
+  const note=buyOffered() ? "" : '<p class="sgn-cap door-nobuy">'+esc(t("Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again."))+'</p>'; /* plant:door-nobuy-line */
   const quiet=[];
   if(!checkFilled) quiet.push(doorTextPress(t("Check now"), "check"));
   quiet.push(doorTextPress(t("Use another account"), "another"));
@@ -592,7 +600,7 @@ function doorLaterHtml(v, ds){
   const wayOut=out ? '<div class="door-out"><button type="button" class="btn" data-door-save>'+esc(t("Save your own work as files…"))+'</button><p class="sgn-cap">'+esc(t("What this account made here can still be saved as files, in a folder of your choice: its own cards, its edits to a catalog's cards, and the flags it raised. Catalogs themselves are not saved."))+'</p></div>' : "";
   const p=signinParts(v);
   const right=signinIdentHtml({initial:p.initial, name:p.name, sub:p.sub, off:p.off})
-    +'<div class="sgn-acts door-acts">'+acts+'</div><div class="door-quiet">'+quiet.join("")+'</div>'+wayOut;
+    +'<div class="sgn-acts door-acts">'+acts+'</div>'+note+'<div class="door-quiet">'+quiet.join("")+'</div>'+wayOut;
   const left='<h1 id="fsHeading">'+esc(pair[0])+'</h1><p class="fs-lede">'+esc(pair[1])+'</p>';
   return doorScreen(left, right, "");
 }
@@ -661,14 +669,12 @@ function signinDoorOf(v){
   const ds=deskDoorState(v);
   if(ds.state==="ended"){
     const endedPair=deskDoorLines(ds);
-    const ask=!!(ds.orgLicence || ds.seatOn==="team");
-    const acts=[];
-    if(ask) acts.push({act:"ask", label:doorAskLabel(ds.lead), solid:true});
-    else acts.push({act:"check", label:t("Check now"), solid:true});
-    acts.push({act:"buy", label:t("Buy")});
-    if(ask) acts.push({act:"check", label:t("Check now")});
-    acts.push(acct);
-    return {moment:"ended", ident, heading:endedPair[0], line:endedPair[1], acts:acts};
+    /* No Ask press: the service's ask route is not what a lead's Roster reads under Asking to join, and this desk holds the leads' names, not
+       the pseudonyms the route names them by, so the press would do nothing (22 November 2026). */
+    const acts=[{act:"check", label:t("Check now"), solid:true}].concat(buyOffered() ? [{act:"buy", label:t("Buy")}] : [], [acct]); /* plant:panel-buy-order */
+    return {moment:"ended", ident, heading:endedPair[0], line:endedPair[1], acts:acts,
+      nobuy:buyOffered() ? "" : t("Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again."), /* plant:panel-nobuy-line */
+    };
   }
   const pair=deskDoorLines(ds);
   if(ds.state==="working") return {moment:"working", ident, heading:pair[0], line:pair[1], foot:deskSeatShort(ds), acts:[{act:"check", label:t("Check now")}, acct]}; /* plant:door-panel-working */
@@ -779,6 +785,7 @@ function signinPanelHtml(d){
     if(d.moment==="ended") h+=signinEndedActsHtml(d.acts); /* plant:door-panel-rows */
     else h+=signinActsHtml(d.acts);
   }
+  if(d.nobuy) h+='<p class="sgn-cap door-nobuy">'+esc(d.nobuy)+'</p>';
   if(d.own) h+='<p class="sgn-say sgn-own"><b>'+esc(d.own[0])+'</b><span>'+esc(d.own[1])+'</span></p>';
   if(d.link) h+=signinLinkHtml(d.link);
   if(d.foot) h+='<p class="sgn-ft">'+esc(d.foot)+'</p>';
@@ -1184,6 +1191,7 @@ function wireSignin(){
 
 export {
   SIGNIN_NAMES,
+  buyOffered,
   bootFirstSignin,
   closeFirstSignin,
   deskWorks,

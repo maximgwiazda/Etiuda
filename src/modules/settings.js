@@ -34,7 +34,7 @@ import { rewordState, rewordSwitchSet } from "./card-reword.js";
 import { SIGNIN_NAMES, signinNow, signinShown, signinParts, signinSay, signinNoSeat, signinTold, signinActsHtml, signinWhen, signinProvidersHtml, signinIdentHtml, signinCodeText, signinChoosingNow, signinDoorsHtml, signinDoorRefusedNow,
   signinAct, signinStart, signinOnChange, signinPreviewHtml, signinLinkHtml, signinLinkSelect, signinCopyHtml, signinManaged, signinKeepsAccount,
   signinCapHolds, signinStranded, signinStrandedWords, signinWaiting, signinWaitingWords, syncNow, syncLine, syncSet, syncOnChange, syncOpened, syncConsent, askSyncWhose,
-  deskDoorState, deskDoorLines, deskSeatShort } from "./signin.js";
+  deskDoorState, deskDoorLines, deskSeatShort, buyOffered } from "./signin.js";
 import { hangBubble } from "./bubble.js";
 
 /* THE SETTINGS SCREEN, a screen tab. Opening it shows every section on one page, under its name,
@@ -337,10 +337,6 @@ function accountCardHtml(v){
   return h+'</div>';
 }
 /* Buy, where the shell names an order page (shell/main.js orderAddress); the shell builds the address, so the page names none. */
-function buyOffered(){
-  const h=eHost();
-  try{ const s=h && typeof h.buyState==="function" ? h.buyState() : null; return !!(s && s.offer===true); }catch(e){ return false; }
-}
 function buyRow(v){
   return row("buy","forward",t("Licence for one person"),v.signedIn ? t("The order page opens in the browser with this account's sign-in code filled in; typing another person's code buys the licence for them instead.")
     : t("The order page opens in the browser and asks for the sign-in code of the person the licence is for, which Etiuda shows them after their first sign-in."),

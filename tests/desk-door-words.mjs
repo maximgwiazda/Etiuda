@@ -18,7 +18,7 @@ const SETTINGS_PATH = path.join(ROOT, "src", "modules", "settings.js");
 const TEMPLATE_PATH = path.join(ROOT, "src", "template.html");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
-const CHECKS = 41, PLANTS = 38;
+const CHECKS = 46, PLANTS = 47;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -69,7 +69,7 @@ function hostOn(signinObj, opts) {
   globalThis.window = {
     E_HOST: o.plainBrowser ? undefined : {
       signinState: () => signinObj,
-      buyState: () => ({ offer: true }),
+      buyState: () => ({ offer: o.noOrder ? false : true }),
       storeState: () => ({ shown: false })
     }
   };
@@ -248,7 +248,7 @@ CASES.seamShape = (pg = P) => {
   const expectedTypes = {
     day: "number", deskEnd: "number", ended: "number", ends: "number", lead: "string", now: "number",
     online: "boolean", orgLicence: "boolean", seatOn: "string", state: "string", stoppedAt: "number",
-    studioEnd: "number", until: "number", waitingOnLead: "boolean", why: "string"
+    studioEnd: "number", until: "number", waitingOnLead: "boolean", askedMany: "string", why: "string"
   };
   const expectedKeys = Object.keys(expectedTypes).sort().join();
   hostOn(VIEWS.ended);
@@ -426,6 +426,30 @@ for (const lang of ["en", "pl"]) {
   };
 }
 
+/* 5b. The door names whom an open join request waits on, as the service's answer gave it (the view's `asked`): one lead as the
+   team's lead is told, several in one line with the plural heading, none as before; both languages. */
+CASES.askedDoor = (pg = P) => {
+  const noTeam = { noTeam: true };
+  const asks = names => Object.assign({}, VIEWS.waiting, { asked: names });
+  const one = ["Anna Nowak"], two = ["Anna Nowak", "Piotr Zieliński"];
+  for (const lang of ["en", "pl"]) {
+    const w = W[lang], dEnd = dayOf(T_DESK_END, lang);
+    const lineOne = lang === "en" ? `Catalogs open here again once ${one[0]}, the team's lead, accepts it. Etiuda's own fourteen days ended on ${dEnd}.`
+      : `Katalogi znów otworzą się tutaj, gdy ${one[0]}, lider zespołu, ją przyjmie. Własne czternaście dni Etiudy skończyły się ${dEnd}.`;
+    const lineTwo = lang === "en" ? `Catalogs open here again once one of these leads accepts a request: ${two.join(", ")}. Etiuda's own fourteen days ended on ${dEnd}.`
+      : `Katalogi znów otworzą się tutaj, gdy któryś z tych liderów przyjmie prośbę: ${two.join(", ")}. Własne czternaście dni Etiudy skończyły się ${dEnd}.`;
+    const headTwo = lang === "en" ? "The requests to join are waiting." : "Prośby o dołączenie czekają.";
+    const bare = lang === "en" ? `Catalogs open here again once the team's lead accepts it. Etiuda's own fourteen days ended on ${dEnd}.`
+      : `Katalogi znów otworzą się tutaj, gdy lider zespołu ją przyjmie. Własne czternaście dni Etiudy skończyły się ${dEnd}.`;
+    const tOne = textOf(doorHtml(pg, asks(one), lang, noTeam)), tTwo = textOf(doorHtml(pg, asks(two), lang, noTeam));
+    const tNone = textOf(doorHtml(pg, VIEWS.waiting, lang, noTeam)), tNoneList = textOf(doorHtml(pg, asks([]), lang, noTeam));
+    if (!(tOne.includes(w.h2) && tOne.includes(lineOne))) return false;
+    if (!(tTwo.includes(headTwo) && tTwo.includes(lineTwo) && !tTwo.includes(w.h2))) return false;
+    if (!(tNone.includes(w.h2) && tNone.includes(bare) && tNoneList.includes(bare))) return false;
+  }
+  return true;
+};
+
 /* 6. State 3 ("trial-over-org") and State 3b ("trial-over"): row 3/3b words, buttons, quiet presses, rule & way out (sentence a). */
 for (const lang of ["en", "pl"]) {
   CASES["state3_" + lang] = (pg = P) => {
@@ -433,12 +457,11 @@ for (const lang of ["en", "pl"]) {
     const txt = textOf(html);
     const w = W[lang];
     const dEnd = dayOf(T_DESK_END, lang);
-    const askFilled = new RegExp(`class="btn primary"[^>]*>${w.ask}<`).test(html);
-    const buyPlain = new RegExp(`class="btn"[^>]*>${w.buy}<`).test(html);
+    const buyFilled = new RegExp(`class="btn primary"[^>]*>${w.buy}<`).test(html);
     const quiet = html.includes("door-text") && txt.includes(w.check) && txt.includes(w.another) && txt.includes(w.out);
     const wayOut = html.includes("data-door-save") && html.includes("door-out") && txt.includes(w.aBtn) && txt.includes(w.aCap);
     return txt.includes(w.h3) && txt.includes(w.l3(dEnd)) && !html.includes("fs-steps") && !html.includes("fs-foot")
-      && askFilled && buyPlain && quiet && wayOut;
+      && buyFilled && !txt.includes(w.ask) && quiet && wayOut;
   };
   CASES["state3b_" + lang] = (pg = P) => {
     const html = doorHtml(pg, VIEWS.trialOver, lang);
@@ -453,7 +476,7 @@ for (const lang of ["en", "pl"]) {
   };
 }
 
-/* 7. State 5 ("stopped"): all 5 {WHY} sentences, filled button (Ask LEAD or Buy), quiet presses, way out. */
+/* 7. State 5 ("stopped"): all 5 {WHY} sentences, filled button (Buy), quiet presses, way out. */
 for (const lang of ["en", "pl"]) {
   CASES["state5_" + lang] = (pg = P) => {
     const w = W[lang];
@@ -461,7 +484,7 @@ for (const lang of ["en", "pl"]) {
     for (const on of ["trial", "studio-trial", "own", "team", "org"]) {
       const html = doorHtml(pg, VIEWS.stopped(on), lang);
       const txt = textOf(html);
-      const expectFilled = (on === "team" || on === "org") ? w.ask : w.buy;
+      const expectFilled = w.buy;
       const filledOk = new RegExp(`class="btn primary"[^>]*>${expectFilled}<`).test(html);
       const wayOut = html.includes("data-door-save") && txt.includes(w.aBtn) && txt.includes(w.aCap);
       if (!txt.includes(w.h5) || !txt.includes(w.l5(dStop, w.why5[on])) || !filledOk || !wayOut || html.includes("fs-steps")) return false;
@@ -480,7 +503,7 @@ for (const lang of ["en", "pl"]) {
     const bandOk = !!band && band.shown === true && band.dot === true && band.text === w.band4(eStr, uStr) && band.tip === w.tip4(uStr);
     const pHtml = panelHtml(pg, VIEWS.ended, lang);
     const pTxt = textOf(pHtml);
-    const hasBtns = new RegExp(`class="btn primary"[^>]*>${w.ask}<`).test(pHtml) && pTxt.includes(w.buy) && pTxt.includes(w.check) && pTxt.includes(w.acctSet);
+    const hasBtns = new RegExp(`class="btn primary"[^>]*>${w.check}<`).test(pHtml) && pTxt.includes(w.buy) && pTxt.includes(w.acctSet) && !pTxt.includes(w.ask);
     const noOrgPanel = panelHtml(pg, Object.assign({}, VIEWS.ended, { holding: { on: "own", ends: T_ENDS } }), lang, { noTeam: true });
     const noOrgBtns = new RegExp(`class="btn primary"[^>]*>${w.check}<`).test(noOrgPanel) && textOf(noOrgPanel).includes(w.buy) && textOf(noOrgPanel).includes(w.acctSet);
     return noDoor && bandOk && pTxt.includes(w.h4(eStr)) && pTxt.includes(w.l4(uStr)) && hasBtns && noOrgBtns;
@@ -592,9 +615,10 @@ CASES.panelRows = (pg = P) => {
   const own = split(panelHtml(pg, Object.assign({}, VIEWS.ended, { holding: { on: "own", ends: T_ENDS } }), "en", { noTeam: true }));
   const work = panelHtml(pg, VIEWS.working("own"), "en");
   if (!ask.on || !ask.rest || !own.on || !own.rest) return false;
-  const askOk = ask.on.includes('class="btn primary"') && ask.on.includes("Ask " + LEAD) && ask.on.includes(">Buy<")
-    && ask.on.indexOf("Check now") < 0 && ask.on.indexOf("Account settings") < 0
-    && ask.rest.includes(">Check now<") && ask.rest.includes(">Account settings<")
+  /* A team's lead on the panel no longer changes the rows: there is no Ask press, so it reads as the one without a team. */
+  const askOk = ask.on.includes('class="btn primary"') && ask.on.includes(">Check now<") && ask.on.includes(">Buy<")
+    && ask.on.indexOf("Ask ") < 0 && ask.on.indexOf("Account settings") < 0
+    && ask.rest.includes(">Account settings<") && ask.rest.indexOf("Check now") < 0
     && ask.rest.indexOf("btn primary") < 0 && ask.rest.indexOf(">Buy<") < 0;
   const ownOk = own.on.includes('class="btn primary"') && own.on.includes(">Check now<") && own.on.includes(">Buy<")
     && own.on.indexOf("Account settings") < 0
@@ -625,9 +649,9 @@ CASES.noName = (pg = P) => {
   const askPl = "Popro\u015b lidera zespo\u0142u\u2026";
   return en2.includes("once the team's lead accepts it") && en2.indexOf("once ,") < 0
     && pl2.includes("gdy lider zespo\u0142u j\u0105 przyjmie") && pl2.indexOf("gdy ,") < 0
-    && textOf(en3).includes(ask) && en3.indexOf(">Ask <") < 0
-    && textOf(pl3).includes(askPl) && pl3.indexOf(">Popro\u015b: <") < 0
-    && textOf(en4).includes(ask) && textOf(pl4).includes(askPl)
+    && !textOf(en3).includes(ask) && en3.indexOf(">Ask <") < 0
+    && !textOf(pl3).includes(askPl) && pl3.indexOf(">Popro\u015b: <") < 0
+    && !textOf(en4).includes(ask) && !textOf(pl4).includes(askPl)
     && en5.includes("the seat on the team ended") && en5.indexOf("leads ended") < 0
     && pl5.includes("wygas\u0142o miejsce w zespole") && pl5.indexOf("kt\u00f3ry prowadzi") < 0
     && en6.includes("waits for the team's lead") && en6.indexOf("waits for ,") < 0
@@ -741,6 +765,49 @@ CASES.noFamilyElsewhere = (pg = P) => {
   return true;
 };
 
+/* No press the desk cannot answer (class B, 22 November 2026). The service's ask route is not what a lead's Roster reads under
+   Asking to join, and the desk holds the leads' names, not the pseudonyms the route names them by, so the door draws no "Ask {LEAD}"
+   and no "Ask a team's lead…" in any state, door or panel, in either language. Every state is swept: a button that does
+   nothing is the fault, wherever it stands. */
+const ASK_VIEWS = () => [VIEWS.none, VIEWS.first, VIEWS.waiting, VIEWS.trialOverOrg, VIEWS.trialOver, VIEWS.ended,
+  Object.assign({}, VIEWS.ended, { holding: { on: "org", ends: T_ENDS } }),
+  ...["trial", "studio-trial", "own", "team", "org"].map(on => VIEWS.stopped(on)),
+  ...["trial", "studio-trial", "own", "team", "org"].map(on => VIEWS.working(on))];
+const askPressIn = (html) => /data-signin-act="ask"/.test(html) || /Ask a team's lead|Ask Jan Kowalski|Poproś lidera zespołu|Poproś: Jan Kowalski/.test(textOf(html).replace(/&hellip;/g, "…"));
+CASES.noAskDoor = (pg = P) => {
+  for (const lang of ["en", "pl"]) for (const noTeam of [false, true]) for (const v of ASK_VIEWS()) {
+    if (askPressIn(doorHtml(pg, v, lang, { noTeam }))) return false;
+  }
+  const en = doorHtml(pg, VIEWS.trialOverOrg, "en");
+  return new RegExp(`class="btn primary"[^>]*>${W.en.buy}<`).test(en) && textOf(en).includes(W.en.check);
+};
+CASES.noAskPanel = (pg = P) => {
+  for (const lang of ["en", "pl"]) for (const noTeam of [false, true]) for (const v of ASK_VIEWS()) {
+    if (askPressIn(panelHtml(pg, v, lang, { noTeam }))) return false;
+  }
+  const en = panelHtml(pg, VIEWS.ended, "en");
+  return new RegExp(`class="btn primary"[^>]*>${W.en.check}<`).test(en) && textOf(en).includes(W.en.buy) && textOf(en).includes(W.en.acctSet);
+};
+
+/* Buy follows the order page (22 November 2026, Claude alpha 01:57). Where none is set (tonight every build) the door and the ended panel draw no
+   Buy, in any state and either language, and the copywriter's one sentence stands in its place where the person has no seat (the door's
+   states and the ended panel); where one is set Buy draws as before and the sentence is not there. */
+const NOBUY = { en: "Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again.",
+  pl: "W tej wersji Etiudy nie ma zakupu. Miejsce w licencji daje lider zespołu: przynosi je zaproszenie od lidera, a przycisk Sprawdź teraz pozwala sprawdzić ponownie." };
+const buyIn = (html) => /data-e-open="buy"/.test(html) || />(Buy|Kup)</.test(html);
+const buyHolds = (pg, render, later) => {
+  for (const lang of ["en", "pl"]) for (const noTeam of [false, true]) for (const v of ASK_VIEWS()) {
+    const withPage = render(pg, v, lang, { noTeam }), without = render(pg, v, lang, { noTeam, noOrder: true });
+    const isLater = later(withPage);
+    if (buyIn(without) || textOf(withPage).includes(NOBUY[lang])) return false;
+    if (textOf(without).includes(NOBUY[lang]) !== isLater) return false;
+    if (isLater && !buyIn(withPage)) return false;
+  }
+  return true;
+};
+CASES.noBuyDoor = (pg = P) => buyHolds(pg, doorHtml, (h) => h.includes("door-quiet"));
+CASES.noBuyPanel = (pg = P) => buyHolds(pg, panelHtml, (h) => h.includes("door-on-row"));
+
 /* Run all checks. */
 const RUN_LIST = [
   ["dd1", "seam", "deskDoorState(view) returns the closed state set and all word facts"],
@@ -751,8 +818,8 @@ const RUN_LIST = [
   ["dd6", "sentencesBC", "Sentences (b) and (c) (EN & PL): left heading and line, no steps/foot, empty right side"],
   ["dd7", "state2_en", "State 2 (EN): waiting heading/line, Check now filled, Buy plain, quiet text presses, no way out"],
   ["dd8", "state2_pl", "State 2 (PL): waiting heading/line, Check now filled, Buy plain, quiet text presses, no way out"],
-  ["dd9", "state3_en", "State 3 (EN): trial over (org), Ask {LEAD} filled, Buy plain, quiet presses, way out (a)"],
-  ["dd10", "state3_pl", "State 3 (PL): trial over (org), Ask {LEAD} filled, Buy plain, quiet presses, way out (a)"],
+  ["dd9", "state3_en", "State 3 (EN): trial over (org), Buy filled and no Ask press, quiet presses, way out (a)"],
+  ["dd10", "state3_pl", "State 3 (PL): trial over (org), Buy filled and no Ask press, quiet presses, way out (a)"],
   ["dd11", "state3b_en", "State 3b (EN): trial over (no org), Buy filled, quiet presses, way out (a)"],
   ["dd12", "state3b_pl", "State 3b (PL): trial over (no org), Buy filled, quiet presses, way out (a)"],
   ["dd13", "state5_en", "State 5 (EN): stopped with all five {WHY} values, filled press, way out (a)"],
@@ -777,6 +844,11 @@ const RUN_LIST = [
   ["dd38", "studioNoDeskEnd_pl", "licence line (PL): Studio's trial told with no end for the own fourteen days draws the seat's end and no day it does not hold"],
   ["dd39", "askLeadStudio_en", "licence line (EN): the ask-your-lead panel past the own fourteen days inside Studio's trial says Studio's trial, with the day, and not the own trial running"],
   ["dd40", "askLeadStudio_pl", "licence line (PL): the ask-your-lead panel past the own fourteen days inside Studio's trial says Studio's trial, with the day, and not the own trial running"],
+  ["dd42", "askedDoor", "door (EN & PL): a person held at the door whose sign-in carried open join requests sees whom each waits on, one lead as the team's lead is told, several in one line with the plural heading, none as before"],
+  ["dd60", "noAskDoor", "door (EN & PL), every state: no Ask press that nothing answers, Buy filled where Ask stood (an order page set)"],
+  ["dd61", "noAskPanel", "panel (EN & PL), every state: no Ask press that nothing answers, Check now filled and Buy beside it on the ended panel (an order page set)"],
+  ["dd62", "noBuyDoor", "door (EN & PL), every state: no Buy where no order page is set, the copywriter's sentence in its place where there is no seat, Buy as before where one is set"],
+  ["dd63", "noBuyPanel", "panel (EN & PL), every state: no Buy where no order page is set, the copywriter's sentence on the ended panel, Buy as before where one is set"],
   ["dd41", "noFamilyElsewhere", "licence line: the ended, waiting, trial-over and organisation panels carry no short-form foot, and the organisation's Seat row keeps an empty value"],
   ["dd34", "doorNotNoneWhenDue", "Argon 51 B2: deskDoorState never answers none while signed in and due (waiting, full, no licence, team seat marked by another key), and paintFirstSignin never draws the retired fallback"],
 ];
@@ -888,9 +960,24 @@ if (!PLANTS_OFF) {
   await plant("ddp17", SIGNIN_PATH,
     ["if(d.moment===\"ended\") h+=signinEndedActsHtml(d.acts); /* plant:door-panel-rows */", "if(false) h+=signinEndedActsHtml(d.acts); /* plant:door-panel-rows */"],
     "panelRows");
-  await plant("ddp16", SIGNIN_PATH,
-    ["if(!lead) return t(\"Ask a team's lead…\"); /* plant:door-ask-noname */", "if(false) return t(\"Ask a team's lead…\"); /* plant:door-ask-noname */"],
-    "noName");
+  await plant("ddp60", SIGNIN_PATH,
+    ["  if(checkFilled) acts+=doorPress(t(\"Check now\"), true, \"check\");", "  if(ds.state===\"trial-over-org\") acts+=doorPress(t(\"Ask a team's lead…\"), true, \"ask\"); if(checkFilled) acts+=doorPress(t(\"Check now\"), true, \"check\");"],
+    "noAskDoor");
+  await plant("ddp62", SIGNIN_PATH,
+    ["  if(buyOffered()) acts+=doorPress(t(\"Buy\"), !checkFilled, \"buy\"); /* plant:door-buy-order */", "  if(true) acts+=doorPress(t(\"Buy\"), !checkFilled, \"buy\");"],
+    "noBuyDoor");
+  await plant("ddp63", SIGNIN_PATH,
+    ["  const note=buyOffered() ? \"\" : '<p class=\"sgn-cap door-nobuy\">'+esc(t(\"Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again.\"))+'</p>'; /* plant:door-nobuy-line */", "  const note=\"\";"],
+    "noBuyDoor");
+  await plant("ddp64", SIGNIN_PATH,
+    ["const acts=[{act:\"check\", label:t(\"Check now\"), solid:true}].concat(buyOffered() ? [{act:\"buy\", label:t(\"Buy\")}] : [], [acct]); /* plant:panel-buy-order */", "const acts=[{act:\"check\", label:t(\"Check now\"), solid:true}, {act:\"buy\", label:t(\"Buy\")}, acct];"],
+    "noBuyPanel");
+  await plant("ddp65", SIGNIN_PATH,
+    ["nobuy:buyOffered() ? \"\" : t(\"Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again.\"), /* plant:panel-nobuy-line */", "nobuy:\"\","],
+    "noBuyPanel");
+  await plant("ddp61", SIGNIN_PATH,
+    ["const acts=[{act:\"check\", label:t(\"Check now\"), solid:true}].concat(buyOffered() ? [{act:\"buy\", label:t(\"Buy\")}] : [], [acct]); /* plant:panel-buy-order */", "const acts=[{act:\"ask\", label:t(\"Ask a team's lead…\"), solid:true}, {act:\"check\", label:t(\"Check now\")}, acct];"],
+    "noAskPanel");
   await plant("ddp15", SIGNIN_PATH,
     ["if(d.getFullYear()!==new Date(now>0?now:Date.now()).getFullYear()) opt.year=\"numeric\"; /* plant:door-day-year */", "if(false) opt.year=\"numeric\"; /* plant:door-day-year */"],
     "doorDates");
@@ -934,6 +1021,18 @@ if (!PLANTS_OFF) {
   await plant("ddp33", SETTINGS_PATH,
     ["title:seatShort ? t(\"Seat\") : seatPair[0], /* plant:account-seat-title */", "title:seatPair[0],"],
     "account_pl");
+  await plant("ddp40", SIGNIN_PATH,
+    ["(asked.length===1 ? asked[0] : \"\"); /* plant:door-asked-lead */", "\"\";"],
+    "askedDoor");
+  await plant("ddp41", SIGNIN_PATH,
+    ["asked.length>1 ? asked.join(\", \") : \"\"; /* plant:door-asked-many */", "asked.length>1 ? asked[0] : \"\";"],
+    "askedDoor");
+  await plant("ddp42", SIGNIN_PATH,
+    ["return [t(\"The requests to join are waiting.\"), /* plant:door-asked-head */", "return [t(\"The request to join is waiting.\"),"],
+    "askedDoor");
+  await plant("ddp43", SIGNIN_PATH,
+    ["asked: signedIn && Array.isArray(o.asked) ? o.asked.filter(n=>typeof n===\"string\" && n && n.length<=120).slice(0,8) : [], /* plant:read-asked */", "asked: [],"],
+    "askedDoor");
   plantText("ddp19", TEMPLATE_PATH,
     [".door-out{margin-top:22px;padding-top:18px;border-top:1px solid var(--line)} /* plant:door-out-gap */", ".door-out{margin-top:18px;padding-top:18px;border-top:1px solid var(--line)} /* plant:door-out-gap */"],
     "css");

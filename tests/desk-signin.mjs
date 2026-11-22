@@ -48,7 +48,7 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 308;
+const PLANTS = 316;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
@@ -5878,9 +5878,12 @@ answersWatched = false;
 /* A held certificate issued before every recorded answer in tests/signin-answers.json, standing in for what the desk kept before. */
 const HELD_BEFORE = () => ({ provider: "microsoft", refresh: "sealed:rt", sub: "sealed:s", seed: "6".repeat(64), code: CODE, cert: cert({ issued: VIA_FROM, until: VIA_FROM + 30 * 86400000 }), at: 1, checked: 1, reached: true, said: "", ask: false });
 const unreached = r => r.ok === false && r.reason === "unreached";
-/* `asked`, an open join request beside an answer, is not kept. The desk reads that answer as the same answer without the list. */
+/* `asked`, an open join request beside an answer, is kept as the lead names it, answer by answer (it was read as the same answer without
+   the list until the door named whom a request waits on). The service's lead object is never kept whole: only the plain name, and only where
+   it is plain text. */
 function askedHeldOk(r, c, s) {
   if (!c || !c.body || !Array.isArray(c.body.asked) || c.body.asked.length === 0 || !P) return false;
+  const names = c.body.asked.map(x => x.lead.name);
   const bareBody = JSON.parse(JSON.stringify(c.body));
   delete bareBody.asked;
   const desk = c.body.certificate ? c.body.certificate.desk : DESK_KEY;
@@ -5888,14 +5891,27 @@ function askedHeldOk(r, c, s) {
   const h = s.signinSettle(HELD_BEFORE(), r, NOW), hBare = s.signinSettle(HELD_BEFORE(), bare, NOW);
   const viewOf = held => s.signinViewOf(Object.assign({ provider: "microsoft" }, held), viewFacts());
   const v = viewOf(h), vBare = viewOf(hBare);
+  const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+  const without = o => { const x = Object.assign({}, o); delete x.asked; return x; };
   const panelOf = viewIn => { const d = P.signinDoor(P.signinRead(viewIn)); return d ? P.signinPanelHtml(d) : ""; };
   const html = panelOf(v), htmlBare = panelOf(vBare), stamp = String(c.body.asked[0].at);
   const door = P.signinDoor(P.signinRead(v));
-  return r.ok === true && bare.ok === true && r.cert === null && r.askLead === true && r.code === c.body.code
-    && !("asked" in r) && !("asked" in h) && !("asked" in v)
-    && JSON.stringify(r) === JSON.stringify(bare) && JSON.stringify(h) === JSON.stringify(hBare) && JSON.stringify(v) === JSON.stringify(vBare)
+  /* The file: what is written reads back the same names, and a later answer without the list forgets them. */
+  const back = s.signinFileRead(s.signinFileText({ held: Object.assign({ provider: "microsoft", seed: "0".repeat(64) }, h) }), true).held;
+  const gone = s.signinSettle(h, bare, NOW + 1);
+  /* Only plain names, none twice, at most eight; a long, markup or empty name and a lead that is not an object are no request. */
+  const withAsked = list => s.signinAnswer({ status: c.status, bytes: Buffer.from(JSON.stringify(Object.assign({}, c.body, { asked: list }))) }, desk, true);
+  const first = c.body.asked[0];
+  const odd = withAsked([first, { lead: { name: "<b>x</b>" } }, { lead: { name: "x".repeat(121) } }, first, { lead: { name: "  " } }, { lead: null }, "junk"]);
+  const many = withAsked(Array.from({ length: 10 }, (_, i) => ({ lead: { name: "Lead " + i } })));
+  const plainOk = same(odd.asked, names) && !!many.asked && many.asked.length === 8 && many.asked[0] === "Lead 0" && !("asked" in withAsked([{ lead: null }]));
+  return plainOk && r.ok === true && bare.ok === true && r.cert === null && r.askLead === true && r.code === c.body.code
+    && same(r.asked, names) && !("asked" in bare) && same(h.asked, names) && same(v.asked, names) && !("asked" in hBare) && !("asked" in vBare)
+    && same(without(r), bare) && same(without(h), hBare) && same(without(v), vBare)
+    && !!back && same(back.asked, names) && !("asked" in gone)
     && h.said === "" && h.askLead === true && !!h.cert && JSON.stringify(h.cert) === JSON.stringify(HELD_BEFORE().cert) && h.ended > 0 && h.refresh === "sealed:rt"
-    && !!door && door.moment === "asklead" && html.length > 0 && html === htmlBare && html.indexOf(stamp) < 0;
+    && !!door && door.moment === "asklead" && html.length > 0 && html === htmlBare && html.indexOf(stamp) < 0
+    && P.signinRead(v).asked.join() === names.join() && P.signinRead(vBare).asked.length === 0;
 }
 CASES.askedHeld = s => {
   const c = ANSWER_CASES.find(x => x.case === "asked");
@@ -6115,6 +6131,14 @@ if (!PLANTS_OFF) {
   await plant("dsp80", ["said: ans.waiting === true ? \"waiting\" : \"\", ask: false, askLead: ans.askLead === true, managed: ans.managed === true, cause: ans.managed === true ? ans.cause || \"\" : \"\",",
     "said: \"\", ask: false, askLead: ans.askLead === true, managed: ans.managed === true, cause: ans.managed === true ? ans.cause || \"\" : \"\","], "waitRead");
   await plant("dsp80b", ["askLead: h.askLead === true, /* plant:file-ask-lead */", "askLead: false,"], "askLeadFile");
+  await plant("dsa2", ["signinAskedWords(signinAskedOf(j.asked))); /* plant:words-read */", "{}); /* plant:words-read */"], "askedHeld");
+  await plant("dsa3", ["signinAskedWords(signinAskedOf((ans.asked || []).map(n => ({ lead: { name: n } }))))); /* plant:words-settle */", ")); /* plant:words-settle */"], "askedHeld");
+  await plant("dsa4", ["if (out.held) Object.assign(out.held, signinAskedWords(signinAskedOf(Array.isArray(h.asked) ? h.asked.map(n => ({ lead: { name: n } })) : null))); /* plant:asked-file */", ""], "askedHeld");
+  await plant("dsa5", ["if (signedIn && held && Array.isArray(held.asked) && held.asked.length) view.asked = held.asked.slice(); /* plant:view-asked */", ""], "askedHeld");
+  await plant("dsa6", [".test(n) || out.indexOf(n) >= 0) continue; /* plant:asked-name */", ".test(n)) continue;"], "askedHeld");
+  await plant("dsa7", ["!n || n.length > SIGNIN_LEAD_MAX || ", "!n || "], "askedHeld");
+  await plant("dsa8", ["\\u007f-\\u009f<>\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]/.test(n)", "\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]/.test(n)"], "askedHeld");
+  await plant("dsa9", ["if (out.length >= SIGNIN_ASKED_MAX) break;", ""], "askedHeld");
   await plant("dsa1", ["if (j.certificate === null) return Object.assign({ ok: true, code: String(j.code), cert: null, doors: [], waiting: j.reason === \"waiting\", askLead, storeOffer }, signinManagedOf(j), words); /* plant:wait-read */",
     "if (j.certificate === null) return Object.assign({ ok: true, code: String(j.code), cert: null, doors: [], waiting: j.reason === \"waiting\", askLead, storeOffer, asked: j.asked }, signinManagedOf(j), words);"], "askedHeld");
   await plantWire("dsp93", ["  if (Object.keys(teamPins).some(teamPinStands)) return []; /* plant:door-pin-stands */\n", ""], "doorPins");
@@ -6310,10 +6334,10 @@ if (!PLANTS_OFF) {
   await plant("dskp1", ["  if (!v || typeof v !== \"object\" || Array.isArray(v) || SIGNIN_HOLDING_ON.indexOf(v.on) < 0) return null; /* plant:holding-on */","  if (!v || typeof v !== \"object\" || Array.isArray(v)) return null;"], "answerWords");
   await plant("dskp2", ["  if (lead && lead.length <= SIGNIN_LEAD_MAX && !/[\\u0000-\\u001f\\u007f-\\u009f<>\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]/.test(lead)) out.lead = lead; /* plant:holding-lead */","  if (typeof v.lead === \"string\") out.lead = v.lead;"], "answerWords");
   await plant("dskp3", ["  for (const k of [\"desk\", \"studio\"]) if (Number.isSafeInteger(v[k]) && v[k] > 0) out[k] = v[k]; /* plant:trials-read */","  for (const k of [\"desk\", \"studio\"]) if (v[k] !== undefined) out[k] = v[k]; /* plant:trials-read */"], "answerWords");
-  await plant("dskp4", ["    const words = signinWordsOf(signinHoldingOf(j.seat), signinTrialsOf(j.trials)); /* plant:words-read */","    const words = {};"], "answerWords");
+  await plant("dskp4", ["    const words = Object.assign(signinWordsOf(signinHoldingOf(j.seat), signinTrialsOf(j.trials)), signinAskedWords(signinAskedOf(j.asked))); /* plant:words-read */","    const words = {};"], "answerWords");
   await plant("dskp5", ["    const keep = !ans.cert && !!held && !!held.cert; /* plant:keep-none */","    const keep = false;"], "keepNone");
   await plant("dskp6", ["    const ended = ans.cert ? 0 : !keep ? 0 : held.ended > 0 ? held.ended : Number.isSafeInteger(deskNow) && deskNow > 0 ? deskNow : now; /* plant:ended-first */","    const ended = ans.cert ? 0 : !keep ? 0 : Number.isSafeInteger(deskNow) && deskNow > 0 ? deskNow : now; /* plant:ended-first */"], "keepNone");
-  await plant("dskp7", ["    return Object.assign(out, ended ? { ended: ended } : {}, signinWordsOf(ans.cert ? ans.holding : keep ? held.holding : null, ans.trials || (held && held.trials))); /* plant:words-settle */","    return Object.assign(out, ended ? { ended: ended } : {}, signinWordsOf(ans.holding, ans.trials)); /* plant:words-settle */"], "wordsKept");
+  await plant("dskp7", ["    return Object.assign(out, ended ? { ended: ended } : {}, signinWordsOf(ans.cert ? ans.holding : keep ? held.holding : null, ans.trials || (held && held.trials)), signinAskedWords(signinAskedOf((ans.asked || []).map(n => ({ lead: { name: n } }))))); /* plant:words-settle */","    return Object.assign(out, ended ? { ended: ended } : {}, signinWordsOf(ans.holding, ans.trials)); /* plant:words-settle */"], "wordsKept");
   await plant("dskp8", ["  return Object.assign({ held: signinSettle(fresh, said, now(), io && typeof io.deskNow === \"function\" ? io.deskNow() : 0, io && typeof io.deskIssued === \"function\" ? io.deskIssued() : 0), said: said.ok ? \"renewed\" : said.reason }, said.ok ? { idToken: m ? m.got.idToken : got.idToken } : {}); /* plant:renew-desk-now */","  return Object.assign({ held: signinSettle(fresh, said, now()), said: said.ok ? \"renewed\" : said.reason }, said.ok ? { idToken: m ? m.got.idToken : got.idToken } : {}); /* plant:renew-desk-now */"], "keepNone");
   await plantWire("dskp9", ["    if (was.cert) Object.assign(base, { code: was.code, cert: was.cert }, was.ended > 0 ? { ended: was.ended } : {}, was.holding ? { holding: was.holding } : {}); /* plant:take-keeps-cert */\n",""], "wordsKept");
   await plant("dskp10", ["  return Array.isArray(offered) && offered.length > 0 && signinWorks(held, deskKey, deskNow); /* plant:works-offered */","  return signinWorks(held, deskKey, deskNow);"], "noProvider");
