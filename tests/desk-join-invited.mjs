@@ -11,6 +11,8 @@
  * does not vouch) leaves the desk in the drawn waiting state with the copywriter's line for it. (dji5) A refused Join is said in one
  * line. (dji6) Buy's handoff to the order page is unchanged in shape: the fragment the shell builds from its own view. (dji7) No
  * paste field outside the empty desk: Settings, the Library and the Menu draw no Join a team, and no request card offers the paste.
+ * (dji9) A Join left waiting owes a knock at its team's door: the renewal that brings the seat and that door knocks it once, as an
+ * accepted Join does. (dji10) A seat with no door for that team knocks nothing and keeps what is owed. (dji11) No renewal after knocks again.
  *
  * THE SHELL'S HALF IS SLICED from shell/main.js, as tests/desk-buy.mjs slices it; the page's half is imported, and drawn again by the
  * built page (engine/etiuda.html) in headless Chrome for dji1 and the bubble. No window, no provider, no service reached.
@@ -39,8 +41,8 @@ const MANAGE = fs.readFileSync(path.join(ROOT, "src", "modules", "manage.js"), "
 const MENUS = fs.readFileSync(path.join(ROOT, "src", "modules", "header-menus.js"), "utf8");
 const TEMPLATE = fs.readFileSync(path.join(ROOT, "src", "template.html"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const SHELL_PLANTS = 10, PAGE_PLANTS = 9;
-const EXPECTED = 10 + (PLANTS_OFF ? 0 : SHELL_PLANTS + PAGE_PLANTS);
+const SHELL_PLANTS = 15, PAGE_PLANTS = 9;
+const EXPECTED = 13 + (PLANTS_OFF ? 0 : SHELL_PLANTS + PAGE_PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -79,19 +81,29 @@ try {
     lineOf("let SIGNIN_SERVICE ="), lineOf("let SIGNOUT_SERVICE ="), lineOf("function storeServiceAt("), fnOf("async function signinServiceAsk("),
     lineOf("const SIGNIN_BODY_MAX ="), fnOf("function orderAddress("), lineOf("const ORDER_PAGE_SHAPE ="), fnOf("function buyAddress(")].join("\n");
 } catch (e) { sliced = e.message; }
-let SHELL_SWAP = null;
-function shellOf(view) {
-  let text = SHELL;
+/* The renewal's half (dji9 to dji11): the seat's settle and the knock a waiting Join owes, sliced apart so the checks above stand alone. */
+let KNOCK = "", knockSliced = "";
+try {
+  KNOCK = [lineOf("const SIGNIN_ASKED_MAX ="), fnOf("function signinAskedOf("), lineOf("const signinAskedWords ="), fnOf("function signinWordsOf("),
+    fnOf("function signinSettleSeat("), fnOf("function signinJoinKnockOf("), fnOf("function signinJoinKnockNow(")].join("\n");
+} catch (e) { knockSliced = e.message; }
+const RENEW_NOW = (() => { try { return fnOf("async function signinRenewNow("); } catch { return ""; } })();
+let SHELL_SWAP = null, RENEW_SWAP = null;
+function shellOf(view, io) {
+  let text = SHELL + (KNOCK ? "\n" + KNOCK : "");
   if (SHELL_SWAP) {
     if (text.split(SHELL_SWAP[0]).length !== 2) throw new Error("plant anchor not in the slice once: " + SHELL_SWAP[0]);
     text = text.replace(SHELL_SWAP[0], SHELL_SWAP[1]);
   }
   const posted = [];
   const env = { Buffer, signinPost: (f, url, bytes) => { posted.push({ url, body: JSON.parse(bytes.toString("utf8")) }); return Promise.resolve({ status: 200, bytes: Buffer.from("{}") }); },
-    signinView: () => view || {}, buyManaged: () => false, ORDER_PAGE: "https://etiuda.dev/order/desk" };
+    signinView: () => view || {}, buyManaged: () => false, ORDER_PAGE: "https://etiuda.dev/order/desk",
+    /* The knock's world, an illustration: every door of a standing certificate is offered, so only the owed knock's own mark stops a second one. */
+    signinState: () => io, signinSave: () => { if (io) io.saved++; }, signinDoorsShown: h => (h && h.cert ? (h.doors || []).map((d, n) => ({ n })) : []),
+    signinDoorJoin: n => { if (io) io.joins.push(n); }, sendJoin: () => { if (io) io.told++; }, theWindow: null };
   const names = Object.keys(env);
   const api = new Function(...names, text + "\nreturn { signinInvitedOf, signinInvitedWords, signinInvitedView, signinJoinWaitKept, signinJoinBytes, signinJoinBody, signinJoinOf,"
-    + " signinJoinSettle, signinServiceAsk, storeServiceAt, orderAddress, buyAddress };")(...names.map(n => env[n]));
+    + " signinJoinSettle, signinServiceAsk, storeServiceAt, orderAddress, buyAddress" + (KNOCK ? ", signinSettleSeat, signinJoinKnockOf, signinJoinKnockNow" : "") + " };")(...names.map(n => env[n]));
   return Object.assign(api, { posted });
 }
 const keys = crypto.generateKeyPairSync("ed25519");
@@ -146,6 +158,45 @@ CASES.settle = () => {
     && u.invited.length === 2 && held.invited.length === 2
     && S.signinJoinWaitKept({ joinWait: "Bruno" }, { asked: ["Bruno"] }) === "Bruno" && S.signinJoinWaitKept({ joinWait: "Bruno" }, { asked: [] }) === ""
     && S.signinJoinWaitKept({}, { asked: ["Bruno"] }) === "";
+};
+/* dji9 to dji11: a Join to Ada's team answered "waiting", then the renewals after her confirm, each settled as the shell settles one (the
+   ask no longer named, a later certificate), and the knock the renewal asks after it. The certificate and doors are illustrations; the
+   doors' signature is the real shell's to judge (signinDoorsShown), stood in for here by offering every door. */
+const OTHER_TEAM = "t-fedcba9876543210";
+const doorFor = team => ({ team, rt: "1".repeat(32), url: "https://etiuda.dev/relay/v1", keyId: "studio-" + "2".repeat(16), lead: "ef".repeat(32), box: "cd".repeat(32) });
+function knockWalk(rounds) {
+  const io = { held: null, joins: [], saved: 0, told: 0 }, S = shellOf(undefined, io);
+  if (!S.signinJoinKnockNow) return null;
+  const inv = S.signinInvitedOf(ANSWER_INVITED);
+  io.held = S.signinJoinSettle({ invited: inv, asked: [], cert: null, doors: [] }, 0, "waiting");
+  const out = { io, owed: io.held.joinKnock === TEAM && io.held.joinWait === "Ada", knocked: [] };
+  rounds.forEach((doors, i) => {
+    const cert = { issued: NOW + i + 1, until: UNTIL, sig: { value: "s" + i } };
+    io.held = S.signinSettleSeat(io.held, { ok: true, code: "", cert, doors, doorsSig: "x", asked: [] }, NOW + i, NOW + i, 0);
+    out.knocked.push(S.signinJoinKnockNow());
+  });
+  return out;
+}
+/* dji9: the renewal that hands the seat and that team's door knocks it once, by its place among the doors, and the renewal asks the knock. */
+CASES.knockOnce = () => {
+  const w = knockWalk([[doorFor(OTHER_TEAM), doorFor(TEAM)]]);
+  const wired = /\n  s\.held = r\.held;[\s\S]*\n  signinJoinKnockNow\(\); \/\* plant:knock-renew \*\/\n  tellSignin\(\);/.test(RENEW_SWAP ? RENEW_NOW.replace(RENEW_SWAP[0], RENEW_SWAP[1]) : RENEW_NOW);
+  return !!w && w.owed && w.knocked.join() === "true" && w.io.joins.join() === "1" && w.io.told === 1 && w.io.saved === 1 && wired;
+};
+/* dji10: a seat with no door for that team knocks nothing and leaves the owed knock where it was; the door arriving later knocks then. */
+CASES.knockNone = () => {
+  const w = knockWalk([[doorFor(OTHER_TEAM)], []]);
+  if (!w || !w.owed || w.knocked.join() !== "false,false" || w.io.joins.length || w.io.saved || w.io.held.joinKnock !== TEAM) return false;
+  const later = knockWalk([[doorFor(OTHER_TEAM)], [doorFor(OTHER_TEAM), doorFor(TEAM)]]);
+  return later.knocked.join() === "false,true" && later.io.joins.join() === "1";
+};
+/* dji11: the renewals after the knock, the door still handed, knock no more; an accepted or refused Join owes none. */
+CASES.knockNoMore = () => {
+  const w = knockWalk([[doorFor(TEAM)], [doorFor(TEAM)], [doorFor(TEAM)]]);
+  const S = shellOf(), inv = S.signinInvitedOf(ANSWER_INVITED), held = { invited: inv, asked: [], joinKnock: TEAM };
+  return !!w && w.knocked.join() === "true,false,false" && w.io.joins.join() === "0" && !("joinKnock" in w.io.held)
+    && !("joinKnock" in S.signinJoinSettle(held, 0, "accepted")) && !("joinKnock" in S.signinJoinSettle(held, 0, "refused"))
+    && S.signinJoinSettle(held, 0, "unreached").joinKnock === TEAM && !("joinKnock" in S.signinJoinSettle({ invited: inv, asked: [] }, 1, "waiting"));
 };
 /* dji6: the order page's handoff is the fragment the shell builds from its own view, unchanged: the same value the old screens showed. */
 CASES.handoff = () => {
@@ -382,6 +433,7 @@ async function builtPage() {
 
 /* ---- the run -------------------------------------------------------------------------------------------------------------- */
 if (sliced) console.log("  (the slices did not load: " + sliced + ")");
+if (knockSliced) console.log("  (the knock's slice did not load: " + knockSliced + ")");
 const run = async (name, arg) => { try { return !sliced && (await CASES[name](arg)) === true; } catch (e) { console.log("    (" + name + " threw: " + e.message + ")"); return false; } };
 let built = null;
 try { built = sliced ? null : await builtPage(); } catch (e) { console.log("    (the built page threw: " + e.message + ")"); }
@@ -396,6 +448,9 @@ check(await run("pagePress"), "dji5 a refused Join says so in one line, where it
 check(await run("handoff"), "dji6 Buy's handoff to the order page is unchanged in shape: the fragment the shell builds from its own view");
 check(await run("pageWords"), "dji6b the door's and Account's words say how a seat comes now: a lead's invitation to the address, a link, or a purchase where Buy is shown; signed out, Buy says signing in comes first");
 check(await run("nameless"), "dji8 a lead with no name: the wait, the invitation and the confirm take their nameless forms, nothing stands in for the name, no sentence repeats the team's lead, English and Polish");
+check(await run("knockOnce"), "dji9 a Join left waiting, then the renewal that brings the seat and that team's door, knocks that door exactly once, as the accepted Join does; the renewal asks it");
+check(await run("knockNone"), "dji10 a renewal whose seat brings no door for that team knocks nothing and leaves the owed knock as it was; the door arriving later knocks then");
+check(await run("knockNoMore"), "dji11 the renewals after the knock knock no more; an accepted or refused Join owes none, an unreached one keeps what was owed");
 check(await run("noPaste"), "dji7 no paste field outside the empty desk: Settings, the Library and the Menu draw no Join a team, and no request card offers the paste");
 
 /* ---- the plants ----------------------------------------------------------------------------------------------------------- */
@@ -427,6 +482,18 @@ if (!PLANTS_OFF && !sliced) {
     "nameless", "join-wait-nameless cut: a nameless wait would be dropped at the next answer");
   await plantShell("djp17", ["Object.assign(out, { joinWait: lead }, lead === \"-\" || asked.indexOf(lead) >= 0 ? {} : { asked: asked.concat([lead]).slice(0, 8) });",
     "Object.assign(out, { joinWait: lead }, asked.indexOf(lead) >= 0 ? {} : { asked: asked.concat([lead]).slice(0, 8) });"], "nameless", "the nameless mark written among the leads: the door would name \"-\"");
+  await plantShell("djp20", ["const d = team ? (shown || []).find(x => held.doors[x.n] && held.doors[x.n].team === team) : null; /* plant:knock-team */", "const d = null;"],
+    "knockOnce", "knock-team cut: the seat and the door would arrive and nothing would knock");
+  await plantShell("djp21", ["const d = team ? (shown || []).find(x => held.doors[x.n] && held.doors[x.n].team === team) : null; /* plant:knock-team */",
+    "const d = team ? (shown || []).find(x => held.doors[x.n]) : null;"], "knockNone", "knock-team loosened: another team's door would be knocked");
+  await plantShell("djp22", ["delete out.joinKnock; /* plant:knock-once */", ""], "knockNoMore", "knock-once cut: every renewal after would knock again");
+  await plantShell("djp23", ["if (said === \"waiting\" && inv.team) out.joinKnock = inv.team; /* plant:join-knock */", ""], "knockOnce", "join-knock cut: a waiting Join would owe no knock");
+  {
+    let red = false;
+    RENEW_SWAP = ["  signinJoinKnockNow(); /* plant:knock-renew */\n", ""];
+    try { red = RENEW_NOW.split(RENEW_SWAP[0]).length === 2 && !(await run("knockOnce")); } finally { RENEW_SWAP = null; }
+    check(red, "djp24 knock-renew cut in signinRenewNow: no renewal would ask the owed knock");
+  }
   {
     let red = false;
     PRELOAD_SWAP = ["delete o.code; /* plant:page-view-code */", ""];
