@@ -1,4 +1,4 @@
-/* FOUR INSTALLER MENDS AND ONE WARNING, held without makensis or a window: shell/installer.nsh, shell/installer/allusers-folder.nsh,
+/* THREE INSTALLER MENDS AND ONE WARNING, held without makensis or a window: shell/installer.nsh, shell/installer/allusers-folder.nsh,
  * shell/install-files.cjs, electron-builder.js and shell/main.js, read as text, and the NSIS walks replayed line by line.
  *
  *   node tests/installer-mends.mjs        no fixtures, nothing installed or run; exit code is the number of failed checks
@@ -11,10 +11,13 @@
  *       c  drop: only listed files and the folders they empty go, a junction is never entered, a folder left non-empty stays
  *       d  where the walks run: after the stage takes the folder's name and before anything after the swap, a leftover aside
  *          cleared by list before the swap, and nothing else removes the copy aside whole but a plain uninstall
- *   im2 A SILENT RUN NEVER REPLACES A NEWER COPY: the version is read silent too, and an installed newer version ends the run
- *       1638 before anything is written, unless /ALLOWDOWNGRADE
+ *       e  a folder that holds anything and is no copy of this program is refused before anything is written, with one
+ *          sentence (a placeholder for the copywriter) and exit 2
  *   im4 AN ALL-USERS INSTALL STARTED ELEVATED leaves the per-user copy to its own uninstaller, run as that account at its next
- *       sign-in (HKCU RunOnce), silent and keeping data, and still runs no program of that account's itself
+ *       sign-in (HKCU RunOnce) with that account's ordinary rights only, silent and keeping data; nothing of that account's runs here
+ *       a  the scheduled line, with /currentuser, the finish sentence (a placeholder), and nothing run by the elevated install
+ *       b  the per-user uninstaller asks no administrator rights: the template requests user level for every uninstaller, and
+ *          /currentuser, read after /allusers, takes the per-user branch, whose mode never calls UAC
  *   im5 A STAGE IS WHOLE FILE BY FILE, AND THE OLD COPY STAYS UNTIL THE NEW ONE HAS STARTED
  *       a  the list's writer and the verifier's model (shell/install-files.cjs) over a real temporary tree
  *       b  etiudaStageWhole replayed agrees with the model on a whole stage and on each way a stage is short
@@ -259,47 +262,64 @@ check(p1.ok, "im1d the keep walk runs once the stage has the folder's name and b
 check(!placed(NSH.replace("    !insertmacro etiudaRenameRetry \"$etiudaBase\" \"$etiudaAside\"\n", "    !insertmacro etiudaRemoveTree \"$etiudaAside\"\n    !insertmacro etiudaRenameRetry \"$etiudaBase\" \"$etiudaAside\"\n")).ok,
   "im1d control: the old whole removal of the aside put back reads red");
 
-/* ---- im2: a silent downgrade ---- */
-const silentRefuses = (nsh, readme) => {
-  const init = code(macro(nsh, "customInit"));
-  const call = init.indexOf("Call RecogniseExistingInstallation"), silent = init.indexOf("${IfNot} ${Silent}");
-  const outside = call > 0 && init[call - 1] === "${IfNot} ${UAC_IsInnerInstance}" && (silent < 0 || silent > call)
-    && init.slice(0, call).filter(l => /^\$\{IfNot\} \$\{Silent\}$/.test(l)).length === 0;
-  const rec = code(fnOf(nsh, "RecogniseExistingInstallation"));
-  const at = s => rec.indexOf(s), box = rec.findIndex(l => /^MessageBox MB_OKCANCEL/.test(l));
-  const block = ["${If} ${Silent}", "${If} $0 == 1", "${AndIf} $InstalledVersion != \"\"", "ClearErrors",
-    "${GetOptions} $CMDLINE \"/ALLOWDOWNGRADE\" $1", "${If} ${Errors}", "SetErrorLevel 1638", "Quit"];
-  const s0 = at(block[0]);
-  const inOrder = s0 > -1 && block.every((l, k) => rec[s0 + k] === l);
-  const thenOn = rec.indexOf("Goto DoneRecognise", s0) > s0 && rec.indexOf("Goto DoneRecognise", s0) < box;
-  const afterCompare = s0 > at("Call CompareSemver");
-  const told = /\| 1638 \|[^\n]*newer version[^\n]*\/ALLOWDOWNGRADE/.test(readme);
-  return { ok: outside && inOrder && thenOn && afterCompare && box > s0 && told, outside, inOrder, thenOn, afterCompare, told };
+/* ---- im1e: a folder that is not ours is refused ---- */
+const refuses = nsh => {
+  const b = code(macro(nsh, "etiudaStageBegin"));
+  const g = b.indexOf("${If} ${FileExists} \"$etiudaBase\*.*\"");
+  const guard = g > -1 && b[g + 1] === "${AndIfNot} ${FileExists} \"$etiudaBase\${APP_EXECUTABLE_FILENAME}\""
+    && b[g + 2] === "${AndIfNot} ${FileExists} \"$etiudaBase\${ETIUDA_FILES}\"";
+  const seen = b.indexOf("StrCpy $2 \"theirs\"", g), quit = b.indexOf("Quit", seen);
+  const says = seen > g && b.slice(seen, quit).includes("MessageBox MB_OK|MB_ICONSTOP \"$(etiudaFolderNotOurs)\" /SD IDOK") && b[quit - 1] === "SetErrorLevel 2";
+  const back = b.findIndex(l => l === "!insertmacro etiudaRenameRetry \"$etiudaAside\" \"$etiudaBase\"");
+  const before = quit > -1 && quit < b.indexOf("CreateDirectory \"$etiudaStage\"") && back > -1 && g > back;
+  const words = (nsh.match(/LangString etiudaFolderNotOurs \$\{ID\} "[^"\n]+" ; placeholder: Claudette\n/g) || []).length === 2;
+  return { ok: guard && says && before && words, guard, says, before, words };
 };
-const s1 = silentRefuses(NSH, README);
-check(s1.ok, "im2a the installed version is read on a silent run too (not in the inner instance), and a newer one installed ends the"
-  + " run 1638 before any page or write, unless /ALLOWDOWNGRADE is passed; README's table says so", JSON.stringify(s1));
-check(!silentRefuses(NSH.replace("  ${IfNot} ${UAC_IsInnerInstance}\n    Call RecogniseExistingInstallation\n  ${EndIf}\n  ${IfNot} ${Silent}\n",
-  "  ${IfNot} ${Silent}\n    ${IfNot} ${UAC_IsInnerInstance}\n      Call RecogniseExistingInstallation\n    ${EndIf}\n"), README).ok,
-  "im2a control: the reading left inside the non-silent branch, as before, reads red");
-check(!silentRefuses(NSH.replace("          SetErrorLevel 1638\n", ""), README).ok, "im2a control: the refusal without its exit code reads red");
+const f1 = refuses(NSH);
+check(f1.ok, "im1e a folder that holds anything and has neither this program nor its list is refused, after a cut-short swap is put back"
+  + " and before anything is written, with one sentence in both languages (a placeholder for the copywriter) and exit 2", JSON.stringify(f1));
+check(!refuses(NSH.replace("      SetErrorLevel 2\n      Quit\n    ${EndIf}\n    Pop $2", "    ${EndIf}\n    Pop $2")).ok,
+  "im1e control: the refusal that goes on into the folder anyway reads red");
 
 /* ---- im4: the per-user copy met by an installer started elevated ---- */
+const RUNONCE = "WriteRegStr HKCU \"Software\Microsoft\Windows\CurrentVersion\RunOnce\" \"${APP_ID}.per-user-copy\" \"$R9 /currentuser /S /KEEP_APP_DATA\"";
 const leftToItsOwner = nsh => {
   const m = code(macro(nsh, "etiudaOldUserCopy"));
   const rest = m.slice(m.lastIndexOf("${Else}"));
-  const cond = rest.indexOf("${If} $R9 != \"\""), w = rest.indexOf("WriteRegStr HKCU \"Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce\" \"${APP_ID}.per-user-copy\" \"$R9 /S /KEEP_APP_DATA\"");
+  const cond = rest.indexOf("${If} $R9 != \"\""), w = rest.indexOf(RUNONCE);
   const said = rest.indexOf("StrCpy $etiudaFinishText \"$(etiudaOldCopyGoes)\"");
   const runsNothing = !rest.some(l => /uninstallOldVersion|ExecWait|\bExec\b|ExecShell|nsExec/.test(l));
-  const words = (nsh.match(/LangString etiudaOldCopyGoes \$\{ID\} "[^"\n]+"/g) || []).length === 2
-    && /LangString etiudaOldCopyGoes \$\{ID\} "[^"]*przy następnym logowaniu do Windows/.test(nsh) && /LangString etiudaOldCopyGoes \$\{ID\} "[^"]*next time this account signs in/.test(nsh);
+  const words = (nsh.match(/LangString etiudaOldCopyGoes \$\{ID\} "[^"\n]+" ; placeholder: Claudette\n/g) || []).length === 2;
   return { ok: cond > -1 && w > cond && said > cond && runsNothing && words, cond, w, said, runsNothing, words };
 };
 const o1 = leftToItsOwner(NSH);
 check(o1.ok, "im4a started elevated, the per-user copy HKCU names is left to its own uninstaller at that account's next sign-in (HKCU"
-  + " RunOnce, /S /KEEP_APP_DATA), no program of that account's is run here, and the finish page says so in both languages", JSON.stringify(o1));
-check(!leftToItsOwner(NSH.replace(/\n\s*WriteRegStr HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce"[^\n]*/, "")).ok,
+  + " RunOnce, /currentuser /S /KEEP_APP_DATA), the elevated install runs no program of that account's, and the finish page says so in"
+  + " both languages, marked a placeholder for the copywriter", JSON.stringify(o1));
+check(!leftToItsOwner(NSH.replace(/\n\s*WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\RunOnce"[^\n]*/, "")).ok,
   "im4a control: the copy left registered with nothing to remove it, as before, reads red");
+check(!leftToItsOwner(NSH.replace("$R9 /currentuser /S /KEEP_APP_DATA", "$R9 /S /KEEP_APP_DATA")).ok,
+  "im4a control: the line without /currentuser, which beside the new all-users copy would take the all-users branch and ask to elevate, reads red");
+
+/* im4b: what runs at sign-in asks no administrator rights, read from app-builder-lib's own templates as installed. */
+const TPL = path.join(ROOT, "node_modules", "app-builder-lib", "templates", "nsis");
+const tread = rel => { try { return fs.readFileSync(path.join(TPL, rel), "utf8").replace(/\r\n/g, "\n"); } catch (e) { return ""; } };
+const userLevel = (nsi, assisted, multi) => {
+  const lv = /!ifdef INSTALL_MODE_PER_ALL_USERS\n\s*!ifdef BUILD_UNINSTALLER\n\s*RequestExecutionLevel user\n\s*!else\n\s*RequestExecutionLevel admin\n\s*!endif\n!else\n\s*RequestExecutionLevel user\n!endif/.test(nsi);
+  const init = (/\n[ \t]*!macro initMultiUser\n([\s\S]*?)\n[ \t]*!macroend/.exec("\n" + assisted) || [])[1] || "";
+  const all = init.indexOf("${GetOptions} $R0 \"/allusers\" $R1"), cur = init.indexOf("${GetOptions} $R0 \"/currentuser\" $R1");
+  const curWins = all > -1 && cur > all
+    && /"\/currentuser" \$R1\n\s*\$\{IfNot\} \$\{Errors\}\n\s*StrCpy \$hasPerMachineInstallation "0"\n\s*StrCpy \$hasPerUserInstallation "1"/.test(init)
+    && /\$\{if\} \$hasPerUserInstallation == "1"\n\s*\$\{andif\} \$hasPerMachineInstallation == "0"\n\s*!insertmacro setInstallModePerUser/.test(init);
+  const perUser = (/\n[ \t]*!macro setInstallModePerUser\n([\s\S]*?)\n[ \t]*!macroend/.exec("\n" + multi) || [])[1] || "";
+  const noUac = !!perUser && !/UAC_/.test(perUser);
+  return { ok: lv && curWins && noUac, lv, curWins, noUac };
+};
+const u1 = userLevel(tread("installer.nsi"), tread("assistedInstaller.nsh"), tread("multiUser.nsh"));
+check(u1.ok, "im4b the per-user uninstaller asks no administrator rights: every uninstaller the template builds requests user level,"
+  + " /currentuser is read after /allusers and takes the per-user branch, and that mode calls no UAC", JSON.stringify(u1));
+check(!userLevel(tread("installer.nsi").replace(/(!ifdef BUILD_UNINSTALLER\n\s*)RequestExecutionLevel user/, "$1RequestExecutionLevel admin"), tread("assistedInstaller.nsh"), tread("multiUser.nsh")).ok,
+  "im4b control: an uninstaller built to request administrator rights reads red");
 
 /* ---- im5: whole file by file, and the old copy kept until the start ---- */
 let modelOk = false, modelDetail = "shell/install-files.cjs is missing";
