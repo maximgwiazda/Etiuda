@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-seats-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 224;
+const EXPECTED = 231;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* ETIUDA_PLANT_ONLY, a comma list of plant tags or planted names: only those plants run, every other is skipped, so one plant is proved
    alone without the whole sweep. */
@@ -1295,6 +1295,37 @@ async function main() {
       nextDeviceHello: said(devHello), nextInvitationHello: said(invHello) }) };
   }
   await leg("s30f", freedEveryPathScene, "an enrolled desk the grant names as freed: its device and invitation sessions end no-hello on that renewal, and its next device hello and next invitation hello are each refused seat-lapsed");
+  /* An ordinary licence's grant carrying the service's freed list alone, seats: {freed: [{key, at}]}: the team stays ordinary (no seats
+     row, any licence's certificate still opens a desk not named), a named key is refused at once at the device hello and on the invitation
+     path and loses the sessions it holds, a certificate issued since opens it, and a later grant naming nobody lifts the name. */
+  async function freedOrdinaryScene() {
+    const w = await team({}), a = w.desks.a, j = joiner(w, "j"), inv = await inviteOn(w), inv2 = await inviteOn(w);
+    a.cert = certFor(a.pub, hex(16), T0, DAY);
+    const jc = certFor(j.pub, hex(16), T0, DAY);
+    const dev = await sessionAs(w, "a"), invS = await helloWith(w, j, { invite: inv.token, inv: inv.inv, seat: jc });
+    w.R.clock.now = T0 + 5 * MIN;
+    const at = w.R.clock.now, freed = [{ key: a.pub, at }, { key: j.pub, at }];
+    const empty = C.grantWhy(grantAt(w.lead.pub, at, { freed: [] }), w.lead.pub, at, K.ROOTS), bare = C.grantWhy(grantAt(w.lead.pub, at, {}), w.lead.pub, at, K.ROOTS);
+    const named = await renew(w, grantAt(w.lead.pub, at, { freed }));
+    const devAfter = await listWith(w, dev), invAfter = await listWith(w, invS);
+    const devHello = await sessionAs(w, "a"), resume = await helloWith(w, j, { seat: jc });
+    const invHello = await helloWith(w, a, { invite: inv2.token, inv: inv2.inv, seat: a.cert });
+    const other = await session(w, w.desks.b, certFor(w.desks.b.pub, hex(16), w.R.clock.now, DAY));
+    const stillOrdinary = storeOf(w).get("seats") === undefined;
+    w.R.clock.now += MIN;
+    const since = await session(w, a, certFor(a.pub, hex(16), w.R.clock.now, DAY));
+    w.R.clock.now += MIN;
+    const lifted = await renew(w, grantAt(w.lead.pub, w.R.clock.now));
+    const back = await sessionAs(w, "a");
+    const ended = r => r.status === 401 && !!r.json && r.json.error === "no-hello";
+    const ok = opened(dev) && opened(invS) && empty === "shape" && bare === "shape" && named.status === 200 && ended(devAfter) && ended(invAfter)
+      && refused(devHello, "seat-lapsed") && refused(resume, "seat-lapsed") && refused(invHello, "seat-lapsed") && opened(other) && stillOrdinary
+      && opened(since) && lifted.status === 200 && opened(back);
+    return { ok, detail: brief({ device: said(dev), invitation: said(invS), emptyList: empty, noFields: bare, named: said(named), deviceListAfter: said(devAfter),
+      invitationListAfter: said(invAfter), nextDeviceHello: said(devHello), resume: said(resume), nextInvitationHello: said(invHello), otherDesk: said(other),
+      stillOrdinary, certSince: said(since), lifted: said(lifted), earlierCertAfterLift: said(back) }) };
+  }
+  await leg("s30g", freedOrdinaryScene, "an ordinary licence's grant naming keys as freed (seats holding the freed list alone): the team stays ordinary, the named desk's device and invitation sessions end no-hello, its next device hello, invitation resume and invitation hello are refused seat-lapsed, a desk not named opens on any licence, a certificate issued since opens, a later grant naming nobody lifts the name, and an empty list or empty seats is refused shape");
   /* No folder arm: a working team's lead writing its team file with a channel keeps no team file or move row, and a
      read-only team's lead moving it to a folder is refused team-lapsed, as every write there is. */
   async function folderGoneScene() {
@@ -1613,6 +1644,12 @@ async function main() {
     ["invite-freed", "s30f", freedEveryPathScene, "a freed key's invitation hello opens"],
     ["freed-sessions", "s30f", freedEveryPathScene, "a freed key's device session lives on"],
     ["freed-invite-sessions", "s30f", freedEveryPathScene, "a freed key's invitation session lives on"],
+    ["grant-freed-ordinary", "s30g", freedOrdinaryScene, "an ordinary licence's freed list is refused shape"],
+    ["freed-ordinary-kept", "s30g", freedOrdinaryScene, "an ordinary licence's freed list is not kept"],
+    ["freed-ordinary-read", "s30g", freedOrdinaryScene, "an ordinary licence's freed list is never read at a hello"],
+    ["freed-ordinary-lift", "s30g", freedOrdinaryScene, "a later grant naming nobody leaves the name standing"],
+    ["freed-sessions", "s30g", freedOrdinaryScene, "an ordinary freed key's device session lives on"],
+    ["freed-invite-sessions", "s30g", freedOrdinaryScene, "an ordinary freed key's invitation session lives on"],
     ["store-session", "s24i", storeScene, "a store's session is judged by the seat gate, so its store certificate is refused and a seat certificate opens it"],
   ];
   for (const [tag, id, scene, what] of PLANTS) {
