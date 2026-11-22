@@ -5460,10 +5460,10 @@ CASES.browserDoor = async (s, swap) => {
 /* A LEAD'S ACT ENDS THE SEAT (class A, the desk's half; Claude alpha's ruling of 22 November 2026): a certificate's remaining life is a
    grace for a seat that still stands, never against a lead who freed it or withdrew its person. The service's answer to that renewal is
    its own "signin" (tests/signin-answers.json: "a renewal of a seat its lead freed"); every other answer keeps the certificate as before. */
-const FREED_EN = ["The team's lead has taken back this computer's seat.",
-  "Once a lead gives this account a seat again, signing in again opens the catalogs. Nothing on this computer is lost meanwhile."];
-const FREED_PL = ["Lider zespołu odebrał miejsce tego komputera.",
-  "Gdy lider znów da temu kontu miejsce, ponowne zalogowanie się otworzy katalogi. Do tego czasu nic na tym komputerze nie przepada."];
+const FREED_EN = ["This account's seat on the team has been taken back.",
+  "A lead can bring it back with a new invitation to this account's email address: after signing in again, it appears here with one Join. Nothing on this computer is lost meanwhile."];
+const FREED_PL = ["Miejsce tego konta w zespole zostało odebrane.",
+  "Lider zespołu może je przywrócić nowym zaproszeniem na adres e-mail tego konta: po ponownym zalogowaniu pojawi się tutaj z jednym przyciskiem Dołącz. Do tego czasu nic na tym komputerze nie przepada."];
 const FREED_TEAM = { on: "team", ends: NOW + 99 * DAY_MS, lead: "Ada" };
 /* The freed answer, read as the service gives it, sets the certificate and its doors aside and stamps `freed` with the desk's time, at a
    settle and at a quiet renewal alike: the desk works no more, the view says so, the file keeps the mark and no certificate, and the
@@ -5738,7 +5738,7 @@ const LEGS = [
   ["dsg12", "stateKeyRestoreAndTell", "Argon 51 M2: unopenable key then old key restored keeps works:true and preserves disk cert on tick; key arrival tells the page"],
   ["dsfe1", "freedEnds", "class A, the desk's half: the service's freed answer at a renewal sets the certificate and its doors aside, freed stamped with the desk's time, so the desk stops at once; the view, the file and the next certificate agree"],
   ["dsfe2", "freedKeeps", "a freed renewal keeps the account, its code, its words and the store's offer, writes and removes no file, and neither leaves nor forgets the store"],
-  ["dsfe3", "freedDoor", "a freed desk's door says the team's lead has taken back this computer's seat and what to do, EN and PL, screen and panel, with Sign in again; another stop is told as before"],
+  ["dsfe3", "freedDoor", "a freed desk's door says this account's seat on the team has been taken back and how a lead brings it back, EN and PL, screen and panel, with Sign in again; another stop is told as before"],
   ["dsfe4", "freedOthers", "every other refusal, the wait, the service's none (ended as before) and a provider's refusal keep the certificate working and stamp nothing"],
 ];
 for (let [id, name, line] of LEGS) {
@@ -6524,7 +6524,7 @@ if (!PLANTS_OFF) {
   await plant("dsfep6", ["  return Object.assign({}, held, { checked: now, reached: true, said: ans.reason, ask: freed || held.ask === true,", "  return Object.assign({ provider: held.provider, sub: held.sub, seed: held.seed }, { checked: now, reached: true, said: ans.reason, ask: freed || held.ask === true,"], "freedKeeps");
   await plantPage("dsfep7", ["    freed: signedIn ? signinTimeRead(o.freed) : 0, /* plant:read-freed */", "    freed: 0,"], "freedDoor");
   await plantPage("dsfep8", ["  else if(!works && v.signedIn && v.freed>0) state=\"freed\"; /* plant:door-state-freed */", ""], "freedDoor");
-  await plantPage("dsfep9", ["  if(ds.state===\"freed\") return [t(\"The team's lead has taken back this computer's seat.\"), /* plant:door-lines-freed */", "  if(false) return [t(\"The team's lead has taken back this computer's seat.\"),"], "freedDoor");
+  await plantPage("dsfep9", ["  if(ds.state===\"freed\") return [t(\"This account's seat on the team has been taken back.\"), /* plant:door-lines-freed */", "  if(false) return [t(\"This account's seat on the team has been taken back.\"),"], "freedDoor");
   await plantPage("dsfep10", ["|| ds.state===\"freed\") return doorLaterHtml(v, ds); /* plant:door-later-freed */", ") return doorLaterHtml(v, ds);"], "freedDoor");
   await plantPage("dsfep13", ["  if(!checkFilled && !freed) quiet.push(doorTextPress(t(\"Check now\"), \"check\")); /* plant:door-freed-nocheck */", "  if(!checkFilled) quiet.push(doorTextPress(t(\"Check now\"), \"check\"));"], "freedDoor");
   await plantPage("dsfep11", ["  quiet.push(doorTextPress(freed ? t(\"Sign in again\") : t(\"Use another account\"), \"another\")); /* plant:door-freed-again */", "  quiet.push(doorTextPress(t(\"Use another account\"), \"another\"));"], "freedDoor");

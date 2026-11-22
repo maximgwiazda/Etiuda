@@ -1855,9 +1855,9 @@ UI_STRINGS.pl={
   "Etiuda keeps working on this computer until {DATE}, when its last confirmation runs out, and then stops. A purchase, or a team's lead admitting this account, brings the seat back.":"Etiuda działa na tym komputerze do {DATE}, kiedy wygasa jej ostatnie potwierdzenie, a potem się zatrzyma. Miejsce przywróci zakup albo przyjęcie tego konta przez lidera zespołu.",
   "Seat ended {ENDED} · Etiuda stops {DATE}":"Miejsce wygasło {ENDED} · Etiuda zatrzyma się {DATE}",
   "This account's seat has ended; Etiuda stops on {DATE}.":"Miejsce tego konta wygasło; Etiuda zatrzyma się {DATE}.",
-  /* words: placeholder (a lead took back this computer's seat) */
-  "The team's lead has taken back this computer's seat.":"Lider zespołu odebrał miejsce tego komputera.",
-  "Once a lead gives this account a seat again, signing in again opens the catalogs. Nothing on this computer is lost meanwhile.":"Gdy lider znów da temu kontu miejsce, ponowne zalogowanie się otworzy katalogi. Do tego czasu nic na tym komputerze nie przepada.",
+  /* A seat taken back: the copywriter's words, 22 November 2026. */
+  "This account's seat on the team has been taken back.":"Miejsce tego konta w zespole zostało odebrane.",
+  "A lead can bring it back with a new invitation to this account's email address: after signing in again, it appears here with one Join. Nothing on this computer is lost meanwhile.":"Lider zespołu może je przywrócić nowym zaproszeniem na adres e-mail tego konta: po ponownym zalogowaniu pojawi się tutaj z jednym przyciskiem Dołącz. Do tego czasu nic na tym komputerze nie przepada.",
   "Sign in again":"Zaloguj się ponownie",
   "Etiuda has stopped on this computer.":"Etiuda zatrzymała się na tym komputerze.",
   "It stopped on {DATE}: {WHY}. Signing in with an account that has a seat, a purchase, or a team's lead admitting this account starts it again.":"Zatrzymała się {DATE}: {WHY}. Etiudę uruchomi ponownie zalogowanie się kontem, które ma miejsce w licencji, zakup albo przyjęcie tego konta przez lidera zespołu.",

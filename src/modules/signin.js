@@ -67,7 +67,7 @@ function signinRead(v){
     /* When the service first said none while a certificate ran, the seat and trials it last named, and whether this build can sign in
        at all; kept as the shell said them. deskDoorState reads them. */
     ended: signedIn ? signinTimeRead(o.ended) : 0, /* plant:read-ended */
-    /* When a lead took back this computer's seat, the shell having set its certificate aside. */
+    /* When this account's seat was taken back, the shell having set its certificate aside. */
     freed: signedIn ? signinTimeRead(o.freed) : 0, /* plant:read-freed */
     holding: signedIn ? signinHoldingRead(o.holding) : null,
     trials: signedIn ? signinTrialsRead(o.trials) : null,
@@ -494,9 +494,8 @@ function deskDoorLines(ds){
     fill(t("It ended on {DESK_END}. Buying a licence opens the catalogs again."), {"{DESK_END}":desk})];
   if(ds.state==="ended") return [fill(t("This account's seat ended on {ENDED}."), {"{ENDED}":ended}),
     fill(t("Etiuda keeps working on this computer until {DATE}, when its last confirmation runs out, and then stops. A purchase, or a team's lead admitting this account, brings the seat back."), {"{DATE}":until})];
-  /* words: placeholder */
-  if(ds.state==="freed") return [t("The team's lead has taken back this computer's seat."), /* plant:door-lines-freed */
-    t("Once a lead gives this account a seat again, signing in again opens the catalogs. Nothing on this computer is lost meanwhile.")];
+  if(ds.state==="freed") return [t("This account's seat on the team has been taken back."), /* plant:door-lines-freed */
+    t("A lead can bring it back with a new invitation to this account's email address: after signing in again, it appears here with one Join. Nothing on this computer is lost meanwhile.")];
   if(ds.state==="stopped") return [t("Etiuda has stopped on this computer."),
     fill(t("It stopped on {DATE}: {WHY}. Signing in with an account that has a seat, a purchase, or a team's lead admitting this account starts it again."),
       {"{DATE}":stopped, "{WHY}":deskWhySentence(ds.why, lead)})];
@@ -608,7 +607,6 @@ function doorLaterHtml(v, ds){
   /* A freed seat holds no refresh token, so Check now would ask nothing, and the note's promise of it would not hold: only a sign-in. */
   const freed=ds.state==="freed";
   if(!checkFilled && !freed) quiet.push(doorTextPress(t("Check now"), "check")); /* plant:door-freed-nocheck */
-  /* words: placeholder (Sign in again) */
   quiet.push(doorTextPress(freed ? t("Sign in again") : t("Use another account"), "another")); /* plant:door-freed-again */
   quiet.push(doorTextPress(t("Sign out"), "out"));
   const out=ds.state!=="waiting";
@@ -678,7 +676,7 @@ function signinDoorOf(v){
   }
   const told=signinTold(v), toldDoor=()=>({moment:told.kind, ident, say:told.say, providers:told.providers ? v.offered : undefined, acts:told.acts.concat([acct])});
   if(told && told.kind==="pressed") return toldDoor();
-  /* A lead took back this computer's seat: said as the door says it, with the providers to sign in again. */
+  /* This account's seat taken back: said as the door says it, with the providers to sign in again. */
   if(v.freed>0 && deskDoorState(v).state==="freed"){ const fp=deskDoorLines(deskDoorState(v)); return {moment:"freed", ident, heading:fp[0], line:fp[1], providers:v.offered, acts:[acct]}; } /* plant:freed-moment */
   /* The relay refused this desk's seat: what that means to the person, never a fault of the team or its lead. */
   if(v.relaySeat) return {moment:"relayseat", ident, say:signinSay(v.relaySeat==="removed" ? "seat-removed" : "seat-renew", v), /* plant:relay-seat-moment */
