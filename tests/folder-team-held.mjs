@@ -8,6 +8,12 @@
  * once, on the team's row in Settings and in a notice, the copywriter's sentence for such a team, and, where the mirror's outbox
  * still owes the folder something, that it stays on this computer unsent. Nothing under the share or the mirror is removed or
  * changed: a listing of both, path, size and digest, is the same before and after.
+ *
+ * THE LOCAL COPY (the mend of the design read). The desk reads the folder team's local copy, `<userData>/folder-mirror/<team>/`,
+ * where it holds anything, and the share itself only where no copy is kept: the copy is what the desk last had, with what the
+ * share does not hold (an owed file), and it opens with the share out of reach. The owed line names the folder the unsent files
+ * stay in. A sealed catalog of the held team opens from the copy under the key kept, and the desk's own file for it is held,
+ * never written in the clear, whether or not the share answers.
  */
 process.removeAllListeners("warning");
 process.on("warning", () => {});
@@ -24,7 +30,7 @@ const MODS = path.join(ROOT, "src", "modules"), MOD_DIR = pathToFileURL(MODS).hr
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 19;
+const EXPECTED = 27;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -38,7 +44,7 @@ const LAB = createLab("etiuda-folder-team-held-");
 /* ETIUDA_SHELL_MAIN names another shell/main.js to judge, as tests/team-desk.mjs takes it: a tree before this one, for its reds. */
 const SRC = fs.readFileSync(process.env.ETIUDA_SHELL_MAIN || path.join(ROOT, "shell", "main.js"), "utf8");
 const EXPOSE = ["catalogFolder", "teamWriteHere", "heedTeam", "leadsView", "joinPolicyFacts", "armFolder", "teamRoster", "teamEpochSeen",
-  "pinnedLead", "sharedWrite", "unlinkOwn"];
+  "pinnedLead", "sharedWrite", "unlinkOwn", "readCatalog", "catalogFileNamed", "storeSyncFolder", "sealCatalog", "writeBranch"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -109,8 +115,37 @@ function listing(dir) {
   return out.sort();
 }
 
-/* A desk holding the folder team: the share is its catalog folder setting, the mirror its local copy, the outbox owing one file. */
-function makeDesk(name, owed) {
+/* A catalog the share holds and the local copy does not (newer there), and one the copy holds and the share does not (owed). */
+const shareOnly = () => JSON.stringify({ format: 2, kind: "etiuda-catalog", id: "share-news", rev: 4, name: "Share News", date: "2026-05-01",
+  langs: [{ code: "en", label: "EN" }], tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers" } }],
+  cards: [{ id: "c-n", shelf: "t-op", bodyShape: "plain", title: { en: "News" }, body: { en: "Newer on the share." } }] });
+const copyOnly = () => JSON.stringify({ format: 2, kind: "etiuda-catalog", id: "owed-notes", rev: 2, name: "Owed Notes", date: "2026-05-02",
+  langs: [{ code: "en", label: "EN" }], tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers" } }],
+  cards: [{ id: "c-o", shelf: "t-op", bodyShape: "plain", title: { en: "Owed" }, body: { en: "Only in the local copy." } }] });
+/* The text of every file under `dir`, so a card's words are looked for in all of them. */
+function walkText(dir) {
+  const out = [];
+  const walk = d => {
+    let ents = [];
+    try { ents = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const e of ents) { const p = path.join(d, e.name); if (e.isDirectory()) walk(p); else { try { out.push(fs.readFileSync(p, "utf8")); } catch { /* unreadable */ } } }
+  };
+  walk(dir);
+  return out;
+}
+/* A desk holding the folder team: the share is its catalog folder setting, the mirror its local copy, the outbox owing one file.
+   The share holds a file the copy lacks and the copy one the share lacks, so a read of either is told from the other. `sealedCopy`
+   seals the copy's edition under a key kept for the team (K1) and leaves no plain edition of it on the share. */
+const K1 = crypto.randomBytes(32);
+/* The shell's own sealing (sealCatalog), by the same AEAD, so the fixture needs no desk loaded to make an envelope. */
+function SEAL(key, epoch, text) {
+  const nonce = crypto.randomBytes(12), c = crypto.createCipheriv("aes-256-gcm", key, nonce);
+  c.setAAD(Buffer.from(["etiuda-sealed", TEAM, epoch].join(String.fromCharCode(10)), "utf8"));
+  const ct = Buffer.concat([c.update(text, "utf8"), c.final(), c.getAuthTag()]);
+  return { format: 2, kind: "etiuda-sealed", team: TEAM, epoch: epoch, nonce: nonce.toString("hex"), ct: ct.toString("hex") };
+}
+const keptKey = k => Buffer.from(Buffer.from(k.toString("base64"), "utf8").map(b => b ^ 0x5a)).toString("base64");
+function makeDesk(name, owed, sealedCopy) {
   const ud = path.join(LAB, name, "ud"), share = path.join(LAB, name, "share"), mirror = path.join(ud, "folder-mirror", TEAM);
   for (const d of [ud, share, mirror, path.join(share, "desks", OTHER_DESK), path.join(mirror, "desks", OTHER_DESK)]) fs.mkdirSync(d, { recursive: true });
   for (const root of [share, mirror]) {
@@ -118,13 +153,19 @@ function makeDesk(name, owed) {
     fs.writeFileSync(path.join(root, "wick-board.ec"), JSON.stringify(edition()), "utf8");
     fs.writeFileSync(path.join(root, "desks", OTHER_DESK, "note.txt"), "a desk's own file", "utf8");
   }
+  fs.writeFileSync(path.join(share, "share-news.ec"), shareOnly(), "utf8");
+  fs.writeFileSync(path.join(mirror, "owed-notes.ec"), copyOnly(), "utf8");
+  if (sealedCopy) {
+    fs.writeFileSync(path.join(mirror, "wick-board.ec"), JSON.stringify(SEAL(K1, 1, JSON.stringify(edition()))), "utf8");
+    fs.rmSync(path.join(share, "wick-board.ec"));
+  }
   if (owed) fs.writeFileSync(path.join(mirror, ".outbox.json"), JSON.stringify({ kind: "etiuda-folder-outbox", v: 1,
-    owe: { ["desks/" + OTHER_DESK + "/note.txt"]: { owe: true, sha: "0".repeat(64) } }, floors: {} }), "utf8");
+    owe: { ["desks/" + OTHER_DESK + "/note.txt"]: { owe: true, sha: "0".repeat(64) }, "owed-notes.ec": { owe: true, sha: "0".repeat(64) } }, floors: {} }), "utf8");
   fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({
     kind: "etiuda-desk", schema: 1,
     keys: { eCatalogFolder: share, eUiLang: "en" },
     teamPins: { [TEAM]: LEAD },
-    teamKeys: { [TEAM]: { "1": "kept" } },
+    teamKeys: { [TEAM]: { "1": sealedCopy ? keptKey(K1) : "kept" } },
     teamEpochSeen: { [TEAM]: 1 },
     teamShown: { [TEAM]: { lead: "Ada", folder: share } }
   }), "utf8");
@@ -134,8 +175,11 @@ function makeDesk(name, owed) {
 /* ---- the page: the row's facts worded on the team's row in Settings and once in a notice (as tests/relay-desk-follow.mjs ks26) */
 const HELD_EN = "Ada's team worked through a shared folder, which Etiuda no longer follows: its catalog stays on this computer as it is, and a new invitation from the team's lead brings the team back.";
 const HELD_PL = "Zespół osoby Ada korzysta ze wspólnego folderu, którego Etiuda już nie obsługuje: katalog tego zespołu zostaje na tym komputerze bez zmian, a nowe zaproszenie od lidera zespołu przywróci zespół.";
-const OWED_EN = "What this desk had not yet sent to the shared folder stays on this computer, unsent.";
-const OWED_PL = "To, czego to stanowisko nie zdążyło wysłać do wspólnego folderu, zostaje na tym komputerze, niewysłane.";
+/* The owed line, moved: it said "... stays on this computer, unsent." and does not say where; it now names the folder the unsent
+   files stay in (the row's folderCopy). Placeholder words for the copywriter. */
+const COPY_SHOWN = ["C:", "Users", "ada", "AppData", "Roaming", "Etiuda", "folder-mirror", "t-0123456789abcdef"].join(path.win32.sep);
+const OWED_EN = "What this desk had not yet sent to the shared folder stays on this computer, unsent, in the folder " + COPY_SHOWN + ".";
+const OWED_PL = "To, czego to stanowisko nie zdążyło wysłać do wspólnego folderu, zostaje na tym komputerze, niewysłane, w folderze " + COPY_SHOWN + ".";
 const pageWords = h => String(h).replace(/<[^>]*>/g, " ").replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/\s+/g, " ");
 const plantedMod = (name, tag) => {
   const text = fs.readFileSync(path.join(MODS, name), "utf8"), lines = text.split("\n"), at = lines.findIndex(l => l.includes("plant:" + tag));
@@ -178,9 +222,9 @@ async function pageScene(tj, set) {
       send({ leads: [Object.assign({}, fact)] });
       const notices = body.children.filter(c => c.id === "eTeamFolderHeld").length;
       dismiss();
-      send({ leads: [Object.assign({}, fact, { folderOwed: true })] });
+      send({ leads: [Object.assign({}, fact, { folderOwed: true, folderCopy: COPY_SHOWN })] });
       const afterDismiss = noticeText(), rowOwed = pageWords(SET.settingsPageHtml("teams", ""));
-      send({ leads: [{ team: team + "x", lead: "Ada", print: "0123456789abcdef", folderHeld: true, folderOwed: true }] });
+      send({ leads: [{ team: team + "x", lead: "Ada", print: "0123456789abcdef", folderHeld: true, folderOwed: true, folderCopy: COPY_SHOWN }] });
       const owedNotice = noticeText();
       send({ leads: [{ team, lead: "Ada", print: "0123456789abcdef" }] });
       const rowGone = !pageWords(SET.settingsPageHtml("teams", "")).includes(held.slice(0, 40));
@@ -207,11 +251,13 @@ try {
   const desk = loadDesk(A.ud);
   const api = desk.api;
 
-  /* fth1: the catalog folder is the person's own setting, read as a plain folder; never the folder team's mirror. */
+  /* fth1, moved. It said: a desk holding a folder team reads its catalog folder setting (the share) as a plain folder, not the team's
+     mirror. It now says: it reads the local copy kept for the team, as a plain folder, where the share differs from it; the share is
+     read only where no copy is kept (fth22). */
   let folder = "";
   try { folder = api.catalogFolder(); } catch (e) { folder = "threw " + e.message; }
-  check(path.resolve(folder) === path.resolve(A.share),
-    "fth1 a desk holding a folder team reads its catalog folder setting as a plain folder, not the team's mirror: " + folder);
+  check(path.resolve(folder) === path.resolve(A.mirror),
+    "fth1 a desk holding a folder team reads the local copy kept for the team as its catalog folder, a plain folder, where the share differs: " + folder);
 
   /* fth2: no write goes to a team's place. */
   let writes = null;
@@ -231,6 +277,7 @@ try {
   const row = Array.isArray(rows) ? rows.filter(r => r && r.team === TEAM)[0] : null;
   check(!!row && row.folderHeld === true, "fth4 the team's row says it is held through a shared folder: " + JSON.stringify(row && { folderHeld: row.folderHeld, folder: row.folder }));
   check(!!row && row.folderOwed === true, "fth5 the team's row says the mirror's outbox still owes the folder: " + JSON.stringify(row && { folderOwed: row.folderOwed }));
+  check(!!row && row.folderCopy === A.mirror, "fth26 the owed row names the folder the unsent files stay in, the local copy: " + JSON.stringify(row && { folderCopy: row.folderCopy }));
 
   /* fth6: a desk whose outbox owes nothing is told nothing of it. */
   const B = makeDesk("clear", false);
@@ -282,6 +329,61 @@ try {
     "fth8 nothing under the share or the mirror is removed or changed, the outbox included: share " + after.share.length + " files, mirror "
     + after.mirror.length + (JSON.stringify(after) === JSON.stringify(listedTeam) ? ", the same" : ", changed: " + JSON.stringify({ before: listedTeam, after })));
 
+
+  /* fth20: the desk opens what the local copy holds and the share does not, and is not shown the share's own: the copy is what it last had. */
+  const inCopy = api.catalogFileNamed("owed-notes.ec"), inShare = api.catalogFileNamed("share-news.ec");
+  check(!!inCopy && path.resolve(inCopy) === path.resolve(path.join(A.mirror, "owed-notes.ec")) && inShare === null,
+    "fth20 a file only the local copy holds opens, and one only the share holds is not read: " + JSON.stringify({ inCopy, inShare }));
+
+  /* fth21: the share out of reach, the desk still opens its catalog from the copy. */
+  const G = makeDesk("away", true);
+  fs.renameSync(G.share, G.share + "-offline");
+  const away = loadDesk(G.ud).api;
+  const awayAt = away.catalogFileNamed("wick-board.ec");
+  check(!fs.existsSync(G.share) && path.resolve(away.catalogFolder()) === path.resolve(G.mirror) && !!awayAt && path.resolve(awayAt) === path.resolve(path.join(G.mirror, "wick-board.ec")),
+    "fth21 with the share out of reach the desk opens its catalog from the local copy: " + JSON.stringify({ folder: away.catalogFolder(), file: awayAt }));
+
+  /* fth22: no copy kept, the share is the catalog folder, as before the mend. */
+  const N = makeDesk("nocopy", false);
+  fs.rmSync(N.mirror, { recursive: true, force: true });
+  const nocopy = loadDesk(N.ud).api;
+  check(path.resolve(nocopy.catalogFolder()) === path.resolve(N.share) && path.resolve(nocopy.catalogFileNamed("share-news.ec") || "") === path.resolve(path.join(N.share, "share-news.ec")),
+    "fth22 where no local copy is kept, the share is read as the plain catalog folder: " + nocopy.catalogFolder());
+
+  /* fth23: a sealed catalog of the held team, the desk's own file for it, across a restart. The sealed edition opens from the copy under
+     the key kept; the desk's own file for it is held and written nowhere (never in the clear: the card's words are in no file of the share
+     or the copy), and a restart does the same: the edit is the page's layer's, sent again at every start, and nothing is lost on disk. */
+  const S = makeDesk("sealed", false, true);
+  const needle = "Edited by the desk.";
+  const edited = base => { const d = JSON.parse(base); d.cards[0].body.en = needle; return d; };
+  const sealedRun = async (d, first) => {
+    const text = d.api.readCatalog();
+    if (!text) return { text: text, w: null, first: first };
+    const me = await d.ask("etiuda:branch-identity", true);
+    const doc = JSON.parse(text);
+    const hex8 = crypto.createHash("sha256").update(String(doc.id)).digest("hex").slice(0, 8);
+    delete doc.sig;
+    const grown = Object.assign(edited(JSON.stringify(doc)), { id: me.id + "-" + hex8, rev: 1,
+      grew: { id: doc.id, rev: 1, sha: "sha256:" + crypto.createHash("sha256").update(Buffer.from(V2.v2SignedBytes(JSON.parse(text)))).digest("hex") },
+      desk: { id: me.id, key: me.key, box: me.box } });
+    const w = await d.ask("etiuda:branch-write", "wick-board-" + hex8, JSON.stringify(grown));
+    return { text: text, w: w, first: first };
+  };
+  const beforeS = { share: listing(S.share), mirror: listing(S.mirror) };
+  const d1 = loadDesk(S.ud), r1 = await sealedRun(d1, true);
+  const d2 = loadDesk(S.ud), r2 = await sealedRun(d2, false);
+  const afterS = { share: listing(S.share), mirror: listing(S.mirror) };
+  const leaked = [S.share, S.mirror].some(root => walkText(root).some(t => t.indexOf(needle) >= 0));
+  check(r1.text && r1.text.indexOf("Wick Board") >= 0 && r2.text === r1.text && !!r1.w && r1.w.ok === false && r1.w.held === true && !!r2.w && r2.w.held === true
+    && JSON.stringify(afterS.mirror.filter(l => l.indexOf("desks/") !== 0)) === JSON.stringify(beforeS.mirror.filter(l => l.indexOf("desks/") !== 0))
+    && JSON.stringify(afterS.share) === JSON.stringify(beforeS.share) && !leaked,
+    "fth23 a sealed catalog of the held team opens from the local copy under the key kept, before and after a restart, and the desk's own file for it is held and written"
+    + " in the clear nowhere: " + JSON.stringify({ w1: r1.w, w2: r2.w, opened: !!r1.text, same: r2.text === r1.text, leaked }));
+
+  /* fth25: the store's sync leaves the copy out as the team's, as it leaves the share. */
+  const syncRoot = api.storeSyncFolder();
+  check(syncRoot === "", "fth25 the store's sync takes no catalog from, and puts none into, the local copy the desk reads for the held team: " + JSON.stringify(syncRoot));
+
   /* fth9: the page words the facts on the row and once in a notice, in English and Polish. */
   let page = null;
   try { page = await pageScene(); } catch (e) { page = { ok: false, error: String(e && e.stack ? e.stack.split("\n")[0] : e) }; }
@@ -308,6 +410,8 @@ try {
     ["fth12", "folder-owed-row", async d => { const r = (await d.ask("etiuda:team-join", "leads")).leads.filter(x => x.team === TEAM)[0]; return !r || r.folderOwed !== true; }, "fth5"],
     ["fth16", "team-file-place", async d => d.api.pinnedLead() !== null, "fth14"],
     ["fth19", "held-folder-kept", async (d, P) => { const f = path.join(P.share, "desks", OTHER_DESK, "note.txt"); try { d.api.unlinkOwn(f); } catch { /* kept */ } return !fs.existsSync(f); }, "fth18"],
+    ["fth24", "held-local-copy", async (d, P) => path.resolve(d.api.catalogFolder()) !== path.resolve(P.mirror), "fth1"],
+    ["fth27", "sync-held-copy", async (d, P) => d.api.storeSyncFolder() !== "", "fth25"],
     ["fth17", "shared-team-folder", async (d, P) => {
       fs.writeFileSync(path.join(P.ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: P.share, eUiLang: "en" } }), "utf8");
       const r = await loadDesk(P.ud, d.src).api.sharedWrite("loose.ec", sharedText(), "", true);
