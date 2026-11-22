@@ -143,7 +143,7 @@ function editionPaneHtml(it,held,c,desk){
 /** The panel behind the offer: every card the edition changes at the left, the chosen one at the right.
  *  `o` carries the catalog offered and the one held, the changes, the edition's name (`ed`) and the catalog's to head it,
  *  and the offer's own three ways out: keep, load and back to the bubble. A colleague's desk comes as `o.desk`, its
- *  title, heads, words for the two ways out and its take (editionPaneHtml); its file carries no note of its own. */
+ *  title, heads, the word for the way back and its take (editionPaneHtml); its file carries no note of its own. */
 function openEditionPanel(o){
   const items=o.changes.items, c=o.c, desk=o.desk||null, sub=desk?desk.sub:null;
   let at=Math.max(0,items.findIndex(it=>it.own));
@@ -160,7 +160,7 @@ function openEditionPanel(o){
       +'<div class="ed-list">'+items.map(row).join("")+'</div></div>'
       +'<div class="ed-pane" id="edPane" aria-live="polite"></div></div>',
     actions:'<button type="button" class="btn" id="edKeep">'+esc(desk?desk.keep:t("Keep current"))+'</button>'
-      +'<button type="button" class="btn primary" id="edLoad">'+esc(desk?desk.load:t("Load the new edition"))+'</button>',
+      +(desk?'':'<button type="button" class="btn primary" id="edLoad">'+esc(t("Load the new edition"))+'</button>'),
     wire:()=>{
       const pane=document.getElementById("edPane"), list=document.querySelector(".ed-list");
       const draw=()=>{
@@ -200,7 +200,8 @@ function openEditionPanel(o){
         };
       });
       document.getElementById("edKeep").onclick=o.keep;
-      document.getElementById("edLoad").onclick=o.load;
+      const ld=document.getElementById("edLoad");
+      if(ld) ld.onclick=o.load;
       draw();
     }
   });

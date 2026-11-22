@@ -303,8 +303,8 @@ function wireDeskPlace(pane,it,hers,done){
 }
 
 /** Look at a colleague's file: `f` its listing row, `base` from deskBase, `name` the catalog it is compared with, and
- *  the panel's two ways out. Resolves to whether the panel stood. */
-function openDeskLook(f,base,name,work,back){
+ *  the panel's way back. Resolves to whether the panel stood. */
+function openDeskLook(f,base,name,back){
   return deskSides(f,base).then(s=>{
     if(!s){
       const at=(f.desk&&f.desk.id||"")+"/"+String(f.name||"")+"|"+f.mtime;
@@ -315,9 +315,9 @@ function openDeskLook(f,base,name,work,back){
     if(!changes.items.length){ toast(t("That teammate's cards match the team's edition.")); return false; }
     const who=deskName(f);
     lkPick=null;
-    openEditionPanel({c:s.hers, held:s.team, changes:changes, name:name, keep:back, load:work, back:back, taken:()=>{},
+    openEditionPanel({c:s.hers, held:s.team, changes:changes, name:name, keep:back, back:back, taken:()=>{},
       desk:{title:who, was:t("In the team's edition"), now:t("At {DESK}").split("{DESK}").join(who),
-        keep:t("Back to the Library"), load:t("Work from this file").split("{DESK}").join(who),
+        keep:t("Back to the Library"),
         take:inUse ? t("Take this text").split("{DESK}").join(who) : "",
         taken:it=>deskTaken(it,s.hers), toggle:it=>deskToggle(it,s.hers),
         place:inUse ? it=>deskPlaceHtml(it,s.hers) : null, wirePlace:inUse ? (pane,it,done)=>wireDeskPlace(pane,it,s.hers,done) : null,

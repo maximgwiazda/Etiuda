@@ -1798,7 +1798,6 @@ UI_STRINGS.pl={
   "A teammate":"Członek zespołu",
   "Signed by {DESK}, key {KEY}. Only that teammate can change this file; anyone with the folder can read it.":"Podpis: {DESK}, klucz {KEY}. Zmienić ten plik może tylko ten członek zespołu, a przeczytać każdy z dostępem do folderu.",
   "See what changed":"Zobacz zmiany",
-  "Work from this file":"Wczytaj ten plik do pracy",
   "A catalog of its own":"Osobny katalog",
   "Your edits are with the team":"Własne zmiany są już u zespołu",
   "Your edits are kept on this computer and go to the team as soon as it can take them. To hand them over now, Export saves them in a catalog file for the team's lead.":"Własne zmiany są zachowane na tym komputerze i trafią do zespołu, gdy tylko będzie mógł je przyjąć. Aby przekazać je od razu, Eksportuj zapisze je w pliku katalogu dla lidera zespołu.",
