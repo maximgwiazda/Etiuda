@@ -3019,9 +3019,10 @@ const STRANGER_PUB = "ef".repeat(32);
 const OTHER_SERVICE_PUB = OTHER_SERVICE.publicKey.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
 /* The shell's view over `held` with the section's own signinLapsed, the rest stood in. */
 const viewWith = (s, held) => new Function("signinOffered", "signinState", "signinPreviewing", "SIGNIN_PROVIDERS", "signinLapsed", "signinDoorsShown",
-  "signinPageOk", "sealsForReal", "safeStorage", "process", "signinRelaySeat", "signinViewOf", "signinClockNow", "let signinBusy = null, signinSaid = \"\", signinOutFlight = null;\n"
+  "signinPageOk", "sealsForReal", "safeStorage", "process", "signinRelaySeat", "signinViewOf", "signinClockNow", "Date", "let signinBusy = null, signinSaid = \"\", signinOutFlight = null;\n"
   + decl(MAIN, "function signinView(") + "\nreturn signinView();")(() => [{ id: "microsoft" }], () => ({ held }), () => false, {}, s.signinLapsed,
-  () => [], () => false, () => true, {}, { platform: "win32" }, () => "", s.signinViewOf, CLOCK_STAND);
+  () => [], () => false, () => true, {}, { platform: "win32" }, () => "", s.signinViewOf, CLOCK_STAND, { now: () => NOW });
+/* The view reads the wall clock as the test's own NOW: a stand-in for Date, or a certificate dated NOW plus days stops being early once the real date passes it. */
 /* Taken at a first sign-in and at the renewal, from a refusal as well, and kept in signin.json. */
 CASES.revokedTaken = async s => {
   const list = revokedList(1, [STRANGER_PUB]), later = revokedList(2, [STRANGER_PUB, "aa".repeat(32)]);
