@@ -63,7 +63,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 560;
+const EXPECTED = 566;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -8531,34 +8531,61 @@ async function parallelOffline(mod) {
   out.listedGone = copy ? listed(fourth) : null;
   return out;
 }
-/* The team file edited on the first computer while it was offline, and a newer team file published from the second: the first keeps
-   its edit, whole and in place, with no copy beside it (ownHeld's own-edit line; a team file has an order of its own, landTeam's
-   rev floor, and a conflict sibling of it would be read as a team file). That is what the line does today, held here so that lifting
-   it turns a check; the relay's reply to the first's later upload of that team file is the open item of the team file and the head. */
-async function teamParallel(mod) {
+/* One key on two computers, the first offline, and a root file both change: the team file (by epoch and rev) or the head (by its
+   time). The first writes its edit `mine` from the file both hold; the second sends `theirs`. When the first reconnects, the newer of
+   the two stands at the relay, on both computers and at a third profile, the relay's at a tie; the one passed over is said once on the
+   first and kept in its record (rootClash); no conflict copy is written beside either. `kind` is "team" or "head"; for the team file
+   `mine` and `theirs` are revs, and the two rosters differ by one desk each, so a tie is two different files. */
+async function rootParallel(mod, kind, mine, theirs) {
   const { tm, mk, deskKey, teamText } = await ownSetup(mod);
-  const teamAt = rev => teamBody(tm, 1, rev, [member(deskKey)]);
-  const TA = teamAt(2), TB = teamAt(3);
-  const a = mk("cfu-a"), b = mk("cfu-b");
+  const dA = keyPair(true), dB = keyPair(true), base = Date.now() - 60000;
+  const name = kind === "head" ? HEAD_FILE : C.TEAM_NAME;
+  const head = (t, ed) => headWith(tm.id, t, [{ catalog: "quay-board", rev: 2, edition: ed, published: "1 March 2026" }]);
+  const first = kind === "head" ? head(base, "Quay one") : null;
+  const A = kind === "head" ? head(base + mine, "Quay from the first") : teamBody(tm, 1, mine, [member(deskKey), member(dA)]);
+  const Bt = kind === "head" ? head(base + theirs, "Quay from the second") : teamBody(tm, 1, theirs, [member(deskKey), member(dB)]);
+  const a = mk("rp-a"), b = mk("rp-b");
   put(a.mirror, C.TEAM_NAME, teamText);
+  if (first) put(a.mirror, HEAD_FILE, first);
   a.ch.start(); b.ch.start();
   await a.ch.idle(); await b.ch.idle();
   await once(a);
   await once(b);
-  const bothT1 = read(a.mirror, C.TEAM_NAME) === teamText && read(b.mirror, C.TEAM_NAME) === teamText;
+  const both = kind === "head" ? read(a.mirror, HEAD_FILE) === first && read(b.mirror, HEAD_FILE) === first
+    : read(a.mirror, C.TEAM_NAME) === teamText && read(b.mirror, C.TEAM_NAME) === teamText;
   a.t.down = true;
-  put(a.mirror, C.TEAM_NAME, TA);
+  put(a.mirror, name, A);
   await once(a);
-  put(b.mirror, C.TEAM_NAME, TB);
+  put(b.mirror, name, Bt);
   await once(b);
   a.t.down = false;
+  const at = a.t.log.length, said0 = a.said.length;
   await once(a);
   await once(a);
-  const now = read(a.mirror, C.TEAM_NAME);
-  const out = { bothT1, atA: now === TA ? "the edit" : now === TB ? "the relay's" : "other", copies: fs.readdirSync(a.mirror).filter(n => /conflicted copy/.test(n)) };
+  await once(b);
+  await once(a);
+  const which = v => (v === A ? "the first's" : v === Bt ? "the second's" : v === null ? "none" : "other");
+  const clash = typeof a.prog.rootClash === "function" ? a.prog.rootClash() : null;
+  const out = { both, atA: which(read(a.mirror, name)), atB: which(read(b.mirror, name)),
+    putsBack: a.t.log.slice(at).filter(l => /^PUT b\//.test(l)).length,
+    copies: fs.readdirSync(a.mirror).concat(fs.readdirSync(b.mirror)).filter(n => /conflicted copy/.test(n)),
+    said: a.said.slice(said0).filter(l => l.indexOf(name) >= 0 && l.indexOf("changed on this computer and on another at once") >= 0),
+    clash: clash ? clash.map(c => ({ path: c.path, kept: c.kept, here: c.here, team: c.team })) : null };
   await a.ch.stop(); await b.ch.stop();
+  /* The first started again on its record: the clash is still there to tell, and nothing more goes up. */
+  const again = mk("rp-a");
+  out.clashRestart = typeof again.prog.rootClash === "function" ? again.prog.rootClash().map(c => c.path + ":" + c.kept) : null;
+  const third = mk("rp-c");
+  third.ch.start();
+  await third.ch.idle();
+  await once(third);
+  out.atThird = which(read(third.mirror, name));
+  await third.ch.stop();
   return out;
 }
+const rootTold = (x, path, kept, here, team) => !!x.clash && x.clash.length === 1 && x.clash[0].path === path && x.clash[0].kept === kept
+  && JSON.stringify(x.clash[0].here) === JSON.stringify(here) && JSON.stringify(x.clash[0].team) === JSON.stringify(team) && x.said.length === 1
+  && JSON.stringify(x.clashRestart) === JSON.stringify([path + ":" + kept]);
 if (partOn("pNor")) {
   try {
     markPart("pNor");
@@ -8598,17 +8625,44 @@ if (partOn("pNor")) {
       check(p.turned && p.back, "nor1f lifting plant:own-apart writes the second computer's rev 2 over the first's and keeps no copy, and the product file is never written: "
         + p.detail + ", sha " + (p.back ? "restored" : "differs"));
     }
-    {
-      const t = await teamParallel(C);
-      check(t.bothT1 && t.atA === "the edit" && t.copies.length === 0,
-        "cfu3a a team file edited on the first computer while it was offline, met by a newer one from the second, stays the first computer's edit whole and in place, with no copy beside it: both held the first "
-        + t.bothT1 + ", the first's file is " + t.atA + ", copies " + JSON.stringify(t.copies));
-    }
-    if (PLANTS_OFF) skip("cfu3b lifting plant:own-edit writes the relay's team file over the first computer's edit");
-    else {
-      const p = await liftChannel("plant:own-edit", async mod => (await teamParallel(mod)).atA === "the relay's");
-      check(p.turned && p.back, "cfu3b lifting plant:own-edit writes the relay's team file over the first computer's edit, and the product file is never written: "
-        + p.detail + ", sha " + (p.back ? "restored" : "differs"));
+    /* tse1: the team file in one epoch, by rev; tse2: the head, by its time. */
+    const T = C.TEAM_NAME;
+    const t1 = await rootParallel(C, "team", 2, 3);
+    check(t1.both && t1.atA === "the second's" && t1.atB === "the second's" && t1.atThird === "the second's" && t1.putsBack === 0 && t1.copies.length === 0,
+      "cfu3a tse1a the first computer's unsent team file at rev 2 never buries the second's rev 3 of the same epoch: the relay, the second computer and a third profile keep rev 3, the first takes it and sends nothing over it, and no copy is written: first "
+      + t1.atA + ", second " + t1.atB + ", third " + t1.atThird + ", uploads after reconnecting " + t1.putsBack + ", copies " + JSON.stringify(t1.copies));
+    check(rootTold(t1, T, "team", { epoch: 1, rev: 2 }, { epoch: 1, rev: 3 }),
+      "tse1b the first computer's rev 2 is not silently lost: said once, and kept in its record as passed over for the team's rev 3, after a restart too: "
+      + JSON.stringify({ clash: t1.clash, said: t1.said.length, restart: t1.clashRestart }));
+    const t2 = await rootParallel(C, "team", 3, 3);
+    check(t2.atA === "the second's" && t2.atB === "the second's" && t2.atThird === "the second's" && t2.putsBack === 0 && rootTold(t2, T, "team", { epoch: 1, rev: 3 }, { epoch: 1, rev: 3 }),
+      "tse1c two different team files at the same rev: the relay's (the second's) stands everywhere, and the first's is said and kept as passed over: first "
+      + t2.atA + ", second " + t2.atB + ", third " + t2.atThird + ", uploads " + t2.putsBack + ", clash " + JSON.stringify(t2.clash));
+    const t3 = await rootParallel(C, "team", 4, 3);
+    check(t3.atA === "the first's" && t3.atB === "the first's" && t3.atThird === "the first's" && t3.putsBack === 1 && t3.copies.length === 0
+      && rootTold(t3, T, "here", { epoch: 1, rev: 4 }, { epoch: 1, rev: 3 }),
+      "tse1d the first computer's unsent team file at rev 4, newer than the second's rev 3, goes up once and stands everywhere, and the second's is said and kept as passed over: first "
+      + t3.atA + ", second " + t3.atB + ", third " + t3.atThird + ", uploads " + t3.putsBack + ", clash " + JSON.stringify(t3.clash));
+    const h1 = await rootParallel(C, "head", 1000, 2000), h2 = await rootParallel(C, "head", 3000, 2000);
+    check(h1.atA === "the second's" && h1.atB === "the second's" && h1.atThird === "the second's" && h1.putsBack === 0 && h1.clash && h1.clash.length === 1 && h1.clash[0].kept === "team" && h1.said.length === 1
+      && h2.atA === "the first's" && h2.atB === "the first's" && h2.atThird === "the first's" && h2.putsBack === 1 && h2.clash && h2.clash.length === 1 && h2.clash[0].kept === "here",
+      "tse2a the head both computers wrote: the newer by its time stands at the relay, on both and at a third profile, the relay's where it is the newer and the first's where it is, and the other is said and kept: older here "
+      + JSON.stringify({ a: h1.atA, b: h1.atB, c: h1.atThird, puts: h1.putsBack, clash: h1.clash && h1.clash.map(c => c.kept) }) + ", newer here "
+      + JSON.stringify({ a: h2.atA, b: h2.atB, c: h2.atThird, puts: h2.putsBack, clash: h2.clash && h2.clash.map(c => c.kept) }));
+    if (PLANTS_OFF) {
+      skip("tse1e lifting plant:own-root-newer keeps the first computer's older team file and sends it over the second's");
+      skip("cfu3b lifting plant:own-edit writes the relay's older team file over the first computer's newer edit");
+      skip("tse1f lifting plant:root-clash passes over the first computer's team file in silence");
+    } else {
+      const p1 = await liftChannel("plant:own-root-newer", async mod => (await rootParallel(mod, "team", 2, 3)).atThird === "the first's");
+      check(p1.turned && p1.back, "tse1e lifting plant:own-root-newer keeps the first computer's older team file and sends it over the second's, which a third profile then reads, and the product file is never written: "
+        + p1.detail + ", sha " + (p1.back ? "restored" : "differs"));
+      const p2 = await liftChannel("plant:own-edit", async mod => (await rootParallel(mod, "team", 4, 3)).atA === "the second's");
+      check(p2.turned && p2.back, "cfu3b lifting plant:own-edit writes the relay's older team file over the first computer's newer edit, and the product file is never written: "
+        + p2.detail + ", sha " + (p2.back ? "restored" : "differs"));
+      const p3 = await liftChannel("plant:root-clash", async mod => { const x = await rootParallel(mod, "team", 2, 3); return x.atA === "the second's" && x.said.length === 0 && JSON.stringify(x.clash) === "[]"; });
+      check(p3.turned && p3.back, "tse1f lifting plant:root-clash passes over the first computer's team file in silence, nothing said or kept, and the product file is never written: "
+        + p3.detail + ", sha " + (p3.back ? "restored" : "differs"));
     }
     if (PLANTS_OFF) skip("nor1g lifting plant:apart-kept forgets at a restart that the copy stays, so it is sent");
     else {
