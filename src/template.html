@@ -5148,7 +5148,8 @@ body.e-host .row .win-btn:focus-visible{outline-offset:-2px}
         </div>
       </div>
     </div>
-    <!-- THE CATALOG IN USE, by name, or that none is: inert, and no door to the Library. -->
+    <!-- THE CATALOG IN USE, by name, or that none is: inert, and no door to the Library, except while an edition waits, when
+         the name is the button that shows it again (catalog-offer.js). -->
     <div class="cat-now" id="catNow"><span class="cn-name" data-i18n-skip hidden></span><span class="cn-none">No catalog loaded</span></div>
     <!-- THE WINDOW'S OWN CONTROLS, drawn here because the desktop shell gives the band the top
          bar. Present in every build and shown only under body.e-host, so the browser is the
@@ -5254,8 +5255,8 @@ body.e-host .row .win-btn:focus-visible{outline-offset:-2px}
           <button type="button" role="menuitem" data-act="join" id="menuJoin" hidden title="Paste the invitation from the team's lead.">Join a team</button>
           <!-- Only where the host has a picker, its words and combination drawn in header-menus.js. -->
           <button type="button" role="menuitem" data-act="picker" id="menuPicker" hidden></button>
-          <!-- Maintenance has NO menu entry: F2 opens it, and the Keyboard shortcuts screen is
-               where that is discovered. -->
+          <!-- Maintenance has NO menu entry: Ctrl+Shift+M opens it (F2 is Rename), and the Keyboard shortcuts
+               screen is where that is discovered. -->
           <!-- Locks live in Settings - standing decisions about how the app may behave; hide and
                show stay here - things you do for one chat and undo for the next. -->
           <div class="menu-sep"></div>

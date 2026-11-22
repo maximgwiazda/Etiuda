@@ -151,8 +151,7 @@ function intentRows(si, o){
   rows.push("-");
   if(row ? !!slot("[data-show-intent]") : (pack.intentHidden||[]).indexOf(id)>-1){
     rows.push({ label:t("Show this intent again"), act:pressOr(slot("[data-show-intent]"), null, ()=>hooks.setIntentHidden(id, false)) });
-    rows.push({ label:t("Edit this intent"), act:()=>hooks.openIntentEditor(si), key:"F2", hidden:true });
-    return rows.filter(r=>!(r && r.hidden));
+    return rows;
   }
   const fav=slot("[data-fav-intent]"), edit=slot("[data-edit-intent]"), hide=slot("[data-hide-intent]");
   rows.push({ label:label(fav, t((pack.intentFavourites||[]).indexOf(id)>-1 ? "Remove from Favourites" : "Add to Favourites")), act:pressOr(fav, null, ()=>hooks.toggleIntentFavourite(id)) });
