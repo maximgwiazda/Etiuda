@@ -2265,12 +2265,13 @@ try {
   const unkeptHtml = await bothLang(unkeptDesk);
   const unkeptSaid = cardSaid(unkeptHtml, UNKEPT_EN, UNKEPT_PL)
     && unkeptHtml.en.indexOf('data-join="ask"') < 0 && unkeptHtml.en.indexOf('data-join="cancel"') < 0
-    && unkeptHtml.en.indexOf('data-join="load"') >= 0 && unkeptHtml.en.indexOf('data-join="join"') >= 0
+    /* Board 1017 moved this: the card once offered Join a team, the paste; it offers Load another catalog file alone now. */
+    && unkeptHtml.en.indexOf('data-join="load"') >= 0 && unkeptHtml.en.indexOf('data-join="join"') < 0
     && unkeptHtml.en.indexOf(escPage(PENDING_EN)) < 0 && unkeptHtml.pl.indexOf(PENDING_PL) < 0
     && unkeptHtml.en.indexOf(escPage(STAYS_EN)) < 0;
   if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
   check(unkeptSaid,
-    "15cy a withdrawal the relay refuses for good ends the waiting and the card says the invitation is past its keep, in English and in Polish, with Join a team and Load another catalog file and no Ask again: "
+    "15cy a withdrawal the relay refuses for good ends the waiting and the card says the invitation is past its keep, in English and in Polish, with Load another catalog file, no Join a team (board 1017: the paste is gone) and no Ask again: "
     + (unkeptSaid ? "said" : "not said"));
   const heldDesk = await relayDesk("c5-held-card", { withdrawing: true, readonly: true });
   const heldHtml = await bothLang(heldDesk);
@@ -2666,12 +2667,13 @@ try {
   await pageOn(deskS3);
   const canJoinS3 = TJ.teamCanJoin();
 
-  const buttonsWork = html => html.indexOf('data-join="join"') >= 0 && html.indexOf('data-join="load"') >= 0 && html.indexOf('data-join="ask"') < 0;
+  /* Board 1017 moved this: the cards once offered Join a team (the paste) beside Load; Load alone now. */
+  const buttonsWork = html => html.indexOf('data-join="join"') < 0 && html.indexOf('data-join="load"') >= 0 && html.indexOf('data-join="ask"') < 0;
   const leaveCardsOk = cardSaid(htmlS1, s1En, s1Pl) && buttonsWork(htmlS1.en) && canJoinS1
     && cardSaid(htmlS2, s2En, s2Pl) && buttonsWork(htmlS2.en) && canJoinS2
     && cardSaid(htmlS3, s3En, s3Pl) && buttonsWork(htmlS3.en) && canJoinS3;
   check(leaveCardsOk,
-    "15dk after Leave this team, the card says what is true across withdrawing, read-only and landed states, with buttons Join a team and Load another catalog file: "
+    "15dk after Leave this team, the card says what is true across withdrawing, read-only and landed states, with Load another catalog file and no Join a team (board 1017): "
     + (leaveCardsOk ? "all 3 states said" : "mismatched"));
 
   // 15dl: after It does not match, cards say what is true across withdrawing, read-only and landed, buttons work
@@ -2704,7 +2706,7 @@ try {
     && cardSaid(htmlS5, s5En, s5Pl) && buttonsWork(htmlS5.en) && canJoinS5
     && cardSaid(htmlS6, s6En, s6Pl) && buttonsWork(htmlS6.en) && canJoinS6;
   check(matchCardsOk,
-    "15dl after It does not match, the card says what is true across withdrawing, read-only and landed states, with buttons Join a team and Load another catalog file: "
+    "15dl after It does not match, the card says what is true across withdrawing, read-only and landed states, with Load another catalog file and no Join a team (board 1017): "
     + (matchCardsOk ? "all 3 states said" : "mismatched"));
 
   // 15do: after Leave or It does not match, a withdrawal the relay refused because it no longer holds the request (a sweep, or
@@ -3359,11 +3361,10 @@ try {
     const MG = await import(MOD("manage.js"));
     const settingsOn = SET.settingsBodyHtml();
     const libraryOn = MG.libraryActionsHtml();
-    const shown = settingsOn.indexOf('id="setJoinTeam"') >= 0 && settingsOn.indexOf('<div class="set-label">Team</div>') >= 0
-      && settingsOn.indexOf("Join a team") >= 0
-      && settingsOn.indexOf("data-leave-team") >= 0 && settingsOn.indexOf("data-leave-team") < settingsOn.indexOf('id="setJoinTeam"')
-      && libraryOn.indexOf('id="mgImportCatalog"') >= 0 && libraryOn.indexOf('id="mgImportCatalog"') < libraryOn.indexOf('id="mgJoinTeam"')
-      && menuJoin.hidden === false;
+    /* Board 1017 moved this: Join a team, the paste, once stood in Settings after the lead's key, in the Library after Load and in the
+       Menu; the paste stands on the empty desk alone now (Max, 2026-11-22 02:12: "Yes, remove it please."). */
+    const shown = settingsOn.indexOf('id="setJoinTeam"') < 0 && settingsOn.indexOf("Join a team") < 0 && settingsOn.indexOf("data-leave-team") >= 0
+      && libraryOn.indexOf('id="mgImportCatalog"') >= 0 && libraryOn.indexOf('id="mgJoinTeam"') < 0 && menuJoin.hidden === true;
     const settingsBtn = { classList: { add: noop, remove: noop, contains: () => false }, setAttribute: noop, hidden: false };
     const settingsMenu = { hidden: true, classList: { add: noop, remove: noop, contains: () => false }, setAttribute: noop, contains: () => false, onclick: null };
     const moreBtn = { classList: { add: noop, remove: noop, contains: () => false }, setAttribute: noop, hidden: true };
@@ -3375,7 +3376,7 @@ try {
     const doorLoads = [];
     HK.hooks.loadCatalogFromFolder = name => { doorLoads.push(String(name)); };
     settingsMenu.onclick({ target: { closest: () => ({ dataset: { act: "join" } }) } });
-    const opened = TJ.inviteHeld().mode === "paste" && doorLoads.length === 0 && AS.cards.length === 1;
+    const opened = TJ.inviteHeld().mode !== "paste" && doorLoads.length === 0 && AS.cards.length === 1;
     tookFn({ sealed: null, join: null, leads: [{ team: TEAM, print: "abcdabcdabcdabcd", admitted: true, seen: false }] });
     const unseenSettings = SET.settingsBodyHtml(), unseenLibrary = MG.libraryActionsHtml();
     const unseen = unseenSettings.indexOf('id="setJoinTeam"') < 0 && unseenLibrary.indexOf('id="mgJoinTeam"') < 0 && menuJoin.hidden === true;
@@ -3389,8 +3390,8 @@ try {
       && menuJoin.hidden === true;
     doorNote = [shown, opened, unseen, flight, noHost].join("/");
     check(shown && opened && unseen && flight && noHost,
-      "15bj Join a team is in Settings after the lead's key, in the Library after Load, and in the Menu, on a desk that already has a catalog and has seen its lead;"
-      + " the Menu opens the paste and loads nothing; the door hides while a key is unseen, while a request is in flight, and with no shell: " + doorNote);
+      "15bj Join a team, the paste, is in none of Settings, the Library and the Menu (board 1017; it once stood in all three), on a desk that already has a catalog and has seen its lead;"
+      + " a Menu act of that name opens nothing and loads nothing; the door hides while a key is unseen, while a request is in flight, and with no shell: " + doorNote);
   } catch (e) {
     check(false, "15bj Join a team is in Settings after the lead's key, in the Library after Load, and in the Menu: threw "
       + (e && e.stack ? e.stack.split("\n").slice(0, 4).join(" | ") : e));
@@ -3413,7 +3414,7 @@ try {
   const doorDoc = globalThis.document, doorHost = window.E_HOST, motionWas = ST.lsGet("eMotionOff");
   let doorErr = "";
   const menuTag = (fs.readFileSync(path.join(ROOT, "src", "template.html"), "utf8").match(/<button\b[^>]*\bid="menuJoin"[^>]*>/) || [""])[0];
-  const menuItem = /\bdata-act="join"/.test(menuTag) && /\brole="menuitem"/.test(menuTag);
+  const menuItem = menuTag === "";
   let settingsOpened = false, libraryOpened = false, leftPaste = false;
   try {
     class DoorEl {
@@ -3512,8 +3513,8 @@ try {
     try { await press("back"); } catch (e) { doorErr = doorErr || String(e && e.message || e); }
     const settingsClosed = TJ.inviteHeld().mode !== "paste";
     SET.openSettings("teams");
-    click(doc.getElementById("setJoinTeam"));
-    settingsOpened = settingsClosed && TJ.inviteHeld().mode === "paste";
+    /* Board 1017 moved 15bm: these buttons once opened the paste; Settings and the Library draw none now. */
+    settingsOpened = settingsClosed && !doc.getElementById("setJoinTeam") && TJ.inviteHeld().mode !== "paste";
     const STB = await import(MOD("screen-tabs.js"));
     STB.clearScreenOn(); STB.screens.length = 0;
     try { await press("back"); leftPaste = TJ.inviteHeld().mode !== "paste"; }
@@ -3521,8 +3522,7 @@ try {
     // The Library is a screen tab, painted into the screen tabs' host, and closed again once read.
     if (!doc.getElementById("screenHost")) doc.body.appendChild(new DoorEl("div", { id: "screenHost" }));
     MG.openManage();
-    click(doc.getElementById("mgJoinTeam"));
-    libraryOpened = leftPaste && TJ.inviteHeld().mode === "paste";
+    libraryOpened = leftPaste && !doc.getElementById("mgJoinTeam") && TJ.inviteHeld().mode !== "paste";
     (await import(MOD("screen-tabs.js"))).closeScreenTab("library");
     const offerEl = new DoorEl("div", { id: "eCatalogOffer", class: "bub bub-ask e-offer" });
     doc.body.appendChild(offerEl);
@@ -3541,7 +3541,7 @@ try {
     try { const DM = await import(MOD("dom.js")); DM.grabDom(); } catch { /* the page document has no modal; the handles go back to empty */ }
   }
   check(menuItem && settingsOpened && libraryOpened,
-    "15bm the Menu item Join a team is in the template, and the Settings and Library buttons' clicks open the paste: "
+    "15bm the Menu item Join a team is not in the template, and Settings and the Library draw no button for the paste (board 1017; once all three opened it): "
     + [menuItem, settingsOpened, libraryOpened].join("/") + (doorErr ? " " + doorErr : ""));
   check(joinShownOverOffer, "15cn with a catalog loaded, the team-join bubble is reachable while the catalog offer shows: " + joinShownOverOffer);
 

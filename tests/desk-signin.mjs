@@ -943,7 +943,7 @@ CASES.doorPage = async () => {
   return v.doors.length === 1 && !!d && d.moment === "doors" && html.indexOf('data-signin-act="door" data-signin-door="0"') > 0
     && html.indexOf("relay.example.test") > 0 && html.indexOf(print) > 0 && P.signinDoor(plain).moment === "noteam"
     && d.heading === "A team on this licence" && html.indexOf(">Ask to join</button>") > 0 && html.indexOf(">Join</button>") < 0
-    && /\n  "A team on this licence":"Zespół w tej licencji",/.test(L) && /\n  "Ask to join":"Poproś o dołączenie",/.test(L) && !/\n  "Join":/.test(L)
+    && /\n  "A team on this licence":"Zespół w tej licencji",/.test(L) && /\n  "Ask to join":"Poproś o dołączenie",/.test(L) /* board 1017 moved this: "Join" was no string; it is the invitation's press now, the door's stays Ask to join */
     && /\n  "This licence has a team on the relay\. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation\.":"[^"]+",/.test(L)
     /* No placeholder left on the door's own lines; another feature's (the sign-in lab's "Lab") is not this case's. */
     && !PAGE.split("\n").some(l => /placeholder: Claudette/.test(l) && !/^const SIGNIN_NAMES=/.test(l.trim())) && /signinDoorsHtml\(v\.doors\)/.test(SETTINGS) && /signinDoor: \(n\) => ipcRenderer\.invoke\("etiuda:signin-door", n\)/.test(PRELOAD)
@@ -1207,8 +1207,8 @@ CASES.pageAskLead = async () => {
   let pl = "";
   try { pl = P.signinPanelHtml(P.signinDoor(view({ signedIn: "microsoft", code: CODE, seat: "held", deskOnly: true, askLead: true, trialUntil: until }))); }
   finally { storage.lsSet("eUiLang", "en"); }
-  return !!running && running.moment === "asklead" && running.code === CODE && running.acts.map(a => a.act).join() === "check,account"
-    && html.indexOf("Etiuda licence seats the people its leads add.") > 0 && html.indexOf("Give the team") > 0
+  return !!running && running.moment === "asklead" && !("code" in running) && running.acts.map(a => a.act).join() === "check,account"
+    && html.indexOf("Etiuda licence seats the people its leads add.") > 0 && html.indexOf("The team&#39;s lead invites this account by its email address") > 0 /* board 1017 moved this: it once said give the lead the code */
     && /<p class="sgn-say sgn-own"><b>This account&#39;s own trial is running\.<\/b><span>Fourteen days, until 27 Nov, on up to three computers\./.test(html)
     && html.indexOf('sgn-own"') > html.indexOf("data-signin-act") && !!had && had.moment === "asklead" && hadHtml.indexOf("sgn-own") < 0
     && pl.indexOf("Licencja Etiudy tej organizacji daje miejsce osobom, które dodają jej liderzy.") > 0 && pl.indexOf("Trwa własny okres próbny tego konta.") > 0 && pl.indexOf("do 27 lis") > 0
@@ -1226,14 +1226,15 @@ CASES.askLeadFile = s => {
 CASES.pageTwoRefusals = () => {
   if (!P) return false;
   const org = P.signinDoor(view({ said: "signin-notallowed" })), lic = P.signinDoor(view({ signedIn: "microsoft", code: CODE, seat: "none" }));
-  return /sign-in provider/.test(org.heading) && /No Etiuda licence has a seat/.test(lic.say[0]) && lic.code === CODE && org.heading !== lic.say[0];
+  /* Board 1017 moved this: the no-licence moment once carried the code; it carries none now. */
+  return /sign-in provider/.test(org.heading) && /No Etiuda licence has a seat/.test(lic.say[0]) && !("code" in lic) && org.heading !== lic.say[0];
 };
-/* Nothing from the provider is shown: the identity is the person's own name, the provider's name and the code. */
+/* Nothing from the provider is shown: the identity is the person's own name and the provider's name. Board 1017 moved this: the
+   parts once carried the code, in fours; they carry none now, and nothing groups it. */
 CASES.pageNothingFromProvider = () => {
   if (!P) return false;
   const p = P.signinParts(view({ signedIn: "google", code: CODE, seat: "held" }));
-  return Object.keys(p).sort().join() === "code,initial,name,off,sub,team,teamName" && p.sub === "Signed in with Google" && p.code === CODE
-    && P.signinCodeText(CODE) === "7K3M Q9TV 2XRB HN4W";
+  return Object.keys(p).sort().join() === "initial,name,off,sub,team,teamName" && p.sub === "Signed in with Google" && !("signinCodeText" in P);
 };
 
 /* ---- the sign-in preview (ds12) ----------------------------------------------------------------------------------------- */
@@ -1646,7 +1647,7 @@ async function acctOf(v, host, setMod) {
 const LINK_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=" + MS_CLIENT + "&state=s1&nonce=n1";
 /* The block in every waiting place, last, from the view alone: the panel after its acts, Account's card after Cancel; the link
    whole in the field, the line's two sentences, Copy; none outside a wait, none without a link, none in the preview's pressed state;
-   Polish too. Copy hands the shell the link (the code's Copy the code), and nothing once the wait has ended. */
+   Polish too. Copy hands the shell the link, and nothing once the wait has ended; no Copy hands the code (board 1017). */
 CASES.linkPage = async () => {
   if (!P || typeof P.signinLinkHtml !== "function") return false;
   const storage = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
@@ -1676,7 +1677,8 @@ CASES.linkPage = async () => {
     && panel.indexOf(field) > 0 && words(panel).indexOf(LINK_LINE) >= 0 && panel.lastIndexOf("data-signin-link") > panel.lastIndexOf('data-signin-act="stop"')
     && none.every(h => !/data-signin-link/.test(h)) && /data-signin-act="stop">Cancel<\/button><\/span><div class="sgn-link" data-signin-link>/.test(acct)
     && acct.indexOf(field) > 0 && !/data-signin-link/.test(acctNone) && words(pl).indexOf(LINK_LINE_PL) >= 0
-    && JSON.stringify(copied) === JSON.stringify([LINK_URL, CODE]);
+    /* Board 1017 moved this: the code's Copy once copied the code too ([LINK_URL, CODE]); no code is copied now. */
+    && JSON.stringify(copied) === JSON.stringify([LINK_URL]);
 };
 /* Finding 9: during the folder step (busy with no link, where Open the browser again does nothing), the button is not offered in the panel or Account. */
 CASES.waitingAgain = async (s, page, setMod) => {
@@ -1784,8 +1786,8 @@ CASES.accountPress = async (s, page) => {
   } finally { delete globalThis.window; delete globalThis.document; }
   return fromAccount === true && fromPanel === false && /signinStart\(b\.getAttribute\("data-e-provider"\), "account"\)/.test(SETTINGS);
 };
-/* "Copied" on screen (the product designer's edit to the built block): the code's Copy and the link's are one button, its two
-   labels stacked in one cell so it keeps the wider width; a copy the clipboard took turns it to "Copied" for SIGNIN_COPIED_MS, then
+/* "Copied" on screen (the product designer's edit to the built block): the link's Copy, its two
+   labels stacked in one cell so it keeps the wider width; board 1017 moved this, as the code's Copy it once also held is gone; a copy the clipboard took turns it to "Copied" for SIGNIN_COPIED_MS, then
    back; a copy refused leaves it; no toast, tick or colour; Polish "Skopiowano". */
 CASES.copiedLabel = async () => {
   if (!P || typeof P.signinCopyHtml !== "function") return false;
@@ -1809,9 +1811,9 @@ CASES.copiedLabel = async () => {
   try {
     P.signinChanged(signed, false);
     await P.signinAct("copy", code);
-    during = code.set.has("sgn-done");
-    took = false; await P.signinAct("copy", refused); took = true;
+    during = !code.set.has("sgn-done");
     P.signinChanged({ offered: ["microsoft"], busy: "microsoft", link: LINK_URL }, false);
+    took = false; await P.signinAct("copylink", refused); took = true;
     await P.signinAct("copylink", link);
     linkDuring = link.set.has("sgn-done");
     await tick(P.SIGNIN_COPIED_MS + 80);
@@ -1821,7 +1823,7 @@ CASES.copiedLabel = async () => {
     if (nav) Object.defineProperty(globalThis, "navigator", nav); else delete globalThis.navigator;
     delete globalThis.window; delete globalThis.document;
   }
-  return P.SIGNIN_COPIED_MS === 1500 && P.signinCopyHtml("copy") === BTN("copy") && noteam.indexOf(BTN("copy")) > 0 && acct.indexOf(BTN("copy")) > 0
+  return P.SIGNIN_COPIED_MS === 1500 && P.signinCopyHtml("copy") === BTN("copy") && noteam.indexOf("sgn-copy") < 0 && acct.indexOf("sgn-copy") < 0
     && P.signinLinkHtml(LINK_URL).indexOf(BTN("copylink")) > 0 && pl.indexOf("<span>Kopiuj</span><span>Skopiowano</span>") > 0
     && during && !refused.set.has("sgn-done") && linkDuring && !after
     && rule(".sgn-copy") === "display:inline-grid;justify-items:center" && rule(".sgn-copy>span") === "grid-area:1/1"
@@ -1857,16 +1859,16 @@ CASES.identNoName = async () => {
   return seen.length === 12 && seen.every(Boolean) && pl === "<b>Zalogowano przez Microsoft</b>"
     && named.every(h => h === "<b>Ada</b><small>Signed in with Google</small>");
 };
-/* One order in the panel (the product designer): the fact, its line, then the code; no licence's refusal stands over the code's box
-   as no team's heading and line do, under the identity and above the acts. */
+/* One order in the panel (the product designer): the fact, its line; no licence's refusal stands as no team's heading and line do,
+   under the identity and above the acts. Board 1017 moved this: the code's box once stood between the line and the acts; none now. */
 CASES.panelOrder = () => {
   if (!P) return false;
   const inOrder = (h, keys) => keys.map(k => h.indexOf(k)).every((at, i, a) => at >= 0 && (i === 0 || at > a[i - 1]));
   return ["microsoft", "google"].every(id => {
     const nolicence = P.signinPanelHtml(P.signinDoor(view({ signedIn: id, code: CODE, seat: "none" })));
     const noteam = P.signinPanelHtml(P.signinDoor(view({ signedIn: id, code: CODE, seat: "held" })));
-    return inOrder(nolicence, ['class="sgn-id"', 'class="sgn-say"', 'class="sgn-code"', 'class="sgn-acts"'])
-      && inOrder(noteam, ['class="sgn-id"', "<h4>", 'class="sgn-lede"', 'class="sgn-code"', 'class="sgn-acts"']);
+    return inOrder(nolicence, ['class="sgn-id"', 'class="sgn-say"', 'class="sgn-acts"'])
+      && inOrder(noteam, ['class="sgn-id"', "<h4>", 'class="sgn-lede"', 'class="sgn-acts"']) && (nolicence + noteam).indexOf("sgn-code") < 0;
   });
 };
 
@@ -2113,14 +2115,15 @@ CASES.stagingCmd = () => {
 
 /* ---- no free seat is a wait (ds18): the service answers 200 with no certificate and the reason "waiting", the desk keeps the person
    signed in and renews quietly, and the door and Account say so in the copywriter's words; an older service's 409 "full" as before ---- */
+/* Board 1017 moved the second lines, which once said the team's lead sees this account's sign-in code among those who have signed in. */
 const WAIT_EN = ["No seat is free on the organisation's licence just now.",
-  "The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and the team's lead sees this account's sign-in code among those who have signed in."];
+  "The sign-in worked. This computer takes a seat by itself as soon as one is free; nothing is needed here."];
 const WAIT_TEAM_EN = ["Ada's team has no free seat just now.",
-  "The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and Ada, the team's lead, sees this account's sign-in code among those who have signed in."];
+  "The sign-in worked. This computer takes a seat by itself as soon as one is free; nothing is needed here. The team's lead: Ada."];
 const WAIT_PL = ["W licencji organizacji nie ma teraz wolnego miejsca.",
-  "Logowanie się powiodło. Ten komputer sam zajmie miejsce, gdy tylko któreś się zwolni; nikt nie musi nic robić, a lider zespołu widzi kod logowania tego konta wśród osób, które się zalogowały."];
+  "Logowanie się powiodło. Ten komputer sam zajmie miejsce, gdy tylko któreś się zwolni; tutaj nie trzeba nic robić."];
 const WAIT_TEAM_PL = ["Ada's team nie ma teraz wolnego miejsca.",
-  "Logowanie się powiodło. Ten komputer sam zajmie miejsce, gdy tylko któreś się zwolni; nikt nie musi nic robić, a lider zespołu, Ada, widzi kod logowania tego konta wśród osób, które się zalogowały."];
+  "Logowanie się powiodło. Ten komputer sam zajmie miejsce, gdy tylko któreś się zwolni; tutaj nie trzeba nic robić. Lider zespołu: Ada."];
 /* The answer read and settled: "waiting" is a wait, kept as the said reason with the refresh token, asking nobody; an answer of none
    without it stays no licence; the certificate that follows ends the wait; a 409 "full" reads and settles as before. */
 CASES.waitRead = s => {
@@ -2924,7 +2927,8 @@ CASES.testServiceAsar = async (s0, swap) => {
    certificate, without the field, reads as not desk-only. */
 const DESK_ONLY_EN = ["Working without a team", "This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed."];
 const DESK_ONLY_PL = ["Praca bez zespołu", "Ten komputer ma swoje miejsce w licencji, a Etiuda działa na własnym katalogu. Nic więcej nie trzeba."];
-const NO_TEAM_LINE = "No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself.";
+/* Board 1017 moved this line, which once said a lead admits it by the code below. */
+const NO_TEAM_LINE = "No team has admitted this account yet. A lead can invite it by its email address or send a link; the catalog then arrives by itself.";
 /* The shell's signinView over `held`, the rest stood in. */
 function viewOver(held, relaySeat) {
   const text = decl(MAIN, "function signinView(");
@@ -2957,7 +2961,7 @@ CASES.deskOnlyPage = async (s, page) => {
   storage.lsSet("eUiLang", "pl");
   try { pl = pg.signinDoor(v({ deskOnly: true })); } finally { storage.lsSet("eUiLang", "en"); }
   const acct = page ? "" : words(await acctOf(Object.assign({}, base, { deskOnly: true }))), acctPlain = page ? "" : words(await acctOf(base));
-  return only.moment === "noteam" && only.heading === DESK_ONLY_EN[0] && only.line === DESK_ONLY_EN[1] && only.code === CODE
+  return only.moment === "noteam" && only.heading === DESK_ONLY_EN[0] && only.line === DESK_ONLY_EN[1] && !("code" in only) /* board 1017 moved this: the code once still showed */
     && plain.moment === "noteam" && plain.heading === "Signed in. No team yet" && plain.line === NO_TEAM_LINE && forged.deskOnly === false
     && !!pl && pl.heading === DESK_ONLY_PL[0] && pl.line === DESK_ONLY_PL[1]
     && (page ? true : acct.indexOf(DESK_ONLY_EN[0]) >= 0 && acct.indexOf(DESK_ONLY_EN[1]) >= 0 && acct.indexOf(NO_TEAM_LINE) < 0 && acctPlain.indexOf(NO_TEAM_LINE) >= 0);
@@ -5484,7 +5488,7 @@ const LEGS = [
   ["ds8a", "pageNone", "the page draws no door where nothing is offered and nobody is signed in"],
   ["ds8b", "pageMoments", "the door's content follows the view: before, waiting, refused, no licence, no team, no seat, sign in again"],
   ["ds8c", "pageTwoRefusals", "the organisation's refusal at its provider and no licence at our service are two moments, each in its own words"],
-  ["ds8d", "pageNothingFromProvider", "the identity is the person's own name, the provider's name and the code in fours, nothing from the provider"],
+  ["ds8d", "pageNothingFromProvider", "the identity is the person's own name and the provider's name, no code (board 1017), nothing from the provider"],
   ["ds9a", "signoutBody", "signout/desk's body has the interface's three names alone, signed by this desk's key over the service's bytes"],
   ["ds9b", "signoutPost", "Sign out posts exactly one signout/desk, the three names, a fresh t and a signature that verifies, before the sign-in is cleared, and nothing stays owed once it is taken"],
   ["ds9c", "signoutAway", "with the service unreached, throwing or answering 503 or a refusal, Sign out still clears the sign-in, says no refusal, and keeps the place owed, the page told once more"],
@@ -5529,9 +5533,9 @@ const LEGS = [
   ["ds17f", "doorRefusedSaid", "a press the shell refused at the door is said where it was pressed, the panel and Account's team row, in the copywriter's sentence, Polish too; a press taken says nothing, and the next act clears it"],
   ["ds17h", "doorAddress", "a door names a relay this build trusts and is a channel by the desk's own rule: every row of tests/door-relays.json is kept, filed, offered and knocked at as it says, installed and unpackaged, while an invitation to a valid https channel off the list is still read; the installed list is the built-in relay; the desk's flag is installed or packaged and reaches every caller"],
   ["ds17g", "doorEnded", "a join at the door the relay or the lead turned away, or refused as removed, knocks no more; \"turned\" is kept on a door join alone, the envelope keeps it, and the page is told"],
-  ["ds14g", "copiedLabel", "the code's Copy and the link's read Copied for SIGNIN_COPIED_MS after a copy the clipboard took, then Copy, holding the wider width; a refused copy leaves it; Polish too"],
+  ["ds14g", "copiedLabel", "the link's Copy (the code's gone, board 1017) reads Copied for SIGNIN_COPIED_MS after a copy the clipboard took, then Copy, holding the wider width; a refused copy leaves it; Polish too"],
   ["ds15a", "identNoName", "with no name written the identity's bold line is \"Signed in with\" its provider and there is no second line, in the panel's every signed-in moment and in Account; a name written stands over it; Polish too"],
-  ["ds15b", "panelOrder", "the panel tells no licence as it tells no team: the fact, its line, then the code's box, under the identity and above the acts"],
+  ["ds15b", "panelOrder", "the panel tells no licence as it tells no team: the fact, its line, no code's box (board 1017), under the identity and above the acts"],
   ["ds16a", "labPackaged", "THE LAB IS INERT PACKAGED: installed, packaged or both, ETIUDA_SIGNIN_LAB naming a lab or a staging file and Google's secret in the environment, nothing is read and the providers, what is offered, the secret and both doors are byte for byte the shipped ones; unpackaged, the lab is taken, a staging file fills the shipped two's client ids alone, the secret goes to Google alone, and a file naming another host is refused whole"],
   ["ds16b", "labRead", "the lab file is taken whole or not at all: the service http on 127.0.0.1 or https on etiuda.dev; client ids for the shipped two alone; the provider \"lab\" optional, its authorize and token http on 127.0.0.1 alone, its issuer and key set also https on a .localhost name, openid; a root optional, of 64 hex"],
   ["ds16c", "labPath", "pointed at a lab over real HTTP, the real path runs unchanged: the browser's redirect to the loopback, the code exchange with PKCE, the token checks, signin/desk's certificate, a refresh, a sign out; the shipped door and other ports refused"],
@@ -5590,12 +5594,12 @@ const LEGS = [
   ["ds22c", "certForgedAnswer", "a forged answer, a made-up signature or a stranger's root with a door on the trusted relay, is no seat and offers no door; signin.json edited to a forged certificate holds no seat, while a genuine one, lapsed too, stays"],
   ["ds22d", "certRoot", "the root the desk checks a certificate against is the vendor's, the relay's ROOT_PUB, and the check names it"],
   ["ds22i", "deskOnlyCert", "a desk-only licence's certificate carries deskOnly: true under the signature, as the line \"desk-only\" after the key id; the field taken off, put on, false or of another value is no certificate; signin.json keeps it; an older certificate without it reads as not desk-only, in the view as well"],
-  ["ds22j", "deskOnlyPage", "a desk-only seat with no team is told \"Working without a team\" and that nothing else is needed, in the panel and Account, Polish too, the code still shown; any other seat with no team keeps the waiting-for-a-lead line"],
+  ["ds22j", "deskOnlyPage", "a desk-only seat with no team is told \"Working without a team\" and that nothing else is needed, in the panel and Account, Polish too, no code shown (board 1017); any other seat with no team keeps the waiting-for-a-lead line"],
   ["ds22k", "testServiceAsar", "THE TEST SERVICE BUILD READS ITS FIELDS FROM INSIDE THE ASAR: a test-service.json, root included, planted beside the asar of an ordinary package changes nothing (no test service, the shipped service and root alone, a certificate under the planted root refused, staging's relay refused); in a test service package the asar's fields win over it; no file beside the asar is read"],
   ["ds22h", "labRoot", "unpackaged, a lab file's root is honoured beside the shipped one; installed, packaged or both a certificate under it is refused, the file never read; no lab, or one naming no root, honours the shipped root alone; a stranger's root never"],
   ["ds22e", "doorsSigned", "a door is taken only under the service's signature by the certificate's key, over those doors in that order under that certificate; an older service's answer without one holds the seat, offers no door and says nothing; a stranger's door added, a door changed, another key's or another certificate's signature is no door"],
   ["ds22f", "doorsFile", "signin.json keeps doors only with their signature under the certificate it holds: doors edited, the signature gone (an older build's file) or no certificate is no door, and the certificate stays"],
-  ["ds26a", "pageAskLead", "a desk its organisation's licence does not seat, the switch seating only people added, is told to give its lead the code, with Check now and Account, and under a hairline its own trial and its end, nothing there once the trial is had; Polish too (decision 47, held for Max's ruling)"],
+  ["ds26a", "pageAskLead", "a desk its organisation's licence does not seat, the switch seating only people added, is told a lead invites it by its email address (board 1017; once: give its lead the code), with Check now and Account, and under a hairline its own trial and its end, nothing there once the trial is had; Polish too (decision 47, held for Max's ruling)"],
   ["ds26b", "askLeadFile", "review 6: signin.json keeps askLead across a restart, with a trial certificate or none, and reads false otherwise"],
   ["ds49a", "relaySeatAnswer", "the service's no-role is read as itself at a renewal: the certificate kept to its own end, no sign-in asked"],
   ["ds49b", "relaySeatWire", "the team whose relay refused this desk's seat is kept and told once, said removed where the service found no role and renew otherwise, cleared by its own open or the channel let go"],
@@ -6033,8 +6037,8 @@ if (!PLANTS_OFF) {
   await plant("dsp9t", ["  return Buffer.from(SIGNIN_DESK_LINE + \"\\n\" + [o.provider, o.tokenHash, o.desk, o.t].concat(o.seed ? [\"seed:\" + o.seed] : []).map(String).join(\"\\n\"), \"utf8\"); /* plant:desk-seed-line */",
     "  return Buffer.from(SIGNIN_DESK_LINE + \"\\n\" + [o.provider, o.tokenHash, o.desk, o.t].map(String).join(\"\\n\"), \"utf8\");"], "deskBody");
   await plant("dsp10", ["if (seed) body.seed = String(seed); /* plant:seed-first */", "body.seed = String(seed);"], "deskBody");
-  await plant("dsp11", ["if ([SIGNIN_SERVICE, SIGNOUT_SERVICE, storeServiceAt(\"store/grant\"), storeServiceAt(\"store/end\")].indexOf(String(url)) < 0) throw new Error(\"the licence service's door takes signin/desk, signout/desk, store/grant and store/end only\"); /* plant:service-host */", ""], "serviceDoor");
-  await plant("dsp27", ["if ([SIGNIN_SERVICE, SIGNOUT_SERVICE, storeServiceAt(\"store/grant\"), storeServiceAt(\"store/end\")].indexOf(String(url)) < 0) throw new Error(\"the licence service's door takes signin/desk, signout/desk, store/grant and store/end only\"); /* plant:service-host */", ""], "signoutDoor");
+  await plant("dsp11", ["if ([SIGNIN_SERVICE, SIGNOUT_SERVICE, storeServiceAt(\"store/grant\"), storeServiceAt(\"store/end\"), storeServiceAt(\"ask\")].indexOf(String(url)) < 0) throw new Error(\"the licence service's door takes signin/desk, signout/desk, store/grant, store/end and ask only\"); /* plant:service-host */", ""], "serviceDoor");
+  await plant("dsp27", ["if ([SIGNIN_SERVICE, SIGNOUT_SERVICE, storeServiceAt(\"store/grant\"), storeServiceAt(\"store/end\"), storeServiceAt(\"ask\")].indexOf(String(url)) < 0) throw new Error(\"the licence service's door takes signin/desk, signout/desk, store/grant, store/end and ask only\"); /* plant:service-host */", ""], "signoutDoor");
   await plant("dsp28", ["const SIGNOUT_DESK_LINE = \"etiuda-licence-signout-desk\"; /* plant:signout-line */", "const SIGNOUT_DESK_LINE = \"etiuda-licence-signin-desk\";"], "signoutBody");
   await plant("dsp12", ["&& String(c.desk) === String(deskKey) && /^[0-9a-f]{64}$/.test(String(c.person)) && SIGNIN_CODE.test(String(c.code)) /* plant:cert-desk */",
     "&& /^[0-9a-f]{64}$/.test(String(c.person)) && SIGNIN_CODE.test(String(c.code))"], "answers");
@@ -6136,8 +6140,8 @@ if (!PLANTS_OFF) {
   await plant("dsp80", ["said: ans.waiting === true ? \"waiting\" : \"\", ask: false, askLead: ans.askLead === true, managed: ans.managed === true, cause: ans.managed === true ? ans.cause || \"\" : \"\",",
     "said: \"\", ask: false, askLead: ans.askLead === true, managed: ans.managed === true, cause: ans.managed === true ? ans.cause || \"\" : \"\","], "waitRead");
   await plant("dsp80b", ["askLead: h.askLead === true, /* plant:file-ask-lead */", "askLead: false,"], "askLeadFile");
-  await plant("dsa2", ["signinAskedWords(signinAskedOf(j.asked))); /* plant:words-read */", "{}); /* plant:words-read */"], "askedHeld");
-  await plant("dsa3", ["signinAskedWords(signinAskedOf((ans.asked || []).map(n => ({ lead: { name: n } }))))); /* plant:words-settle */", ")); /* plant:words-settle */"], "askedHeld");
+  await plant("dsa2", ["signinAskedWords(signinAskedOf(j.asked)), signinInvitedWords(", "signinInvitedWords("], "askedHeld");
+  await plant("dsa3", ["signinAskedWords(signinAskedOf((ans.asked || []).map(n => ({ lead: { name: n } })))), /* plant:words-settle */", "/* plant:words-settle */"], "askedHeld");
   await plant("dsa4", ["if (out.held) Object.assign(out.held, signinAskedWords(signinAskedOf(Array.isArray(h.asked) ? h.asked.map(n => ({ lead: { name: n } })) : null))); /* plant:asked-file */", ""], "askedHeld");
   await plant("dsa5", ["if (signedIn && held && Array.isArray(held.asked) && held.asked.length) view.asked = held.asked.slice(); /* plant:view-asked */", ""], "askedHeld");
   await plant("dsa6", [".test(n) || out.indexOf(n) >= 0) continue; /* plant:asked-name */", ".test(n)) continue;"], "askedHeld");
@@ -6339,10 +6343,10 @@ if (!PLANTS_OFF) {
   await plant("dskp1", ["  if (!v || typeof v !== \"object\" || Array.isArray(v) || SIGNIN_HOLDING_ON.indexOf(v.on) < 0) return null; /* plant:holding-on */","  if (!v || typeof v !== \"object\" || Array.isArray(v)) return null;"], "answerWords");
   await plant("dskp2", ["  if (lead && lead.length <= SIGNIN_LEAD_MAX && !/[\\u0000-\\u001f\\u007f-\\u009f<>\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]/.test(lead)) out.lead = lead; /* plant:holding-lead */","  if (typeof v.lead === \"string\") out.lead = v.lead;"], "answerWords");
   await plant("dskp3", ["  for (const k of [\"desk\", \"studio\"]) if (Number.isSafeInteger(v[k]) && v[k] > 0) out[k] = v[k]; /* plant:trials-read */","  for (const k of [\"desk\", \"studio\"]) if (v[k] !== undefined) out[k] = v[k]; /* plant:trials-read */"], "answerWords");
-  await plant("dskp4", ["    const words = Object.assign(signinWordsOf(signinHoldingOf(j.seat), signinTrialsOf(j.trials)), signinAskedWords(signinAskedOf(j.asked))); /* plant:words-read */","    const words = {};"], "answerWords");
+  await plant("dskp4", ["    const words = Object.assign(signinWordsOf(signinHoldingOf(j.seat), signinTrialsOf(j.trials)), signinAskedWords(signinAskedOf(j.asked)), signinInvitedWords(signinInvitedOf(j.invited))); /* plant:words-read */","    const words = {};"], "answerWords");
   await plant("dskp5", ["    const keep = !ans.cert && !!held && !!held.cert; /* plant:keep-none */","    const keep = false;"], "keepNone");
   await plant("dskp6", ["    const ended = ans.cert ? 0 : !keep ? 0 : held.ended > 0 ? held.ended : Number.isSafeInteger(deskNow) && deskNow > 0 ? deskNow : now; /* plant:ended-first */","    const ended = ans.cert ? 0 : !keep ? 0 : Number.isSafeInteger(deskNow) && deskNow > 0 ? deskNow : now; /* plant:ended-first */"], "keepNone");
-  await plant("dskp7", ["    return Object.assign(out, ended ? { ended: ended } : {}, signinWordsOf(ans.cert ? ans.holding : keep ? held.holding : null, ans.trials || (held && held.trials)), signinAskedWords(signinAskedOf((ans.asked || []).map(n => ({ lead: { name: n } }))))); /* plant:words-settle */","    return Object.assign(out, ended ? { ended: ended } : {}, signinWordsOf(ans.holding, ans.trials)); /* plant:words-settle */"], "wordsKept");
+  await plant("dskp7", ["    return Object.assign(out, ended ? { ended: ended } : {}, signinWordsOf(ans.cert ? ans.holding : keep ? held.holding : null, ans.trials || (held && held.trials)), signinAskedWords(signinAskedOf((ans.asked || []).map(n => ({ lead: { name: n } })))), /* plant:words-settle */","    return Object.assign(out, ended ? { ended: ended } : {}, signinWordsOf(ans.holding, ans.trials), /* plant:words-settle */"], "wordsKept");
   await plant("dskp8", ["  return Object.assign({ held: signinSettle(fresh, said, now(), io && typeof io.deskNow === \"function\" ? io.deskNow() : 0, io && typeof io.deskIssued === \"function\" ? io.deskIssued() : 0), said: said.ok ? \"renewed\" : said.reason }, said.ok ? { idToken: m ? m.got.idToken : got.idToken } : {}); /* plant:renew-desk-now */","  return Object.assign({ held: signinSettle(fresh, said, now()), said: said.ok ? \"renewed\" : said.reason }, said.ok ? { idToken: m ? m.got.idToken : got.idToken } : {}); /* plant:renew-desk-now */"], "keepNone");
   await plantWire("dskp9", ["    if (was.cert) Object.assign(base, { code: was.code, cert: was.cert }, was.ended > 0 ? { ended: was.ended } : {}, was.holding ? { holding: was.holding } : {}); /* plant:take-keeps-cert */\n",""], "wordsKept");
   await plant("dskp10", ["  return Array.isArray(offered) && offered.length > 0 && signinWorks(held, deskKey, deskNow); /* plant:works-offered */","  return signinWorks(held, deskKey, deskNow);"], "noProvider");

@@ -124,11 +124,12 @@ CASES.absent = async () => {
   const a = await acctOf(signed, NO_OFFER), b = await acctOf(signedOut, NO_OFFER), c = await acctOf(signed), d = await acctOf(signed, { buyState: () => S.state() });
   return lineOf("let ORDER_PAGE =") === "let ORDER_PAGE = \"\";" && S.page() === "" && !!st && st.offer === false && Object.keys(st).join() === "offer"
     && clicked === null && opened === false && S.opened.length === 0
-    && [a, b, c, d].every(h => /data-row="code"|data-e-open="signin"/.test(h) && !/data-e-open="buy"/.test(h) && !/data-row="buy"/.test(h));
+    && [a, b, c, d].every(h => /data-row="seat"|data-e-open="signin"/.test(h) && !/data-e-open="buy"/.test(h) && !/data-row="buy"/.test(h));
 };
 /* b2: an order page named (here by the sign-in lab, as a client id is filled) is offered, and nothing else is told; Account draws
-   Buy signed in, its line saying the code is filled in; signed out too, its line saying the page asks for the code; neither while
-   a sign-in waits; Polish too. */
+   Buy signed in, its line saying the licence bought is this account's; signed out too, its line saying signing in comes first;
+   neither while a sign-in waits; Polish too. Board 1017 moved the two lines, which once said the code is filled in and that the
+   page asks for the code: no screen names a code now. */
 CASES.present = async () => {
   const S = shellOf({ lab: labWith({ order: ORDER }) });
   const st = S.state(), other = S.state(false);
@@ -141,11 +142,11 @@ CASES.present = async () => {
   try { plIn = buyRowOf(await acctOf(signed, OFFER)); plOut = buyRowOf(await acctOf(signedOut, OFFER)); } finally { storage.lsSet("eUiLang", "en"); }
   return S.taken === true && S.page() === ORDER && !!st && st.offer === true && Object.keys(st).join() === "offer" && other === null
     && /<button type="button" class="btn" data-e-open="buy">Buy<\/button>/.test(inRow)
-    && words(inRow).indexOf("Licence for one person") >= 0 && words(inRow).indexOf("with this account's sign-in code filled in; typing another person's code buys the licence for them instead.") >= 0
-    && /data-e-open="buy">Buy</.test(outRow) && words(outRow).indexOf("asks for the sign-in code of the person the licence is for, which Etiuda shows them after their first sign-in.") >= 0
+    && words(inRow).indexOf("Licence for one person") >= 0 && words(inRow).indexOf("The order page opens in the browser, and the licence bought there is this account's.") >= 0
+    && /data-e-open="buy">Buy</.test(outRow) && words(outRow).indexOf("A licence is bought for the account signed in here, so signing in comes first.") >= 0
     && inRow.indexOf(CODE) < 0 && outRow.indexOf("http") < 0 && !/data-e-open="buy"/.test(busy)
-    && /data-e-open="buy">Kup</.test(plIn) && words(plIn).indexOf("Licencja dla jednej osoby") >= 0 && words(plIn).indexOf("z wpisanym kodem logowania tego konta; po wpisaniu kodu innej osoby licencja zostanie kupiona dla niej.") >= 0
-    && /data-e-open="buy">Kup</.test(plOut) && words(plOut).indexOf("poprosi o kod logowania osoby, dla której jest licencja; Etiuda pokazuje go tej osobie po jej pierwszym zalogowaniu.") >= 0;
+    && /data-e-open="buy">Kup</.test(plIn) && words(plIn).indexOf("Licencja dla jednej osoby") >= 0 && words(plIn).indexOf("Strona zamówienia otworzy się w przeglądarce, a kupiona tam licencja będzie należeć do tego konta.") >= 0
+    && /data-e-open="buy">Kup</.test(plOut) && words(plOut).indexOf("Licencję kupuje się dla konta zalogowanego na tym komputerze, więc najpierw trzeba się zalogować.") >= 0;
 };
 /* b3: a click on Buy hands the browser the order page with the code after its #: the request a browser makes of it (its path and
    query) holds no code. Signed out, or with a code not of its shape, the bare page. */

@@ -367,7 +367,7 @@ function accountGroups(){
     /* A managed computer shows the provider it is held to. */
     if(v.managed && v.managed.provider) rows.push(row("signin","user",t("Sign-in"),"",lockedHtml(signinHeldTo(v.managed))));
     /* The invitations waiting, each with its Join (board 1017), and a Join that waits for the lead's confirm. */
-    v.invited.forEach(x=>rows.push(row("invited","people",t("Invitation"),signinInvitedLine(x), /* plant:account-invited */
+    v.invited.forEach(x=>rows.push(row("invited","people",t("Invitation"),signinInvitedLine(x),
       '<button type="button" class="btn primary" data-signin-act="join" data-signin-invite="'+esc(String(x.n))+'">'+esc(t("Join"))+'</button>')));
     if(signinJoinRefusedNow()) rows.push({key:"joinno", html:signinJoinRefusedHtml()});
     if(v.joinWait){ const w=signinJoinWaitWords(v); rows.push(row("joinwait","people",w[0],w[1],"")); }

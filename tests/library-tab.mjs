@@ -797,9 +797,10 @@ await checkAsync("L16b the Library list says 'Categories & cards'", async () => 
 
 /* THE FOOTER GOES (Maxim, 2026-11-09 20:31, finding 3): no Close and no bar under the list; Load catalog file, Join a team,
    Saved copies and Clear local changes are rows of Catalog and data, each doing what its button did. The host offers a
-   picker and a join for this leg only. */
+   picker and a join for this leg only. Board 1017 moved this: Join a team, the paste, was once a row here too; the paste stands on
+   the empty desk alone now (Max, 2026-11-22 02:12: "Yes, remove it please."), so the rows are Load, Saved copies and Clear. */
 const ST = await import(MOD("storage.js"));
-await checkAsync("L17 the Library has no footer, and Catalog and data holds Load catalog file, Join a team, Saved copies and Clear local changes as rows, each acting as its button did", async () => {
+await checkAsync("L17 the Library has no footer, and Catalog and data holds Load catalog file, Saved copies and Clear local changes as rows (no Join a team, board 1017), each acting as its button did", async () => {
   if (wired) return wired;
   const picked = [];
   window.E_HOST.pickCatalogFile = () => { picked.push(1); return Promise.resolve(null); };
@@ -812,13 +813,11 @@ await checkAsync("L17 the Library has no footer, and Catalog and data holds Load
     const rows = data ? data.querySelectorAll(".mg-data-acts > .set-row").map(r => r.getAttribute("data-row")) : [];
     const footer = !!host().querySelector(".screen-actions") || !!host().querySelector("#mgClose");
     const btnIn = (row, id) => !!(data && data.querySelector('.set-row[data-row="' + row + '"] #' + id));
-    const homes = btnIn("load", "mgImportCatalog") && btnIn("join", "mgJoinTeam") && btnIn("history", "mgHistory") && btnIn("clear", "mgWipe");
+    const homes = btnIn("load", "mgImportCatalog") && !host().querySelector("#mgJoinTeam") && btnIn("history", "mgHistory") && btnIn("clear", "mgWipe");
     host().querySelector("#mgImportCatalog").click();
     await settle();
     const loads = picked.length === 1;
-    host().querySelector("#mgJoinTeam").click();
-    await settle();
-    const joins = !!doc.querySelector("[data-join]");
+    const joins = !doc.querySelector("[data-join-paste]");
     host().querySelector("#mgWipe").click();
     const ask = doc.querySelector("#eClearAsk");
     const asks = !!ask && !!ask.querySelector("#eClearGo") && !!ask.querySelector("#eClearStay");
@@ -830,7 +829,7 @@ await checkAsync("L17 the Library has no footer, and Catalog and data holds Load
     const back = host().querySelector("#ehClose");
     if (back) back.click();
     await settle();
-    return !footer && rows.join() === "load,join,history,clear" && homes && loads && joins && asks && history
+    return !footer && rows.join() === "load,history,clear" && homes && loads && joins && asks && history
       || JSON.stringify({ footer, rows, homes, loads, joins, asks, history });
   } finally {
     delete window.E_HOST.pickCatalogFile;

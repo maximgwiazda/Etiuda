@@ -135,7 +135,6 @@ function joinAsk(op,file,name,check,before){
   return asked.then(v=>joinTook(v,typeof before==="function"&&before(v)),()=>{
     const shown=joinMode!=="";
     dropInvite();
-    syncJoinDoor();
     if(shown) repaintJoin();
     return null;
   });
@@ -250,13 +249,6 @@ function joinShown(j){
   if(j.doubted===true) row.doubted=true;
   if(j.paused===true) row.paused=true;
   return row;
-}
-/* The Menu's Join a team follows the same rule as the other two doors: hidden while a request is in flight or a new key is still to be compared. */
-function syncJoinDoor(){
-  try{
-    const el=document.getElementById("menuJoin");
-    if(el) el.hidden=!teamCanJoin();
-  }catch(e){}
 }
 /* The head the shell read, or nothing. A folder team sends no head, and a head that is not this shape is left off
    so the row stays as it was. */
@@ -496,7 +488,6 @@ function joinTook(v,changed){
       hooks.loadCatalogFromFolder(s.opens.file,0); /* plant:opens-load */
     }
   }
-  syncJoinDoor();
   syncLapseNotice();
   syncRelayRemoved();
   syncRelayElsewhere(); /* plant:elsewhere-notice */

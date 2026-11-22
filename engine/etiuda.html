@@ -18402,7 +18402,6 @@ What is typed here stays in this browser.`;
     return asked.then((v) => joinTook(v, typeof before === "function" && before(v)), () => {
       const shown2 = joinMode !== "";
       dropInvite();
-      syncJoinDoor();
       if (shown2) repaintJoin();
       return null;
     });
@@ -18558,13 +18557,6 @@ What is typed here stays in this browser.`;
     if (j.doubted === true) row2.doubted = true;
     if (j.paused === true) row2.paused = true;
     return row2;
-  }
-  function syncJoinDoor() {
-    try {
-      const el = document.getElementById("menuJoin");
-      if (el) el.hidden = !teamCanJoin();
-    } catch (e) {
-    }
   }
   function headKept(h) {
     if (!h || typeof h !== "object") return null;
@@ -18828,7 +18820,6 @@ What is typed here stays in this browser.`;
         hooks.loadCatalogFromFolder(s.opens.file, 0);
       }
     }
-    syncJoinDoor();
     syncLapseNotice();
     syncRelayRemoved();
     syncRelayElsewhere();
@@ -42715,7 +42706,6 @@ What is typed here stays in this browser.`;
         "people",
         t("Invitation"),
         signinInvitedLine(x),
-        /* plant:account-invited */
         '<button type="button" class="btn primary" data-signin-act="join" data-signin-invite="' + esc(String(x.n)) + '">' + esc(t("Join")) + "</button>"
       )));
       if (signinJoinRefusedNow()) rows.push({ key: "joinno", html: signinJoinRefusedHtml() });

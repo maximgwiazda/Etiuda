@@ -28,7 +28,7 @@ const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const SIGNIN = fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8");
 const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const CHECKS = 38, PLANTS = 55;
+const CHECKS = 38, PLANTS = 53;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -447,6 +447,10 @@ CASES.waiting = async (s, set, pg) => {
 };
 /* mm-p10 (finding 7, case A): on a managed computer, the Team row's "No team yet" hint never refers to "the code below",
    English and Polish; unmanaged still does. */
+const B3U = {
+  en: "No team has admitted this account yet. A lead can invite it by its email address or send a link; the catalog then arrives by itself.",
+  pl: "Żaden zespół nie przyjął jeszcze tego konta. Lider zespołu może zaprosić je na adres e-mail albo wysłać link; potem katalog przyjdzie sam.",
+};
 const B3 = {
   en: "No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself.",
   pl: "Żaden zespół nie przyjął jeszcze tego konta. Gdy lider zespołu je przyjmie, katalog przyjdzie sam.",
@@ -456,7 +460,8 @@ CASES.noTeamManaged = async (s, set, pg) => {
     const m = await drawn(withM(PROFILES.signed, M_ON), lang, set, pg), w = words(m.acct);
     if (w.indexOf(B3[lang]) < 0 || /code below|kodzie poniżej/i.test(w) || m.acct.indexOf("data-row=\"code\"") >= 0) return false;
     const u = await drawn(PROFILES.signed, lang, set, pg), uw = words(u.acct);
-    if (!/code below|kodzie poniżej/i.test(uw) || u.acct.indexOf("data-row=\"code\"") < 0) return false;
+    /* Board 1017 moved this: unmanaged once still referred to the code below and drew its row; now neither does, and its line says a lead invites by address or sends a link. */
+    if (/code below|kodzie poniżej/i.test(uw) || u.acct.indexOf("data-row=\"code\"") >= 0 || uw.indexOf(B3U[lang]) < 0) return false;
   }
   return true;
 };
@@ -473,7 +478,8 @@ CASES.askLeadManaged = async (s, set, pg) => {
     }
   }
   const u = await drawn(Object.assign({}, PROFILES.signed, { seat: "held", askLead: true, trialUntil: until }), "en", set, pg);
-  return u.moment === "asklead" && u.door.indexOf("sgn-code") >= 0 && u.door.indexOf("sgn-own") >= 0;
+  /* Board 1017 moved this: unmanaged once drew the code and the trial line; now the trial line alone, the code nowhere. */
+  return u.moment === "asklead" && u.door.indexOf("sgn-code") < 0 && u.door.indexOf(CODE) < 0 && u.door.indexOf("sgn-own") >= 0;
 };
 /* mm-p17 (section B8 row 5): on a managed computer, askLead uses the copywriter's line, English and Polish. */
 CASES.askLeadManagedWords = async (s, set, pg) => {
@@ -653,8 +659,8 @@ const LIST = [
   ["mm-p7", "noRoleWords", "no role: the copywriter's line, English and Polish, giving way to SupportContact where it is set"],
   ["mm-p6", "heldTo", "the Sign-in row in the one of three states that holds: the tenant's work accounts, any work account, or those the organisation allows"],
   ["mm-p8", "waiting", "policy not read yet: the panel and Account say the desk waits for the organisation's settings, offer nothing to sign in with, buy or copy, and never say managed"],
-  ["mm-p10", "noTeamManaged", "finding 7: on a managed computer, the Team row never refers to the hidden code below, English and Polish; unmanaged still does"],
-  ["mm-p11", "askLeadManaged", "finding 7: on a managed computer, askLead shows neither sign-in code nor trial line and names no hidden code; unmanaged still shows both"],
+  ["mm-p10", "noTeamManaged", "finding 7: on a managed computer, the Team row never refers to the hidden code below, English and Polish; unmanaged neither (board 1017), saying a lead invites by address"],
+  ["mm-p11", "askLeadManaged", "finding 7: on a managed computer, askLead shows neither sign-in code nor trial line and names no hidden code; unmanaged shows the trial line and no code (board 1017)"],
   ["mm-p12", "seatRemovedContact", "finding 8: seat-removed uses SupportContact when set, English and Polish, as text; keeps IT words otherwise"],
   ["mm-p13", "unmanagedContact", "finding 8: unmanaged signin-notassigned and signin-notallowed use SupportContact when set, English and Polish"],
   ["mm-p14", "managedClosedAccount", "finding 8: under Managed with no sign-in offered, Account says it is managed and why, with SupportContact when set"],
@@ -728,8 +734,6 @@ if (!PLANTS_OFF && S) {
     "  return reason===\"signin-tenant\";"], "m1", "signin");
   await plantPage("mmp27", ["      +(keeps ? '' : '<span class=\"sgn-acts\"><button type=\"button\" class=\"btn\" data-signin-act=\"another\">'+esc(t(\"Use another account\"))+'</button>' /* plant:card-keeps */",
     "      +(false ? '' : '<span class=\"sgn-acts\"><button type=\"button\" class=\"btn\" data-signin-act=\"another\">'+esc(t(\"Use another account\"))+'</button>'"], "managedSeat", "settings");
-  await plantPage("mmp28", ["    if(v.code && !signinManaged(v)) rows.push(row(\"code\",\"code\",t(\"Your sign-in code\"), /* plant:code-row-managed */",
-    "    if(v.code) rows.push(row(\"code\",\"code\",t(\"Your sign-in code\"),"], "managedSeat", "settings");
   await plantPage("mmp29", ["  if(reason===\"nolicence\" && signinManaged(v)) /* plant:no-role-managed */", "  if(false)"], "noRole", "signin");
   {
     const swap = ["      + (catalogLoaded() ? \" \"+t(\"Etiuda keeps working with the catalog it has.\") : \"\")]; /* plant:refused-catalog */",
@@ -753,10 +757,8 @@ if (!PLANTS_OFF && S) {
     try { red = SIGNIN.split(swap[0]).length === 2 && !(await CASES.noRoleWords(S, undefined, undefined, SIGNIN.replace(swap[0], swap[1]))); } catch (e) { red = false; }
     check(red, "mmp33 plant SupportContact dropped from the no-role line turns noRoleWords red");
   }
-  await plantPage("mmp43", [": row(\"team\",\"people\",t(\"No team yet\"),doorSaid||(signinManaged(v)?t(\"No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself.\"):t(\"No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself.\")),\"\")); /* plant:no-team-managed */",
-    ": row(\"team\",\"people\",t(\"No team yet\"),doorSaid||t(\"No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself.\"),\"\"));"], "noTeamManaged", "settings");
-  await plantPage("mmp44", ["if(v.askLead) return {moment:\"asklead\", ident, say:signinSay(\"asklead\", v), code:signinManaged(v)?\"\":v.code, /* plant:asklead-code-managed */",
-    "if(v.askLead) return {moment:\"asklead\", ident, say:signinSay(\"asklead\", v), code:v.code,"], "askLeadManaged", "signin");
+  await plantPage("mmp43", [": row(\"team\",\"people\",t(\"No team yet\"),doorSaid||(signinManaged(v)?t(\"No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself.\"):t(\"No team has admitted this account yet. A lead can invite it by its email address or send a link; the catalog then arrives by itself.\")),\"\")); /* plant:no-team-managed */",
+    ": row(\"team\",\"people\",t(\"No team yet\"),doorSaid||t(\"No team has admitted this account yet. A lead can invite it by its email address or send a link; the catalog then arrives by itself.\"),\"\"));"], "noTeamManaged", "settings");
   await plantPage("mmp45", ["own:signinManaged(v)?null:v.seat===\"held\" && v.trialUntil ? signinOwnTrialWords(v, ds) : null}; /* plant:asklead-trial-managed */",
     "own:v.seat===\"held\" && v.trialUntil ? signinOwnTrialWords(v, ds) : null};"], "askLeadManaged", "signin");
   await plantPage("mmp46", ["    case \"seat-removed\": /* plant:seat-removed-contact */\n      { const c=v && v.managed ? v.managed.contact : \"\";",
