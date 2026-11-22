@@ -2222,6 +2222,77 @@ Module.prototype._compile = function (content, filename) {
   }
 }
 
+/* 34z. THE HELD-BACK HOME (Claude alpha, 2026-11-22, before board 1016's purge). The catalog the quote scan holds back
+   moves out of every tree, and tools/pre-commit learns where from .git/etiuda-held-back, one line naming a folder. It
+   fails closed. In a throwaway repository with invented words and no catalog beside it: 34z1, no path file and nothing
+   beside the engine is refused for want of a catalog; 34z2, a path file naming no folder, a folder not there, and an empty
+   folder are each refused with their own sentence; 34z3, a home holding a catalog is counted by name and a clean message
+   passes; 34z4, that catalog's quote in a message is refused; 34z5, the control: the same folder with the path file taken
+   away is refused again, so 34z3's pass came through the path file and nothing else. */
+{
+  const cp = require("child_process");
+  let bash = "bash";
+  if (process.platform === "win32") {
+    const ex = cp.execFileSync("git", ["--exec-path"], { encoding: "utf8" }).trim();
+    bash = [["bin", "bash.exe"], ["usr", "bin", "bash.exe"], ["usr", "bin", "sh.exe"]]
+      .map(p => path.join(ex, "..", "..", "..", ...p)).find(p => fs.existsSync(p)) || path.join(ex, "..", "..", "..", "bin", "bash.exe");
+  }
+  const lab = path.join(tmp, "scan-home");
+  const home = path.join(tmp, "scan-home-held");
+  fs.mkdirSync(lab);
+  const git = (...a) => cp.execFileSync("git", ["-c", "user.name=selftest", "-c",
+    "user.email=selftest@invalid", "-c", "core.autocrlf=false", ...a],
+    { cwd: lab, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  if (cp.spawnSync(bash, ["-c", "exit 0"]).status !== 0) ok(false, "34z needs git's own shell, and none answers at " + bash);
+  else {
+    const PUB = 'var s = "amber falcon drifts over quiet copper meadows every morning";\n';
+    const HELD = 'var s = "crimson orchard ladders lean against patient northern walls";\n';
+    git("init", "-q");
+    fs.writeFileSync(path.join(lab, ".gitignore"), "*-catalog.js\n");
+    fs.writeFileSync(path.join(lab, "sample.js"), PUB);
+    git("add", ".gitignore", "sample.js");
+    git("commit", "-q", "--no-verify", "-m", "published");
+    git("update-ref", "refs/remotes/origin/main", "HEAD");
+    fs.writeFileSync(path.join(lab, ".git", "etiuda-names"), "zqxwvname\n");
+    const script = fs.readFileSync(path.join(E.ROOT, "tools", "pre-commit"), "utf8");
+    const quiet = { ...process.env };
+    delete quiet.ETIUDA_SCAN_OFF;
+    const pathFile = path.join(lab, ".git", "etiuda-held-back");
+    const scan = (body) => {
+      fs.writeFileSync(path.join(lab, "scan.sh"), script);
+      fs.writeFileSync(path.join(lab, "msg.txt"), body || "A plain message.\n");
+      const r = cp.spawnSync(bash, ["scan.sh", "msg.txt"], { cwd: lab, encoding: "utf8", env: quiet });
+      return { code: r.status, say: String(r.stderr || "") };
+    };
+    const fwd = p => p.split(path.sep).join("/");
+    const none = scan();
+    ok(none.code === 1 && /needs a catalog this repository holds back/.test(none.say),
+       "34z1 no path file and no catalog beside the engine is refused for want of a catalog: exit " + none.code);
+    fs.writeFileSync(pathFile, "# the held-back home\n\n");
+    const blank = scan();
+    fs.writeFileSync(pathFile, fwd(home) + "\n");
+    const gone = scan();
+    fs.mkdirSync(home);
+    const empty = scan();
+    ok(blank.code === 1 && /names no folder/.test(blank.say) && gone.code === 1 && /is not a folder here/.test(gone.say)
+       && empty.code === 1 && /holds no catalog this scan can read/.test(empty.say),
+       "34z2 a path file naming no folder (exit " + blank.code + "), a folder not there (exit " + gone.code
+       + ") and an empty folder (exit " + empty.code + ") are each refused with their own sentence");
+    fs.writeFileSync(path.join(home, "held-catalog.js"), HELD);
+    const clean = scan();
+    ok(clean.code === 0 && /against 1 held-back catalog\(s\): .*held-catalog\.js/.test(clean.say),
+       "34z3 a home holding a catalog is counted by name and a clean message passes: exit " + clean.code);
+    const quoted = scan("Subject\nwe saw crimson orchard ladders lean against patient walls\n");
+    ok(quoted.code === 1 && /content held back by this repository is quoted/.test(quoted.say),
+       "34z4 the home catalog's quote in a message is refused: exit " + quoted.code);
+    fs.unlinkSync(pathFile);
+    const control = scan();
+    ok(control.code === 1 && /needs a catalog this repository holds back/.test(control.say),
+       "34z5 CONTROL: the same home with the path file taken away is refused again, so 34z3 read it through the path"
+       + " file: exit " + control.code);
+  }
+}
+
 /* 35. A BUILD THE HARNESS MAKES SIGNS NOTHING (board 827, item A). electron-builder signs a --dir build
    too, and a token route asks for a PIN in a window nobody sees behind stdio "ignore", where Artifact
    Signing installs a module and signs in. So the three builds the gates make (shell-smoke, reinstall,
