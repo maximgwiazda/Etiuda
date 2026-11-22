@@ -659,6 +659,14 @@ before this gate existed, and each leg under a fault planted in the shell (the t
 the listener cut, the middle click unheard, the click not spent, the address not matched, the click
 never stale).
 
+The desk is seated before the legs through the shell's own sign-in lab (`tests/seat-shell.mjs`: a
+loopback service on 127.0.0.1 answering the lab provider's token and signin/desk with certificates
+under a per-run root, the door's Lab button pressed by a trusted click, the stub's line for the
+authorize address followed as a browser would), because an unseated desk shows the first sign-in
+door, which swallows every key aimed outside it. g0, before the seat, presses Enter on the same
+focused link with the door standing and hands nothing; with the seat withheld by a plant, g went red
+(17 checks, 2 failed: the seat and g).
+
 ## Whether a build can be sold, which no other gate asks
 
     node tests/sellable.mjs
