@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 339;
+const PLANTS = 343;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 217 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 220 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -3887,7 +3887,8 @@ CASES.clockBackClosed = (s, swap) => {
   const end = w2.signinClockNow().desk;
   return kept && stood && still && end === until && s.signinWorks(st.held, DESK_KEY, end) === false;
 };
-/* Set back a year while running: the monotonic clock carries the desk on, and the next run measures from the set-back clock. */
+/* Set back a year while running: the monotonic clock carries the desk on; the next run counts nothing while the system clock stays
+   behind where the desk's reckoning left it, and the time closed once it is put right. */
 CASES.clockBackRunning = (s, swap) => {
   const st = clockStand({ held: heldOf(), wall: NOW, mono: 1000 }), w = clockWire(s, st, swap);
   w.signinClockNow();
@@ -3897,7 +3898,10 @@ CASES.clockBackRunning = (s, swap) => {
   const b = w.signinClockNow().desk === NOW + 10000 + 86400000;
   w.signinSave();
   st.wall += HOUR_MS; st.mono = 3;
-  return a && b && clockWire(s, st, swap).signinClockNow().desk === NOW + 10000 + 86400000 + HOUR_MS;
+  const w2 = clockWire(s, st, swap), behind = w2.signinClockNow().desk === NOW + 10000 + 86400000;
+  w2.signinSave();
+  st.wall = NOW + 10000 + 86400000 + 2 * HOUR_MS; st.mono = 4;
+  return a && b && behind && clockWire(s, st, swap).signinClockNow().desk === NOW + 10000 + 86400000 + 2 * HOUR_MS;
 };
 /* An old answer replayed: its certificate, genuine and older, rewinds nothing, in the run or the next, and stands ended on the desk's
    clock; today's calm lapse on a clock set back to its days reads it as held. */
@@ -4260,6 +4264,58 @@ CASES.clockKeyLate = (s, swap) => {
   const before = w2.signinClockNow().desk;
   next.key = undefined;
   return before === 0 && w2.signinClockNow().desk === NOW + 3 * DAY_MS;
+};
+/* A CLOCK SET BACK, THEN PUT RIGHT (Grok psi's B1, the backward half, which its verification found): the correction is no time passed.
+   A desk kept at the true time starts on a system clock read at a firmware date, and is put right a minute later in the run, or after
+   an hour's running and the next start: the desk's time lands at the true time, the closed days counted once, never the years between. */
+CASES.clockKeptBack = (s, swap) => {
+  const FIRM = Date.UTC(2010, 0, 1), held = heldOf();
+  const kept = () => { const st = clockStand({ held, wall: NOW }), w = clockWire(s, st, swap); w.signinClockNow(); clockRun(st, DAY_MS); w.signinSave(); return st.file; };
+  const a = clockStand({ held, file: kept(), wall: FIRM, mono: 5 }), wa = clockWire(s, a, swap);
+  const seen = wa.signinClockNow().desk;
+  a.wall = NOW + 3 * DAY_MS + 60000; a.mono += 60000;
+  const inRun = wa.signinClockNow().desk;
+  const b = clockStand({ held, file: kept(), wall: FIRM, mono: 5 }), wb = clockWire(s, b, swap);
+  wb.signinClockNow(); clockRun(b, HOUR_MS); wb.signinSave();
+  b.wall = NOW + 3 * DAY_MS; b.mono = 9;
+  const next = clockWire(s, b, swap).signinClockNow().desk;
+  return seen === NOW + DAY_MS && inRun === NOW + 3 * DAY_MS + 60000 && next === NOW + 3 * DAY_MS
+    && s.signinWorks(held, DESK_KEY, inRun) === true && s.signinWorks(held, DESK_KEY, next) === true;
+};
+/* A running clock stepped back two hours and forward two hours: the desk's time moves by the real time passed and no more, in the run
+   and in the next; a sleep after the step (the monotonic clock standing, the system clock on) still counts the time asleep. */
+CASES.clockStepBack = (s, swap) => {
+  const st = clockStand({ held: heldOf(), wall: NOW, mono: 1000 }), w = clockWire(s, st, swap);
+  const t0 = w.signinClockNow().desk;
+  st.wall -= 2 * HOUR_MS; clockRun(st, 60000);
+  const back = w.signinClockNow().desk;
+  clockRun(st, 60000); st.wall += 2 * HOUR_MS;
+  const put = w.signinClockNow().desk;
+  clockRun(st, HOUR_MS);
+  w.signinSave();
+  st.wall += DAY_MS; st.mono = 3;
+  const w2 = clockWire(s, st, swap), next = w2.signinClockNow().desk;
+  st.wall -= 2 * HOUR_MS; w2.signinClockNow();
+  st.wall += 2 * HOUR_MS + 3 * HOUR_MS;
+  const slept = w2.signinClockNow().desk;
+  return t0 === NOW && back === NOW + 60000 && put === NOW + 120000 && next === NOW + 120000 + HOUR_MS + DAY_MS
+    && slept === next + 3 * HOUR_MS;
+};
+/* THE STOP MENDED ONLINE: a running desk whose clock is carried past its certificate's end (a forward step, which stays until the next
+   certificate) stops and asks one renewal at once; the renewal's certificate, issued on the service's time, sets the desk's time back
+   to its issue and the desk works again, no second renewal asked. */
+CASES.clockStopRenewed = (s, swap) => {
+  let at = NOW + DAY_MS, mono = 1;
+  const st = stopStand({ held: heldOf({ seated: true }), clock: { now: () => at }, mono: { now: () => mono }, setTimeout: () => ({ unref() {} }), clearTimeout: () => {} });
+  const w = stopWire(s, st, swap);
+  w.signinClockNow(); w.signinStopArm();
+  const works = w.signinWorksNow() === true && st.renews === 0;
+  at += 40 * DAY_MS; mono += 1000;
+  w.signinStopArm(); w.signinStopArm();
+  const stopped = w.signinWorksNow() === false && st.renews === 1;
+  st.held = heldOf({ seated: true, cert: cert({ issued: NOW + DAY_MS + 2000, until: NOW + 31 * DAY_MS }) });
+  w.signinStopArm();
+  return works && stopped && w.signinClockNow().desk === NOW + DAY_MS + 2000 && w.signinWorksNow() === true && st.renews === 1;
 };
 /* THE QUICK REPLIES ON A DESK THAT DOES NOT WORK: neither the key nor the tray opens them, and the desk's window comes forward instead;
    on a desk that works they open as before, and a second press still closes one that stands. */
@@ -5753,7 +5809,7 @@ const LEGS = [
   ["dsw8", "clockSlow", "the system clock five minutes slow, or ten, at a fresh sign-in: the desk works from the certificate's issue and runs on, where today's calm lapse reads it lapsed"],
   ["dsw9", "clockFast", "a year fast at the sign-in: the desk works and runs on, the next run carrying on from the kept clock, where today's calm lapse reads it ended"],
   ["dsw10", "clockBackClosed", "set back a year between two runs: the desk's time stands only while it was closed and it stops at the certificate's end after thirty days of running, where today's calm lapse reads it lapsed, issued in the future"],
-  ["dsw11", "clockBackRunning", "set back a year while running: the monotonic clock carries the desk on, and the next run measures from the set-back clock"],
+  ["dsw11", "clockBackRunning", "set back a year while running: the monotonic clock carries the desk on; the next run counts nothing while the system clock stays behind where the desk's reckoning left it, and the time closed once it is put right"],
   ["dsw12", "clockReplay", "an old answer replayed rewinds the desk's clock neither in the run nor in the next, and its certificate stands ended on it"],
   ["dsw13", "clockTick", "the tick is armed once by the first ask and unref'd, keeps the clock at its first turn and then hourly, writes nothing before an anchor, and tells the page once each time the network comes or goes"],
   ["dsk1","answerWords","B-2b: the answer's seat is read as {on, ends, lead?}, on one of the five words or no seat, a team's lead plain text of at most 120 characters with no markup, control or bidirectional character, each trial an end; an answer without them reads as before; the service's record reads as it says"],
@@ -5766,6 +5822,9 @@ const LEGS = [
   ["dsk8","clockLater","B-2b: a forward jump while running, then corrected, leaves the desk's time ahead until the next certificate, issued later than any taken, sets it back to its issue; a replay still moves nothing"],
   ["dsk9","clockLost","B-2b: with the record deleted before every start a run restarts at the later of the issue and the system clock: an honest clock ends the certificate at its end over thirty-two starts, a slow clock works at once, a year fast reads ended, and a clock set back gets one span per run and never more within one"],
   ["dsk10","clockB2a","B-2b: a file written by B-2a's clock is no clock here, the run restarting at the later of the issue and the system clock with the seat whole; the issue is under the mark"],
+  ["dsc1","clockKeptBack","psi's B1, the backward half: a kept clock that starts on a system clock read at 2010 and is put right, in the run or after the next start, lands at the true time, the closed days counted once and never the years between"],
+  ["dsc2","clockStepBack","psi's B1, the backward half: a running clock stepped back two hours and forward two hours moves the desk's time by the real time passed and no more, in the run and the next; a sleep after the step still counts"],
+  ["dsc3","clockStopRenewed","a desk carried past its certificate's end stops and asks one renewal at once, and the renewal's certificate sets the desk's time back to its issue and the desk works again"],
   ["dsk11","clockKeyLate","B-2b, the test architect's candidate: a start whose first ask comes before the desk's key still reads the kept clock once the key answers"],
   ["dsk12","pickRefused","B-2b: the quick replies' key and tray open nothing on a desk that does not work and bring its window forward; on one that works they open as before, and a second press still closes one that stands"],
   ["dsk13","noProvider","B-2b: a build offering no provider works with no certificate, a genuine one held, arms no stop, asks no renewal and tells the page registered false; machine policy pinning the providers away leaves registered as the build is; nothing held is dropped"],
@@ -6474,6 +6533,11 @@ if (!PLANTS_OFF) {
   await plant("dswp13", ["licenceManaged: signedIn ? held.managed === true : o.licenceManaged === true,", "licenceManaged: signedIn ? held.managed === true : false,"], "viewSame");
   await plant("dswp14", ["  let desk = c.desk > 0 ? c.desk + Math.round(Math.max(0, byWall, byMono)) : 0; /* plant:clock-forward */", "  let desk = c.desk > 0 ? c.desk + Math.round(byWall) : 0;"], "clockRules");
   await plant("dswp15", ["  let desk = c.desk > 0 ? c.desk + Math.round(Math.max(0, byWall, byMono)) : 0; /* plant:clock-forward */", "  let desk = c.desk > 0 ? c.desk + Math.round(Math.max(byWall, byMono)) : 0;"], "clockRules");
+  /* psi's B1, the backward half: the system clock held where the monotonic clock carries it while it stands behind. */
+  await plant("dscp1", ["  const at = Number.isFinite(c.wall) ? Math.max(wall, c.wall + byMono) : wall; /* plant:clock-wall-behind */", "  const at = wall;"], "clockKeptBack");
+  await plant("dscp2", ["  const at = Number.isFinite(c.wall) ? Math.max(wall, c.wall + byMono) : wall; /* plant:clock-wall-behind */", "  const at = wall;"], "clockStepBack");
+  await plant("dscp3", ["    if (cert.issued > issued) { desk = cert.issued; issued = cert.issued; } /* plant:clock-anchor */\n", ""], "clockStopRenewed");
+  await plantWire("dscp4", ["    signinEndAsked = String(cert.sig.value); /* plant:end-asked-once */", "    signinEndAsked = \"\";"], "clockStopRenewed");
   await plant("dswp16", ["    if (cert.issued > issued) { desk = cert.issued; issued = cert.issued; } /* plant:clock-anchor */\n",""], "clockSlow");
   await plant("dswp17", ["    if (cert.issued > issued) { desk = cert.issued; issued = cert.issued; } /* plant:clock-anchor */","    { desk = cert.issued; issued = cert.issued; }"], "clockReplay");
   await plant("dswp18", ["  if (!/^[0-9a-f]{64}$/.test(String(deskKey || \"\")) || !signinVerified(String(deskKey), signinClockBytes(c), d.clockMark)) return null; /* plant:clock-mark */\n", ""], "clockMark");

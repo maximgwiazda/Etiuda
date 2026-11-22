@@ -11786,7 +11786,8 @@ function signinSaidOf(held) {
 }
 /* THE DESK'S OWN CLOCK {desk, wall, mono, last, issued}: `desk` the service's time as this desk reckons it, 0 until a certificate
    anchors it; `wall` and `mono` the system clock and the run's monotonic one at the last observation (`mono` null when read from the
-   file); `last` the last certificate's end; `issued` the latest issue taken. Each observation moves `desk` on by the larger of the two
+   file), `wall` held where the monotonic clock carries it while the system clock stands behind, so putting right a clock set back is no
+   time passed; `last` the last certificate's end; `issued` the latest issue taken. Each observation moves `desk` on by the larger of the two
    differences, never back, so only differences of the system clock count, and none below zero. A certificate issued later than any
    taken sets `desk` to its signed `issued`, forward or back, so the next certificate rights a clock carried ahead; an older one, a
    replay, moves nothing. */
@@ -11801,7 +11802,8 @@ function signinClockObserve(clock, wall, mono, held, deskKey) {
     if (cert.issued > issued) { desk = cert.issued; issued = cert.issued; } /* plant:clock-anchor */
     last = cert.until;
   }
-  return { desk: desk, wall: wall, mono: Number.isFinite(mono) ? mono : null, last: last, issued: issued };
+  const at = Number.isFinite(c.wall) ? Math.max(wall, c.wall + byMono) : wall; /* plant:clock-wall-behind */
+  return { desk: desk, wall: at, mono: Number.isFinite(mono) ? mono : null, last: last, issued: issued };
 }
 /* A RUN'S FIRST CLOCK: the one kept in signin.json, or, where none is kept or it is broken while the file holds this desk's
    certificate, the later of that certificate's `issued` and the system clock, so neither a lost record nor a clock set back gives a
