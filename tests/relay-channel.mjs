@@ -63,7 +63,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 553;
+const EXPECTED = 555;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -3474,6 +3474,29 @@ if (deskOn()) try {
         check(!!pc && pc.indexOf(cfuCopy) >= 0, "cfu1c lifting plant:pick-copy-last opens the copy that leads in the relay mirror (FAIL cfu1a): " + (sc ? JSON.stringify(pc) : "plant line absent"));
         const st = lifted6("plant:pick-tie-canonical"), pt = st ? await cfuPick("folder", 2, 2, st) : null;
         check(!!pt && pt.indexOf(cfuCopy) >= 0, "cfu1d lifting plant:pick-tie-canonical opens the first of two files at the same rev in a folder (FAIL cfu1b): " + (st ? JSON.stringify(pt) : "plant line absent"));
+      }
+
+      /* kct1: in the relay mirror only the channel's own tail, " (conflicted copy <date>[ n])", marks a copy that never opens over
+         the team's file. A name with any other tail a sync client might use ("-FINAL" reads like a computer's) is a catalog file
+         like any other there, and its higher rev opens. */
+      const kctPick = async (aName, aRev, bName, bRev, src) => {
+        const d = await e6Desk("relay", src), out = [];
+        const item = (name, rev) => ({ file: path.join(d.mir, name), data: JSON.parse(catOf(cfuName, rev)) });
+        for (const order of [[item(aName, aRev), item(bName, bRev)], [item(bName, bRev), item(aName, aRev)]]) {
+          const got = d.D.api.pickEdition(order);
+          out.push(got ? path.basename(got.file) : null);
+        }
+        return out;
+      };
+      const kctFinal = cfuName + "-FINAL.ec", kctNumbered = cfuName + " (conflicted copy 2026-11-22 2).ec";
+      const kc1 = { final: await kctPick(kctFinal, 3, cfuCanon, 2), copy: await kctPick(kctNumbered, 3, cfuCanon, 2) };
+      check(both(kc1.final, kctFinal) && both(kc1.copy, cfuCanon),
+        "kct1a in the relay mirror a file named " + kctFinal + " at rev 3 opens over " + cfuCanon + " at rev 2, and the channel's own conflicted copy at rev 3 still does not, whichever the order: "
+        + JSON.stringify(kc1));
+      if (PLANTS_OFF) skip("kct1b lifting plant:pick-kept-tail reads any sync client's tail as the channel's copy");
+      else {
+        const sk = lifted6("plant:pick-kept-tail"), pk = sk ? await kctPick(kctFinal, 3, cfuCanon, 2, sk) : null;
+        check(!!pk && pk.indexOf(cfuCanon) >= 0, "kct1b lifting plant:pick-kept-tail reads any sync client's tail as the channel's copy, so rev 2 opens (FAIL kct1a): " + (sk ? JSON.stringify(pk) : "plant line absent"));
       }
 
       /* cfu2c: the team's row names the copy the channel kept (the program's list, by file name, in the mirror) for as long as it
