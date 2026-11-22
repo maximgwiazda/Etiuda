@@ -2922,36 +2922,17 @@ const placeEc = (dir, from, as, minutesOld) => {
     + " catalog (" + bare2.catalogThere + "), raises no offer (" + bare2.offer + ") and shows "
     + bare2.cards + " cards. So 2t is the argument and not the folder");
 
-  /* Board item 383. The empty Etiuda in front of us is where that sentence lives, so it is
-     measured here rather than in a lab of its own: how many line boxes it occupies at this
-     window's own width, and how wide it would be on one line, which is the number that says at
-     what width it starts to wrap. */
-  line = await s.p.evaluate(() => {
-    const span = document.querySelector("#list .empty .mid-folder");
-    if (!span) return { step: "no folder line" };
-    const code = span.querySelector("code.open-folder");
-    const lh = parseFloat(getComputedStyle(span).lineHeight) || 0;
-    const h = span.getBoundingClientRect().height;
-    const probe = document.createElement("span");
-    probe.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap;font:" + getComputedStyle(span).font;
-    probe.textContent = span.textContent;
-    document.body.appendChild(probe);
-    const nowrap = Math.ceil(probe.getBoundingClientRect().width);
-    probe.remove();
-    return { step: "read", lines: lh ? Math.round(h / lh) : -1, lh: Math.round(lh), h: Math.round(h),
-             nowrap: nowrap, width: window.innerWidth,
-             short: code ? code.textContent : null, full: code ? code.getAttribute("title") : null,
-             linked: !!code && code.getAttribute("role") === "button",
-             text: span.textContent };
-  });
-  check(line.step === "read" && line.lines === 1 && !!line.short && !!line.full
-        && line.short !== line.full && line.linked,
-    "2u2 the empty state's folder line is one line at this window's " + line.width + " px ("
-    + line.lines + " line box of " + line.lh + " px in " + line.h + " px), names the folder short"
-    + " as " + JSON.stringify(line.short) + " with the full path on hover ("
-    + JSON.stringify(line.full) + ") and as something clickable (" + line.linked
-    + "). On one line it measures " + line.nowrap + " px, so it wraps below about "
-    + (line.nowrap + 32) + " px of window");
+  /* Board 1016 item 3, Max 2026-11-22. The folder line that board item 383 measured (one line at this window's width, the
+     folder short with the full path on hover, clickable) is gone from the empty desk, with the add-a-card line; the empty
+     Etiuda in front of us draws neither. */
+  line = await s.p.evaluate(() => ({
+    folder: !!document.querySelector("#list .empty .mid-folder, #list .empty #emptyCatFolder"),
+    addCard: !!document.getElementById("emptyAddCard"),
+    load: !!document.getElementById("emptyLoad")
+  }));
+  check(!line.folder && !line.addCard && line.load,
+    "2u2 the empty state draws no folder line (" + line.folder + ") and no add-a-card line (" + line.addCard
+    + "), and Load catalog file stands (" + line.load + ")");
 
   /* The second copy: it must hand its path over and go, or two Etiudas write one desk file. */
   port++;

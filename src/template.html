@@ -2459,11 +2459,16 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
 .empty-desk h2{font:600 26px/1.25 "Segoe UI Variable Display","Segoe UI",sans-serif;margin:0 0 22px;letter-spacing:-.2px;color:var(--ink)}
 .empty-desk #emptyLoad{display:inline-flex;align-items:center;justify-content:center;gap:10px;border:0;border-radius:10px;background:#0e67d8;color:#fff;font:600 16px "Segoe UI Variable Text","Segoe UI",sans-serif;padding:13px 26px;box-shadow:0 6px 18px rgba(14,103,216,.25);cursor:pointer}
 :root[data-theme=dark] .empty-desk #emptyLoad{background:#409afc;color:#0b0d12;box-shadow:0 6px 18px rgba(64,154,252,.25)}
-.empty-desk .mid-or{margin-top:12px;font-size:14px;color:var(--dim)}
-.empty-desk .mid-or a{color:inherit;text-decoration:none;border-bottom:1px solid currentColor;cursor:pointer}
-.empty-desk .mid-or a:hover{color:var(--accent)}
-.empty-desk #emptyJoin{margin-top:16px}
-.empty-desk .mid-folder{margin-top:28px;font-size:12.5px;color:color-mix(in srgb,var(--ink) 75%,var(--bg))}
+.empty-desk .e-lede{margin:-8px auto 22px;max-width:560px;font-size:14px;color:var(--dim)}
+.empty-desk .e-joinp{box-sizing:border-box;width:min(560px,100%);padding:22px 24px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);box-shadow:0 6px 24px rgba(15,23,42,.08);color:var(--dim)}
+.empty-desk .e-joinp p{margin:8px auto 0;font-size:13px}
+.empty-desk .e-joinp .e-join-t{font-size:16px}
+.empty-desk .e-joinp-slot:empty{display:none}
+.empty-desk .e-joinp-hint{margin-top:14px;font-size:12.5px;color:color-mix(in srgb,var(--dim) 85%,var(--bg))}
+.empty-desk .mid-or{margin-top:26px;font-size:14px;color:var(--dim);display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap}
+.empty-desk .mid-or #emptyLoad{padding:7px 12px;border:1px solid var(--line-strong);border-radius:var(--radius-sm);background:var(--panel);color:var(--ink);font:600 13px var(--sans);box-shadow:none}
+:root[data-theme=dark] .empty-desk .mid-or #emptyLoad{background:var(--panel);color:var(--ink);box-shadow:none}
+.empty-desk .mid-or #emptyLoad:hover,.empty-desk .mid-or #emptyLoad:focus-visible{color:var(--accent);background:var(--accent-soft)}
 /* THE LAUNCH (launch-mark.js): opening variant A, turning over window ground, landing on the corner mark; nothing of the UI before landing. --e-launch-out is the give-way fade. */
 .e-launch-veil{position:fixed;inset:0;z-index:100;width:100vw;height:100vh;background:var(--bg);display:block;
   margin:0;padding:0;overflow:hidden;transition:opacity var(--e-launch-out,.35s) ease-out}
