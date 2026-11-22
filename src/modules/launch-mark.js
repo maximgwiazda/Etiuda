@@ -1,12 +1,12 @@
 /* THE OPENING (board 957, Claudia handover 2026-11-03, Max decisions 30 and 31):
- * First-round variant A, the desk's turn phiIcon 56 degrees (a-turning), ink #2881ea over window ground (theme token),
+ * First-round variant A, the desk's turn phiIcon 90 degrees (c-open), ink #2881ea over window ground (theme token),
  * landing in the header's corner mark (.brand svg) with no jump, then the window arriving; nothing of UI before landing.
  * Under reduced motion: no opening; window shows as soon as ready, corner mark still. A key, click or wheel skips it. */
 import { fifthMarkFrame, setFifthPhase } from "./fifth.js";
 
 const LAUNCH_R = 7, LAUNCH_MIN_MS = 1100, LAUNCH_OUT_MS = 350, LAUNCH_QUICK_MS = 140, LAUNCH_MAX_MS = 4000;
 const OPENING_INK = "#2881ea";
-const PHI_ICON = 56 * Math.PI / 180; // the desk: 56 degrees (a-turning)
+const PHI_ICON = 90 * Math.PI / 180; // the desk: 90 degrees (c-open, the one logo)
 const W0 = 2 * Math.PI * 0.007; // 0.007 Hz detune rate in rad/s
 const KF = 150 / 212;
 const LW = 20 * KF;

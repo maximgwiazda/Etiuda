@@ -4360,7 +4360,7 @@ function fifthTests() {
     const fav = (/<link rel="icon" type="image\/svg\+xml" href="data:image\/svg\+xml,([^"]+)"/.exec(tpl) || [])[1] || "";
     // the logo repository's engine/etiuda-app-favicon.svg with its leading comment removed (a shipped build carries no
     // comment), everything else byte for byte; the stripped file's sha256 written here when it landed
-    const FAV_SHA = "dd30529d9e2333ad36701c610c9887cd51dffe07af23c8181942db903becfe06";
+    const FAV_SHA = "9d3ead7034549eab9205bc1a4cec073433ba3c34424384ab30e1e9df8fbaa57c";
     const favSvg = decodeURIComponent(fav), favSha = require("crypto").createHash("sha256").update(favSvg, "utf8").digest("hex");
     const tile = (/TILE_MARK='<svg viewBox="([^"]+)"[^>]*>([\s\S]*?)<\/svg>';/.exec(about) || []);
     const head = (/<span class="brand-tile"[^>]*><svg viewBox="([^"]+)"[^>]*>([\s\S]*?)<\/svg><\/span>/.exec(tpl) || []);
@@ -4371,8 +4371,8 @@ function fifthTests() {
     got, [true, true, true, true, true, true]);
 
   try {
-    // the header's path is the figure at its own size (ink 212); taken to the turn's fit (150) it is the line standing at 56 degrees
-    const KF = 150 / 212, a = fifthLab(false), t = lineTruth(56 * Math.PI / 180), turn = a.f.fifthLinePath(PHI0);
+    // the header's path is the figure at its own size (ink 212); taken to the turn's fit (150) it is the line standing at 90 degrees
+    const KF = 150 / 212, a = fifthLab(false), t = lineTruth(90 * Math.PI / 180), turn = a.f.fifthLinePath(PHI0);
     const out = outlinePoints(a.std).map(p => [128 + (p[0] - 128) * KF, 128 + (p[1] - 128) * KF]), t0 = lineTruth(PHI0);
     const atHalf = pts => pts.length > 500 && pts.every(p => Math.abs(lineGap(t.line, p) - t.h) <= 0.03);
     // where the two passes cross, the ink has no edge near the centreline, so reaching it is read as lying inside the ink
@@ -4385,7 +4385,7 @@ function fifthTests() {
       t1.line.filter((p, i) => i % 20 === 0).every(q => turn1.some(p => Math.hypot(p[0] - q[0], p[1] - q[1]) <= 1)),
       atHalf(out.map(p => [p[0] + 0.5, p[1]])), reaches(rings.map(r => r.filter(p => p[0] >= 128)))];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("the header's path is the turning line standing at 56 degrees: every point of its outline, taken from the figure's own size to the turn's fit, lies half the line's width from the figure's centreline at 56 degrees (within 0.03) and that centreline lies inside its ink; the turn's centreline at pi/4 lies on the figure's (within 0.06) at the same width, open there and closed at any other phase; at pi/4 + 1 the turn's centreline, both halves of the loop, lies on the figure's (within 0.06) and reaches every point of it (within 1); controls: moved half a unit, or with its left half gone, it is not",
+  eq("the header's path is the turning line standing at 90 degrees: every point of its outline, taken from the figure's own size to the turn's fit, lies half the line's width from the figure's centreline at 56 degrees (within 0.03) and that centreline lies inside its ink; the turn's centreline at pi/4 lies on the figure's (within 0.06) at the same width, open there and closed at any other phase; at pi/4 + 1 the turn's centreline, both halves of the loop, lies on the figure's (within 0.06) and reaches every point of it (within 1); controls: moved half a unit, or with its left half gone, it is not",
     got, [true, true, true, true, true, true, true, false, false]);
 
   try {
