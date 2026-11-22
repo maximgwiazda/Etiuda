@@ -39,6 +39,7 @@ export const HELPERS = {
   "tests/reg-stand-preload.cjs": "reg-stand preloaded into a harness-launched shell by tests/engine.js shellLaunch, not a gate",
   "tests/seat-lab.mjs": "the shared sign-in lab helper required by relay-channel, pick and desk-ipc, not a gate",
   "tests/seat-page.js": "the shared browser-boot seating helper required by page-booting browser legs, not a gate",
+  "tests/seat-shell.mjs": "the shared real-shell seating helper (a loopback sign-in lab service) required by tests/links.js, not a gate",
   "tests/storage-keys.js": "a report, as deadcode.js; its scanner is held by tests/text-scan-selftest.js",
   "tests/syncer-invariants.mjs": "the oracle of the folder syncer's invariants piece: red on main on purpose until that piece lands, then it joins the node chain and leaves this list",
   "tests/tour-walk.js": "the tour's walk tests/smoke.js requires and runs",

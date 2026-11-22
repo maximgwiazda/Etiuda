@@ -1770,6 +1770,7 @@ Module.prototype._compile = function (content, filename) {
     "lab-owner.mjs": "the shared owner file and sweep the lab-using legs (relay-channel, desk-roster, folder-mirror) import, not a gate; its use is held by tests/relay-channel-clean.mjs",
     "seat-lab.mjs": "the shared sign-in lab helper required by relay-channel, pick and desk-ipc, not a gate",
     "seat-page.js": "the shared browser-boot seating helper required by page-booting browser legs, not a gate",
+    "seat-shell.mjs": "the shared real-shell seating helper (a loopback sign-in lab service) required by tests/links.js, not a gate",
   };
   const CHAIN_SCRIPTS = ["test", "split-guard", "nightly"];
   function reachOf(scripts, releaseSrc, nightlyLegs) {

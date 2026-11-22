@@ -28,6 +28,9 @@
  *   j  i's own address by script after the window    nothing handed: a click goes stale
  *   k  a real click on About's maker link, English   handed, the company's address
  *   l  the same, in Polish                           handed, the company's address
+ * The desk is seated first through the shell's own sign-in lab (tests/seat-shell.mjs), since the
+ * first sign-in door swallows keys aimed outside it; g0, before the seat, is the proof that g rests
+ * on it: the door stands and Enter on the focused link hands nothing.
  * Real input is the protocol's Input domain, which the page receives as trusted events.
  *
  * Exit code is the number of failed checks, capped at 63 (E.exitOf), 78 where the run produced no
@@ -39,6 +42,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const E = require("./engine.js");
+const { openShellSeat } = require("./seat-shell.mjs");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const HANDED = "etiuda-test: handed ";
@@ -73,7 +77,7 @@ E.refuseWhileElectronLive("tests/links.js");
 const LEASED = E.takeLeases(["ports:" + PORT], 10, "tests/links.js");
 console.log("       debugging port " + PORT + "; leases: " + LEASED.said);
 
-let child; let fails = 0; let checks = 0; let reachedEnd = false;
+let child; let seat = null; let fails = 0; let checks = 0; let reachedEnd = false;
 const t0 = Date.now();
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
 
@@ -108,13 +112,14 @@ function buildApp() {
   const UD = buildApp();
   check(outCalls === 1, "the shell holds exactly one call of openExternal, so the stub in the lab is the only way out: " + outCalls);
   if (outCalls !== 1) return;
+  seat = await openShellSeat({ dir: path.join(APP, "signin-lab") });
   const LINK_MS = +((/const LINK_CLICK_MS = (\d+);/.exec(fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8")) || [])[1] || 2000);
 
   child = E.shellLaunch("tests/links.js", electronExe(),
     [APP, "--remote-debugging-port=" + PORT, "--user-data-dir=" + UD],
-    { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: path.join(APP, "documents") }) });
+    { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv(Object.assign({ ETIUDA_TEST_DOCUMENTS: path.join(APP, "documents") }, seat.env)) });
   const said = [];
-  const hear = d => String(d).split(/\r?\n/).forEach(l => { if (l.trim()) said.push(l.trim()); });
+  const hear = d => { seat.hear(String(d)); String(d).split(/\r?\n/).forEach(l => { if (l.trim()) said.push(l.trim()); }); };
   child.stdout.on("data", hear);
   child.stderr.on("data", hear);
   const b = await E.connectShell({ port: PORT, child, said });
@@ -172,6 +177,21 @@ function buildApp() {
   const say = r => "handed " + JSON.stringify(r.handed) + ", refused " + r.refused + ", " + r.ms + " ms";
   const none = r => r.handed.length === 0;
 
+  /* g0, unseated: the door stands, so Enter on the same focused link is swallowed and nothing is handed in a second and a half. */
+  const g0From = said.length;
+  const g0 = await p.evaluate(() => { document.getElementById("lkG").focus();
+    return { door: document.body.classList.contains("e-first-signin"), focus: document.activeElement && document.activeElement.id }; });
+  await p.keyboard.press("Enter");
+  await sleep(1500);
+  const g0Handed = said.slice(g0From).filter(l => l.indexOf(HANDED) === 0);
+  check(g0.door && g0.focus === "lkG" && g0Handed.length === 0,
+    "g0 unseated, the first sign-in door stands and Enter on the focused link hands nothing, so g below rests on the seat: " + JSON.stringify(g0) + ", handed " + g0Handed.length);
+  await p.evaluate(() => { document.getElementById("linksProbe").style.display = "none"; });
+  const view = await seat.seat(p).catch(e => ({ error: String(e && e.message || e) }));
+  check(view.works === true && view.seat === "held" && view.signedIn === "lab",
+    "the desk is seated through the shell's own sign-in lab, the door closed: " + JSON.stringify(view.error ? view : { works: view.works, seat: view.seat, signedIn: view.signedIn }) + "; service calls " + seat.calls.join(", "));
+  await p.evaluate(() => { document.getElementById("linksProbe").style.display = "flex"; });
+
   let r = await act(() => p.evaluate(u => { window.open(u); }, U("a-open")));
   check(none(r) && r.refused === 1, "a  window.open by script hands nothing to the browser: " + say(r));
   r = await act(() => p.evaluate(u => { location.href = u; }, U("b-location")));
@@ -228,6 +248,7 @@ function buildApp() {
   fails++;
 }).finally(() => {
   E.killTree(child && child.pid);
+  if (seat) seat.close();
   try { if (child) child.kill(); } catch (x) {}
   check(E.removeLab(APP), "the throwaway app is gone from the temp folder: " + APP);
   console.log("#counts checks=" + checks + " failed=" + fails);
