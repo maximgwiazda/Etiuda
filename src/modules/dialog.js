@@ -247,22 +247,36 @@ function edFormState(root){
   return out.join("\u0001");
 }
 function edMarkClean(){ edBaseline=edFormState(); edBaseTyped=edTyped(); }
-/* The typing itself, to be put back: every field's value in document order, and which of the
-   segmented buttons carried .on. The same entry reopens in the same shape, so order is identity. */
+/* The typing itself, to be put back: every field's value in document order, its key, and which of the segmented
+   buttons carried .on. A field is put back by its key, so a row that appears or goes between two arrivals moves no
+   typing into another box: its id, else for a box or a radio its name and value, since a group shares one name.
+   A field with no key is matched by place, only while the shape holds; a key the form holds twice, by nothing. */
+function edKeyOf(el){
+  if(el.id) return String(el.id);
+  return (el.type==="checkbox"||el.type==="radio") ? String(el.name||"")+"="+String(el.value) : String(el.name||"");
+}
 function edTyped(root){
   root=root||modalCard;
   if(!root) return null;
-  return { fields:Array.from(root.querySelectorAll("input,textarea,select"))
-             .map(el=>(el.type==="checkbox"||el.type==="radio")?el.checked:String(el.value||"")),
+  const els=Array.from(root.querySelectorAll("input,textarea,select"));
+  return { fields:els.map(el=>(el.type==="checkbox"||el.type==="radio")?el.checked:String(el.value||"")),
+           keys:els.map(edKeyOf),
            segs:Array.from(root.querySelectorAll("[data-v]")).map(el=>el.classList.contains("on")) };
 }
-function edRetype(was){
+/* `keep`, where given, names the places in `was` to put back, {f(i), s(i)}; the rest stay as drawn. */
+function edRetype(was, keep){
   if(!was || !modalCard) return;
   const segs=Array.from(modalCard.querySelectorAll("[data-v]"));
-  segs.forEach((el,i)=>{ if(was.segs[i] && !el.classList.contains("on")) el.click(); });
-  Array.from(modalCard.querySelectorAll("input,textarea,select")).forEach((el,i)=>{
-    if(i>=was.fields.length) return;
-    const v=was.fields[i];
+  if(segs.length===was.segs.length) segs.forEach((el,i)=>{ if(was.segs[i] && (!keep || keep.s(i)) && !el.classList.contains("on")) el.click(); });
+  const els=Array.from(modalCard.querySelectorAll("input,textarea,select"));
+  const once=new Map(), twice=new Set();
+  (was.keys||[]).forEach((k,j)=>{ if(!k) return; if(once.has(k)) twice.add(k); else once.set(k,j); });
+  const same=els.length===was.fields.length;
+  els.forEach((el,i)=>{
+    const k=edKeyOf(el);
+    const j=was.keys && k ? (once.has(k) && !twice.has(k) ? once.get(k) : -1) : (same ? i : -1);
+    if(j<0 || (keep && !keep.f(j))) return;
+    const v=was.fields[j];
     if(el.type==="checkbox"||el.type==="radio"){ if(el.checked!==v){ el.checked=v; el.dispatchEvent(new Event("change",{bubbles:true})); } }
     else if(String(el.value||"")!==v){ el.value=v; el.dispatchEvent(new Event("input",{bubbles:true})); }
   });
@@ -917,16 +931,16 @@ function edSubjectCheck(){
 }
 /* A field the person has not typed in takes the entry's new value, one they typed in keeps their typing: the editor is
    redrawn from the entry and the typed fields put back. Whether a typed field changed underneath, or null where the
-   form's shape is not the same before and after, every field then kept as typed. */
+   form's shape is not the same before and after, each typed field then put back into its own box. */
 function edMergeUnder(){
   const base=edBaseTyped, was=edTyped();
-  const same=(a,b)=>!!(a && b && a.fields.length===b.fields.length && a.segs.length===b.segs.length);
+  const same=(a,b)=>!!(a && b && a.fields.length===b.fields.length && a.segs.length===b.segs.length && String(a.keys)===String(b.keys));
   if(!same(base,was)) return null;
   const tf=was.fields.map((v,i)=>v!==base.fields[i]), ts=was.segs.map((v,i)=>v!==base.segs[i]);
   edStepping=true;
   try{ edAgain(); }finally{ edStepping=false; }
   const now=edTyped();
-  if(!same(now,was)){ edRetype(was); return null; }
+  if(!same(now,was)){ edRetype(was, {f:i=>tf[i], s:i=>ts[i]}); return null; }
   const under=now.fields.some((v,i)=>tf[i] && v!==base.fields[i] && v!==was.fields[i]) || now.segs.some((v,i)=>ts[i] && v!==base.segs[i] && v!==was.segs[i]);
   edRetype({fields:now.fields.map((v,i)=>tf[i] ? was.fields[i] : v), segs:now.segs.map((v,i)=>ts[i] ? was.segs[i] : v)});
   return under;

@@ -714,6 +714,7 @@ UI_STRINGS.pl={
   "Move or delete cards in this category first":"Kategorię można usunąć, gdy jej karty zostaną przeniesione albo usunięte",
   "Move or delete the cards in this category first":"Kategorię można usunąć, gdy jej karty zostaną przeniesione albo usunięte",
   "Delete card":"Usuń kartę",
+  /* The copywriter's words, for the Library's Delete and the editors' alike, this and "Delete this intent" */
   "Delete this card":"Usuń tę kartę",
   "New intent":"Nowa intencja",
   "New intent…":"Nowa intencja…",
@@ -847,8 +848,6 @@ UI_STRINGS.pl={
   "Close without saving any change":"Zamknij bez zapisywania zmian",
   "Save this card on this computer":"Zapisz tę kartę na tym komputerze",
   "Save this intent on this computer":"Zapisz tę intencję na tym komputerze",
-  "Delete this card: a built-in one returns on Reset, one you made does not":"Usuń tę kartę: wbudowana wróci po zresetowaniu, własna nie",
-  "Delete this intent: a built-in one returns on Reset, one you made does not":"Usuń tę intencję: wbudowana wróci po zresetowaniu, własna nie",
   "Discard your edits and restore the catalog wording.":"Odrzuca zmiany i przywraca treść z katalogu.",
   "Restore built-in quick facts":"Przywróć wbudowane szybkie fakty",
   "{KEY} is fixed and keeps its own meaning":"{KEY} to klawisz stały i zachowuje swoje znaczenie",
@@ -1926,6 +1925,8 @@ UI_STRINGS.pl={
   "This card is too large to share, so nothing was sent.":"Ta karta jest za duża, by ją udostępnić, więc nic nie wysłano.",
   "This desk has no current seat, so nothing was sent; sharing works again once it has one.":"To stanowisko nie ma teraz ważnego miejsca w licencji, więc nic nie wysłano; udostępnianie zadziała ponownie, gdy je odzyska.",
   "This card could not be sent just now.":"Nie udało się teraz wysłać tej karty.",
+  /* words: placeholder */
+  "This catalog is private, so this card stays on this desk.":"Ten katalog jest prywatny, więc ta karta zostaje na tym stanowisku.",
   "This card could not be kept just now.":"Nie udało się teraz zachować tej karty."
 };
 // Is this a language this build carries? The table itself stays private to this file.

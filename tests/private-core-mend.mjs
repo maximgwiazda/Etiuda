@@ -3,7 +3,9 @@
  * whose first hop the lead did not sign, takes the mark and keeps it. An answer about a catalog now Private is taken back
  * whatever seal it went under. Nothing names a personal catalog to the team before this desk is told, and a catalog marked
  * Private is never named at all: not in in-use.ec, not in the statistics. The page is never told Private for a catalog that
- * is being sent.
+ * is being sent. A shared root file of one is not written again, and the root file this desk wrote is taken off, and
+ * only that file. Statistics on the share are emptied or taken off when it is marked, even after this process has
+ * forgotten them. A card from it is not shared, and the page says so in one line.
  *
  *     node tests/private-core-mend.mjs        exit code is the number of failed checks, capped at 63
  *
@@ -27,7 +29,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 28;
+const EXPECTED = 42;
 
 const CARD = "The quay lamp is wrapped for the crossing.";
 
@@ -74,6 +76,7 @@ function loadDesk(ud, src) {
   process.env.XDG_CURRENT_DESKTOP = "GNOME";
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
     (src || SRC) + "\nreturn { setDown: d => { folderDown = d; }, setStats: (s, p) => { statsSpan = s; statsPeriod = p; }, "
+      + "forgetStatsNamed: () => { statsWroteNamed = null; if (typeof statsNamedKept !== 'undefined') statsNamedKept = null; }, noteSharedWrote: (file, text) => historyKeep(file, text, true), "
       + EXPOSE.map(n => n + ": typeof " + n + " === 'undefined' ? undefined : " + n).join(", ") + " };")(
     n => (n === "electron" ? electron : nodeRequire(n)),
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
@@ -500,6 +503,189 @@ try {
     "pcm10 contentView's teamCatalogPins holds the lead's signed edition under the listed id and neither a stranger-signed file under it nor an unsigned fork, and the mark is taken on that id (" + JSON.stringify(r10) + ")");
   await planted("pcm10p", "plant:pcm-team-pins", "    /* plant lifted */", pcm10,
     r => !r.lead || r.stranger || r.fork, "teamCatalogPins no longer follows teamListedDoc");
+
+  /* pcm9s: a mark after the process has forgotten the statistics, and again after the span is gone. */
+  const pcm9s = async src => {
+    const u = await setup("pcm9s-" + (src ? "p" : "g"), { src });
+    u.box.D.api.setStats("lab", { from: "2026-11-01", to: "2026-11-30" });
+    const file = path.join(ownDir(u.box.share, u.box.me.id), "stats.estat");
+    const read = () => { try { return JSON.parse(u.box.D.api.openStatsSealed(leadBox.privateKey, JSON.parse(fs.readFileSync(file, "utf8")), u.box.me.id)); } catch { return null; } };
+    u.box.D.api.writeStatsAnswer(JSON.stringify({ catalog: { id: "quay-held", rev: 4 }, cards: [{ id: "c-warm", n: 2 }], intents: [], misses: 0, langs: {} }), "", "close");
+    u.box.D.api.forgetStatsNamed();
+    await mark(u, "quay-held", true);
+    const live = read();
+    /* Taken off with no span held, the file naming the catalog again first: one already emptied names nothing, and stays. */
+    await mark(u, "quay-held", false);
+    u.box.D.api.writeStatsAnswer(JSON.stringify({ catalog: { id: "quay-held", rev: 4 }, cards: [{ id: "c-warm", n: 2 }], intents: [], misses: 0, langs: {} }), "", "close");
+    u.box.D.api.forgetStatsNamed();
+    u.box.D.api.setStats("", null);
+    await mark(u, "quay-held", true);
+    return { live: live ? (live.catalog || null) : "unread", counts: !!live && Array.isArray(live.cards) && live.cards.length === 0, dropped: fs.existsSync(file) };
+  };
+  const r9s = await pcm9s();
+  check(r9s.live === null && r9s.counts && !r9s.dropped,
+    "pcm9s marking Private empties statistics the process has forgotten, and takes the file off once no span is held (" + JSON.stringify(r9s) + ")");
+  await planted("pcm9sp", "plant:pcm-stats-mark", "    /* plant lifted */", pcm9s,
+    r => !!(r.live && r.live.id) || r.dropped, "statistics the process forgot still name the catalog, or the file stays once the span is gone");
+
+  /* pcm9n (withdraw-names-only-private, review rho's narrowing of 5cf2f1e3): a mark on another catalog, in a process that has not
+     written the statistics itself, leaves statistics that name a catalog not private, span held or not. */
+  const pcm9n = async src => {
+    const u = await setup("pcm9n-" + (src ? "p" : "g"), { src });
+    u.box.D.api.setStats("lab", { from: "2026-11-01", to: "2026-11-30" });
+    const file = path.join(ownDir(u.box.share, u.box.me.id), "stats.estat");
+    const read = () => { try { return JSON.parse(u.box.D.api.openStatsSealed(leadBox.privateKey, JSON.parse(fs.readFileSync(file, "utf8")), u.box.me.id)); } catch { return null; } };
+    u.box.D.api.writeStatsAnswer(JSON.stringify({ catalog: { id: "quay-held", rev: 4 }, cards: [{ id: "c-warm", n: 2 }], intents: [], misses: 0, langs: {} }), "", "close");
+    u.box.D.api.forgetStatsNamed();
+    await mark(u, "quay-other", true);
+    const live = read();
+    u.box.D.api.forgetStatsNamed();
+    u.box.D.api.setStats("", null);
+    await mark(u, "quay-third", true);
+    const left = read();
+    return { live: live && live.catalog ? live.catalog.id : null, counts: !!live && Array.isArray(live.cards) && live.cards.length === 1,
+      kept: fs.existsSync(file), left: left && left.catalog ? left.catalog.id : null };
+  };
+  const r9n = await pcm9n();
+  check(r9n.live === "quay-held" && r9n.counts && r9n.kept && r9n.left === "quay-held",
+    "pcm9n withdraw-names-only-private marking another catalog Private leaves statistics that name a catalog not private, with their counts, in a process that did not write them, span held or not (" + JSON.stringify(r9n) + ")");
+  await planted("pcm9np", "plant:pcm-withdraw-named", "    /* plant lifted */", pcm9n,
+    r => r.live !== "quay-held" || !r.counts || !r.kept, "statistics naming a team catalog are emptied or taken off by a mark on another");
+
+  /* pcm11: on a folder team, the root file this desk wrote goes, and only that file. No shared-write: that starts a worker. */
+  const pcm11 = async src => {
+    const u = await setup("pcm11-" + (src ? "p" : "g"), { src });
+    const root = path.dirname(path.dirname(ownDir(u.box.share, u.box.me.id)));
+    const mineText = bodyOf("quay-held", { unsigned: true });
+    const signedText = bodyOf("quay-held");
+    const swapFirst = bodyOf("quay-held", { unsigned: true });
+    const mine = path.join(root, "quay-held.ec");
+    const neighbor = path.join(root, "harbour.ec");
+    const signed = path.join(root, "quay-signed.ec");
+    const swapped = path.join(root, "quay-swapped.ec");
+    fs.writeFileSync(mine, mineText);
+    fs.writeFileSync(neighbor, bodyOf("harbour-board", { unsigned: true, name: "Harbour", card: "harbour lamp" }));
+    fs.writeFileSync(signed, signedText);
+    fs.writeFileSync(swapped, swapFirst);
+    u.box.D.api.noteSharedWrote(mine, mineText);
+    u.box.D.api.noteSharedWrote(signed, signedText);
+    u.box.D.api.noteSharedWrote(swapped, swapFirst);
+    fs.writeFileSync(swapped, bodyOf("harbour-board", { unsigned: true, name: "Harbour", card: "other lamp" }));
+    await mark(u, "quay-held", true);
+    const idOf = f => { try { return JSON.parse(fs.readFileSync(f, "utf8")).id; } catch { return ""; } };
+    return { gone: !fs.existsSync(mine), neighbor: idOf(neighbor) === "harbour-board", signed: fs.existsSync(signed) && idOf(signed) === "quay-held", swapped: idOf(swapped) === "harbour-board" };
+  };
+  const r11 = await pcm11();
+  check(r11.gone && r11.neighbor && r11.signed && r11.swapped,
+    "pcm11 marking Private takes off the unsigned root file this desk wrote, and leaves a neighbor, a signed file and a file that now holds another catalog (" + JSON.stringify(r11) + ")");
+  await planted("pcm11p", "plant:pcm-shared-root", "    /* plant lifted */", pcm11,
+    r => !r.gone, "the root file this desk wrote stays on the share");
+
+  /* pcm11w: off a team, the real shared write is refused once the catalog is private, and the file it wrote is gone. */
+  const pcm11w = async src => {
+    const tag = "pcm11w-" + (src ? "p" : "g");
+    const share = folder(tag + "-share");
+    const D = newDesk(tag, share, src);
+    const text = bodyOf("quay-held", { unsigned: true });
+    const first = await D.ask("etiuda:shared-write", "quay-held.ec", text, "", true);
+    const neighbor = path.join(share, "harbour.ec");
+    fs.writeFileSync(neighbor, bodyOf("harbour-board", { unsigned: true, name: "Harbour", card: "harbour lamp" }));
+    await D.ask("etiuda:team-join", "private", "quay-held", "on");
+    const mine = path.join(share, "quay-held.ec");
+    const gone = !fs.existsSync(mine);
+    let neighborId = "";
+    try { neighborId = JSON.parse(fs.readFileSync(neighbor, "utf8")).id; } catch { neighborId = ""; }
+    const second = await D.ask("etiuda:shared-write", "quay-held.ec", text, "", true);
+    return { first: !!(first && first.ok), gone, neighbor: neighborId === "harbour-board",
+      refused: !!(second && second.ok === false && second.refused === true && second.private === true), back: fs.existsSync(mine) };
+  };
+  const r11w = await pcm11w();
+  check(r11w.first && r11w.gone && r11w.neighbor && r11w.refused && !r11w.back,
+    "pcm11w a shared write of a Private catalog is refused, and the unsigned root file that write had put down is gone (" + JSON.stringify(r11w) + ")");
+  await planted("pcm11wp", "plant:pcm-shared-private", "    /* plant lifted */", pcm11w,
+    r => !r.refused || r.back, "a shared write after the mark puts the catalog back");
+
+  /* pcm12: sharing a card from the catalog in use, once it is private, is refused before any team is asked. */
+  const pcm12 = async src => {
+    const u = await setup("pcm12-" + (src ? "p" : "g"), { private: "quay-held", src });
+    const r = await u.box.D.ask("etiuda:team-join", "share-to", "k-0123456789abcdef", JSON.stringify({ id: "c-warm", title: { en: "Warm opening" } }), "");
+    return { ok: !!(r && r.ok), reason: (r && r.reason) || "" };
+  };
+  const r12 = await pcm12();
+  check(r12.ok === false && r12.reason === "private",
+    "pcm12 sharing a card from a Private catalog is refused (" + JSON.stringify(r12) + ")");
+  await planted("pcm12p", "plant:pcm-share-private", "    /* plant lifted */", pcm12,
+    r => r.reason !== "private", "the share is refused for some other reason, or it is sent");
+
+  /* The page's own refusal, sliced from the modules: the shell lift does not reach these files. */
+  const pageSrc = name => fs.readFileSync(path.join(ROOT, "src", "modules", name), "utf8");
+  const sliceFn = (src, marker) => {
+    const at = src.indexOf(marker);
+    if (at < 0 || src.indexOf(marker, at + 1) > -1) throw new Error("not there exactly once: " + marker);
+    for (let i = src.indexOf("{", at), depth = 0; i < src.length; i++) {
+      if (src[i] === "{") depth++;
+      else if (src[i] === "}" && --depth === 0) return src.slice(at, i + 1);
+    }
+    throw new Error("unterminated: " + marker);
+  };
+  const pageLift = (file, tag, with_) => {
+    const raw = pageSrc(file);
+    const s = raw.split(NL).map(l => l.indexOf(tag) >= 0 ? with_ : l).join(NL);
+    return s === raw ? null : s;
+  };
+  const withScope = own => new Proxy({}, {
+    has: () => true,
+    get: (o, k) => (k === Symbol.unscopables ? undefined : (k in own ? own[k] : (k in globalThis ? globalThis[k] : (() => { throw new ReferenceError(String(k) + " is not defined"); })()))),
+  });
+  const runWriteShared = async src => {
+    const own = { sharedEditing: () => true, teamContentNow: () => ({ private: ["quay-held"] }), lyGet: () => "" };
+    let writeShared;
+    try {
+      writeShared = new Function("scope", "with(scope){\n" + sliceFn(src, "function sharedPrivateNow(") + "\n" + sliceFn(src, "function writeShared(") + "\nreturn writeShared;\n}")(withScope(own));
+    } catch (e) { return { route: "", threw: true, err: String(e && e.message || e) }; }
+    try {
+      const r = await writeShared(false, { id: "quay-held", pin: "sha256:" + "ab".repeat(32) }, true, "layer");
+      return { route: r && r.route || "", threw: false };
+    } catch (e) { return { route: "", threw: true, err: String(e && e.message || e) }; }
+  };
+  const SHARE_EN = "This catalog is private, so this card stays on this desk.";
+  const SHARE_PL = "Ten katalog jest prywatny, więc ta karta zostaje na tym stanowisku.";
+  const runSharePage = src => {
+    /* currentCatalog builds an export, which mints a new id each call as the page's does; the catalog in use is storedCatalog's. */
+    let minted = 0;
+    const own = { hooks: { currentCatalog: () => ({ id: "c-export" + (++minted) }), storedCatalog: () => ({ id: "quay-held" }) },
+      teamContentNow: () => ({ private: ["quay-held"] }), t: s => s };
+    let api;
+    try {
+      api = new Function("scope", "with(scope){\n" + sliceFn(src, "function sharePrivateNow(") + "\n" + sliceFn(src, "function wholeRefusalLine(") + "\nreturn { sharePrivateNow, wholeRefusalLine };\n}")(withScope(own));
+    } catch (e) { return { marked: false, line: "", err: String(e && e.message || e) }; }
+    try { return { marked: api.sharePrivateNow() === true, line: api.wholeRefusalLine("private") }; }
+    catch (e) { return { marked: false, line: "", err: String(e && e.message || e) }; }
+  };
+  const langText = pageSrc("ui-lang.js"), cardText = pageSrc("card-share.js");
+  const words = langText.indexOf("/* words: placeholder */") >= 0 && langText.indexOf('"' + SHARE_EN + '":"' + SHARE_PL + '"') >= 0
+    && cardText.indexOf('t("' + SHARE_EN + '")') >= 0 && cardText.indexOf("if(sharePrivateNow())") >= 0;
+  const pageWrite = await runWriteShared(pageSrc("catalog-file.js"));
+  check(pageWrite.route === "none" && !pageWrite.threw,
+    "pcmPage writeShared of a catalog the page knows is private resolves to route none and does not write (" + JSON.stringify(pageWrite) + ")");
+  if (PLANTS_OFF) skip("pcmPagep lifting plant:pcm-write-shared turns its check red");
+  else {
+    const lifted = pageLift("catalog-file.js", "plant:pcm-write-shared", "  on=false;");
+    const red = lifted ? await runWriteShared(lifted) : null;
+    check(!!red && (red.threw || red.route !== "none"),
+      "pcmPagep lifting plant:pcm-write-shared turns its check red: the shared write is not refused (" + (red ? JSON.stringify(red) : "plant not found") + ")");
+  }
+  const pageShare = runSharePage(cardText);
+  check(pageShare.marked && pageShare.line === SHARE_EN && words,
+    "pcmSharePage a private catalog is refused in one line, in English and in Polish (" + JSON.stringify(pageShare) + ", words " + words + ")");
+  if (PLANTS_OFF) skip("pcmSharePagep lifting plant:pcm-share-page turns its check red");
+  else {
+    const lifted = pageLift("card-share.js", "plant:pcm-share-page", "  marked=false;");
+    const red = lifted ? runSharePage(lifted) : null;
+    check(!!red && red.marked === false,
+      "pcmSharePagep lifting plant:pcm-share-page turns its check red: the page still calls the catalog private (" + (red ? JSON.stringify(red) : "plant not found") + ")");
+  }
+
   /* Holds: a told desk with a personal catalog it has not marked still names it and answers the lead's box. */
   {
     const u = await setup("pcmh");

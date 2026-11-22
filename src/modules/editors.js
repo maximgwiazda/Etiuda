@@ -10,7 +10,7 @@ import { offerUndo, t, toast } from "./ui-lang.js";
 import { BASE_CATS, pack, savePack, packSnapshot, packUndoFor } from "./pack.js";
 import { removeIntent } from "./favourites.js";
 import { catIconKey, catSlot, categoryIsOverridden, resetCategory } from "./cat-identity.js";
-import { intentIdAt, intentIdxOfId, intentIsCustom, intentIsOverridden } from "./intent-id.js";
+import { BASE_STORE, intentIdAt, intentIdxOfId, intentIsCustom, intentIsOverridden } from "./intent-id.js";
 import { applyCatsToGlobal, removeCategory, catPackKey, catCatalogLabel } from "./cat-set.js";
 import { esc } from "./esc.js";
 import { $, modalCard, originOf } from "./dom.js";
@@ -328,7 +328,7 @@ function openIntentEditor(idx, fromManage){
          itself rather than a rule being enforced. */
       '<span class="mf-left">'+
         (isNew ? "" : '<button type="button" class="btn danger mf-del" id="ieDelete" '+
-          'title="Delete this intent: a built-in one returns on Reset, one you made does not">Delete</button>')+
+          'title="Delete this intent">Delete</button>')+
         '<button type="button" class="btn mf-reset" id="ieReset">Reset</button>'+
       '</span>'+
       '<button type="button" class="btn" id="ieCancel" title="Close without saving any change">Cancel</button>'+
@@ -376,7 +376,12 @@ function openIntentEditor(idx, fromManage){
       if(ix<0){ toast("Intent not found"); return; }
       pack.intentCustom[ix]=Object.assign({id:id},next);
     } else {
-      pack.intentOverrides[id]=Object.assign({},next);
+      /* Only what differs from the catalog's own wording is kept, so a field left as the catalog has it takes the next
+         edition's (overrideAgainstBase in card-model.js, for a card). Nothing differing is no edit. */
+      const at=intentIdxOfId(id), own={};
+      Object.keys(next).forEach(k=>{ if(next[k]!==String((BASE_STORE[k]||[])[at]||"").trim()) own[k]=next[k]; });
+      if(Object.keys(own).length) pack.intentOverrides[id]=own;
+      else delete pack.intentOverrides[id];
     }
     savePack(); refreshAfterIntents();
     toast(isNew?"Intent added":"Intent saved");

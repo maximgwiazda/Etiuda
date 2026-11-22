@@ -981,7 +981,7 @@ function mgIntentRow(i,catOf,linked,intentCardsMap){
   const badge=(intentIsCustom(i)||intentIsOverridden(i))?' <span class="cbadge ed" title="'+esc(t("Changed or added by you, not what the catalog shipped"))+'">'+esc(t("mod"))+'</span>':"";
   const favTip=fav?"Remove from Favourites":"Add to Favourites";
   /* Hide toggles; delete is separate and lives only here. Both built-in and custom intents
-     can be deleted now - a built-in goes to pack.intentRemoved and comes back on Reset. */
+     can be deleted; a built-in goes to pack.intentRemoved (removeIntent in favourites.js). */
   const hideShow=hid
     ?'<button type="button" data-show-intent="'+esc(iid)+'" title="Show this intent again" aria-label="Show this intent again">'+ICON_EYE_SHUT+'</button>'
     :'<button type="button" data-hide-intent="'+esc(iid)+'" title="Hide this intent: it greys out and drops to the bottom" aria-label="Hide this intent">'+ICON_EYE_OPEN+'</button>';

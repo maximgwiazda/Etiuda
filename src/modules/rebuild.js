@@ -51,7 +51,7 @@ function rebuildCards(){
   /* Hidden and removed are different states: HIDDEN stays listed - greyed, bottom, out of
      search, never ringed - visibly existing, which is what makes hiding reversible in
      practice; favourite status survives. REMOVED never enters `cards`: gone from the
-     interface and from exports, back on Reset because the catalog still has it. */
+     interface and from exports, back only by its Undo or Clear local changes (favourites.js). */
   const hidden=new Set(pack.hidden||[]);
   const removed=new Set(pack.removed||[]);
   const ov=pack.overrides||{};

@@ -7,6 +7,7 @@ import { catalogLoaded } from "./catalog-boot.js";
 import { agentName } from "./agent.js";
 import { catalogToV2, v2SignedBytes, v2Problems, v2ContentHash, v2CatKey } from "./catalog-v2.js";
 import { directWrite } from "./catalog-merge.js";
+import { teamContentNow } from "./team-join.js";
 import { STARTER_CATS, CATS, intentArr, intentFieldKey, intentCount, catalogLangs, CONTENT_LANGS, tagChangedAt } from "./content-model.js";
 import { eHost, eCatalogTaken, eHasCatalogPicker, ePickCatalogFile, eHasCatalogSaver, eSaveCatalogFile, eHasOwnSaver, eSaveOwnFiles, eLoadedCatalogFile, eHasBranch, eBranchIdentity, eWriteBranch, eHasShared, eSharedRead, eSharedWrite } from "./host.js";
 import { CAT_LABELS_PL, CAT_LABELS_BY_LANG } from "./icons.js";
@@ -443,9 +444,19 @@ function sharedState(name,pin){
 /* The pin of the edition this desk last wrote and nobody else had touched, which it is never offered unasked. */
 function sharedOwnPin(){ return String(lyGet("SharedOwn")||""); }
 function sharedOwnWrite(c){ const own=sharedOwnPin(); return !!own && pinned(c).pin===own; }
+/* The catalog this write would put in the shared file is marked private, so the file is not written. */
+function sharedPrivateNow(loose, origin){
+  const id=String(loose ? (origin&&origin.id)||lyGet("LooseId")||"" : (origin&&origin.id)||"");
+  const c=teamContentNow();
+  const list=c && Array.isArray(c.private) ? c.private : [];
+  let on=false;
+  on=!!id && list.indexOf(id)>=0; /* plant:pcm-write-shared */
+  return on;
+}
 /* The write, or null where it does not apply. Its answer's route says whether the desk's own file is still wanted. */
 function writeShared(loose,origin,holds,layer){
   if(!sharedEditing()) return null;
+  if(sharedPrivateNow(loose,origin)) return Promise.resolve({route:"none"});
   const pin=loose ? "" : String(origin.pin||"");
   const at=loose ? String(lyGet("SharedFile")||"") : String(nsGet("CatalogFile")||"");
   if(!loose && !at) return null;
@@ -466,6 +477,7 @@ function writeShared(loose,origin,holds,layer){
       check:v2Problems, hash:v2ContentHash, pinOf:d=>"sha256:"+sha256Hex(v2SignedBytes(d)), today:todayEdition()
     }).then(r=>{
       if(!same()) return {route:"branch"};
+      if(r && r.why==="private") return {route:"none", why:"private", state:r.state, fresh:[]};
       if(!at && (r.why==="taken" || r.why==="other") && n+1<SHARED_NAMES) return go(n+1);
       lySet("Shared",JSON.stringify({file:name, pin:pin, state:r.state}));
       if(r.wrote){
