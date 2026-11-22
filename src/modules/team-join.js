@@ -1,5 +1,5 @@
-/* Asking to join: the empty desk, a bubble where a catalog is open, and Join a team in Settings, the Library and
-   the Menu. The shell keeps the request and says where it stands; this paints that answer and sends the agent's
+/* Asking to join: the empty desk and a bubble where a catalog is open.
+   The shell keeps the request and says where it stands; this paints that answer and sends the agent's
    acts back. Joining leaves a catalog the desk already has loaded. Once admitted, the same place shows the pinned
    lead's key once, to compare with the lead's, and Settings lists every such team with a way to leave it. An
    invitation's wait names the lead and draws no code until the opening is read; the code then shows. */
@@ -597,17 +597,12 @@ function clearJoinAsk(){
   dropInvite();
   repaintJoin();
 }
-/* One door, from the empty desk, from a sealed catalog, and from Settings, the Library and the Menu. */
+/* The paste, opened from the empty desk alone. */
 function openJoinPaste(){
   if(!teamCanJoin() || joinDoorHolds()) return;
   dropInvite();
   joinMode="paste";
   repaintJoin();
-}
-/* Settings, the Library and the Menu share this door. It is the same paste, and it is there only while the desk can take an invitation. */
-function joinDoorButton(id){
-  if(!teamCanJoin()) return "";
-  return '<button type="button" class="btn" id="'+esc(id)+'" title="'+esc(t("Paste the invitation from the team's lead."))+'">'+esc(t("Join a team"))+'</button>';
 }
 function joinDisclosure(){
   return '<div class="e-join-meta">'+esc(t("Once this desk joins, the team's lead can see the catalogs it uses, their content included, and this desk's changes to them. The lead's Studio can take a copy of any of them at any time, without asking here: of a team catalog, one the lead publishes to the team, sealed for the team; of a personal catalog, any other on this desk, sealed for the lead alone. A personal catalog can be marked Private in the Library, under Catalog & data; the lead then sees nothing of it, not even that it is used. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses unless that catalog is Private, and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, none of them from a Private catalog, and Studio shows them in the team's totals."))+'</div>';
@@ -727,7 +722,7 @@ function joinParts(){
       const forward=t("To join, a new invitation from the team's lead is needed.");
       return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
         line:cause+" "+status+" "+forward,
-        body:meta, acts:[["join",t("Join a team")],["load",t("Load another catalog file")]]};
+        body:meta, acts:[["load",t("Load another catalog file")]]};
     }
     /* A request at a team's door, while it is taken back, is titled by that act: the copywriter's words. */
     let backTitle=t("Joining {LEAD}'s team").split("{LEAD}").join(lead);
@@ -739,7 +734,7 @@ function joinParts(){
     /* Claudette's words, 2026-10-27 20:37. */
     if(j.unkept===true) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
       line:t("The relay no longer holds this request, so it could not be withdrawn there. The team's lead may still see it until it expires. To join after all, a new invitation from the team's lead is needed."),
-      body:meta, acts:[["join",t("Join a team")],["load",t("Load another catalog file")]]}; /* plant:c5-card-unkept */
+      body:meta, acts:[["load",t("Load another catalog file")]]}; /* plant:c5-card-unkept */
     /* Claudette's words, 2026-10-27. */
     if(j.withdrawing===true && j.readonly===true) return {title:backTitle,
       line:t("The request is being withdrawn. The team's relay is read-only until it is renewed, so it takes the withdrawal then, and until that the team's lead may still see the request. If the relay clears the team's copy first, the request goes with it."),
@@ -792,7 +787,7 @@ function joinParts(){
       :t("The code to read to them appears here as soon as they do."), body:joinCodeHtml("")+meta,
     acts:[["cancel",t("Cancel the request")]]};
   const ask='<div class="e-join-meta">'+esc(t("Asks as {NAME}, the name in Settings.").split("{NAME}").join(who))+'</div>'+joinDisclosure();
-  const acts=[["ask",t("Ask to join")],["join",t("Join a team")],["load",t("Load another catalog file")]];
+  const acts=[["ask",t("Ask to join")],["load",t("Load another catalog file")]];
   /* A team whose roster no longer lists this desk says so in place of the ask a desk never on it gets. */
   const gone=s?((joinNow&&joinNow.leads)||[]).filter(x=>x.team===s.team && x.removed)[0]:null;
   if(gone){
@@ -1089,4 +1084,4 @@ function shareDropItem(blobId){
   catch(e){ return Promise.resolve({ok:false}); }
 }
 
-export { lapseNote, shareRefusedNotes, relayElsewhereNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, teamPolicySaid, relayDesk, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, openJoinPaste, joinDoorButton, teamCanJoin, inviteHeld, noteCatalogCopy, joinTook, teamContent, teamContentNow, markCatalogPrivate, onContentChanged, openTeamBubble, closeTeamBubble, teamShareState, shareToTeammate, shareInboxList, shareKeepCard, shareKeptNote, shareDropItem };
+export { lapseNote, shareRefusedNotes, relayElsewhereNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, teamPolicySaid, relayDesk, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, openJoinPaste, teamCanJoin, inviteHeld, noteCatalogCopy, joinTook, teamContent, teamContentNow, markCatalogPrivate, onContentChanged, openTeamBubble, closeTeamBubble, teamShareState, shareToTeammate, shareInboxList, shareKeepCard, shareKeptNote, shareDropItem };

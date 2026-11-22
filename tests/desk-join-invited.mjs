@@ -76,7 +76,7 @@ try {
   SHELL = [lineOf("const SIGNIN_HOLDING_ON ="), lineOf("const SIGNIN_INVITED_MAX ="), fnOf("function signinInvitedOf("), lineOf("const signinInvitedWords ="),
     fnOf("function signinInvitedView("), fnOf("function signinJoinWaitKept("), lineOf("const SIGNIN_ASK_LINE ="), fnOf("function signinJoinBytes("),
     fnOf("function signinJoinBody("), fnOf("function signinJoinOf("), fnOf("function signinJoinSettle("),
-    lineOf("let SIGNIN_SERVICE ="), lineOf("let SIGNOUT_SERVICE ="), fnOf("function storeServiceAt("), fnOf("function signinServiceAsk("),
+    lineOf("let SIGNIN_SERVICE ="), lineOf("let SIGNOUT_SERVICE ="), lineOf("function storeServiceAt("), fnOf("async function signinServiceAsk("),
     lineOf("const SIGNIN_BODY_MAX ="), fnOf("function orderAddress("), lineOf("const ORDER_PAGE_SHAPE ="), fnOf("function buyAddress(")].join("\n");
 } catch (e) { sliced = e.message; }
 let SHELL_SWAP = null;
@@ -88,7 +88,7 @@ function shellOf(view) {
   }
   const posted = [];
   const env = { Buffer, signinPost: (f, url, bytes) => { posted.push({ url, body: JSON.parse(bytes.toString("utf8")) }); return Promise.resolve({ status: 200, bytes: Buffer.from("{}") }); },
-    signinView: () => view || {}, buyManaged: () => false, ORDER_PAGE: "https://etiuda.dev/order/desk", SIGNIN_SERVICE_MAX: 32 * 1024 };
+    signinView: () => view || {}, buyManaged: () => false, ORDER_PAGE: "https://etiuda.dev/order/desk" };
   const names = Object.keys(env);
   const api = new Function(...names, text + "\nreturn { signinInvitedOf, signinInvitedWords, signinInvitedView, signinJoinWaitKept, signinJoinBytes, signinJoinBody, signinJoinOf,"
     + " signinJoinSettle, signinServiceAsk, storeServiceAt, orderAddress, buyAddress };")(...names.map(n => env[n]));
@@ -202,7 +202,7 @@ const SIGNED = { offered: ["microsoft", "google"], signedIn: "microsoft", code: 
 const VIEWS = {
   noteam: Object.assign({}, SIGNED, { seat: "held", works: true, now: NOW, until: UNTIL, holding: { on: "trial", ends: UNTIL }, trials: { desk: UNTIL } }),
   none: Object.assign({}, SIGNED, { seat: "none", works: false }),
-  asklead: Object.assign({}, SIGNED, { seat: "held", askLead: true, works: true, now: NOW, until: UNTIL, trialUntil: UNTIL, holding: { on: "trial", ends: UNTIL }, trials: { desk: UNTIL } }),
+  asklead: Object.assign({}, SIGNED, { seat: "none", askLead: true, works: false }),
   full: Object.assign({}, SIGNED, { seat: "none", refused: "full", works: false }),
 };
 /* The panel and Account for `v`, in `lang`; `pg` a planted signin.js where given (Account then still draws the real one). */

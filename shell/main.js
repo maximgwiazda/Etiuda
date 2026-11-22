@@ -11388,7 +11388,7 @@ function signinDeskBody(provider, idToken, desk, seed, t, sign, accessToken, poo
 /* The store's routes at the licence service, beside signin/desk wherever the service is, the sign-in lab's included. */
 function storeServiceAt(route) { return SIGNIN_SERVICE.replace(/signin\/desk$/, route); }
 async function signinServiceAsk(fetchFn, url, body, ms) {
-  if ([SIGNIN_SERVICE, SIGNOUT_SERVICE, storeServiceAt("store/grant"), storeServiceAt("store/end")].indexOf(String(url)) < 0) throw new Error("the licence service's door takes signin/desk, signout/desk, store/grant and store/end only"); /* plant:service-host */
+  if ([SIGNIN_SERVICE, SIGNOUT_SERVICE, storeServiceAt("store/grant"), storeServiceAt("store/end"), storeServiceAt("ask")].indexOf(String(url)) < 0) throw new Error("the licence service's door takes signin/desk, signout/desk, store/grant, store/end and ask only"); /* plant:service-host */
   const bytes = Buffer.from(JSON.stringify(body), "utf8");
   if (bytes.length > SIGNIN_BODY_MAX) throw new Error("the body is longer than it may be");
   return signinPost(fetchFn, String(url), bytes, "application/json", SIGNIN_SERVICE_MAX, ms);
@@ -11570,6 +11570,65 @@ function signinAskedOf(v) {
   return out;
 }
 const signinAskedWords = names => names.length ? { asked: names } : {};
+/* THE INVITATIONS WAITING FOR THIS PERSON (board 1017), as the signin/desk answer names them: each kept whole or not at all, the licence
+   by its reference, the inviting lead by pseudonym and name, the team by id and name, its end, and `confirm` where the provider does not
+   vouch the address. Kept for the Join; the page is handed only the names, by place (signinInvitedView). */
+const SIGNIN_INVITED_MAX = 8;
+function signinInvitedOf(v) {
+  const out = [];
+  if (!Array.isArray(v)) return out;
+  const plain = s => typeof s === "string" && s.length <= SIGNIN_LEAD_MAX && !/[\u0000-\u001f\u007f-\u009f<>‎‏‪-‮⁦-⁩]/.test(s) ? s.trim() : "";
+  for (const e of v) {
+    const lead = e && typeof e === "object" && e.lead && typeof e.lead === "object" ? e.lead : null;
+    if (!lead || !/^[0-9a-f]{32}$/.test(String(e.licence)) || !Number.isSafeInteger(e.until) || e.until <= 0) continue;
+    if (!/^[0-9a-f]{64}$/.test(String(lead.person))) continue; /* plant:invited-person */
+    if (e.team !== null && e.team !== undefined && !/^t-[0-9a-f]{16}$/.test(String(e.team))) continue;
+    out.push(Object.assign({ licence: String(e.licence), lead: { person: String(lead.person), name: plain(lead.name) }, team: e.team ? String(e.team) : null,
+      label: plain(e.label) || null, until: e.until }, e.confirm === true ? { confirm: true } : {}));
+    if (out.length >= SIGNIN_INVITED_MAX) break;
+  }
+  return out;
+}
+const signinInvitedWords = list => Array.isArray(list) && list.length ? { invited: list } : {};
+function signinInvitedView(list) {
+  return list.map((x, n) => Object.assign({ n: n, lead: x.lead.name, team: x.label || x.team || "", until: x.until }, x.confirm ? { confirm: true } : {})); /* plant:invited-view */
+}
+/* The lead a Join answered "waiting" waits on, kept across an answer only while that answer still names an open request to them. */
+function signinJoinWaitKept(held, ans) {
+  const w = held && typeof held.joinWait === "string" ? held.joinWait : "";
+  return w && ans && Array.isArray(ans.asked) && ans.asked.indexOf(w) >= 0 ? w : "";
+}
+/* THE JOIN: the licence service's route ask (Studio's service/licence/requests.mjs askBytes), signed by the desk key: its line, then the
+   kind, the desk's public half, the licence, the lead's pseudonym, the team or "-", and t, one a line. Null where any part is not its shape. */
+const SIGNIN_ASK_LINE = "etiuda-licence-ask"; /* plant:ask-line */
+function signinJoinBytes(o) {
+  return Buffer.from(SIGNIN_ASK_LINE + "\n" + [o.kind, o.key, o.licence, o.lead, o.team || "-", o.t].map(String).join("\n"), "utf8");
+}
+function signinJoinBody(inv, desk, t, sign) {
+  if (!inv || !inv.lead || !/^[0-9a-f]{64}$/.test(String(desk)) || !Number.isSafeInteger(t)) return null;
+  const sig = String(sign(signinJoinBytes({ kind: "desk", key: desk, licence: inv.licence, lead: inv.lead.person, team: inv.team, t: t })) || "");
+  if (!/^[0-9a-f]{128}$/.test(sig)) return null;
+  return Object.assign({ kind: "desk", key: String(desk), licence: inv.licence, lead: inv.lead.person }, inv.team ? { team: inv.team } : {}, { t: t, sig: sig }); /* plant:join-body */
+}
+/* The answer read: "accepted" (the seat taken), "waiting" (a request the lead confirms), "unreached" where nothing came back, else "refused". */
+function signinJoinOf(res) {
+  if (!res) return "unreached";
+  let j = null;
+  try { j = JSON.parse(Buffer.from(res.bytes || []).toString("utf8")); } catch { j = null; }
+  if (res.status === 200 && j && j.ok === true && (j.state === "accepted" || j.state === "waiting")) return j.state; /* plant:join-answer */
+  return "refused";
+}
+/* `held` after the Join of invitation `n` was answered `said`: the invitation leaves the list unless nothing came back, and a "waiting"
+   keeps whom it waits on, beside the leads the last answer named. */
+function signinJoinSettle(held, n, said) {
+  const list = Array.isArray(held.invited) ? held.invited : [], inv = list[n];
+  if (!inv || said === "unreached") return held;
+  const out = Object.assign({}, held, { invited: list.filter((x, i) => i !== n) }), lead = inv.lead.name || "-", asked = Array.isArray(held.asked) ? held.asked : [];
+  delete out.joinWait;
+  if (!out.invited.length) delete out.invited;
+  if (said === "waiting") Object.assign(out, { joinWait: lead, asked: asked.indexOf(lead) >= 0 ? asked : asked.concat([lead]).slice(0, 8) }); /* plant:join-wait */
+  return out;
+}
 function signinTrialsOf(v) {
   if (!v || typeof v !== "object" || Array.isArray(v)) return null;
   const out = {};
@@ -11601,7 +11660,7 @@ function signinAnswerBody(res, deskKey, packed) {
     /* THE STORE OFFERED: the service says it keeps a person's store (store/grant) only by "storeOffer": true beside a sign-in's answer;
        absent, null or anything else is no offer, and nothing of sync is asked, looked at or said (storeOffered). */
     const storeOffer = j.storeOffer === true; /* plant:offer-read */
-    const words = Object.assign(signinWordsOf(signinHoldingOf(j.seat), signinTrialsOf(j.trials)), signinAskedWords(signinAskedOf(j.asked))); /* plant:words-read */
+    const words = Object.assign(signinWordsOf(signinHoldingOf(j.seat), signinTrialsOf(j.trials)), signinAskedWords(signinAskedOf(j.asked)), signinInvitedWords(signinInvitedOf(j.invited))); /* plant:words-read */
     if (j.certificate === null) return Object.assign({ ok: true, code: String(j.code), cert: null, doors: [], waiting: j.reason === "waiting", askLead, storeOffer }, signinManagedOf(j), words); /* plant:wait-read */
     if (signinCertOk(j.certificate, deskKey) && j.certificate.code === j.code) {
       const doors = signinDoorsOk(j.doors, packed), signed = signinDoorsSigned(doors, j.doorsSig, j.certificate); /* plant:door-signed-read */
@@ -11734,7 +11793,7 @@ function signinViewOf(kept, o) {
   const real = o.offered, now = o.wall, preview = o.preview, busy = o.busy;
   const offered = preview ? o.shown : real;
   const signedIn = held && real.indexOf(held.provider) >= 0 ? held.provider : "";
-  /* The code shown and handed to Buy is the held certificate's own where one is held, as the answer took it. */
+  /* The code handed to Buy is the held certificate's own where one is held, as the answer took it; the preload hands the page none. */
   let code = signedIn ? held.code : "";
   if (signedIn && held.cert && typeof held.cert.code === "string") code = held.cert.code; /* plant:view-cert-code */
   const works = signinWorksOf(kept, real, o.deskKey, o.deskNow), cert = kept && kept.cert;
@@ -11764,6 +11823,9 @@ function signinViewOf(kept, o) {
     registered: o.registered === true }; /* plant:view-registered */
   /* The leads an open join request waits on, as the last answer named them: only where it named any, so a view without is the same object as before. */
   if (signedIn && held && Array.isArray(held.asked) && held.asked.length) view.asked = held.asked.slice(); /* plant:view-asked */
+  /* The invitations waiting, by place, and the lead a Join waits on: only where any, as `asked`. */
+  if (signedIn && held && Array.isArray(held.invited) && held.invited.length) view.invited = signinInvitedView(held.invited);
+  if (signedIn && held && typeof held.joinWait === "string" && held.joinWait) view.joinWait = held.joinWait;
   /* Only where machine policy sets any of its six values, so an unmanaged desk's view is the same object as before. */
   const m = o.managed;
   if (m && m.any) view.managed = { on: m.managed, shared: m.shared, personal: m.personal, provider: m.provider, tenant: !!m.tenant, closed: m.closed, contact: m.contact, /* plant:view-managed */
@@ -11793,8 +11855,10 @@ function signinSettleSeat(held, ans, now, deskNow, clockIssued) {
     const out = Object.assign({}, held, { code: ans.code, cert: ans.cert || (keep ? held.cert : null), doors: ans.cert ? (ans.doors || []) : [], doorsSig: ans.cert ? String(ans.doorsSig || "") : "", at: now, checked: now, reached: true,
       said: ans.waiting === true ? "waiting" : "", ask: false, askLead: ans.askLead === true, managed: ans.managed === true, cause: ans.managed === true ? ans.cause || "" : "",
       storeOffer: ans.storeOffer === true }); /* plant:wait-settle */
-    delete out.ended; delete out.holding; delete out.trials; delete out.asked;
-    return Object.assign(out, ended ? { ended: ended } : {}, signinWordsOf(ans.cert ? ans.holding : keep ? held.holding : null, ans.trials || (held && held.trials)), signinAskedWords(signinAskedOf((ans.asked || []).map(n => ({ lead: { name: n } }))))); /* plant:words-settle */
+    delete out.ended; delete out.holding; delete out.trials; delete out.asked; delete out.invited; delete out.joinWait;
+    const joinWait = signinJoinWaitKept(held, ans);
+    return Object.assign(out, ended ? { ended: ended } : {}, signinWordsOf(ans.cert ? ans.holding : keep ? held.holding : null, ans.trials || (held && held.trials)), signinAskedWords(signinAskedOf((ans.asked || []).map(n => ({ lead: { name: n } })))), /* plant:words-settle */
+      signinInvitedWords(signinInvitedOf(ans.invited)), joinWait ? { joinWait: joinWait } : {});
   }
   if (ans.reason === "unreached") return Object.assign({}, held, { checked: now, reached: false });
   const freed = ans.reason === "signin";
@@ -11884,6 +11948,7 @@ function signinFileRead(text, packed) {
   if (out.held && out.held.cert && Number.isSafeInteger(h.ended) && h.ended > 0) out.held.ended = h.ended; /* plant:ended-file */
   if (out.held) Object.assign(out.held, signinWordsOf(out.held.cert ? signinHoldingOf(h.holding) : null, signinTrialsOf(h.trials))); /* plant:words-file */
   if (out.held) Object.assign(out.held, signinAskedWords(signinAskedOf(Array.isArray(h.asked) ? h.asked.map(n => ({ lead: { name: n } })) : null))); /* plant:asked-file */
+  if (out.held) Object.assign(out.held, signinInvitedWords(signinInvitedOf(h.invited)), signinJoinWaitKept(h, out.held) ? { joinWait: h.joinWait } : {});
   if (out.held && h.org && typeof h.org === "object") out.held.org = { tid: SIGNIN_TENANT.test(String(h.org.tid)) ? String(h.org.tid).toLowerCase() : "", /* plant:org-file */
     hd: typeof h.org.hd === "string" && h.org.hd.length <= 253 ? h.org.hd.toLowerCase() : "" };
   if (out.held && out.held.cert) {
@@ -12254,6 +12319,32 @@ ipcMain.handle("etiuda:signin-door", (e, n) => {
   tellSignin();
   sendJoin(theWindow);
   return r;
+});
+/* JOIN, the person's one press on a lead's invitation to their address (board 1017): the service's ask for it, and where the seat is
+   taken at once, the renewal that brings it and the knock at that team's door the renewal handed. {joined} or {refused: "join"}. */
+async function signinJoinNow(n) {
+  const st = signinState(), held = st.held, inv = held && Array.isArray(held.invited) && Number.isInteger(n) ? held.invited[n] : null;
+  const me = inv ? branchIdentity(false) : null;
+  if (!inv || !me || signinBusy || (harnessLaunch() && !signinLabHeld()) || !net || typeof net.fetch !== "function") return { refused: "join" };
+  const body = signinJoinBody(inv, me.key, Date.now(), signinSign);
+  let res = null;
+  try { res = body ? await signinIo({ loop: null }).serviceAsk(storeServiceAt("ask"), body) : null; } catch { res = null; }
+  const said = signinJoinOf(res);
+  if (signinState().held !== held) return { refused: "join" };
+  st.held = signinJoinSettle(held, n, said);
+  signinSave();
+  if (said === "accepted") {
+    try { await signinRenewNow({ person: true }); } catch { /* the seat arrives at the next renewal */ }
+    const after = signinState().held, doors = (after && after.doors) || [];
+    const d = inv.team ? signinDoorsShown(after, Date.now()).find(x => doors[x.n] && doors[x.n].team === inv.team) : null;
+    if (d) { signinDoorJoin(d.n); sendJoin(theWindow); }
+  }
+  tellSignin();
+  return said === "accepted" || said === "waiting" ? { joined: said } : { refused: "join" };
+}
+ipcMain.handle("etiuda:signin-join", (e, n) => {
+  if (!fromEngine(e)) return null;
+  return signinJoinNow(Number(n));
 });
 /* What the page is told: signinViewOf over the held seat and the facts around it, read here. */
 function signinView() {

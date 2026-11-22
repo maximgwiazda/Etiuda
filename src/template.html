@@ -1460,6 +1460,8 @@ html.e-still .sgn-run::after{animation:none;transform:translateX(80%)}
 .sgn-code{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 12px;margin-top:10px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
 .sgn-code code,.sgn-mono{font:600 14.5px var(--mono);letter-spacing:.04em;color:var(--ink);white-space:nowrap}
 .sgn-code code{flex:1 1 auto;font-size:13px;letter-spacing:.02em}
+.sgn-invite span{flex:1 1 12em;font-size:13.5px;line-height:1.45;color:var(--ink)}
+.sgn-join-no{margin-top:8px}
 .sgn-val{font-size:13.5px;color:var(--ink)}
 .sgn-lock{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--dim)}
 .sgn-lock .ic{width:13px;height:13px}
@@ -5251,7 +5253,6 @@ body.e-host .row .win-btn:focus-visible{outline-offset:-2px}
           <div class="menu-sep" id="menuUpdateSep" hidden></div>
           <button type="button" role="menuitem" data-act="manage" title="Edit, hide or restore every card, intent and category">Library…</button>
           <button type="button" role="menuitem" data-act="settings" title="Interface language, appearance and keyboard shortcuts">Settings…</button>
-          <button type="button" role="menuitem" data-act="join" id="menuJoin" hidden title="Paste the invitation from the team's lead.">Join a team</button>
           <!-- Only where the host has a picker, its words and combination drawn in header-menus.js. -->
           <button type="button" role="menuitem" data-act="picker" id="menuPicker" hidden></button>
           <!-- Maintenance has NO menu entry: F2 opens it, and the Keyboard shortcuts screen is
