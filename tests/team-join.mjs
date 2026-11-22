@@ -41,7 +41,7 @@ const ASIDE = {
   "15ep": offWindows("15ep", "15em stands aside off Windows, so lifting plant:w2-folder-not-writable has no green leg there to turn"),
 };
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 223;
+const EXPECTED = 225;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -1658,6 +1658,76 @@ try {
   check(!!heldShown && heldShown.mode === "confirm" && heldShown.read !== "" && escaped && letGo(heldHidden),
     "15bd Hide on the bubble, pressed while it holds an invitation's confirm, lets the invitation go as Cancel does: "
     + (heldShown && heldShown.mode) + ", then " + (heldHidden && (heldHidden.mode || "nothing held")) + ", " + bubbles.length + " bubble(s) drawn");
+
+  /* Hide, or Escape, on the bubble while it holds a link's confirm lets the link go in the shell as Cancel does (link-no), so a link
+     waiting behind it is offered (link-handler 3ht); the held answer then names no offer (jlk5). Lifting the page's line turns it red
+     (jlk6). The bubble is drawn on stand-ins. */
+  let hideLinkRuns = 0;
+  async function hideLinkScene(M) {
+    const shells = [];
+    const node = () => ({ className: "", id: "", style: {}, attrs: {}, listeners: {}, isConnected: false, innerHTML: "",
+      offsetWidth: 340, offsetHeight: 200, classList: { contains: () => false, add: noop, remove: noop },
+      setAttribute(k, v) { this.attrs[k] = String(v); }, removeAttribute(k) { delete this.attrs[k]; }, appendChild(c) { return c; },
+      addEventListener(t, fn) { (this.listeners[t] = this.listeners[t] || []).push(fn); }, removeEventListener: noop,
+      querySelector: () => null, querySelectorAll: () => [], remove() { this.removed = true; } });
+    const was = { createElement: document.createElement, body: document.body };
+    const gWas = {};
+    for (const k of ["innerWidth", "innerHeight", "addEventListener", "removeEventListener"]) gWas[k] = globalThis[k];
+    const out = { shown: false, escaped: false, sent: false, released: false };
+    try {
+      document.createElement = () => node();
+      document.body = { appendChild: el => { shells.push(el); return el; } };
+      Object.assign(globalThis, { innerWidth: 1280, innerHeight: 800, addEventListener: noop, removeEventListener: noop });
+      const n = hideLinkRuns++;
+      const Dl = await deskWith("hide-link-" + n, folder("hide-link-own-" + n));
+      window.E_HOST = hostOver(Dl);
+      const team = "t-" + crypto.randomBytes(8).toString("hex");
+      const blob = inviteBlob({ team, relay: { rt: crypto.randomBytes(16).toString("hex"), url: "https://relay.test/relay/v1",
+        token: crypto.randomBytes(32).toString("hex"), inv: crypto.randomBytes(16).toString("hex") }, lead: lampLead, secret: newSecret() });
+      const got = Dl.api.acceptLink("etiuda:join#" + blob.slice("etiuda-join:".length));
+      AS.setCards([{ id: "c-hide-link" }]);
+      M.wireTeamJoin();
+      await new Promise(r => setTimeout(r, 30));
+      const h = M.inviteHeld();
+      out.shown = !!(got && got.confirm === true) && !!h && h.mode === "confirm" && !!h.offer && h.offer.link === true;
+      const from = calls.length;
+      const top = shells[shells.length - 1];
+      const onKey = top && (top.listeners.keydown || [])[0];
+      if (onKey) { onKey({ key: "Escape", preventDefault: noop, stopPropagation: noop }); out.escaped = true; }
+      await new Promise(r => setTimeout(r, 30));
+      out.sent = calls.slice(from).some(c => c[0] === "link-no");
+      const after = await Dl.join("held");
+      out.released = !!after && !after.offer;
+    } finally {
+      AS.setCards([]);
+      document.createElement = was.createElement;
+      document.body = was.body;
+      for (const k of Object.keys(gWas)) { if (gWas[k] === undefined) delete globalThis[k]; else globalThis[k] = gWas[k]; }
+    }
+    return out;
+  }
+  const sayHide = r => (r.shown ? "link confirm shown" : "no link confirm") + ", " + (r.escaped ? "Escape pressed" : "no bubble to press")
+    + ", " + (r.sent ? "link-no sent" : "no link-no") + ", " + (r.released ? "the shell holds no offer" : "the shell still holds the offer");
+  const hideNow = await hideLinkScene(TJ);
+  check(hideNow.shown && hideNow.escaped && hideNow.sent && hideNow.released,
+    "jlk5 Escape on the bubble holding a link's confirm lets the link go in the shell as Cancel does: " + sayHide(hideNow));
+  if (PLANTS_OFF) skip("jlk6 lifting plant:hide-link-no keeps the link held in the shell after Escape (jlk5 red)");
+  else {
+    const at = path.join(ROOT, "src", "modules", "team-join.js"), before = fs.readFileSync(at);
+    const lines = before.toString("utf8").split(/\n/), i = lines.findIndex(l => l.indexOf("plant:hide-link-no") >= 0);
+    let r = null;
+    if (i >= 0) {
+      lines.splice(i, 1);
+      const dir = fs.mkdtempSync(path.join(LAB, "hide-link-plant-"));
+      const modulesUrl = pathToFileURL(path.join(ROOT, "src", "modules")).href;
+      fs.writeFileSync(path.join(dir, "team-join.js"), lines.join("\n").replace(/from "\.\//g, 'from "' + modulesUrl + "/"), "utf8");
+      r = await hideLinkScene(await import(pathToFileURL(path.join(dir, "team-join.js")).href));
+    }
+    const same = fs.readFileSync(at).equals(before);
+    check(!!r && r.shown && r.escaped && !(r.sent && r.released) && same,
+      "jlk6 lifting plant:hide-link-no keeps the link held in the shell after Escape (jlk5 red): " + (r ? sayHide(r) : "plant line absent")
+      + ", tree " + (same ? "untouched" : "changed"));
+  }
 
   /* A lead may open an invitation's request for the six-digit code. The reveal rewrites the file. The bytes written
      at yes stay, and only the reveal and the opening are added. A request that never carried an invitation gains the
