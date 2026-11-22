@@ -207,9 +207,9 @@ const parse = c => (sh ? sh.api.signinAgentNameFromClaims(c) : null);
   const gOpenid = parse({ iss: "https://accounts.google.com", sub: "1001" });
   const gProfile = parse({ iss: "https://accounts.google.com", sub: "1001", given_name: "Helena", family_name: "Kowalczyk" });
   const msScope = (/microsoft:\s*Object\.freeze\(\{[\s\S]{0,400}?scope:\s*"([^"]+)"/.exec(MAIN) || [])[1];
-  const gScope = (/google:\s*Object\.freeze\(\{[\s\S]{0,400}?scope:\s*GOOGLE_HD_NEEDS_EMAIL\s*\?\s*"[^"]+"\s*:\s*"([^"]+)"/.exec(MAIN) || [])[1];
+  const gScope = (/google:\s*Object\.freeze\(\{[\s\S]{0,400}?scope:\s*"([^"]+)"/.exec(MAIN) || [])[1];
   check(gOpenid === null && !!gProfile && gProfile.name === "Helena K." && gProfile.form === "initial"
-    && msScope === "openid profile offline_access" && gScope === "openid",
+    && msScope === "openid profile email offline_access" && gScope === "openid email profile",
     "an1i Google openid-only fills nothing today, fills once profile claims arrive, and provider scopes stay untouched",
     { gOpenid, gProfile, msScope, gScope });
 }

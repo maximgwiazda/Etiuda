@@ -10420,8 +10420,7 @@ function policyFor(hashes) {
    service's signin/desk, signed by the desk's key, and the answer is the person's sign-in code and, where a licence admits them,
    a seat certificate the service signed, which the desk keeps and writes as desks/<id>/seat.json. Nothing on the desk waits on
    any of it, and no token or name reaches a lead. */
-/* Email is asked of nobody. Google is asked for it only if its hosted domain claim proves to need it, and then by this alone. */
-const GOOGLE_HD_NEEDS_EMAIL = false; /* plant:scope-email */
+/* Email is asked at the first sign-in of both providers: the licence service reads the ID token's email claim (Google's email and email_verified, Microsoft's email and xms_edov) to vouch an address. A renewal asks what it asked before. */
 /* THE PROVIDERS ARE CONFIGURATION: Etiuda's own registration with each, its client id, and the addresses and scopes Studio uses.
    A provider with no client id is not offered, so until the registrations exist nothing is drawn and nothing is sent. A desktop
    app is a public client, and clientSecret stays "" in this tree, which is public: Google's forum reports its token address
@@ -10432,14 +10431,14 @@ let SIGNIN_PROVIDERS = Object.freeze({
   microsoft: Object.freeze({ clientId: "", clientSecret: "", issuer: "https://login.microsoftonline.com/{tenantid}/v2.0",
     authorize: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
     token: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-    scope: "openid profile offline_access", refreshScope: "openid profile offline_access",
+    scope: "openid profile email offline_access", refreshScope: "openid profile offline_access", /* plant:scope-ms-email */
     extra: Object.freeze({ response_mode: "query", prompt: "select_account" }), service: "" }),
   /* Google: select_account alone. A consent prompt at every sign-in (decision 36) was withdrawn on measurement, 2026-11-13: a
      personal account signed in twice with select_account and kept a refresh token both times (a Workspace account unmeasured);
      access_type offline stays, and a sign-in that ever lacks a refresh token is asked again (signinRenewHeld). */
   google: Object.freeze({ clientId: "", clientSecret: "", issuer: "https://accounts.google.com",
     authorize: "https://accounts.google.com/o/oauth2/v2/auth", token: "https://oauth2.googleapis.com/token",
-    scope: GOOGLE_HD_NEEDS_EMAIL ? "openid email" : "openid", refreshScope: "", extra: Object.freeze({ prompt: "select_account", access_type: "offline" }) }), /* plant:google-offline */
+    scope: "openid email profile", refreshScope: "" /* plant:scope-google-email */, extra: Object.freeze({ prompt: "select_account", access_type: "offline" }) }), /* plant:google-offline */
 });
 const SIGNIN_TENANT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SIGNIN_CLIENT = /^[A-Za-z0-9][A-Za-z0-9._-]{7,199}$/;

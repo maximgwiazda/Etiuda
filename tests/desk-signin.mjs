@@ -48,7 +48,7 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 308;
+const PLANTS = 309;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
@@ -88,7 +88,7 @@ const NEEDS = ["const BUILTIN_RELAY_URL =", "const SEALED_TEAM_RE =", "const LIN
   "const SPKI_ED25519 =", "function canonJson("].map(s => decl(MAIN, s)).join("\n") + "\nconst NOTE_ROOT = \"" + TEST_ROOT + "\";";
 const INVITE = ["const INVITE_HIDDEN_RE =", "function inviteRead(", "function inviteRelay(", "function teamChannelOf("].map(s => decl(MAIN, s)).join("\n");
 const NAMES = ["SIGNIN_PROVIDERS", "signinOffered", "signinNonce", "signinAuthorize", "signinPageOk", "signinBack", "signinRefusedWhy", "signinTokens",
-  "signinRequest", "signinListen", "signinRun", "signinRenew", "signinKeep", "signinKept", "GOOGLE_HD_NEEDS_EMAIL", "signinRefreshForm",
+  "signinRequest", "signinListen", "signinRun", "signinRenew", "signinKeep", "signinKept", "signinRefreshForm",
   "SIGNIN_SERVICE", "signinDeskBytes", "signinDeskBody", "signinServiceAsk", "signinCertOk", "signinAnswer", "signinSeat", "signinLapsed",
   "signinSettle", "signinRenewHeld", "seatFileText", "SEAT_NAME", "signinFileRead", "signinFileText", "branchIdOf", "inviteRead",
   "SIGNOUT_SERVICE", "signoutDeskBytes", "signoutDeskBody", "signoutAsk", "signinDoorRequest", "signinKnown", "signinPreviewing",
@@ -497,11 +497,11 @@ CASES.loopFlow = async s => {
   return got.ok === true && code === "abc" && codes.join() === "400,400,303";
 };
 CASES.scopes = s => {
-  const ms = s.SIGNIN_PROVIDERS.microsoft, g = s.SIGNIN_PROVIDERS.google, want = "openid profile offline_access";
+  const ms = s.SIGNIN_PROVIDERS.microsoft, g = s.SIGNIN_PROVIDERS.google, want = "openid profile offline_access", wantIn = "openid profile email offline_access", gWant = "openid email profile";
   const scopeOf = p => new URL(s.signinAuthorize(p, 50000, DESK_KEY).url).searchParams.get("scope");
   const refresh = new URLSearchParams(s.signinRefreshForm(MS, "rt").toString()).get("scope");
-  return s.GOOGLE_HD_NEEDS_EMAIL === false && ms.scope === want && ms.refreshScope === want && scopeOf(MS) === want && refresh === want
-    && g.scope === "openid" && scopeOf(G) === "openid" && !/email/.test(JSON.stringify(s.SIGNIN_PROVIDERS));
+  return ms.scope === wantIn && ms.refreshScope === want && scopeOf(MS) === wantIn && refresh === want
+    && g.scope === gWant && scopeOf(G) === gWant && g.refreshScope === "";
 };
 
 /* ---- the quiet renewal ------------------------------------------------------------------------------------------------- */
@@ -5471,7 +5471,7 @@ const LEGS = [
   ["ds4d", "loopOnce", "the loopback answers 404 to anything but GET /, answers the GET / it takes once (303 to its landing), and closes once the landing is served"],
   ["ds6a", "loopStray", "a GET / with no state or another state is answered 400 and ignored, and the reply with the state ends it"],
   ["ds6b", "loopFlow", "through signinRun on a real loopback, two strays leave the sign-in waiting and the browser's reply completes it"],
-  ["ds6c", "scopes", "Microsoft is asked for openid profile offline_access at sign-in and refresh, Google for openid, email of nobody"],
+  ["ds6c", "scopes", "the first sign-in asks Microsoft for openid profile email offline_access and Google for openid email profile; a refresh asks Microsoft what it asked before and Google nothing"],
   ["ds7a", "renewWrite", "a refreshed token with the seat's sub goes to signin/desk with no seed, signed by this desk's key, and the new certificate is kept"],
   ["ds7b", "renewRefuse", "another sub or another desk's nonce posts nothing, forgets the refresh token and asks the person"],
   ["ds7c", "renewFail", "the provider or the service away, or the service refusing, keeps the certificate and the code; a freed seat asks the person"],
@@ -6028,7 +6028,8 @@ if (!PLANTS_OFF) {
   await plant("dsp18", ["if (!token || !sealsForReal(storage, platform)) return \"\"; /* plant:keep-real */", "if (!token) return \"\";"], "keep");
   await plant("dsp19", ["if (landed) { serve(res, 200, landed); shut(); } else held = res;", "if (landed) serve(res, 200, landed); else held = res;"], "loopOnce");
   await plant("dsp20", ["if (!ours) { serve(res, 400, \"earlier\"); return; } /* plant:loop-state */", ""], "loopStray");
-  await plant("dsp21", ["const GOOGLE_HD_NEEDS_EMAIL = false; /* plant:scope-email */", "const GOOGLE_HD_NEEDS_EMAIL = true;"], "scopes");
+  await plant("dsp21", ["scope: \"openid profile email offline_access\", refreshScope: \"openid profile offline_access\", /* plant:scope-ms-email */", "scope: \"openid profile offline_access\", refreshScope: \"openid profile offline_access\","], "scopes");
+  await plant("dsp300", ["scope: \"openid email profile\", refreshScope: \"\" /* plant:scope-google-email */", "scope: \"openid\", refreshScope: \"\""], "scopes");
   await plant("dsp22", ["const ans = await signinSeat(io, p.id, deskKey, got.idToken, \"\", now); /* plant:renew-seedless */",
     "const ans = await signinSeat(io, p.id, deskKey, got.idToken, held.seed, now);"], "renewWrite");
   await plant("dsp23", ["reached: lost ? held.reached : false }), said: got.reason }; /* plant:renew-ask */", "reached: held.reached }), said: got.reason };"], "renewFail");
