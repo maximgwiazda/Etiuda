@@ -714,7 +714,7 @@ UI_STRINGS.pl={
   "Move or delete cards in this category first":"Kategorię można usunąć, gdy jej karty zostaną przeniesione albo usunięte",
   "Move or delete the cards in this category first":"Kategorię można usunąć, gdy jej karty zostaną przeniesione albo usunięte",
   "Delete card":"Usuń kartę",
-  /* words: placeholder, the editors' Delete as the Library's, until the copywriter's */
+  /* The copywriter's words, for the Library's Delete and the editors' alike, this and "Delete this intent" */
   "Delete this card":"Usuń tę kartę",
   "New intent":"Nowa intencja",
   "New intent…":"Nowa intencja…",

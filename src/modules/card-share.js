@@ -105,9 +105,10 @@ function wholeRefusalLine(reason){
   if(reason==="private") return t("This catalog is private, so this card stays on this desk.");
   return t("This card could not be sent just now.");
 }
-/* The catalog in use is marked private, so a card from it is not sent. */
+/* The catalog in use is marked private, so a card from it is not sent. Its id is the stored catalog's: currentCatalog
+   builds an export, which mints a new one. */
 function sharePrivateNow(){
-  const cur=hooks.currentCatalog({asIs:true});
+  const cur=hooks.storedCatalog();
   const id=cur && cur.id ? String(cur.id) : "";
   const c=teamContentNow();
   let marked=false;

@@ -8791,7 +8791,7 @@ What is typed here stays in this browser.`;
     "Move or delete cards in this category first": "Kategorię można usunąć, gdy jej karty zostaną przeniesione albo usunięte",
     "Move or delete the cards in this category first": "Kategorię można usunąć, gdy jej karty zostaną przeniesione albo usunięte",
     "Delete card": "Usuń kartę",
-    /* words: placeholder, the editors' Delete as the Library's, until the copywriter's */
+    /* The copywriter's words, for the Library's Delete and the editors' alike, this and "Delete this intent" */
     "Delete this card": "Usuń tę kartę",
     "New intent": "Nowa intencja",
     "New intent…": "Nowa intencja…",
@@ -20596,7 +20596,7 @@ What is typed here stays in this browser.`;
     return t("This card could not be sent just now.");
   }
   function sharePrivateNow() {
-    const cur = hooks.currentCatalog({ asIs: true });
+    const cur = hooks.storedCatalog();
     const id = cur && cur.id ? String(cur.id) : "";
     const c = teamContentNow();
     let marked = false;
