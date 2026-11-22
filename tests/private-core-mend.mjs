@@ -27,7 +27,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 24;
+const EXPECTED = 26;
 
 const CARD = "The quay lamp is wrapped for the crossing.";
 
@@ -429,6 +429,34 @@ try {
     "pcm9 the statistics name the catalog in use, but never one marked Private (" + JSON.stringify({ priv: r9, open: r9o }) + ")");
   await planted("pcm9p", "plant:pcm-stats-private", "  if (data.catalog && data.catalog.id) {", src => pcm9(src, true),
     r => !!r.catalog, "the statistics name the Private catalog");
+  /* pcm9w (Claude alpha, 2026-11-22, by Claudius): nothing of a Private catalog is reported, not its name, id or edition, not its
+     cards' ids, not per-card or intent counts, not that the desk used a private catalog for so many replies. Statistics sent while
+     one is in use carry nothing of it, whether the page names the catalog or not. */
+  const pcm9w = async src => {
+    const u = await setup("pcm9w-" + (src ? "p" : "g"), { private: "quay-held", src });
+    u.box.D.api.setStats("lab", { from: "2026-11-01", to: "2026-11-30" });
+    const file = path.join(ownDir(u.box.share, u.box.me.id), "stats.estat");
+    const read = () => { try { return u.box.D.api.openStatsSealed(leadBox.privateKey, JSON.parse(fs.readFileSync(file, "utf8")), u.box.me.id) || ""; } catch { return ""; } };
+    const page = { cards: [{ id: "c-warm", n: 2, langs: { en: 2 } }], intents: [{ id: "i-quay-ask", n: 3 }], misses: 4, langs: { en: 5 },
+      pairs: [{ from: "c-warm", to: "c-cold", n: 1 }], suggestTaken: 1, suggestOpen: 2 };
+    const out = [];
+    for (const named of [true, false]) {
+      const data = Object.assign(named ? { catalog: { id: "quay-held", rev: 4 } } : {}, page);
+      u.box.D.api.writeStatsAnswer(JSON.stringify(Object.assign({}, data, { misses: named ? 4 : 5 })), "", "close");
+      const t = read();
+      let d = null; try { d = JSON.parse(t); } catch { d = null; }
+      out.push({ named, written: !!d, carries: !d ? ["unread"] : ["quay-held", "c-warm", "c-cold", "i-quay-ask"].filter(x => t.indexOf(x) >= 0)
+        .concat(d.catalog ? ["catalog"] : [], (d.cards || []).length ? ["cards"] : [], (d.intents || []).length ? ["intents"] : [],
+          d.misses ? ["misses"] : [], Object.keys(d.langs || {}).length ? ["langs"] : [], d.pairs ? ["pairs"] : [],
+          d.suggestTaken || d.suggestOpen ? ["suggest"] : []) });
+    }
+    return out;
+  };
+  const r9w = await pcm9w();
+  check(r9w.every(x => x.written && x.carries.length === 0),
+    "pcm9w statistics sent while a Private catalog is in use carry nothing of it: no name, id, card id, count or reply total (" + JSON.stringify(r9w) + ")");
+  await planted("pcm9wp", "plant:pcm-stats-whole", "    /* plant lifted */", pcm9w,
+    r => r.some(x => x.carries.length > 0), "the statistics carry the Private catalog's cards and counts");
   /* pcm9m: statistics written before the mark are written again at once without the catalog's name when it is marked. */
   const pcm9m = async src => {
     const u = await setup("pcm9m-" + (src ? "p" : "g"), { src });
