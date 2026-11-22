@@ -63,7 +63,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 573;
+const EXPECTED = 576;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -8576,7 +8576,8 @@ async function rootParallel(mod, kind, mine, theirs) {
     putsBack: a.t.log.slice(at).filter(l => /^PUT b\//.test(l)).length,
     copies: fs.readdirSync(a.mirror).concat(fs.readdirSync(b.mirror)).filter(n => /conflicted copy/.test(n)),
     said: a.said.slice(said0).filter(l => l.indexOf(name) >= 0 && l.indexOf("changed on this computer and on another at once") >= 0),
-    clash: clash ? clash.map(c => ({ path: c.path, kept: c.kept, here: c.here, team: c.team })) : null };
+    clash: clash ? clash.map(c => ({ path: c.path, kept: c.kept, here: c.here, team: c.team })) : null,
+    dropped: clash ? clash.map(c => c.dropped) : null, ids: { dA: dA.keyId, dB: dB.keyId } };
   out.atDesk = dk ? which(read(dk.mirror, name)) : null;
   if (dk) await dk.ch.stop();
   await a.ch.stop(); await b.ch.stop();
@@ -8738,7 +8739,7 @@ async function crossEpoch(mod) {
       me: () => ({ keyId: d.k.keyId, public: d.k.pub, privateKey: d.k.privateKey, place: "desk:" + d.k.keyId, box: d.box.pub }),
       keyFor: e => held.get(e) || null, sealEpoch: () => Math.max(...held.keys()), agree: agreeWith(d.box), onTeam: heed }), { held });
   };
-  const of = text => { try { const t = JSON.parse(text); return { epoch: t.epoch, rev: t.rev, d3: t.roster.some(r => r.desk.id === D3.k.keyId) }; } catch { return null; } };
+  const of = text => { try { const t = JSON.parse(text); return { epoch: t.epoch, rev: t.rev, d3: t.roster.some(r => r.desk.id === D3.k.keyId), d4: t.roster.some(r => r.desk.id === D4.k.keyId) }; } catch { return null; } };
   const at = p => of(read(p.mirror, C.TEAM_NAME));
   await enrol(D1.k, D2.k, D3.k);
   const ONE = doc(1, 1, [entry(D1, KM1, 1), entry(D2, KM1, 1), entry(D3, KM1, 1)]);
@@ -8772,7 +8773,7 @@ async function crossEpoch(mod) {
   await settle(b);
   await settle(d1, d2, d3);
   await settle(a, b, d1, d2, d3);
-  const clash = typeof a.prog.rootClash === "function" ? a.prog.rootClash().map(c => ({ path: c.path, kept: c.kept, here: c.here, team: c.team })) : null;
+  const clash = typeof a.prog.rootClash === "function" ? a.prog.rootClash().map(c => ({ path: c.path, kept: c.kept, here: c.here, team: c.team, dropped: c.dropped })) : null;
   const out = { allOne, tookEdit, atA: at(a), atB: at(b), atD1: at(d1), atD2: at(d2), atD3: at(d3), d3Key2: !!d3.held.get(2),
     d1Key2: !!d1.held.get(2), d2Key2: !!d2.held.get(2), clash,
     said: a.said.slice(said0).filter(l => l.indexOf(C.TEAM_NAME) >= 0 && l.indexOf("changed on this computer and on another at once") >= 0),
@@ -8790,6 +8791,8 @@ async function crossEpoch(mod) {
   /* The first started again on its record: the clash is still there to tell, and nothing more goes up. */
   const again = leadOf("tce-a", new Map([[1, KM1], [2, KM2]]));
   out.clashRestart = typeof again.prog.rootClash === "function" ? again.prog.rootClash().map(c => c.path + ":" + c.kept) : null;
+  out.droppedRestart = typeof again.prog.rootClash === "function" ? again.prog.rootClash().map(c => c.dropped) : null;
+  out.ids = { d3: D3.k.keyId, d4: D4.k.keyId };
   /* The relay's main team file, read by a fresh profile of the lead's key holding both keys, which makes no desk's copy. */
   const third = Object.assign(program("tce-c-" + tag, LEAD, "root", { mod, rt, pin: pinOf, keyFor: e => (e === 1 ? KM1 : e === 2 ? KM2 : null),
     sealEpoch: () => 2 }), {});
@@ -8801,6 +8804,23 @@ async function crossEpoch(mod) {
   late.ch.start(); await settle(late);
   out.atLate = at(late);
   await late.ch.stop();
+  /* The second computer, started again, is not left out of step: its next edit, made as its Studio makes one from the team file
+     it holds (the next rev, D4 added back), goes up and stands at the relay. */
+  const b2 = leadOf("tce-b", new Map([[1, KM1], [2, KM2]]));
+  b2.ch.start(); await settle(b2);
+  let hold = null;
+  try { hold = JSON.parse(read(b2.mirror, C.TEAM_NAME)); } catch { hold = null; }
+  if (hold) {
+    const k = hold.epoch === 2 ? KM2 : KM1, keep = hold.roster.filter(r => r.desk.id !== D4.k.keyId).map(r => [D1, D2, D3].find(d => d.k.keyId === r.desk.id));
+    put(b2.mirror, C.TEAM_NAME, doc(hold.epoch, hold.rev + 1, keep.map(d => entry(d, k, hold.epoch)).concat([entry(D4, k, hold.epoch)])));
+  }
+  await settle(b2);
+  out.bNextWaits = b2.said.filter(l => l.indexOf(C.TEAM_NAME) >= 0 && l.indexOf("waits") >= 0).length;
+  await b2.ch.stop();
+  const fourth = program("tce-f-" + tag, LEAD, "root", { mod, rt, pin: pinOf, keyFor: e => (e === 1 ? KM1 : e === 2 ? KM2 : null), sealEpoch: () => 2 });
+  fourth.ch.start(); await settle(fourth);
+  out.atRelayNext = at(fourth);
+  await fourth.ch.stop();
   return out;
 }
 /* The control: one computer of the lead's key that sent its epoch-2 team file. An own team file at epoch 1, later by its counter,
@@ -8854,10 +8874,27 @@ if (partOn("pTce")) {
     check(x.d1Key2 && x.d2Key2 && x.deskUp && x.deskRefused === 0 && two(x.atLate),
       "tce1d each remaining desk takes the epoch-2 key from its own copy and its upload afterwards reaches the lead, and a desk opened afterwards reads epoch 2 from the relay: "
       + JSON.stringify({ d1Key: x.d1Key2, d2Key: x.d2Key2, upload: x.deskUp, said: x.deskRefused, late: x.atLate }));
+    const same = await rootParallel(C, "team", 3, 3);
+    check(JSON.stringify(x.clash && x.clash.map(c => c.dropped)) === JSON.stringify([[x.ids.d3, x.ids.d4].sort()])
+      && JSON.stringify(x.droppedRestart) === JSON.stringify([[x.ids.d3, x.ids.d4].sort()])
+      && JSON.stringify(same.dropped) === JSON.stringify([[same.ids.dA]]),
+      "tce1h the clash record names each member the passed-over file has and the standing one does not, so a member the second computer added is not withdrawn in silence: across the move "
+      + JSON.stringify({ dropped: x.clash && x.clash.map(c => c.dropped), restart: x.droppedRestart, want: [x.ids.d3, x.ids.d4].sort() })
+      + ", two files at one rev " + JSON.stringify({ dropped: same.dropped, want: [same.ids.dA] }));
+    const nx = x.atRelayNext;
+    check(!!nx && nx.epoch === 2 && nx.rev === 2 && nx.d4 === true && nx.d3 === false && x.bNextWaits === 0,
+      "tce1g the second computer is not left out of step: started again, its next edit, made from the team file it holds, goes up and stands at the relay at epoch 2, without the desk taken off: "
+      + JSON.stringify({ relay: nx, waits: x.bNextWaits }));
     const c = await crossEpochSent(C);
     check(c.sentAt2 && c.fetched && c.kept && c.puts === 0 && c.clash === 0 && c.replay,
       "tce1f the control: an own epoch-1 team file the relay serves after this computer sent epoch 2 is refused as before, the mirror keeps epoch 2, nothing is sent or kept as a clash: "
       + JSON.stringify(c));
+    if (PLANTS_OFF) skip("tce1i lifting plant:clash-dropped keeps no member of the passed-over file");
+    else {
+      const p = await liftChannel("plant:clash-dropped", async mod => { const y = await crossEpoch(mod); return !!y.clash && y.clash.length === 1 && y.clash[0].dropped === undefined; });
+      check(p.turned && p.back, "tce1i lifting plant:clash-dropped keeps no member of the passed-over file in the clash record, and the product file is never written: "
+        + p.detail + ", sha " + (p.back ? "restored" : "differs"));
+    }
     if (PLANTS_OFF) skip("tce1e lifting plant:own-epoch-ahead leaves the relay's main team file at the old epoch");
     else {
       const p = await liftChannel("plant:own-epoch-ahead", async mod => { const y = await crossEpoch(mod); return !!y.atRelay && y.atRelay.epoch === 1 && y.atB.epoch === 1; });
