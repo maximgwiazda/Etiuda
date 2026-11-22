@@ -350,25 +350,18 @@ function loadedMeta(stamp){
 function ecCopyHtml(f){
   return f.builtIn ? '<span class="ec-copy" data-ec-copy="builtin">'+esc(t("comes with Etiuda"))+'</span>' : "";
 }
-const catParentOf=new Map();
 let paintListSeq=0, listFetchingContent=false;
-function isTeamCatalogId(id, grew, parentOf, listedSet){
-  if(!id || !listedSet || !listedSet.size) return false;
-  if(listedSet.has(id)) return true;
-  if(grew && grew.root && listedSet.has(String(grew.root))) return true;
-  const seen=new Set([id]);
-  let cur=grew && grew.id ? String(grew.id) : (parentOf && parentOf.get(id)) || "";
-  while(cur && !seen.has(cur)){
-    if(listedSet.has(cur)) return true;
-    seen.add(cur);
-    cur=(parentOf && parentOf.get(cur)) || "";
-  }
-  return false;
+/* Whether a row's catalog is the team's: the shell's own answer, teamListedDoc over the file the row is, sent in the content view as
+   teamPins (the signed pins of the team's catalogs this desk holds). The page never derives the rule itself: a catalog under a listed
+   id that the lead did not sign, or a copy whose first hop the lead did not sign, is personal (board 1014, 2026-11-22). */
+function isTeamCatalogPin(pin, content){
+  let team=false;
+  team=!!pin && !!content && Array.isArray(content.teamPins) && content.teamPins.indexOf(String(pin))>=0; /* plant:page-team-by-shell */
+  return team;
 }
-function rowShareParts(id, grew, content, parentOf){
+function rowShareParts(id, pin, content){
   if(!content || !content.team || !id) return {lockHtml:"", teamHtml:""};
-  const listed=new Set(content.listed||[]);
-  if(isTeamCatalogId(id, grew, parentOf, listed)){
+  if(isTeamCatalogPin(pin, content)){
     return {
       lockHtml:"",
       teamHtml:'<span class="ec-team">'+sxIcon("people")+'<span data-i18n-text="Team catalog">'+esc(t("Team catalog"))+'</span></span>'
@@ -385,8 +378,8 @@ function rowShareParts(id, grew, content, parentOf){
 function openPrivateBubble(id, nowPriv){
   if(!id) return;
   const msg=nowPriv
-    ? t("The team's lead still sees this catalog's name and edition, but its content and this desk's changes to it are never sent. Marking it withdraws what this desk had shared of it; what the team's lead has already opened cannot be taken back.")
-    : t("This catalog is no longer private: the team's lead can now see its content and this desk's changes to it.");
+    ? t("The team's lead sees nothing of this catalog: not its name or edition, its content, this desk's changes to it, nor that it is used here. Marking it withdraws what this desk had shared of it; what the lead's Studio already received of it stays there.")
+    : t("This catalog is no longer private: the team's lead can now see it, its content and this desk's changes to it.");
   openTeamBubble({
     id:"ePrivateBubble",
     cls:"e-priv-bub",
@@ -416,9 +409,6 @@ function paintCatalogList(){
     listFetchingContent=false;
     if(!box.isConnected || seq!==paintListSeq) return;
     const files=all.filter(f=>!f.desk);
-    catParentOf.clear();
-    files.forEach(f=>{ if(f.id && f.grew && f.grew.id) catParentOf.set(String(f.id),String(f.grew.id)); });
-    if(held && held.id && held.grew && held.grew.id) catParentOf.set(String(held.id),String(held.grew.id));
     const shaped=f=>!!f.desk && f.id.indexOf(f.desk.id+"-")===0;
     const desks=all.filter(f=>shaped(f) && !(me && f.desk.id===me.id)), own=me?all.filter(f=>shaped(f) && f.desk.id===me.id):[];
     const heldId=held?String(held.id||""):"";
@@ -467,7 +457,7 @@ function paintCatalogList(){
       const on=i===onAt;
       const stamp=catalogStamp(f.edition,f.mtime,f.rev);
       const copy=ecCopyHtml(f), meta=on?loadedMeta(stamp):ecMeta(stamp,f);
-      const share=rowShareParts(String(f.id||""),f.grew,content,catParentOf);
+      const share=rowShareParts(String(f.id||""),f.sha,content);
       return {id:f.id, sha:f.sha, on:on, team:f.leadSigned===true, html:ecRowHtml({ name:f.name, file:f.name, mtime:f.mtime, loaded:on, newer:at>0 && f.mtime>at,
         sample:!!f.sample, meta:copy&&meta ? copy+" · "+meta : copy||meta, trust:on?heldCatalogTrust():"", print:on?heldCatalogPrint():"", extra:extraFor(f.id,on)+adoptFor(f.id,on,f.leadSigned===true),
         lockHtml:share.lockHtml, teamHtml:share.teamHtml })};
@@ -477,7 +467,7 @@ function paintCatalogList(){
        existed. What is APPLIED decides rather than what is stored, because "no catalog" over two
        hundred visible cards is worse than useless. A colleague's file worked from is its own row. */
     if((held||catalogLoaded()||(cards||[]).length) && onAt<0 && deskOn<0){
-      const share=rowShareParts(heldId,held&&held.grew,content,catParentOf);
+      const share=rowShareParts(heldId,held&&held.pin,content);
       tops.unshift({id:heldId, sha:String(held&&held.pin||""), on:true, html:ecRowHtml({ name:shownCatalogName(catalogFileName()),
         loaded:true, newer:false, meta:loadedMeta(""), trust:heldCatalogTrust(), print:heldCatalogPrint(), extra:mineLine+adoptFor(heldId,true,false),
         lockHtml:share.lockHtml, teamHtml:share.teamHtml })});
@@ -997,7 +987,7 @@ function paintCatPrivate(){
   if(!el) return;
   const held=storedCatalog(), id=held&&held.id?String(held.id):"", content=teamContentNow();
   let shown=false;
-  shown=!!(content && content.team && id && !isTeamCatalogId(id,held&&held.grew,catParentOf,new Set(content.listed||[])) && (content.private||[]).indexOf(id)>=0); /* plant:bar-private-lock */
+  shown=!!(content && content.team && id && !isTeamCatalogPin(held&&held.pin,content) && (content.private||[]).indexOf(id)>=0); /* plant:bar-private-lock */
   let lock=el.querySelector(".cn-lock");
   el.classList.toggle("is-private",shown);
   if(!shown){ if(lock) lock.remove(); return; }

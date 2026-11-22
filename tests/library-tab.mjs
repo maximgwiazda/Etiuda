@@ -1075,13 +1075,13 @@ await checkAsync("L22 Catalog & data shows Private toggle on personal rows only,
   let contentState = { team: "", told: true, private: ["cat-priv"], listed: ["cat-team"] };
   const privCalls = [];
   const FILES = [
-    { name: "team.ec", mtime: 4000, cards: 2, edition: "edition 1", macros: 2, intents: 1, cats: 1, id: "cat-team", rev: 1, grew: null },
-    { name: "team-fork.ec", mtime: 3500, cards: 2, edition: "rev 1", macros: 2, intents: 1, cats: 1, id: "cat-fork", rev: 1, grew: { id: "cat-team", rev: 1, sha: "a".repeat(64) } },
+    { name: "team.ec", mtime: 4000, cards: 2, edition: "edition 1", macros: 2, intents: 1, cats: 1, id: "cat-team", rev: 1, grew: null, sha: "sha256:" + "e".repeat(64) },
+    { name: "team-fork.ec", mtime: 3500, cards: 2, edition: "rev 1", macros: 2, intents: 1, cats: 1, id: "cat-fork", rev: 1, grew: { id: "cat-team", rev: 1, sha: "a".repeat(64) }, sha: "sha256:" + "f".repeat(64) },
     { name: "own.ec", mtime: 3000, cards: 2, edition: "rev 1", macros: 2, intents: 1, cats: 1, id: "cat-own", rev: 1, grew: null },
     { name: "priv.ec", mtime: 2000, cards: 2, edition: "rev 1", macros: 2, intents: 1, cats: 1, id: "cat-priv", rev: 1, grew: null },
   ];
-  const MARK_EN = "The team's lead still sees this catalog's name and edition, but its content and this desk's changes to it are never sent. Marking it withdraws what this desk had shared of it; what the team's lead has already opened cannot be taken back.";
-  const UNMARK_EN = "This catalog is no longer private: the team's lead can now see its content and this desk's changes to it.";
+  const MARK_EN = "The team's lead sees nothing of this catalog: not its name or edition, its content, this desk's changes to it, nor that it is used here. Marking it withdraws what this desk had shared of it; what the lead's Studio already received of it stays there.";
+  const UNMARK_EN = "This catalog is no longer private: the team's lead can now see it, its content and this desk's changes to it.";
   window.E_HOST = Object.assign({}, hadHost, {
     catalogFiles: () => Promise.resolve(FILES),
     branchIdentity: () => Promise.resolve(null),
@@ -1120,8 +1120,10 @@ await checkAsync("L22 Catalog & data shows Private toggle on personal rows only,
     if (offSw || offTeamLbl || offListLock || offBarLock) {
       return "off-team showed controls: " + JSON.stringify({ offSw, offTeamLbl, offListLock, offBarLock: !!offBarLock });
     }
-    /* On-team: team.ec and team-fork.ec have Team catalog and no switch; own.ec has unchecked switch; priv.ec has checked switch + lock; bar has lock. */
-    contentState = { team: "t-lib", told: true, private: ["cat-priv"], listed: ["cat-team"] };
+    /* On-team: team.ec and team-fork.ec have Team catalog and no switch; own.ec has unchecked switch; priv.ec has checked switch + lock; bar has lock.
+       Board 1014, 2026-11-22: a row is the team's because the shell's teamPins names its pin (it was by its id or grew chain reaching a
+       listed id); the two team rows are named there. */
+    contentState = { team: "t-lib", told: true, private: ["cat-priv"], listed: ["cat-team"], teamPins: ["sha256:" + "e".repeat(64), "sha256:" + "f".repeat(64)] };
     await TJ.teamContent();
     await CO.paintCatalogList();
     CO.paintCatPrivate();
@@ -1209,6 +1211,73 @@ await checkAsync("L23 one-time told notice opens from #catNow once and sends con
   }
 });
 
+/* The test architect's HOLD 1 on board 1014 (2026-11-22): a row is the team's only where the shell says so, by its own teamListedDoc
+   answer sent in contentView as teamPins (the signed pins of the team's catalogs this desk holds). A stranger-signed file under a
+   listed id, and a copy whose first hop the lead did not sign, are personal rows with the Private switch and lock; the lead's signed
+   edition is unchanged; and when the shell's answer changes, the page follows it, never a rule of its own. */
+await checkAsync("L24 a row is the team's by the shell's teamPins: a listed id unsigned by the lead is personal, with its switch and lock, and the page follows the shell", async () => {
+  if (wired) return wired;
+  const CAT = await import(MOD("catalog.js"));
+  const CO = await import(MOD("catalog-offer.js"));
+  const TJ = await import(MOD("team-join.js"));
+  const ST = await import(MOD("storage.js"));
+  const RP = await import(MOD("repaint.js"));
+  const hadHost = window.E_HOST;
+  const hadUi = ST.lsGet("eUiLang");
+  const hadCatalog = ST.lsGet("eCatalog");
+  const hadCatalogFile = ST.lsGet("eCatalogFile");
+  const P_LEAD = "sha256:" + "1".repeat(64), P_STR = "sha256:" + "2".repeat(64), P_FORK = "sha256:" + "3".repeat(64);
+  const FILES = [
+    { name: "lead.ec", mtime: 4000, cards: 2, edition: "edition 1", macros: 2, intents: 1, cats: 1, id: "cat-team", rev: 1, grew: null, sha: P_LEAD, leadSigned: true },
+    { name: "stranger.ec", mtime: 3500, cards: 2, edition: "rev 1", macros: 2, intents: 1, cats: 1, id: "cat-team", rev: 1, grew: null, sha: P_STR },
+    { name: "fork.ec", mtime: 3000, cards: 2, edition: "rev 1", macros: 2, intents: 1, cats: 1, id: "cat-fork", rev: 1, grew: { id: "cat-team", rev: 1, sha: "c".repeat(64) }, sha: P_FORK },
+  ];
+  let contentState = { team: "t-l24", told: true, private: [], listed: ["cat-team"], teamPins: [P_LEAD] };
+  const give = () => Promise.resolve(JSON.parse(JSON.stringify(contentState)));
+  window.E_HOST = Object.assign({}, hadHost, {
+    catalogFiles: () => Promise.resolve(FILES),
+    branchIdentity: () => Promise.resolve(null),
+    catalogLeads: () => [],
+    teamJoin: (op) => (op === "content" ? give() : Promise.resolve({ sealed: null, join: null, leads: [] })),
+    onTeamJoin: () => {},
+    onCatalogCopy: () => {},
+  });
+  const paint = async () => { await TJ.teamContent(); await CO.paintCatalogList(); CO.paintCatPrivate(); await settle(); };
+  try {
+    ST.lsSet("eUiLang", "en");
+    RP.setUiLang("en");
+    CAT.storeCatalog({ format: 2, kind: "etiuda-catalog", id: "cat-team", rev: 1, name: "Mine", pin: P_STR, langs: [{ code: "en", label: "EN" }], tags: [], cards: [] });
+    ST.lsSet("eCatalogFile", "stranger.ec");
+    CO.paintCatNow();
+    MG.openManage();
+    await paint();
+    const box = host().querySelector("#mgCatList");
+    if (!box) return "no #mgCatList";
+    const rowOf = f => box.querySelector('.ec-row[data-ec-file="' + f + '"]');
+    const team = r => !!r && !!r.querySelector(".ec-team") && !r.querySelector("input[data-ec-private]");
+    const sw = r => r && r.querySelector('input[data-ec-private]');
+    const first = { lead: team(rowOf("lead.ec")), stranger: !!sw(rowOf("stranger.ec")) && !rowOf("stranger.ec").querySelector(".ec-team"),
+      fork: !!sw(rowOf("fork.ec")) && !rowOf("fork.ec").querySelector(".ec-team") };
+    /* The shell holds the mark on cat-team for the stranger's file: the personal row is locked, the lead's row stays the team's. */
+    contentState = Object.assign({}, contentState, { private: ["cat-team"] });
+    await paint();
+    const marked = { stranger: !!sw(rowOf("stranger.ec")) && sw(rowOf("stranger.ec")).checked && !!rowOf("stranger.ec").querySelector(".ec-lock"),
+      lead: team(rowOf("lead.ec")) && !rowOf("lead.ec").querySelector(".ec-lock"), bar: !!doc.querySelector("#catNow .cn-lock") };
+    /* The shell's answer changes: every row it names is the team's, with no switch and no lock. */
+    contentState = Object.assign({}, contentState, { private: [], teamPins: [P_LEAD, P_STR, P_FORK] });
+    await paint();
+    const follows = { stranger: team(rowOf("stranger.ec")), fork: team(rowOf("fork.ec")), bar: !doc.querySelector("#catNow .cn-lock") };
+    const ok = first.lead && first.stranger && first.fork && marked.stranger && marked.lead && marked.bar && follows.stranger && follows.fork && follows.bar;
+    return ok || JSON.stringify({ first, marked, follows });
+  } finally {
+    window.E_HOST = hadHost;
+    try { if (hadCatalog == null) ST.lsDel("eCatalog"); else ST.lsSet("eCatalog", hadCatalog); } catch (e) {}
+    try { if (hadCatalogFile == null) ST.lsDel("eCatalogFile"); else ST.lsSet("eCatalogFile", hadCatalogFile); } catch (e) {}
+    try { if (hadUi == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", hadUi); } catch (e) {}
+    try { RP.setUiLang(hadUi === "pl" ? "pl" : "en"); } catch (e) {}
+  }
+});
+
 /* ================================================================================================
    THE FAILURE PATHS: each plant lifted in a scratch copy of src/, the leg it guards run there by a child.
    ================================================================================================ */
@@ -1224,6 +1293,7 @@ const PLANTS = [
   { tag: "list-private-personal-only", file: "catalog-offer.js", leg: "L22" },
   { tag: "bar-private-lock", file: "catalog-offer.js", leg: "L22" },
   { tag: "told-bubble-said", file: "team-join.js", leg: "L23" },
+  { tag: "page-team-by-shell", file: "catalog-offer.js", leg: "L24" },
 ];
 if (childAt < 0) {
   for (const p of PLANTS) {

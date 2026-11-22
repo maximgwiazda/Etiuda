@@ -24,10 +24,10 @@ const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 const EXPECTED = 148;
 
-const JOIN_EN = "Once this desk joins, the team's lead can see the catalogs it uses, their content included, and this desk's changes to them. The lead's Studio can take a copy of any of them at any time, without asking here: of a team catalog, one the lead publishes to the team, sealed for the team; of a personal catalog, any other on this desk, sealed for the lead alone. A personal catalog can be marked Private in the Library, under Catalog & data, and is then never sent, though the lead still sees its name and edition. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, and Studio shows them in the team's totals.";
-const JOIN_PL = "Po dołączeniu lider zespołu widzi katalogi, których używa to stanowisko, razem z ich treścią, oraz zmiany wprowadzone w nich na tym stanowisku. Studio lidera może w każdej chwili, bez pytania tutaj, pobrać kopię każdego z nich: katalogu zespołowego, czyli publikowanego przez lidera dla zespołu, zapieczętowaną dla zespołu, a katalogu osobistego, czyli każdego innego na tym stanowisku, zapieczętowaną wyłącznie dla lidera. Katalog osobisty można oznaczyć jako Prywatny w Bibliotece, w części Katalog i dane, i wtedy nigdy nie jest wysyłany, choć lider nadal widzi jego nazwę i wydanie. Studio lidera wymienia to stanowisko z nazwy, chyba że organizacja wyłączy nazwy, razem z używanym katalogiem, jego wydaniem i okresem zliczania, i wymienia je dalej, gdy przestanie się odzywać. Własne dane stanowiska trafiają do lidera zapieczętowane, a Studio pokazuje je w sumach zespołu.";
-const STATUS_EN = "The team's lead can see the catalogs this desk uses, their content included, and this desk's changes to them. The lead's Studio can take a copy of any of them at any time, without asking here: of a team catalog, one the lead publishes to the team, sealed for the team; of a personal catalog, any other on this desk, sealed for the lead alone. A personal catalog can be marked Private in the Library, under Catalog & data, and is then never sent, though the lead still sees its name and edition. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, and Studio shows them in the team's totals.";
-const STATUS_PL = "Lider zespołu widzi katalogi, których używa to stanowisko, razem z ich treścią, oraz zmiany wprowadzone w nich na tym stanowisku. Studio lidera może w każdej chwili, bez pytania tutaj, pobrać kopię każdego z nich: katalogu zespołowego, czyli publikowanego przez lidera dla zespołu, zapieczętowaną dla zespołu, a katalogu osobistego, czyli każdego innego na tym stanowisku, zapieczętowaną wyłącznie dla lidera. Katalog osobisty można oznaczyć jako Prywatny w Bibliotece, w części Katalog i dane, i wtedy nigdy nie jest wysyłany, choć lider nadal widzi jego nazwę i wydanie. Studio lidera wymienia to stanowisko z nazwy, chyba że organizacja wyłączy nazwy, razem z używanym katalogiem, jego wydaniem i okresem zliczania, i wymienia je dalej, gdy przestanie się odzywać. Własne dane stanowiska trafiają do lidera zapieczętowane, a Studio pokazuje je w sumach zespołu.";
+const JOIN_EN = "Once this desk joins, the team's lead can see the catalogs it uses, their content included, and this desk's changes to them. The lead's Studio can take a copy of any of them at any time, without asking here: of a team catalog, one the lead publishes to the team, sealed for the team; of a personal catalog, any other on this desk, sealed for the lead alone. A personal catalog can be marked Private in the Library, under Catalog & data; the lead then sees nothing of it, not even that it is used. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses unless that catalog is Private, and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, none of them from a Private catalog, and Studio shows them in the team's totals.";
+const JOIN_PL = "Po dołączeniu lider zespołu widzi katalogi, których używa to stanowisko, razem z ich treścią, oraz zmiany wprowadzone w nich na tym stanowisku. Studio lidera może w każdej chwili, bez pytania tutaj, pobrać kopię każdego z nich: katalogu zespołowego, czyli publikowanego przez lidera dla zespołu, zapieczętowaną dla zespołu, a katalogu osobistego, czyli każdego innego na tym stanowisku, zapieczętowaną wyłącznie dla lidera. Katalog osobisty można oznaczyć jako Prywatny w Bibliotece, w części Katalog i dane; lider nie widzi wtedy nic z niego, nawet tego, że jest używany. Studio lidera wymienia to stanowisko z nazwy, chyba że organizacja wyłączy nazwy, razem z używanym katalogiem i jego wydaniem, o ile nie jest to katalog prywatny, oraz z okresem zliczania, i wymienia je dalej, gdy przestanie się odzywać. Własne dane stanowiska trafiają do lidera zapieczętowane, bez żadnych danych z katalogu prywatnego, a Studio pokazuje je w sumach zespołu.";
+const STATUS_EN = "The team's lead can see the catalogs this desk uses, their content included, and this desk's changes to them. The lead's Studio can take a copy of any of them at any time, without asking here: of a team catalog, one the lead publishes to the team, sealed for the team; of a personal catalog, any other on this desk, sealed for the lead alone. A personal catalog can be marked Private in the Library, under Catalog & data; the lead then sees nothing of it, not even that it is used. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses unless that catalog is Private, and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, none of them from a Private catalog, and Studio shows them in the team's totals.";
+const STATUS_PL = "Lider zespołu widzi katalogi, których używa to stanowisko, razem z ich treścią, oraz zmiany wprowadzone w nich na tym stanowisku. Studio lidera może w każdej chwili, bez pytania tutaj, pobrać kopię każdego z nich: katalogu zespołowego, czyli publikowanego przez lidera dla zespołu, zapieczętowaną dla zespołu, a katalogu osobistego, czyli każdego innego na tym stanowisku, zapieczętowaną wyłącznie dla lidera. Katalog osobisty można oznaczyć jako Prywatny w Bibliotece, w części Katalog i dane; lider nie widzi wtedy nic z niego, nawet tego, że jest używany. Studio lidera wymienia to stanowisko z nazwy, chyba że organizacja wyłączy nazwy, razem z używanym katalogiem i jego wydaniem, o ile nie jest to katalog prywatny, oraz z okresem zliczania, i wymienia je dalej, gdy przestanie się odzywać. Własne dane stanowiska trafiają do lidera zapieczętowane, bez żadnych danych z katalogu prywatnego, a Studio pokazuje je w sumach zespołu.";
 const SENT_EN = "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.";
 const SENT_LEAD_EN = "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team's lead alone.";
 const SENT_LEAD_PL = "Na prośbę Studia lidera zespołu przesłano kopię katalogu używanego na tym stanowisku wyłącznie liderowi zespołu.";
@@ -1053,6 +1053,8 @@ try {
     put(hist.share, "board.ec", newerText);
     await hist.D.ask("etiuda:catalog-files");
     await tick();
+    /* Told now, after the history is kept: an untold desk names no personal catalog in in-use.ec (board 1014, 2026-11-22). */
+    await hist.D.ask("etiuda:team-join", "content-said", hist.team, "");
     const histBoot = hist.D.sync("etiuda:catalog");
     const histPin = pinOf(hist.D, histBoot || "");
     take(hist.D, histPin);
@@ -1145,10 +1147,10 @@ try {
     /* Board 1014: copywriter words present and old switch notices absent; join sends content-said. */
     const TOLD_HEAD_EN = "What the team's lead can see has changed.";
     const TOLD_HEAD_PL = "Zmieniło się to, co widzi lider zespołu.";
-    const TOLD_LINE_EN = "From now on, the team's lead can see every catalog this desk uses, their content included, and this desk's changes to them: personal catalogs as well as team catalogs. A personal catalog can be marked Private in the Library, under Catalog & data, and is then never sent, though the lead still sees its name and edition. Nothing has been sent yet.";
-    const TOLD_LINE_PL = "Od teraz lider zespołu widzi każdy katalog, którego używa to stanowisko, razem z jego treścią, oraz zmiany wprowadzone w nim na tym stanowisku: nie tylko katalogi zespołowe, lecz także osobiste. Katalog osobisty można oznaczyć jako Prywatny w Bibliotece, w części Katalog i dane, i wtedy nigdy nie jest wysyłany, choć lider nadal widzi jego nazwę i wydanie. Nic jeszcze nie zostało wysłane.";
-    const UNMARK_EN = "This catalog is no longer private: the team's lead can now see its content and this desk's changes to it.";
-    const UNMARK_PL = "Ten katalog nie jest już prywatny: lider zespołu może teraz zobaczyć jego treść i zmiany wprowadzone w nim na tym stanowisku.";
+    const TOLD_LINE_EN = "From now on, the team's lead can see every catalog this desk uses, their content included, and this desk's changes to them: personal catalogs as well as team catalogs. A personal catalog can be marked Private in the Library, under Catalog & data; the lead then sees nothing of it, not even that it is used. Nothing of this desk's personal catalogs has been sent yet.";
+    const TOLD_LINE_PL = "Od teraz lider zespołu widzi każdy katalog, którego używa to stanowisko, razem z jego treścią, oraz zmiany wprowadzone w nim na tym stanowisku: nie tylko katalogi zespołowe, lecz także osobiste. Katalog osobisty można oznaczyć jako Prywatny w Bibliotece, w części Katalog i dane; lider nie widzi wtedy nic z niego, nawet tego, że jest używany. Z katalogów osobistych tego stanowiska nic jeszcze nie zostało wysłane.";
+    const UNMARK_EN = "This catalog is no longer private: the team's lead can now see it, its content and this desk's changes to it.";
+    const UNMARK_PL = "Ten katalog nie jest już prywatny: lider zespołu może teraz widzieć ten katalog, jego treść i zmiany wprowadzone w nim na tym stanowisku.";
     const tjSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "team-join.js"), "utf8");
     const removedGone = ["turned on copies of unlisted catalogs", "turned off copies of unlisted catalogs", "team's rules apply to it again", "copies of unlisted catalogs are off"]
       .every(s => lang.indexOf(s) < 0 && tjSrc.indexOf(s) < 0 && settings.indexOf(s) < 0);
@@ -1664,10 +1666,13 @@ try {
       const kept = (listedP.box.D.envelope().catalogPrivate || []).length;
       const env = unlistedP.box.D.envelope().catalogPrivate || [];
       const useDoc = openSealedDoc(unlistedP.box.D, inUsePath(unlistedP.box.share, unlistedP.box.me.id), unlistedP.box.key);
-      const nowhere = !!useDoc && !/private/i.test(JSON.stringify(useDoc)) && !/private/i.test(JSON.stringify(fs.readdirSync(unlistedP.box.share)));
+      /* A catalog marked private is not named in in-use.ec at all: the file says cleared and names none (board 1014, 2026-11-22;
+         it was named, with no word of the mark). */
+      const nowhere = !!useDoc && useDoc.cleared === true && !useDoc.catalog && !/private/i.test(JSON.stringify(useDoc))
+        && !/private/i.test(JSON.stringify(fs.readdirSync(unlistedP.box.share)));
       check(!unlistedP.written && listedP.written && !grown.written && Array.isArray(view.private) && view.private.length === 0 && freed.written && !!freed.team && grownFreed.written
           && kept === 0 && env.length === 1 && env[0] === "quay-held" && nowhere,
-        "b0d a catalog the team does not list, marked private, is answered to nobody, nor a copy grown from it; a listed one takes no mark and is answered (round six); the mark is kept in the desk envelope alone, and taken off, the catalog is answered ("
+        "b0d a catalog the team does not list, marked private, is answered to nobody, nor a copy grown from it, nor named in in-use.ec; a listed one takes no mark and is answered (round six); the mark is kept in the desk envelope alone, and taken off, the catalog is answered ("
         + [unlistedP.written, listedP.written, grown.written, freed.written, grownFreed.written].join(",") + ")");
       if (PLANTS_OFF) skip("b0j lifting plant:s0b-private turns b0d red: a catalog marked private is answered");
       else {
@@ -2449,11 +2454,15 @@ try {
         putAsk(box, "Asklistedmark", pin, 1);
         box.D.api.tryCatalogAsk(box.D.win);
         const ans = answerPath(box.share, box.me.id);
-        await writeCopy(box, "98989898", "quay-held");
+        /* The copy grows from the lead's own signed edition (grew.sha its pin), which is what makes it the team's (board 1014,
+           2026-11-22): a copy whose first hop the lead did not sign is personal, and the mark holds for it. */
+        const copy = branchDoc(box, "98989898", "quay-held");
+        copy.grew.sha = pin;
+        await box.D.ask("etiuda:branch-write", "quay-98989898", JSON.stringify(copy));
         return { team: !!openSealedDoc(box.D, ans, box.key), copy: fs.existsSync(branchAt(box, "98989898")) };
       };
       const m = await listedMark("r6-listed-mark");
-      check(m.team && m.copy, "r6a a listed catalog the desk holds a private mark for is answered under the team key, and its copy written, as any listed one (" + JSON.stringify(m) + ")");
+      check(m.team && m.copy, "r6a a listed catalog the desk holds a private mark for is answered under the team key, and its copy grown from the lead's edition written, as any listed one (" + JSON.stringify(m) + ")");
       if (PLANTS_OFF) skip("r6b letting the mark override the list turns r6a red");
       else {
         const NL6 = String.fromCharCode(10);
@@ -2478,7 +2487,8 @@ try {
         const NL6 = String.fromCharCode(10);
         const planted = SRC.split(NL6).map(l => l.indexOf("plant:s0b-mark-listed") >= 0 ? "  if (CATALOG_ID_RE.test(id)) {" : l).join(NL6);
         const p = planted !== SRC ? await markOn("r6-mark-on-plant", planted) : null;
-        check(!!p && p.listedTaken, "r6d lifting plant:s0b-mark-listed turns r6c red: the listed catalog takes the mark (" + (p ? JSON.stringify(p) : "plant not found") + ")");
+        /* Read from the envelope: the view lists only the marks that hold (board 1014, 2026-11-22), so it hides this one. */
+        check(!!p && p.stored.split(",").indexOf("quay-held") >= 0, "r6d lifting plant:s0b-mark-listed turns r6c red: the listed catalog takes the mark, kept in the envelope (" + (p ? JSON.stringify(p) : "plant not found") + ")");
       }
     }
     {
