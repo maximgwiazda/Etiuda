@@ -306,7 +306,9 @@ try {
   /* ---- the lead, a catalog invented from nothing, and the team ------------------------------------------------- */
   const pubHex = k => k.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
   const lead = crypto.generateKeyPairSync("ed25519"), forger = crypto.generateKeyPairSync("ed25519");
-  const LEAD = { keyId: "lamp-lead", public: pubHex(lead.publicKey) }, FORGED = { keyId: "lamp-lead", public: pubHex(forger.publicKey) };
+  /* The lead's key id is the one Studio makes of its public half, the form a relay invitation's id must take (shell/main.js inviteKeyHolds). */
+  const LEAD = { keyId: "studio-" + crypto.createHash("sha256").update(Buffer.from(pubHex(lead.publicKey), "hex")).digest("hex").slice(0, 16), public: pubHex(lead.publicKey) };
+  const FORGED = { keyId: LEAD.keyId, public: pubHex(forger.publicKey) };
   const sign = (doc, key, keyId) => {
     const out = JSON.parse(JSON.stringify(doc));
     delete out.sig;

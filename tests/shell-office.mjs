@@ -2001,7 +2001,8 @@ try {
       const doc = { team: "t-" + crypto.randomBytes(8).toString("hex"),
         relay: { rt: crypto.randomBytes(16).toString("hex"), url: url,
           token: crypto.randomBytes(32).toString("hex"), inv: crypto.randomBytes(16).toString("hex") },
-        lead: { keyId: "lead-one", public: leadPub, name: "Ada Lane" }, secret: crypto.randomBytes(16).toString("hex") };
+        lead: { keyId: "studio-" + crypto.createHash("sha256").update(Buffer.from(leadPub, "hex")).digest("hex").slice(0, 16), public: leadPub, name: "Ada Lane" },
+        secret: crypto.randomBytes(16).toString("hex") };
       return "etiuda-join:" + Buffer.from(JSON.stringify(doc)).toString("base64url");
     };
     const withoutHarness = async fn => {
