@@ -790,8 +790,14 @@ function createCore(deps) {
     freedLive = list => (Array.isArray(list) ? list : []).filter(x => plain(x) && Number.isSafeInteger(x.at) && x.at + CERT_SPAN_MS > now); /* plant:freed-ordinary-lapse */
     if (grant.seats === undefined && Array.isArray(grant.freed)) {
       const held = new Map(freedLive(allWas && allWas.freed).map(x => [x.key, x.at])), newly = [];
-      for (const x of freedLive(grant.freed)) { const had = held.get(x.key); if (had === undefined || x.at > had) { held.set(x.key, x.at); newly.push(x.key); } }
-      const next = [...held].map(([key, t]) => ({ key, at: t })).sort((p, q) => q.at - p.at).slice(0, FREED_MAX);
+      for (const x of freedLive(grant.freed)) {
+        const had = held.get(x.key);
+        let later = had === undefined || x.at !== had;
+        later = had === undefined || x.at > had; /* plant:freed-ordinary-later */
+        if (later) { held.set(x.key, x.at); newly.push(x.key); }
+      }
+      let next = [...held].map(([key, t]) => ({ key, at: t })).sort((p, q) => q.at - p.at);
+      next = next.slice(0, FREED_MAX); /* plant:freed-ordinary-cap */
       store.put("freedAll", { freed: next, at: Math.max(at, allWas ? allWas.at : at) }); /* plant:freed-ordinary-kept */
       endFreed(newly);
       return;
