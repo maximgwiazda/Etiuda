@@ -9,7 +9,7 @@
  * HOW IT IS HELD, so a second tool can redo it. Each screen is shot twice at one device pixel to a CSS pixel with the dot field off in both: as it
  * is, and with the clearing taken out (.e-dot-hug and .e-dot-ic without ground or spread, .e-dot-ctrl without its ground). With no dots to clear,
  * the clearing is the page's own colour on the page's own colour, so the two shots are the same picture: a pixel inside the ground whose channel
- * differs by 24 or more is a pixel the clearing painted over something that is not the dots. Counted as clusters of such pixels (within 3 px of each
+ * differs by 8 or more (24 in the one band named at MIN_GAP) is a pixel the clearing painted over something that is not the dots. Counted as clusters of such pixels (within 3 px of each
  * other), per screen, theme and width. The screens: the empty desk, the loaded desk, every section of Settings, the Library and Maintenance, and
  * the first sign-in. Exit code is the number of failed checks; 78 when the run could not complete.
  */
@@ -112,9 +112,23 @@ async function bootFirstSignin(browser, pageUrl, theme, lang, vp) {
 }
 
 
-/* a channel apart by 24 or more: a covered border or word differs by 100 and more; the empty desk's link band differs by 18 on base and
-   is a faint tone, no element covered (board 1019 (9), report: left) */
-const MIN_GAP = Number(process.env.DOTS_GROUND_GAP) || 24;
+/* a channel apart by 8 or more: a covered border or word differs by 100 and more, and every screen's own difference is 0 */
+const MIN_GAP = Number(process.env.DOTS_GROUND_GAP) || 8;
+/* THE ONE BAND HELD AT 24. Every child of the empty desk is a stacking context of its own (template.html, .empty-desk>*{position:relative;
+   z-index:1}), so the link's patch under "Load catalog file" cannot lie below the button and its top edge covers the tail of the button's soft
+   shadow, by 18 levels at most. Excused only there: inside the shadow's reach below #emptyLoad and the patch round #emptyAddCard both. */
+const BAND_GAP = 24;
+const BAND = () => {
+  const btn = document.getElementById("emptyLoad"), link = document.getElementById("emptyAddCard");
+  const hug = link && link.closest(".e-dot-hug");
+  if (!btn || !hug) return null;
+  const sh = getComputedStyle(btn).boxShadow.match(/(-?[\d.]+)px (-?[\d.]+)px ([\d.]+)px/);
+  if (!sh) return null;
+  const reach = Math.abs(+sh[1]) + +sh[3], b = btn.getBoundingClientRect(), h = hug.getBoundingClientRect();
+  const x0 = Math.max(b.left - reach, h.left - 3), x1 = Math.min(b.right + reach, h.right + 3);
+  const y0 = Math.max(b.top, h.top - 3), y1 = Math.min(b.bottom + +sh[2] + +sh[3], h.bottom + 3);
+  return x1 > x0 && y1 > y0 ? [x0, y0, x1, y1] : null;
+};
 const OFF = ".dotfield>div,.sx-page,.fs-left{background-image:none !important}";
 const CLEAR = ".e-dot-hug{background:none !important;box-shadow:none !important}.e-dot-ic{background:none !important;box-shadow:none !important}"
   + ".e-dot-ctrl:not(:hover):not(:focus-visible):not(:active){background-color:transparent !important}";
@@ -164,7 +178,9 @@ async function diffOf(decoder, p) {
   const b = await p.screenshot({ encoding: "base64" });
   await p.evaluate((x) => x.remove(), clear);
   await p.evaluate((x) => x.remove(), off);
-  const boxes = await decoder.evaluate(PIXELS, MIN_GAP, a, b, R);
+  const band = await p.evaluate(BAND);
+  const boxes = (await decoder.evaluate(PIXELS, MIN_GAP, a, b, R)).filter((q) => !(band && q.max < BAND_GAP
+    && q.x0 >= Math.floor(band[0]) && q.x1 <= Math.ceil(band[2]) && q.y0 >= Math.floor(band[1]) && q.y1 <= Math.ceil(band[3])));
   const named = await p.evaluate((boxes) => boxes.slice(0, 12).map((q) => {
     const e = document.elementFromPoint((q.x0 + q.x1) / 2, (q.y0 + q.y1) / 2);
     return { box: [q.x0, q.y0, q.x1, q.y1], px: q.n, max: q.max, under: e ? e.tagName.toLowerCase() + "." + String(e.className).trim().split(/\s+/).join(".") + " " + (e.textContent || "").trim().slice(0, 30) : "" };
@@ -213,6 +229,31 @@ try {
       await sections(p, "settings [" + theme + "," + vpLabel + "]", () => window.openScreenTab("settings"), ".sx-sec", "data-sx");
       await sections(p, "library [" + theme + "," + vpLabel + "]", () => window.openManage(), ".sx-sec[data-lm]", "data-lm");
       await sections(p, "maintenance [" + theme + "," + vpLabel + "]", () => window.openScreenTab("maintenance"), ".sx-sec[data-mt]", "data-mt");
+      /* dots-route: the pass's numbers are the screen's alone. Settings reached after the other screens and Settings reached fresh after
+         Maintenance carry the same patches with the same inline order (tests/swap.mjs holds the whole markup the same way). */
+      const routeLabel = "dots-route [" + theme + "," + vpLabel + "]";
+      if (theme === "light" && vpLabel === "1280w" && (!ONLY || routeLabel.includes(ONLY))) {
+        const ZS = () => Array.from(document.querySelectorAll("#screenHost .sx-page .e-dot-hug > .e-dot-t"))
+          .map((w) => w.textContent.trim().slice(0, 24) + "=" + w.parentNode.style.zIndex);
+        const settingsFirst = async (q) => {
+          await q.evaluate(() => window.openScreenTab("settings"));
+          await q.waitForSelector("#screenHost .sx-nav .sx-sec", { timeout: 10000 });
+          await q.evaluate(() => { const b = document.querySelector("#screenHost .sx-nav .sx-sec"); if (b) b.click(); });
+          await sleep(200);
+          return q.evaluate(ZS);
+        };
+        const after = await settingsFirst(p);
+        const q = await boot(browser, urlFull, theme, "en", true, vp);
+        await q.evaluate(() => window.openScreenTab("maintenance"));
+        await q.waitForSelector("#screenHost .sx-page", { timeout: 10000 });
+        await sleep(150);
+        const fresh = await settingsFirst(q);
+        await closePage(q);
+        EXPECTED += 1;
+        const same = after.length > 0 && JSON.stringify(after) === JSON.stringify(fresh);
+        check(same, routeLabel + ": one screen reached two ways numbers its patches the same (" + after.length + " patches)",
+          same ? undefined : { after: after.slice(0, 6), fresh: fresh.slice(0, 6) });
+      }
       await closePage(p);
     }
   }
@@ -232,8 +273,10 @@ if (done && !process.env.DOTS_GROUND_ONLY && process.env.ETIUDA_PLANTS !== "off"
   const plantLab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-dots-ground-plant-"));
   const PLANTS = [
     ["words in the patch's own layer", ".e-dot-t{position:relative}", ".e-dot-t{position:static}", "settings [light,560w]/account"],
-    ["patches in the page's flow", "hug.style.zIndex = String(-1 - hugSeq++);", "hug.style.zIndex=\"auto\";", "settings [light,1280w]/account"],
-    ["patches in tree order", "hug.style.zIndex = String(-1 - hugSeq++);", "hug.style.zIndex=\"-1\";", "maintenance [light,1280w]/storage"],
+    ["patches in the page's flow", "if (hug.style.zIndex !== z) hug.style.zIndex = z;", "hug.style.zIndex=\"auto\";", "settings [light,1280w]/account"],
+    ["patches in tree order", "if (hug.style.zIndex !== z) hug.style.zIndex = z;", "hug.style.zIndex=\"-1\";", "maintenance [light,1280w]/storage"],
+    ["patches numbered by a page-wide count", "if (hug.style.zIndex !== z) hug.style.zIndex = z;",
+      "if (!hug.style.zIndex) hug.style.zIndex = String(-1 - (window.__dgSeq = (window.__dgSeq || 0) + 1));", "dots-route [light,1280w]"],
   ];
   for (const [name, from, to, leg] of PLANTS) {
     const at = raw.indexOf(from);
