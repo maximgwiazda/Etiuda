@@ -86,8 +86,8 @@ function suggestCountLine(){
 function suggestNoteText(){
   const st=orgModel();
   return orgRanks(st) && eAiOn()
-    ? t("When Quick replies opens on words selected in another program, and the words point clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. While the organisation's model is on, the selected words, at most their first 1,500 characters, are sent to {HOST} as Quick replies opens, with up to 12 short pieces of the cards being ranked, so that the model there can suggest the intents; this desk keeps no copy of them. The statistics count only how often suggestions appeared and how many were taken.").split("{HOST}").join(String(st.host||""))
-    : t("When Quick replies opens on words selected in another program, and the words point clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. The words are read only as Quick replies opens, and never kept or sent; the statistics count only how often suggestions appeared and how many were taken.");
+    ? t("When Quick replies opens with a customer's message selected in another program, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. While the organisation's model is on, the selected text, at most its first 1,500 characters, is sent to {HOST} as Quick replies opens, with up to 12 short pieces of the cards being ranked, so that the model there can suggest the intents; this desk keeps no copy of it. The statistics count only how often suggestions appeared and how many were taken.").split("{HOST}").join(String(st.host||""))
+    : t("When Quick replies opens with a customer's message selected in another program, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. The selected text is read only as Quick replies opens, and never kept or sent; the statistics count only how often suggestions appeared and how many were taken.");
 }
 function hotkeyRowHtml(){
   if(!hotkeyHost()) return "";
@@ -601,10 +601,10 @@ function aiGroups(){
   if(!eAiModel() && !orgRanks(st)) return [];
   return [{rows:[
     row("aisuggest","ai",w(t("Suggest intents with the built-in model"),t("Suggest intents with the organisation's model")),
-      w(t("Reads the selected words on this computer and suggests the intents they are closest to. Off, suggestions come from matching words."),
-        t("Sends the selected words, with up to 12 short pieces of the cards being ranked, to the organisation's model at {HOST} and suggests the intents they are closest to. Off, suggestions come from matching words.")),
+      w(t("Reads the selected message on this computer and suggests the intents it is closest to. Off, suggestions come from matching words."),
+        t("Sends the selected message, with up to 12 short pieces of the cards being ranked, to the organisation's model at {HOST} and suggests the intents it is closest to. Off, suggestions come from matching words.")),
       onoff("aisuggest", eAiOn(),
-        w(t("The model ranks the suggestions; nothing leaves this computer"),t("The organisation's model ranks the suggestions; the selected words and up to 12 short pieces of the cards are sent to {HOST}.")),
+        w(t("The model ranks the suggestions; nothing leaves this computer"),t("The organisation's model ranks the suggestions; the selected message and up to 12 short pieces of the cards are sent to {HOST}.")),
         t("Suggestions come from matching words, and the model stays unloaded"))),
     row("aisearch","ai",w(t("Search by meaning with the built-in model"),t("Search by meaning with the organisation's model")),
       w(t("From the third letter typed, the main search adds the cards and intents closest in meaning after those that match the words, ranked by the model on this computer. Off, it matches words only."),
@@ -627,7 +627,7 @@ function aiSearchOnLine(st){
 /* THE MODEL THAT RANKS SEARCH AND SUGGESTIONS, where the host can say: built-in, or the organisation's own service, whose
    fields open under the row. What machine policy set is shown as set and takes no change. The key is never drawn back. */
 function orgModelSentLine(st){
-  return (rewordSent() ? t("The search text, the selected words the suggestions are made from and up to 12 short pieces of the cards being ranked are sent to {HOST}, and nowhere else; so, at your press, are the words or the card you ask it to reword.") : t("The search text, the selected words the suggestions are made from and up to 12 short pieces of the cards being ranked are sent to {HOST}, and nowhere else.")).split("{HOST}").join(String(st.host||""));
+  return (rewordSent() ? t("The search text, the selected message the suggestions are made from and up to 12 short pieces of the cards being ranked are sent to {HOST}, and nowhere else; so, at your press, are the words or the card you ask it to reword.") : t("The search text, the selected message the suggestions are made from and up to 12 short pieces of the cards being ranked are sent to {HOST}, and nowhere else.")).split("{HOST}").join(String(st.host||""));
 }
 function orgModelRows(){
   const st=orgModel();

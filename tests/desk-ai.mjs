@@ -1003,9 +1003,9 @@ await block(async () => {
 await block(async () => {
   const { MESSAGE_MAX_CHARS } = await import(pathToFileURL(path.join(ROOT, "src", "modules", "clip-suggest.js")).href);
   const lang = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8");
-  const line = lang.split("\n").find(l => l.indexOf("While the organisation's model is on, the selected words") > -1) || "";
+  const line = lang.split("\n").find(l => l.indexOf("While the organisation's model is on, the selected text") > -1) || "";
   const en = MESSAGE_MAX_CHARS.toLocaleString("en-GB"), pl = String(MESSAGE_MAX_CHARS);
-  check(line.indexOf("at most their first " + en + " characters") > -1 && line.indexOf("najwyżej " + pl + " pierwszych znaków") > -1,
+  check(line.indexOf("at most its first " + en + " characters") > -1 && line.indexOf("najwyżej " + pl + " pierwszych znaków") > -1,
     "da21 the picker's note names the cap the shell sends, " + MESSAGE_MAX_CHARS + " characters, in English and Polish: " + (line ? "found" : "no line"));
 });
 

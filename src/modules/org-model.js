@@ -35,9 +35,9 @@ function rewordSent(){
 /* What leaves, in one sentence, while the organisation's model ranks: by the two switches and by the Rewording switch. The AI section's
    lede and the mark's title are this one string, with {HOST} for the address, so the two cannot drift apart. */
 function orgSaid(search, suggest){
-  const line=search && suggest ? t("The organisation's model at {HOST} ranks the search and the suggestions. The search text, the selected words the suggestions are made from, and up to 12 short pieces of the cards being ranked are sent there.")
+  const line=search && suggest ? t("The organisation's model at {HOST} ranks the search and the suggestions. The search text, the selected message the suggestions are made from, and up to 12 short pieces of the cards being ranked are sent there.")
     : search ? t("The organisation's model at {HOST} ranks the search. The search text is sent there, with up to 12 short pieces of the cards being ranked.")
-    : suggest ? t("The organisation's model at {HOST} ranks the suggestions. The selected words they are made from are sent there, with up to 12 short pieces of the cards being ranked.")
+    : suggest ? t("The organisation's model at {HOST} ranks the suggestions. The selected message they are made from is sent there, with up to 12 short pieces of the cards being ranked.")
     : "";
   const rewords=rewordSent();
   if(line) return rewords ? line+" "+t("At your press, the words or the card you ask it to reword go there too.") : line;

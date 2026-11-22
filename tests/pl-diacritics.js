@@ -151,6 +151,8 @@ const ALLOWED_IN = [
     within: "Wszystko działa jak zwykle; lider zespołu może ją zastąpić wydaniem opublikowanym na licencji." },
   { fold: "zwykle", since: "2026-10-26",
     within: "Wszystko działa jak zwykle; lider zespołu może je zastąpić wydaniem objętym licencją." },
+  /* 2026-11-22. The copywriter's Quick replies lines say "zaznaczona wiadomość", the nominative ("the selected message is"), not "zaznaczoną". */
+  { fold: "zaznaczona", since: "2026-11-22", within: "zaznaczona wiadomość" },
   /* 2026-11-14. Sync's reason for a provider's refusal says "kolejna próba", the nominative, not "kolejną". 2026-11-17: the
      copywriter changed how that sentence ends on 2026-11-16 ("tries again each day" was untrue of a desk closed overnight) and the
      allowance did not follow it; it names the sentence as it now stands, the one before being nowhere in the tree. */

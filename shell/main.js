@@ -14607,6 +14607,8 @@ function pickPage() {
       b.className = cls.join(" ");
       b.textContent = s.name || "";
       b.setAttribute("data-id", String(s.id));
+      if (i < 5) b.setAttribute("aria-keyshortcuts", "Alt+" + (i + 1));
+      b.title = s.name || "";
       b.setAttribute("aria-selected", i === sgAt ? "true" : "false");
       b.setAttribute("aria-pressed", isPicked ? "true" : "false");
       el.appendChild(b);
@@ -14837,6 +14839,12 @@ function pickPage() {
       else if (first) first.focus();
       return;
     }
+    if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && sgAt >= 0 && suggest.length > 0 && blank()) {
+      e.preventDefault();
+      sgAt = (sgAt + (e.key === "ArrowRight" ? 1 : -1) + suggest.length) % suggest.length;
+      paint(true);
+      return;
+    }
     const step = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : e.key === "PageDown" ? 8 : e.key === "PageUp" ? -8 : 0;
     if (step) {
       e.preventDefault();
@@ -14869,6 +14877,12 @@ function pickPage() {
       e.preventDefault();
       if (sgAt >= 0 && suggest[sgAt] && blank()) { takeSuggest(suggest[sgAt].id, !!(e.ctrlKey || e.metaKey)); return; }
       take(all[at], e.shiftKey);
+      return;
+    }
+    const chip = /^(Digit|Numpad)([1-5])$/.exec(e.code || "");
+    if (chip && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && suggest.length > 0 && blank()) { /* plant:pick-chip-alt */
+      e.preventDefault();
+      if (suggest[+chip[2] - 1]) takeSuggest(suggest[+chip[2] - 1].id, false);
       return;
     }
     const d = /^(Digit|Numpad)([0-9])$/.exec(e.code || "");
@@ -15005,12 +15019,14 @@ function pickerDoc() {
     + '#lang:hover{color:var(--ink);border-color:var(--line-strong)}\n'
     + '#lang:focus{border-bottom-color:var(--accent);box-shadow:inset 0 -1px 0 var(--accent)}\n'
     + '#lang[hidden]{display:none}\n'
-    + '#sg{flex:0 0 auto;display:flex;flex-direction:column;gap:2px;min-width:0}\n'
-    + '#sg .sg-lab{padding:0 10px 2px;color:var(--dim);font-size:12px}\n'
-    + '#sg button{box-sizing:border-box;display:block;width:100%;height:32px;margin:0;padding:0 10px;border:0;'
-    + 'border-radius:var(--radius-sm);background:transparent;color:var(--ink);font:600 14px var(--sans);text-align:left;cursor:default}\n'
-    + '#sg button.on{background:color-mix(in srgb,var(--accent) 20%,transparent);color:var(--accent)}\n'
-    + '#sg button.picked{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}\n'
+    + '#sg{flex:0 0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:4px;min-width:0;max-height:70px;overflow:hidden}\n' /* plant:pick-chip-wrap */
+    + '#sg .sg-lab{box-sizing:border-box;flex:0 0 100%;padding:0 2px;line-height:14px;color:var(--dim);font-size:12px}\n'
+    + '#sg button{box-sizing:border-box;display:block;flex:0 0 auto;max-width:calc(33.3% - 3px);height:24px;margin:0;padding:0 10px;'
+    + 'border:1px solid var(--line-strong);border-radius:var(--radius-sm);background:var(--field);color:var(--ink);font:600 13px/22px var(--sans);'
+    + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default}\n'
+    + '#sg button:hover{border-color:var(--accent)}\n'
+    + '#sg button.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 20%,transparent);color:var(--accent)}\n'
+    + '#sg button.picked{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}\n'
     + '#sg button.picked.on{background:color-mix(in srgb,var(--accent) 28%,transparent);color:var(--accent)}\n'
     + '#sel{flex:0 0 auto;padding:0 12px;color:var(--dim);font-size:12px}\n#sel[hidden]{display:none}\n'
     + '#top[hidden],#rows[hidden],#count[hidden],#sg[hidden],#rw[hidden],#rwo[hidden],#rwr[hidden],.rw-h[hidden],.rw-lab[hidden],'
