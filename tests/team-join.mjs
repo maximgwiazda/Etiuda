@@ -5562,6 +5562,8 @@ try {
       check(!p8.missing && p8 && Array.isArray(p8.items) && p8.items.length === 0,
         "1013s8 lifting plant:share-seal-to sends unsealed envelope rejected by share-inbox: " + JSON.stringify(p8));
       const p9 = await liftSharePlant("share-open-from", async src => {
+        /* The real desk B now drops the unsealed envelope p8 left, as one it cannot open, so the unverified one is written afresh here. */
+        await (dA.chans.find(c => c.enrolled()) || dA.chans[0]).writeTo(dB.me.id, JSON.stringify({ format: 1, kind: "raw", from: dA.me.id, card: JSON.stringify(sharedCard) }));
         const dP = await loadFromCopy("p9-" + hexS(3), dB.ud, src);
         const got = await dP.join("share-inbox");
         for (const it of (got && got.items) || []) await dP.join("share-drop", it.id);
@@ -5637,8 +5639,8 @@ try {
       const offRoster = await dB.join("share-kept", dRemId, "u:shared-1");
       check(!!(unknown && unknown.ok) && !!(notThem && notThem.ok) && !!(forgedPut && forgedPut.ok) && pendingBad === 3
         && Object.keys(keptBad).join() === "u:shared-1" && names(keptBad["u:shared-1"]).join() === rowB.id + ":Tom Lis"
-        && leftBad === 1 && !!offRoster && offRoster.ok === false && offRoster.reason === "not-on-team",
-        "1013r4 a receipt naming a card this desk did not share, or not to that keeper, is dropped and records nothing; one signed by another key records nothing; a keep for a sender off the roster sends nothing: "
+        && leftBad === 0 && !!offRoster && offRoster.ok === false && offRoster.reason === "not-on-team",
+        "1013r4 a receipt naming a card this desk did not share, or not to that keeper, is dropped and records nothing; one signed by another key records nothing and is dropped as well, nothing left waiting; a keep for a sender off the roster sends nothing: "
         + JSON.stringify({ unknown, notThem, forgedPut, pendingBad, keptBad, leftBad, offRoster }));
 
       const reloaded = await loadFromCopy("r5-" + hexS(3), dA.ud, SRC);
@@ -5758,7 +5760,7 @@ try {
           const lines = SRC.split("\n"), at = lines.findIndex(l => l.includes("/* plant:inbox-drop-unopened */"));
           let pl = { missing: true };
           if (at >= 0) {
-            lines[at] = lines[at].replace(/await relayChannel\.dropTo\(id\);/, "");
+            lines[at] = lines[at].replace(/if \(boxKey\) await relayChannel\.dropTo\(id\);/, "");
             const dP = await loadFromCopy("n1p-" + hexS(3), dA.ud, lines.join("\n"));
             R.clock.now += 61000;
             await chanOf(dC).writeTo(dA.me.id, "junk for the planted desk");
