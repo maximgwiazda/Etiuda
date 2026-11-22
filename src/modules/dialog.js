@@ -1,10 +1,9 @@
 /* The window every dialog is drawn inside: the fold families, the opener and its chrome, the
    pass that fades a cut line, and the navigation an editor carries. */
 import { markCutText } from "./cut-text.js";
-import { ICON_CHEVRON_R, ICON_X } from "./icons.js";
+import { ICON_CHEVRON_R, ICON_MIN, ICON_X } from "./icons.js";
 import { mgOpen } from "./app-state.js";
-import { animateModalHeightFrom, animatePinnedHeight, cutLeaves, dismissNode, mgAccordion, mgPinCard, mgReduceMotion, E_EASE, M_MS } from "./motion.js";
-import { lsGet, lsSet, lsDel } from "./storage.js";
+import { animateModalHeightFrom, animatePinnedHeight, cutLeaves, dismissNode, mgAccordion, mgPinCard, mgReduceMotion } from "./motion.js";
 import { formatActionChord } from "./shortcuts.js";
 import { scStopCapture } from "./shortcuts-list.js";
 import { offerUndo, t, tc, translateTree } from "./ui-lang.js";
@@ -178,7 +177,7 @@ function openDialog(cfg){
      you into Maintenance. Rebuilding the class list from the base makes that impossible. */
   modalCard.className="modal-card"+(cfg.cls?" "+cfg.cls:"");
   modalCard.innerHTML=
-    modalHead(t(cfg.title), cfg.lead, cfg.nav, modalNameFn?(modalNameFn()||""):"")+
+    modalHead(t(cfg.title), cfg.lead, cfg.nav, modalNameFn?(modalNameFn()||""):"", cfg.place)+
     (cfg.sub?'<p class="modal-sub">'+cfg.sub+'</p>':"")+
     (cfg.body||"")+
     (cfg.actions?'<div class="modal-actions">'+cfg.actions+'</div>':"");
@@ -345,7 +344,7 @@ function edLangCaret(scope, was, from, to){
  *  SCREEN - for a dialog opened from another, that means back to it (see dismissModal):
  *  "close the stack" put the card editor's X on the main screen while Cancel went back
  *  to Manage - two controls meaning "never mind" landing in two different places. */
-function modalHead(title, lead, nav, name){
+function modalHead(title, lead, nav, name, place){
   /* `lead` goes INSIDE the h2, before the title, so the heading's own flex row places it - the
      row is already display:flex with gap:10px and the close button on margin-left:auto, so a mark
      dropped in front needs no layout of its own. */
@@ -354,6 +353,8 @@ function modalHead(title, lead, nav, name){
      moment it does. A span can be told to refuse. */
   return '<h2 id="modalTitle">'+(lead||"")+'<span class="modal-t">'+esc(title)+'</span>'+
     (name?'<span class="modal-name">'+esc(name)+'</span>':'')+(nav||"")+
+    (ED_PLACE_KINDS.indexOf(place)>=0 ? '<button type="button" class="modal-x modal-min" id="modalMin" title="Minimise this editor" '+
+      'aria-label="Minimise this editor">'+ICON_MIN+'</button>' : '')+
     '<button type="button" class="modal-x" id="modalX" title="Close this screen" '+
     'aria-label="Close this screen">'+ICON_X+'</button></h2>';
 }
@@ -373,6 +374,7 @@ function wireFocusModality(){
 function wireModalX(){
   modalCard.addEventListener("click",e=>{
     if(e.target.closest && e.target.closest("#modalX")) dismissModal();
+    else if(e.target.closest && e.target.closest("#modalMin")) edMinimise();
   });
 }
 /* Where "leave this screen" goes for the dialog on screen NOW; null means nothing
@@ -449,21 +451,23 @@ function closeModal(){
     edActiveWin=null;
     edWinClear();
     edUnstand();
-    const next=edHist[edHist.length-1]||edWins[edWins.length-1];
+    /* The most recent still showing comes forward; where every other is minimised, the desk does. */
+    const next=edHist.filter(r=>!r.min).pop()||edHist[edHist.length-1]||edWins[edWins.length-1];
     edUnshelve(next);
     edFrontHist(next);
     edMulti();
-    if(!edRest) edFocusOn((edEdFocus && modalCard.contains(edEdFocus)) ? edEdFocus : modalCard);
+    if(next.min && !edRest) edRestStart();
+    else if(!edRest) edFocusOn((edEdFocus && modalCard.contains(edEdFocus)) ? edEdFocus : modalCard);
     return;
   }
-  edWins=[]; edHist=[]; edActiveWin=null; edPlaceNow=null; edEntry=null; edRefresh=null;
-  modalEl.classList.remove("ed-multi");
-  if(document.body) document.body.classList.remove("ed-bars");
-  if(modalCard.classList.contains("ed-bar")) edBarLook(modalCard, false);
+  edWins=[]; edHist=[]; edActiveWin=null; edEntry=null; edRefresh=null;
+  edShow=false;
+  modalEl.classList.remove("ed-multi","ed-show");
   const wasRest=edRest;
   leaveModal();
   modalEl.hidden=true;
-  edPlaceKind=null; edDrag=null; edAgain=null; edRestEnd(); edUnstand();
+  edPlaceKind=null; edAgain=null; edRestEnd(); edUnstand();
+  edMarks();
   modalEl.classList.remove("ed-win");
   modalCard.classList.remove("about-modal","about-page");
   modalCard.innerHTML="";
@@ -480,155 +484,90 @@ function closeModal(){
     try{ back.focus(how); }catch(e){ try{ back.focus(); }catch(e2){} }
   }
 }
-/* ---- AN EDITOR STANDS WHERE IT WAS PUT. The card, intent and category editors drag by the whole
-   title bar but its buttons. Each kind keeps its place in eEdPlace as {x,y}, the middle of its top
-   edge from the window's centre, so the place still means something in a window of another size.
-   Every other dialog stays centred: openDialog clears a place its config does not name. */
-const ED_PLACE_KINDS=["card","intent","category"], ED_EDGE=8;
-let edPlaceKind=null, edDrag=null, edDragEnd=0, edPlaced=null, edHeadDown=false, edDragStart=null;
-function edPlaceNum(v){ return typeof v==="number" && isFinite(v) && Math.abs(v)<=20000; }
-/* Each kind is refused on its own when malformed, and what is refused leaves the store. */
-function edPlaces(){
-  const raw=lsGet("eEdPlace");
-  if(raw==null) return {};
-  let o=null;
-  try{ o=JSON.parse(raw); }catch(e){}
-  const out={};
-  if(o && typeof o==="object" && !Array.isArray(o)) ED_PLACE_KINDS.forEach(k=>{
-    const p=o[k];
-    if(p && typeof p==="object" && edPlaceNum(p.x) && edPlaceNum(p.y)) out[k]={x:Math.round(p.x), y:Math.round(p.y)};
-  });
-  if(JSON.stringify(out)!==raw) edPlacesWrite(out);
-  return out;
-}
-function edPlacesWrite(all){
-  const out={};
-  ED_PLACE_KINDS.forEach(k=>{ if(all[k]) out[k]=all[k]; });
-  if(Object.keys(out).length) lsSet("eEdPlace", JSON.stringify(out)); else lsDel("eEdPlace");
-}
-/* Wholly inside the window: ED_EDGE from its sides and foot, and its top ED_EDGE under the band,
-   whose drag region swallows every click over it (the band's rule in the sheet). Where it fills the
-   window's width it is kept centred sideways; too short, the top wins and --ed-room keeps the foot in. */
-function edPlaceRect(g, x, y){
-  const maxL=g.W-ED_EDGE-g.w;
-  const left=(g.fill || maxL<ED_EDGE) ? (g.W-g.w)/2 : Math.min(maxL, Math.max(ED_EDGE, g.W/2+x-g.w/2));
-  const top=Math.max(g.floor, Math.min(g.bottom-g.h, g.H/2+y));
-  return {left:Math.round(left), top:Math.round(top)};
-}
+/* ---- THE EDITORS PLACE THEMSELVES, and nobody drags them (board 1018). The card, intent and category editors showing stand
+   side by side, tops level, ED_GAP apart and centred as a group, while the window holds them all; else in a stack, the one in
+   hand in front and the others' heads ED_HEAD apart above it, the most recent nearest. One alone stands centred, as every other
+   dialog does. */
+const ED_PLACE_KINDS=["card","intent","category"], ED_EDGE=8, ED_GAP=24, ED_HEAD=34, ED_SHOW_S=0.5, ED_SHOW_GAP=28;
+let edPlaceKind=null;
+/* The band's drag region swallows every click over it (the band's rule in the sheet), so nothing stands higher than ED_EDGE under it. */
 function edBand(){
   const row=document.querySelector("header > .row");
   const r=row && row.getBoundingClientRect ? row.getBoundingClientRect() : null;
   return r && r.bottom>0 ? r.bottom : 0;
 }
-/* Stands the card at (x,y), clamped, and returns the offset it took. It stays a flex item,
-   top-aligned and shifted by its relative top and left, so its width is the centred card's own. */
-function edStandAt(x, y, floor){
-  const st=modalCard.style, band=edBand(), W=modalEl.clientWidth, H=modalEl.clientHeight;
+/* The card in hand stays a flex item, top-aligned and shifted by its relative top and left, so its width is the centred card's own. */
+function edPutCard(left, top, room){
+  const st=modalCard.style;
   modalEl.classList.add("ed-placed");
-  const top0=Math.max(band+ED_EDGE, floor||0);
-  const bottom=edBottom(H);
-  st.setProperty("--ed-room", Math.max(0, bottom-top0)+"px");
+  st.setProperty("--ed-room", Math.max(0, Math.round(room))+"px");
   const relT=parseFloat(st.top)||0, relL=parseFloat(st.left)||0;
-  const w=modalCard.offsetWidth, cap=parseFloat(getComputedStyle(modalCard).maxWidth);
-  const g={W:W, H:H, floor:top0, bottom:bottom, w:w, h:modalCard.offsetHeight, fill:cap>0 && w<cap-0.5};
-  const at=edPlaceRect(g, x, y), t0=modalCard.offsetTop-relT, l0=modalCard.offsetLeft-relL;
-  st.top=(at.top-t0)+"px";
-  st.left=(at.left-l0)+"px";
-  /* A height glide scales the card about its origin, so the origin is the point that holds still
-     while the top goes to its nudged place and the foot to its new one; unnudged, the top (the sheet). */
-  const was=edPlaced;
-  if(was && was.h!==g.h && was.top!==at.top) st.transformOrigin="50% "+((was.top-at.top)*g.h/(g.h-was.h))+"px";
-  else st.removeProperty("transform-origin");
-  edPlaced={top:at.top, h:g.h};
-  return {x:Math.round(at.left+g.w/2-W/2), y:Math.round(at.top-H/2)};
+  const t0=modalCard.offsetTop-relT, l0=modalCard.offsetLeft-relL;
+  st.top=Math.round(top-t0)+"px";
+  st.left=Math.round(left-l0)+"px";
 }
 function edUnstand(){
   if(!modalEl || !modalEl.classList.contains("ed-placed")) return;
-  modalEl.classList.remove("ed-placed");
+  modalEl.classList.remove("ed-placed","ed-stack");
   ["top","left","--ed-room","transform-origin"].forEach(k=>modalCard.style.removeProperty(k));
-  edPlaced=null;
 }
-/* Every render asks again, so Prev, Next and the reopening after a first Save stand where the
-   editor stood; so do a resize and the card's own change of size. */
+/* `back` stands a shell behind the one in front: its depth and its step smaller. */
+function edPutShell(sh, left, top, w, room, back){
+  sh.style.left=Math.round(left)+"px"; sh.style.top=Math.round(top)+"px"; sh.style.width=Math.round(w)+"px";
+  sh.style.maxHeight=Math.max(0, Math.round(room))+"px";
+  sh.classList.toggle("ed-back", !!back);
+  if(back){ sh.style.setProperty("--ed-z", String(back.z)); sh.style.setProperty("scale", String(back.s)); }
+  else { sh.style.removeProperty("--ed-z"); sh.style.removeProperty("scale"); }
+}
+function edElOf(r){ return r===edActiveWin ? (edHeld ? null : modalCard) : r.shell; }
+/* Every render asks again, and so do a resize, the card's own change of size and every change of what is showing. */
 function placeDialog(kind){
-  const was=edPlaced;
   edPlaceKind=ED_PLACE_KINDS.indexOf(kind)>=0 ? kind : null;
   edPlaceSync();
-  if(was && edPlaced) edPlaced=was;   // the glide after a re-render starts from what was painted
 }
 function edPlaceSync(){
   modalEl.classList.toggle("ed-win", !!(edPlaceKind && !modalEl.hidden));
-  if(edDrag && edDrag.moved) return;
-  edBars();
-  const open=edPlaceKind && !modalEl.hidden, p=open ? (edPlaceNow || edPlaces()[edPlaceKind]) : null;
-  /* Resting, it stands clear of the header: the band and the tools' row under it. */
-  const floor=(open && edRest) ? edHeaderFloor() : 0;
-  if(p) edStandAt(p.x, p.y, floor);
-  else if((floor && modalEl.clientHeight/2-modalCard.offsetHeight/2<floor) || (open && edBarsUp())) edStandAt(0, -modalCard.offsetHeight/2, floor);
-  else edUnstand();
+  edMarks();
+  if(!edPlaceKind || modalEl.hidden){ edUnstand(); return; }
+  if(edShow){ edShowLay(); return; }
+  const up=edWins.filter(r=>!r.min).sort((a,b)=>a.seq-b.seq);
+  if(edRest || up.length<2){ edUnstand(); return; }
+  const W=modalEl.clientWidth, H=modalEl.clientHeight, w=modalCard.offsetWidth, floor=edBand()+ED_EDGE, foot=H-ED_EDGE;
+  const row=up.length*w+(up.length-1)*ED_GAP;
+  if(row<=W-2*ED_EDGE){
+    modalEl.classList.remove("ed-stack");
+    /* Measured uncapped: a stack's cap would otherwise set the row's top. */
+    up.forEach(r=>{ if(r.shell) r.shell.style.maxHeight=Math.max(0, foot-floor)+"px"; });
+    const tall=Math.max.apply(null, up.map(r=>edElOf(r).offsetHeight));
+    const top=Math.max(floor, Math.round((H-tall)/2)), x0=Math.round((W-row)/2);
+    up.forEach((r,i)=>{
+      const x=x0+i*(w+ED_GAP);
+      if(r===edActiveWin) edPutCard(x, top, foot-top); else edPutShell(r.shell, x, top, w, foot-top, null);
+    });
+    return;
+  }
+  const behind=edHist.filter(r=>!r.min && r!==edActiveWin).reverse();
+  const top=floor+behind.length*ED_HEAD, left=Math.round((W-w)/2);
+  modalEl.classList.add("ed-stack");
+  edPutCard(left, top, foot-top);
+  const h=modalCard.offsetHeight;
+  behind.forEach((r,i)=>edPutShell(r.shell, left, top-(i+1)*ED_HEAD, w, h+(i+1)*ED_HEAD,
+    {z:behind.length-i, s:Math.round((1-0.03*(i+1))*100)/100}));
 }
-function wireDialogDrag(){
-  const head=e=>{
-    const h=e.target && e.target.closest ? e.target.closest("h2") : null;
-    return h && h.parentNode===modalCard && !e.target.closest("button,a,input,select,textarea") ? h : null;
-  };
-  /* The press is captured, so the double click it ends in is the card's: where it began is read here. */
-  edDragStart=e=>{
-    edHeadDown=!!head(e);
-    if(!edPlaceKind || e.button!==0 || e.pointerType==="touch" || !head(e)) return;
-    edDrag={x:e.clientX, y:e.clientY, top:modalCard.offsetTop, left:modalCard.offsetLeft, moved:false, at:null};
-    try{ modalCard.setPointerCapture(e.pointerId); }catch(_){}
-  };
-  modalCard.addEventListener("pointerdown",e=>edDragStart(e));
-  modalCard.addEventListener("pointermove",e=>{
-    const d=edDrag;
-    if(!d) return;
-    const dx=e.clientX-d.x, dy=e.clientY-d.y;
-    if(!d.moved){ if(Math.abs(dx)+Math.abs(dy)<4) return; d.moved=true; document.documentElement.classList.add("eddrag"); }
-    d.at=edStandAt(d.left+dx+modalCard.offsetWidth/2-modalEl.clientWidth/2, d.top+dy-modalEl.clientHeight/2);
-  });
-  const end=()=>{
-    const d=edDrag;
-    edDrag=null;
-    if(d && d.moved) document.documentElement.classList.remove("eddrag");
-    if(!d || !d.at || !edPlaceKind) return;
-    edDragEnd=Date.now();
-    const all=edPlaces();
-    all[edPlaceKind]=d.at;
-    edPlacesWrite(all);
-    edPlaceNow=d.at;
-  };
-  ["pointerup","pointercancel","lostpointercapture"].forEach(k=>modalCard.addEventListener(k,end));
-  /* Back to the centre, the desk's double click for how it came (All, the rail's title). A drag
-     just ended is not the first half of one. */
-  modalCard.addEventListener("dblclick",e=>{
-    if(!edPlaceKind || !edHeadDown || Date.now()-edDragEnd<500) return;
-    const all=edPlaces();
-    if(!all[edPlaceKind]) return;
-    delete all[edPlaceKind];
-    edPlacesWrite(all);
-    edPlaceNow=null;
-    const t0=modalCard.offsetTop, l0=modalCard.offsetLeft;
-    edUnstand();
-    const dx=l0-modalCard.offsetLeft, dy=t0-modalCard.offsetTop;
-    if((dx||dy) && !mgReduceMotion() && typeof modalCard.animate==="function")
-      modalCard.animate([{translate:dx+"px "+dy+"px"},{translate:"0 0"}],{duration:M_MS.move, easing:E_EASE});
-  });
+function wireEditorPlace(){
   addEventListener("resize", edPlaceSync);
   if(typeof ResizeObserver==="function") new ResizeObserver(edPlaceSync).observe(modalCard);
+  /* Typing shows at once as the head's dot. */
+  if(modalEl.addEventListener){ modalEl.addEventListener("input", edMarks); modalEl.addEventListener("change", edMarks); }
 }
-/* ---- THE DESK IN FRONT WHILE AN EDITOR WAITS. A click on the dimmed desk, or F6, puts the desk in
-   front: the scrim lifts, the editor rests where it stands, inert to the keys and live to the
-   pointer, and a click on it or F6 brings it back. Below ED_REST_MIN wide a waiting editor is a bar (edBars). */
-const ED_REST_MIN=800;
-let edRest=false, edEdFocus=null, edDeskFocus=null, edHeld=null, edAgain=null, edStepping=false;
+/* ---- MINIMISED, AND THE DESK IN FRONT. An editor's minimise button sends it to the one action button in the floating stack; a
+   click on the dimmed desk, or F6 past the last editor, sends every one there, and the desk is in front (edRest). A minimised
+   editor keeps its nodes whole, typing and all. The button's digit is how many wait, amber while one of them holds unsaved work:
+   one comes straight back, two or more are shown side by side at ED_SHOW_S to pick from (the showcase). */
+let edRest=false, edEdFocus=null, edDeskFocus=null, edHeld=null, edAgain=null, edStepping=false, edShow=false, edShowAt=0;
 function edResting(){ return edRest; }
-/* A dialog the keyboard belongs to: any dialog, an editor only while it is in front. */
+/* A dialog the keyboard belongs to: any dialog, an editor only while one is showing. */
 function modalFront(){ return !!modalEl && !modalEl.hidden && !edRest; }
-function edHeaderFloor(){
-  const r=document.querySelector("header > .fills"), b=r && r.getBoundingClientRect ? r.getBoundingClientRect() : null;
-  return b && b.bottom>0 ? b.bottom+ED_EDGE : 0;
-}
 function edFocusOn(el){
   if(!el || typeof el.focus!=="function") return;
   const how=lastInputWasKey?{preventScroll:true}:{preventScroll:true,focusVisible:false};
@@ -637,35 +576,168 @@ function edFocusOn(el){
 function edRestEnd(){
   if(!edRest) return;
   edRest=false;
+  if(edActiveWin && !edHeld) edActiveWin.min=false;
   modalEl.classList.remove("ed-rest");
   modalCard.setAttribute("aria-modal","true");
-  edBars();
+  edPlaceSync();
 }
-function edToDesk(){
-  if(edRest || !edPlaceKind || modalEl.hidden || openCover()) return false;
-  const at=document.activeElement;
-  edEdFocus=(at && modalCard.contains(at) && at!==modalCard) ? at : null;
+/* Into the desk's keeping: the keyboard goes back where it was on the desk. */
+function edRestStart(){
   edRest=true;
   modalEl.classList.add("ed-rest");
   modalCard.removeAttribute("aria-modal");
   edPlaceSync();
   const back=(edDeskFocus && document.contains(edDeskFocus) && edDeskFocus.getClientRects && edDeskFocus.getClientRects().length) ? edDeskFocus : null;
+  const at=document.activeElement;
   if(back) edFocusOn(back);
-  else if(at && modalCard.contains(at) && typeof at.blur==="function") at.blur();
+  else if(at && modalEl.contains && modalEl.contains(at) && typeof at.blur==="function") at.blur();
+}
+function edToDesk(){
+  if(edRest || edShow || !edPlaceKind || modalEl.hidden || openCover()) return false;
+  const at=document.activeElement;
+  edEdFocus=(at && modalCard.contains(at) && at!==modalCard) ? at : null;
+  edWins.forEach(r=>{ r.min=true; });
+  edRestStart();
   return true;
 }
-/* `keys` says the keyboard brought it: the caret goes back to the field it had. A press is acted
-   on where it landed, so the editor goes back to its place only once the press is over. */
-function edToFront(keys){
+/* The editor in hand to the button; the most recent still showing comes forward, else the desk does. */
+function edMinimise(){
+  if(!edActiveWin || !edPlaceKind || modalEl.hidden || edRest || edShow || edHeld) return false;
+  const next=edHist.filter(r=>r!==edActiveWin && !r.min).pop();
+  if(!next) return edToDesk();
+  edActiveWin.min=true;
+  edActivate(next, true);
+  return true;
+}
+/* Back from the desk, the caret where it was. */
+function edToFront(){
   if(!edRest) return false;
   const at=document.activeElement;
   if(at && at!==document.body && !modalCard.contains(at)) edDeskFocus=at;
   edRestEnd();
   edRefreshNow();
-  if(keys){
+  edPlaceSync();
+  edFocusOn((edEdFocus && modalCard.contains(edEdFocus)) ? edEdFocus : modalCard);
+  return true;
+}
+/* One minimised editor shown again, the others left where they are. */
+function edBringUp(rec){
+  if(!rec || edWins.indexOf(rec)<0) return false;
+  rec.min=false;
+  if(rec!==edActiveWin){ edActivate(rec, true); return true; }
+  if(edRest) return edToFront();
+  edPlaceSync();
+  return true;
+}
+function edMinList(){ return edWins.filter(r=>r.min).sort((a,b)=>a.seq-b.seq); }
+function edFabPress(){
+  if(modalEl.hidden || edHeld || edShow) return false;
+  const list=edMinList();
+  if(!list.length) return false;
+  if(list.length===1) return edBringUp(list[0]);
+  return edShowOpen();
+}
+function edWinDirty(r){
+  if(r===edActiveWin) return edHeld ? !!edHeld.dirty : edDirty();
+  const st=r.state;
+  return !!(r.shell && st && st.baseline!==null && edFormState(r.shell)!==st.baseline);
+}
+/* The classes that say minimised and unsaved, and the button that counts them. The button stands above the dim while editors show. */
+function edMarks(){
+  let n=0, unsaved=false;
+  edWins.forEach(r=>{
+    const el=edElOf(r), d=edWinDirty(r);
+    if(el){ el.classList.toggle("ed-min", !!r.min); el.classList.toggle("ed-unsaved", d); }
+    if(r.min){ n++; if(d) unsaved=true; }
+  });
+  if(!edPlaceKind && modalCard) modalCard.classList.remove("ed-min","ed-unsaved");
+  const up=n>0 && !modalEl.hidden;
+  const fab=document.getElementById("edFab");
+  if(fab){
+    fab.hidden=!up;
+    fab.classList.toggle("unsaved", up && unsaved);
+    const b=fab.querySelector(".fab-badge");
+    if(b) b.textContent=up ? String(n) : "";
+    const say=t(n===1 ? "Bring back the minimised editor" : "Choose a minimised editor")
+      +(unsaved ? ". "+t(n===1 ? "Its unsaved changes are kept" : "Unsaved changes in them are kept") : "");
+    fab.title=say;
+    fab.setAttribute("aria-label", say);
+  }
+  if(document.body) document.body.classList.toggle("ed-up", up && !edRest && !edHeld && !edShow && !!edPlaceKind);
+}
+/* ---- THE SHOWCASE: every minimised editor at ED_SHOW_S, side by side over the dim, the last used ringed, the ones showing hidden
+   meanwhile. A press on one, its digit, or Enter on the ringed one brings that one back; a short Esc or a press on the dim leaves. */
+function edShowOpen(){
+  const list=edMinList();
+  if(list.length<2 || modalEl.hidden || edHeld) return false;
+  const last=edHist.filter(r=>r.min).pop();
+  edShowAt=Math.max(0, list.indexOf(last));
+  const at=document.activeElement;
+  if(at && at!==document.body && !(modalEl.contains && modalEl.contains(at))) edDeskFocus=at;
+  edShow=true;
+  modalEl.classList.add("ed-show");
+  if(at && at!==document.body && typeof at.blur==="function") at.blur();
+  edPlaceSync();
+  return true;
+}
+function edShowLay(){
+  const list=edMinList(), n=list.length;
+  const W=modalEl.clientWidth, H=modalEl.clientHeight, w=modalCard.offsetWidth;
+  const s=Math.min(ED_SHOW_S, (W-2*ED_EDGE-(n-1)*ED_SHOW_GAP)/Math.max(1, n*w));
+  const row=n*w*s+(n-1)*ED_SHOW_GAP, x0=Math.round((W-row)/2);
+  const tall=Math.max.apply(null, list.map(r=>edElOf(r).offsetHeight));
+  const floor=edBand()+ED_EDGE, top=Math.max(floor, Math.round((H-tall*s)/2)), room=(H-ED_EDGE-top)/s;
+  edWins.forEach(r=>{ const el=edElOf(r); if(el) el.classList.toggle("ed-off", !r.min); });
+  list.forEach((r,i)=>{
+    const el=edElOf(r), x=Math.round(x0+i*(w*s+ED_SHOW_GAP));
+    if(r===edActiveWin) edPutCard(x, top, room); else edPutShell(r.shell, x, top, w, room, null);
+    el.style.setProperty("scale", String(s));
+    el.classList.toggle("ed-pick", i===edShowAt);
+    Array.prototype.forEach.call(el.children||[], c=>{ c.inert=true; });
+  });
+}
+function edShowEnd(){
+  if(!edShow) return false;
+  edShow=false;
+  modalEl.classList.remove("ed-show");
+  edWins.forEach(r=>{
+    const el=edElOf(r);
+    if(!el) return;
+    el.classList.remove("ed-off","ed-pick");
+    el.style.removeProperty("scale");
+    Array.prototype.forEach.call(el.children||[], c=>{ c.inert=false; });
+  });
+  edPlaceSync();
+  return true;
+}
+function edShowPick(rec){
+  edShowEnd();
+  edBringUp(rec);
+}
+function edShowing(){ return edShow; }
+/* Esc held closes every editor, the minimised among them; the showcase holds the keyboard while it is up. A short Esc anywhere
+   else is the keyboard's X, which closes the editor in hand (keydown.js). True where the key was taken. */
+function edKeys(e){
+  if(!e || !modalEl || modalEl.hidden || !edWins.length) return false;
+  if(e.key==="Escape" && e.repeat){ e.preventDefault(); closeAllDialogs(); return true; }
+  if(!edShow) return false;
+  const list=edMinList();
+  if(e.key==="Escape"){
+    e.preventDefault();
+    edShowEnd();
+    if(edRest && edDeskFocus && document.contains(edDeskFocus)) edFocusOn(edDeskFocus);
+    return true;
+  }
+  const d=/^[1-9]$/.test(e.key||"") ? Number(e.key) : 0;
+  if(d && d<=list.length){ e.preventDefault(); edShowPick(list[d-1]); return true; }
+  if(e.key==="ArrowRight" || e.key==="ArrowLeft"){
+    e.preventDefault();
+    edShowAt=(edShowAt+(e.key==="ArrowRight" ? 1 : list.length-1))%list.length;
     edPlaceSync();
-    edFocusOn((edEdFocus && modalCard.contains(edEdFocus)) ? edEdFocus : modalCard);
-  } else addEventListener("pointerup",()=>setTimeout(edPlaceSync,0),{once:true});
+    return true;
+  }
+  if(e.key==="Enter" || e.key===" "){ e.preventDefault(); if(list[edShowAt]) edShowPick(list[edShowAt]); return true; }
+  if(e.key==="Tab") e.preventDefault();
   return true;
 }
 /* Another entry takes the window, and unsaved typing in the one it replaces gets the Undo Prev and
@@ -679,15 +751,11 @@ function edBeforeOpen(cfg){
     modalEl.classList.remove("ed-held");
     return (h.dirty && h.again) ? {was:h.typed, again:h.again} : null;
   }
-  const beside=edBeside;
-  edBeside=null;
   if(place && !modalEl.hidden && edPlaceKind){
     const w=edWinOf(cfg.place);
     if(w && w!==edActiveWin) edActivate(w,true);
     else if(!w){
-      edBesideFrom=beside;
       edShelve();
-      edNewWin=true;
       return null;
     }
   }
@@ -701,9 +769,8 @@ function edAfterOpen(cfg, leaving){
   edAgain=(place && typeof cfg.again==="function") ? cfg.again : null;
   if(place){
     if(!edActiveWin){
-      edActiveWin={kind:cfg.place, seq:++edSeq, shell:null, state:null, cause:""};
+      edActiveWin={kind:cfg.place, seq:++edSeq, shell:null, state:null, cause:"", min:false};
       edWins.push(edActiveWin);
-      edPlaceNow=null;
     }
     edActiveWin.kind=cfg.place;
     edFrontHist(edActiveWin);
@@ -713,7 +780,6 @@ function edAfterOpen(cfg, leaving){
   }
   if(!edStepping) edRestEnd();   // the editor redrawing itself keeps the desk in front
   placeDialog(cfg.place);
-  if(place && edNewWin){ edNewWin=false; edPlaceNewWin(); }
   if(edPlaceKind && edBaseline===null) edMarkClean();
   edSubjectOpen(cfg);
   if(leaving) offerUndo("Moved on without saving the changes", ()=>edGo(()=>{ leaving.again(); edRetype(leaving.was); }), null,
@@ -728,12 +794,13 @@ function edHold(){
   const wrap=(at && at.closest) ? at.closest(".menu-wrap") : null;
   if(wrap) at=wrap.querySelector(":scope > button")||at;
   edHeld=Object.assign(edWinState(), {kids:Array.prototype.slice.call(modalCard.childNodes), css:modalCard.style.cssText,
-    rest:edRest, dirty:edDirty(), typed:edTyped(), desk:edRest ? at : edDeskFocus, placeNow:edPlaceNow});
+    rest:edRest, dirty:edDirty(), typed:edTyped(), desk:edRest ? at : edDeskFocus});
   edHeld.kids.forEach(k=>modalCard.removeChild(k));
   edPlaceKind=null;
   modalEl.classList.remove("ed-win");
   edRestEnd();
   edUnstand();
+  edMarks();
 }
 function edRestore(){
   const h=edHeld;
@@ -744,11 +811,12 @@ function edRestore(){
   ["top","left","--ed-room","transform-origin"].forEach(k=>modalCard.style.removeProperty(k));
   h.kids.forEach(k=>modalCard.appendChild(k));
   edWinApply(h);
-  edDeskFocus=h.desk; edPlaceNow=h.placeNow||null;
+  edDeskFocus=h.desk;
   modalEl.classList.remove("ed-held");
   refreshDialogReset();
   if(h.rest){
     edRest=true;
+    if(edActiveWin) edActiveWin.min=true;
     modalEl.classList.add("ed-rest");
     modalCard.removeAttribute("aria-modal");
   }
@@ -758,23 +826,21 @@ function edRestore(){
 }
 function wireEditorRest(){
   const bg=modalEl.querySelector(".modal-bg");
-  /* The desk was dimmed when it was clicked, so the click was not aimed: it brings the desk in
-     front and does nothing else. */
+  /* The desk was dimmed when it was clicked, so the click was not aimed: it minimises every editor and does nothing else; over
+     the showcase it only leaves the showcase. */
   if(bg) bg.addEventListener("pointerdown",e=>{
-    if(e.button!==0 || !edToDesk()) return;
+    if(e.button!==0) return;
+    if(edShow){ e.preventDefault(); edShowEnd(); return; }
+    if(!edToDesk()) return;
     e.preventDefault();
   });
   modalCard.addEventListener("pointerdown",e=>{
-    if(!edRest) return;
-    if(edBarX(e, modalCard)) return;
-    edToFront(false);
+    if(!edShow || !edActiveWin) return;
+    e.preventDefault(); e.stopPropagation();
+    edShowPick(edActiveWin);
   },true);
-  modalCard.addEventListener("focusin",()=>{ if(edRest && !modalCard.classList.contains("ed-bar")) edToFront(false); });
-  modalCard.addEventListener("keydown",e=>{
-    if(!edRest || !modalCard.classList.contains("ed-bar") || (e.key!=="Enter" && e.key!==" ")) return;
-    e.preventDefault();
-    if(!e.repeat) edToFront(true);
-  });
+  const fab=document.getElementById("edFab");
+  if(fab) fab.addEventListener("click",()=>edFabPress());
   /* Gone, the entry has no Save, Reset or Delete, whatever an editor does to its buttons later. */
   modalCard.addEventListener("click",e=>{
     if(edGone && e.target.closest && e.target.closest(ED_LOCKS)){ e.preventDefault(); e.stopPropagation(); return; }
@@ -892,22 +958,14 @@ function edSayLine(text){
 }
 /* ---- SEVERAL EDITORS: one window for each kind, so up to three. The one in hand is #modalCard; the others stand as
    shells inside #modal above the scrim, each holding its editor's nodes and state, and the one brought forward is swapped
-   back into #modalCard where it stood. Only the desk dims. Below ED_REST_MIN wide the waiting ones are bars (edBars). */
-const ED_CHROME_IDS=["modalTitle","modalX","edPrev","edNext"];
-let edWins=[], edHist=[], edActiveWin=null, edSeq=0, edPlaceNow=null, edBeside=null, edBesideFrom=null, edNewWin=false,
-  edEntry=null, edRefresh=null;
+   back into #modalCard. Only the desk dims. Where each stands is edPlaceSync's. */
+const ED_CHROME_IDS=["modalTitle","modalMin","modalX","edPrev","edNext"];
+let edWins=[], edHist=[], edActiveWin=null, edSeq=0, edEntry=null, edRefresh=null;
 function edWinOf(kind){ return edWins.filter(r=>r.kind===kind)[0]||null; }
 function edFrontHist(rec){ edHist=edHist.filter(r=>r!==rec); edHist.push(rec); }
-function edMulti(){ modalEl.classList.toggle("ed-multi", edWins.length>1); edBars(); }
+function edMulti(){ modalEl.classList.toggle("ed-multi", edWins.length>1); edMarks(); }
 function edScrolls(root){
   return Array.prototype.filter.call(root.querySelectorAll("*"),x=>x.scrollTop>0).map(x=>[x,x.scrollTop]);
-}
-/* A bar's X closes its editor where it stands, the desk staying in front, on the click as every X does; the press on it stands
-   nothing up. Unsaved work is left with the Undo, as the editor's own X leaves it. */
-function edBarX(e, el){
-  if(!el.classList.contains("ed-bar") || !(e.target.closest && e.target.closest("#modalX,[data-ed-id=modalX]"))) return false;
-  e.preventDefault(); e.stopPropagation();
-  return true;
 }
 /* Everything dialog.js holds for the editor in hand, so a shell can carry it and give it back. */
 function edWinState(){
@@ -921,17 +979,16 @@ function edWinApply(h){
   modalNameFn=h.nameFn; modalResetFn=h.resetFn; modalResetOn=h.resetOn; modalResetOff=h.resetOff;
   edBaseline=h.baseline; edBaseTyped=h.baseTyped||null; edReturn=h.ret; modalBack=h.back; edAgain=h.again;
   edEditionReset=!!h.editionReset; edSubject=h.subject||null; edSubjectSig=h.sig; edGone=!!h.gone; edGoneLayer=!!h.goneLayer;
-  edEntry=h.entry==null ? null : h.entry; edRefresh=h.refresh||null; edEdFocus=h.focus; edPlaceKind=h.kind; edPlaced=null;
+  edEntry=h.entry==null ? null : h.entry; edRefresh=h.refresh||null; edEdFocus=h.focus; edPlaceKind=h.kind;
 }
 function edWinClear(){
   edPlaceKind=null; edAgain=null; edBaseline=null; edBaseTyped=null; edReturn=null; modalBack=null; edEditionReset=false;
   edSubject=null; edSubjectSig=null; edGone=false; edGoneLayer=false; edEntry=null; edRefresh=null; edEdFocus=null;
-  edPlaceNow=null; edPlaced=null; modalNameFn=null; modalResetFn=null;
+  modalNameFn=null; modalResetFn=null;
 }
 function edShelve(){
   const rec=edActiveWin;
   if(!rec || !edPlaceKind) return null;
-  if(modalCard.classList.contains("ed-bar")) edBarLook(modalCard, false);
   const st=edWinState();
   const box={left:modalCard.offsetLeft, top:modalCard.offsetTop, width:modalCard.offsetWidth, height:modalCard.offsetHeight};
   const kept=edScrolls(modalCard);
@@ -948,27 +1005,21 @@ function edShelve(){
   });
   modalEl.insertBefore(sh, modalCard);
   kept.forEach(k=>{ k[0].scrollTop=k[1]; });
-  /* A press or the keyboard reaching a shell brings its editor forward, and the press is then acted on there. */
+  /* A press or the keyboard reaching a shell brings its editor forward, and the press is then acted on there; in the showcase
+     the press picks it. */
   sh.addEventListener("pointerdown",e=>{
     if(rec.shell!==sh) return;
-    if(edBarX(e, sh)) return;
-    const bar=sh.classList.contains("ed-bar");
+    if(edShow){
+      if(!rec.min) return;
+      if(e.preventDefault) e.preventDefault();
+      if(e.stopPropagation) e.stopPropagation();
+      edShowPick(rec);
+      return;
+    }
     edActivate(rec,false);
-    /* A press on a window's title bar brings it forward and starts the drag in the same press, as a window does; a bar
-       stands up at its own place, away from the pointer. */
-    if(!bar && edDragStart) edDragStart(e);
   },true);
-  sh.addEventListener("click",e=>{
-    if(rec.shell!==sh || !edBarX(e, sh)) return;
-    edShelve(); edUnshelve(rec); edFrontHist(rec); dismissModal(); edMulti();
-  });
-  sh.addEventListener("focusin",()=>{ if(rec.shell===sh && !sh.classList.contains("ed-bar")) edActivate(rec,false); });
-  sh.addEventListener("keydown",e=>{
-    if(rec.shell!==sh || !sh.classList.contains("ed-bar") || (e.key!=="Enter" && e.key!==" ")) return;
-    e.preventDefault();
-    if(!e.repeat) edActivate(rec,true);
-  });
-  rec.shell=sh; rec.state=st; rec.winPlace=edPlaceNow;
+  sh.addEventListener("focusin",()=>{ if(rec.shell===sh && !edShow && !rec.min) edActivate(rec,false); });
+  rec.shell=sh; rec.state=st;
   edActiveWin=null;
   edWinClear();
   modalCard.className="modal-card";
@@ -977,7 +1028,6 @@ function edShelve(){
 }
 function edUnshelve(rec){
   const sh=rec.shell, st=rec.state;
-  const x=sh.offsetLeft+sh.offsetWidth/2-modalEl.clientWidth/2, y=sh.offsetTop-modalEl.clientHeight/2, wasBar=sh.classList.contains("ed-bar");
   const kept=edScrolls(sh);
   modalCard.innerHTML="";
   modalCard.className=st.cls;
@@ -987,8 +1037,6 @@ function edUnshelve(rec){
   rec.shell=null; rec.state=null;
   edWinApply(st);
   edActiveWin=rec;
-  /* Where it stood as a window; a bar stands up at the place it had before it stepped down. */
-  edPlaceNow=wasBar ? (rec.winPlace||null) : {x:Math.round(x), y:Math.round(y)};
   edPlaceSync();
   kept.forEach(k=>{ k[0].scrollTop=k[1]; });
   refreshDialogReset();
@@ -1003,22 +1051,21 @@ function edActivate(rec, keys){
   if(!rec || rec===edActiveWin || !rec.shell) return;
   const at=document.activeElement;
   if(edRest && at && at!==document.body && !modalEl.contains(at)) edDeskFocus=at;
+  rec.min=false;
   edShelve();
   edUnshelve(rec);
   edFrontHist(rec);
   edMulti();
   edRestEnd();
+  edPlaceSync();
   if(keys) edFocusOn((edEdFocus && modalCard.contains(edEdFocus)) ? edEdFocus : modalCard);
 }
-/* F6: the desk, then each editor in the order it was opened, then the desk again. */
+/* F6: each editor showing in the order it was opened, then the desk with every editor minimised; from the desk, what the
+   action button does. */
 function edF6(){
-  if(modalEl.hidden || !edActiveWin || edHeld) return false;
-  const list=edWins.slice().sort((a,b)=>a.seq-b.seq);
-  if(edRest){
-    if(list[0]===edActiveWin) return edToFront(true);
-    edActivate(list[0],true);
-    return true;
-  }
+  if(modalEl.hidden || !edActiveWin || edHeld || edShow) return false;
+  if(edRest) return edFabPress();
+  const list=edWins.filter(r=>!r.min).sort((a,b)=>a.seq-b.seq);
   const i=list.indexOf(edActiveWin);
   if(i>=0 && i<list.length-1){ edActivate(list[i+1],true); return true; }
   return edToDesk();
@@ -1039,134 +1086,30 @@ function edRefreshShells(){
     if(clean && r.state.baseline!==null){ r.state.baseline=edFormState(r.shell); r.state.baseTyped=edTyped(r.shell); }
   });
 }
-/* Opened from inside an editor (its right-click rows, F2): the next window stands beside the one in hand. */
-function edOpenBeside(){
-  edBeside=(edActiveWin && !modalEl.hidden)
-    ? {left:modalCard.offsetLeft, top:modalCard.offsetTop, width:modalCard.offsetWidth} : null;
-}
-/* Beside the editor in hand, tops level and 12 px apart: to its right if the new one fits whole, else to its left; else, where
-   the window holds the two, the one in hand slides aside just far enough; else stepped down a title bar and 28 px right. */
-function edBesideRect(r, w, W){
-  const GAP=12;
-  if(r.left+r.width+GAP+w<=W-ED_EDGE) return {left:r.left+r.width+GAP, top:r.top, slide:null};
-  if(r.left-GAP-w>=ED_EDGE) return {left:r.left-GAP-w, top:r.top, slide:null};
-  if(r.width+GAP+w<=W-2*ED_EDGE){
-    const l0=Math.max(ED_EDGE, Math.round((W-(r.width+GAP+w))/2));
-    return {left:l0+r.width+GAP, top:r.top, slide:l0};
-  }
-  return {left:r.left+28, top:r.top+52, slide:null};
-}
-const ED_TITLE_H=52;
-function edPlaceNewWin(){
-  if(modalEl.clientWidth<ED_REST_MIN){ edBesideFrom=null; return; }
-  mountModalBody();   // its width is the one with a body, which the observer would only give it after this task
-  const W=modalEl.clientWidth, H=modalEl.clientHeight, w=modalCard.offsetWidth;
-  const from=edBesideFrom;
-  edBesideFrom=null;
-  const shells=edWins.filter(r=>r.shell).map(r=>r.shell);
-  if(from){
-    const b=edBesideRect(from, w, W);
-    if(b.slide!=null){
-      const sh=shells.filter(s=>s.offsetLeft===from.left && s.offsetTop===from.top)[0]||shells[shells.length-1];
-      if(sh){
-        if(!mgReduceMotion()) sh.style.transition="left var(--m-scrim) var(--m-ease)";
-        sh.style.left=b.slide+"px";
-      }
-    }
-    edPlaceNow={x:Math.round(b.left+w/2-W/2), y:Math.round(b.top-H/2)};
-    edPlaceSync();
-    return;
-  }
-  /* From the desk, at the kind's own place; over another window's title bar, stepped as above. */
-  const l=modalCard.offsetLeft, t=modalCard.offsetTop;
-  const hit=shells.filter(s=>l<s.offsetLeft+s.offsetWidth && s.offsetLeft<l+w && t<s.offsetTop+ED_TITLE_H && s.offsetTop<t+ED_TITLE_H)[0];
-  if(hit){
-    edPlaceNow={x:Math.round(hit.offsetLeft+28+w/2-W/2), y:Math.round(hit.offsetTop+52-H/2)};
-    edPlaceSync();
-  }
-}
-/* Asked from outside for the entry an editor already shows: that window comes forward, untouched, and the editor is not
-   built again. An editor redrawing itself (Save, Reset, Prev and Next) is the one in front and passes. */
+/* Asked from outside for the entry an editor already shows: that window comes forward, minimised or not, untouched, and the
+   editor is not built again. An editor redrawing itself (Save, Reset, Prev and Next) is the one in front and passes. */
 function edAlreadyOpen(kind, entry){
   if(entry==null || edStepping || modalEl.hidden) return false;
   const w=edWinOf(kind);
   if(!w) return false;
   if(w===edActiveWin){
     if(edEntry!==entry || !edRest) return false;
-    edToFront(true);
+    edShowEnd();
+    edToFront();
     return true;
   }
   if(w.state.entry!==entry) return false;
+  edShowEnd();
   edActivate(w,true);
   return true;
 }
-/* ---- THE NARROWEST WINDOW: below ED_REST_MIN wide a waiting editor steps down to a bar, 40 px high and ED_EDGE above the
-   window's foot, from 16 px to ED_EDGE short of the floating +, holding its kind, its name and its X; several stack ED_EDGE
-   apart, the one opened latest lowest. With the desk in front every editor is a bar; with one in front, the others. A bar is
-   a button named by its title; a press, Enter or F6 stands its editor up as it was left. */
-const ED_BAR_H=40;
-function edNarrow(){ return !!modalEl && modalEl.clientWidth<ED_REST_MIN; }
-function edBarsUp(){ return edNarrow() && !modalEl.hidden && edWins.some(r=>r.shell); }
-/* The lowest an editor in front may reach. */
-function edBottom(H){
-  let b=H-ED_EDGE;
-  if(!edNarrow() || modalEl.hidden) return b;
-  const bars=modalEl.querySelectorAll(".ed-bar");
-  Array.prototype.forEach.call(bars, el=>{ if(el!==modalCard) b=Math.min(b, el.offsetTop-ED_EDGE); });
-  const fab=document.querySelector(".fab-stack"), r=fab && fab.getBoundingClientRect ? fab.getBoundingClientRect() : null;
-  if(r && r.width>0 && modalCard.offsetLeft+modalCard.offsetWidth>r.left) b=Math.min(b, r.top-ED_EDGE);
-  return b;
-}
-function edBarLook(el, on, name){
-  el.classList.toggle("ed-bar", on);
-  if(on){
-    el.setAttribute("role","button");
-    el.setAttribute("aria-label", name);
-    el.tabIndex=0;
-  } else {
-    el.setAttribute("role","dialog");
-    el.removeAttribute("aria-label");
-    el.tabIndex=-1;
-    ["--bar-l","--bar-t","--bar-w"].forEach(k=>el.style.removeProperty(k));
-  }
-}
-function edBarName(el){
-  const t=el.querySelector(".modal-t"), n=el.querySelector(".modal-name");
-  return [t && t.textContent, n && n.textContent].filter(Boolean).join(" ");
-}
-function edBars(){
-  if(!modalEl || modalEl.hidden){ if(document.body) document.body.classList.remove("ed-bars"); return; }
-  const narrow=edNarrow();
-  modalEl.classList.toggle("ed-narrow", narrow);
-  const list=edWins.slice().sort((a,b)=>a.seq-b.seq);
-  const bars=[];
-  list.forEach(r=>{
-    const el=r===edActiveWin ? modalCard : r.shell;
-    if(!el) return;
-    const bar=narrow && (r!==edActiveWin || edRest);
-    if(bar) bars.push(el);
-    else if(el.classList.contains("ed-bar")) edBarLook(el, false);
-  });
-  const W=modalEl.clientWidth, H=modalEl.clientHeight;
-  const fab=document.querySelector(".fab-stack"), fabBox=fab && fab.getBoundingClientRect ? fab.getBoundingClientRect() : null;
-  const right=(fabBox && fabBox.width>0) ? fabBox.left-ED_EDGE : W-16;
-  bars.forEach((el,i)=>{
-    edBarLook(el, true, edBarName(el));
-    el.style.setProperty("--bar-l","16px");
-    el.style.setProperty("--bar-w",Math.max(120, right-16)+"px");
-    el.style.setProperty("--bar-t",(H-ED_EDGE-ED_BAR_H-(bars.length-1-i)*(ED_BAR_H+ED_EDGE))+"px");
-  });
-  if(document.body){
-    document.body.classList.toggle("ed-bars", bars.length>0);
-    document.documentElement.style.setProperty("--ed-bars-h", (bars.length*(ED_BAR_H+ED_EDGE)+ED_EDGE)+"px");
-  }
-}
-/* The tour and a catalog taken whole close every editor, not only the one in hand. */
+/* The tour and a catalog taken whole close every editor, not only the one in hand, and so does Esc held. */
 /* No close the person did not press loses typing silently: one Undo, the one a closed editor leaves, brings back every editor
-   that held typing, each with it at its place, the one in hand in front again. It stands above the tour, whose start is one
+   that held typing, each with it, the one in hand in front again. It stands above the tour, whose start is one
    of the acts that close them all, and pressing it ends the tour. */
 function closeAllDialogs(){
   const kept=edDirtyWins();
+  if(edShow){ edShow=false; modalEl.classList.remove("ed-show"); }
   edWins.forEach(r=>{ if(r.shell) r.shell.remove(); r.shell=null; });
   edWins=edActiveWin ? [edActiveWin] : [];
   edHist=edWins.slice();
@@ -1181,14 +1124,12 @@ function edDirtyWins(){
   const out=[];
   edWins.forEach(r=>{
     if(r===edActiveWin){
-      if(edAgain && edDirty()) out.push({seq:r.seq, again:edAgain, typed:edTyped(), place:edPlaceNow, front:1});
+      if(edAgain && edDirty()) out.push({seq:r.seq, again:edAgain, typed:edTyped(), front:1});
       return;
     }
     const sh=r.shell, st=r.state;
     if(!sh || !st || !st.again || st.baseline===null || edFormState(sh)===st.baseline) return;
-    const place=sh.classList.contains("ed-bar") ? (r.winPlace||null)
-      : {x:Math.round(sh.offsetLeft+sh.offsetWidth/2-modalEl.clientWidth/2), y:Math.round(sh.offsetTop-modalEl.clientHeight/2)};
-    out.push({seq:r.seq, again:st.again, typed:edTyped(sh), place:place, front:0});
+    out.push({seq:r.seq, again:st.again, typed:edTyped(sh), front:0});
   });
   return out.sort((a,b)=>(a.front-b.front) || (a.seq-b.seq));
 }
@@ -1198,9 +1139,6 @@ function edBringBack(kept){
     edStepping=true;
     try{ k.again(); }finally{ edStepping=false; }
     edRetype(k.typed);
-    edPlaceNow=k.place;
-    edPlaced=null;
-    edPlaceSync();
   });
 }
 /* THE CARD IS THE WHOLE KEYBOARD while it is up: the markup says aria-modal, and the scrim
@@ -1231,7 +1169,8 @@ function openCover(){
 
 export {
   modalOpen, modalTabTarget, tabTargetIn, openCover, mountModalBody, modalResize, dismissModal, closeModal,
-  wireModalX, wireModalBody, wireFocusModality, wireDialogDrag, wireEditorRest, modalFront, edResting, edToDesk, edToFront, edF6, edOpenBeside, edAlreadyOpen, closeAllDialogs, edSubjectSoon, edSubjectCheck, edCatalogTaken, edCanSave,
+  wireModalX, wireModalBody, wireFocusModality, wireEditorPlace, wireEditorRest, modalFront, edResting, edToDesk, edToFront, edF6, edAlreadyOpen, closeAllDialogs, edSubjectSoon, edSubjectCheck, edCatalogTaken, edCanSave,
+  edMinimise, edFabPress, edShowing, edKeys,
   accOpen, accHtml, mfSec, catToggle, wireFolds, wireAcc,
   openDialog, refreshDialogName, refreshDialogChrome,
   dressDialogInputs,
