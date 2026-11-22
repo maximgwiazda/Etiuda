@@ -5320,10 +5320,8 @@ function shippedFlagTests() {
     try {
       return new Function("t", "esc", "trustKeyHtml", "V2_SIG_VALID", "V2_SIG_NONE", "ICON_SUCCESS",
         "catalogEdited", "ICON_LOAD", "ICON_EJECT",
-        ["function ecMetaHtml(", "function ecInUseHtml(", "function ecSigHtml(", "function ecRowHtml(", "function ecActHtml("].map(m => extractDecl(offer, m)).join("
-")
-        + "
-return ecRowHtml;")(
+        ["function ecMetaHtml(", "function ecInUseHtml(", "function ecSigHtml(", "function ecRowHtml(", "function ecActHtml("].map(m => extractDecl(offer, m)).join("\n")
+        + "\nreturn ecRowHtml;")(
         tr, s => s, (s, id) => "<key " + s + "|" + id + ">", "valid", "none", "<svg class=\"ic\">tick</svg>", () => false, "<svg>load</svg>", "<svg>eject</svg>")(o);
     } catch (e) { return "ecRowHtml did not run: " + e.message; }
   };
@@ -5334,7 +5332,7 @@ return ecRowHtml;")(
   eq("a Library row's glyphs, the loaded mark, the key and Load or Eject, share one size above a toolbar icon's 15px",
     [+glyph > 15, sized], [true, [true, true, true]]);
   const keyOf = html => ((/<key ([^>]*)>/.exec(String(html)) || [])[1]) || String(html).slice(0, 120);
-  const sigWords = html => ((/<span class="ec-sigw">([^<]*)</span>/.exec(String(html)) || [])[1]) || "";
+  const sigWords = html => ((/<span class="ec-sigw">([^<]*)<\/span>/.exec(String(html)) || [])[1]) || "";
   eq("a Library row's signature is a key in the whose column, carrying the state and the print of the key the list hands it, and a team row says in words whose it is", [
     keyOf(rowOf({ name: "team.ec", mtime: 5, trust: "valid", print: "87ad0879ac3e9ff6" }, s => s)),
     keyOf(rowOf({ name: "team.ec", loaded: true, trust: "none" }, s => s)),

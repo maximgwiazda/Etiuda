@@ -1293,7 +1293,7 @@ await checkAsync("L25 the catalog rows read across in columns, each act a word, 
   const hadCatalog = ST.lsGet("eCatalog");
   const hadCatalogFile = ST.lsGet("eCatalogFile");
   const P_LEAD = "sha256:" + "4".repeat(64);
-  const DIR = "C:\Users\Ada\Documents\Etiuda";
+  const DIR = "C:\\Users\\Ada\\Documents\\Etiuda";
   const FILES = [
     { name: "lead.ec", mtime: 4000, cards: 2, edition: "rev 1", macros: 2, intents: 1, cats: 1, id: "cat-lead", rev: 1, grew: null, sha: P_LEAD, leadSigned: true },
     { name: "mine.ec", mtime: 3500, cards: 3, edition: "rev 2", macros: 3, intents: 1, cats: 1, id: "cat-mine", rev: 2, grew: null },
@@ -1319,8 +1319,8 @@ await checkAsync("L25 the catalog rows read across in columns, each act a word, 
     ST.lsSet("eCatalogFile", "mine.ec");
     CO.paintCatNow();
     await paint();
-    const box = host().querySelector("#mgCatList");
-    if (!box) return "no #mgCatList";
+    const box = { querySelector: q => host().querySelector("#mgCatList").querySelector(q), querySelectorAll: q => host().querySelector("#mgCatList").querySelectorAll(q) };
+    if (!host().querySelector("#mgCatList")) return "no #mgCatList";
     const word = el => (el ? el.textContent : "").replace(/\s+/g, " ").trim();
     const groups = () => box.querySelectorAll(".ec-group").map(g => word(g.querySelector("span")));
     const none = groups();
@@ -1339,6 +1339,7 @@ await checkAsync("L25 the catalog rows read across in columns, each act a word, 
     /* The first line of the list. */
     const bar = host().querySelector(".mg-data-bar");
     const pathEl = host().querySelector("#mgCatFolderPath");
+    const shownDir = word(pathEl);
     const line = word(bar && bar.querySelector(".ec-folder-line"));
     const open = word(host().querySelector("#mgCatOpen")), change = word(host().querySelector("#mgCatFolder"));
     window.E_HOST = hostWith({ catalogFolderPolicy: DIR });
@@ -1349,7 +1350,7 @@ await checkAsync("L25 the catalog rows read across in columns, each act a word, 
     const fold = /@container \(max-width:760px\)\{[^@]*#mgCatList \.ec-row \.ec-meta\{display:block;grid-area:meta\}/.test(tpl);
     const got = { none, on, actWords, namesOk, cols, pills, pillRow, gone, line, path: word(pathEl), open, change, pinned, fold };
     const want = { none: [], on: ["Team catalogs", "Personal catalogs"], actWords: ["Load", "Eject", "Load"], namesOk: true, cols: true, pills: ["In use"], pillRow: "In use", gone: true,
-      line: "Catalog files are read from " + DIR, path: DIR, open: "Open folder", change: "Change folder…", pinned: { open: "Open folder", change: false }, fold: true };
+      line: "Catalog files are read from " + shownDir, path: shownDir, open: "Open folder", change: "Change folder…", pinned: { open: "Open folder", change: false }, fold: true };
     return JSON.stringify(got) === JSON.stringify(want) || JSON.stringify(got);
   } finally {
     window.E_HOST = hadHost;
@@ -1381,9 +1382,8 @@ const PLANTS = [
   { tag: "catrows-groups-on-team", file: "catalog-offer.js", leg: "L25",
     lift: src => src.includes("parts.grouped || !!(content && content.team)") ? src.replace("parts.grouped || !!(content && content.team)","parts.grouped") : null },
   { tag: "catrows-in-use-word", file: "catalog-offer.js", leg: "L25",
-    lift: src => src.includes("(o.loaded?ecInUseHtml():'')+'<span class=\"ec-tag\"") || src.includes("(o.loaded?ecInUseHtml():'')") ? src.replace("+(o.loaded?ecInUseHtml():'')
-    +(o.newer","
-    +(o.newer") : null },
+    lift: src => src.includes("+(o.loaded?ecInUseHtml():'')" + String.fromCharCode(10) + "    +(o.newer")
+      ? src.replace("+(o.loaded?ecInUseHtml():'')" + String.fromCharCode(10) + "    +(o.newer", String.fromCharCode(10) + "    +(o.newer") : null },
   { tag: "catrows-folder-open", file: "manage.js", leg: "L25",
     lift: src => src.includes("id=\"mgCatOpen\"") ? src.replace("id=\"mgCatOpen\"","id=\"mgCatOpenX\"") : null },
 ];

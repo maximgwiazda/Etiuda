@@ -1297,7 +1297,7 @@ async function parent() {
       + JSON.stringify(rows75.map(r => [r.name, r.fp, r.alone, r.acts.join("/")])));
     check(olaRow.fp === ola1.four && ola2Row.fp === ola2.four && p75.fp === "" && olaRow.tip.indexOf(grouped(ola1.id)) > -1 && /^Signed by Ola, a teammate, key /.test(olaRow.tip),
       "75b two desks of one name each carry the first four of their key, and the desk's glyph names its key in four groups: " + JSON.stringify([olaRow.fp, ola2Row.fp, p75.fp, olaRow.tip]));
-    check(same(rows75[0].mine, ["Your edits are with the team"]) && /^rev 1 (2026-09-01) · 1 changed · 1 new$/.test(olaRow.meta) && /^rev 1 (2026-09-01) · A catalog of its own · /.test(p75.meta),
+    check(same(rows75[0].mine, ["Your edits are with the team"]) && /^rev 1 \(2026-09-01\) · 1 changed · 1 new$/.test(olaRow.meta) && /^rev 1 \(2026-09-01\) · A catalog of its own · /.test(p75.meta),
       "75c the loaded row says this desk's edits are in the folder under its desk's name; a hanging row says what that desk changed, and one grown from nothing says so: "
       + JSON.stringify([rows75[0].mine, olaRow.meta, p75.meta]));
 
