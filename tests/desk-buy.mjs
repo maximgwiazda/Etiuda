@@ -28,9 +28,9 @@ const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 8;
+const PLANTS = 12;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 10 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 11 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -53,7 +53,7 @@ const NOTE_HEAD = "/* ---- the version note (board 991)";
 let TEXT = "", BUY = "", sliced = "";
 try {
   BUY = MAIN.slice(once(MAIN, ORDER_HEAD), once(MAIN, LINK_HEAD));
-  TEXT = [lineOf("let ORDER_PAGE ="), lineOf("const ORDER_PAGE_SHAPE ="), lineOf("const SIGNIN_CLIENT ="), lineOf("const SIGNIN_SECRET_SHAPE ="),
+  TEXT = [lineOf("let ORDER_PAGE ="), lineOf("const ORDER_PAGE_SHAPE ="), lineOf("const ORDER_ORIGIN_SHAPE ="), lineOf("const SIGNIN_CLIENT ="), lineOf("const SIGNIN_SECRET_SHAPE ="),
     fnOf("function signinLabAt("), fnOf("function signinLabService("), fnOf("function signinLabRead("), lineOf("let signinLabOn ="),
     fnOf("function signinLabUse("), BUY, MAIN.slice(once(MAIN, LINK_HEAD), once(MAIN, NOTE_HEAD))].join("\n");
 } catch (e) { sliced = e.message; }
@@ -75,12 +75,13 @@ function shellOf(o) {
     ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { handle[ch] = fn; } },
     fromEngine: e => !!(e && e.engine),
     shell: { openExternal: async u => { opened.push(u); } },
+    shellWords: () => ({ lang: opt.lang || "en" }),
     signinView: () => ({ code: typeof opt.code === "function" ? opt.code() : opt.code || "", licenceManaged: opt.managed === true }),
   };
   const names = Object.keys(env);
   const body = "let SIGNIN_PROVIDERS = Object.freeze({ microsoft: Object.freeze({ clientId: \"\" }), google: Object.freeze({ clientId: \"\" }) }),"
     + " SIGNIN_SERVICE = \"\", SIGNOUT_SERVICE = \"\";\n" + text
-    + "\nreturn { orderAddress, buyAddress, ORDER_PAGE_SHAPE, signinLabRead, signinLabUse, LINK_CLICK_MS, page: () => ORDER_PAGE };";
+    + "\nreturn { orderAddress, orderPageFor, buyAddress, ORDER_PAGE_SHAPE, signinLabRead, signinLabUse, LINK_CLICK_MS, page: () => ORDER_PAGE };";
   const api = new Function(...names, body)(...names.map(n => env[n]));
   if (opt.lab) api.taken = api.signinLabUse(api.signinLabRead(JSON.stringify(opt.lab)));
   /* A press of Buy as the shell hears it: the preload's click, then the page's open; each from the engine's frame unless told. */
@@ -92,7 +93,8 @@ function shellOf(o) {
 
 /* ---- the stand-ins ---------------------------------------------------------------------------------------------------- */
 /* Illustrations only: the order page's real address is etiuda.dev's to name, and the code is of the service's shape. */
-const ORDER = "https://etiuda.dev/order/desk";
+const ORDER = "https://etiuda.dev";
+const EN_PAGE = ORDER + "/en/order/desk/", PL_PAGE = ORDER + "/pl/zamowienie/stanowisko/";
 const CODE = "ABCD2345EFGH6789";
 const STAGING = "https://etiuda.dev/licence-staging/v1/";
 const labWith = over => Object.assign({ service: STAGING }, over);
@@ -158,9 +160,22 @@ CASES.address = () => {
   O.click(); const okOut = O.open();
   const W = shellOf({ lab: labWith({ order: ORDER }), code: "ABCD2345EFGH678&" });
   W.click(); W.open();
-  return ok === true && !!u && S.opened[0] === ORDER + "#code=" + CODE && u.search === "" && u.hash === "#code=" + CODE
+  return ok === true && !!u && S.opened[0] === EN_PAGE + "#code=" + CODE && u.search === "" && u.hash === "#code=" + CODE
     && (u.pathname + u.search).indexOf(CODE) < 0 && u.origin === "https://etiuda.dev"
-    && okOut === true && O.opened.length === 1 && O.opened[0] === ORDER && W.opened.length === 1 && W.opened[0] === ORDER;
+    && okOut === true && O.opened.length === 1 && O.opened[0] === EN_PAGE && W.opened.length === 1 && W.opened[0] === EN_PAGE;
+};
+/* b13: the order page is the desk-only one in the desk's language, and the handoff is what the site's order.js reads (a "#code=" of
+   sixteen capitals and digits, nothing in the query): English /en/order/desk/, Polish /pl/zamowienie/stanowisko/, any other language the
+   English; signed out the bare page of that language. Press by press, the browser is handed that one address and nothing else. */
+CASES.language = () => {
+  const run = (lang, code) => { const S = shellOf({ lab: labWith({ order: ORDER }), code, lang }); const st = S.state(); S.click(); const ok = S.open(); return { ok, st, opened: S.opened }; };
+  const pl = run("pl", CODE), en = run("en", CODE), de = run("de", CODE), plOut = run("pl", ""), enOut = run("en", "");
+  const u = pl.opened.length === 1 ? new URL(pl.opened[0]) : null;
+  return pl.ok === true && pl.opened.length === 1 && pl.opened[0] === PL_PAGE + "#code=" + CODE
+    && !!u && u.pathname === "/pl/zamowienie/stanowisko/" && u.search === "" && /^#code=[0-9A-Z]{16}$/.test(u.hash)
+    && en.opened.length === 1 && en.opened[0] === EN_PAGE + "#code=" + CODE && de.opened.length === 1 && de.opened[0] === EN_PAGE + "#code=" + CODE
+    && plOut.opened.length === 1 && plOut.opened[0] === PL_PAGE && enOut.opened.length === 1 && enOut.opened[0] === EN_PAGE
+    && pl.st.offer === true && en.st.offer === true;
 };
 /* b4: nothing else opens the browser: no open without a click, a click or an open from another frame, a click gone stale, a click
    spent, a click that named another address (the person signed out between); the section calls the browser only through the link
@@ -182,14 +197,19 @@ CASES.nothingElse = () => {
 };
 /* b5: the order page is etiuda.dev's, https, with no port, no user, no query and no fragment of its own; a lab file naming any
    other is refused whole; one naming none leaves it "". */
-const GOOD_PAGES = ["https://etiuda.dev/order", "https://etiuda.dev/", "https://etiuda.dev", "https://shop.etiuda.dev/order/desk/"];
-const BAD_PAGES = ["http://etiuda.dev/order", "https://etiuda.dev.example.test/order", "https://example.test/etiuda.dev/order", "https://evil-etiuda.dev/order",
-  "https://etiuda.dev:8443/order", "https://user@etiuda.dev/order", "https://etiuda.dev/order?ref=desk", "https://etiuda.dev/order#code=", "https://etiuda.dev/order desk",
-  "https://ETIUDA.DEV/order", "", "javascript:alert(1)"];
+const GOOD_PAGES = ["https://etiuda.dev", "https://shop.etiuda.dev"];
+const BAD_PAGES = ["http://etiuda.dev", "https://etiuda.dev.example.test", "https://example.test/etiuda.dev", "https://evil-etiuda.dev",
+  "https://etiuda.dev:8443", "https://user@etiuda.dev", "https://etiuda.dev/order", "https://etiuda.dev/", "https://etiuda.dev?ref=desk", "https://etiuda.dev#code=", "https://etiuda.dev desk",
+  "https://ETIUDA.DEV", "", "javascript:alert(1)"];
+/* The address itself, whatever builds it, is judged again: etiuda.dev's, https, no port, user, query or fragment of its own. */
+const BAD_ADDRESSES = ["http://etiuda.dev/en/order/desk/", "https://example.test/en/order/desk/", "https://etiuda.dev.example.test/en/order/desk/", "https://evil-etiuda.dev/en/order/desk/",
+  "https://etiuda.dev:8443/en/order/desk/", "https://user@etiuda.dev/en/order/desk/", "https://etiuda.dev/en/order/desk/?ref=desk", "https://etiuda.dev/en/order/desk/#code=", ""];
 CASES.shape = () => {
   const S = shellOf();
-  const good = GOOD_PAGES.every(p => S.ORDER_PAGE_SHAPE.test(p) && S.orderAddress(p, CODE) === p + "#code=" + CODE);
-  const bad = BAD_PAGES.every(p => !S.ORDER_PAGE_SHAPE.test(p) && S.orderAddress(p, CODE) === "" && S.signinLabRead(JSON.stringify(labWith({ order: p }))) === null);
+  const good = GOOD_PAGES.every(p => S.orderPageFor(p, "en") === p + "/en/order/desk/" && S.orderPageFor(p, "pl") === p + "/pl/zamowienie/stanowisko/"
+    && S.orderAddress(S.orderPageFor(p, "pl"), CODE) === p + "/pl/zamowienie/stanowisko/#code=" + CODE && S.signinLabRead(JSON.stringify(labWith({ order: p }))) !== null);
+  const bad = BAD_PAGES.every(p => S.orderPageFor(p, "en") === "" && S.orderPageFor(p, "pl") === "" && S.signinLabRead(JSON.stringify(labWith({ order: p }))) === null)
+    && BAD_ADDRESSES.every(a => S.orderAddress(a, CODE) === "");
   const none = S.signinLabRead(JSON.stringify(labWith({})));
   const N = shellOf({ lab: labWith({}) });
   return good && bad && !!none && none.order === "" && N.taken === true && N.page() === "" && N.state().offer === false
@@ -253,6 +273,7 @@ const LEGS = [
   ["b3", "address", "the address handed carries the code after the #, outside the query and the path; signed out, or a code not of its shape, the bare page"],
   ["b4", "nothingElse", "nothing else opens the browser: no click, another frame, a stale or spent click, a click for another address; only through openExternally"],
   ["b5", "shape", "the order page is etiuda.dev's over https with no port, user, query or fragment; a lab file naming another is refused whole"],
+  ["b13", "language", "the page is the desk-only one in the desk's language, English or Polish, with the fragment the site's order.js reads; signed out the bare page; the browser is handed that alone"],
   ["b6", "preload", "the preload tells main of a trusted click on Buy alone; E_HOST asks the state and the open"],
   ["b7", "pagePress", "the page's Buy asks the shell's open and names no address"],
   ["b10", "managed", "a managed tenant's account: no order page offered, a press opens nothing, Account draws no Buy but who holds the licence, and why"],
@@ -283,7 +304,7 @@ if (!PLANTS_OFF && !sliced) {
     "order-page with no shape check: any address would be handed");
   await plant("bp3", ["/^https:\\/\\/(?:[a-z0-9-]+\\.)*etiuda\\.dev(?:\\/[A-Za-z0-9._~-]+)*\\/?$/; /* plant:order-shape */", "/^https?:\\/\\/\\S+$/;"], "shape",
     "order-shape loosened to any http(s) address");
-  await plant("bp4", ["if (!(d.order === undefined || (typeof d.order === \"string\" && ORDER_PAGE_SHAPE.test(d.order)))) return null; /* plant:lab-order */", ""], "shape",
+  await plant("bp4", ["if (!(d.order === undefined || (typeof d.order === \"string\" && ORDER_ORIGIN_SHAPE.test(d.order)))) return null; /* plant:lab-order */", ""], "shape",
     "lab-order cut: a lab file naming another address would be taken");
   await plant("bp5", ["if (!fromEngine(e)) return; /* plant:buy-click-frame */", ""], "nothingElse",
     "buy-click-frame cut: a click from another frame would let the page out");
@@ -291,6 +312,14 @@ if (!PLANTS_OFF && !sliced) {
     "buy-open past the link rule: an open with no click would reach the browser");
   await plant("bp8", ["if (buyManaged(v) || (v && v.licenceManaged)) return \"\"; /* plant:buy-managed */", "if (buyManaged(v)) return \"\";"], "managed",
     "the order page handed to a managed tenant's account turns b10 red");
+  await plant("bp13", ["return origin + ORDER_PATHS[lang === \"pl\" ? \"pl\" : \"en\"]; /* plant:order-lang */", "return origin + ORDER_PATHS.en;"], "language",
+    "order-lang cut: a Polish desk would be handed the English page");
+  await plant("bp14", ["try { if (shellWords().lang === \"pl\") lang = \"pl\"; } catch { lang = \"en\"; }", "lang = \"en\";"], "language",
+    "the desk's language ignored by Buy: a Polish desk would be handed the English page");
+  await plant("bp15", ["if (typeof origin !== \"string\" || !ORDER_ORIGIN_SHAPE.test(origin)) return \"\"; /* plant:order-origin-use */", "if (typeof origin !== \"string\") return \"\";"], "shape",
+    "order-origin-use cut: a page builder would not refuse an origin off etiuda.dev");
+  await plant("bp16", ["/^https:\\/\\/(?:[a-z0-9-]+\\.)*etiuda\\.dev$/; /* plant:order-origin */", "/^https?:\\/\\/\\S+$/;"], "shape",
+    "order-origin loosened to any http(s) address");
   await plant("bp7", ["let ORDER_PAGE = \"\";", "let ORDER_PAGE = \"" + ORDER + "\";"], "absent",
     "the control for b1: with an order page named in the tree, the shell offers Buy and a press hands it");
 }
