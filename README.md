@@ -73,11 +73,15 @@ written out in full for a tool that does not expand variables. The exit code say
 | 0 | Installed, or uninstalled. A Windows older than 7, or a 32-bit Windows, is refused and can also end with 0 | Nothing, on a supported machine |
 | 1618 | Etiuda was still open after being asked to close for about 20 seconds, or open in another person's session, or its folder or one of its files stayed locked, or a folder left beside it could not be removed or moved back, or another Etiuda installer was running | Retry later |
 | 740 | An all-users run could not get administrator rights | Run it elevated, or install per account with `/currentuser` |
+| 1638 | A silent run found a newer version installed, and left it as it was | Nothing, or pass `/ALLOWDOWNGRADE` to install the older version in its place |
 | 2 | The new files could not all be written beside the install, the folder is a drive root, the old version could not be moved back after a failed swap, or another failure the installer caught | Look at that machine |
 
 An upgrade writes the new version into a folder beside the installed one, `<folder>.setup-staging`, while the old
-version stays installed, registered and startable. Only once every file is there does it close Etiuda and swap the two
-folders, so a failed upgrade leaves the old version as it was. A locked folder or file is tried for about a minute
+version stays installed, registered and startable. Only once every file the package lists is there, at its size, does it
+close Etiuda and swap the two folders, so a failed upgrade leaves the old version as it was. Anything in the folder that
+the old version's own list (`etiuda-files.ini`) does not name goes straight back into it. The old version waits in
+`<folder>.setup-previous` until the new one has started; an account that cannot write there, as with an all-users install,
+leaves it for the next upgrade or the uninstall. A locked folder or file is tried for about a minute
 before the run ends with 1618. An upgrade in the same folder keeps each person's shortcuts as they left them; one that
 moves Etiuda to another folder makes them again there, and then deletes from the old folder the files the installer
 wrote, with its `resources` and `locales` folders whole, leaving anything else in it, and anything locked, without
@@ -87,8 +91,11 @@ no longer registered, to be removed by hand.
 An all-users install looks for an open copy in every session, and asks only the installing account's own copy to
 close: another person's is never closed, so the run ends with 1618 and the deployment tool tries again later. A
 per-user install looks in its own account alone, since another account's copy runs from that account's own folder.
-1618 and 740 are the codes Windows itself uses for these cases; the deployment tool still needs them mapped, 1618 to a
-retry and 740 and 2 to a failure.
+An all-users install started already elevated, with no person's own instance to act through, leaves that account's
+per-user copy to its own uninstaller, run silently as that account the next time it signs in, keeping its data.
+
+1618, 740 and 1638 are the codes Windows itself uses for these cases; the deployment tool still needs them mapped, 1618
+to a retry, 1638 to done or to a rerun with `/ALLOWDOWNGRADE`, and 740 and 2 to a failure.
 
 ### Detecting it, and packaging it
 

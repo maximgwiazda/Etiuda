@@ -614,6 +614,40 @@ function registerEtiudaLink() {
   } catch (e) { ok = false; }
   if (!ok) console.error("etiuda: Windows did not make this desk the program that opens an etiuda: link");
 }
+/* THE COPY AN UPDATE SET ASIDE ("<folder>.setup-previous", shell/installer.nsh etiudaSwap) loses, once this copy has started,
+   the files its own list names (shell/install-files.cjs) and the folders they leave empty; never a link, never anything else.
+   Where this account may not write there (an all-users install), it stays for the next installer or the uninstall. */
+async function setAsideDrop(fsp, join, aside, own, exe) {
+  const st = await fsp.lstat(aside).catch(() => null);
+  if (!st || !st.isDirectory() || st.isSymbolicLink() || !(await fsp.lstat(join(aside, exe)).catch(() => null))) return "none";
+  let text = await fsp.readFile(join(aside, "etiuda-files.ini"), "utf8").catch(() => null), wide = false;
+  if (text === null) { wide = true; text = await fsp.readFile(join(own, "etiuda-files.ini"), "utf8").catch(() => null); }
+  if (text === null) return "no list";
+  const listed = { files: new Set(), dirs: new Set() };
+  let sect = "";
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim(), head = /^\[([^\]]*)\]$/.exec(line), eq = line.indexOf("=");
+    if (head) sect = head[1].toLowerCase();
+    else if (eq > 0 && listed[sect]) listed[sect].add(line.slice(0, eq).trim().toLowerCase());
+  }
+  const whole = key => wide && /^(resources|locales)(\\|$)/.test(key); /* as etiudaAsideList counts them */
+  const walk = async rel => {
+    for (const name of await fsp.readdir(rel ? join(aside, rel) : aside).catch(() => [])) {
+      const r = rel ? rel + "\\" + name : name, key = r.toLowerCase(), p = join(aside, r);
+      const s = await fsp.lstat(p).catch(() => null);
+      if (!s || s.isSymbolicLink()) continue;
+      if (s.isDirectory()) { if (listed.dirs.has(key) || whole(key)) { await walk(r); await fsp.rmdir(p).catch(() => {}); } }
+      else if (listed.files.has(key) || whole(key)) await fsp.unlink(p).catch(() => {});
+    }
+  };
+  await walk("");
+  return fsp.rmdir(aside).then(() => "gone", () => "kept");
+}
+function dropSetAside() {
+  if (process.platform !== "win32" || !app.isPackaged) return;
+  const own = path.dirname(process.execPath);
+  setAsideDrop(fs.promises, path.join, own + ".setup-previous", own, path.basename(process.execPath)).catch(() => {});
+}
 /* The lead's standing span, at the root of the team's folder. It replaces the old request file, which nothing here reads. */
 const SPAN_NAME = "stats-span.json";
 // The engine's V2_TEAM_FILE. Watched with the catalogs, since an admission is what opens a sealed one.
@@ -16915,6 +16949,8 @@ if (!theOnlyOne || (Array.isArray(process.argv) && process.argv.includes("--upda
         createWindow();
         armNoteLook();
         armSigninRenew();
+        const asideAt = setTimeout(dropSetAside, 10000);
+        if (asideAt && asideAt.unref) asideAt.unref();
         try { ensureTray(); } catch { /* the window still opens */ }
         try { syncJumpList(); } catch { /* the jump list still stands */ }
         hotkeyReady = true; syncHotkey();
