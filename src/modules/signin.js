@@ -479,7 +479,7 @@ function deskDoorLines(ds){
   const stopped=dayAt(ds.stoppedAt);
   const fill=(s, map)=>Object.keys(map).reduce((a,k)=>a.split(k).join(map[k]), s);
   if(ds.state==="first" || ds.state==="first-offline") return [t("Etiuda starts with a sign-in."),
-    t("Signing in with Microsoft or Google gives this computer a seat: the team's, where its lead has admitted this account, or else a trial of fourteen days. Catalogs open once the seat is here.")];
+    t("Signing in with Microsoft or Google gives this computer a seat: the team's, where this account is already admitted, or else a trial of fourteen days. A lead's invitation then appears here with one Join. Catalogs open once the seat is here.")];
   if(ds.state==="waiting" && ds.askedMany) return [t("The requests to join are waiting."), /* plant:door-asked-head */
     fill(t("Catalogs open here again once one of these leads accepts a request: {LEADS}. Etiuda's own fourteen days ended on {DESK_END}."), {"{LEADS}":ds.askedMany, "{DESK_END}":desk})];
   if(ds.state==="waiting") return [t("The request to join is waiting."),
@@ -597,7 +597,7 @@ function doorLaterHtml(v, ds){
   if(checkFilled) acts+=doorPress(t("Check now"), true, "check");
   if(buyOffered()) acts+=doorPress(t("Buy"), !checkFilled, "buy"); /* plant:door-buy-order */
   /* Where no order page is set the person with no seat is told what brings one (the copywriter's words, 22 November 2026). */
-  const note=buyOffered() ? "" : '<p class="sgn-cap door-nobuy">'+esc(t("Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again."))+'</p>'; /* plant:door-nobuy-line */
+  const note=buyOffered() ? "" : '<p class="sgn-cap door-nobuy">'+esc(t("Buying is not available in this build of Etiuda. A seat comes from a team's lead: the lead's invitation appears here with one Join, and Check now looks for it again."))+'</p>'; /* plant:door-nobuy-line */
   const quiet=[];
   if(!checkFilled) quiet.push(doorTextPress(t("Check now"), "check"));
   quiet.push(doorTextPress(t("Use another account"), "another"));
@@ -683,7 +683,7 @@ function signinDoorOf(v){
        the pseudonyms the route names them by, so the press would do nothing (22 November 2026). */
     const acts=[{act:"check", label:t("Check now"), solid:true}].concat(buyOffered() ? [{act:"buy", label:t("Buy")}] : [], [acct]); /* plant:panel-buy-order */
     return {moment:"ended", ident, heading:endedPair[0], line:endedPair[1], acts:acts,
-      nobuy:buyOffered() ? "" : t("Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again."), /* plant:panel-nobuy-line */
+      nobuy:buyOffered() ? "" : t("Buying is not available in this build of Etiuda. A seat comes from a team's lead: the lead's invitation appears here with one Join, and Check now looks for it again."), /* plant:panel-nobuy-line */
     };
   }
   /* A Join waiting for the lead's confirm, said until the seat comes, whatever the trial does meanwhile. */

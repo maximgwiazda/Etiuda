@@ -9486,7 +9486,7 @@ What is typed here stays in this browser.`;
     "The order page opens in the browser, and the licence bought there is this account's.": "Strona zamówienia otworzy się w przeglądarce, a kupiona tam licencja będzie należeć do tego konta.",
     "A licence is bought for the account signed in here, so signing in comes first.": "Licencję kupuje się dla konta zalogowanego na tym komputerze, więc najpierw trzeba się zalogować.",
     "Buy": "Kup",
-    "Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again.": "W tej wersji Etiudy nie ma zakupu. Miejsce w licencji daje lider zespołu: przynosi je zaproszenie od lidera, a przycisk Sprawdź teraz pozwala sprawdzić ponownie.",
+    "Buying is not available in this build of Etiuda. A seat comes from a team's lead: the lead's invitation appears here with one Join, and Check now looks for it again.": "W tej wersji Etiudy nie ma zakupu. Miejsce w licencji daje lider zespołu: jego zaproszenie pojawia się tutaj z jednym przyciskiem Dołącz, a przycisk Sprawdź teraz szuka go ponownie.",
     "The sign-in service could not be reached.": "Nie udało się połączyć z usługą logowania.",
     "Nothing changed: this computer is not signed in, and Etiuda works as before.": "Nic się nie zmieniło: ten komputer nie jest zalogowany, a Etiuda działa jak dotąd.",
     "{TEAM} has no free seat just now.": "{TEAM} nie ma teraz wolnego miejsca.",
@@ -9826,7 +9826,7 @@ What is typed here stays in this browser.`;
     "{NAME} comes from your account: the first name and the first letter of the surname. Replies that sign with your name use it, and the team's lead sees this desk by it. It can be changed here at any time.": "{NAME} pochodzi z konta: to imię i pierwsza litera nazwiska. Ta nazwa trafia do odpowiedzi podpisywanych imieniem, a lider zespołu widzi pod nią to stanowisko. Można ją zmienić tutaj w dowolnej chwili.",
     "{NAME} is the name on your account. Replies that sign with your name use it, and the team's lead sees this desk by it. It can be changed here at any time.": "{NAME} to nazwa z konta. Ta nazwa trafia do odpowiedzi podpisywanych imieniem, a lider zespołu widzi pod nią to stanowisko. Można ją zmienić tutaj w dowolnej chwili.",
     "Etiuda starts with a sign-in.": "Etiuda zaczyna się od zalogowania.",
-    "Signing in with Microsoft or Google gives this computer a seat: the team's, where its lead has admitted this account, or else a trial of fourteen days. Catalogs open once the seat is here.": "Zalogowanie kontem Microsoft lub Google daje temu komputerowi miejsce w licencji: w zespole, jeśli lider przyjął to konto, a w przeciwnym razie czternastodniowy okres próbny. Katalogi otwierają się, gdy miejsce już jest.",
+    "Signing in with Microsoft or Google gives this computer a seat: the team's, where this account is already admitted, or else a trial of fourteen days. A lead's invitation then appears here with one Join. Catalogs open once the seat is here.": "Zalogowanie kontem Microsoft lub Google daje temu komputerowi miejsce w licencji: w zespole, jeśli to konto jest już do niego przyjęte, a w przeciwnym razie czternastodniowy okres próbny. Zaproszenie od lidera pojawi się wtedy tutaj z jednym przyciskiem Dołącz. Katalogi otwierają się, gdy miejsce już jest.",
     "Signing in needs an internet connection. The buttons appear here by themselves once this computer is online.": "Logowanie wymaga połączenia z internetem. Przyciski pojawią się tu same, gdy komputer będzie online.",
     "The request to join is waiting.": "Prośba o dołączenie czeka.",
     "Catalogs open here again once {LEAD}, the team's lead, accepts it. Etiuda's own fourteen days ended on {DESK_END}.": "Katalogi znów otworzą się tutaj, gdy {LEAD}, lider zespołu, ją przyjmie. Własne czternaście dni Etiudy skończyły się {DESK_END}.",
@@ -30976,7 +30976,7 @@ What is typed here stays in this browser.`;
     const fill2 = (s, map) => Object.keys(map).reduce((a, k) => a.split(k).join(map[k]), s);
     if (ds.state === "first" || ds.state === "first-offline") return [
       t("Etiuda starts with a sign-in."),
-      t("Signing in with Microsoft or Google gives this computer a seat: the team's, where its lead has admitted this account, or else a trial of fourteen days. Catalogs open once the seat is here.")
+      t("Signing in with Microsoft or Google gives this computer a seat: the team's, where this account is already admitted, or else a trial of fourteen days. A lead's invitation then appears here with one Join. Catalogs open once the seat is here.")
     ];
     if (ds.state === "waiting" && ds.askedMany) return [
       t("The requests to join are waiting."),
@@ -31115,7 +31115,7 @@ What is typed here stays in this browser.`;
     let acts = "";
     if (checkFilled) acts += doorPress(t("Check now"), true, "check");
     if (buyOffered()) acts += doorPress(t("Buy"), !checkFilled, "buy");
-    const note = buyOffered() ? "" : '<p class="sgn-cap door-nobuy">' + esc(t("Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again.")) + "</p>";
+    const note = buyOffered() ? "" : '<p class="sgn-cap door-nobuy">' + esc(t("Buying is not available in this build of Etiuda. A seat comes from a team's lead: the lead's invitation appears here with one Join, and Check now looks for it again.")) + "</p>";
     const quiet = [];
     if (!checkFilled) quiet.push(doorTextPress(t("Check now"), "check"));
     quiet.push(doorTextPress(t("Use another account"), "another"));
@@ -31220,7 +31220,7 @@ What is typed here stays in this browser.`;
         heading: endedPair[0],
         line: endedPair[1],
         acts,
-        nobuy: buyOffered() ? "" : t("Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again.")
+        nobuy: buyOffered() ? "" : t("Buying is not available in this build of Etiuda. A seat comes from a team's lead: the lead's invitation appears here with one Join, and Check now looks for it again.")
         /* plant:panel-nobuy-line */
       };
     }

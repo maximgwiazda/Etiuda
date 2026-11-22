@@ -88,7 +88,8 @@ function hostOff() {
 const W = {
   en: {
     h1: "Etiuda starts with a sign-in.",
-    l1: "Signing in with Microsoft or Google gives this computer a seat: the team's, where its lead has admitted this account, or else a trial of fourteen days. Catalogs open once the seat is here.",
+    /* Board 1017 moved l1, EN and PL (the copywriter, 09:13): it once said "where its lead has admitted this account". */
+    l1: "Signing in with Microsoft or Google gives this computer a seat: the team's, where this account is already admitted, or else a trial of fourteen days. A lead's invitation then appears here with one Join. Catalogs open once the seat is here.",
     l1o: "Signing in needs an internet connection. The buttons appear here by themselves once this computer is online.",
     h2: "The request to join is waiting.",
     l2: (d) => `Catalogs open here again once ${LEAD}, the team's lead, accepts it. Etiuda's own fourteen days ended on ${d}.`,
@@ -138,7 +139,7 @@ const W = {
   },
   pl: {
     h1: "Etiuda zaczyna się od zalogowania.",
-    l1: "Zalogowanie kontem Microsoft lub Google daje temu komputerowi miejsce w licencji: w zespole, jeśli lider przyjął to konto, a w przeciwnym razie czternastodniowy okres próbny. Katalogi otwierają się, gdy miejsce już jest.",
+    l1: "Zalogowanie kontem Microsoft lub Google daje temu komputerowi miejsce w licencji: w zespole, jeśli to konto jest już do niego przyjęte, a w przeciwnym razie czternastodniowy okres próbny. Zaproszenie od lidera pojawi się wtedy tutaj z jednym przyciskiem Dołącz. Katalogi otwierają się, gdy miejsce już jest.",
     l1o: "Logowanie wymaga połączenia z internetem. Przyciski pojawią się tu same, gdy komputer będzie online.",
     h2: "Prośba o dołączenie czeka.",
     l2: (d) => `Katalogi znów otworzą się tutaj, gdy ${LEAD}, lider zespołu, ją przyjmie. Własne czternaście dni Etiudy skończyły się ${d}.`,
@@ -792,8 +793,9 @@ CASES.noAskPanel = (pg = P) => {
 /* Buy follows the order page (22 November 2026, Claude alpha 01:57). Where none is set (tonight every build) the door and the ended panel draw no
    Buy, in any state and either language, and the copywriter's one sentence stands in its place where the person has no seat (the door's
    states and the ended panel); where one is set Buy draws as before and the sentence is not there. */
-const NOBUY = { en: "Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again.",
-  pl: "W tej wersji Etiudy nie ma zakupu. Miejsce w licencji daje lider zespołu: przynosi je zaproszenie od lidera, a przycisk Sprawdź teraz pozwala sprawdzić ponownie." };
+/* Board 1017 moved this (the copywriter, 09:13): it once said an invitation from the lead brings the seat and Check now looks again. */
+const NOBUY = { en: "Buying is not available in this build of Etiuda. A seat comes from a team's lead: the lead's invitation appears here with one Join, and Check now looks for it again.",
+  pl: "W tej wersji Etiudy nie ma zakupu. Miejsce w licencji daje lider zespołu: jego zaproszenie pojawia się tutaj z jednym przyciskiem Dołącz, a przycisk Sprawdź teraz szuka go ponownie." };
 const buyIn = (html) => /data-e-open="buy"/.test(html) || />(Buy|Kup)</.test(html);
 const buyHolds = (pg, render, later) => {
   for (const lang of ["en", "pl"]) for (const noTeam of [false, true]) for (const v of ASK_VIEWS()) {
@@ -919,7 +921,7 @@ if (!PLANTS_OFF) {
      "else if(!works && v.signedIn) state=\"stopped\"; /* plant:door-state-stopped */\n  else if(!works && v.signedIn && waitingOnLead && (trialOver || (!seatOn && !(v.stoppedAt>0)))) state=\"waiting\"; /* plant:door-state-waiting */\n  else if(!works && v.signedIn && trialOpen && orgLicence) state=\"trial-over-org\";\n  else if(!works && v.signedIn && trialOpen) state=\"trial-over\";"],
     "seamShape");
   await plant("ddp23", SIGNIN_PATH,
-    ["const waitingOnLead=!!(v.askLead || signinNoSeat(v)); /* B-3a feeds this */ /* plant:door-waiting-noseat */", "const waitingOnLead=!!v.askLead; /* B-3a feeds this */"],
+    ["const waitingOnLead=!!(v.askLead || signinNoSeat(v) || v.joinWait); /* B-3a feeds this */ /* plant:door-waiting-noseat */", "const waitingOnLead=!!(v.askLead || v.joinWait); /* B-3a feeds this */"],
     "doorNotNoneWhenDue");
   await plant("ddp24", SIGNIN_PATH,
     ["else if(!works && v.signedIn && waitingOnLead && (trialOver || (!seatOn && !(v.stoppedAt>0)))) state=\"waiting\"; /* plant:door-state-waiting */", "else if(!works && v.signedIn && waitingOnLead && trialOver) state=\"waiting\";"],
@@ -967,13 +969,13 @@ if (!PLANTS_OFF) {
     ["  if(buyOffered()) acts+=doorPress(t(\"Buy\"), !checkFilled, \"buy\"); /* plant:door-buy-order */", "  if(true) acts+=doorPress(t(\"Buy\"), !checkFilled, \"buy\");"],
     "noBuyDoor");
   await plant("ddp63", SIGNIN_PATH,
-    ["  const note=buyOffered() ? \"\" : '<p class=\"sgn-cap door-nobuy\">'+esc(t(\"Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again.\"))+'</p>'; /* plant:door-nobuy-line */", "  const note=\"\";"],
+    ["  const note=buyOffered() ? \"\" : '<p class=\"sgn-cap door-nobuy\">'+esc(t(\"Buying is not available in this build of Etiuda. A seat comes from a team's lead: the lead's invitation appears here with one Join, and Check now looks for it again.\"))+'</p>'; /* plant:door-nobuy-line */", "  const note=\"\";"],
     "noBuyDoor");
   await plant("ddp64", SIGNIN_PATH,
     ["const acts=[{act:\"check\", label:t(\"Check now\"), solid:true}].concat(buyOffered() ? [{act:\"buy\", label:t(\"Buy\")}] : [], [acct]); /* plant:panel-buy-order */", "const acts=[{act:\"check\", label:t(\"Check now\"), solid:true}, {act:\"buy\", label:t(\"Buy\")}, acct];"],
     "noBuyPanel");
   await plant("ddp65", SIGNIN_PATH,
-    ["nobuy:buyOffered() ? \"\" : t(\"Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again.\"), /* plant:panel-nobuy-line */", "nobuy:\"\","],
+    ["nobuy:buyOffered() ? \"\" : t(\"Buying is not available in this build of Etiuda. A seat comes from a team's lead: the lead's invitation appears here with one Join, and Check now looks for it again.\"), /* plant:panel-nobuy-line */", "nobuy:\"\","],
     "noBuyPanel");
   await plant("ddp61", SIGNIN_PATH,
     ["const acts=[{act:\"check\", label:t(\"Check now\"), solid:true}].concat(buyOffered() ? [{act:\"buy\", label:t(\"Buy\")}] : [], [acct]); /* plant:panel-buy-order */", "const acts=[{act:\"ask\", label:t(\"Ask a team's lead…\"), solid:true}, {act:\"check\", label:t(\"Check now\")}, acct];"],
