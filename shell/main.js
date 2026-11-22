@@ -247,8 +247,21 @@ function rawCatalogFolder() {
   const set = deskKeys[CATALOG_FOLDER_KEY];
   return (typeof set === "string" && set.trim()) ? set.trim() : defaultCatalogFolder();
 }
+/* The local copy of a team held through a shared folder, where the person's catalog folder setting is that team's share and the
+   copy holds anything, else "". A folder team no longer syncs, so the copy is what the desk last had: it holds what the share
+   does not (an owed file), and it opens with the share out of reach. Never a team's place: the copy is read as a plain folder. */
+function heldLocalCopy(setting) {
+  const s = path.resolve(String(setting || ""));
+  for (const t of Object.keys(teamShown)) {
+    if (!folderHeld(t) || path.resolve(teamShown[t].folder) !== s) continue;
+    const copy = folderMirrorOf(t);
+    try { if (fs.statSync(copy).isDirectory() && fs.readdirSync(copy).length) return copy; } catch { /* no copy kept: the share is read */ }
+  }
+  return "";
+}
 /* The catalog folder: a relay team's mirror, the mirror a team moving to a folder waits in, else the person's own setting.
-   A team held through a shared folder is not read as a team (folderHeld): its folder is a plain catalog folder. */
+   A team held through a shared folder is not read as a team (folderHeld): its folder is a plain catalog folder, and where this
+   desk keeps a local copy of it, that copy (heldLocalCopy). */
 function catalogFolder() {
   if (deskKeys === undefined) deskKeys = readDesk();
   /* On the relay the team folder is the mirror the channel layer keeps, beside the desk's own file (shell/relay/channel.cjs). */
@@ -256,7 +269,9 @@ function catalogFolder() {
   if (relay) return relayMirrorOf(relay.rt);
   const need = Object.values(teamNeedsFolder)[0];
   if (need && need.mirror) return need.mirror;
-  return rawCatalogFolder();
+  const raw = rawCatalogFolder(), copy = heldLocalCopy(raw);
+  if (copy) return copy; /* plant:held-local-copy */
+  return raw;
 }
 /* Made on first run, and only where nobody has chosen one: a folder somebody picked existed when
    they picked it, so making it again would quietly stand in for a share that has gone away. */
@@ -1827,8 +1842,14 @@ function inHeldFolder(file) {
   const f = path.resolve(String(file));
   return Object.keys(teamShown).some(t => folderHeld(t) && f.indexOf(path.resolve(teamShown[t].folder) + path.sep) === 0);
 }
+/* Or in that team's local copy, which the desk reads (heldLocalCopy) and which keeps what was owed. */
+function inHeldCopy(file) {
+  const f = path.resolve(String(file));
+  return Object.keys(teamShown).some(t => folderHeld(t) && f.indexOf(path.resolve(folderMirrorOf(t)) + path.sep) === 0);
+}
 function unlinkOwn(file) {
   if (inHeldFolder(file)) return; /* plant:held-folder-kept */
+  if (inHeldCopy(file)) return; /* plant:held-copy-kept */
   fs.unlinkSync(file);
   mirrorOwes(file);
 }
@@ -7019,7 +7040,7 @@ function policyHoldsTeam(t, named) {
 }
 /* A team this desk holds through a shared folder: its folder kept, and no relay (leadsView asks it of the pinned teams alone). No
    folder is read as a team, so its row says so (folderHeld), and what the folder's local copy still owed the share stays there,
-   said on the row (folderOwed). */
+   said on the row (folderOwed), with the folder it stays in (folderCopy). */
 function folderHeld(t) {
   const shown = teamShown[t];
   if (!shown || !shown.folder || shown.relay || teamRelayGone[t] === true || teamNeedsFolder[t]) return false;
@@ -7070,7 +7091,7 @@ function leadsView() {
     }
     if (folderHeld(t)) {
       row.folderHeld = true; /* plant:folder-held-row */
-      if (folderOutboxOwes(t)) row.folderOwed = true; /* plant:folder-owed-row */
+      if (folderOutboxOwes(t)) { row.folderOwed = true; row.folderCopy = folderMirrorOf(t); } /* plant:folder-owed-row */
     }
     if (admitted && !row.removed && awaitsFirstEdition(t)) row.awaitsEdition = true;
     return row;
@@ -13221,6 +13242,7 @@ function storeSyncFolder() {
   if (relayHere() || Object.keys(teamNeedsFolder).length) return ""; /* plant:sync-team-folder */
   const root = catalogFolder();
   if (Object.keys(teamShown).some(t => folderHeld(t) && path.resolve(teamShown[t].folder) === path.resolve(root))) return ""; /* plant:sync-held-folder */
+  if (Object.keys(teamShown).some(t => folderHeld(t) && path.resolve(folderMirrorOf(t)) === path.resolve(root))) return ""; /* plant:sync-held-copy */
   return root;
 }
 /* This desk's items that follow: its desk keys, and the catalog files at the top of the person's own catalog folder. Null while that
