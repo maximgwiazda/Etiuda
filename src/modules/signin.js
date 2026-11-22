@@ -579,13 +579,19 @@ function doorFirstHtml(v, ds){
   const foot='<p class="fs-foot">'+esc(t("No licence key to keep"))+'</p>';
   return doorScreen(left, right, foot);
 }
+/* Whether the shell names an order page (shell/main.js buyAddress); none is set in a build without one, and then Buy is drawn nowhere. */
+function buyOffered(){
+  const h=eHost();
+  try{ const s=h && typeof h.buyState==="function" ? h.buyState() : null; return !!(s && s.offer===true); }catch(e){ return false; }
+}
 function doorLaterHtml(v, ds){
   const pair=deskDoorLines(ds);
   const checkFilled=ds.state==="waiting";
   let acts="";
   if(checkFilled) acts+=doorPress(t("Check now"), true, "check");
-  else acts+=doorPress(t("Buy"), true, "buy"); /* plant:door-no-ask */
-  if(checkFilled) acts+=doorPress(t("Buy"), false, "buy");
+  if(buyOffered()) acts+=doorPress(t("Buy"), !checkFilled, "buy"); /* plant:door-buy-order */
+  /* Where no order page is set the person with no seat is told what brings one (the copywriter's words, 22 November 2026). */
+  const note=buyOffered() ? "" : '<p class="sgn-cap door-nobuy">'+esc(t("Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again."))+'</p>'; /* plant:door-nobuy-line */
   const quiet=[];
   if(!checkFilled) quiet.push(doorTextPress(t("Check now"), "check"));
   quiet.push(doorTextPress(t("Use another account"), "another"));
@@ -594,7 +600,7 @@ function doorLaterHtml(v, ds){
   const wayOut=out ? '<div class="door-out"><button type="button" class="btn" data-door-save>'+esc(t("Save your own work as files…"))+'</button><p class="sgn-cap">'+esc(t("What this account made here can still be saved as files, in a folder of your choice: its own cards, its edits to a catalog's cards, and the flags it raised. Catalogs themselves are not saved."))+'</p></div>' : "";
   const p=signinParts(v);
   const right=signinIdentHtml({initial:p.initial, name:p.name, sub:p.sub, off:p.off})
-    +'<div class="sgn-acts door-acts">'+acts+'</div><div class="door-quiet">'+quiet.join("")+'</div>'+wayOut;
+    +'<div class="sgn-acts door-acts">'+acts+'</div>'+note+'<div class="door-quiet">'+quiet.join("")+'</div>'+wayOut;
   const left='<h1 id="fsHeading">'+esc(pair[0])+'</h1><p class="fs-lede">'+esc(pair[1])+'</p>';
   return doorScreen(left, right, "");
 }
@@ -665,8 +671,10 @@ function signinDoorOf(v){
     const endedPair=deskDoorLines(ds);
     /* No Ask press: the service's ask route is not what a lead's Roster reads under Asking to join, and this desk holds the leads' names, not
        the pseudonyms the route names them by, so the press would do nothing (22 November 2026). */
-    const acts=[{act:"check", label:t("Check now"), solid:true}, {act:"buy", label:t("Buy")}, acct]; /* plant:panel-no-ask */
-    return {moment:"ended", ident, heading:endedPair[0], line:endedPair[1], acts:acts};
+    const acts=[{act:"check", label:t("Check now"), solid:true}].concat(buyOffered() ? [{act:"buy", label:t("Buy")}] : [], [acct]); /* plant:panel-buy-order */
+    return {moment:"ended", ident, heading:endedPair[0], line:endedPair[1], acts:acts,
+      nobuy:buyOffered() ? "" : t("Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again."), /* plant:panel-nobuy-line */
+    };
   }
   const pair=deskDoorLines(ds);
   if(ds.state==="working") return {moment:"working", ident, heading:pair[0], line:pair[1], foot:deskSeatShort(ds), acts:[{act:"check", label:t("Check now")}, acct]}; /* plant:door-panel-working */
@@ -777,6 +785,7 @@ function signinPanelHtml(d){
     if(d.moment==="ended") h+=signinEndedActsHtml(d.acts); /* plant:door-panel-rows */
     else h+=signinActsHtml(d.acts);
   }
+  if(d.nobuy) h+='<p class="sgn-cap door-nobuy">'+esc(d.nobuy)+'</p>';
   if(d.own) h+='<p class="sgn-say sgn-own"><b>'+esc(d.own[0])+'</b><span>'+esc(d.own[1])+'</span></p>';
   if(d.link) h+=signinLinkHtml(d.link);
   if(d.foot) h+='<p class="sgn-ft">'+esc(d.foot)+'</p>';
@@ -1182,6 +1191,7 @@ function wireSignin(){
 
 export {
   SIGNIN_NAMES,
+  buyOffered,
   bootFirstSignin,
   closeFirstSignin,
   deskWorks,

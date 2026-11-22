@@ -795,9 +795,9 @@ CASES.noAskPanel = (pg = P) => {
 const NOBUY = { en: "Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again.",
   pl: "W tej wersji Etiudy nie ma zakupu. Miejsce w licencji daje lider zespołu: przynosi je zaproszenie od lidera, a przycisk Sprawdź teraz pozwala sprawdzić ponownie." };
 const buyIn = (html) => /data-e-open="buy"/.test(html) || />(Buy|Kup)</.test(html);
-const buyHolds = (render, later) => {
+const buyHolds = (pg, render, later) => {
   for (const lang of ["en", "pl"]) for (const noTeam of [false, true]) for (const v of ASK_VIEWS()) {
-    const withPage = render(P, v, lang, { noTeam }), without = render(P, v, lang, { noTeam, noOrder: true });
+    const withPage = render(pg, v, lang, { noTeam }), without = render(pg, v, lang, { noTeam, noOrder: true });
     const isLater = later(withPage);
     if (buyIn(without) || textOf(withPage).includes(NOBUY[lang])) return false;
     if (textOf(without).includes(NOBUY[lang]) !== isLater) return false;
@@ -805,8 +805,8 @@ const buyHolds = (render, later) => {
   }
   return true;
 };
-CASES.noBuyDoor = (pg = P) => buyHolds(doorHtml, (h) => h.includes("door-quiet"));
-CASES.noBuyPanel = (pg = P) => buyHolds(panelHtml, (h) => h.includes("door-on-row"));
+CASES.noBuyDoor = (pg = P) => buyHolds(pg, doorHtml, (h) => h.includes("door-quiet"));
+CASES.noBuyPanel = (pg = P) => buyHolds(pg, panelHtml, (h) => h.includes("door-on-row"));
 
 /* Run all checks. */
 const RUN_LIST = [
@@ -961,7 +961,7 @@ if (!PLANTS_OFF) {
     ["if(d.moment===\"ended\") h+=signinEndedActsHtml(d.acts); /* plant:door-panel-rows */", "if(false) h+=signinEndedActsHtml(d.acts); /* plant:door-panel-rows */"],
     "panelRows");
   await plant("ddp60", SIGNIN_PATH,
-    ["else acts+=doorPress(t(\"Buy\"), true, \"buy\"); /* plant:door-no-ask */", "else if(ds.state===\"trial-over-org\") acts+=doorPress(t(\"Ask a team's lead…\"), true, \"ask\"); else acts+=doorPress(t(\"Buy\"), true, \"buy\");"],
+    ["  if(checkFilled) acts+=doorPress(t(\"Check now\"), true, \"check\");", "  if(ds.state===\"trial-over-org\") acts+=doorPress(t(\"Ask a team's lead…\"), true, \"ask\"); if(checkFilled) acts+=doorPress(t(\"Check now\"), true, \"check\");"],
     "noAskDoor");
   await plant("ddp62", SIGNIN_PATH,
     ["  if(buyOffered()) acts+=doorPress(t(\"Buy\"), !checkFilled, \"buy\"); /* plant:door-buy-order */", "  if(true) acts+=doorPress(t(\"Buy\"), !checkFilled, \"buy\");"],
@@ -976,7 +976,7 @@ if (!PLANTS_OFF) {
     ["nobuy:buyOffered() ? \"\" : t(\"Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again.\"), /* plant:panel-nobuy-line */", "nobuy:\"\","],
     "noBuyPanel");
   await plant("ddp61", SIGNIN_PATH,
-    ["const acts=[{act:\"check\", label:t(\"Check now\"), solid:true}, {act:\"buy\", label:t(\"Buy\")}, acct]; /* plant:panel-no-ask */", "const acts=[{act:\"ask\", label:t(\"Ask a team's lead…\"), solid:true}, {act:\"check\", label:t(\"Check now\")}, {act:\"buy\", label:t(\"Buy\")}, acct];"],
+    ["const acts=[{act:\"check\", label:t(\"Check now\"), solid:true}].concat(buyOffered() ? [{act:\"buy\", label:t(\"Buy\")}] : [], [acct]); /* plant:panel-buy-order */", "const acts=[{act:\"ask\", label:t(\"Ask a team's lead…\"), solid:true}, {act:\"check\", label:t(\"Check now\")}, acct];"],
     "noAskPanel");
   await plant("ddp15", SIGNIN_PATH,
     ["if(d.getFullYear()!==new Date(now>0?now:Date.now()).getFullYear()) opt.year=\"numeric\"; /* plant:door-day-year */", "if(false) opt.year=\"numeric\"; /* plant:door-day-year */"],

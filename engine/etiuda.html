@@ -9478,6 +9478,7 @@ What is typed here stays in this browser.`;
     "The order page opens in the browser with this account's sign-in code filled in; typing another person's code buys the licence for them instead.": "Strona zamówienia otworzy się w przeglądarce z wpisanym kodem logowania tego konta; po wpisaniu kodu innej osoby licencja zostanie kupiona dla niej.",
     "The order page opens in the browser and asks for the sign-in code of the person the licence is for, which Etiuda shows them after their first sign-in.": "Strona zamówienia otworzy się w przeglądarce i poprosi o kod logowania osoby, dla której jest licencja; Etiuda pokazuje go tej osobie po jej pierwszym zalogowaniu.",
     "Buy": "Kup",
+    "Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again.": "W tej wersji Etiudy nie ma zakupu. Miejsce w licencji daje lider zespołu: przynosi je zaproszenie od lidera, a przycisk Sprawdź teraz pozwala sprawdzić ponownie.",
     "The sign-in service could not be reached.": "Nie udało się połączyć z usługą logowania.",
     "Nothing changed: this computer is not signed in, and Etiuda works as before.": "Nic się nie zmieniło: ten komputer nie jest zalogowany, a Etiuda działa jak dotąd.",
     "{TEAM} has no free seat just now.": "{TEAM} nie ma teraz wolnego miejsca.",
@@ -31096,13 +31097,22 @@ What is typed here stays in this browser.`;
     const foot = '<p class="fs-foot">' + esc(t("No licence key to keep")) + "</p>";
     return doorScreen(left, right, foot);
   }
+  function buyOffered() {
+    const h = eHost();
+    try {
+      const s = h && typeof h.buyState === "function" ? h.buyState() : null;
+      return !!(s && s.offer === true);
+    } catch (e) {
+      return false;
+    }
+  }
   function doorLaterHtml(v, ds) {
     const pair = deskDoorLines(ds);
     const checkFilled = ds.state === "waiting";
     let acts = "";
     if (checkFilled) acts += doorPress(t("Check now"), true, "check");
-    else acts += doorPress(t("Buy"), true, "buy");
-    if (checkFilled) acts += doorPress(t("Buy"), false, "buy");
+    if (buyOffered()) acts += doorPress(t("Buy"), !checkFilled, "buy");
+    const note = buyOffered() ? "" : '<p class="sgn-cap door-nobuy">' + esc(t("Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again.")) + "</p>";
     const quiet = [];
     if (!checkFilled) quiet.push(doorTextPress(t("Check now"), "check"));
     quiet.push(doorTextPress(t("Use another account"), "another"));
@@ -31110,7 +31120,7 @@ What is typed here stays in this browser.`;
     const out = ds.state !== "waiting";
     const wayOut = out ? '<div class="door-out"><button type="button" class="btn" data-door-save>' + esc(t("Save your own work as files…")) + '</button><p class="sgn-cap">' + esc(t("What this account made here can still be saved as files, in a folder of your choice: its own cards, its edits to a catalog's cards, and the flags it raised. Catalogs themselves are not saved.")) + "</p></div>" : "";
     const p = signinParts(v);
-    const right = signinIdentHtml({ initial: p.initial, name: p.name, sub: p.sub, off: p.off }) + '<div class="sgn-acts door-acts">' + acts + '</div><div class="door-quiet">' + quiet.join("") + "</div>" + wayOut;
+    const right = signinIdentHtml({ initial: p.initial, name: p.name, sub: p.sub, off: p.off }) + '<div class="sgn-acts door-acts">' + acts + "</div>" + note + '<div class="door-quiet">' + quiet.join("") + "</div>" + wayOut;
     const left = '<h1 id="fsHeading">' + esc(pair[0]) + '</h1><p class="fs-lede">' + esc(pair[1]) + "</p>";
     return doorScreen(left, right, "");
   }
@@ -31196,8 +31206,16 @@ What is typed here stays in this browser.`;
     const ds = deskDoorState(v);
     if (ds.state === "ended") {
       const endedPair = deskDoorLines(ds);
-      const acts = [{ act: "check", label: t("Check now"), solid: true }, { act: "buy", label: t("Buy") }, acct];
-      return { moment: "ended", ident, heading: endedPair[0], line: endedPair[1], acts };
+      const acts = [{ act: "check", label: t("Check now"), solid: true }].concat(buyOffered() ? [{ act: "buy", label: t("Buy") }] : [], [acct]);
+      return {
+        moment: "ended",
+        ident,
+        heading: endedPair[0],
+        line: endedPair[1],
+        acts,
+        nobuy: buyOffered() ? "" : t("Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again.")
+        /* plant:panel-nobuy-line */
+      };
     }
     const pair = deskDoorLines(ds);
     if (ds.state === "working") return { moment: "working", ident, heading: pair[0], line: pair[1], foot: deskSeatShort(ds), acts: [{ act: "check", label: t("Check now") }, acct] };
@@ -31312,6 +31330,7 @@ What is typed here stays in this browser.`;
       if (d.moment === "ended") h += signinEndedActsHtml(d.acts);
       else h += signinActsHtml(d.acts);
     }
+    if (d.nobuy) h += '<p class="sgn-cap door-nobuy">' + esc(d.nobuy) + "</p>";
     if (d.own) h += '<p class="sgn-say sgn-own"><b>' + esc(d.own[0]) + "</b><span>" + esc(d.own[1]) + "</span></p>";
     if (d.link) h += signinLinkHtml(d.link);
     if (d.foot) h += '<p class="sgn-ft">' + esc(d.foot) + "</p>";
@@ -42596,15 +42615,6 @@ What is typed here stays in this browser.`;
     if (v.offered.length) h += "<div>" + (v.said === "signin-preview" ? "" : signinPreviewHtml(v)) + signinProvidersHtml(v.offered, true) + (signinCapHolds(v) ? '<p class="sgn-cap">' + esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.")) + "</p>" : "") + '<p class="sgn-cap">' + esc(t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name, address and picture, and shows them only to the leads and administrator of the licence it asks to join.")) + "</p></div>";
     if (choosing && v.signedIn) h += '<span class="sgn-acts"><button type="button" class="btn" data-signin-act="keep">' + esc(t("Cancel")) + "</button></span>";
     return h + "</div>";
-  }
-  function buyOffered() {
-    const h = eHost();
-    try {
-      const s = h && typeof h.buyState === "function" ? h.buyState() : null;
-      return !!(s && s.offer === true);
-    } catch (e) {
-      return false;
-    }
   }
   function buyRow(v) {
     return row(

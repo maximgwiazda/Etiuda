@@ -1486,6 +1486,7 @@ UI_STRINGS.pl={
   "The order page opens in the browser with this account's sign-in code filled in; typing another person's code buys the licence for them instead.":"Strona zamówienia otworzy się w przeglądarce z wpisanym kodem logowania tego konta; po wpisaniu kodu innej osoby licencja zostanie kupiona dla niej.",
   "The order page opens in the browser and asks for the sign-in code of the person the licence is for, which Etiuda shows them after their first sign-in.":"Strona zamówienia otworzy się w przeglądarce i poprosi o kod logowania osoby, dla której jest licencja; Etiuda pokazuje go tej osobie po jej pierwszym zalogowaniu.",
   "Buy":"Kup",
+  "Buying is not available in this build of Etiuda. A seat comes from a team's lead: an invitation from the lead brings it, and Check now looks again.":"W tej wersji Etiudy nie ma zakupu. Miejsce w licencji daje lider zespołu: przynosi je zaproszenie od lidera, a przycisk Sprawdź teraz pozwala sprawdzić ponownie.",
   "The sign-in service could not be reached.":"Nie udało się połączyć z usługą logowania.",
   "Nothing changed: this computer is not signed in, and Etiuda works as before.":"Nic się nie zmieniło: ten komputer nie jest zalogowany, a Etiuda działa jak dotąd.",
   "{TEAM} has no free seat just now.":"{TEAM} nie ma teraz wolnego miejsca.",
