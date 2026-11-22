@@ -240,7 +240,7 @@ try {
     const mine = openSealedDoc(u.box.D, inUsePath(u.box.share, u.box.me.id), u.box.key);
     const onShare = openSealedDoc(u.box.D, path.join(u.box.share, "desks", u.box.me.id, "in-use.ec"), u.box.key);
     const names = d => !!d && !!d.catalog && (d.catalog.id === "quay-held" || d.catalog.title === "Quay held" || d.catalog.id === "harbour-board");
-    return { mirror: names(mine), share: names(onShare), cleared: !!mine && mine.cleared === true };
+    return { mirror: names(mine), share: names(onShare), cleared: !!mine && mine.cleared === true && !!onShare && onShare.cleared === true };
   };
   const NL = "\n";
   const lift = (tag, with_) => { const s = SRC.split(NL).map(l => l.indexOf(tag) >= 0 ? with_ : l).join(NL); return s === SRC ? null : s; };
@@ -370,8 +370,8 @@ try {
     return { untold, told };
   };
   const r7 = await pcm7();
-  check(!r7.untold.mirror && !r7.untold.share && r7.told.mirror && r7.told.share,
-    "pcm7 in-use.ec names a personal catalog only once the desk is told (" + JSON.stringify(r7) + ")");
+  check(!r7.untold.mirror && !r7.untold.share && r7.untold.cleared && r7.told.mirror && r7.told.share,
+    "pcm7 in-use.ec names a personal catalog only once the desk is told, and until then says cleared, naming none (" + JSON.stringify(r7) + ")");
   await planted("pcm7p", "plant:pcm-in-use-gate", "    /* plant lifted */", pcm7,
     r => r.untold.mirror || r.untold.share, "the personal catalog is named before the desk is told");
   {
@@ -408,7 +408,7 @@ try {
     return { before, marked, unmarked };
   };
   const r8 = await pcm8();
-  check(r8.before.mirror && r8.before.share && !r8.marked.mirror && !r8.marked.share && r8.unmarked.mirror && r8.unmarked.share,
+  check(r8.before.mirror && r8.before.share && !r8.marked.mirror && !r8.marked.share && r8.marked.cleared && r8.unmarked.mirror && r8.unmarked.share,
     "pcm8 marking the catalog in use takes its name off the mirror and the share, and unmarking puts it back (" + JSON.stringify(r8) + ")");
   await planted("pcm8p", "plant:pcm-reseal-judge",
     "  if (inUseKept && inUseKept.sha === pin && inUseKept.epoch === use.seal.epoch && inUseKept.team === use.seal.team) return;", pcm8,

@@ -1666,8 +1666,10 @@ try {
       const kept = (listedP.box.D.envelope().catalogPrivate || []).length;
       const env = unlistedP.box.D.envelope().catalogPrivate || [];
       const useDoc = openSealedDoc(unlistedP.box.D, inUsePath(unlistedP.box.share, unlistedP.box.me.id), unlistedP.box.key);
-      /* A catalog marked private is not named in in-use.ec at all (board 1014, 2026-11-22; it was named, with no word of the mark). */
-      const nowhere = !useDoc && !/private/i.test(JSON.stringify(fs.readdirSync(unlistedP.box.share)));
+      /* A catalog marked private is not named in in-use.ec at all: the file says cleared and names none (board 1014, 2026-11-22;
+         it was named, with no word of the mark). */
+      const nowhere = !!useDoc && useDoc.cleared === true && !useDoc.catalog && !/private/i.test(JSON.stringify(useDoc))
+        && !/private/i.test(JSON.stringify(fs.readdirSync(unlistedP.box.share)));
       check(!unlistedP.written && listedP.written && !grown.written && Array.isArray(view.private) && view.private.length === 0 && freed.written && !!freed.team && grownFreed.written
           && kept === 0 && env.length === 1 && env[0] === "quay-held" && nowhere,
         "b0d a catalog the team does not list, marked private, is answered to nobody, nor a copy grown from it, nor named in in-use.ec; a listed one takes no mark and is answered (round six); the mark is kept in the desk envelope alone, and taken off, the catalog is answered ("

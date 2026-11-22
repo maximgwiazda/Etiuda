@@ -3722,14 +3722,14 @@ function inUseNames(doc, use) {
   if (teamListedDoc(doc, use)) return true;
   return !catalogMarkedPrivate(doc) && contentApplies(use.seal.team);
 }
-/* The catalog in use is kept on this desk and named nowhere: in-use.ec goes from this desk's own folder, its removal owed to the
-   share as an eject's is, and the record says the pin is withheld, so a later tell or unmark names it. A removal that does not
-   land is held and tried again. */
+/* The catalog in use is kept on this desk and named nowhere: in-use.ec is written cleared, naming no catalog, under the key
+   held now, so Studio reads the desk as using none, refuses an older file that named one (its n floor), and still sees the desk
+   take a key change; the record says the pin is withheld, so a later tell or unmark names it. A write that does not land is
+   held and tried again. */
 function withholdInUse(got, pin, seal) {
-  const at = branchDest(IN_USE_STEM);
-  if (!at) return;
-  try { unlinkOwn(at.dest); }
-  catch (e) { if (e.code !== "ENOENT") { heldInUse = { text: got.text, source: got.source }; return; } }
+  let written = false;
+  try { written = writeClearedInUse(); } catch { written = false; }
+  if (!written) { heldInUse = { text: got.text, source: got.source }; return; }
   inUseKept = { sha: pin, epoch: seal.epoch, team: seal.team, source: got.source, withheld: true };
   heldInUse = null;
   persistDeskEnvelope();
