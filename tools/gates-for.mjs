@@ -236,6 +236,7 @@ export const SCANS = {
     "tests/lab-owner.mjs",
   ],
   "tests/tray.mjs": ["shell/tray.cjs"],
+  "tests/one-logo.mjs": ["shell/etiuda.ico", "shell/etiuda-tray.png", "shell/installer/**", "src/template.html", "src/modules/about.js", "src/modules/launch-mark.js", "shell/main.js", "engine/etiuda.html"],
   "tests/no-crash-dialog.mjs": ["tests/**/*.{js,mjs,cjs}"],
   "tests/off-windows-selftest.cjs": ["tests/*.{js,mjs,cjs}"],
   "tests/control-bytes.mjs": ["**/*.{js,mjs,cjs}"],

@@ -383,13 +383,13 @@ check(restTurned && !rest.tile.classList.contains("brand-turning") && rest.draws
   "441c at rest the header hands back to its svg: turning " + restTurned + ", then the canvas "
   + (rest.tile.classList.contains("brand-turning") ? "stays" : "comes off") + " after " + rest.draws.length + " stroke(s), the path unwritten");
 
-/* The canvas at the standing figure's phase, 56 degrees, lies on the standing path: every point of the path's outline,
+/* The canvas at the standing figure's phase, 90 degrees, lies on the standing path: every point of the path's outline,
    placed as the svg places it, sits half the line's width from the turn's centreline placed by the canvas's own matrix.
    The centreline is worked out from the figure's definition. The control: the same test through the tile's transform
    alone, without the turn's fit taken back, misses. */
 function onLine(m, pts) {
   const line = [];
-  const phi = 56 * Math.PI / 180;
+  const phi = 90 * Math.PI / 180;
   for (let i = 0; i <= 6000; i++) {
     const t = i / 6000 * 2 * Math.PI;
     line.push([(128 + FIT * 96 * Math.sin(3 * t + phi)) * m.a + m.e, (128 + FIT * 96 * Math.sin(2 * t)) * m.a + m.f]);
@@ -413,7 +413,7 @@ const canvasM = draws.length ? { a: draws[0].a, e: draws[0].e, f: draws[0].f } :
 const worstOn = standPx.length > 500 ? onLine(canvasM, standPx) : Infinity;
 const worstOff = onLine({ a: tilePx * wantSc, e: (wantTx - wantVx) * tilePx, f: (wantTy - vbParts[1]) * tilePx }, standPx);
 check(worstOn <= 0.01 && worstOff > 0.5,
-  "441d the canvas at 56 degrees strokes the standing figure: its " + standPx.length + " outline points lie within "
+  "441d the canvas at 90 degrees strokes the standing figure: its " + standPx.length + " outline points lie within "
   + worstOn.toFixed(4) + " px of half the line's width; control, through the tile's transform alone, off by " + (isFinite(worstOff) ? worstOff.toFixed(2) + " px" : "more than 3 px"));
 
 /* THE TURN CARRIES THE DEPTH (board 441). At each repaint the light canvas holds the line's pieces in greys, a wider pass
@@ -456,7 +456,7 @@ check(lastPut.first === true && lastPut.alpha === 102 && lastPut.n === 625,
 
 /* THE STANDING MARK IS THE AGREED CUT, BYTE FOR BYTE: the svg's content after the viewBox is the cut taken whole,
    its sha256 written here when it landed. */
-const STAND_SHA = "db48b668f4ad6e23d9e6eaa6a24977ed2c1d358d1353cb3617458ae58b222a51";
+const STAND_SHA = "abae675a710e80f6a85fe3c06d602849dd12addb650488ae9a38baf182f04648";
 const standInner = (/^<svg[^>]*>([\s\S]*)<\/svg>$/.exec(tileSvg) || [])[1] || "";
 const standSha = crypto.createHash("sha256").update(standInner, "utf8").digest("hex");
 check(standSha === STAND_SHA && viewBox === "-17.4545 -17.4545 290.9091 290.9091",
