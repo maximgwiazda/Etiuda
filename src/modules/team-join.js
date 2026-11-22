@@ -320,7 +320,7 @@ function lapseNote(l){ return lapseWords(l).title; }
    PLACEHOLDER words, for the copywriter's. */
 function keptApartNotes(l){
   return (Array.isArray(l&&l.keptApart)?l.keptApart:[]).filter(f=>typeof f==="string"&&f).map(f=>
-    t("{FILE} was kept on this computer and not sent to the team: the team's edition came from another computer at the same time.").split("{FILE}").join(f));
+    t("{FILE} was kept on this computer and not sent to the team: another computer changed the same catalog at the same moment, and the team kept that computer's edition.").split("{FILE}").join(f));
 }
 function shareRefusedNotes(l){
   return (Array.isArray(l&&l.shareRefused)?l.shareRefused:[]).filter(r=>r&&typeof r.file==="string"&&r.file).map(r=>(r.kind==="folder"

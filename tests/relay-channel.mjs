@@ -3017,8 +3017,8 @@ if (deskOn()) try {
          where the row names none. The words are a placeholder until the copywriter's. */
       {
         const cfuFile = "guide (conflicted copy 2026-11-22).ec";
-        const KEPT_EN = cfuFile + " was kept on this computer and not sent to the team: the team's edition came from another computer at the same time.";
-        const KEPT_PL = "Plik " + cfuFile + " zachowano na tym komputerze i nie wysłano go zespołowi: wydanie zespołu przyszło z innego komputera w tym samym czasie.";
+        const KEPT_EN = cfuFile + " was kept on this computer and not sent to the team: another computer changed the same catalog at the same moment, and the team kept that computer's edition.";
+        const KEPT_PL = "Plik " + cfuFile + " zachowano na tym komputerze i nie wysłano go zespołowi: inny komputer zmienił ten sam katalog w tej samej chwili, a zespół zachował wydanie z tamtego komputera.";
         const withKept = leads => (leads || []).map(l => l && l.team === TEAM2 ? Object.assign({}, l, { keptApart: [cfuFile] }) : l);
         const withPage = await pageHtml(withKept(freshLeads));
         const noPage = await pageHtml(freshLeads);
