@@ -934,20 +934,24 @@ function folderTeamDoc() {
   const doc = teamTextChosen(root).doc;
   return doc && teamWhole(doc) && !teamFileBehind(doc) ? doc : null; /* plant:s0b-floor-doc */
 }
-/* null: no pin, so the ring decides. []: a whole team file whose lead this desk has not pinned.
-   Otherwise the publics that may sign a catalog chosen here. */
+/* null: no pin, so the ring decides. []: this folder's team is known and its lead is not pinned, or a whole
+   team file names a lead this desk has not pinned. Otherwise the publics that may sign a catalog chosen here. */
 function folderLeadPublics() {
   const all = pinnedLeadPubs();
   if (!all.length) return null;
   const doc = folderTeamDoc();
-  if (!doc) return all;
-  const pin = pinTrusted(doc.id); /* plant:folder-publics-trusted */
-  if (pin && doc.lead && pin.keyId === doc.lead.keyId && pin.public === doc.lead.public) return [String(pin.public)];
-  return [];
+  if (doc) {
+    const pin = pinTrusted(doc.id); /* plant:folder-publics-trusted */
+    if (pin && doc.lead && pin.keyId === doc.lead.keyId && pin.public === doc.lead.public) return [String(pin.public)];
+    return [];
+  }
+  const here = folderTeamHere();
+  if (here) { const pin = pinTrusted(here.team); return (pin && typeof pin.public === "string") ? [String(pin.public)] : []; } /* plant:folder-publics-here */
+  return all;
 }
 /* The public a catalog may be chosen under without the agent asking. With no lead pinned, any key the ring verifies.
-   Where this folder's team file is whole, only the key pinned for that team: a key pinned for another team verifies
-   nothing here. With no whole team file, any pinned lead's key, verified against the pin, since the ring is the share's to write. */
+   Where this folder's team is known, only the key pinned for that team, team file or none: a key pinned for another
+   team verifies nothing here. With no team known and no whole team file, any pinned lead's key, since the ring is the share's to write. */
 function catalogLeadOk(data) {
   const bound = folderLeadPublics();
   if (bound === null) return catalogSigValid(data);
@@ -963,9 +967,9 @@ function catalogLeadOk(data) {
 function catalogTrustedPub(data) {
   return pinnedLeadPubs().length ? catalogLeadOk(data) : catalogSigValid(data); /* plant:trusted-pub-lead */
 }
-/* The leads the page verifies against, the same publics catalogLeadOk uses. A whole team file narrows them to that
-   team's pin. Where that lead is not pinned, one key that verifies nothing, so another team's pin is not read and
-   the ring is not read in its place. */
+/* The leads the page verifies against, the same publics catalogLeadOk uses. The folder's own team narrows them,
+   team file or none. Where that lead is not pinned, one key that verifies nothing, so another team's pin and the
+   ring are not read in its place. */
 function leadsForPage() {
   const bound = folderLeadPublics();
   if (bound === null) return [];
@@ -975,7 +979,8 @@ function leadsForPage() {
     const pin = pinTrusted(doc.id);
     if (pin && bound.indexOf(String(pin.public)) >= 0) return [{ keyId: pin.keyId, public: String(pin.public) }];
   }
-  return pinnedLeadKeys();
+  const keys = pinnedLeadKeys().filter(k => k && bound.indexOf(String(k.public)) >= 0);
+  return keys.length ? keys : [LEAD_NONE];
 }
 function editionRev(data) {
   const n = data && +data.rev;
@@ -7223,7 +7228,8 @@ function leadPrint(publicHex) {
 /* Every lead this desk trusts, for the agent to compare once after admission and to leave at any time: the team by its lead's
    name and folder where known; `removed` where the roster of the epoch accepted leaves out this desk, which once held a key;
    `policy` where machine policy names this lead, which pins it again after any leave. */
-/* The newest rev this desk has of `catalogId`, among the active catalog, recorded revs and the folder's catalogs. */
+/* The newest rev this desk has of `catalogId`, among the active catalog, recorded revs and the folder's catalogs.
+   A folder file counts only where it is genuine, so an unsigned rev cannot hide the head. */
 function deskEditionRev(catalogId, folder, leadPublic) {
   let maxRev = -1;
   if (leadPublic && catalogRevs[catalogId] && Number.isInteger(catalogRevs[catalogId][leadPublic])) {
@@ -7241,7 +7247,7 @@ function deskEditionRev(catalogId, folder, leadPublic) {
     for (const f of ecFilesIn(folder)) {
       try {
         const facts = ecFacts(f, "");
-        if (facts && facts.id === catalogId && facts.rev > maxRev) maxRev = facts.rev;
+        if (facts && facts.id === catalogId && facts.genuine && facts.rev > maxRev) maxRev = facts.rev; /* plant:head-unsigned-rev */
       } catch { /* skip */ }
     }
   }
@@ -10086,9 +10092,9 @@ ipcMain.handle("etiuda:catalog-ring", (e) => {
   } catch { /* no ring, which is the ordinary case */ }
   return text;
 });
-/* THE LEADS THIS PAGE VERIFIES AGAINST: the keys catalogLeadOk uses, the team file heeded first. A whole
-   team file narrows them to that team's pin, or one key that verifies nothing where it is not pinned, so
-   another team's pin and the ring are not read for it. [] where no lead is pinned, and the ring decides. */
+/* THE LEADS THIS PAGE VERIFIES AGAINST: the keys catalogLeadOk uses, the team file heeded first. This folder's
+   own team narrows them to that team's pin, team file or none, or one key that verifies nothing where it is not
+   pinned, so another team's pin and the ring are not read for it. [] where no lead is pinned, and the ring decides. */
 ipcMain.handle("etiuda:catalog-leads", (e) => {
   if (!fromEngine(e)) return [];
   heedTeam();
