@@ -3012,6 +3012,55 @@ if (deskOn()) try {
         const back = sha(fs.readFileSync(src)) === digest;
         check(turned && back, "948h lifting plant:head-show drops the sentence, and the product file is never written: " + detail + ", sha " + (back ? "restored" : "differs"));
       }
+      /* cfu2e to cfu2g, the page's half of the copy the channel kept: the row the shell sends carries the copy's file name, the page
+         keeps it through its own reading of the answer and prints one sentence a copy in the desk's language, and prints none of it
+         where the row names none. The words are a placeholder until the copywriter's. */
+      {
+        const cfuFile = "guide (conflicted copy 2026-11-22).ec";
+        const KEPT_EN = cfuFile + " was kept on this computer and not sent to the team: the team's edition came from another computer at the same time.";
+        const KEPT_PL = "Plik " + cfuFile + " zachowano na tym komputerze i nie wysłano go zespołowi: wydanie zespołu przyszło z innego komputera w tym samym czasie.";
+        const withKept = leads => (leads || []).map(l => l && l.team === TEAM2 ? Object.assign({}, l, { keptApart: [cfuFile] }) : l);
+        const withPage = await pageHtml(withKept(freshLeads));
+        const noPage = await pageHtml(freshLeads);
+        check(withPage.en.indexOf(KEPT_EN) >= 0 && withPage.pl.indexOf(KEPT_PL) >= 0 && noPage.en.indexOf("was kept on this computer") < 0 && noPage.pl.indexOf("zachowano na tym komputerze") < 0,
+          "cfu2e a team row that names a kept copy shows, in English and in Polish, that the copy was kept on this computer and not sent, and a row that names none shows nothing of it: en "
+          + (withPage.en.indexOf(KEPT_EN) >= 0) + ", pl " + (withPage.pl.indexOf(KEPT_PL) >= 0) + ", none-row en " + (noPage.en.indexOf("was kept on this computer") >= 0)
+          + ", none-row pl " + (noPage.pl.indexOf("zachowano na tym komputerze") >= 0) + (pageErr ? " page " + pageErr.split("\n")[0] : ""));
+        /* The page's modules copied whole beside a lifted line, loaded as a second page that reads the same row. */
+        const liftedPage = async (file, tag) => {
+          const lines = fs.readFileSync(path.join(ROOT, "src", "modules", file), "utf8").split(/\n/);
+          const at = lines.findIndex(l => l.indexOf(tag) >= 0);
+          if (at < 0) return null;
+          lines.splice(at, 1);
+          const dir = fs.mkdtempSync(path.join(LAB, "page-plant-"));
+          fs.cpSync(path.join(ROOT, "src", "modules"), dir, { recursive: true });
+          fs.writeFileSync(path.join(dir, file), lines.join("\n"), "utf8");
+          const at2 = n => pathToFileURL(path.join(dir, n)).href;
+          const HK2 = await import(at2("hooks.js"));
+          HK2.hooks.render = () => {};
+          const TJ2 = await import(at2("team-join.js")), ST2 = await import(at2("storage.js")), SET2 = await import(at2("settings.js"));
+          let took2 = null;
+          const host = window.E_HOST;
+          window.E_HOST = { teamJoin: () => Promise.resolve({ leads: [] }), onTeamJoin: fn => { took2 = fn; } };
+          TJ2.wireTeamJoin();
+          await wait(40);
+          window.E_HOST = host;
+          if (took2) took2({ leads: withKept(freshLeads) });
+          ST2.lsSet("eUiLang", "en");
+          return shownText(SET2.settingsBodyHtml());
+        };
+        if (PLANTS_OFF) {
+          skip("cfu2f lifting plant:kept-apart-shown leaves the kept copy off the team's row on the page");
+          skip("cfu2g lifting plant:kept-apart-kept drops the kept copy from the row the page keeps");
+        } else {
+          let shownEn = null, keptEn = null, err = "";
+          try { shownEn = await liftedPage("settings.js", "plant:kept-apart-shown"); keptEn = await liftedPage("team-join.js", "plant:kept-apart-kept"); } catch (e) { err = e && e.stack ? e.stack : String(e); }
+          check(shownEn !== null && shownEn.indexOf("Newest edition Quay three") >= 0 && shownEn.indexOf("was kept on this computer") < 0 && !err, "cfu2f lifting plant:kept-apart-shown leaves the kept copy off the team's row on the page (FAIL cfu2e): "
+            + (shownEn === null ? "plant line absent" : "sentence " + (shownEn.indexOf("was kept on this computer") >= 0 ? "still there" : "gone")) + (err ? " " + err.split("\n")[0] : ""));
+          check(keptEn !== null && keptEn.indexOf("Newest edition Quay three") >= 0 && keptEn.indexOf("was kept on this computer") < 0 && !err, "cfu2g lifting plant:kept-apart-kept drops the kept copy from the row the page keeps (FAIL cfu2e): "
+            + (keptEn === null ? "plant line absent" : "sentence " + (keptEn.indexOf("was kept on this computer") >= 0 ? "still there" : "gone")) + (err ? " " + err.split("\n")[0] : ""));
+        }
+      }
       /* 962 stage 5, T4, the page's half of the head per catalog: the row keeps each catalog's entry the shell kept, and the note
          under the team's name counts only the team's other catalogs whose edition is newer than the one loaded here. */
       {
@@ -3425,6 +3474,33 @@ if (deskOn()) try {
         check(!!pc && pc.indexOf(cfuCopy) >= 0, "cfu1c lifting plant:pick-copy-last opens the copy that leads in the relay mirror (FAIL cfu1a): " + (sc ? JSON.stringify(pc) : "plant line absent"));
         const st = lifted6("plant:pick-tie-canonical"), pt = st ? await cfuPick("folder", 2, 2, st) : null;
         check(!!pt && pt.indexOf(cfuCopy) >= 0, "cfu1d lifting plant:pick-tie-canonical opens the first of two files at the same rev in a folder (FAIL cfu1b): " + (st ? JSON.stringify(pt) : "plant line absent"));
+      }
+
+      /* cfu2c: the team's row names the copy the channel kept (the program's list, by file name, in the mirror) for as long as it
+         sits there as kept. The stop is put in the channel's record as keepApart puts it (cfu2a drives the real parallel edit),
+         because a desk that met one needs two computers of one key; the row is read through the shell's own answer. */
+      const cfuRow = async src => {
+        const d = await e6Desk("relay", src), ch = d.D.api.relayRun();
+        const bytes = catOf(cfuName, 3);
+        fs.writeFileSync(path.join(d.mir, cfuCopy), bytes);
+        if (ch) ch.program.state().refused[cfuCopy] = { sha: sha(Buffer.from(bytes, "utf8")), why: "kept-apart" };
+        const rowNow = async () => {
+          const v = await d.D.ask("etiuda:team-join", "leads");
+          const r = ((v && v.leads) || []).filter(l => l && l.team === d.team)[0];
+          return r ? (r.keptApart || null) : undefined;
+        };
+        const shown = await rowNow();
+        fs.unlinkSync(path.join(d.mir, cfuCopy));
+        return { running: !!ch, shown, gone: await rowNow() };
+      };
+      const cu2 = await cfuRow();
+      check(cu2.running && JSON.stringify(cu2.shown) === JSON.stringify([cfuCopy]) && cu2.gone === null,
+        "cfu2c the team's row in the shell's answer names the conflict copy the channel kept, by its file name, and names none once the copy is removed: "
+        + JSON.stringify(cu2));
+      if (PLANTS_OFF) skip("cfu2d lifting plant:kept-apart-row leaves the copy off the team's row");
+      else {
+        const sr = lifted6("plant:kept-apart-row"), pr = sr ? await cfuRow(sr) : null;
+        check(!!pr && pr.running && pr.shown === null, "cfu2d lifting plant:kept-apart-row leaves the copy off the team's row (FAIL cfu2c): " + (sr ? JSON.stringify(pr) : "plant line absent"));
       }
 
       if (PLANTS_OFF) {
@@ -8069,7 +8145,7 @@ async function ownSetup(mod) {
   const tm = await freshTeam([deskKey]);
   const tag = tm.rt.slice(0, 8);
   const mk = (name, place) => opened(mod, name + "-" + tag, tm, LEAD, place || "root", { keyFor: e => keys.get(e) || null, sealEpoch: () => 1 });
-  return { tm, mk, teamText: teamBody(tm, 1, 1, [member(deskKey)]) };
+  return { tm, mk, deskKey, teamText: teamBody(tm, 1, 1, [member(deskKey)]) };
 }
   const putsOf = p => p.t.log.filter(l => /^PUT b\//.test(l)).length;
 
@@ -8383,6 +8459,44 @@ async function parallelOffline(mod) {
   out.relayHolds = read(third.mirror, "guide.ec");
   out.copyAtThird = copy ? read(third.mirror, copy) : null;
   await third.ch.stop();
+  /* What the program lists as kept beside the team's edition (keptApart), read from the first computer's record on a program that
+     is never started, so nothing it does is sent: the copy as it was kept, the same copy edited (it would go up, so it is not
+     listed), and the copy removed. */
+  const listed = p => (typeof p.prog.keptApart === "function" ? p.prog.keptApart() : null);
+  const fourth = mk("nor-a");
+  out.listedKept = copy ? listed(fourth) : null;
+  if (copy) put(fourth.mirror, copy, NOR_A2 + "edited afterwards\n");
+  out.listedEdited = copy ? listed(fourth) : null;
+  if (copy) fs.unlinkSync(path.join(fourth.mirror, copy));
+  out.listedGone = copy ? listed(fourth) : null;
+  return out;
+}
+/* The team file edited on the first computer while it was offline, and a newer team file published from the second: the first keeps
+   its edit, whole and in place, with no copy beside it (ownHeld's own-edit line; a team file has an order of its own, landTeam's
+   rev floor, and a conflict sibling of it would be read as a team file). That is what the line does today, held here so that lifting
+   it turns a check; the relay's reply to the first's later upload of that team file is the open item of the team file and the head. */
+async function teamParallel(mod) {
+  const { tm, mk, deskKey, teamText } = await ownSetup(mod);
+  const teamAt = rev => teamBody(tm, 1, rev, [member(deskKey)]);
+  const TA = teamAt(2), TB = teamAt(3);
+  const a = mk("cfu-a"), b = mk("cfu-b");
+  put(a.mirror, C.TEAM_NAME, teamText);
+  a.ch.start(); b.ch.start();
+  await a.ch.idle(); await b.ch.idle();
+  await once(a);
+  await once(b);
+  const bothT1 = read(a.mirror, C.TEAM_NAME) === teamText && read(b.mirror, C.TEAM_NAME) === teamText;
+  a.t.down = true;
+  put(a.mirror, C.TEAM_NAME, TA);
+  await once(a);
+  put(b.mirror, C.TEAM_NAME, TB);
+  await once(b);
+  a.t.down = false;
+  await once(a);
+  await once(a);
+  const now = read(a.mirror, C.TEAM_NAME);
+  const out = { bothT1, atA: now === TA ? "the edit" : now === TB ? "the relay's" : "other", copies: fs.readdirSync(a.mirror).filter(n => /conflicted copy/.test(n)) };
+  await a.ch.stop(); await b.ch.stop();
   return out;
 }
 if (partOn("pNor")) {
@@ -8400,6 +8514,15 @@ if (partOn("pNor")) {
       "nor1c the kept copy is never sent, before or after a restart: at the second computer " + JSON.stringify(n.copyAtB) + ", at a third profile "
       + JSON.stringify(n.copyAtThird) + ", uploads after reconnecting " + n.putsBack + ", after the restart " + n.putsRestart);
     check(n.said === 1, "nor1d the first computer says once that guide.ec changed on two computers and where its own copy is kept: lines " + n.said);
+    check(!!n.copy && JSON.stringify(n.listedKept) === JSON.stringify([n.copy]) && JSON.stringify(n.listedEdited) === "[]" && JSON.stringify(n.listedGone) === "[]",
+      "cfu2a the first computer's program lists the copy it kept, from its record after a restart, and no longer once the copy is edited (it would go up) or removed: kept "
+      + JSON.stringify(n.listedKept) + ", edited " + JSON.stringify(n.listedEdited) + ", removed " + JSON.stringify(n.listedGone));
+    if (PLANTS_OFF) skip("cfu2b lifting plant:kept-apart-listed lists nothing of the copy kept");
+    else {
+      const p = await liftChannel("plant:kept-apart-listed", async mod => { const x = await parallelOffline(mod); return !!x.copy && JSON.stringify(x.listedKept) === "[]"; });
+      check(p.turned && p.back, "cfu2b lifting plant:kept-apart-listed lists nothing of the copy kept, and the product file is never written: "
+        + p.detail + ", sha " + (p.back ? "restored" : "differs"));
+    }
     if (PLANTS_OFF) skip("nor1e lifting plant:own-parallel sends the first computer's rev 2 over the second's");
     else {
       const p = await liftChannel("plant:own-parallel", async mod => (await parallelOffline(mod)).relayHolds === NOR_A2);
@@ -8413,6 +8536,18 @@ if (partOn("pNor")) {
         return x.relayHolds === NOR_B2 && x.guideA === NOR_B2 && x.copies.length === 0;
       });
       check(p.turned && p.back, "nor1f lifting plant:own-apart writes the second computer's rev 2 over the first's and keeps no copy, and the product file is never written: "
+        + p.detail + ", sha " + (p.back ? "restored" : "differs"));
+    }
+    {
+      const t = await teamParallel(C);
+      check(t.bothT1 && t.atA === "the edit" && t.copies.length === 0,
+        "cfu3a a team file edited on the first computer while it was offline, met by a newer one from the second, stays the first computer's edit whole and in place, with no copy beside it: both held the first "
+        + t.bothT1 + ", the first's file is " + t.atA + ", copies " + JSON.stringify(t.copies));
+    }
+    if (PLANTS_OFF) skip("cfu3b lifting plant:own-edit writes the relay's team file over the first computer's edit");
+    else {
+      const p = await liftChannel("plant:own-edit", async mod => (await teamParallel(mod)).atA === "the relay's");
+      check(p.turned && p.back, "cfu3b lifting plant:own-edit writes the relay's team file over the first computer's edit, and the product file is never written: "
         + p.detail + ", sha " + (p.back ? "restored" : "differs"));
     }
     if (PLANTS_OFF) skip("nor1g lifting plant:apart-kept forgets at a restart that the copy stays, so it is sent");
