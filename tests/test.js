@@ -556,6 +556,7 @@ function runUnitTests() {
   ejectUndoTests();
   tourActTests();
   emptyDeskTests();
+  emptyDeskWordsTests();
   quickFactsDefaultTests();
   catNowTests();
   deskMarkTests();
@@ -1065,6 +1066,75 @@ function emptyDeskTests() {
   }));
   eq("the empty desk offers Load and no sample button on the desk, from a disk and over a link, in English and in Polish",
     wrong, []);
+}
+
+/* THE EMPTY DESK LEADS WITH JOINING A TEAM (board 1016 item 3; Max, 2026-11-20: "the empty desk redrawn to lead with
+   joining a team, Load catalog file the other way"; 2026-11-22 02:12 of the pasted invitation: "Yes, remove it please.").
+   The block is drawn over a model of each host, in both languages, and its text read in order. */
+const EMPTY_DESK_WORDS = {
+  en: { head: "Etiuda is ready for its first replies.", lede: "Most people answer from their team's catalog. Joining the team brings it to this desk, with every update after.",
+    panel: "Join your team", line: "The team's lead invites this account by its email address, and the invitation appears here with one Join; a link from the lead, opened on this computer, does the same.",
+    hint: "No invitation yet? The team's lead sends one.", quiet: "Working on your own?", load: "Load catalog file" },
+  pl: { head: "Etiuda czeka na pierwsze odpowiedzi.", lede: "Większość osób odpowiada z katalogu swojego zespołu. Po dołączeniu do zespołu katalog trafia na to stanowisko, a z nim każda kolejna aktualizacja.",
+    panel: "Dołącz do zespołu", line: "Lider zespołu zaprasza to konto na jego adres e-mail, a zaproszenie pojawia się tutaj z jednym przyciskiem Dołącz; to samo daje link od lidera otwarty na tym komputerze.",
+    hint: "Nie ma jeszcze zaproszenia? Wysyła je lider zespołu.", quiet: "Praca bez zespołu?", load: "Wczytaj plik katalogu" }
+};
+function emptyDeskWordsTests() {
+  const base = fs.readFileSync(path.join(E.ROOT, "src", "modules", "render.js"), "utf8");
+  const langSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "ui-lang.js"), "utf8");
+  const plAt = langSrc.indexOf("UI_STRINGS.pl={"), plEnd = langSrc.indexOf("\n};", plAt);
+  const PL = new Function("const UI_STRINGS={};\n" + langSrc.slice(plAt, plEnd + 3) + "\nreturn UI_STRINGS.pl;")();
+  /* one drawing of the block from `src`: [its text segments in order, its markup] */
+  const drawn = (src, host, lang, canJoin) => {
+    const own = { terms: [], list: { innerHTML: "" }, wholeThingEmpty: () => true, esc: s => String(s), E_CATALOG_SCRIPT: "etiuda-catalog.js",
+      ICON_TEAM: "<svg></svg>", teamCanJoin: () => canJoin, teamJoinShown: () => false, teamReadingEmptyHtml: () => "",
+      eCatalogFolder: () => host[0], eCatalogFolderShort: () => "X", eFolderHoldsCatalog: () => false, location: { protocol: host[1] },
+      t: lang === "pl" ? x => (PL[x] == null ? x : PL[x]) : x => x };
+    const scope = new Proxy({}, {
+      has: (o, k) => typeof k === "string",
+      get: (o, k) => k === Symbol.unscopables ? undefined : k in own ? own[k] : k in globalThis ? globalThis[k] : () => undefined,
+      set: (o, k, v) => { own[k] = v; return true; }
+    });
+    const html = new Function("scope", "with(scope){\n" + extractDecl(src, "list.innerHTML=terms.length") + "\nreturn list.innerHTML;\n}")(scope);
+    return [html.replace(/<[^>]*>/g, "\u0001").split("\u0001").map(x => x.trim()).filter(Boolean), html];
+  };
+  const hosts = { desk: ["C:/X", "https:"], disk: ["", "file:"], link: ["", "https:"] };
+  const run = src => {
+    const wrong = [];
+    Object.keys(hosts).forEach(h => ["en", "pl"].forEach(lang => {
+      const w = EMPTY_DESK_WORDS[lang];
+      [true, false].forEach(canJoin => {
+        let got;
+        try { got = drawn(src, hosts[h], lang, canJoin); } catch (e) { wrong.push(h + " " + lang + " threw " + e.message); return; }
+        const want = canJoin ? [w.head, w.lede, w.panel, w.line, w.hint, w.quiet, w.load] : [w.head, w.load];
+        if (JSON.stringify(got[0]) !== JSON.stringify(want)) wrong.push(h + " " + lang + " join " + canJoin + ": " + JSON.stringify(got[0]));
+        const html = got[1];
+        if (/emptyAddCard|emptyJoin"|mid-folder|emptyCatFolder|<textarea|<input|add a card|Paste the invitation|Wklej zaproszenie|>Continue<|>Dalej<|HTML|catalog file in|offers you the newest/.test(html))
+          wrong.push(h + " " + lang + " join " + canJoin + " carries a retired piece");
+        if (canJoin) {
+          const at = id => html.indexOf('id="' + id + '"');
+          if (!(at("emptyJoinPanel") > 0 && at("emptyJoinPanel") < at("emptyInvite") && at("emptyInvite") < at("emptyLoad"))) wrong.push(h + " " + lang + " order of panel, place for an invitation, Load");
+        }
+        if (html.indexOf('id="emptyLoad"') < 0) wrong.push(h + " " + lang + " no emptyLoad");
+      });
+    }));
+    return wrong;
+  };
+  eq("1016c the empty desk draws the heading and its line, the Join your team panel with a place for an invitation and no paste box or Continue, then only Working on your own? and Load catalog file; where a desk cannot join, the heading and Load catalog file; no add-a-card line, no folder line, in English and Polish",
+    run(base), []);
+  if (process.env.ETIUDA_PLANTS === "off") { console.log("  SKIP  1016c lifting plant:empty-lede, plant:empty-panel-head, plant:empty-panel-line, plant:empty-hint, plant:empty-quiet, plant:empty-slot and planting the retired pieces must each go red"); return; }
+  const lifted = tag => { const ls = base.split("\n"), at = ls.findIndex(l => l.indexOf(tag) >= 0); if (at < 0) return "missing " + tag; ls.splice(at, 1); return ls.join("\n"); };
+  ["plant:empty-lede", "plant:empty-panel-head", "plant:empty-panel-line", "plant:empty-hint", "plant:empty-quiet", "plant:empty-slot"].forEach(tag => {
+    const s = lifted(tag);
+    eq("1016c lifting " + tag + " turns the empty desk's words red", s.length > 100 && run(s).length > 0, true);
+  });
+  const planted = (what, piece) => {
+    const s = base.replace("'</div>'\n        /* A chosen", "'</div>' + " + piece + "\n        /* A chosen");
+    eq("1016c planting " + what + " into the empty desk turns the words red", s !== base && run(s).length > 0, true);
+  };
+  planted("the add-a-card line", "'<a id=\"emptyAddCard\">' + esc(t(\"or add a card to a category\")) + '</a>'");
+  planted("a paste box", "'<textarea></textarea><button>' + esc(t(\"Continue\")) + '</button>'");
+  planted("the folder line", "'<div class=\"mid-folder\">' + esc(t(\"There is no catalog file in {FOLDER} yet.\")) + '</div>'");
 }
 
 /* THE EMPTY DESK'S QUICK FACTS TEXT: chosen by host ("on this computer" in the app, "in this browser"
