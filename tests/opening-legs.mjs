@@ -379,7 +379,7 @@ async function run() {
         && light.folderBranchPresent && dark.folderBranchPresent
         && light.orLinkPresent && dark.orLinkPresent;
 
-      check(ok5, "957o5 the empty desk's middle in both themes: the figure absent, the column's order, the button filled in the ink with readable text (contrast measured), the catalog-folder line present and byte for byte as now decided");
+      check(ok5, "957o5 the empty desk's middle in both themes: the figure absent, the column's order, the button filled in the ink with readable text (contrast measured), no folder line and no add-a-card line");
       await page.close();
     }
 

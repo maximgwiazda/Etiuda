@@ -18,7 +18,8 @@ const { seatPage } = require("./seat-page.js");
 const puppeteer = require("puppeteer-core");
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 45;
+// H (the empty desk) now records one check, where it recorded two.
+const EXPECTED = 44;
 let fails = 0, checks = 0, skipped = 0;
 
 function check(ok, what, detail) {
