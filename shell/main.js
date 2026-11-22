@@ -981,6 +981,18 @@ function editionRev(data) {
   const n = data && +data.rev;
   return Number.isFinite(n) ? n : -1;
 }
+/* Whether edition `a` is the one to open over edition `b`, both of one catalog id. The higher rev, except that in the relay
+   mirror a conflict-named copy of the other file is never opened over it: the relay channel keeps this computer's own parallel
+   edition there, beside the team's, and never sends it, so on the lead's own desk it would show cards the team does not have.
+   At the same rev the file named as the catalog is opened over its copy, where the files are. */
+function editionBeats(a, b, mirror) {
+  const copy = (x, y) => !!mirror && path.resolve(path.dirname(x.file)) === path.resolve(mirror) && conflictSiblingName(y.file, x.file);
+  const ac = copy(a, b), bc = copy(b, a);
+  if (ac !== bc) return bc; /* plant:pick-copy-last */
+  const ar = editionRev(a.data), br = editionRev(b.data);
+  if (ar !== br) return ar > br;
+  return conflictSiblingName(a.file, b.file) && !conflictSiblingName(b.file, a.file); /* plant:pick-tie-canonical */
+}
 /* The file this launch was opened with, else the highest rev of each catalog id that may be chosen
    without the agent asking. With no lead pinned, that is a signature the ring verifies. With a lead
    pinned, only a file catalogLeadOk accepts, and a file it refuses is dropped even when it
@@ -993,12 +1005,13 @@ function pickEdition(found) {
   }
   const pins = pinnedLeadPubs();
   const best = new Map();
+  const here = relayHere(), mirror = here ? relayMirrorOf(here.rt) : "";
   found.forEach((item, i) => {
     if (!(pins.length ? catalogLeadOk(item.data) : catalogSigValid(item.data))) return;
     const id = String(item.data.id || "");
     if (!id) return;
     const had = best.get(id);
-    if (had === undefined || editionRev(item.data) > editionRev(found[had].data)) best.set(id, i);
+    if (had === undefined || editionBeats(item, found[had], mirror)) best.set(id, i);
   });
   const drop = new Set();
   found.forEach((item, i) => {
@@ -7421,6 +7434,16 @@ function strandedShown(team) {
   try { s = relayChannel.stranded(); } catch { s = null; }
   return s ? { seen: s.seen === true } : null;
 }
+/* The conflict copies the relay channel kept beside the team's edition on this computer and never sent, by file name, for the
+   team's row; null where there are none or the team is not the one followed. */
+function keptApartShown(team) {
+  const here = relayHere();
+  if (!here || here.team !== team || !relayChannel || typeof relayChannel.keptApart !== "function") return null;
+  let list = null;
+  try { list = relayChannel.keptApart(); } catch { list = null; }
+  const names = (Array.isArray(list) ? list : []).map(rel => path.basename(String(rel))).filter(Boolean).slice(0, 3);
+  return names.length ? names : null;
+}
 function strandedDismissed(team) {
   const here = relayHere();
   if (here && here.team === String(team || "") && relayChannel && typeof relayChannel.strandedSeen === "function") relayChannel.strandedSeen();
@@ -7506,6 +7529,8 @@ function leadsView() {
     if (fork) row.fork = fork; /* plant:fork-row */
     const stranded = strandedShown(t);
     if (stranded) row.stranded = stranded; /* plant:stranded-row */
+    const keptApart = keptApartShown(t);
+    if (keptApart) row.keptApart = keptApart; /* plant:kept-apart-row */
     if (teamNeedsFolder[t]) {
       row.needsFolder = true;
       row.openFolder = shellWords().openFolder;

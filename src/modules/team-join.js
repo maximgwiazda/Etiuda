@@ -316,6 +316,12 @@ function lapseWords(l){
 /* The team's row in Settings says the title, for as long as the step lasts. */
 function lapseNote(l){ return lapseWords(l).title; }
 /* A write this desk owes the shared folder that the folder refuses as read-only, one sentence a file, until it lands. */
+/* A conflict copy the relay channel kept on this computer beside the team's edition, never sent: one sentence a copy, by its file name.
+   PLACEHOLDER words, for the copywriter's. */
+function keptApartNotes(l){
+  return (Array.isArray(l&&l.keptApart)?l.keptApart:[]).filter(f=>typeof f==="string"&&f).map(f=>
+    t("{FILE} was kept on this computer and not sent to the team: the team's edition came from another computer at the same time.").split("{FILE}").join(f));
+}
 function shareRefusedNotes(l){
   return (Array.isArray(l&&l.shareRefused)?l.shareRefused:[]).filter(r=>r&&typeof r.file==="string"&&r.file).map(r=>(r.kind==="folder"
     ? t("The team's shared folder is read-only where {FILE} goes, so this desk keeps the change and tries again at each check.")
@@ -465,6 +471,8 @@ function joinTook(v,changed){
              const fork=forkKept(l.fork);
              if(fork) row.fork=fork;
              if(l.stranded && typeof l.stranded==="object") row.stranded={seen:l.stranded.seen===true};
+             const keptApart=Array.isArray(l.keptApart)?l.keptApart.filter(f=>typeof f==="string"&&f&&f.length<=200).map(String).slice(0,3):[];
+             if(keptApart.length) row.keptApart=keptApart; /* plant:kept-apart-kept */
              if(l.needsFolder===true) row.needsFolder=true; /* plant:needs-folder-kept */
              if(l.awaitsEdition===true) row.awaitsEdition=true;
              /* The shell's still-reading sentence, as text. The page prints it; it is not a translation of its own. */
@@ -1075,4 +1083,4 @@ function shareDropItem(blobId){
   catch(e){ return Promise.resolve({ok:false}); }
 }
 
-export { lapseNote, shareRefusedNotes, relayElsewhereNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, teamPolicySaid, relayDesk, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, openJoinPaste, teamCanJoin, inviteHeld, noteCatalogCopy, joinTook, teamContent, teamContentNow, markCatalogPrivate, onContentChanged, openTeamBubble, closeTeamBubble, teamShareState, shareToTeammate, shareInboxList, shareKeepCard, shareKeptNote, shareDropItem };
+export { lapseNote, shareRefusedNotes, keptApartNotes, relayElsewhereNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, teamPolicySaid, relayDesk, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, openJoinPaste, teamCanJoin, inviteHeld, noteCatalogCopy, joinTook, teamContent, teamContentNow, markCatalogPrivate, onContentChanged, openTeamBubble, closeTeamBubble, teamShareState, shareToTeammate, shareInboxList, shareKeepCard, shareKeptNote, shareDropItem };

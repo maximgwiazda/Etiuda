@@ -1058,6 +1058,22 @@ function createProgram(opts) {
     return true;
   }
 
+  /* The copies keepApart made that still sit in the mirror as they were kept, for the desk to tell the person where their version
+     went: each whole file stopped as kept-apart whose bytes are still the stopped ones. A copy edited since would go up as a new
+     file, and a copy removed is gone, so neither is listed. */
+  function keptApart() {
+    const out = [];
+    for (const rel of io.list()) {
+      if (TMP_RE.test(rel)) continue;
+      const key = pathKey(rel), stop = has(st.refused, key) ? st.refused[key] : null;
+      const bytes = stop && stop.why === KEPT_APART ? io.read(rel) : null;
+      let listed = false;
+      listed = bytes != null && sha256(toBytes(bytes)) === stop.sha; /* plant:kept-apart-listed */
+      if (listed) out.push(rel);
+    }
+    return out;
+  }
+
   /* A counter this key already used, whether the blob landed or a newer one of its path passed over it. The next upload
      has to clear it, or the relay refuses the file as an older copy. */
   function noteOwn(r) {
@@ -1933,6 +1949,7 @@ function createProgram(opts) {
     /* Left behind (judgeBehind): the epoch it holds, the one it cannot open, and whether the agent dismissed the notice. */
     stranded: () => (st.stranded ? { epoch: st.stranded.epoch, above: st.stranded.above, seen: st.stranded.seen } : null),
     strandedSeen() { if (st.stranded && !st.stranded.seen) { st.stranded.seen = true; persist(); } },
+    keptApart,
     setSeq(n) { if (Number.isSafeInteger(n) && n > st.seq) { st.seq = n; persist(); } },
     markTokenUsed(id) {
       st.tokenUsed = true;
@@ -3440,6 +3457,7 @@ function createChannel(opts) {
     fork: () => prog.fork(),
     stranded: () => prog.stranded(),
     strandedSeen: () => prog.strandedSeen(),
+    keptApart: () => prog.keptApart(),
   };
 }
 
