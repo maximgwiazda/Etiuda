@@ -2277,6 +2277,16 @@ function statsSealNote(seal) {
   try { writeReplacing(path.join(app.getPath("userData"), "stats-seal.json"), JSON.stringify(statsSealedTo) + "\n"); }
   catch (e) { console.error("etiuda: the box statistics were sealed to could not be kept - " + e.message); }
 }
+/* Whether the statistics the page sent are about a private catalog: the one it names, or the catalog in use, either one. */
+function statsHidden(data) {
+  if (data && data.catalog && typeof data.catalog === "object" && data.catalog.id && statsCatalogPrivate(String(data.catalog.id))) return true;
+  const doc = loadedText ? catalogDocIn(loadedText) : null;
+  return !!doc && doc.kind === "etiuda-catalog" && typeof doc.id === "string" && !!doc.id && statsCatalogPrivate(doc.id);
+}
+function statsStripped(out) {
+  delete out.catalog; delete out.pairs; delete out.suggestTaken; delete out.suggestOpen;
+  out.cards = []; out.intents = []; out.misses = 0; out.langs = {};
+}
 /* Whether the statistics' catalog `id` is private here: the catalog in use, where it carries this id, as privateHere judges it
    on the team; any other id by its stored chain and the marks. */
 function statsCatalogPrivate(id) {
@@ -2313,9 +2323,7 @@ function writeStatsAnswer(text, askId, forced) {
   /* The first day the page counted by day (board 521): a span that opens before it was not
      wholly counted, and the reader is told so rather than shown a short month as a quiet one. */
   if (ymdOk(data.since)) out.since = String(data.since);
-  /* A catalog marked private is never named to the lead (Claude alpha, 2026-11-22, board 1014): the counts go, its id and
-     edition do not. */
-  if (data.catalog && data.catalog.id && !statsCatalogPrivate(String(data.catalog.id))) { /* plant:pcm-stats-private */
+  if (data.catalog && data.catalog.id) {
     out.catalog = { id: String(data.catalog.id), rev: +data.catalog.rev || 0 };
   }
   /* "B after A" for the span (board 814): rebuilt row by row like the rest, and the key is written
@@ -2331,6 +2339,10 @@ function writeStatsAnswer(text, askId, forced) {
   }
   if ((data.suggestTaken | 0) > 0) out.suggestTaken = data.suggestTaken | 0;
   if ((data.suggestOpen | 0) > 0) out.suggestOpen = data.suggestOpen | 0;
+  /* Nothing of a Private catalog is reported (Claude alpha, 2026-11-22, board 1014): not its name, id or edition, its cards' ids,
+     per-card or intent counts, nor that this desk used a private catalog for so many replies. While one is in use, the answer
+     keeps its frame (desk, period, sync, since) and every count goes; Studio reads it as a desk with nothing counted. */
+  if (statsHidden(data)) statsStripped(out); /* plant:pcm-stats-whole */
   /* The box is part of what was written, so the same figures under a new box are sealed again. */
   let got = statsSeal();
   const key = statsContentKey(out) + (got && got.seal ? "\n" + statsSealKey(got.seal) : ""); /* plant:stats-seal-key */
@@ -7339,7 +7351,7 @@ function markPrivate(id, on) {
     /* An answer whose catalog this desk did not record goes too, since it cannot be told apart. */
     if (on && !answerKept) removeAnswer();
     tryCatalogAsk(theWindow);
-    /* Statistics already on the share that name the catalog now private are written again at once without its name. */
+    /* Statistics already on the share about the catalog now private are written again at once with nothing of it. */
     if (on && statsWroteNamed && statsCatalogPrivate(statsWroteNamed.id)) writeStatsAnswer(statsWroteNamed.text, "", "close"); /* plant:pcm-stats-mark */
   }
   return contentView();

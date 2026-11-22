@@ -427,7 +427,7 @@ try {
   const r9 = await pcm9(null, true), r9o = await pcm9(null, false);
   check(r9.written && !r9.catalog && r9o.written && !!r9o.catalog && r9o.catalog.id === "quay-held",
     "pcm9 the statistics name the catalog in use, but never one marked Private (" + JSON.stringify({ priv: r9, open: r9o }) + ")");
-  await planted("pcm9p", "plant:pcm-stats-private", "  if (data.catalog && data.catalog.id) {", src => pcm9(src, true),
+  await planted("pcm9p", "plant:pcm-stats-whole", "    /* plant lifted */", src => pcm9(src, true),
     r => !!r.catalog, "the statistics name the Private catalog");
   /* pcm9w (Claude alpha, 2026-11-22, by Claudius): nothing of a Private catalog is reported, not its name, id or edition, not its
      cards' ids, not per-card or intent counts, not that the desk used a private catalog for so many replies. Statistics sent while
@@ -467,11 +467,11 @@ try {
     const before = read();
     await mark(u, "quay-held", true);
     const after = read();
-    return { before: before ? before.catalog || null : null, after: after ? after.catalog || null : "unread", counts: !!after && Array.isArray(after.cards) && after.cards.length === 1 };
+    return { before: before ? before.catalog || null : null, after: after ? after.catalog || null : "unread", counts: !!after && Array.isArray(after.cards) && after.cards.length === 0 };
   };
   const r9m = await pcm9m();
   check(!!r9m.before && r9m.after === null && r9m.counts,
-    "pcm9m statistics that named the catalog are written again without its name the moment it is marked Private (" + JSON.stringify(r9m) + ")");
+    "pcm9m statistics that named the catalog are written again with nothing of it, name or counts, the moment it is marked Private (" + JSON.stringify(r9m) + ")");
   await planted("pcm9mp", "plant:pcm-stats-mark", "    /* plant lifted */", pcm9m, r => !!r.after, "the statistics on the share still name it");
 
   /* Holds: a told desk with a personal catalog it has not marked still names it and answers the lead's box. */
