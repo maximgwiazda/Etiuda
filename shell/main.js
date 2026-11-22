@@ -11419,6 +11419,22 @@ function signinHoldingOf(v) {
   if (lead && lead.length <= SIGNIN_LEAD_MAX && !/[\u0000-\u001f\u007f-\u009f<>\u200e\u200f\u202a-\u202e\u2066-\u2069]/.test(lead)) out.lead = lead; /* plant:holding-lead */
   return out;
 }
+/* THE OPEN JOIN REQUESTS beside an answer (`asked`: one per lead the person asked, each with the lead object the service names): kept only
+   as the leads' plain names, at most SIGNIN_ASKED_MAX of them, each text of at most SIGNIN_LEAD_MAX characters with no control,
+   bidirectional or angle-bracket character, none twice. Anything else is no request, and an answer without the list is read as before. */
+const SIGNIN_ASKED_MAX = 8;
+function signinAskedOf(v) {
+  const out = [];
+  if (!Array.isArray(v)) return out;
+  for (const e of v) {
+    const n = e && typeof e === "object" && e.lead && typeof e.lead === "object" && typeof e.lead.name === "string" ? e.lead.name.trim() : "";
+    if (!n || n.length > SIGNIN_LEAD_MAX || /[ --<>‎‏‪-‮⁦-⁩]/.test(n) || out.indexOf(n) >= 0) continue; /* plant:asked-name */
+    out.push(n);
+    if (out.length >= SIGNIN_ASKED_MAX) break;
+  }
+  return out;
+}
+const signinAskedWords = names => names.length ? { asked: names } : {};
 function signinTrialsOf(v) {
   if (!v || typeof v !== "object" || Array.isArray(v)) return null;
   const out = {};
@@ -11450,7 +11466,7 @@ function signinAnswerBody(res, deskKey, packed) {
     /* THE STORE OFFERED: the service says it keeps a person's store (store/grant) only by "storeOffer": true beside a sign-in's answer;
        absent, null or anything else is no offer, and nothing of sync is asked, looked at or said (storeOffered). */
     const storeOffer = j.storeOffer === true; /* plant:offer-read */
-    const words = signinWordsOf(signinHoldingOf(j.seat), signinTrialsOf(j.trials)); /* plant:words-read */
+    const words = Object.assign(signinWordsOf(signinHoldingOf(j.seat), signinTrialsOf(j.trials)), signinAskedWords(signinAskedOf(j.asked))); /* plant:words-read */
     if (j.certificate === null) return Object.assign({ ok: true, code: String(j.code), cert: null, doors: [], waiting: j.reason === "waiting", askLead, storeOffer }, signinManagedOf(j), words); /* plant:wait-read */
     if (signinCertOk(j.certificate, deskKey) && j.certificate.code === j.code) {
       const doors = signinDoorsOk(j.doors, packed), signed = signinDoorsSigned(doors, j.doorsSig, j.certificate); /* plant:door-signed-read */
@@ -11611,6 +11627,8 @@ function signinViewOf(kept, o) {
     holding: !!signedIn && !!kept.holding ? Object.assign({}, kept.holding) : null, /* plant:view-holding */
     trials: !!signedIn && !!kept.trials ? Object.assign({}, kept.trials) : null,
     registered: o.registered === true }; /* plant:view-registered */
+  /* The leads an open join request waits on, as the last answer named them: only where it named any, so a view without is the same object as before. */
+  if (signedIn && held && Array.isArray(held.asked) && held.asked.length) view.asked = held.asked.slice(); /* plant:view-asked */
   /* Only where machine policy sets any of its six values, so an unmanaged desk's view is the same object as before. */
   const m = o.managed;
   if (m && m.any) view.managed = { on: m.managed, shared: m.shared, personal: m.personal, provider: m.provider, tenant: !!m.tenant, closed: m.closed, contact: m.contact, /* plant:view-managed */
@@ -11640,8 +11658,8 @@ function signinSettleSeat(held, ans, now, deskNow, clockIssued) {
     const out = Object.assign({}, held, { code: ans.code, cert: ans.cert || (keep ? held.cert : null), doors: ans.cert ? (ans.doors || []) : [], doorsSig: ans.cert ? String(ans.doorsSig || "") : "", at: now, checked: now, reached: true,
       said: ans.waiting === true ? "waiting" : "", ask: false, askLead: ans.askLead === true, managed: ans.managed === true, cause: ans.managed === true ? ans.cause || "" : "",
       storeOffer: ans.storeOffer === true }); /* plant:wait-settle */
-    delete out.ended; delete out.holding; delete out.trials;
-    return Object.assign(out, ended ? { ended: ended } : {}, signinWordsOf(ans.cert ? ans.holding : keep ? held.holding : null, ans.trials || (held && held.trials))); /* plant:words-settle */
+    delete out.ended; delete out.holding; delete out.trials; delete out.asked;
+    return Object.assign(out, ended ? { ended: ended } : {}, signinWordsOf(ans.cert ? ans.holding : keep ? held.holding : null, ans.trials || (held && held.trials)), signinAskedWords(signinAskedOf((ans.asked || []).map(n => ({ lead: { name: n } }))))); /* plant:words-settle */
   }
   if (ans.reason === "unreached") return Object.assign({}, held, { checked: now, reached: false });
   const freed = ans.reason === "signin";
@@ -11730,6 +11748,7 @@ function signinFileRead(text, packed) {
   /* The service's none while a certificate ran, kept with that certificate alone; the seat's words with it, the trials beside. */
   if (out.held && out.held.cert && Number.isSafeInteger(h.ended) && h.ended > 0) out.held.ended = h.ended; /* plant:ended-file */
   if (out.held) Object.assign(out.held, signinWordsOf(out.held.cert ? signinHoldingOf(h.holding) : null, signinTrialsOf(h.trials))); /* plant:words-file */
+  if (out.held) Object.assign(out.held, signinAskedWords(signinAskedOf(Array.isArray(h.asked) ? h.asked.map(n => ({ lead: { name: n } })) : null))); /* plant:asked-file */
   if (out.held && h.org && typeof h.org === "object") out.held.org = { tid: SIGNIN_TENANT.test(String(h.org.tid)) ? String(h.org.tid).toLowerCase() : "", /* plant:org-file */
     hd: typeof h.org.hd === "string" && h.org.hd.length <= 253 ? h.org.hd.toLowerCase() : "" };
   if (out.held && out.held.cert) {

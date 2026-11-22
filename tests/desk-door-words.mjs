@@ -18,7 +18,7 @@ const SETTINGS_PATH = path.join(ROOT, "src", "modules", "settings.js");
 const TEMPLATE_PATH = path.join(ROOT, "src", "template.html");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
-const CHECKS = 42, PLANTS = 41;
+const CHECKS = 42, PLANTS = 42;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -248,7 +248,7 @@ CASES.seamShape = (pg = P) => {
   const expectedTypes = {
     day: "number", deskEnd: "number", ended: "number", ends: "number", lead: "string", now: "number",
     online: "boolean", orgLicence: "boolean", seatOn: "string", state: "string", stoppedAt: "number",
-    studioEnd: "number", until: "number", waitingOnLead: "boolean", why: "string"
+    studioEnd: "number", until: "number", waitingOnLead: "boolean", askedMany: "string", why: "string"
   };
   const expectedKeys = Object.keys(expectedTypes).sort().join();
   hostOn(VIEWS.ended);
@@ -959,6 +959,18 @@ if (!PLANTS_OFF) {
   await plant("ddp33", SETTINGS_PATH,
     ["title:seatShort ? t(\"Seat\") : seatPair[0], /* plant:account-seat-title */", "title:seatPair[0],"],
     "account_pl");
+  await plant("ddp40", SIGNIN_PATH,
+    ["(asked.length===1 ? asked[0] : \"\"); /* plant:door-asked-lead */", "\"\";"],
+    "askedDoor");
+  await plant("ddp41", SIGNIN_PATH,
+    ["asked.length>1 ? asked.join(\", \") : \"\"; /* plant:door-asked-many */", "asked.length>1 ? asked[0] : \"\";"],
+    "askedDoor");
+  await plant("ddp42", SIGNIN_PATH,
+    ["return [t(\"The requests to join are waiting.\"), /* plant:door-asked-head */", "return [t(\"The request to join is waiting.\"),"],
+    "askedDoor");
+  await plant("ddp43", SIGNIN_PATH,
+    ["asked: signedIn && Array.isArray(o.asked) ? o.asked.filter(n=>typeof n===\"string\" && n && n.length<=120).slice(0,8) : [], /* plant:read-asked */", "asked: [],"],
+    "askedDoor");
   plantText("ddp19", TEMPLATE_PATH,
     [".door-out{margin-top:22px;padding-top:18px;border-top:1px solid var(--line)} /* plant:door-out-gap */", ".door-out{margin-top:18px;padding-top:18px;border-top:1px solid var(--line)} /* plant:door-out-gap */"],
     "css");

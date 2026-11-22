@@ -30,6 +30,8 @@ function signinRead(v){
     deskOnly: !!signedIn && o.deskOnly===true,
     askLead: !!signedIn && o.askLead===true,
     trialUntil: !!signedIn && Number.isFinite(o.trialUntil) && o.trialUntil>0 ? o.trialUntil : 0,
+    /* The leads an open join request waits on, as the service names them (the shell keeps plain names only); none where it names none. */
+    asked: signedIn && Array.isArray(o.asked) ? o.asked.filter(n=>typeof n==="string" && n && n.length<=120).slice(0,8) : [], /* plant:read-asked */
     /* The service said this account's organisation holds its licence (a managed tenant), and why where it also owns one. */
     licenceManaged: o.licenceManaged===true,
     cause: o.licenceManaged===true && (o.cause==="own-licence" || o.cause==="assigned") ? o.cause : "",
@@ -418,7 +420,9 @@ function deskDoorState(v){
   const studioEnd=(v.trials&&v.trials.studio)||0;
   const ends=seat&&seat.ends?seat.ends:0;
   const team=signinTeam();
-  const lead=(seat&&seat.lead)||(team&&team.lead)||"";
+  const asked=Array.isArray(v.asked) ? v.asked : [];
+  const lead=(seat&&seat.lead)||(team&&team.lead)||(asked.length===1 ? asked[0] : ""); /* plant:door-asked-lead */
+  const askedMany=!(seat&&seat.lead) && !(team&&team.lead) && asked.length>1 ? asked.join(", ") : ""; /* plant:door-asked-many */
   const waitingOnLead=!!(v.askLead || signinNoSeat(v)); /* B-3a feeds this */ /* plant:door-waiting-noseat */
   const orgLicence=!!v.licenceManaged; /* B-3a feeds this */
   const trialOver=seatOn==="trial" || (!seatOn && deskEnd>0); /* plant:door-trial-over */
@@ -439,7 +443,7 @@ function deskDoorState(v){
   else if(!works && !v.signedIn && !v.busy && FAIL_FIRST.indexOf(v.said)<0 && v.offered.length && v.registered && !v.online && !signinWaiting(v) && !signinStranded(v)) state="first-offline"; /* plant:door-first-offline */
   else if(!works && !v.signedIn && !v.busy && FAIL_FIRST.indexOf(v.said)<0 && v.offered.length && v.registered && v.online && !signinWaiting(v) && !signinStranded(v)) state="first";
   return {state:state, lead:lead, deskEnd:deskEnd, studioEnd:studioEnd, ended:v.ended||0, until:v.until||0,
-    stoppedAt:v.stoppedAt||0, why:seatOn, seatOn:seatOn, ends:ends, day:day, waitingOnLead:waitingOnLead,
+    stoppedAt:v.stoppedAt||0, why:seatOn, seatOn:seatOn, ends:ends, day:day, waitingOnLead:waitingOnLead, askedMany:askedMany,
     orgLicence:orgLicence, online:v.online!==false, now:v.now||0};
 }
 function deskWhySentence(on, lead){
@@ -470,6 +474,8 @@ function deskDoorLines(ds){
   const fill=(s, map)=>Object.keys(map).reduce((a,k)=>a.split(k).join(map[k]), s);
   if(ds.state==="first" || ds.state==="first-offline") return [t("Etiuda starts with a sign-in."),
     t("Signing in with Microsoft or Google gives this computer a seat: the team's, where its lead has admitted this account, or else a trial of fourteen days. Catalogs open once the seat is here.")];
+  if(ds.state==="waiting" && ds.askedMany) return [t("The requests to join are waiting."), /* plant:door-asked-head */
+    fill(t("Catalogs open here again once one of these leads accepts a request: {LEADS}. Etiuda's own fourteen days ended on {DESK_END}."), {"{LEADS}":ds.askedMany, "{DESK_END}":desk})];
   if(ds.state==="waiting") return [t("The request to join is waiting."),
     lead ? fill(t("Catalogs open here again once {LEAD}, the team's lead, accepts it. Etiuda's own fourteen days ended on {DESK_END}."), {"{LEAD}":lead, "{DESK_END}":desk})
       : fill(t("Catalogs open here again once the team's lead accepts it. Etiuda's own fourteen days ended on {DESK_END}."), {"{DESK_END}":desk})];
@@ -496,6 +502,8 @@ function deskDoorLines(ds){
   }
   if(ds.state==="working" && ds.seatOn==="org") return [t("This account has a seat on its organisation's licence."),
     fill(t("It renews by itself; the licence runs until {ENDS}."), {"{ENDS}":ends})];
+  if(ds.state==="working" && ds.waitingOnLead && ds.askedMany) return ["",
+    fill(t("Day {N} of 14, until {DESK_END}. The requests to join wait for {LEADS}, and Etiuda works meanwhile."), {"{N}":n, "{DESK_END}":desk, "{LEADS}":ds.askedMany})];
   if(ds.state==="working" && ds.waitingOnLead) return ["",
     lead ? fill(t("Day {N} of 14, until {DESK_END}. The request to join waits for {LEAD}, and Etiuda works meanwhile."), {"{N}":n, "{DESK_END}":desk, "{LEAD}":lead})
       : fill(t("Day {N} of 14, until {DESK_END}. The request to join waits for the team's lead, and Etiuda works meanwhile."), {"{N}":n, "{DESK_END}":desk})];
