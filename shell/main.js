@@ -11627,9 +11627,22 @@ function signinJoinSettle(held, n, said) {
   if (!inv || said === "unreached") return held;
   const out = Object.assign({}, held, { invited: list.filter((x, i) => i !== n) }), lead = inv.lead.name || "-", asked = Array.isArray(held.asked) ? held.asked : [];
   delete out.joinWait;
+  if (said === "accepted") delete out.joinKnock; /* plant:knock-accepted */
   if (!out.invited.length) delete out.invited;
   if (said === "waiting") Object.assign(out, { joinWait: lead }, lead === "-" || asked.indexOf(lead) >= 0 ? {} : { asked: asked.concat([lead]).slice(0, 8) }); /* plant:join-wait */
+  /* The knock a waiting Join owes at its team's door, kept past the wait's words until a renewal hands that door (signinJoinKnockOf). */
+  if (said === "waiting" && inv.team) out.joinKnock = inv.team; /* plant:join-knock */
   return out;
+}
+/* The door a Join left waiting is owed, once the seat it waited for hands it: its place among the doors `shown`, and `held` without the
+   debt, so it is knocked once; -1 and `held` as it was where no door of that team is shown. */
+function signinJoinKnockOf(held, shown) {
+  const team = held && typeof held.joinKnock === "string" ? held.joinKnock : "";
+  const d = team ? (shown || []).find(x => held.doors[x.n] && held.doors[x.n].team === team) : null; /* plant:knock-team */
+  if (!d) return { n: -1, held: held };
+  const out = Object.assign({}, held);
+  delete out.joinKnock; /* plant:knock-once */
+  return { n: d.n, held: out };
 }
 function signinTrialsOf(v) {
   if (!v || typeof v !== "object" || Array.isArray(v)) return null;
@@ -11951,6 +11964,7 @@ function signinFileRead(text, packed) {
   if (out.held) Object.assign(out.held, signinWordsOf(out.held.cert ? signinHoldingOf(h.holding) : null, signinTrialsOf(h.trials))); /* plant:words-file */
   if (out.held) Object.assign(out.held, signinAskedWords(signinAskedOf(Array.isArray(h.asked) ? h.asked.map(n => ({ lead: { name: n } })) : null))); /* plant:asked-file */
   if (out.held) Object.assign(out.held, signinInvitedWords(signinInvitedOf(h.invited)), signinJoinWaitKept(h, out.held) ? { joinWait: h.joinWait } : {});
+  if (out.held && /^t-[0-9a-f]{16}$/.test(String(h.joinKnock))) out.held.joinKnock = String(h.joinKnock); /* plant:knock-file */
   if (out.held && h.org && typeof h.org === "object") out.held.org = { tid: SIGNIN_TENANT.test(String(h.org.tid)) ? String(h.org.tid).toLowerCase() : "", /* plant:org-file */
     hd: typeof h.org.hd === "string" && h.org.hd.length <= 253 ? h.org.hd.toLowerCase() : "" };
   if (out.held && out.held.cert) {
@@ -12344,6 +12358,17 @@ async function signinJoinNow(n) {
   tellSignin();
   return said === "accepted" || said === "waiting" ? { joined: said } : { refused: "join" };
 }
+/* After a renewal: the knock a waiting Join owes, at the door of its team the renewal handed, as an accepted Join knocks; the debt is
+   written gone before the knock, so no later renewal knocks again. True where it knocked. */
+function signinJoinKnockNow() {
+  const s = signinState(), k = signinJoinKnockOf(s.held, signinDoorsShown(s.held, Date.now()));
+  if (k.n < 0) return false;
+  s.held = k.held;
+  signinSave();
+  signinDoorJoin(k.n);
+  sendJoin(theWindow);
+  return true;
+}
 ipcMain.handle("etiuda:signin-join", (e, n) => {
   if (!fromEngine(e)) return null;
   return signinJoinNow(Number(n));
@@ -12731,6 +12756,7 @@ async function signinRenewNow(o) {
   signinSave();
   signinFlush();
   if (r.idToken && typeof signinNameTake === "function") signinNameTake(r.idToken);
+  if (typeof signinJoinKnockNow === "function") signinJoinKnockNow(); /* plant:knock-renew */
   tellSignin();
   if (o && o.look === false) return r.said; /* a look's own renewal (storeSigninFresh) starts no look */
   if (r.said === "renewed") { storeLeaveNow(null); storeTurn(); } /* plant:store-renew */

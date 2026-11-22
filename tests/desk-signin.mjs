@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 318;
+const PLANTS = 319;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 211 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 212 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -3000,6 +3000,12 @@ CASES.doorsFile = s => {
     && JSON.stringify(edited.doors) === "[]" && JSON.stringify(edited.cert) === JSON.stringify(c)
     && JSON.stringify(unsigned.doors) === "[]" && JSON.stringify(unsigned.cert) === JSON.stringify(c) && JSON.stringify(certless.doors) === "[]";
 };
+/* The knock a waiting Join owes (board 1017) outlasts a restart: signin.json keeps the team it is owed at, and nothing that is not a team id. */
+CASES.knockFile = s => {
+  const back = h => s.signinFileRead(s.signinFileText({ held: h })).held, team = "t-0123456789abcdef";
+  return back(heldOf({ joinKnock: team })).joinKnock === team && !("joinKnock" in back(heldOf({ joinKnock: "t-xyz" })))
+    && !("joinKnock" in back(heldOf({ joinKnock: 7 }))) && !("joinKnock" in back(heldOf({})));
+};
 /* What the desk holds in memory is offered only under the signature too, and a press on such a door joins nothing. */
 CASES.doorsShownSigned = (s, swap) => {
   const signed = doorJoinStand(), bare = doorJoinStand({ held: heldOf({ doors: DOORS_TWO(), doorsSig: "" }) });
@@ -5598,6 +5604,7 @@ const LEGS = [
   ["ds22k", "testServiceAsar", "THE TEST SERVICE BUILD READS ITS FIELDS FROM INSIDE THE ASAR: a test-service.json, root included, planted beside the asar of an ordinary package changes nothing (no test service, the shipped service and root alone, a certificate under the planted root refused, staging's relay refused); in a test service package the asar's fields win over it; no file beside the asar is read"],
   ["ds22h", "labRoot", "unpackaged, a lab file's root is honoured beside the shipped one; installed, packaged or both a certificate under it is refused, the file never read; no lab, or one naming no root, honours the shipped root alone; a stranger's root never"],
   ["ds22e", "doorsSigned", "a door is taken only under the service's signature by the certificate's key, over those doors in that order under that certificate; an older service's answer without one holds the seat, offers no door and says nothing; a stranger's door added, a door changed, another key's or another certificate's signature is no door"],
+  ["dsjk1", "knockFile", "signin.json keeps the team a waiting Join owes its knock at, so the knock outlasts a restart; a value that is not a team id is not kept"],
   ["ds22f", "doorsFile", "signin.json keeps doors only with their signature under the certificate it holds: doors edited, the signature gone (an older build's file) or no certificate is no door, and the certificate stays"],
   ["ds26a", "pageAskLead", "a desk its organisation's licence does not seat, the switch seating only people added, is told a lead invites it by its email address (board 1017; once: give its lead the code), with Check now and Account, and under a hairline its own trial and its end, nothing there once the trial is had; Polish too (decision 47, held for Max's ruling)"],
   ["ds26b", "askLeadFile", "review 6: signin.json keeps askLead across a restart, with a trial certificate or none, and reads false otherwise"],
@@ -6201,6 +6208,7 @@ if (!PLANTS_OFF) {
     "const doors = signinDoorsOk(j.doors, packed), signed = doors.length > 0;"], "doorsSigned");
   await plant("dsp109", ["if (signinDoorsSigned(doors, sig, out.held.cert)) Object.assign(out.held, { doors: doors, doorsSig: sig }); /* plant:file-doors-signed */",
     "Object.assign(out.held, { doors: doors, doorsSig: sig });"], "doorsFile");
+  await plant("dsjkp1", ["if (out.held && /^t-[0-9a-f]{16}$/.test(String(h.joinKnock))) out.held.joinKnock = String(h.joinKnock); /* plant:knock-file */", ""], "knockFile");
   await plantWire("dsp110", ["  if (!signinDoorsSigned(held.doors, held.doorsSig, held.cert)) return []; /* plant:door-shown-signed */\n", ""], "doorsShownSigned");
   /* The page's half, imported again with the line planted. */
   const plantPage = async (id, swap, name) => {

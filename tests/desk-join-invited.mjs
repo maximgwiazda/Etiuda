@@ -41,7 +41,7 @@ const MANAGE = fs.readFileSync(path.join(ROOT, "src", "modules", "manage.js"), "
 const MENUS = fs.readFileSync(path.join(ROOT, "src", "modules", "header-menus.js"), "utf8");
 const TEMPLATE = fs.readFileSync(path.join(ROOT, "src", "template.html"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const SHELL_PLANTS = 15, PAGE_PLANTS = 9;
+const SHELL_PLANTS = 16, PAGE_PLANTS = 9;
 const EXPECTED = 13 + (PLANTS_OFF ? 0 : SHELL_PLANTS + PAGE_PLANTS);
 
 let asserted = 0, failed = 0;
@@ -180,7 +180,7 @@ function knockWalk(rounds) {
 /* dji9: the renewal that hands the seat and that team's door knocks it once, by its place among the doors, and the renewal asks the knock. */
 CASES.knockOnce = () => {
   const w = knockWalk([[doorFor(OTHER_TEAM), doorFor(TEAM)]]);
-  const wired = /\n  s\.held = r\.held;[\s\S]*\n  signinJoinKnockNow\(\); \/\* plant:knock-renew \*\/\n  tellSignin\(\);/.test(RENEW_SWAP ? RENEW_NOW.replace(RENEW_SWAP[0], RENEW_SWAP[1]) : RENEW_NOW);
+  const wired = /\n  s\.held = r\.held;[\s\S]*\n  if \(typeof signinJoinKnockNow === "function"\) signinJoinKnockNow\(\); \/\* plant:knock-renew \*\/\n  tellSignin\(\);/.test(RENEW_SWAP ? RENEW_NOW.replace(RENEW_SWAP[0], RENEW_SWAP[1]) : RENEW_NOW);
   return !!w && w.owed && w.knocked.join() === "true" && w.io.joins.join() === "1" && w.io.told === 1 && w.io.saved === 1 && wired;
 };
 /* dji10: a seat with no door for that team knocks nothing and leaves the owed knock where it was; the door arriving later knocks then. */
@@ -190,13 +190,15 @@ CASES.knockNone = () => {
   const later = knockWalk([[doorFor(OTHER_TEAM)], [doorFor(OTHER_TEAM), doorFor(TEAM)]]);
   return later.knocked.join() === "false,true" && later.io.joins.join() === "1";
 };
-/* dji11: the renewals after the knock, the door still handed, knock no more; an accepted or refused Join owes none. */
+/* dji11: the renewals after the knock, the door still handed, knock no more. An accepted Join, which knocks its own door, ends what was
+   owed; a refused or unreached one leaves it, and owes nothing of its own, as a waiting Join with no team owes nothing. */
 CASES.knockNoMore = () => {
   const w = knockWalk([[doorFor(TEAM)], [doorFor(TEAM)], [doorFor(TEAM)]]);
-  const S = shellOf(), inv = S.signinInvitedOf(ANSWER_INVITED), held = { invited: inv, asked: [], joinKnock: TEAM };
+  const S = shellOf(), inv = S.signinInvitedOf(ANSWER_INVITED), held = { invited: inv, asked: [], joinKnock: OTHER_TEAM }, fresh = { invited: inv, asked: [] };
   return !!w && w.knocked.join() === "true,false,false" && w.io.joins.join() === "0" && !("joinKnock" in w.io.held)
-    && !("joinKnock" in S.signinJoinSettle(held, 0, "accepted")) && !("joinKnock" in S.signinJoinSettle(held, 0, "refused"))
-    && S.signinJoinSettle(held, 0, "unreached").joinKnock === TEAM && !("joinKnock" in S.signinJoinSettle({ invited: inv, asked: [] }, 1, "waiting"));
+    && !("joinKnock" in S.signinJoinSettle(held, 0, "accepted")) && S.signinJoinSettle(held, 0, "refused").joinKnock === OTHER_TEAM
+    && S.signinJoinSettle(held, 0, "unreached").joinKnock === OTHER_TEAM && !("joinKnock" in S.signinJoinSettle(fresh, 0, "refused"))
+    && !("joinKnock" in S.signinJoinSettle(fresh, 0, "accepted")) && !("joinKnock" in S.signinJoinSettle(fresh, 1, "waiting"));
 };
 /* dji6: the order page's handoff is the fragment the shell builds from its own view, unchanged: the same value the old screens showed. */
 CASES.handoff = () => {
@@ -450,14 +452,14 @@ check(await run("pageWords"), "dji6b the door's and Account's words say how a se
 check(await run("nameless"), "dji8 a lead with no name: the wait, the invitation and the confirm take their nameless forms, nothing stands in for the name, no sentence repeats the team's lead, English and Polish");
 check(await run("knockOnce"), "dji9 a Join left waiting, then the renewal that brings the seat and that team's door, knocks that door exactly once, as the accepted Join does; the renewal asks it");
 check(await run("knockNone"), "dji10 a renewal whose seat brings no door for that team knocks nothing and leaves the owed knock as it was; the door arriving later knocks then");
-check(await run("knockNoMore"), "dji11 the renewals after the knock knock no more; an accepted or refused Join owes none, an unreached one keeps what was owed");
+check(await run("knockNoMore"), "dji11 the renewals after the knock knock no more; an accepted Join ends what was owed, a refused or unreached one leaves it and owes nothing of its own");
 check(await run("noPaste"), "dji7 no paste field outside the empty desk: Settings, the Library and the Menu draw no Join a team, and no request card offers the paste");
 
 /* ---- the plants ----------------------------------------------------------------------------------------------------------- */
 async function plantShell(id, swap, name, line) {
   let red = false;
   SHELL_SWAP = swap;
-  try { red = SHELL.split(swap[0]).length === 2 && !(await run(name)); } finally { SHELL_SWAP = null; }
+  try { red = (SHELL + "\n" + KNOCK).split(swap[0]).length === 2 && !(await run(name)); } finally { SHELL_SWAP = null; }
   check(red, id + " " + line);
 }
 async function plantPage(id, swap, name, line, src) {
@@ -487,10 +489,11 @@ if (!PLANTS_OFF && !sliced) {
   await plantShell("djp21", ["const d = team ? (shown || []).find(x => held.doors[x.n] && held.doors[x.n].team === team) : null; /* plant:knock-team */",
     "const d = team ? (shown || []).find(x => held.doors[x.n]) : null;"], "knockNone", "knock-team loosened: another team's door would be knocked");
   await plantShell("djp22", ["delete out.joinKnock; /* plant:knock-once */", ""], "knockNoMore", "knock-once cut: every renewal after would knock again");
+  await plantShell("djp25", ["if (said === \"accepted\") delete out.joinKnock; /* plant:knock-accepted */", ""], "knockNoMore", "knock-accepted cut: a desk on the team it accepted would still owe another team's knock");
   await plantShell("djp23", ["if (said === \"waiting\" && inv.team) out.joinKnock = inv.team; /* plant:join-knock */", ""], "knockOnce", "join-knock cut: a waiting Join would owe no knock");
   {
     let red = false;
-    RENEW_SWAP = ["  signinJoinKnockNow(); /* plant:knock-renew */\n", ""];
+    RENEW_SWAP = ["  if (typeof signinJoinKnockNow === \"function\") signinJoinKnockNow(); /* plant:knock-renew */\n", ""];
     try { red = RENEW_NOW.split(RENEW_SWAP[0]).length === 2 && !(await run("knockOnce")); } finally { RENEW_SWAP = null; }
     check(red, "djp24 knock-renew cut in signinRenewNow: no renewal would ask the owed knock");
   }
