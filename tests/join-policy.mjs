@@ -1666,7 +1666,6 @@ const PIN_KEEPERS = {
   signinDoorsShown: "offers no door against any kept pin", teamPinStands: "any kept pin hides the doors",
   leadForPause: "reads a pause, which only stops",
   relayRingAt: "any kept pin on the relay believes no ring", forkChain: "says a fork, trusting nothing",
-  pickMovedFolder: "a moved team's folder",
   storeSetAside: "keeps the floors under kept pins",
 };
 /* Each lists the kept pins to choose among them, so it must take each through pinTrusted: deskRoster the rosters whose desks'
