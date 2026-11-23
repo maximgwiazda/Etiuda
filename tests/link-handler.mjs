@@ -1009,7 +1009,7 @@ try {
     const plainRelay = await read(pastedText), httpsRelay = await read(httpsText);
     const plainFolder = await read(sharePasted), httpsFolder = await read(httpsOf(shareB64));
     const same = !plainRelay.refused && !!plainRelay.offer && plainRelay.offer.relay === HOST && JSON.stringify(httpsRelay) === JSON.stringify(plainRelay)
-      && !plainFolder.refused && !!plainFolder.offer && plainFolder.offer.folder === share && JSON.stringify(httpsFolder) === JSON.stringify(plainFolder);
+      && plainFolder.refused === "unread" && !plainFolder.offer && httpsFolder.refused === "unread" && !httpsFolder.offer; /* P2: a folder invitation is no invitation, in either form */
     const spaced = await read("  \n" + httpsText + "\n ");
     const trimmed = !spaced.refused && JSON.stringify(spaced) === JSON.stringify(plainRelay);
     const wrong = [];
@@ -1038,7 +1038,7 @@ try {
   }, MAIN, '  if (raw.slice(0, page.length) === page && /^[A-Za-z0-9_-]+$/.test(raw.slice(page.length))) raw = "etiuda-join:" + raw.slice(page.length);');
   check(readsNow.same && readsNow.trimmed && readsNow.others && readsNow.cap
     && httpsLift.turned && httpsLift.back && hostLoose.turned && hostLoose.back && capLoose.turned && capLoose.back,
-    "3hr https://etiuda.dev/join#<payload> pasted reads as the same invitation as etiuda-join:<payload> (a relay one and a folder one, trimmed as the other is, "
+    "3hr https://etiuda.dev/join#<payload> pasted reads as the same invitation as etiuda-join:<payload> (a relay one; a folder one is unread in either form, P2: it was offered, trimmed as the other is, "
     + "8192 characters read and 8194 not), and an https address on another host or path, with a query, a port, a user, a padded or wrapped fragment, or http, is unreadable: "
     + "same " + readsNow.same + ", trimmed " + readsNow.trimmed + ", let in " + (readsNow.wrong.join(", ") || "none") + ", cap " + readsNow.cap
     + "; lifting the https line at plant:paste-https: " + httpsLift.detail + ", sha " + (httpsLift.back ? "restored" : "differs")
