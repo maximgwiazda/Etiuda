@@ -550,7 +550,8 @@ async function main() {
     /* fmg4: no tree declares a move. */
     const mainText = read("shell", "main.js"), chan = read("shell", "relay", "channel.cjs"), pageText = read("src", "modules", "team-join.js") + read("src", "modules", "settings.js");
     const gone = [["shell/main.js", mainText, /\b(?:copyDeskFilesToFolder|checkMatchingFolder|findMatchingFolderInKnownRoots|switchToFolderTeam|setTeamNeedsFolder|pickMovedFolder|teamNeedsFolder|isFolderMove|pick-moved-folder|teamMeetsInFolder|folderRefused(?:WrongTeam|WrongLead|LowerRev)|meetsInFolder)\b/],
-      ["shell/relay/channel.cjs", chan, /plant:relay-to-folder|\bmoving\b/],
+      /* The variable, not the word: a refusal sentence may say "moving the key number" (the removals piece). */
+      ["shell/relay/channel.cjs", chan, /plant:relay-to-folder|\b(?:let|const|var)\s+moving\b|[(!&|]\s*moving\b/],
       ["the page", pageText, /pickMovedFolder|needsFolder|data-team-pick-folder|pick-moved-folder|Open a folder/]];
     const still = gone.filter(g => g[2].test(g[1])).map(g => g[0] + ": " + (g[1].match(g[2]) || [""])[0]);
     check(still.length === 0,
