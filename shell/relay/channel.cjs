@@ -101,6 +101,8 @@ const INVITE_USED_SAID = "This invitation has already been used. Ask your lead f
 const INVITE_ENDED_SAID = "This invitation has expired. Ask your lead for a new one.";
 /* The label of a desk's own copy of the team file: its key and its place from one agreement of two boxes (deskCopyOf). */
 const DESK_COPY_INFO = "etiuda-relay-desk-copy";
+/* The label of the lead's own copy of the team file: its key and its place from the agreement of the lead's box with itself (leadCopyOf). */
+const LEAD_COPY_INFO = "etiuda-relay-lead-copy";
 /* The label of the lead's answer to one invitation. One key, 32 bytes, and no place id: the blob's id is the invitation's. */
 const ANSWER_INFO = "etiuda-join-answer";
 const ANSWER_NAME = "join-answer.json";
@@ -272,6 +274,19 @@ function deskCopyOf(dh, f) {
   if (!table(f) || !HEX32.test(String(f.rt)) || !B.isId(f.teamId) || !B.isId(f.leadKeyId) || !HEX64.test(String(f.leadBox))
     || !/^k-[0-9a-f]{16}$/.test(String(f.deskId)) || !HEX64.test(String(f.deskBox))) return null;
   const info = Buffer.from([DESK_COPY_INFO, f.rt, f.teamId, f.leadKeyId, f.leadBox, f.deskId, f.deskBox].join("\n") + "\n", "utf8");
+  const okm = Buffer.from(crypto.hkdfSync("sha256", d, Buffer.alloc(0), info, 48));
+  return { id: okm.subarray(32).toString("hex"), key: okm.subarray(0, 32) };
+}
+
+/* THE LEAD'S OWN COPY of the team file (Claude alpha's decision of 2026-11-23 00:36, a new place on the wire): {id, key} as a desk's
+   copy is, from the agreement of the lead's box with itself, which only a holder of the lead box's private half can make: the lead's
+   other computers. So the lead's other computer reaches a newer epoch's team file with no desk left on the roster. `dh` is that
+   agreement; an all-zero one makes nothing. The rest binds it: the relay team, the team, the lead's key id and the lead's box. */
+function leadCopyOf(dh, f) {
+  const d = toBytes(dh);
+  if (!d || d.length !== 32 || d.every(b => b === 0)) return null;
+  if (!table(f) || !HEX32.test(String(f.rt)) || !B.isId(f.teamId) || !B.isId(f.leadKeyId) || !HEX64.test(String(f.leadBox))) return null;
+  const info = Buffer.from([LEAD_COPY_INFO, f.rt, f.teamId, f.leadKeyId, f.leadBox].join("\n") + "\n", "utf8");
   const okm = Buffer.from(crypto.hkdfSync("sha256", d, Buffer.alloc(0), info, 48));
   return { id: okm.subarray(32).toString("hex"), key: okm.subarray(0, 32) };
 }
@@ -1298,6 +1313,14 @@ function createProgram(opts) {
     return deskCopyOf(dh, { rt: pin.rt, teamId: pin.teamId, leadKeyId: leadKeyId || pin.lead.keyId, leadBox, deskId, deskBox });
   }
 
+  /* On the lead's side: the place and key of its own copy of the team file `doc`, by the agreement of the lead's box with itself. */
+  function ownLeadCopy(doc, ctx) {
+    if (!ctx || typeof ctx.agree !== "function" || !table(doc) || !table(doc.lead) || !HEX64.test(String(doc.lead.box))) return null;
+    let dh = null;
+    try { dh = ctx.agree(doc.lead.box); } catch { dh = null; }
+    return leadCopyOf(dh, { rt: pin.rt, teamId: pin.teamId, leadKeyId: pin.lead.keyId, leadBox: doc.lead.box });
+  }
+
   /* On the lead's side: one copy for each desk the roster of the team file being sent names, by that entry's own box, and
      for nobody else, so a desk taken off the roster has none of this file or any later one. */
   function deskCopies(doc, ctx) {
@@ -1334,6 +1357,10 @@ function createProgram(opts) {
       const c = copyFor(ctx, r.desk.box, held.doc.lead.box, r.desk.id, r.desk.box);
       if (c) out.push({ id: c.id, key: c.key, lead: true });
     }
+    /* And the lead's own copy, which reaches it with no desk left on the roster. */
+    let own = null;
+    own = ownLeadCopy(held.doc, ctx); /* plant:lead-own-open */
+    if (own) out.push({ id: own.id, key: own.key, lead: true });
     return out;
   }
 
@@ -1862,7 +1889,9 @@ function createProgram(opts) {
     if (me.place === "root" && ctx && (Array.isArray(ctx.inviteKeys) || agrees)) {
       const bytes = here.has(TEAM_NAME) ? io.read(TEAM_NAME) : null;
       const held = bytes ? judgedBytes(bytes) : null;
-      const copies = (Array.isArray(ctx.inviteKeys) ? ctx.inviteKeys : []).concat(held ? deskCopies(held.doc, ctx) : []);
+      let self = [];
+      self = held && agrees && ownLeadCopy(held.doc, ctx) ? [ownLeadCopy(held.doc, ctx)] : []; /* plant:lead-own-copy */
+      const copies = (Array.isArray(ctx.inviteKeys) ? ctx.inviteKeys : []).concat(held ? deskCopies(held.doc, ctx) : [], self);
       const live = new Set();
       for (const k of copies) {
         live.add(k.id);
@@ -3612,7 +3641,7 @@ module.exports = {
   SESSION_KEEP_MS, REMOVED_KEEP_MS, REMOVED_CLOCK_AHEAD_MS, WAITING_SAID, FORK_SAID, STRANDED_SAID, LAPSE_STATES, RELAY_CHALLENGE_MS,
   lapseKept, lapseStep,
   DOOR_SEAL_INFO, DOOR_HELLO_LABEL, doorSealKey, doorHelloBytes,
-  pathKey, canon, signedBytes, helloBytes, inviteSealKey, inviteWrapKey, deskCopyOf, answerKey, relayOf, rosterOf, branchIdOf, inPlace, diskIO, writeWhole, stateOf,
+  pathKey, canon, signedBytes, helloBytes, inviteSealKey, inviteWrapKey, deskCopyOf, leadCopyOf, answerKey, relayOf, rosterOf, branchIdOf, inPlace, diskIO, writeWhole, stateOf,
   inviteWrapAad: B.inviteWrapAad, sealInviteWrap: B.sealInviteWrap, openInviteWrap: B.openInviteWrap, openWrap: B.openWrap,
   inviteRefusedSignedBytes: B.inviteRefusedSignedBytes, inviteRefusedGenuine: B.inviteRefusedGenuine,
   createProgram, createChannel, newestEdition,
