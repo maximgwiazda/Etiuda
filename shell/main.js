@@ -417,8 +417,6 @@ function ecFromArgv(argv) {
    base64url, handed to inviteRead as etiuda-join: and the same text. A folder invitation, a page
    address, a link wrapped twice and anything longer than 8192 characters are said and dropped,
    and a refusal reads nothing from disk. Nothing joins: the confirm is still the person's yes. */
-const LINK_FOLDER = "A folder invitation is pasted in Etiuda, not opened from a link.";
-const LINK_FOLDER_PL = "Zaproszenie do folderu wkleja się w Etiudzie; z odnośnika się go nie otwiera.";
 const LINK_FORM = "Etiuda cannot read this link, so nothing was opened or sent. The invitation can be pasted in Etiuda instead.";
 const LINK_FORM_PL = "Etiuda nie potrafi odczytać tego odnośnika, więc niczego nie otwarto ani nie wysłano. Zaproszenie można zamiast tego wkleić w Etiudzie.";
 const LINK_NO_TEAM = "This invitation names no team this desk can join, so nothing was sent. Ask your lead for a new one.";
@@ -444,8 +442,7 @@ function linkFromArg(arg) {
   if (!/^[A-Za-z0-9_-]+$/.test(payload)) return linkRefusal(LINK_FORM, LINK_FORM_PL); /* plant:link-b64 */
   const handed = "etiuda-join:" + payload;
   const parsed = inviteRead(handed, process.platform !== "win32");
-  if (!parsed) return linkRefusal(LINK_FORM, LINK_FORM_PL);
-  if (!parsed.relay) return linkRefusal(LINK_FOLDER, LINK_FOLDER_PL); /* plant:link-folder */
+  if (!parsed) return linkRefusal(LINK_FORM, LINK_FORM_PL); /* a document that names a folder is read as null (inviteRead), so it is this refusal */
   if (!inviteKeyHolds(parsed)) return linkRefusal(LINK_KEY, LINK_KEY_PL); /* plant:link-key */
   return { text: handed, parsed: parsed };
 }

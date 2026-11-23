@@ -34,9 +34,7 @@ if (process.env.ETIUDA_PLANTS_COPY !== "1") {
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 
-const EXPECTED = 34;
-const LINK_FOLDER = "A folder invitation is pasted in Etiuda, not opened from a link.";
-const LINK_FOLDER_PL = "Zaproszenie do folderu wkleja się w Etiudzie; z odnośnika się go nie otwiera.";
+const EXPECTED = 33; /* 34 less 3hc, retired with the folder invitation (P2) */
 const LINK_FORM = "Etiuda cannot read this link, so nothing was opened or sent. The invitation can be pasted in Etiuda instead.";
 const LINK_FORM_PL = "Etiuda nie potrafi odczytać tego odnośnika, więc niczego nie otwarto ani nie wysłano. Zaproszenie można zamiast tego wkleić w Etiudzie.";
 const LINK_NO_TEAM = "This invitation names no team this desk can join, so nothing was sent. Ask your lead for a new one.";
@@ -304,8 +302,8 @@ try {
 
   const folded = refused(folderArg);
   check(folded.run.hits === 0 && folded.run.reg === 0 && !folded.run.err && folded.run.result && folded.run.result.confirm !== true
-    && folded.run.result.refused === LINK_FOLDER && hasBoth(folded.lines, LINK_FOLDER, LINK_FOLDER_PL) && deskNow() === deskBefore,
-    "3h5 a folder document is refused with the folder sentence, with no I/O and the token unspent ("
+    && folded.run.result.refused === LINK_FORM && hasBoth(folded.lines, LINK_FORM, LINK_FORM_PL) && deskNow() === deskBefore,
+    "3h5 a folder document is refused as no invitation, with the form sentence (P2: was the folder sentence, \"A folder invitation is pasted in Etiuda, not opened from a link.\", gone with the paste), with no I/O and the token unspent ("
     + folded.run.hits + " fs, " + folded.run.reg + " reg)");
 
   let etiudaStats = 0;
@@ -617,13 +615,7 @@ try {
   check(capPlant.turned && capPlant.back, "3hb lifting plant:link-cap drops the length sentence and still does not confirm, and the file is put back: "
     + capPlant.detail + ", sha " + (capPlant.back ? "restored" : "differs"));
 
-  const folderPlant = lift("plant:link-folder", src => {
-    const L = loadShell({ lock: false, src });
-    const a = L.api.acceptLink(folderArg);
-    return !!(a && a.confirm === true && a.offer && a.offer.lead === LEAD && !a.offer.relay);
-  });
-  check(folderPlant.turned && folderPlant.back, "3hc lifting plant:link-folder lets a folder document reach the confirm, and the file is put back: "
-    + folderPlant.detail + ", sha " + (folderPlant.back ? "restored" : "differs"));
+  /* RETIRED, P2: 3hc, "lifting plant:link-folder lets a folder document reach the confirm"; the branch and its sentence left the shell with the paste, and a folder document reads as null (fjg4 holds it). */
 
   const filePlant = lift("plant:link-file", src => {
     let n = 0;
@@ -937,42 +929,18 @@ try {
     L.api.bindWindow(L.win);
     return takenFolder(L, await L.join("invite", sharePasted, "Ola", typed));
   }
-  const roadsNow = { pasted: await relayRoad(undefined, "paste", pastedText), https: await relayRoad(undefined, "paste", httpsText),
-    link: await relayRoad(undefined, "link", exactArg) };
-  const folderNow = { none: await folderIpc(undefined, ""), wrong: await folderIpc(undefined, shareWrong),
-    right: await folderIpc(undefined, shareRight), road: await folderRoad(undefined) };
-  const codeOk = /^[0-9]{5}$/.test(rightCode) && rightCode !== wrongCode && /^[0-9]{5}$/.test(shareRight) && shareRight !== shareWrong
-    && roadOk(roadsNow.pasted) && roadOk(roadsNow.https) && roadOk(roadsNow.link)
-    && refusedCheck(folderNow.none) && refusedCheck(folderNow.wrong) && joinedFolder(folderNow.right)
-    && folderNow.road.page && joinedFolder(folderNow.road.taken);
-  let folderLifted = "";
-  const shareCodePlant = await liftAsync("plant:folder-code", async src => {
-    const none = await folderIpc(src, ""), wrong = await folderIpc(src, shareWrong);
-    folderLifted = "pasted with none " + sayFolder(none) + ", with a wrong code " + sayFolder(wrong);
-    return joinedFolder(none) && joinedFolder(wrong);
-  }, MAIN, "  if (false)");
-  const pageFile = path.join(ROOT, "src", "modules", "team-join.js");
-  let pageLifted = "";
-  const pastePagePlant = await liftAsync("plant:paste-relay", async () => {
-    const r = await relayRoad(undefined, "paste", pastedText);
-    pageLifted = sayRoad(r);
-    return !r.shown && !joinedClean(r.taken);
-  }, pageFile);
+  /* P2: 3hp held three roads in (pasted as etiuda-join:, pasted as https://etiuda.dev/join#, opened by the link) and "a folder invitation keeps its code", with plant:folder-code
+     and plant:paste-relay lifted to turn the folder and paste scenes. There is no paste box and no folder invitation now; the link road is the one road and plant:relay-offer the one plant. */
+  const roadsNow = { link: await relayRoad(undefined, "link", exactArg) };
+  const codeOk = roadOk(roadsNow.link);
   let offerLifted = "";
   const relayOfferPlant = await liftAsync("plant:relay-offer", async src => {
-    const r = await relayRoad(src, "paste", pastedText);
+    const r = await relayRoad(src, "link", exactArg);
     offerLifted = sayRoad(r);
     return !r.clean;
   }, MAIN);
-  check(codeOk && shareCodePlant.turned && shareCodePlant.back && pastePagePlant.turned && pastePagePlant.back && relayOfferPlant.turned && relayOfferPlant.back,
-    "3hp a relay invitation pasted as etiuda-join:, pasted as https://etiuda.dev/join# and opened by the link each shows the link's confirm with no code box, sends nothing before yes "
-    + "and joins on yes, through the real IPC and the page's own readTook and invite act, and a folder invitation keeps its code (the page asks it, the shell refuses check on a wrong one and on none, "
-    + "the right one joins); pasted " + sayRoad(roadsNow.pasted) + "; https " + sayRoad(roadsNow.https) + "; link " + sayRoad(roadsNow.link)
-    + "; folder none " + sayFolder(folderNow.none) + ", wrong " + sayFolder(folderNow.wrong) + ", right " + sayFolder(folderNow.right)
-    + ", page " + folderNow.road.page + "/" + sayFolder(folderNow.road.taken)
-    + "; taking out takeInvite's folder clause at plant:folder-code lets the pasted folder invitation in: " + shareCodePlant.detail + " (" + folderLifted
-    + "), sha " + (shareCodePlant.back ? "restored" : "differs")
-    + "; taking out the page's relay confirm at plant:paste-relay: " + pastePagePlant.detail + " (" + pageLifted + "), sha " + (pastePagePlant.back ? "restored" : "differs")
+  check(codeOk && relayOfferPlant.turned && relayOfferPlant.back,
+    "3hp a relay invitation opened by the link shows the link's confirm with no code box, sends nothing before yes and joins on yes, through the real IPC and the page's own invite act (P2: the pasted roads and the folder invitation's code are retired); link " + sayRoad(roadsNow.link)
     + "; taking out readInvite's clean relay offer at plant:relay-offer: " + relayOfferPlant.detail + " (" + offerLifted + "), sha " + (relayOfferPlant.back ? "restored" : "differs"));
 
   /* The person's Cancel on a link confirm. The shell lets the link go: the `held` answer then names no offer, the held text is empty,
