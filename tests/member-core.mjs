@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const EXPECTED = 37;
+const EXPECTED = 36; /* 37 less 16s, retired with the check code (P2) */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -62,7 +62,7 @@ const MEMBER_DECLS = ["const HPKE_KEM =", "const HPKE_SUITE =", "const SPKI_X255
   "function unwrapTeamKey(", "const JOIN_KIND =", "const HANDOVER_PREFIX =", "const HANDOVER_KIND =",
   "function handoverSignedBytes(", "function handoverGenuine(", "function handedTo(", "const SPKI_ED25519 =",
   "function canonJson(", "function signedBytesOf(", "function teamWhole(",
-  "function memberStateCopy(", "function memberProof(", "function inviteCode(", "function inviteIdOf(", "const INVITE_HIDDEN_RE =", "function inviteFolder(",
+  "function memberStateCopy(", "function memberProof(", "function inviteIdOf(", "const INVITE_HIDDEN_RE =", "function inviteFolder(",
   "function placeKindOk(", "function driveTops(", "function placeSlash(", "function placeLeaf(", "function placeJoin(",
   "function placeUnder(", "function placeRest(", "function syncRootsFrom(", "function placeOf(",
   "function placeCandidates(", "function placeResolve(", "function placeKept(", "function readSyncRecords(",
@@ -71,14 +71,14 @@ const MEMBER_DECLS = ["const HPKE_KEM =", "const HPKE_SUITE =", "const SPKI_X255
 const BUILD_DECLS = ["function hpkeSeal(", "function wrapTeamKey(", "function branchIdOf("];
 const JOIN_DECLS = ["const SPKI_ED25519 =", "function branchIdOf(", "function canonJson(", "function signedBytesOf(",
   "const SEALED_TEAM_RE =", "const JOIN_PREFIX =", "const JOIN_KIND =", "const JOIN_HEX_RE =", "function joinHash(",
-  "function joinCommit(", "function joinCode(", "function joinSignedBytes(", "function joinGenuine(", "function joinOpening("];
+  "function joinCommit(", "function joinSignedBytes(", "function joinGenuine(", "function joinOpening("];
 
 const SRC = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 let M = null, J = null;
 try {
   M = load(SRC, MEMBER_DECLS.concat(BUILD_DECLS),
-    ["memberRequestDoc", "memberHeed", "memberProof", "inviteCode", "inviteIdOf", "inviteRead", "folderHost", "wrapTeamKey", "branchIdOf", "signedBytesOf", "teamWhole"]);
-  J = load(SRC, JOIN_DECLS, ["joinCommit", "joinCode", "joinSignedBytes", "joinGenuine"]);
+    ["memberRequestDoc", "memberHeed", "memberProof", "inviteIdOf", "inviteRead", "folderHost", "wrapTeamKey", "branchIdOf", "signedBytesOf", "teamWhole"]);
+  J = load(SRC, JOIN_DECLS, ["joinCommit", "joinSignedBytes", "joinGenuine"]);
   check(true,
     "16a the " + MEMBER_DECLS.length + " member declarations slice out of shell/main.js and evaluate with crypto and Buffer alone,"
     + " and the " + JOIN_DECLS.length + " join declarations still do");
@@ -215,10 +215,9 @@ if (M && J) {
     + "keep " + next.keep + ", old " + (next.state.keys[TEAM] && next.state.keys[TEAM][1])
     + ", again keep " + again.keep + ", again epoch 2 " + (again.state.keys[TEAM] && again.state.keys[TEAM][2]));
 
-  const code = J.joinCode(TEAM, me.key, me.box, lead.public, nonce, opening.nonce);
   check(/^[0-9a-f]{64}$/.test(J.joinCommit(TEAM, me.key, me.box, nonce))
-      && J.joinCommit(TEAM, me.key, me.box, nonce) === commit && /^[0-9]{6}$/.test(code),
-    "16i the join declarations still reckon a commitment of 64 hex and a code of six digits");
+      && J.joinCommit(TEAM, me.key, me.box, nonce) === commit,
+    "16i the join declarations still reckon a commitment of 64 hex (P2: and no code of six digits, which the shell no longer makes)");
 
   const secret = hex(16);
   const proof = M.memberProof(secret, commit);
@@ -362,19 +361,7 @@ if (M && J) {
     "16r a team whose lead this member forgot takes no first admission from a waiting invitation, even under the lead it names:"
     + " only an answered request lifts the bar: stopped " + barredInvite.stop + ", pinned " + barredInvite.pinned);
 
-  /* The check code against an HMAC made here: keyed by the secret's 16 bytes, over the lead's 32 raw key bytes, the first six
-     bytes big-endian modulo 100000, as five digits. The fixed vectors are for any other maker of the code to share; the first
-     reads 990, so a code left unpadded is three digits there. */
-  const codeOf = (sec, pub) => String(crypto.createHmac("sha256", Buffer.from(sec, "hex")).update(Buffer.from(pub, "hex")).digest()
-    .readUIntBE(0, 6) % 100000).padStart(5, "0");
-  const VECTORS = [["11".repeat(15) + "0b", "22".repeat(32), "00990"], ["11".repeat(16), "22".repeat(32), "97467"]];
-  const vectorsHeld = VECTORS.map(([sec, pub, want]) => M.inviteCode(sec, pub) === want && codeOf(sec, pub) === want);
-  const wantInvite = codeOf(secret, lead.public);
-  check(vectorsHeld.every(Boolean) && /^[0-9]{5}$/.test(wantInvite) && M.inviteCode(secret, lead.public) === wantInvite
-      && M.inviteCode(otherSecret, lead.public) !== wantInvite && M.inviteCode(secret, otherLead.public) !== wantInvite,
-    "16s the check code is HMAC-SHA256 keyed by the secret's bytes over the lead's raw public key, five digits from the first six"
-    + " bytes, zeros kept in front, and another secret or another lead gives another: vectors " + JSON.stringify(vectorsHeld)
-    + ", " + (M.inviteCode(secret, lead.public) === wantInvite ? "this invitation's code" : "another code"));
+  /* RETIRED, P2 (the shell makes no check code): 16s, "the check code is HMAC-SHA256 keyed by the secret's bytes over the lead's raw public key, five digits from the first six bytes, zeros kept in front, and another secret or another lead gives another". */
 
   /* A place beside the absolute path (board 945, item 4). The functions are sliced on their own, with crypto and Buffer
      alone, as the member core is: a free name fails here. liveSyncIo is not on this list; the record reader is given a

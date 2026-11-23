@@ -20,7 +20,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 const STAND = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), STAND);
-const EXPECTED = 13;
+const EXPECTED = 6; /* 13 less 955c to 955i, retired with the folder join (P2) */
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
   asserted++;
@@ -231,53 +231,7 @@ const machineFill = labs => {
 const machineGreen = r => waiting(r) && !!joinIn(path.join(r.labs.H, "Lab Teams", "Team")) && !fs.existsSync(path.join(r.labs.H, "Lab Mine", "Team"));
 const MACHINE_DRIVE = { "HKLM\\SOFTWARE\\WOW6432Node\\Google\\DriveFS": "H" };
 
-if (ASIDE["955c"]) skip(ASIDE["955c"]);
-else {
-const polish = await joinAt(polishFill);
-check(!!place && place.kind === "gdrive" && place.root === "Shared drives" && place.rel === "Team" && polishGreen(polish)
-    && !!polish.offer && polish.offer.how === "root" && polish.offer.folder === "H:\\" + POLISH_SHARED + "\\Team",
-  "955c an invitation made on G:\\Shared drives\\Team joins with no picker into H:\\" + POLISH_SHARED + "\\Team on a desk with no"
-  + " record of Drive, and the confirm shows that folder: place " + (place ? place.root + " / " + place.rel : "none")
-  + ", confirm " + (polish.offer ? polish.offer.how + " " + polish.offer.folder : "none") + ", " + said(polish));
-}
-
-if (ASIDE["955d"]) skip(ASIDE["955d"]);
-else {
-const shortcut = await joinAt(shortcutFill);
-check(shortcutGreen(shortcut),
-  "955d the same invitation joins with no picker into H:\\.shortcut-targets-by-id\\" + SHORT_ID + "\\Team where the folder is only"
-  + " a shortcut's target: " + said(shortcut));
-}
-
-if (ASIDE["955e"]) skip(ASIDE["955e"]);
-else {
-STAND.drive = MACHINE_DRIVE;
-const before = Object.assign({}, regStand.calls);
-const machine = await joinAt(machineFill);
-const asked = { drive: regStand.calls.drive - before.drive, machine: regStand.calls.machine - before.machine, reached: regStand.calls.reached - before.reached };
-check(machineGreen(machine) && asked.drive >= 3 && asked.machine === 0 && asked.reached === 0 && regStand.held(),
-  "955e a desk whose Drive root only HKLM's WOW6432Node key names, as a bare letter, its folders in an unlisted language, joins"
-  + " with no picker into the folder that holds the team, and the registry was only read: " + said(machine)
-  + ", " + asked.drive + " DriveFS queries, " + asked.machine + " other machine reads, " + asked.reached + " past the stand-in");
-STAND.drive = undefined;
-}
-
-/* Each guard lifted from a copy of the shell turns its scene. */
-const turns = [
-  ["drive-scan", polishFill, polishGreen, null, "955f lifting plant:drive-scan leaves the Polish desk at the picker"],
-  ["drive-links", shortcutFill, shortcutGreen, null, "955g lifting plant:drive-links leaves the shortcut desk at the picker"],
-  ["drive-hklm", machineFill, machineGreen, MACHINE_DRIVE, "955h lifting plant:drive-hklm leaves the machine-wide desk at the picker"],
-  ["drive-itself", machineFill, machineGreen, MACHINE_DRIVE, "955i lifting plant:drive-itself takes the folder beside the right one, and the join fails there"]
-];
-for (const [tag, fill, green, drive, line] of turns) {
-  const aside = offWindows(line.split(" ")[0], NO_DRIVE + ", so a lifted guard has no join to undo");
-  if (aside) { skip(aside); continue; }
-  const src = lifted(tag);
-  STAND.drive = drive || undefined;
-  const r = src ? await joinAt(fill, src) : null;
-  STAND.drive = undefined;
-  check(!!r && !green(r), line + ": " + (r ? said(r) + (tag === "drive-itself" && fs.existsSync(path.join(r.labs.H, "Lab Mine", "Team")) ? ", Lab Mine\\Team written" : "") : "no plant"));
-}
+/* RETIRED, P2 (a desk no longer joins a team through a folder, so no invitation names a Drive folder and none is taken into one): 955c, "an invitation made on G:\Shared drives\Team joins with no picker into H:\<Polish name>\Team on a desk with no record of Drive, and the confirm shows that folder"; 955d, "the same invitation joins with no picker into H:\.shortcut-targets-by-id\<id>\Team where the folder is only a shortcut's target"; 955e, "a desk whose Drive root only HKLM's WOW6432Node key names, as a bare letter, its folders in an unlisted language, joins with no picker into the folder that holds the team, and the registry was only read"; and the four plants that turned those scenes, 955f (plant:drive-scan), 955g (plant:drive-links), 955h (plant:drive-hklm) and 955i (plant:drive-itself, whose line left the shell with the invitation's folder choice). The pure rules, which Studio slices for its own places, are held below. */
 
 /* The pure rules, sliced. */
 const tailLifted = (() => { try { return placeApi(lifted("drive-tail")); } catch (e) { return null; } })();

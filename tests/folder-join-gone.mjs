@@ -67,6 +67,7 @@ const views = {
   sealed: { sealed: { file: "lamps.ec", team: "t-0123456789abcdef" }, join: null, leads: [] },
   gone: { sealed: { file: "lamps.ec", team: "t-0123456789abcdef" }, join: null, leads: [{ team: "t-0123456789abcdef", print: "", admitted: true, seen: true, lead: "Lamp lead", removed: true }] },
 };
+ST.lsSet("eUiLang", "en");
 const shown = {};
 for (const k of Object.keys(views)) shown[k] = paint(views[k]);
 const bad = /e-join-code|e-join-wait|data-join-paste|data-join-check|<textarea|<input|digits|check code|Read this code|read it to the lead/;
@@ -126,7 +127,7 @@ const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
 const lead = { keyId: "studio-" + crypto.randomBytes(8).toString("hex"), public: crypto.randomBytes(32).toString("hex"), name: "Lamp lead" };
 /* The relay invitation's keyId must be the lead key's own print for a yes, but a read asks no more than the shape. */
 const secret = () => crypto.randomBytes(16).toString("hex");
-const relay = { rt: "r-" + crypto.randomBytes(8).toString("hex"), url: "https://relay.test", token: crypto.randomBytes(32).toString("hex"), inv: secret() };
+const relay = { rt: crypto.randomBytes(16).toString("hex"), url: "https://relay.test/relay/v1", token: crypto.randomBytes(32).toString("hex"), inv: secret() };
 const folderBlob = blob({ team: TEAM, folder: path.join(LAB, "elsewhere") + path.sep, lead, secret: secret() });
 const relayBlob = blob({ team: TEAM, lead, secret: secret(), relay });
 const mixedBlob = blob({ team: TEAM, folder: path.join(LAB, "elsewhere") + path.sep, lead, secret: secret(), relay });
@@ -143,7 +144,7 @@ async function shellLegs(src, tag, expectRelayOnly) {
   return { folderRead, relayRead, mixedRead, looked, relayLooked, D };
 }
 const A = await shellLegs(SRC, "a", true);
-check(A.folderRead === null && A.mixedRead === null && !!A.relayRead && A.relayRead.team === TEAM && A.relayRead.relay.url === "https://relay.test"
+check(A.folderRead === null && A.mixedRead === null && !!A.relayRead && A.relayRead.team === TEAM && A.relayRead.relay.url === "https://relay.test/relay/v1"
   && !("folder" in A.relayRead) && A.looked && A.looked.refused === "unread" && !A.looked.offer
   && A.relayLooked && A.relayLooked.offer && A.relayLooked.offer.relay === "relay.test" && A.relayLooked.offer.lead === "Lamp lead" && !("code" in A.relayLooked.offer),
   "fjg4 an invitation that names a folder, alone or beside a relay, is not read, and the desk's read of it is refused as unread with no offer; a relay invitation is read as before and its offer holds the lead, the team and the relay's host and no code: "
