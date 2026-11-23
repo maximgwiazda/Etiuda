@@ -24,7 +24,7 @@ const nodeRequire = createRequire(import.meta.url);
    for machine policy (tests/reg-stand.cjs; review 09, finding 4). */
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 28 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 2);
+const EXPECTED = 29 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 2);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -417,6 +417,11 @@ try {
   const noPutVerb = H.eHasHistory();
   delete window.E_HOST;
   check(noPutVerb === true, "nsfe9 the Library's door is there under a host that lists and reads versions and offers no put-back verb (" + noPutVerb + ")");
+  /* nsfe10: which way a Put back goes is told by the row, which the shell marks mine where the bytes in the file are ones this desk wrote: in place, with
+     an Undo, only for such a row and only under a host that offers the verb; any other row, and any host without it, takes the version as the catalog in use. */
+  const route = typeof H.historyPutRoute === "function" ? H.historyPutRoute : () => "absent";
+  const routes = [route({ mine: true }, { historyPut: noop }), route({ mine: false }, { historyPut: noop }), route({ mine: true }, {}), route({}, { historyPut: noop })];
+  check(routes.join() === "place,desk,desk,desk", "nsfe10 a Put back goes in place only for a row this desk's own, under a host with the verb, and on this desk as the catalog in use otherwise (" + routes.join() + ")");
 } catch (e) {
   failed++;
   console.log("  FAIL the run stopped: " + (e && e.stack || e));
