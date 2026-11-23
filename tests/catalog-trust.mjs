@@ -451,45 +451,102 @@ try {
         check(got === V2.V2_SIG_VALID, "st1b lifting plant:folder-publics-here lets the other team's lead read valid on the page (FAIL st1a): " + got);
       }
 
-      const teamDoc = sign({
-        format: 1, kind: "etiuda-team", id: teamA, catalogs: [fixture.id],
-        lead: { keyId: KEY_ID, public: pubA }, sealed: false, epoch: 1, rev: 1, roster: []
-      }, pair.privateKey, KEY_ID);
-      fs.writeFileSync(path.join(mirror, "etiuda-team.json"), JSON.stringify(teamDoc), "utf8");
-      const Ch = nodeRequire(path.join(ROOT, "shell", "relay", "channel.cjs"));
-      const head = {
-        v: 1, team: teamA, epoch: 1, rev: 1, t: Date.now(),
-        editions: [{ catalog: fixture.id, rev: 3, edition: "North lamps", published: "2026-02-03" }],
-        sig: { alg: "Ed25519", keyId: KEY_ID }
-      };
-      head.sig.value = crypto.sign(null, Buffer.concat([Buffer.from(Ch.HEAD_PREFIX), Ch.signedBytes(head)]), pair.privateKey).toString("hex");
-      fs.writeFileSync(path.join(mirror, "etiuda-head.json"), JSON.stringify(head), "utf8");
-      const high = JSON.parse(JSON.stringify(fixture));
-      delete high.sig;
-      delete high.hash;
-      high.rev = 100;
-      fs.writeFileSync(path.join(mirror, "high-rev.ec"), JSON.stringify(high), "utf8");
-      const joined = await ask(invokeHandlers, "etiuda:team-join", "leads");
-      const row = ((joined && joined.leads) || []).filter(r => r && r.team === teamA)[0] || null;
-      check(!!row && !!row.head && row.head.edition === "North lamps",
-        "st2a an unsigned catalog at a higher rev in this folder leaves the lead's head on the team row: "
-        + (row && row.head ? row.head.edition : "no head"));
-      if (process.env.ETIUDA_PLANTS === "off") { asserted++; console.log("  SKIP  st2b lifting plant:head-unsigned-rev (ETIUDA_PLANTS=off)"); }
-      else {
-        const aside = asideShell("head-unsigned-rev", line => {
-          const opened = line.replace("facts.genuine && ", "");
-          return opened === line ? null : opened;
-        });
-        let shown = "plant line absent";
-        if (aside) {
-          aside.on["etiuda:desk"](eventFor(ENGINE_FRAME));
-          const again = await ask(aside.invoke, "etiuda:team-join", "leads");
-          const rowP = ((again && again.leads) || []).filter(r => r && r.team === teamA)[0] || null;
-          shown = rowP && rowP.head ? rowP.head.edition : "nothing";
-        }
-        check(shown === "nothing", "st2b lifting plant:head-unsigned-rev lets that unsigned rev blank the head (FAIL st2a): " + shown);
-      }
     } finally { fs.writeFileSync(DESK, deskWas, "utf8"); }
+  }
+
+  /* MOVED, P4 (no folder is read as a team): st2a and st2b ran on a folder team, its team file and head in the desk's folder-mirror, and the
+     row read the head off that folder. A held folder team's row now shows no head (its row says folderHeld), so the rule they guard, that an
+     unsigned file at a higher rev never moves the head, is a relay team's: its head is read from the relay mirror and judged by headView
+     against deskEditionRev over that mirror. Same ids, same EXPECTED: the scene is a desk that follows one team over the relay, offline
+     (every fetch fails), its team file, signed head and the unsigned higher rev in userData/relay/<rt>/, the row read through the desk's own
+     shell (the pattern of tests/relay-channel.mjs relayHeadRow). Old sentences: st2a "an unsigned catalog at a higher rev in this folder leaves
+     the lead's head on the team row"; st2b "lifting plant:head-unsigned-rev lets that unsigned rev blank the head (FAIL st2a)". */
+  {
+    const pubA = pubHex(pair.publicKey);
+    const Ch = nodeRequire(path.join(ROOT, "shell", "relay", "channel.cjs"));
+    const teamR = "t-" + crypto.randomBytes(8).toString("hex"), rtR = crypto.randomBytes(16).toString("hex");
+    const channelR = { kind: "relay", rt: rtR, url: "https://relay.test/relay/v1" };
+    const teamDoc = sign({
+      format: 1, kind: "etiuda-team", id: teamR, catalogs: [fixture.id],
+      lead: { keyId: KEY_ID, public: pubA }, sealed: false, epoch: 1, rev: 1, channel: channelR, roster: []
+    }, pair.privateKey, KEY_ID);
+    const head = {
+      v: 1, team: teamR, epoch: 1, rev: 1, t: Date.now(),
+      editions: [{ catalog: fixture.id, rev: 3, edition: "North lamps", published: "2026-02-03" }],
+      sig: { alg: "Ed25519", keyId: KEY_ID }
+    };
+    head.sig.value = crypto.sign(null, Buffer.concat([Buffer.from(Ch.HEAD_PREFIX), Ch.signedBytes(head)]), pair.privateKey).toString("hex");
+    const high = JSON.parse(JSON.stringify(fixture));
+    delete high.sig;
+    delete high.hash;
+    high.rev = 100;
+    /* The relay desk's row for the team: a fresh desk per read, so a planted shell reads the same record. `marker` and `edit` plant one line. */
+    const relayRowN = { n: 0 };
+    const relayHeadRow = async (marker, edit) => {
+      const ud = path.join(LAB, "relay-desk-" + (++relayRowN.n)), mir = path.join(ud, "relay", rtR);
+      fs.mkdirSync(mir, { recursive: true });
+      fs.writeFileSync(path.join(mir, "etiuda-team.json"), JSON.stringify(teamDoc), "utf8");
+      fs.writeFileSync(path.join(mir, "etiuda-head.json"), JSON.stringify(head), "utf8");
+      fs.writeFileSync(path.join(mir, "high-rev.ec"), JSON.stringify(high), "utf8");
+      fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({
+        kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: path.join(ud, "share"), eUiLang: "en" },
+        teamPins: { [teamR]: { keyId: KEY_ID, public: pubA } }, teamPinFrom: { [teamR]: "invite" }, teamChannel: { [teamR]: channelR },
+        teamShown: { [teamR]: { folder: mir, relay: "relay.test" } }
+      }), "utf8");
+      fs.mkdirSync(path.join(ud, "share"), { recursive: true });
+      let src = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
+      if (marker) {
+        const lines = src.split("\n");
+        const at = lines.findIndex(l => l.indexOf("plant:" + marker) >= 0);
+        const next = at < 0 ? null : edit(lines[at]);
+        if (next == null || next === lines[at]) return "plant line absent";
+        lines[at] = next;
+        src = lines.join("\n");
+      }
+      const on = {}, invoke = {};
+      const safeStorage = {
+        isEncryptionAvailable: () => true,
+        encryptString: x => Buffer.from(Buffer.from(String(x), "utf8").map(b => b ^ 0x5a)),
+        decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
+      };
+      const electronR = {
+        app: { getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop, getVersion: () => "0.0.0",
+               whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
+        ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
+        shell: { openPath: async () => "" },
+        BrowserWindow: inert, Menu: inert, dialog: dialogApi, protocol: inert, screen: inert, systemPreferences: inert,
+        net: { fetch: () => Promise.reject(new Error("offline")) },
+        session: { defaultSession: new Proxy({ resolveProxy: () => Promise.resolve("DIRECT") }, { get: (t, k) => (k in t ? t[k] : inert) }) },
+        nativeTheme: { themeSource: "system" }, safeStorage, powerMonitor: inert,
+      };
+      const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
+        src + "\nreturn { relayRun };")(
+        n => (n === "electron" ? electronR : nodeRequire(n)), path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet);
+      /* A relay address is known to a harness start (knownRelayAddress), so the desk reads the channel its record names. */
+      const offscreenWas = process.env.ETIUDA_TEST_OFFSCREEN;
+      process.env.ETIUDA_TEST_OFFSCREEN = "1";
+      await invoke["etiuda:branch-identity"](eventFor(ENGINE_FRAME), true);
+      const run = api.relayRun();
+      try {
+        const v = await invoke["etiuda:team-join"](eventFor(ENGINE_FRAME), "leads");
+        const row = ((v && v.leads) || []).filter(r => r && r.team === teamR)[0] || null;
+        return row && row.head ? row.head.edition : "nothing";
+      } finally {
+        if (run) await run.stop();
+        if (offscreenWas === undefined) delete process.env.ETIUDA_TEST_OFFSCREEN; else process.env.ETIUDA_TEST_OFFSCREEN = offscreenWas;
+      }
+    };
+    const kept = await relayHeadRow();
+    check(kept === "North lamps",
+      "st2a an unsigned catalog at a higher rev in the relay mirror leaves the lead's head on the relay team row: " + kept);
+    if (process.env.ETIUDA_PLANTS === "off") { asserted++; console.log("  SKIP  st2b lifting plant:head-unsigned-rev (ETIUDA_PLANTS=off)"); }
+    else {
+      const shown = await relayHeadRow("head-unsigned-rev", line => {
+        const opened = line.replace("facts.genuine && ", "");
+        return opened === line ? null : opened;
+      });
+      check(shown === "nothing", "st2b lifting plant:head-unsigned-rev lets that unsigned rev blank the head (FAIL st2a): " + shown);
+    }
   }
 } catch (e) {
   failed++;
