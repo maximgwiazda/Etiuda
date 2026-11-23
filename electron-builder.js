@@ -107,18 +107,17 @@ module.exports = sellerAddress.sellerConfig(testService.testServiceConfig({
   copyright: "Copyright (c) 2026 Maxim Gwiazda",
   extraMetadata: { version },
   directories: { output, buildResources: "shell" },
-  // An allowlist, the same discipline as .gitignore's blocklist in reverse: twenty-three files go in
+  // An allowlist, the same discipline as .gitignore's blocklist in reverse: twenty-two files go in
   // and the src tree, the harness and the tools stay out of a customer's machine. The pin
   // travels with the artefact it describes, or the shell serves script-src 'none' and the
   // packaged app opens on a blank window. The last is the sample catalog the shell puts in the
   // catalog folder on a first run; it is content, and the only content this app ever ships. The two
   // under shell/relay/ are the relay's channel layer and its blob rules, which the shell requires only
-  // for a team on the relay (board 900). The two under shell/folder/ are the folder mirror's syncer and
-  // its worker, which the shell requires only for a team in a shared folder (board 945 stage 3 (b)).
+  // for a team on the relay (board 900).
   // The three under shell/embed/ run the embedded model, whose files sit beside the asar, not in it.
   // The two under shell/sync/ are a person's store's key life and its sync, which the shell requires only after a seated sign-in.
   files: ["package.json", "shell/main.js", "shell/preload.js", "shell/win-proxy.cjs", "shell/page-watch.cjs", "shell/proxy-net.cjs", "shell/clip-suggest.cjs", "shell/desk-ai.cjs", "shell/desk-reset.cjs", "shell/tray.cjs",
-          "shell/relay/channel.cjs", "shell/relay/blob.cjs", "shell/sync/store.cjs", "shell/sync/sync.cjs", "shell/folder/syncer.cjs", "shell/folder/syncer-worker.cjs",
+          "shell/relay/channel.cjs", "shell/relay/blob.cjs", "shell/sync/store.cjs", "shell/sync/sync.cjs",
           "shell/embed/suggest.cjs", "shell/embed/core.cjs", "shell/embed/worker.cjs",
           "engine/etiuda.html", "engine/etiuda.csp.json", "shell/sample-catalog.ec",
           // The tray's PNG, which Linux reads where it reads an .ico as empty (board 973). In the root list, not a

@@ -232,7 +232,6 @@ export const SCANS = {
   "tests/relay-channel-clean.mjs": [
     "tests/relay-channel.mjs",
     "tests/desk-roster.mjs",
-    "tests/folder-mirror.mjs",
     "tests/lab-owner.mjs",
   ],
   "tests/tray.mjs": ["shell/tray.cjs"],

@@ -98,10 +98,6 @@ try { embedLib = require(path.join(__dirname, "embed", "suggest.cjs")); } catch 
 /* The relay's channel layer, required the first time a team on the relay needs it, so a desk on a folder loads nothing of it. */
 let relayLayer = null;
 function RelayChannel() { return relayLayer || (relayLayer = require(path.join(__dirname, "relay", "channel.cjs"))); }
-let folderSyncerLayer = null;
-function FolderSyncer() {
-  return folderSyncerLayer || (folderSyncerLayer = require(path.join(__dirname, "folder", "syncer.cjs")));
-}
 
 /* THE PROXY IS CHOSEN HERE, BEFORE READY: a setProxy after ready would not stop the first lookup.
    Windows' own setting is followed where it names a setup script or a server (machine policy first,
@@ -241,33 +237,19 @@ if (TEST_DOOR && process.env.ETIUDA_TEST_DOCUMENTS) {
   } catch (e) { console.error("etiuda: ETIUDA_TEST_DOCUMENTS could not be honoured - " + e.message); }
 }
 function defaultCatalogFolder() { return path.join(app.getPath("documents"), "Etiuda"); }
-function folderMirrorOf(teamId) { return path.join(app.getPath("userData"), "folder-mirror", String(teamId)); }
 function rawCatalogFolder() {
   if (deskKeys === undefined) deskKeys = readDesk();
   const set = deskKeys[CATALOG_FOLDER_KEY];
   return (typeof set === "string" && set.trim()) ? set.trim() : defaultCatalogFolder();
 }
-/* The local copy of a team held through a shared folder, where the person's catalog folder setting is that team's share and the
-   copy holds anything, else "". A folder team no longer syncs, so the copy is what the desk last had: it holds what the share
-   does not (an owed file), and it opens with the share out of reach. Never a team's place: the copy is read as a plain folder. */
 /* The folder team this desk holds at the folder `setting`, as {team}, or null. */
 function heldTeamAt(setting) {
   const s = path.resolve(String(setting || ""));
   for (const t of Object.keys(teamShown)) if (folderHeld(t) && path.resolve(teamShown[t].folder) === s) return { team: t };
   return null;
 }
-function heldLocalCopy(setting) {
-  const s = path.resolve(String(setting || ""));
-  for (const t of Object.keys(teamShown)) {
-    if (!folderHeld(t) || path.resolve(teamShown[t].folder) !== s) continue;
-    const copy = folderMirrorOf(t);
-    try { if (fs.statSync(copy).isDirectory() && fs.readdirSync(copy).length) return copy; } catch { /* no copy kept: the share is read */ }
-  }
-  return "";
-}
 /* The catalog folder: a relay team's mirror, the mirror a team moving to a folder waits in, else the person's own setting.
-   A team held through a shared folder is not read as a team (folderHeld): its folder is a plain catalog folder, and where this
-   desk keeps a local copy of it, that copy (heldLocalCopy). */
+   A team held through a shared folder is not read as a team (folderHeld): its folder is a plain catalog folder. */
 function catalogFolder() {
   if (deskKeys === undefined) deskKeys = readDesk();
   /* On the relay the team folder is the mirror the channel layer keeps, beside the desk's own file (shell/relay/channel.cjs). */
@@ -275,9 +257,7 @@ function catalogFolder() {
   if (relay) return relayMirrorOf(relay.rt);
   const need = Object.values(teamNeedsFolder)[0];
   if (need && need.mirror) return need.mirror;
-  const raw = rawCatalogFolder(), copy = heldLocalCopy(raw);
-  if (copy) return copy; /* plant:held-local-copy */
-  return raw;
+  return rawCatalogFolder();
 }
 /* Made on first run, and only where nobody has chosen one: a folder somebody picked existed when
    they picked it, so making it again would quietly stand in for a share that has gone away. */
@@ -1080,27 +1060,8 @@ function readCatalog() {
    answers, and at once after a resume, and then read, which also keeps the statistics for the span. */
 let catalogSettle = null, catalogWatchers = [], watchedFolder = "";
 const watchSaid = new Map();                   // folder -> the refusal last logged for it
-let folderSyncer = null;
-function deskTrustChecks() {
-  return {
-    teamWhole,
-    openSealed,
-    catalogSigValid,
-    branchSignedBytes,
-    deskFileGenuine,
-    handedTo,
-    handedPath,
-    forkSeen: folderForkSeen
-  };
-}
-/* No team works through a folder: a syncer still running is stopped, and none starts. */
-function folderSyncerRun() {
-  if (folderSyncer) { folderSyncer.stop(); folderSyncer = null; }
-  return null;
-}
 function watchCatalog(win) {
   relayRun();
-  folderSyncerRun(win);
   catalogWatchers.forEach(w => { try { w.close(); } catch { /* already gone */ } });
   catalogWatchers = [];
   watchedFolder = catalogFolder();
@@ -1338,7 +1299,6 @@ function catalogFolderChanged() {
   setImmediate(() => signinFlush());
   if (catalogFolder() === watchedFolder) return;
   const win = theWindow;
-  folderSyncerRun(win);
   console.log("etiuda: catalog folder " + catalogFolder());
   // Somebody has just picked this folder, so it is read as answering while it is asked.
   folderDown = "";
@@ -1860,6 +1820,25 @@ function uniqueTempPath(file) {
   const rand = crypto.randomBytes(6).toString("hex");
   return file + "." + process.pid + "." + tempCount + "." + rand + ".tmp"; /* plant:unique-temp */
 }
+/* CopyFile keeps a source's read-only mark, and Windows refuses every rename or write over a file so marked, for good. A copy onto
+   this computer, through a temp beside it and a rename, keeps the bytes and the last-write time (restored from the source's stat off
+   Windows) and never the mark, and the copy it replaces is cleared. */
+function clearReadOnly(file) {
+  try { const st = fs.statSync(file); if (!(st.mode & 0o200)) fs.chmodSync(file, (st.mode & 0o777) | 0o200); } catch { /* not there */ }
+}
+function copyClear(from, to) {
+  const tmp = uniqueTempPath(to);
+  try {
+    const st = fs.statSync(from);
+    fs.copyFileSync(from, tmp);
+    clearReadOnly(tmp); clearReadOnly(to); /* plant:copy-clear-mark */
+    if (process.platform !== "win32") fs.utimesSync(tmp, st.atimeMs / 1000, st.mtimeMs / 1000); /* plant:copy-clear-time */
+    renamePatiently(tmp, to);
+  } catch (e) {
+    try { fs.unlinkSync(tmp); } catch { /* never made */ }
+    throw e;
+  }
+}
 /* Temp file then rename, so a failed write never leaves half a file under the name, and a
    refused one leaves no temp file behind it. The temp name is unique per write to prevent collisions
    on shared folders, fsynced to disk before the rename, and unlinked on every failure path.
@@ -1879,7 +1858,6 @@ function writeReplacing(file, text) {
     try { fs.unlinkSync(tmp); } catch { /* never made */ }
     throw e;
   }
-  mirrorOwes(file);
 }
 const WRITE_DRAIN_BOUND_MS = 5000;
 const activeWrites = new Set();
@@ -1906,7 +1884,6 @@ async function doWriteReplacingAsync(file, text) {
     try { await fs.promises.unlink(tmp); } catch { /* never made */ }
     throw e;
   }
-  mirrorOwes(file);
 }
 function writeReplacingAsync(file, text) {
   const p = doWriteReplacingAsync(file, text);
@@ -1914,34 +1891,14 @@ function writeReplacingAsync(file, text) {
   p.finally(() => activeWrites.delete(p)).catch(() => {});
   return p;
 }
-/* A file written into, or taken out of, a folder team's mirror is owed to that team's share, and the syncer's outbox
-   carries it there (shell/folder/syncer.cjs). Every write and removal of the desk's own files in the mirror passes here. */
-function mirrorOwes(file) {
-  try {
-    const rel = path.relative(path.join(app.getPath("userData"), "folder-mirror"), path.resolve(String(file)));
-    if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return;
-    const parts = rel.split(path.sep), team = parts.shift();
-    if (!SEALED_TEAM_RE.test(team) || !parts.length) return;
-    const mirror = folderMirrorOf(team), inside = parts.join("/");
-    const s = folderSyncer && !folderSyncer.stopped && path.resolve(folderSyncer.mirror) === path.resolve(mirror) ? folderSyncer : null;
-    if (s) s.owe(inside); else FolderSyncer().noteOwed(mirror, inside); /* plant:mirror-owes */
-  } catch (e) { console.error("etiuda: a write into the team's mirror could not be noted for the team's folder - " + (e && e.message)); }
-}
 /* Whether `file` lies in the folder of a team held through a shared folder (folderHeld), where nothing of this desk's is removed. */
 function inHeldFolder(file) {
   const f = path.resolve(String(file));
   return Object.keys(teamShown).some(t => folderHeld(t) && f.indexOf(path.resolve(teamShown[t].folder) + path.sep) === 0);
 }
-/* Or in that team's local copy, which the desk reads (heldLocalCopy) and which keeps what was owed. */
-function inHeldCopy(file) {
-  const f = path.resolve(String(file));
-  return Object.keys(teamShown).some(t => folderHeld(t) && f.indexOf(path.resolve(folderMirrorOf(t)) + path.sep) === 0);
-}
 function unlinkOwn(file) {
   if (inHeldFolder(file)) return; /* plant:held-folder-kept */
-  if (inHeldCopy(file)) return; /* plant:held-copy-kept */
   fs.unlinkSync(file);
-  mirrorOwes(file);
 }
 function persistDeskEnvelope() {
   if (deskKeys === undefined) deskKeys = readDesk();
@@ -5048,8 +5005,8 @@ function deskForkNoted(team, fork) {
   teamSay("team " + team + ": " + RelayChannel().FORK_SAID[shown.kind]);
   sendJoin(theWindow);
 }
-/* The leads a folder team's files are read against for a fork: those this desk followed, then `leads`, the syncer's own with
-   its pin last, or the pin kept here where it names none. */
+/* The leads a team's files are read against for a fork: those this desk followed, then `leads`, with its pin last, or the pin kept
+   here where it names none. */
 function forkChain(team, leads) {
   const given = Array.isArray(leads) ? leads.filter(k => !!k && typeof k.keyId === "string" && typeof k.public === "string") : [];
   const pin = given.length ? given[given.length - 1] : teamPins[team];
@@ -5211,7 +5168,7 @@ function heedTeam() {
                     const mine = deskFileRev(from), held = deskFileRev(to);
                     if (!(mine !== null && held !== null && mine > held)) continue; /* plant:follow-keep-rev */
                   }
-                  FolderSyncer().copyClear(from, to); /* plant:follow-copy */
+                  copyClear(from, to); /* plant:follow-copy */
                 }
               }
             }
@@ -5426,8 +5383,7 @@ function sealedOutside() {
   }
   return null;
 }
-/* The request to join is written to the team's folder itself, never a mirror: it is made before this desk has joined, while
-   no syncer keeps one for it. */
+/* The request to join is written to the team's folder itself, never a mirror: it is made before this desk has joined. */
 function joinFile() {
   return path.join(catalogFolder(), "desks", branchIdOf(deskBranch.sign.pub), "join.json");
 }
@@ -6856,20 +6812,12 @@ function policyHoldsTeam(t, named) {
   return !!named.lead && named.lead === pin.public;
 }
 /* A team this desk holds through a shared folder: its folder kept, and no relay (leadsView asks it of the pinned teams alone). No
-   folder is read as a team, so its row says so (folderHeld), and what the folder's local copy still owed the share stays there,
-   said on the row (folderOwed), with the folder it stays in (folderCopy). */
+   folder is read as a team, so its row says so (folderHeld). */
 function folderHeld(t) {
   const shown = teamShown[t];
   if (!shown || !shown.folder || shown.relay || teamRelayGone[t] === true || teamNeedsFolder[t]) return false;
   if (teamChannel[t] && teamChannel[t].kind === "relay") return false;
   return path.resolve(shown.folder).indexOf(path.resolve(app.getPath("userData"), "relay") + path.sep) !== 0;
-}
-/* Whether the folder's local copy still owes the share a file, by its outbox, read and never written or moved. */
-function folderOutboxOwes(t) {
-  let doc = null;
-  try { doc = JSON.parse(fs.readFileSync(path.join(folderMirrorOf(t), ".outbox.json"), "utf8")); } catch { return false; }
-  const owe = doc && doc.kind === "etiuda-folder-outbox" && doc.owe && typeof doc.owe === "object" ? doc.owe : null;
-  return !!owe && Object.keys(owe).some(k => !!owe[k] && owe[k].owe === true);
 }
 function leadsView() {
   /* The list is taken here and the policy is first said below (readJoinPolicy does not say it; sayJoinPolicy does), and its first
@@ -6915,10 +6863,7 @@ function leadsView() {
       row.openFolder = shellWords().openFolder;
       row.meetsInFolder = shellWords().teamMeetsInFolder;
     }
-    if (folderHeld(t)) {
-      row.folderHeld = true; /* plant:folder-held-row */
-      if (folderOutboxOwes(t)) { row.folderOwed = true; row.folderCopy = folderMirrorOf(t); } /* plant:folder-owed-row */
-    }
+    if (folderHeld(t)) row.folderHeld = true; /* plant:folder-held-row */
     if (admitted && !row.removed && awaitsFirstEdition(t)) row.awaitsEdition = true;
     return row;
   }).filter(Boolean);
@@ -6954,11 +6899,10 @@ function forgetLead(team, left) {
   if (left === true && (policyWaits() || policyHoldsTeam(team, readJoinPolicy("en")))) return joinView(); /* plant:leave-waits */
   const ch = teamChannel[team];
   if (ch && ch.kind === "relay") setRelayTeamAside(ch.rt); /* plant:leave-aside */
-  /* The note this desk left in the team's mirror goes too, owed to that share where it is a folder team's, so a later return does not
-     send it: forgetting a lead ends what this desk said about the team. The mirror is the relay's where the team's channel is one;
-     releaseInUse below runs after the channel is gone and reaches neither. */
-  const mirrorOfTeam = ch && ch.kind === "relay" && /^[0-9a-f]{32}$/.test(String(ch.rt)) ? relayMirrorOf(ch.rt) : folderMirrorOf(team); /* plant:forget-note-relay */
-  const noteInMirror = deskBranch ? path.join(mirrorOfTeam, "desks", branchIdOf(deskBranch.sign.pub), IN_USE_STEM + ".ec") : "";
+  /* The note this desk left in the team's mirror goes too, so a later return does not send it: forgetting a lead ends what this desk
+     said about the team. The mirror is the relay's; releaseInUse below runs after the channel is gone and reaches neither. */
+  const mirrorOfTeam = ch && ch.kind === "relay" && /^[0-9a-f]{32}$/.test(String(ch.rt)) ? relayMirrorOf(ch.rt) : ""; /* plant:forget-note-relay */
+  const noteInMirror = deskBranch && mirrorOfTeam ? path.join(mirrorOfTeam, "desks", branchIdOf(deskBranch.sign.pub), IN_USE_STEM + ".ec") : "";
   delete teamPins[team];
   delete teamKeys[team];
   delete teamShown[team];
@@ -7095,8 +7039,6 @@ function stopRelayChannel(teamId) {
   persistDeskEnvelope();
 }
 
-/* A file the folder refuses is put in the team's mirror and owed, so the outbox tries it at each scan and the team's row says a
-   refusal for a read-only file or folder there. */
 function copyDeskFilesToFolder(mirrorDir, targetFolder, teamId) {
   const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "";
   if (!me || !mirrorDir) return;
@@ -7109,16 +7051,9 @@ function copyDeskFilesToFolder(mirrorDir, targetFolder, teamId) {
   for (const f of names) {
     try {
       if (!made) throw new Error("the folder took no desks/" + me);
-      FolderSyncer().copyClear(path.join(srcDir, f), path.join(dstDir, f));
+      copyClear(path.join(srcDir, f), path.join(dstDir, f));
     } catch (e) {
       console.error("etiuda: " + f + " could not be copied to the team's folder - " + e.message);
-      if (!teamId) continue;
-      try {
-        const held = path.join(folderMirrorOf(teamId), "desks", me, f);
-        fs.mkdirSync(path.dirname(held), { recursive: true });
-        FolderSyncer().copyClear(path.join(srcDir, f), held);
-        FolderSyncer().noteOwed(folderMirrorOf(teamId), "desks/" + me + "/" + f); /* plant:move-owes */
-      } catch (e2) { console.error("etiuda: " + f + " could not be kept for the team's folder - " + e2.message); }
     }
   }
 }
@@ -7199,7 +7134,6 @@ function switchToFolderTeam(targetFolder, teamId, mirrorDir) {
     teamShown[teamId] = Object.assign({}, teamShown[teamId], { folder: targetFolder });
     delete teamShown[teamId].relay;
   }
-  folderSyncerRun(theWindow);
   catalogFolderChanged();
   sendJoin(theWindow);
   teamStamp = "";
@@ -8691,32 +8625,17 @@ ipcMain.on("etiuda:window", (e, act) => {
 const CLOSE_WAIT_MS = 1500;
 let quitting = false;
 let quitDrained = false;
-/* The longest a quit waits for a folder team's share to take what the outbox owes, as Studio's FOLDER_QUIT_MS. */
-const FOLDER_QUIT_MS = 2000;
-/* A quit drains the writes still running, then gives the folder syncers up to FOLDER_QUIT_MS to send what their outbox owes
-   (the close-time statistics just flushed among it), and only then stops them: a syncer stopped first left that owed until
-   the desk's next start (Argon's folder-as-built review, finding 7, the desk's half). Whatever is not sent stays owed on disk. */
+/* A quit drains the writes still running (the close-time statistics just flushed among them), then quits. */
 app.on("before-quit", (e) => {
   quitting = true;
   storeAgainStop(); /* plant:store-again-quit */
   try { flushHeldStats(); } catch { /* the last sealed answer stays */ }
-  if (quitDrained) { try { FolderSyncer().stopAllFolderSyncers(); } catch {} return; }
-  let owes = false;
-  try { owes = !!folderSyncerLayer && folderSyncerLayer.folderSyncersOwe(); } catch { owes = false; }
-  if (activeWrites.size > 0 || owes) {
-    if (e && typeof e.preventDefault === "function") e.preventDefault();
-    drainWrites(WRITE_DRAIN_BOUND_MS).then(() => {
-      let flushing = Promise.resolve(true);
-      flushing = FolderSyncer().flushFolderSyncers(FOLDER_QUIT_MS); /* plant:quit-flush-folders */
-      return flushing;
-    }).catch(() => {}).finally(() => {
-      try { FolderSyncer().stopAllFolderSyncers(); } catch {}
-      quitDrained = true;
-      app.quit();
-    });
-    return;
-  }
-  try { FolderSyncer().stopAllFolderSyncers(); } catch {}
+  if (quitDrained || activeWrites.size === 0) return;
+  if (e && typeof e.preventDefault === "function") e.preventDefault();
+  drainWrites(WRITE_DRAIN_BOUND_MS).catch(() => {}).finally(() => {
+    quitDrained = true;
+    app.quit();
+  });
 });
 /* Quit on close is the desk key eQuitOnClose === "1". Absent, the window stays in the tray. */
 const QUIT_ON_CLOSE_KEY = "eQuitOnClose";
@@ -13088,14 +13007,13 @@ function storeSyncOf() {
   return storeSyncing;
 }
 /* The person's own catalog folder, or "" while the catalog folder is a team's (a relay team's mirror, a moving team's, or the
-   folder of a team held from before, folderHeld): a team's catalogs never enter the person's store and the person's never reach
-   the team, the catalog files waiting meanwhile. */
+   folder of a team held, folderHeld): a team's catalogs never enter the person's store and the person's never reach the team, the
+   catalog files waiting meanwhile. */
 function storeSyncFolder() {
   if (deskKeys === undefined) deskKeys = readDesk();
   if (relayHere() || Object.keys(teamNeedsFolder).length) return ""; /* plant:sync-team-folder */
   const root = catalogFolder();
   if (Object.keys(teamShown).some(t => folderHeld(t) && path.resolve(teamShown[t].folder) === path.resolve(root))) return ""; /* plant:sync-held-folder */
-  if (Object.keys(teamShown).some(t => folderHeld(t) && path.resolve(folderMirrorOf(t)) === path.resolve(root))) return ""; /* plant:sync-held-copy */
   return root;
 }
 /* This desk's items that follow: its desk keys, and the catalog files at the top of the person's own catalog folder. Null while that
