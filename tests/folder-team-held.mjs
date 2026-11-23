@@ -5,15 +5,13 @@
  *
  * THE CRITERION. No reader takes a folder as a team: the catalog folder is the person's own setting, read as a plain folder; no
  * write goes to a team's place; the team file in the folder is not heeded; machine policy's TeamFolder is not read. The desk says
- * once, on the team's row in Settings and in a notice, the copywriter's sentence for such a team, and, where the mirror's outbox
- * still owes the folder something, that it stays on this computer unsent. Nothing under the share or the mirror is removed or
- * changed: a listing of both, path, size and digest, is the same before and after.
+ * once, on the team's row in Settings and in a notice, the copywriter's sentence for such a team. Nothing under the share or the
+ * mirror an older build left is removed or changed: a listing of both, path, size and digest, is the same before and after.
  *
- * THE LOCAL COPY (the mend of the design read). The desk reads the folder team's local copy, `<userData>/folder-mirror/<team>/`,
- * where it holds anything, and the share itself only where no copy is kept: the copy is what the desk last had, with what the
- * share does not hold (an owed file), and it opens with the share out of reach. The owed line names the folder the unsent files
- * stay in. A sealed catalog of the held team opens from the copy under the key kept, and the desk's own file for it is held,
- * never written in the clear, whether or not the share answers.
+ * NO LOCAL COPY AND NO OUTBOX (the folder syncer is gone, tests/folder-syncer-gone.mjs). The desk never reads
+ * `<userData>/folder-mirror/<team>/` nor an outbox in it: the catalog folder is the person's setting whatever that folder holds, the
+ * row says nothing of what is owed, and a sealed catalog of the held team opens from the share under the key kept, with the desk's
+ * own file for it held and never written in the clear.
  */
 process.removeAllListeners("warning");
 process.on("warning", () => {});
@@ -30,7 +28,7 @@ const MODS = path.join(ROOT, "src", "modules"), MOD_DIR = pathToFileURL(MODS).hr
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 30;
+const EXPECTED = 26;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -135,7 +133,7 @@ function walkText(dir) {
 }
 /* A desk holding the folder team: the share is its catalog folder setting, the mirror its local copy, the outbox owing one file.
    The share holds a file the copy lacks and the copy one the share lacks, so a read of either is told from the other. `sealedCopy`
-   seals the copy's edition under a key kept for the team (K1) and leaves no plain edition of it on the share. */
+   seals the share's edition under a key kept for the team (K1); the copy an older build left is not touched. */
 const K1 = crypto.randomBytes(32);
 /* The shell's own sealing (sealCatalog), by the same AEAD, so the fixture needs no desk loaded to make an envelope. */
 function SEAL(key, epoch, text) {
@@ -155,10 +153,7 @@ function makeDesk(name, owed, sealedCopy) {
   }
   fs.writeFileSync(path.join(share, "share-news.ec"), shareOnly(), "utf8");
   fs.writeFileSync(path.join(mirror, "owed-notes.ec"), copyOnly(), "utf8");
-  if (sealedCopy) {
-    fs.writeFileSync(path.join(mirror, "wick-board.ec"), JSON.stringify(SEAL(K1, 1, JSON.stringify(edition()))), "utf8");
-    fs.rmSync(path.join(share, "wick-board.ec"));
-  }
+  if (sealedCopy) fs.writeFileSync(path.join(share, "wick-board.ec"), JSON.stringify(SEAL(K1, 1, JSON.stringify(edition()))), "utf8");
   if (owed) fs.writeFileSync(path.join(mirror, ".outbox.json"), JSON.stringify({ kind: "etiuda-folder-outbox", v: 1,
     owe: { ["desks/" + OTHER_DESK + "/note.txt"]: { owe: true, sha: "0".repeat(64) }, "owed-notes.ec": { owe: true, sha: "0".repeat(64) } }, floors: {} }), "utf8");
   fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({
@@ -175,8 +170,7 @@ function makeDesk(name, owed, sealedCopy) {
 /* ---- the page: the row's facts worded on the team's row in Settings and once in a notice (as tests/relay-desk-follow.mjs ks26) */
 const HELD_EN = "Ada's team worked through a shared folder, which Etiuda no longer follows: its catalog stays on this computer as it is, and a new invitation from the team's lead brings the team back.";
 const HELD_PL = "Zespół osoby Ada korzysta ze wspólnego folderu, którego Etiuda już nie obsługuje: katalog tego zespołu zostaje na tym komputerze bez zmian, a nowe zaproszenie od lidera zespołu przywróci zespół.";
-/* The owed line, moved: it said "... stays on this computer, unsent." and does not say where; it now names the folder the unsent
-   files stay in (the row's folderCopy). Placeholder words for the copywriter. */
+/* The owed line is gone with the outbox: a fact that still says folderOwed (an older page's) is worded as held alone. */
 const COPY_SHOWN = ["C:", "Users", "ada", "AppData", "Roaming", "Etiuda", "folder-mirror", "t-0123456789abcdef"].join(path.win32.sep);
 const OWED_EN = "What this desk had not yet sent to the shared folder stays on this computer, unsent, in the folder " + COPY_SHOWN + ".";
 const OWED_PL = "To, czego to stanowisko nie zdążyło wysłać do wspólnego folderu, zostaje na tym komputerze, niewysłane, w folderze " + COPY_SHOWN + ".";
@@ -229,7 +223,7 @@ async function pageScene(tj, set) {
       send({ leads: [{ team, lead: "Ada", print: "0123456789abcdef" }] });
       const rowGone = !pageWords(SET.settingsPageHtml("teams", "")).includes(held.slice(0, 40));
       out[lang] = { row: row.includes(held) && !row.includes(owed), notice: shown === held, notices, afterDismiss: afterDismiss === null,
-        rowOwed: rowOwed.includes(held) && rowOwed.includes(owed), owedNotice: owedNotice === held + " " + owed, rowGone };
+        rowOwed: rowOwed.includes(held) && !rowOwed.includes(owed), owedNotice: owedNotice === held, rowGone };
     }
   } finally {
     if (send) send({ leads: [] });
@@ -251,13 +245,13 @@ try {
   const desk = loadDesk(A.ud);
   const api = desk.api;
 
-  /* fth1, moved. It said: a desk holding a folder team reads its catalog folder setting (the share) as a plain folder, not the team's
-     mirror. It now says: it reads the local copy kept for the team, as a plain folder, where the share differs from it; the share is
-     read only where no copy is kept (fth22). */
+  /* fth1, moved twice. It said: a desk holding a folder team reads its catalog folder setting (the share) as a plain folder, not the team's
+     mirror. Then, with the copy: it reads the local copy kept for the team where the share differs from it. It now says, the folder
+     syncer being gone: the share, the person's setting, and never the copy an older build left. */
   let folder = "";
   try { folder = api.catalogFolder(); } catch (e) { folder = "threw " + e.message; }
-  check(path.resolve(folder) === path.resolve(A.mirror),
-    "fth1 a desk holding a folder team reads the local copy kept for the team as its catalog folder, a plain folder, where the share differs: " + folder);
+  check(path.resolve(folder) === path.resolve(A.share),
+    "fth1 a desk holding a folder team reads its catalog folder setting, the share, as a plain folder, and never a local copy kept for the team: " + folder);
 
   /* fth2: no write goes to a team's place. */
   let writes = null;
@@ -271,20 +265,21 @@ try {
   try { api.heedTeam(); heeded = JSON.stringify(api.teamRoster[TEAM] || null); } catch (e) { heeded = "threw " + e.message; }
   check(heeded === "null", "fth3 the folder's team file is not heeded as the team's: the roster kept for it is " + heeded);
 
-  /* fth4, fth5: the row says the team is held through a folder, and that the outbox still owes the folder. */
+  /* fth4, fth5: the row says the team is held through a folder, and nothing of an outbox though one is on disk owing a file. */
   let rows = null;
   try { rows = (await desk.ask("etiuda:team-join", "leads")).leads; } catch (e) { rows = [{ error: e.message }]; }
   const row = Array.isArray(rows) ? rows.filter(r => r && r.team === TEAM)[0] : null;
   check(!!row && row.folderHeld === true, "fth4 the team's row says it is held through a shared folder: " + JSON.stringify(row && { folderHeld: row.folderHeld, folder: row.folder }));
-  check(!!row && row.folderOwed === true, "fth5 the team's row says the mirror's outbox still owes the folder: " + JSON.stringify(row && { folderOwed: row.folderOwed }));
-  check(!!row && row.folderCopy === A.mirror, "fth26 the owed row names the folder the unsent files stay in, the local copy: " + JSON.stringify(row && { folderCopy: row.folderCopy }));
+  /* fth5, moved: it said the row says the mirror's outbox still owes the folder; the outbox is not read, so the row says nothing of it. */
+  check(!!row && row.folderOwed !== true && !("folderCopy" in row), "fth5 the team's row says nothing of an outbox, though the mirror an older build left owes the folder a file: " + JSON.stringify(row && { folderOwed: row.folderOwed, folderCopy: row.folderCopy }));
+  /* RETIRED, P3 (the folder syncer is gone): fth26, "the owed row names the folder the unsent files stay in, the local copy". There is no owed row. */
 
-  /* fth29 (new, moved from folder-mirror's 42g, retired with that leg, whose proof of plant:open-catalog-shared it was): Open folder opens the folder the owed line names, the
-     local copy: it is where the unsent files are found, and the share (the setting) is not what it opens while a copy is kept. */
+  /* fth29 (new, moved from folder-mirror's 42g, retired with that leg, whose proof of plant:open-catalog-shared it was): it said Open folder opens the local copy the owed
+     line names, and not the share. It now says: Open folder opens the folder in force, the share the person's setting names. */
   let openedAt = null;
   try { await desk.ask("etiuda:open-catalog-folder"); openedAt = desk.opened[0] || null; } catch (e) { openedAt = "threw " + e.message; }
-  check(!!openedAt && path.resolve(openedAt) === path.resolve(A.mirror) && !!row && row.folderCopy === A.mirror,
-    "fth29 Open folder opens the local copy the owed line names, where the unsent files are, and not the share: " + JSON.stringify({ opened: openedAt, folderCopy: row && row.folderCopy }));
+  check(!!openedAt && path.resolve(openedAt) === path.resolve(A.share),
+    "fth29 Open folder opens the folder in force, the share the person's setting names: " + JSON.stringify({ opened: openedAt }));
 
   /* fth6: a desk whose outbox owes nothing is told nothing of it. */
   const B = makeDesk("clear", false);
@@ -322,13 +317,11 @@ try {
     && !!wroteHeld && wroteHeld.ok === false && !fs.existsSync(path.join(A.share, "loose.ec")),
     "fth15 a shared write into a folder holding a team's file is refused and writes nothing there: " + JSON.stringify({ pinless: wrote, held: wroteHeld }));
 
-  /* fth18: this desk's own removal leaves a file in the held team's folder, and in its local copy, where it is (the copy added by the mend). */
+  /* fth18, moved: it said this desk's own removal leaves a file in the held team's folder and in its local copy where it is. The copy is no
+     place of the desk's now (tests/folder-syncer-gone.mjs fsg10 holds that a removal under it is a plain removal), so it says the folder alone. */
   const ownNote = path.join(A.share, "desks", OTHER_DESK, "note.txt");
   try { api.unlinkOwn(ownNote); } catch { /* a refusal that throws is not a removal */ }
-  const copyNote = path.join(A.mirror, "desks", OTHER_DESK, "note.txt");
-  try { api.unlinkOwn(copyNote); } catch { /* a refusal that throws is not a removal */ }
-  check(fs.existsSync(ownNote) && fs.existsSync(copyNote), "fth18 this desk's own removal takes nothing out of the held team's folder or its local copy: "
-    + (fs.existsSync(ownNote) ? "share kept" : "share removed") + ", " + (fs.existsSync(copyNote) ? "copy kept" : "copy removed"));
+  check(fs.existsSync(ownNote), "fth18 this desk's own removal takes nothing out of the held team's folder: " + (fs.existsSync(ownNote) ? "share kept" : "share removed"));
 
   /* fth8: the boot's look at the folder starts nothing that writes: share and mirror as they were. */
   try { await api.armFolder(null); } catch { /* the look's own refusal is not this check's */ }
@@ -340,18 +333,20 @@ try {
     + after.mirror.length + (JSON.stringify(after) === JSON.stringify(listedTeam) ? ", the same" : ", changed: " + JSON.stringify({ before: listedTeam, after })));
 
 
-  /* fth20: the desk opens what the local copy holds and the share does not, and is not shown the share's own: the copy is what it last had. */
+  /* fth20, moved: it said the desk opens a file only the local copy holds, and does not read one only the share holds. It now says the reverse:
+     the share is read and the copy an older build left is not. */
   const inCopy = api.catalogFileNamed("owed-notes.ec"), inShare = api.catalogFileNamed("share-news.ec");
-  check(!!inCopy && path.resolve(inCopy) === path.resolve(path.join(A.mirror, "owed-notes.ec")) && inShare === null,
-    "fth20 a file only the local copy holds opens, and one only the share holds is not read: " + JSON.stringify({ inCopy, inShare }));
+  check(!!inShare && path.resolve(inShare) === path.resolve(path.join(A.share, "share-news.ec")) && inCopy === null,
+    "fth20 a file only the share holds opens, and one only the local copy an older build left is not read: " + JSON.stringify({ inCopy, inShare }));
 
-  /* fth21: the share out of reach, the desk still opens its catalog from the copy. */
+  /* fth21, moved: it said that with the share out of reach the desk still opens its catalog from the local copy. It now says the catalog folder
+     is still the setting, and nothing is read from the copy. */
   const G = makeDesk("away", true);
   fs.renameSync(G.share, G.share + "-offline");
   const away = loadDesk(G.ud).api;
   const awayAt = away.catalogFileNamed("wick-board.ec");
-  check(!fs.existsSync(G.share) && path.resolve(away.catalogFolder()) === path.resolve(G.mirror) && !!awayAt && path.resolve(awayAt) === path.resolve(path.join(G.mirror, "wick-board.ec")),
-    "fth21 with the share out of reach the desk opens its catalog from the local copy: " + JSON.stringify({ folder: away.catalogFolder(), file: awayAt }));
+  check(!fs.existsSync(G.share) && path.resolve(away.catalogFolder()) === path.resolve(G.share) && awayAt === null,
+    "fth21 with the share out of reach the catalog folder is still the share, and nothing is opened from the local copy: " + JSON.stringify({ folder: away.catalogFolder(), file: awayAt }));
 
   /* fth22: no copy kept, the share is the catalog folder, as before the mend. */
   const N = makeDesk("nocopy", false);
@@ -360,9 +355,9 @@ try {
   check(path.resolve(nocopy.catalogFolder()) === path.resolve(N.share) && path.resolve(nocopy.catalogFileNamed("share-news.ec") || "") === path.resolve(path.join(N.share, "share-news.ec")),
     "fth22 where no local copy is kept, the share is read as the plain catalog folder: " + nocopy.catalogFolder());
 
-  /* fth23: a sealed catalog of the held team, the desk's own file for it, across a restart. The sealed edition opens from the copy under
-     the key kept; the desk's own file for it is held and written nowhere (never in the clear: the card's words are in no file of the share
-     or the copy), and a restart does the same: the edit is the page's layer's, sent again at every start, and nothing is lost on disk. */
+  /* fth23, moved: the sealed edition was in the local copy and opened from it. It is on the share now, and opens from there under the key kept;
+     the desk's own file for it is held and written nowhere (never in the clear: the card's words are in no file of the share or the copy), and
+     a restart does the same: the edit is the page's layer's, sent again at every start, and nothing is lost on disk. */
   const S = makeDesk("sealed", false, true);
   const needle = "Edited by the desk.";
   const edited = base => { const d = JSON.parse(base); d.cards[0].body.en = needle; return d; };
@@ -387,18 +382,18 @@ try {
   check(r1.text && r1.text.indexOf("Wick Board") >= 0 && r2.text === r1.text && !!r1.w && r1.w.ok === false && r1.w.held === true && !!r2.w && r2.w.held === true
     && JSON.stringify(afterS.mirror.filter(l => l.indexOf("desks/") !== 0)) === JSON.stringify(beforeS.mirror.filter(l => l.indexOf("desks/") !== 0))
     && JSON.stringify(afterS.share) === JSON.stringify(beforeS.share) && !leaked,
-    "fth23 a sealed catalog of the held team opens from the local copy under the key kept, before and after a restart, and the desk's own file for it is held and written"
+    "fth23 a sealed catalog of the held team opens from the share under the key kept, before and after a restart, and the desk's own file for it is held and written"
     + " in the clear nowhere: " + JSON.stringify({ w1: r1.w, w2: r2.w, opened: !!r1.text, same: r2.text === r1.text, leaked }));
 
-  /* fth25: the store's sync leaves the copy out as the team's, as it leaves the share. */
+  /* fth25, moved: it said the store's sync leaves the local copy the desk read for the held team out, as it leaves the share. It says the share alone. */
   const syncRoot = api.storeSyncFolder();
-  check(syncRoot === "", "fth25 the store's sync takes no catalog from, and puts none into, the local copy the desk reads for the held team: " + JSON.stringify(syncRoot));
+  check(syncRoot === "", "fth25 the store's sync takes no catalog from, and puts none into, the folder of the held team: " + JSON.stringify(syncRoot));
 
   /* fth9: the page words the facts on the row and once in a notice, in English and Polish. */
   let page = null;
   try { page = await pageScene(); } catch (e) { page = { ok: false, error: String(e && e.stack ? e.stack.split("\n")[0] : e) }; }
   check(!!page && page.ok, "fth9 the copywriter's sentence for a held folder team, on its row in Settings and once in a notice, in English and Polish;"
-    + " Dismiss holds for the run; the owed line beside it only where the outbox owes: " + JSON.stringify(page));
+    + " Dismiss holds for the run; a fact that still says folderOwed is worded as held alone: " + JSON.stringify(page));
 
   /* fth10 to fth13: each deciding line, lifted alone, turns its check red. */
   const liftShell = async (tag, judge) => {
@@ -417,15 +412,15 @@ try {
       return !!d.api.teamRoster[TEAM];
     }, "fth3"],
     ["fth11", "folder-held-row", async d => { const r = (await d.ask("etiuda:team-join", "leads")).leads.filter(x => x.team === TEAM)[0]; return !r || r.folderHeld !== true; }, "fth4"],
-    ["fth12", "folder-owed-row", async d => { const r = (await d.ask("etiuda:team-join", "leads")).leads.filter(x => x.team === TEAM)[0]; return !r || r.folderOwed !== true; }, "fth5"],
+    /* RETIRED, P3: fth12, "lifting plant:folder-owed-row turns fth5 red". The line is gone with the outbox's reader. */
     ["fth16", "team-file-place", async d => d.api.pinnedLead() !== null, "fth14"],
     ["fth19", "held-folder-kept", async (d, P) => { const f = path.join(P.share, "desks", OTHER_DESK, "note.txt"); try { d.api.unlinkOwn(f); } catch { /* kept */ } return !fs.existsSync(f); }, "fth18"],
-    ["fth28", "held-copy-kept", async (d, P) => { const f = path.join(P.mirror, "desks", OTHER_DESK, "note.txt"); try { d.api.unlinkOwn(f); } catch { /* kept */ } return !fs.existsSync(f); }, "fth18"],
-    ["fth24", "held-local-copy", async (d, P) => path.resolve(d.api.catalogFolder()) !== path.resolve(P.mirror), "fth1"],
-    ["fth27", "sync-held-copy", async (d, P) => d.api.storeSyncFolder() !== "", "fth25"],
+    /* RETIRED, P3: fth28, "lifting plant:held-copy-kept turns fth18 red", and fth24, "lifting plant:held-local-copy turns fth1 red". Both lines are gone
+       with the copy. fth27 is moved: it lifted plant:sync-held-copy and turns fth25 red; it now lifts plant:sync-held-folder, the share's own line. */
+    ["fth27", "sync-held-folder", async (d, P) => d.api.storeSyncFolder() !== "", "fth25"],
     ["fth30", "open-catalog-shared", async (d, P) => {
       try { await d.ask("etiuda:open-catalog-folder"); } catch { /* the lifted line throws: nothing is opened */ }
-      return d.opened.length === 0 || path.resolve(d.opened[0]) !== path.resolve(P.mirror);
+      return d.opened.length === 0 || path.resolve(d.opened[0]) !== path.resolve(P.share);
     }, "fth29"],
     ["fth17", "shared-team-folder", async (d, P) => {
       fs.writeFileSync(path.join(P.ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: P.share, eUiLang: "en" } }), "utf8");

@@ -279,7 +279,6 @@ try {
   }
 
   /* ---- the team file: a higher genuine sibling is heeded ------------------------------------- */
-  const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
   const teamId = "t-" + crypto.randomBytes(8).toString("hex");
   let conflictChecks = null;
   /* The team's relay mirror is the desk's: what a desk holds of the team is carried there from `folder`, which stands for the relay's

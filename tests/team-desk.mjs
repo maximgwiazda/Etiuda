@@ -54,7 +54,7 @@ const APP = path.join(LAB, "app");
 fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
 if (process.env.ETIUDA_SHELL_MAIN) fs.copyFileSync(process.env.ETIUDA_SHELL_MAIN, path.join(APP, "shell", "main.js"));
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
-const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "deskTrustChecks", "folderAnswers", "catalogFolder", "folderSyncerRun"];
+const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "folderAnswers", "catalogFolder"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -116,7 +116,7 @@ function loadDesk(ud, flaky, plant) {
       if (k.startsWith(ud + ":")) deskProgs.delete(k);
     }
   };
-  const deskObj = { api, ask, ipc, on, invoke, said, ud, envelope, syncer: plant && plant.syncer, close, relay };
+  const deskObj = { api, ask, ipc, on, invoke, said, ud, envelope, close, relay };
   allDesks.push(deskObj);
   return deskObj;
 }
@@ -1415,14 +1415,7 @@ try {
         const at = lines.findIndex(l => l.indexOf("plant:" + tag + " ") >= 0 || l.endsWith("plant:" + tag + " */"));
         if (at >= 0) {
           lines.splice(at, 1);
-          let plant;
-          if (file === "main.js") plant = { src: lines.join("\n") };
-          else {
-            const dir = fs.mkdtempSync(path.join(LAB, "plant-" + tag + "-"));
-            fs.writeFileSync(path.join(dir, "syncer.cjs"), lines.join("\n"), "utf8");
-            plant = { syncer: nodeRequire(path.join(dir, "syncer.cjs")) };
-          }
-          turned = await fn(plant);
+          turned = await fn({ src: lines.join("\n") });
           detail = turned ? "the check lifted" : "the check still held";
         }
       } catch (e) { detail = e && e.stack ? e.stack : String(e); }
@@ -1742,7 +1735,7 @@ try {
         return spyOrig[n].call(fs, p, ...rest);
       };
     }
-    const s = d.api.folderSyncerRun(null);
+    const s = null; /* no syncer runs: the scene is retired below */
     const held = [];
     let release = false;
     const apply = s && s.program ? s.program.applyScan.bind(s.program) : null;

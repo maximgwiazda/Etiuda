@@ -1720,7 +1720,7 @@ if (deskOn()) try {
   fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
   const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
   const EXPOSE = ["sealCatalog", "wrapTeamKey", "readCatalog", "catalogFolder", "relayRun", "relayHere", "heedTeam", "relayProbe", "relayProbeNext",
-    "readSpanText", "spanDocument", "spanGenuine", "pinnedLead", "createWindow", "folderSyncerRun",
+    "readSpanText", "spanDocument", "spanGenuine", "pinnedLead", "createWindow",
     "signedSha", "catalogDocIn", "noteHanded", "writeInUse", "inUseCatalogId", "pickEdition", "catalogRead", "acceptLink"];
   const noop = () => {};
   const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
@@ -4518,7 +4518,6 @@ if (deskOn()) try {
         const view = await D.ask("etiuda:team-join", "view");
         const toldJoin = (D.sent || []).some(s => s.ch === "etiuda:team-join" && s.payload && s.payload.joined && s.payload.joined.team === team);
         const joined = !!(view && view.joined && view.joined.team === team) || toldJoin;
-        try { const s = D.api.folderSyncerRun(); if (s && s.stop) s.stop(); } catch { /* already stopped */ }
         return { asked, waited, refused: taken.refused, gone: !fs.existsSync(joinAt), join: D.envelope().teamJoin, joined: joined, brought: sawFirst && sawNext };
       }
       const heldTold = g => (g.asked ? "asked" : "not asked" + (g.refused ? " (refused " + g.refused + ")" : "")) + ", before rev 2 the request "

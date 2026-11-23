@@ -61,7 +61,7 @@ fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true }
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
 const EXPOSE = ["sealCatalog", "wrapTeamKey", "joinCommit", "joinGenuine", "joinOpening", "joinsSignedBytes", "joinSignedBytes",
   "branchSignedBytes", "deskFileGenuine", "readCatalog", "catalogLeadOk", "catalogChanged", "isCatalogName", "JOINS_NAME",
-  "memberProof", "inviteIdOf", "inviteRead", "folderHost", "signedSha", "relayRun", "acceptLink", "askSignedBytes", "rawCatalogFolder", "deskTrustChecks",
+  "memberProof", "inviteIdOf", "inviteRead", "folderHost", "signedSha", "relayRun", "acceptLink", "askSignedBytes", "rawCatalogFolder",
   "sealCardTo", "openCardFrom", "relayChannel", "relayMirrorOf"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
