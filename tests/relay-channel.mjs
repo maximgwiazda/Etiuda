@@ -63,7 +63,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 598;
+const EXPECTED = 599;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -8773,7 +8773,7 @@ async function crossEpoch(mod) {
   await settle(b);
   await settle(d1, d2, d3);
   await settle(a, b, d1, d2, d3);
-  const clash = typeof a.prog.rootClash === "function" ? a.prog.rootClash().map(c => ({ path: c.path, kept: c.kept, here: c.here, team: c.team, dropped: c.dropped })) : null;
+  const clash = typeof a.prog.rootClash === "function" ? a.prog.rootClash().map(c => ({ path: c.path, kept: c.kept, here: c.here, team: c.team, dropped: c.dropped, added: c.added })) : null;
   const out = { allOne, tookEdit, atA: at(a), atB: at(b), atD1: at(d1), atD2: at(d2), atD3: at(d3), d3Key2: !!d3.held.get(2),
     d1Key2: !!d1.held.get(2), d2Key2: !!d2.held.get(2), clash,
     said: a.said.slice(said0).filter(l => l.indexOf(C.TEAM_NAME) >= 0 && l.indexOf("changed on this computer and on another at once") >= 0),
@@ -9217,6 +9217,9 @@ if (partOn("pTce")) {
       "tce1h the clash record names each member the passed-over file has and the standing one does not, so a member the second computer added is not withdrawn in silence: across the move "
       + JSON.stringify({ dropped: x.clash && x.clash.map(c => c.dropped), restart: x.droppedRestart, want: [x.ids.d3, x.ids.d4].sort() })
       + ", two files at one rev " + JSON.stringify({ dropped: same.dropped, want: [same.ids.dA] }));
+    check(JSON.stringify(x.clash && x.clash.map(c => c.added)) === JSON.stringify([[x.ids.d4]]),
+      "tce1j of the members the passed-over file alone names, the clash record keeps as added only the one the second computer added since the file both held (D4), not the desk the move took off (D3): "
+      + JSON.stringify({ added: x.clash && x.clash.map(c => c.added), want: [x.ids.d4] }));
     const nx = x.atRelayNext;
     check(!!nx && nx.epoch === 2 && nx.rev === 2 && nx.d4 === true && nx.d3 === false && x.bNextWaits === 0,
       "tce1g the second computer is not left out of step: started again, its next edit, made from the team file it holds, goes up and stands at the relay at epoch 2, without the desk taken off: "
