@@ -42,7 +42,7 @@ const ASIDE = {
   "15ep": offWindows("15ep", "15em stands aside off Windows, so lifting plant:w2-folder-not-writable has no green leg there to turn"),
 };
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 225 - 76 - 2; /* fold 129: 223 at the merge base + 2 (fold 128: the join link's hide scene, jlk5 and jlk6) - 76 retired with the folder join (FOLDER_JOIN_RETIRED, P4) */
+const EXPECTED = 225 - 76 - 2 - 14; /* fold 129: 223 at the merge base + 2 (fold 128: the join link's hide scene, jlk5 and jlk6) - 76 retired with the folder join (FOLDER_JOIN_RETIRED, P4) - 2 (P2: 15a, 15b, the six-digit code) - 14 (P2: the paste box and the check code: 15ac, 15ah, 15ap, 15aq, 15at, 15al, 15an, 15av, 15aw, 15ax, 15bb, 15bc, b3a2-2 and its plant b3a2-p2) */
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -629,6 +629,13 @@ try {
   }
   /* ---- an invitation: paste, confirm, and a request that proves the secret without carrying it ------------------- */
   const inviteBlob = (o) => "etiuda-join:" + Buffer.from(JSON.stringify(o)).toString("base64url");
+  /* P2: the shell reads a relay invitation alone, so a leg that takes an invitation takes one of these: the team, the lead and the secret of `o`, and the relay's
+     id, address, token and invitation id where a folder invitation named a folder. A yes to it asks for no code. relayRtOf reads the relay's id back, which names
+     the desk's mirror (user data/relay/<id>) where the request is written. */
+  const relayOf = () => ({ rt: crypto.randomBytes(16).toString("hex"), url: "https://relay.test/relay/v1",
+    token: crypto.randomBytes(32).toString("hex"), inv: crypto.randomBytes(16).toString("hex") });
+  const relayBlobOf = (o) => inviteBlob(Object.assign({ relay: relayOf() }, o));
+  const relayRtOf = blob => JSON.parse(Buffer.from(blob.slice(12), "base64url").toString("utf8")).relay.rt;
   const filesUnder = (dir) => {
     const out = [];
     for (const name of fs.readdirSync(dir)) {
@@ -660,6 +667,8 @@ try {
       && fs.readdirSync(quiet).slice().sort().join("|") === beforeQuiet
       && !Du.envelope().teamJoin && !Du.envelope().teamPins,
     "15ab a malformed invitation is refused and nothing is written: " + (badPreview && badPreview.refused));
+  /* RETIRED, P2 (the folder invitation is gone): 15ac, "an invitation for a folder on another computer names that computer and the folder as Windows reaches it before anything is opened, or is refused where that path is no place, and writes nothing". The reader now returns null for an invitation that names a folder (fjg4 holds it). */
+  if (!FOLDER_JOIN_RETIRED) {
   /* A share's path is a place on Windows alone; elsewhere the same text is no place at all, and is refused. */
   const uncBlob = inviteBlob({ team: TEAM, folder: "\\\\quay-host\\catalogs\\", lead: lampLead, secret: secretU });
   const uncAt = Date.now();
@@ -672,38 +681,41 @@ try {
     "15ac an invitation for a folder on another computer names that computer and the folder as Windows reaches it before anything"
     + " is opened, or is refused where that path is no place, and writes nothing: " + uncMs + "ms, "
     + (WIN ? "host " + (uncPreview && uncPreview.offer && uncPreview.offer.host) : "refused " + (uncPreview && uncPreview.refused)));
+  }
   /* RETIRED, P4 (the folder join): 15ad, "a request made with no invitation is unchanged: no invite and no kind on the member", held what a desk's request through the shared folder carried; no such request is made now. */
   if (!FOLDER_JOIN_RETIRED) {
   check(r1 && r1.invite === undefined && r1.desk.kind === undefined && bytes1.indexOf('"invite"') < 0 && bytes1.indexOf('"kind": "desk"') < 0,
     "15ad a request made with no invitation is unchanged: no invite and no kind on the member");
   }
 
-  const yard = folder("yard");
+  /* P2: 15ae, 15af and 15ag held a yes to a folder invitation (the request written under the share's desks/, the share named as the catalog folder, the check code
+     typed). The facts they held are the invitation's, and a relay invitation has them: the yes pins the lead it names, writes a request whose proof is the commitment's
+     (in the relay's mirror on this desk, where the share was), keeps the secret nowhere and asks for no code. They stand on a relay invitation. */
   const Dy = newDesk("yard", folder("yard-old"));
   const mey = await Dy.ask("etiuda:branch-identity", true);
   const secretY = crypto.randomBytes(16).toString("hex");
   SECRETS.push(secretY);
-  const yardBlob = inviteBlob({ team: TEAM, folder: yard, lead: lampLead, secret: secretY });
-  const took = await Dy.join("invite", yardBlob, "Nia", codeFor(yardBlob));
+  const yardBlob = relayBlobOf({ team: TEAM, lead: lampLead, secret: secretY });
+  const yardMirror = path.join(Dy.ud, "relay", relayRtOf(yardBlob));
+  const took = await Dy.join("invite", yardBlob, "Nia");
   /* Read only where the yes took, so a yes refused fails here and the legs after it still run. */
-  const yardFile = path.join(yard, "desks", mey.id, "join.json");
+  const yardFile = path.join(yardMirror, "desks", mey.id, "join.json");
   const ry = took && took.join && fs.existsSync(yardFile) ? JSON.parse(fs.readFileSync(yardFile, "utf8")) : {};
   const envY = Dy.envelope();
-  check(took && took.join && took.join.state === "waiting" && ry.desk.kind === "desk" && ry.desk.name === "Nia"
+  check(took && took.join && took.join.state === "waiting" && ry.desk && ry.desk.kind === "desk" && ry.desk.name === "Nia"
       && ry.invite.id === P.inviteIdOf(secretY) && ry.invite.proof === P.memberProof(secretY, ry.commit)
       && envY.teamJoin && ry.commit === P.joinCommit(TEAM, mey.key, mey.box, envY.teamJoin.nonce)
-      && envY.teamPins && envY.teamPins[TEAM].public === LEAD.public && envY.teamPins[TEAM].keyId === LEAD.keyId
-      && envY.keys.eCatalogFolder === yard,
-    "15ae yes pins the lead from the invitation and writes a desk request whose proof is that commitment's: "
+      && envY.teamPins && envY.teamPins[TEAM].public === LEAD.public && envY.teamPins[TEAM].keyId === LEAD.keyId,
+    "15ae yes to a relay invitation pins the lead from the invitation and writes a desk request, in the relay's mirror, whose proof is that commitment's (P2: was a folder invitation, the request under the share): "
     + (took && took.join && took.join.state));
-  const yardText = filesUnder(yard).map(p => fs.readFileSync(p, "utf8")).join("\n");
+  const yardText = filesUnder(yardMirror).map(p => fs.readFileSync(p, "utf8")).join("\n");
   const restarted = loadDesk(Dy.ud);
   const envR = restarted.envelope();
   check(JSON.stringify(envY).indexOf(secretY) < 0 && yardText.indexOf(secretY) < 0 && JSON.stringify(envR).indexOf(secretY) < 0
       && envR.teamJoin && envR.teamJoin.invite && envR.teamJoin.invite.id === ry.invite.id
       && envR.teamJoin.invite.proof === ry.invite.proof && envR.teamJoin.invite.secret === undefined
       && envR.teamPins[TEAM].public === LEAD.public,
-    "15af the secret is in nothing written to the share or the desk, and a restart still has the proof and the pin");
+    "15af the secret is in nothing written to the relay's mirror or the desk, and a restart still has the proof and the pin (P2: was the share)");
   const otherCommit = P.joinCommit(TEAM, mey.key, crypto.randomBytes(32).toString("hex"), envY.teamJoin ? envY.teamJoin.nonce : "");
   const proofY = ry.invite ? ry.invite.proof : undefined;
   check(!!proofY && P.memberProof(crypto.randomBytes(16).toString("hex"), ry.commit) !== proofY
@@ -774,177 +786,71 @@ try {
       + ", offered " + !!(offered && !offered.refused) + ", taken " + !!(took && !took.refused) + ", request ended " + !e.teamJoin);
   }
   }
-  const hostile = folder("hostile");
-  const forgedLead = { keyId: FORGED.keyId, public: FORGED.public, name: "Lamp lead" };
+  /* The forger names its own key by the id Studio makes of it, as the relay requires of a lead (leadKeyMatches); an id that is not the key's is refused as unread before the pin is asked. */
+  const forgedLead = { keyId: "studio-" + printOf(FORGED.public), public: FORGED.public, name: "Lamp lead" };
   const Dp = await deskWith("pinned", folder("pinned-own"),
     { teamPins: { [TEAM]: LEAD }, teamSeen: [TEAM], teamKeys: { [TEAM]: { "1": Buffer.from("kept").toString("base64") } } });
   const secretP = newSecret();
-  const forgedBlob = inviteBlob({ team: TEAM, folder: hostile, lead: forgedLead, secret: secretP });
-  const relabelled = inviteBlob({ team: TEAM, folder: hostile, lead: { keyId: "lamp-other", public: LEAD.public, name: "Lamp lead" }, secret: secretP });
+  /* P2: 15ai to 15ak and 15ao held the invitation's trust rules on a folder invitation, with the folder watched for any call. They are the shell's rules for any invitation, and
+     a relay invitation is the one left: its mirror, user data/relay/<id>, stands where the folder did, and nothing asked or written there is what "touched" counts. */
+  const relayP = relayOf(), mirrorP = path.join(Dp.ud, "relay", relayP.rt);
+  const forgedBlob = relayBlobOf({ team: TEAM, relay: relayP, lead: forgedLead, secret: secretP });
+  const relabelled = relayBlobOf({ team: TEAM, relay: relayP, lead: { keyId: "lamp-other", public: LEAD.public, name: "Lamp lead" }, secret: secretP });
   const trustP = trustOf(Dp);
   let readP = null, takeP = null, readRelabelled = null, takeRelabelled = null;
-  const touchedP = await watching(hostile, async () => {
+  const touchedP = await watching(mirrorP, async () => {
     readP = await Dp.join("read", forgedBlob);
-    takeP = await Dp.join("invite", forgedBlob, "Ola", codeFor(forgedBlob));
+    takeP = await Dp.join("invite", forgedBlob, "Ola");
     readRelabelled = await Dp.join("read", relabelled);
-    takeRelabelled = await Dp.join("invite", relabelled, "Ola", codeFor(relabelled));
+    takeRelabelled = await Dp.join("invite", relabelled, "Ola");
   });
-  const keptP = trustOf(Dp) === trustP && filesUnder(hostile).length === 0 && touchedP.length === 0;
-  const sameLead = await Dp.join("read", inviteBlob({ team: TEAM, folder: hostile, lead: lampLead, secret: secretP }));
+  const keptP = trustOf(Dp) === trustP && !fs.existsSync(mirrorP) && touchedP.length === 0;
+  const sameLead = await Dp.join("read", relayBlobOf({ team: TEAM, relay: relayP, lead: lampLead, secret: secretP }));
+  /* A key id the key does not name is refused before the pin is asked (the relay's own rule for a lead, inviteKeyHolds), so the relabelled invitation is "unread"
+     where a folder invitation's was "pinned"; either way it moves nothing. */
   check(readP && readP.refused === "pinned" && !readP.offer && takeP && takeP.refused === "pinned" && readRelabelled
-      && readRelabelled.refused === "pinned" && takeRelabelled && takeRelabelled.refused === "pinned" && keptP
+      && readRelabelled.refused === "unread" && takeRelabelled && takeRelabelled.refused === "unread" && keptP
       && sameLead && !!sameLead.offer && sameLead.refused === undefined,
-    "15ai an invitation for a team this desk already pins under another key, or under the same key with another keyId, is refused at"
-    + " read and at yes, and nothing changes: the pin, the kept keys, the key already shown, the folder, and nothing asked or written"
-    + " where it points; THE CONTROL, the lead it pins, is offered: " + (readP && readP.refused) + ", " + (takeP && takeP.refused)
-    + ", touched " + JSON.stringify(touchedP));
+    "15ai a relay invitation for a team this desk already pins under another key is refused at read and at yes (one with the same key and another keyId, as unread), and nothing changes:"
+    + " the pin, the kept keys, the key already shown, the folder, and nothing asked or written in the invitation's mirror; THE CONTROL, the lead it pins, is offered: "
+    + (readP && readP.refused) + ", " + (takeP && takeP.refused) + ", " + (readRelabelled && readRelabelled.refused) + ", touched " + JSON.stringify(touchedP));
 
   const Db = await deskWith("barred", folder("barred-own"), { teamBarred: [TEAM] });
   const secretB = newSecret();
-  const barredBlob = inviteBlob({ team: TEAM, folder: hostile, lead: lampLead, secret: secretB });
+  const relayB = relayOf(), mirrorB = path.join(Db.ud, "relay", relayB.rt);
+  const barredBlob = relayBlobOf({ team: TEAM, relay: relayB, lead: lampLead, secret: secretB });
   const trustB = trustOf(Db);
   let readB = null, takeB = null;
-  const touchedB = await watching(hostile, async () => {
+  const touchedB = await watching(mirrorB, async () => {
     readB = await Db.join("read", barredBlob);
-    takeB = await Db.join("invite", barredBlob, "Ola", codeFor(barredBlob));
+    takeB = await Db.join("invite", barredBlob, "Ola");
   });
   check(readB && readB.refused === "barred" && !readB.offer && takeB && takeB.refused === "barred"
-      && trustOf(Db) === trustB && filesUnder(hostile).length === 0 && touchedB.length === 0,
-    "15aj an invitation for a team whose lead this desk was told does not match is refused at read and at yes, under any lead, and"
+      && trustOf(Db) === trustB && !fs.existsSync(mirrorB) && touchedB.length === 0,
+    "15aj a relay invitation for a team whose lead this desk was told does not match is refused at read and at yes, under any lead, and"
     + " nothing changes or is asked: the bar lifts only by an answered request: " + (readB && readB.refused) + ", " + (takeB && takeB.refused)
     + ", touched " + JSON.stringify(touchedB));
 
   const Ds = await deskWith("shown", folder("shown-own"), { teamSeen: [TEAM] });
-  const shownBlob = inviteBlob({ team: TEAM, folder: folder("shown-yard"), lead: lampLead, secret: newSecret() });
-  const takeS = await Ds.join("invite", shownBlob, "Ola", codeFor(shownBlob));
+  const shownBlob = relayBlobOf({ team: TEAM, lead: lampLead, secret: newSecret() });
+  const takeS = await Ds.join("invite", shownBlob, "Ola");
   const envS = Ds.envelope();
   check(takeS && takeS.join && envS.teamPins && envS.teamPins[TEAM].public === LEAD.public && (envS.teamSeen || []).indexOf(TEAM) < 0
       && leadsOf(takeS) === JSON.stringify([{ team: TEAM, print: printOf(LEAD.public), admitted: false, seen: false }]),
     "15ak a pin an invitation sets is a key not yet shown, so the comparison after admission comes, whatever the desk held: "
     + leadsOf(takeS));
 
-  const Dc = await deskWith("four", folder("four-own"));
-  const fourYard = folder("four-yard");
-  const fourBlob = inviteBlob({ team: TEAM, folder: fourYard, lead: lampLead, secret: newSecret() });
-  const trustC = trustOf(Dc);
-  const otherFour = wrongFor(fourBlob);
-  let noFour = null, wrongFour = null;
-  const touchedC = await watching(fourYard, async () => {
-    noFour = await Dc.join("invite", fourBlob, "Ola", "");
-    wrongFour = await Dc.join("invite", fourBlob, "Ola", otherFour);
-  });
-  const keptC = trustOf(Dc) === trustC && filesUnder(fourYard).length === 0 && touchedC.length === 0;
-  const rightFour = await Dc.join("invite", fourBlob, "Ola", " " + codeFor(fourBlob).slice(0, 2) + " " + codeFor(fourBlob).slice(2) + " ");
-  check(noFour && noFour.refused === "check" && wrongFour && wrongFour.refused === "check" && keptC
-      && rightFour && rightFour.join && rightFour.join.state === "waiting" && Dc.envelope().teamPins[TEAM].public === LEAD.public,
-    "15al yes is taken only with this invitation's check code as the lead reads it, spaces aside: none, or another code, change"
-    + " nothing and ask or write nothing: " + (noFour && noFour.refused) + ", " + (wrongFour && wrongFour.refused)
-    + ", then " + (rightFour && rightFour.join && rightFour.join.state));
+  /* RETIRED, P2 (no check code is asked, typed or kept): 15al, "yes is taken only with this invitation's check code as the lead reads it, spaces aside: none, or another code, change nothing and ask or write nothing". A yes to an invitation asks for no code, and the shell has no refusal named "check" (fjg2). */
 
-  /* RETIRED, P4 (the folder join, P2's folder invitations): 15am, "a folder whose team file is under another lead, for another team, not whole under its lead, or under the lead's key with another keyId takes no request, and the folder is put back as it was; THE CONTROL, a team file whole under the invited lead, takes it". No folder is read as a team, so no invitation is judged by the team file in the folder it names. */
-  if (!FOLDER_JOIN_RETIRED) {
-  const Dr = await deskWith("files", folder("files-own"));
-  const underForger = folder("files-forger"), otherTeam = folder("files-other"), broken = folder("files-broken"), genuineFolder = folder("files-real");
-  put(underForger, "etiuda-team.json", teamFile([], { lead: FORGED, signer: forger.privateKey }));
-  put(otherTeam, "etiuda-team.json", sign({ format: 1, kind: "etiuda-team", id: "t-" + crypto.randomBytes(8).toString("hex"),
-    catalogs: ["lamp-shop"], lead: LEAD, sealed: true, exportsSealed: false, epoch: 1, roster: [] }, lead.privateKey, LEAD.keyId));
-  const cracked = teamFile([]);
-  cracked.sig.value = (cracked.sig.value[0] === "a" ? "b" : "a") + cracked.sig.value.slice(1);
-  put(broken, "etiuda-team.json", cracked);
-  put(genuineFolder, "etiuda-team.json", teamFile([]));
-  /* Whole under the invited lead's own public key, labelled with another keyId, as a pin is compared (15ai). */
-  const relabelledTeam = folder("files-relabelled");
-  put(relabelledTeam, "etiuda-team.json", sign({ format: 1, kind: "etiuda-team", id: TEAM, catalogs: ["lamp-shop"],
-    lead: { keyId: "lamp-other", public: LEAD.public }, sealed: true, exportsSealed: false, epoch: 1, roster: [] }, lead.privateKey, "lamp-other"));
-  const trustR = trustOf(Dr);
-  const foreign = [];
-  for (const f of [underForger, otherTeam, broken, relabelledTeam]) {
-    const b = inviteBlob({ team: TEAM, folder: f, lead: lampLead, secret: newSecret() });
-    const r = await Dr.join("invite", b, "Ola", codeFor(b));
-    foreign.push((r && r.refused) + (fs.existsSync(path.join(f, "desks")) ? " wrote" : ""));
-  }
-  const keptR = trustOf(Dr) === trustR;
-  const genuineBlob = inviteBlob({ team: TEAM, folder: genuineFolder, lead: lampLead, secret: newSecret() });
-  const intoGenuine = await Dr.join("invite", genuineBlob, "Ola", codeFor(genuineBlob));
-  check(foreign.every(x => x === "foreign") && keptR && intoGenuine && intoGenuine.join && intoGenuine.join.state === "waiting",
-    "15am a folder whose team file is under another lead, for another team, not whole under its lead, or under the lead's key with"
-    + " another keyId takes no request, and the"
-    + " folder is put back as it was; THE CONTROL, a team file whole under the invited lead, takes it: " + JSON.stringify(foreign));
-  }
+  /* RETIRED, P4 (the folder join, P2's folder invitations): 15am, "a folder whose team file is under another lead, for another team, not whole under its lead, or under the lead's key with another keyId takes no request, and the folder is put back as it was". */
+  /* RETIRED, P2 (an invitation names no folder): 15an, "reading an invitation states, opens and watches nothing at the folder it names, and the desk's own folder stays as it was", and 15av, "at yes, a folder that does not answer is asked and nothing more: no call that could wait on it with the window behind it, the desk's folder put back, nothing pinned or written", and the scene that took a team file the desk cannot read for neither none nor another team's. Their scenes opened, stated and watched the folder a folder invitation named; no invitation names one now, and 15ai and 15aj above hold that a relay invitation is judged without touching its mirror. */
 
-  /* A team file the desk cannot read is taken neither for no team file nor for another team's: a folder standing where the
-     file would, and a file that is not JSON. The page's sentence for it is read with the page's legs, where 15be is. */
-  const De = await deskWith("unreadable", folder("unreadable-own"));
-  const unreadableTeam = folder("files-unreadable"), notJsonTeam = folder("files-not-json");
-  fs.mkdirSync(path.join(unreadableTeam, "etiuda-team.json"));
-  put(notJsonTeam, "etiuda-team.json", "{ not a team file");
-  const trustE = trustOf(De);
-  const tookE = [];
-  for (const f of [unreadableTeam, notJsonTeam]) {
-    const b = inviteBlob({ team: TEAM, folder: f, lead: lampLead, secret: newSecret() });
-    const r = await De.join("invite", b, "Ola", codeFor(b));
-    tookE.push((r && (r.refused || (r.join ? r.join.state : "nothing"))) + (fs.existsSync(path.join(f, "desks")) ? " wrote" : ""));
-  }
-  const keptE = trustOf(De) === trustE;
-
-  /* The folder the invitation names is one nothing has made. */
-  const never = path.join(LAB, "never-" + crypto.randomBytes(4).toString("hex"));
-  const Dn = await deskWith("untouched", folder("untouched-own"));
-  const folderN = Dn.envelope().keys.eCatalogFolder;
-  let readN = null;
-  const touched = await watching(never, async () => {
-    readN = await Dn.join("read", inviteBlob({ team: TEAM, folder: never, lead: lampLead, secret: newSecret() }));
-  });
-  check(readN && readN.offer && readN.offer.folder === never && touched.length === 0 && Dn.envelope().keys.eCatalogFolder === folderN,
-    "15an reading an invitation states, opens and watches nothing at the folder it names, and the desk's own folder stays as it was:"
-    + " touched " + JSON.stringify(touched));
-
-  /* A folder that does not answer: here one whose parent is missing too, so the ask finds neither. */
-  const silentFolder = path.join(LAB, "gone-" + crypto.randomBytes(4).toString("hex"), "team");
-  const Dv = await deskWith("silent", folder("silent-own"));
-  const trustV = trustOf(Dv);
-  let tookV = null;
-  const touchedV = await watching(silentFolder, async () => {
-    const silentBlob = inviteBlob({ team: TEAM, folder: silentFolder, lead: lampLead, secret: newSecret() });
-    tookV = await Dv.join("invite", silentBlob, "Ola", codeFor(silentBlob));
-  });
-  check(tookV && tookV.canceled === true && trustOf(Dv) === trustV && !fs.existsSync(silentFolder)
-      && touchedV.length > 0 && touchedV.every(n => n.indexOf("promises.") === 0),
-    "15av at yes, a folder that does not answer is asked and nothing more: no call that could wait on it with the window behind it, the"
-    + " desk's folder put back, nothing pinned or written: " + (tookV && (tookV.canceled ? "canceled" : tookV.refused)) + ", touched " + JSON.stringify(touchedV));
-
-  /* RETIRED, P4 (the folder join, P2's folder invitations): 15cl, "a chosen copy of the shared folder is accepted only where it holds that team's own team file under the invited lead, and refused otherwise, a ring there vouching for another key included (review 14.5)", and its plant j14e, "lifting plant:j14-picked-lead takes a chosen folder under another key". */
-  if (!FOLDER_JOIN_RETIRED) {
-  const ringYard = folder("files-ring");
-  put(ringYard, "etiuda-team.json", teamFile([], { lead: FORGED, signer: forger.privateKey }));
-  put(ringYard, "etiuda-ring.json", { format: 1, kind: "etiuda-ring",
-    keys: [{ catalog: "lamp-shop", keyId: FORGED.keyId, alg: "Ed25519", public: FORGED.public }] });
-  const invented = { team: TEAM, lead: lampLead };
-  const belongChecks = [
-    P.inviteFolderBelongs ? P.inviteFolderBelongs(genuineFolder, invented) : false,
-    P.inviteFolderBelongs ? P.inviteFolderBelongs(ringYard, invented) : false,
-    P.inviteFolderBelongs ? P.inviteFolderBelongs(silentFolder, invented) : false,
-    P.inviteFolderBelongs ? P.inviteFolderBelongs(otherTeam, invented) : false,
-    P.inviteFolderBelongs ? P.inviteFolderBelongs(underForger, invented) : false,
-    P.inviteFolderBelongs ? P.inviteFolderBelongs(broken, invented) : false,
-  ];
-  check(belongChecks[0] === true && belongChecks[1] === false
-      && belongChecks[2] === false && belongChecks[3] === false
-      && belongChecks[4] === false && belongChecks[5] === false,
-    "15cl a chosen copy of the shared folder is accepted only where it holds that team's own team file under the invited lead, and refused otherwise, a ring there vouching for another key included (review 14.5): " + JSON.stringify(belongChecks));
-  if (PLANTS_OFF) skip("j14e lifting plant:j14-picked-lead takes a chosen folder under another key (ETIUDA_PLANTS=off)");
-  else {
-    const planted = SRC.split("\n").map(l => (l.indexOf("plant:j14-picked-lead") >= 0 ? "  handed = true;" : l)).join("\n");
-    const Dp = SRC.indexOf("plant:j14-picked-lead") >= 0 ? loadDesk(folder("j14e-ud"), planted) : null;
-    const took = Dp ? Dp.api.inviteFolderBelongs(ringYard, invented) : null;
-    check(took === true, "j14e lifting plant:j14-picked-lead takes a chosen folder under another key (FAIL 15cl): " + JSON.stringify(took));
-  }
-  }
+  /* RETIRED, P4 (the folder join, P2's folder invitations): 15cl, "a chosen copy of the shared folder is accepted only where it holds that team's own team file under the invited lead, and refused otherwise, a ring there vouching for another key included (review 14.5)", and j14e. */
 
   const Dk = await deskWith("kept", folder("kept-own"));
   const secretK = newSecret();
-  const keptBlob = inviteBlob({ team: TEAM, folder: folder("kept-yard"), lead: lampLead, secret: secretK });
-  await Dk.join("invite", keptBlob, "Ola", codeFor(keptBlob));
+  const keptBlob = relayBlobOf({ team: TEAM, lead: lampLead, secret: secretK });
+  await Dk.join("invite", keptBlob, "Ola");
   const envK = Dk.envelope();
   const hadK = !!(envK.teamJoin && envK.teamJoin.invite);
   if (hadK) envK.teamJoin.invite.secret = secretK;
@@ -982,136 +888,71 @@ try {
   const held = () => (typeof TJ.inviteHeld === "function" ? TJ.inviteHeld() : null);
   const yesOf = html => (/<button[^>]*data-join="invite"[^>]*>/.exec(html) || [""])[0];
   const missOf = html => (/<div[^>]*data-join-miss[^>]*>/.exec(html) || [""])[0];
-  const pageYard = folder("page-yard");
-  const blobA = inviteBlob({ team: TEAM, folder: pageYard + path.sep, lead: lampLead, secret: newSecret() });
-  let pasted = elOf({ "data-join-paste": "" }, blobA);
-  document.querySelector = (sel) => sel === "[data-join-paste]" ? pasted : null;
-  TJ.openJoinPaste();
-  const pasteHtml = TJ.teamJoinEmptyHtml();
-  await press("read");
-  const confirmHtml = TJ.teamJoinEmptyHtml();
-  const groups = printOf(LEAD.public).match(/.{4}/g);
-  check(/<textarea /.test(pasteHtml) && confirmHtml.indexOf(pageYard) >= 0 && confirmHtml.indexOf(pageYard + path.sep) < 0
-      && confirmHtml.indexOf("Lamp lead") >= 0 && /<input[^>]*data-join-check[^>]*maxlength="5"/.test(confirmHtml) && confirmHtml.indexOf("e-join-key") < 0
-      && groups.every(g => confirmHtml.indexOf(g) < 0) && / disabled/.test(yesOf(confirmHtml))
-      && !new RegExp("(^|[^0-9])" + codeFor(blobA) + "([^0-9]|$)").test(confirmHtml.replace(/<svg[\s\S]*?<\/svg>/g, "")),
-    "15ah the confirm names the folder as the desk will use it and the lead, asks for the code the lead reads out, shows neither"
-    + " the key nor the code, and its yes waits for it");
-
-  typeFour(wrongFor(blobA));
-  const wrongHtml = TJ.teamJoinEmptyHtml();
-  const before = calls.length;
-  await press("invite");
-  const sentWhileShut = calls.length - before;
-  typeFour(codeFor(blobA).slice(0, 4));
-  const partHtml = TJ.teamJoinEmptyHtml();
-  typeFour(codeFor(blobA));
-  const rightHtml = TJ.teamJoinEmptyHtml();
-  check(/ disabled/.test(yesOf(wrongHtml)) && !!missOf(wrongHtml) && !/ hidden/.test(missOf(wrongHtml)) && sentWhileShut === 0
-      && / disabled/.test(yesOf(partHtml)) && / hidden/.test(missOf(partHtml))
-      && !!yesOf(rightHtml) && !/ disabled/.test(yesOf(rightHtml)) && / hidden/.test(missOf(rightHtml)),
-    "15ap the yes opens only once the code typed is this invitation's check code, all five digits; another code is said not to"
-    + " match, four of the five are not yet said wrong, and the shut yes sends nothing: sent " + sentWhileShut);
-  await press("back");
-  const heldAfterBack = held();
+  /* P2: the page has no paste box, no check field and no check code. An invitation reaches it as the shell's link offer (the link, or the invitation to the person's address), which
+     is what the legs below hand it: `viaLink` gives the desk's shell the invitation as a link and the page what the shell sends of it, the offer the confirm is drawn from. */
+  let pasted = null;
+  const viaLink = (D, blob) => {
+    const got = D.api.acceptLink("etiuda:join#" + blob.slice("etiuda-join:".length));
+    if (got && got.offer) TJ.joinTook({ offer: got.offer });
+    return got;
+  };
+  const letGo = h => !!h && h.mode === "" && h.read === "" && h.offer === null;
+  /* RETIRED, P2 (no paste box, no check field, no check code): 15ah, "the confirm names the folder as the desk will use it and the lead, asks for the code the lead reads out, shows neither the key nor the code, and its yes waits for it", and 15ap, "the yes opens only once the code typed is this invitation's check code, all five digits; another code is said not to match, four of the five are not yet said wrong, and the shut yes sends nothing". The confirm left is the link's, which asks for no code (15ci below, and link-handler 3hn). */
 
   const Dci = await deskWith("relay-confirm", folder("relay-confirm-own"));
   await pageOn(Dci);
   const relayTeamId = "t-" + crypto.randomBytes(8).toString("hex");
-  const relayBlob = inviteBlob({ team: relayTeamId, relay: { rt: crypto.randomBytes(16).toString("hex"),
-    url: "https://relay.test/relay/v1", token: crypto.randomBytes(32).toString("hex"), inv: crypto.randomBytes(16).toString("hex") },
-    lead: lampLead, secret: crypto.randomBytes(16).toString("hex") });
-  TJ.openJoinPaste();
-  pasted = elOf({ "data-join-paste": "" }, relayBlob);
-  await press("read");
+  const relayBlob = relayBlobOf({ team: relayTeamId, lead: lampLead, secret: crypto.randomBytes(16).toString("hex") });
+  viaLink(Dci, relayBlob);
   const relayHtml = TJ.teamJoinEmptyHtml();
   const relayYes = yesOf(relayHtml);
   check(relayHtml.indexOf("data-join-check") < 0 && relayHtml.indexOf("Lamp lead") >= 0 && relayHtml.indexOf(relayTeamId) >= 0
       && relayHtml.indexOf("relay.test") >= 0 && relayHtml.indexOf("Folder:") < 0 && !!relayYes && !/ disabled/.test(relayYes),
-    "15ci a relay invitation's confirm asks for no check code and shows the lead, the team and the relay's host: "
+    "15ci a relay invitation's confirm asks for no check code and shows the lead, the team and the relay's host (P2: opened by the link, where it was pasted): "
     + (relayHtml.indexOf("data-join-check") < 0 ? "no code box" : "a code box")
     + ", lead " + (relayHtml.indexOf("Lamp lead") >= 0 ? "shown" : "absent")
     + ", team " + (relayHtml.indexOf(relayTeamId) >= 0 ? "shown" : "absent")
     + ", host " + (relayHtml.indexOf("relay.test") >= 0 ? "shown" : "absent"));
   await press("back");
 
-  const Dq = await deskWith("race", folder("race-own"));
-  await pageOn(Dq);
-  const raceB = folder("race-b");
-  const blobB = inviteBlob({ team: TEAM, folder: raceB, lead: forgedLead, secret: newSecret() });
-  TJ.openJoinPaste();
-  const boxA = elOf({ "data-join-paste": "" }, blobA), readA = elOf({ "data-join": "read" });
-  pasted = boxA;
-  TJ.wireTeamJoinEmpty({ querySelectorAll: () => [boxA, readA] });
-  slowRead = true;
-  const reading = Promise.resolve(readA.onclick && readA.onclick());
-  boxA.value = blobB;
-  if (boxA.oninput) boxA.oninput();
-  await reading;
-  slowRead = false;
-  const raceHtml = TJ.teamJoinEmptyHtml();
-  typeFour(codeFor(blobA));
-  await press("invite");
-  const heldAfterYes = held();
-  const sentYes = calls.filter(c => c[0] === "invite").pop();
-  check(raceHtml.indexOf(pageYard) >= 0 && raceHtml.indexOf(raceB) < 0 && !!sentYes && sentYes[1] === blobA
-      && fs.existsSync(path.join(pageYard, "desks")) && !fs.existsSync(path.join(raceB, "desks")),
-    "15aq a second paste while the first is read changes nothing: the confirm shows the first, and yes sends the very text that was"
-    + " read, never the box: " + (sentYes ? (sentYes[1] === blobA ? "the first" : sentYes[1] === blobB ? "the second" : "another") : "nothing"));
+  /* RETIRED, P2 (no paste box): 15aq, "a second paste while the first is read changes nothing: the confirm shows the first, and yes sends the very text that was read, never the box". */
 
+  const blobA = relayBlobOf({ team: TEAM, lead: lampLead, secret: newSecret() });
   const Dz = await deskWith("refused", folder("refused-own"));
   await pageOn(Dz);
-  TJ.openJoinPaste();
-  pasted = elOf({ "data-join-paste": "" }, blobA);
-  failOp = "read";
-  await press("read");
-  const afterReadFail = held(), readFailHtml = TJ.teamJoinEmptyHtml();
-  failOp = "";
-  TJ.openJoinPaste();
-  pasted = elOf({ "data-join-paste": "" }, blobA);
-  await press("read");
-  typeFour(codeFor(blobA));
-  failOp = "invite";
+  viaLink(Dz, blobA);
+  const heldConfirm = held();
+  failOp = "link";
   await press("invite");
   const afterYesFail = held(), yesFailHtml = TJ.teamJoinEmptyHtml();
   failOp = "";
-  const letGo = h => !!h && h.mode === "" && h.draft === "" && h.read === "" && h.typed === "" && h.offer === null;
-  check(letGo(afterReadFail) && letGo(afterYesFail) && !/<textarea /.test(readFailHtml) && !/data-join-check/.test(yesFailHtml),
-    "15ar a call to the shell that fails lets the invitation go, the paste box or the confirm with it, after a read and after a yes");
+  check(!!heldConfirm && heldConfirm.mode === "confirm" && letGo(afterYesFail) && !/data-join="invite"/.test(yesFailHtml),
+    "15ar a call to the shell that fails lets the invitation go, the confirm with it, after a yes (P2: the read, and the paste box it opened from, are gone)");
 
-  TJ.openJoinPaste();
-  const boxC = elOf({ "data-join-paste": "" }, "");
-  pasted = boxC;
-  TJ.wireTeamJoinEmpty({ querySelectorAll: () => [boxC] });
-  boxC.value = blobA;
-  if (boxC.oninput) boxC.oninput();
+  const secretK2 = newSecret();
+  const Dt = await deskWith("answered", folder("answered-own"));
+  await pageOn(Dt);
+  viaLink(Dt, relayBlobOf({ team: TEAM, lead: lampLead, secret: secretK2 }));
+  await press("invite");
+  const heldAfterYes = held();
+  const Dcn = await deskWith("cancelled", folder("cancelled-own"));
+  await pageOn(Dcn);
+  viaLink(Dcn, relayBlobOf({ team: TEAM, lead: lampLead, secret: newSecret() }));
   await press("back");
-  const heldAfterPasteBack = held();
-  TJ.openJoinPaste();
-  const unreadable = "etiuda-join:" + Buffer.from("{}").toString("base64url") + "x" + secretK;
-  pasted = elOf({ "data-join-paste": "" }, unreadable);
-  await press("read");
-  const heldAfterRefusal = held(), refusedHtml = TJ.teamJoinEmptyHtml();
-  await press("back");
-  check(letGo(heldAfterYes) && letGo(heldAfterBack) && letGo(heldAfterPasteBack) && !!heldAfterRefusal && heldAfterRefusal.mode === "refused"
-      && heldAfterRefusal.draft === "" && heldAfterRefusal.read === "" && heldAfterRefusal.offer === null && refusedHtml.indexOf(secretK) < 0,
-    "15as the page lets an invitation go once it is answered: after a yes that took, after Cancel on the confirm and on the paste box,"
-    + " and after a refusal, which keeps only its sentence");
-
-  window.E_HOST = { onTeamJoin: noop, teamJoin: op => Promise.resolve(op === "read"
-    ? { sealed: null, join: null, leads: [], offer: { folder: "\\\\quay-host\\catalogs", lead: "Lamp lead", print: printOf(LEAD.public),
-      host: "quay-host", cloud: "", local: false } }
-    : { sealed: null, join: null, leads: [] }) };
+  const heldAfterBack = held();
+  /* A refusal the shell gives at yes, as it gives one for a pinned or barred team: the page keeps only its sentence. */
+  window.E_HOST = { onTeamJoin: noop, teamJoin: op => Promise.resolve(op === "link" ? { sealed: null, join: null, leads: [], refused: "pinned" } : { sealed: null, join: null, leads: [] }) };
   TJ.wireTeamJoin();
   await new Promise(r => setTimeout(r, 30));
-  TJ.openJoinPaste();
-  pasted = elOf({ "data-join-paste": "" }, "etiuda-join:as-the-shell-read-it");
-  await press("read");
-  const hostHtml = TJ.teamJoinEmptyHtml();
-  const hostLine = T.t("This folder is on the computer {HOST}.").split("{HOST}").join("quay-host");
+  viaLink(Dcn, relayBlobOf({ team: TEAM, lead: lampLead, secret: secretK2 }));
+  await press("invite");
+  const heldAfterRefusal = held(), refusedHtml = TJ.teamJoinEmptyHtml();
   await press("back");
-  check(hostHtml.indexOf("<p>" + hostLine + "</p>") >= 0,
-    "15at the confirm says which computer the folder is on, in the line under its title: " + hostLine);
+  check(letGo(heldAfterYes) && letGo(heldAfterBack) && !!heldAfterRefusal && heldAfterRefusal.mode === "refused"
+      && heldAfterRefusal.read === "" && heldAfterRefusal.offer === null && refusedHtml.indexOf(secretK2) < 0 && refusedHtml.indexOf(secretK) < 0,
+    "15as the page lets an invitation go once it is answered: after a yes that took and after Cancel on the confirm, and after a refusal, which keeps only its sentence (P2: the paste box's Cancel is gone)");
+
+  /* RETIRED, P2 (the confirm names no folder): 15at, "the confirm says which computer the folder is on, in the line under its title". */
 
   /* RETIRED, P4 (the folder join, P2's folder invitations): 15ei, "cancelling the folder picker keeps the confirmation card with the invitation and the typed check code in place, and says nothing; pressing Join again with nothing re-typed takes the invitation"; the picker chooses a copy of the invited folder, which a relay invitation has none of. */
   if (!FOLDER_JOIN_RETIRED) {
@@ -1166,67 +1007,7 @@ try {
     "15aa the page shows the shell's key in four groups of four after Studio's sign, with the two answers, and the agent's \"it matches\" reaches"
     + " the shell as seen: " + grouped);
 
-  /* ---- the check code: a forger who never saw the real invitation cannot make it ------------------------------ */
-  /* The forger's key is ground until its print opens with the same four characters as the real lead's, which beat the
-     check when it was the print's first group; its own invitation carries its own secret, so its own code is right for it. */
-  const realYard = folder("code-real"), forgedYard = folder("code-forged");
-  const realBlob = inviteBlob({ team: TEAM, folder: realYard, lead: lampLead, secret: newSecret() });
-  let groundPub = "";
-  do { groundPub = crypto.randomBytes(32).toString("hex"); } while (printOf(groundPub).slice(0, 4) !== printOf(LEAD.public).slice(0, 4));
-  let forgedCodeBlob = "";
-  do {
-    forgedCodeBlob = inviteBlob({ team: TEAM, folder: forgedYard, lead: { keyId: LEAD.keyId, public: groundPub, name: "Lamp lead" }, secret: newSecret() });
-  } while (codeFor(forgedCodeBlob) === codeFor(realBlob));
-  const realCode = codeFor(realBlob), forgedOwn = codeFor(forgedCodeBlob);
-  const pureOk = typeof P.inviteCode === "function" && P.inviteCode(secretOf(realBlob), LEAD.public) === realCode
-    && P.inviteCode(secretOf(forgedCodeBlob), groundPub) === forgedOwn && P.inviteCode("zz", LEAD.public) === "" && P.inviteCode(secretOf(realBlob), "ab") === "";
-  const Dw = await deskWith("forged-code", folder("forged-code-own"));
-  await pageOn(Dw);
-  TJ.openJoinPaste();
-  pasted = elOf({ "data-join-paste": "" }, forgedCodeBlob);
-  await press("read");
-  typeFour(realCode);
-  const forgedPage = TJ.teamJoinEmptyHtml();
-  await press("back");
-  const trustW = trustOf(Dw);
-  const forgedTakeReal = await Dw.join("invite", forgedCodeBlob, "Ola", realCode);
-  const forgedTakePrint = await Dw.join("invite", forgedCodeBlob, "Ola", printOf(LEAD.public).slice(0, 4));
-  const keptW = trustOf(Dw) === trustW && filesUnder(forgedYard).length === 0;
-  TJ.openJoinPaste();
-  pasted = elOf({ "data-join-paste": "" }, realBlob);
-  await press("read");
-  typeFour(realCode);
-  const realPage = TJ.teamJoinEmptyHtml();
-  await press("invite");
-  const envW = Dw.envelope();
-  check(pureOk && / disabled/.test(yesOf(forgedPage)) && !/ hidden/.test(missOf(forgedPage))
-      && forgedTakeReal && forgedTakeReal.refused === "check" && forgedTakePrint && forgedTakePrint.refused === "check" && keptW
-      && !/ disabled/.test(yesOf(realPage)) && !!envW.teamJoin && envW.teamPins && envW.teamPins[TEAM].public === LEAD.public,
-    "15aw a forged invitation, its own code right for its own secret and key and its print opening like the real lead's, fails against"
-    + " the real lead's code at the confirm and at yes, and so does the print's first group; THE CONTROL, the real invitation with"
-    + " that code, is taken: " + (forgedTakeReal && forgedTakeReal.refused) + ", " + (forgedTakePrint && forgedTakePrint.refused)
-    + ", then " + (envW.teamJoin ? "taken" : "not taken"));
-
-  /* The code is five digits, so it is sought as a whole token, never inside a longer run of letters and digits; an
-     invitation whose code the desk's file already holds as a token, or that is this year, is not the one used. */
-  const asToken = code => new RegExp("(^|[^0-9A-Za-z])" + code + "([^0-9A-Za-z]|$)");
-  const Dx = await deskWith("code-unwritten", folder("code-unwritten-own"));
-  const unwrittenYard = folder("code-unwritten-yard");
-  const deskBefore = fs.readFileSync(path.join(Dx.ud, "desk.json"), "utf8");
-  let unwritten = "";
-  do { unwritten = inviteBlob({ team: TEAM, folder: unwrittenYard, lead: lampLead, secret: newSecret() }); }
-  while (asToken(codeFor(unwritten)).test(deskBefore) || codeFor(unwritten) === String(new Date().getFullYear()));
-  const codeX = codeFor(unwritten);
-  await Dx.join("read", unwritten);
-  const tookX = await Dx.join("invite", unwritten, "Ola", codeX);
-  const Dx2 = loadDesk(Dx.ud);
-  await Dx2.join("state");
-  /* The yes reply is scanned too; the read reply carries offer.code for the confirm, and is not. */
-  const written = filesUnder(unwrittenYard).concat(filesUnder(Dx.ud)).map(f => fs.readFileSync(f, "latin1")).concat(Dx.said, Dx2.said, [JSON.stringify(tookX)]);
-  const holding = written.filter(text => asToken(codeX).test(text)).length;
-  check(tookX && tookX.join && tookX.join.state === "waiting" && written.length >= 5 && holding === 0,
-    "15ax the check code is written nowhere: not in the share, not in the desk's file or its envelope, not in the log, not in the"
-    + " yes reply, across a read, a yes and a restart (" + written.length + " texts read): holding " + holding);
+  /* RETIRED, P2 (no check code is made, typed or kept): 15aw, "a forged invitation, its own code right for its own secret and key and its print opening like the real lead's, fails against the real lead's code at the confirm and at yes, and so does the print's first group; THE CONTROL, the real invitation with that code, is taken", and 15ax, "the check code is written nowhere: not in the share, not in the desk's file or its envelope, not in the log, not in the yes reply, across a read, a yes and a restart". The shell makes no code (tests/folder-join-gone.mjs fjg1 holds that no function of the sort is declared, fjg2 that no refusal is named for one), so there is none to forge or to leave written. */
 
   /* ---- machine policy names the team's folder or its lead: the invitation door is closed --------------------- */
   /* The policy key as reg export writes it, each value a string with its two escapes. Off Windows the shell reads no
@@ -1280,7 +1061,7 @@ try {
       + ", requests " + inNamed);
   };
   /* The page's refusal sentence below reads the control invitation (it is offered to a desk with no policy). */
-  const controlBlob = inviteBlob({ team: TEAM, folder: folder("policy-control-yard"), lead: lampLead, secret: newSecret() });
+  const controlBlob = relayBlobOf({ team: TEAM, lead: lampLead, secret: newSecret() });
   /* RETIRED, P4 (machine policy's TeamFolder is not read): 15ay, "while machine policy names the team's folder and lead, an invitation whose lead key matches the policy's lead is accepted at read and at yes, a folder differing only in case included; an invitation from another lead, or under folder policy alone, is refused at read and at yes with the policy's word, and nothing changes; THE CONTROL, a desk with no policy, is offered it". The lead-alone cases that follow stand. */
   if (!FOLDER_JOIN_RETIRED) {
   const folderLead = f => [["TeamFolder", f], ["LeadKey", LEAD.public]];
@@ -1299,13 +1080,36 @@ try {
     + " read and the door stands as before: " + byFolder.join("; "));
   }
 
+  /* P2: 15az held the policy's door on a folder invitation, with the desk's own folder watched and the request counted under the share. The door is the shell's, ahead of how
+     the invitation names its place, so it stands on a relay invitation: the same two desks, the invitation's mirror (user data/relay/<id>) in the folder's place. */
+  const policyRelayCase = async (label, rows, from, accept) => {
+    const n = policyCases++;
+    const Dm = await underPolicy(rows(), "policy-desk-" + n, folder("policy-own-" + n));
+    const relay = relayOf(), mirror = path.join(Dm.ud, "relay", relay.rt);
+    const blob = relayBlobOf({ team: TEAM, relay: relay, lead: from, secret: newSecret() });
+    const trust = trustOf(Dm);
+    let readM = null, takeM = null;
+    const touchedM = accept ? (readM = await Dm.join("read", blob), takeM = await Dm.join("invite", blob, "Ola"), []) : await watching(mirror, async () => {
+      readM = await Dm.join("read", blob);
+      takeM = await Dm.join("invite", blob, "Ola");
+    });
+    const kept = trustOf(Dm) === trust, wrote = fs.existsSync(mirror) ? writtenUnder(mirror) : 0;
+    const ok = accept
+      ? (WIN ? Dm.policyRead && readM && !!readM.offer && readM.refused === undefined && takeM && takeM.join && takeM.join.state === "waiting" && wrote === 1
+        : !Dm.policyRead && readM && !!readM.offer && readM.refused === undefined)
+      : (WIN ? Dm.policyRead && readM && readM.refused === "policy" && !readM.offer && takeM && takeM.refused === "policy" && kept && wrote === 0 && touchedM.length === 0
+        : !Dm.policyRead && readM && !!readM.offer && readM.refused === undefined);
+    return label + ": " + (ok ? "ok" : "read " + (readM && (readM.refused || (readM.offer ? "offered" : "nothing")))
+      + ", yes " + (takeM && (takeM.refused || (takeM.join ? takeM.join.state : "nothing"))) + (kept ? "" : ", trust or folder moved")
+      + ", requests " + wrote + " in the invitation's mirror, touched " + touchedM.length);
+  };
   const leadAlone = () => [["LeadKey", LEAD.public]];
   const byLead = [
-    await policyAcceptCase("lead alone, the invitation from that lead", leadAlone, lampLead, true),
-    await policyCase("lead alone, the invitation from another", leadAlone, forgedLead, false),
+    await policyRelayCase("lead alone, the invitation from that lead", leadAlone, lampLead, true),
+    await policyRelayCase("lead alone, the invitation from another", leadAlone, forgedLead, false),
   ];
   check(byLead.every(x => / ok$/.test(x)),
-    "15az a policy naming only the lead's key accepts an invitation whose lead matches and refuses another lead's at read and at yes"
+    "15az a policy naming only the lead's key accepts a relay invitation whose lead matches and refuses another lead's at read and at yes"
     + " with the policy's word, and nothing changes; off Windows no machine policy is read and the door stands as before: " + byLead.join("; "));
 
   /* A join kept from an invitation is let go when machine policy arrives in a later run: the pin it set and the folder it
@@ -1418,55 +1222,20 @@ try {
     + " offered; off Windows no machine policy is read and all of it stays: " + codeG.split(" ")[0] + "; " + plainKept.join("; "));
   }
 
-  /* ---- the confirm's host line comes only from a folder the reader returned ----------------------------------- */
-  /* The shell evaluated with folderHost wrapped, so every folder it is asked of is kept here. */
-  const HOST_SRC = SRC.split("function folderHost(").length === 2
-    ? SRC.replace("function folderHost(", "function folderHostAsked(")
-      + "\nfunction folderHost(f, e) { globalThis.etiudaHostAsked.push(String(f)); return folderHostAsked(f, e); }"
-    : "";
-  const hostForms = ["/\\evil.example\\share\\team", "\\/evil.example/share/team", "/\\evil.example\\share\\OneDrive\\team",
-    "\\\\?\\UNC\\evil.example\\share\\team", "C:\\OneDrive\\..\\Windows\\Temp\\team", "\\\\quay-host\\catalogs\\",
-    "C:/OneDrive/team/", folder("host-yard") + path.sep];
-  const hostWrong = [];
-  let hostTaken = 0;
-  if (!HOST_SRC) hostWrong.push("shell/main.js does not hold exactly one folderHost declaration");
-  else {
-    const udH = path.join(LAB, "host-asked");
-    fs.mkdirSync(udH, { recursive: true });
-    fs.writeFileSync(path.join(udH, "desk.json"),
-      JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: folder("host-own"), eUiLang: "en" } }), "utf8");
-    const Dh = loadDesk(udH, HOST_SRC);
-    await Dh.ask("etiuda:branch-identity", true);
-    for (const form of hostForms) {
-      const blob = inviteBlob({ team: TEAM, folder: form, lead: lampLead, secret: newSecret() });
-      const want = P.inviteRead(blob, !WIN);
-      globalThis.etiudaHostAsked = [];
-      const got = await Dh.join("read", blob);
-      await Dh.join("invite", blob, "Ola", wrongFor(blob));
-      const asked = globalThis.etiudaHostAsked;
-      if (want) hostTaken++;
-      if (JSON.stringify(asked) !== JSON.stringify(want ? [want.folder] : []) || (got && got.offer ? got.offer.folder : null) !== (want ? want.folder : null))
-        hostWrong.push(JSON.stringify(form) + " asked of " + JSON.stringify(asked));
-    }
-    delete globalThis.etiudaHostAsked;
-  }
-  check(hostWrong.length === 0 && hostTaken >= 1,
-    "15bb where a folder sits is asked only of the folder the invitation reader returned, once at read, never at yes, and never of"
-    + " a text it refused (" + hostForms.length + " forms, " + hostTaken + " taken): " + JSON.stringify(hostWrong));
+  /* RETIRED, P2 (an invitation names no folder): 15bb, "where a folder sits is asked only of the folder the invitation reader returned, once at read, never at yes, and never of a text it refused (8 forms)". The reader returns no folder now, so the shell asks nothing of one (folderHost stays for the watch on a share, which the invitation never reaches). */
 
-  /* The page shows the policy's refusal in its own sentence, in either language. */
+  /* The page shows the policy's refusal in its own sentence, in either language (P2: at the yes to a link's confirm, where it was at the read of a paste). */
   const ST = await import(MOD("storage.js"));
   const langWas = ST.lsGet("eUiLang");
-  window.E_HOST = { onTeamJoin: noop, teamJoin: op => Promise.resolve(op === "read" || op === "invite"
+  window.E_HOST = { onTeamJoin: noop, teamJoin: op => Promise.resolve(op === "link"
     ? { sealed: null, join: null, leads: [], refused: "policy" } : { sealed: null, join: null, leads: [] }) };
   TJ.wireTeamJoin();
   await new Promise(r => setTimeout(r, 30));
   const policyPage = {};
   for (const lang of ["en", "pl"]) {
     ST.lsSet("eUiLang", lang);
-    TJ.openJoinPaste();
-    pasted = elOf({ "data-join-paste": "" }, controlBlob);
-    await press("read");
+    viaLink(await deskWith("policy-page-" + lang, folder("policy-page-own-" + lang)), controlBlob);
+    await press("invite");
     policyPage[lang] = TJ.teamJoinEmptyHtml();
     await press("back");
   }
@@ -1546,40 +1315,7 @@ try {
     + (atWord && (atWord.refused || (atWord.join ? atWord.join.state : "nothing"))) + "; " + overSaid.en);
   }
 
-  /* A read the page has let go is answered to nobody: one left by Cancel, and one landing while another paste box is open. */
-  const Dst = await deskWith("stale", folder("stale-own"));
-  const staleAt = folder("stale-a");
-  const staleA = inviteBlob({ team: TEAM, folder: staleAt, lead: lampLead, secret: newSecret() });
-  const staleB = inviteBlob({ team: TEAM, folder: folder("stale-b"), lead: lampLead, secret: newSecret() });
-  let slowText = "";
-  window.E_HOST = { onTeamJoin: noop, teamJoin: (op, file, name, four) => (op === "read" && file === slowText
-    ? new Promise(r => setTimeout(() => r(Dst.join(op, file, name, four)), 60)) : Dst.join(op, file, name, four)) };
-  TJ.wireTeamJoin();
-  await new Promise(r => setTimeout(r, 30));
-  slowText = staleA;
-  TJ.openJoinPaste();
-  pasted = elOf({ "data-join-paste": "" }, staleA);
-  const lateA = press("read");
-  await press("back");
-  TJ.openJoinPaste();
-  pasted = elOf({ "data-join-paste": "" }, staleB);
-  await lateA;
-  const whileB = held(), whileBHtml = TJ.teamJoinEmptyHtml();
-  await press("read");
-  const shownB = held();
-  await press("back");
-  TJ.openJoinPaste();
-  pasted = elOf({ "data-join-paste": "" }, staleA);
-  const lateA2 = press("read");
-  await press("back");
-  await lateA2;
-  const abandoned = held(), abandonedHtml = TJ.teamJoinEmptyHtml();
-  slowText = "";
-  check(!!whileB && whileB.mode === "paste" && whileB.offer === null && whileBHtml.indexOf(staleAt) < 0
-      && !!shownB && shownB.mode === "confirm" && shownB.read === staleB && letGo(abandoned) && abandonedHtml.indexOf(staleAt) < 0,
-    "15bc a read the page let go is answered to nobody: one landing while another invitation's paste box is open leaves that box as"
-    + " it was and the next read shows its own, and one left by Cancel shows nothing when it lands: "
-    + (whileB && whileB.mode) + ", then " + (shownB && shownB.mode) + ", then " + (abandoned && (abandoned.mode || "nothing")));
+  /* RETIRED, P2 (no paste box, no read): 15bc, "a read the page let go is answered to nobody: one landing while another invitation's paste box is open leaves that box as it was and the next read shows its own, and one left by Cancel shows nothing when it lands". */
 
   /* Hide on the bubble, where a catalog is open, lets the invitation go as Cancel does. The bubble is drawn on stand-ins. */
   const AS = await import(MOD("app-state.js"));
@@ -1602,9 +1338,7 @@ try {
     TJ.wireTeamJoin();
     await new Promise(r => setTimeout(r, 30));
     AS.setCards([{ id: "c-hide" }]);
-    TJ.openJoinPaste();
-    pasted = elOf({ "data-join-paste": "" }, inviteBlob({ team: TEAM, folder: folder("hide-yard"), lead: lampLead, secret: newSecret() }));
-    await press("read");
+    viaLink(Dhd, relayBlobOf({ team: TEAM, lead: lampLead, secret: newSecret() }));
     heldShown = held();
     const top = bubbles[bubbles.length - 1];
     const onKey = top && (top.listeners.keydown || [])[0];
@@ -1617,7 +1351,7 @@ try {
     for (const k of Object.keys(globalsWas)) { if (globalsWas[k] === undefined) delete globalThis[k]; else globalThis[k] = globalsWas[k]; }
   }
   check(!!heldShown && heldShown.mode === "confirm" && heldShown.read !== "" && escaped && letGo(heldHidden),
-    "15bd Hide on the bubble, pressed while it holds an invitation's confirm, lets the invitation go as Cancel does: "
+    "15bd Hide on the bubble, pressed while it holds an invitation's confirm (P2: the link's, where it was a pasted invitation's), lets the invitation go as Cancel does: "
     + (heldShown && heldShown.mode) + ", then " + (heldHidden && (heldHidden.mode || "nothing held")) + ", " + bubbles.length + " bubble(s) drawn");
 
   /* Hide, or Escape, on the bubble while it holds a link's confirm lets the link go in the shell as Cancel does (link-no), so a link
@@ -1772,54 +1506,52 @@ try {
     + ", plain " + (plainOk ? "unchanged" : "moved"));
   }
 
-  /* An invitation's wait names the lead and never draws a code. A request still does, empty places and then the digits. */
+  /* An invitation's wait names the lead and never draws a code. (P2: a request's wait, with its empty places and then its digits, went with the code: a request waits under the same plain line.) */
   let tookFn = null;
   const Dwait = await deskWith("door-wait", folder("invite-own"));
-  const waitYard = folder("invite-wait-yard");
-  window.E_HOST = { onTeamJoin: fn => { tookFn = fn; }, teamJoin: (op, file, name, four) => Dwait.join(op, file, name, four) };
+  window.E_HOST = { onTeamJoin: fn => { tookFn = fn; }, teamJoin: (op, file, name) => Dwait.join(op, file, name) };
   TJ.wireTeamJoin();
   await new Promise(r => setTimeout(r, 30));
   ST.lsSet("eUiLang", "en");
-  const waitBlob = inviteBlob({ team: TEAM, folder: waitYard, lead: lampLead, secret: newSecret() });
-  TJ.openJoinPaste();
-  pasted = elOf({ "data-join-paste": "" }, waitBlob);
-  await press("read");
-  typeFour(codeFor(waitBlob));
+  const waitBlob = relayBlobOf({ team: TEAM, lead: lampLead, secret: newSecret() });
+  viaLink(Dwait, waitBlob);
   await press("invite");
   const waitHtml = TJ.teamJoinEmptyHtml();
   const shellWait = await Dwait.join("state");
-  const quietInvite = !!(shellWait && shellWait.join && shellWait.join.code === "" && shellWait.join.state === "waiting"
+  const quietInvite = !!(shellWait && shellWait.join && shellWait.join.code === undefined && shellWait.join.state === "waiting"
     && shellWait.join.invite && shellWait.join.invite.lead === "Lamp lead");
   const enInvite = waitHtml.indexOf("Joining Lamp lead&#39;s team") >= 0
-    && waitHtml.indexOf("Waiting for the team&#39;s lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead.") >= 0
+    && waitHtml.indexOf("Waiting for the team&#39;s lead to let this desk in. Nothing more is needed here: the team&#39;s catalog opens here by itself once it is.") >= 0
     && waitHtml.indexOf("asked at") >= 0
     && waitHtml.indexOf("e-join-code") < 0 && waitHtml.indexOf("e-join-wait") < 0
     && waitHtml.indexOf("Waiting for the lead to open the request") < 0
     && waitHtml.indexOf('data-join="cancel"') >= 0;
   const paint = view => { if (tookFn) tookFn(view); return TJ.teamJoinEmptyHtml(); };
-  const armed = paint({ join: { file: "a.ec", state: "code", code: "483920", asked: 1, name: "Nia", invite: { lead: "Lamp lead" } }, leads: [] });
-  const armedDigits = armed.indexOf(">483<") >= 0 && armed.indexOf(">920<") >= 0 && armed.indexOf("e-join-code") >= 0
-    && armed.indexOf("Read this code to the team&#39;s lead") >= 0;
-  const blank = paint({ join: { file: "a.ec", state: "waiting", code: "", asked: 1, name: "Nia", invite: { lead: "" } }, leads: [] });
+  const blank = paint({ join: { file: "a.ec", state: "waiting", asked: 1, name: "Nia", invite: { lead: "" } }, leads: [] });
   const namedLead = blank.indexOf("the lead") >= 0 && blank.indexOf("Joining &#39;s") < 0 && blank.indexOf("e-join-code") < 0
     && blank.indexOf("asked at") >= 0 && blank.indexOf("Nia") >= 0;
-  const requestWait = paint({ join: { file: "a.ec", state: "waiting", code: "", asked: 1, name: "Nia" }, leads: [] });
+  /* A request with no invitation, and a view still naming the retired code state with digits in it, wait under the same plain line and draw no code. */
+  const PLAIN_EN = "Waiting for the team&#39;s lead to let this desk in. Nothing more is needed here.";
+  const requestWait = paint({ join: { file: "a.ec", state: "waiting", asked: 1, name: "Nia" }, leads: [] });
   const requestCode = paint({ join: { file: "a.ec", state: "code", code: "120034", asked: 1, name: "Nia" }, leads: [] });
-  const requestDoor = requestWait.indexOf("Waiting for the lead to open the request") >= 0 && requestWait.indexOf("e-join-wait") >= 0
-    && requestCode.indexOf("e-join-code") >= 0 && requestCode.indexOf(">120<") >= 0 && requestCode.indexOf(">034<") >= 0
-    && requestCode.indexOf("Joining ") < 0;
+  const requestPlain = [requestWait, requestCode].every(h => h.indexOf(PLAIN_EN) >= 0 && h.indexOf("e-join-code") < 0 && h.indexOf("e-join-wait") < 0
+    && h.indexOf(">120<") < 0 && h.indexOf(">034<") < 0 && h.indexOf("Waiting for the lead to open the request") < 0 && h.indexOf("The code to read to them") < 0
+    && h.indexOf("Read this code") < 0);
   ST.lsSet("eUiLang", "pl");
-  const plHtml = paint({ join: { file: "a.ec", state: "waiting", code: "", asked: 1, name: "Nia", invite: { lead: "Lamp lead" } }, leads: [] });
+  const plHtml = paint({ join: { file: "a.ec", state: "waiting", asked: 1, name: "Nia", invite: { lead: "Lamp lead" } }, leads: [] });
   const plInvite = plHtml.indexOf("Dołączanie do zespołu osoby Lamp lead") >= 0
-    && plHtml.indexOf("Stanowisko czeka, aż lider zespołu je wpuści. Zwykle dzieje się to samo; jeśli pojawi się tu kod, proszę odczytać go liderowi.") >= 0
+    && plHtml.indexOf("Stanowisko czeka, aż lider zespołu je wpuści. Nic więcej nie trzeba tu robić.") >= 0
     && plHtml.indexOf("e-join-code") < 0;
   if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
-  check(!!tookFn && quietInvite && enInvite && armedDigits && namedLead && requestDoor && plInvite,
+  check(!!tookFn && quietInvite && enInvite && namedLead && requestPlain && plInvite,
     "15bk an invitation's wait names the lead and says the lead's Studio admits the desk, with no code places and no digits, in English and in Polish;"
-    + " once the lead has opened it the same invitation shows its digits;"
-    + " a request still waits with empty places and then shows its code: view " + (shellWait && shellWait.join ? shellWait.join.state + "/" + shellWait.join.code : "none")
+    + " a request with no invitation, or one in the retired code state, waits under the same plain line and draws no code (P2: the code door is gone): view "
+    + (shellWait && shellWait.join ? shellWait.join.state + "/" + String(shellWait.join.code) : "none")
     + (quietInvite ? " lead named" : " lead missing")
-    + " parts " + [!!quietInvite, !!enInvite, !!armedDigits, !!namedLead, !!requestDoor, !!plInvite].join("/"));
+    + " parts " + [!!quietInvite, !!enInvite, !!namedLead, !!requestPlain, !!plInvite].join("/"));
+
+  /* The waiting desk's team folder is its relay mirror now (P2: it was the share the invitation named), where the lead's pause file reaches it. */
+  const waitYard = path.join(Dwait.ud, "relay", relayRtOf(waitBlob));
 
   /* Board 945 item 9, Part A: etiuda-team-pause.json tells a waiting desk the lead cannot admit desks for now */
   const LAPSE_EN = "The team's lead cannot let anyone in for now, as the lead's licence is paused. Nothing needs doing here: once the licence is active again, this desk is let in by itself.";
@@ -1912,11 +1644,9 @@ try {
         lines[at] = "      if (false) { /* plant:f9-team-pause */";
         fs.writeFileSync(mainPath, lines.join("\n"));
         const Dplanted = await deskWith("door-wait-plant", folder("invite-own-plant"), null, lines.join("\n"));
-        const plantYard = folder("invite-wait-yard-plant");
-        const plantBlob = inviteBlob({ team: TEAM, folder: plantYard, lead: lampLead, secret: newSecret() });
-        await Dplanted.join("read", plantBlob);
-        typeFour(codeFor(plantBlob));
-        await Dplanted.join("invite", plantBlob, "Nia", codeFor(plantBlob));
+        const plantBlob = relayBlobOf({ team: TEAM, lead: lampLead, secret: newSecret() });
+        const plantYard = path.join(Dplanted.ud, "relay", relayRtOf(plantBlob));
+        await Dplanted.join("invite", plantBlob, "Nia");
         fs.writeFileSync(path.join(plantYard, "etiuda-team-pause.json"), JSON.stringify(pauseDoc(true, 1000)) + "\n");
         Dplanted.api.catalogChanged(Dplanted.win);
         const st = await Dplanted.join("state");
@@ -1930,13 +1660,13 @@ try {
   }
 
   /* Board 922, F1. A relay join that waits says so in the copywriter's words, and a relay invitation the relay refused as used or
-     expired is said on the same card, in English and in Polish, with acts that clear it; a shared-folder join keeps its own line. */
+     expired is said on the same card, in English and in Polish, with acts that clear it; a join naming no relay shows the plain line. */
   const escPage = (await import(MOD("esc.js"))).esc;
   /* Until the shell has opened the team's catalog here, the line says what it waits for (987e). */
   const COPY = { waitEn: "Waiting for the team's lead to let this desk in. Nothing more is needed here: the team's catalog opens here by itself once it is.", waitPl: "Stanowisko czeka, aż lider zespołu je wpuści. Tutaj nic więcej nie trzeba robić: katalog zespołu otworzy się tu sam, gdy to nastąpi.", usedEn: "This invitation has already been used. Ask your lead for a new one.", usedPl: "To zaproszenie zostało już użyte. Nowe wystawi lider zespołu.",
     endedEn: "This invitation has expired. Ask your lead for a new one.", endedPl: "To zaproszenie wygasło. Nowe wystawi lider zespołu." };
-  const SHARED_EN = "Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead.";
-  const SHARED_PL = "Stanowisko czeka, aż lider zespołu je wpuści. Zwykle dzieje się to samo; jeśli pojawi się tu kod, proszę odczytać go liderowi.";
+  const SHARED_EN = "Waiting for the team's lead to let this desk in. Nothing more is needed here.";
+  const SHARED_PL = "Stanowisko czeka, aż lider zespołu je wpuści. Nic więcej nie trzeba tu robić.";
   const RELAY_TEAM = "t-5c1a77e0b3d94f20";
   const relayJoin = state => ({ join: { file: "", state: state, code: "", asked: 1, name: "Nia", team: RELAY_TEAM,
     invite: { lead: "Lamp lead", relay: "relay.test" } }, leads: [] });
@@ -1947,12 +1677,12 @@ try {
   const relayWaits = waitEn.indexOf(escPage(COPY.waitEn)) >= 0 && waitEn.indexOf("Usually this happens by itself") < 0
     && waitPl.indexOf(COPY.waitPl) >= 0 && waitPl.indexOf("Zwykle dzieje się to samo") < 0
     && waitEn.indexOf('data-join="cancel"') >= 0 && waitEn.indexOf("e-join-code") < 0;
-  const folderKept = folderEn.indexOf(escPage(SHARED_EN)) >= 0 && folderEn.indexOf("Nothing more is needed here") < 0
-    && folderPl.indexOf(SHARED_PL) >= 0 && folderPl.indexOf("Tutaj nic więcej nie trzeba robić") < 0;
+  const folderKept = folderEn.indexOf(escPage(SHARED_EN)) >= 0 && folderEn.indexOf("Usually this happens by itself") < 0 && folderEn.indexOf("read it to the lead") < 0
+    && folderPl.indexOf(SHARED_PL) >= 0 && folderPl.indexOf("Zwykle dzieje się to samo") < 0 && folderPl.indexOf("odczytać go liderowi") < 0;
   if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
   check(!!tookFn && relayWaits && folderKept,
-    "15cj a relay join that waits shows the copywriter's waiting line on its card in English and in Polish, and a shared-folder join keeps its own line:"
-    + " relay " + (relayWaits ? "worded" : "not worded") + ", folder " + (folderKept ? "unchanged" : "changed"));
+    "15cj a relay join that waits shows the copywriter's waiting line on its card in English and in Polish, and a join that names no relay shows the plain line, with no word of a code (P2: it kept the line that told a person to read a code to the lead):"
+    + " relay " + (relayWaits ? "worded" : "not worded") + ", plain " + (folderKept ? "worded" : "changed"));
   const cards = {
     usedEn: cardIn("en", relayJoin("used")), usedPl: cardIn("pl", relayJoin("used")),
     endedEn: cardIn("en", relayJoin("ended")), endedPl: cardIn("pl", relayJoin("ended")) };
@@ -2464,16 +2194,8 @@ try {
   });
   const linkArg15df = "etiuda:join#" + relayBlob15df.slice("etiuda-join:".length);
 
-  // Shell's reading of pasted relay invitation
+  /* P2: the confirm of a pasted relay invitation is gone with the paste box; the link's is the one left. */
   await pageOn(leftDesk15df);
-  TJ.openJoinPaste();
-  pasted = elOf({ "data-join-paste": "" }, relayBlob15df);
-  await press("read");
-  ST.lsSet("eUiLang", "en");
-  const pasteConfirmHtml = TJ.teamJoinEmptyHtml();
-  ST.lsSet("eUiLang", "pl");
-  const pasteConfirmPl = TJ.teamJoinEmptyHtml();
-  await press("back");
 
   // Shell's reading of link relay invitation
   const linkGot = leftDesk15df.api.acceptLink(linkArg15df);
@@ -2490,15 +2212,13 @@ try {
   const leftHeadEn = "This desk left this team on 1 September 2026. Join it again?";
   const leftHeadPl = "To stanowisko opuściło ten zespół 1 września 2026. Dołączyć do niego ponownie?";
 
-  const pasteHasDisc = pasteConfirmHtml.indexOf(escPage(discEn)) >= 0 && pasteConfirmPl.indexOf(escPage(discPl)) >= 0;
-  const pasteHasLeft = pasteConfirmHtml.indexOf(leftHeadEn) >= 0 && pasteConfirmPl.indexOf(leftHeadPl) >= 0;
   const linkHasDisc = relayConfirmHtml.indexOf(escPage(discEn)) >= 0 && relayConfirmPl.indexOf(escPage(discPl)) >= 0;
   const linkHasLeft = relayConfirmHtml.indexOf(leftHeadEn) >= 0 && relayConfirmPl.indexOf(leftHeadPl) >= 0;
 
-  check(pasteHasDisc && pasteHasLeft && linkHasDisc && linkHasLeft,
-    "15df the relay link's confirm card shows the disclosure, and the left heading for a desk that left, in English and in Polish: disclosure "
-    + (pasteHasDisc && linkHasDisc) + ", left heading en " + (pasteConfirmHtml.indexOf(leftHeadEn) >= 0 && relayConfirmHtml.indexOf(leftHeadEn) >= 0)
-    + ", pl " + (pasteConfirmPl.indexOf(leftHeadPl) >= 0 && relayConfirmPl.indexOf(leftHeadPl) >= 0));
+  check(linkHasDisc && linkHasLeft,
+    "15df the relay link's confirm card shows the disclosure, and the left heading for a desk that left, in English and in Polish (P2: the pasted invitation's confirm, which this also held, is gone): disclosure "
+    + linkHasDisc + ", left heading en " + (relayConfirmHtml.indexOf(leftHeadEn) >= 0)
+    + ", pl " + (relayConfirmPl.indexOf(leftHeadPl) >= 0));
   {
     if (PLANTS_OFF) {
       skip("15dg lifting plant:forget-withdraw leaves the request not withdrawn after Leave this team");
@@ -3180,7 +2900,7 @@ try {
       await press("back");
       await sleep(30);
       out.after = { running: T.tourActive(), shown: root.hidden === false };
-      TJ.openJoinPaste();
+      TJ.joinTook({ offer: { link: true, lead: "Lamp lead", team: relayTeam, relay: "relay.test" } }); /* P2: a link's confirm opens the join, where the paste box did */
       out.awayOn = root.cls.has("away");
       await press("back");
       out.awayOff = !root.cls.has("away");
@@ -3202,7 +2922,7 @@ try {
     "987a an invitation link at the desk's first launch shows no tour card while the invitation is held, and the tour comes once it is answered: "
     + tourSaid(toured));
   check(toured.awayOn && toured.awayOff,
-    "987b a join opened while the tour runs takes the tour's place, and the tour is back once the join is gone: away "
+    "987b a join opened while the tour runs takes the tour's place (P2: a link's confirm, where it was the paste box), and the tour is back once the join is gone: away "
     + toured.awayOn + ", back " + toured.awayOff);
   if (PLANTS_OFF) {
     skip("987c lifting plant:tour-waits-join shows the tour card over a held invitation");
@@ -3579,8 +3299,9 @@ try {
     (await import(MOD("screen-tabs.js"))).closeScreenTab("library");
     const offerEl = new DoorEl("div", { id: "eCatalogOffer", class: "bub bub-ask e-offer" });
     doc.body.appendChild(offerEl);
-    TJ.openJoinPaste();
+    TJ.joinTook({ offer: { link: true, lead: "Lamp lead", team: relayTeam, relay: "relay.test" } }); /* P2: a link's confirm is the bubble's one road in, where the paste box was */
     var joinShownOverOffer = !!doc.getElementById("eTeamJoin") && !doc.getElementById("eCatalogOffer");
+    await press("back"); /* the link's confirm let go, so the legs after it meet a page that holds none */
   } catch (e) {
     doorErr = e && e.stack ? e.stack.split("\n").slice(0, 4).join(" | ") : String(e);
   } finally {
@@ -3596,7 +3317,7 @@ try {
   check(menuItem && settingsOpened && libraryOpened,
     "15bm the Menu item Join a team is not in the template, and Settings and the Library draw no button for the paste (board 1017; once all three opened it): "
     + [menuItem, settingsOpened, libraryOpened].join("/") + (doorErr ? " " + doorErr : ""));
-  check(joinShownOverOffer, "15cn with a catalog loaded, the team-join bubble is reachable while the catalog offer shows: " + joinShownOverOffer);
+  check(joinShownOverOffer, "15cn with a catalog loaded, the team-join bubble is reachable while the catalog offer shows (P2: a link's confirm, where the paste box was): " + joinShownOverOffer);
 
   /* ---- leaving, and being left off the roster ---------------------------------------------------------------------- */
   /* A desk let in by an invitation, then left off the team's roster at a newer epoch with the newest edition sealed again
@@ -3719,15 +3440,15 @@ try {
     const never = await onPage(Dn);
     const f = { shell: !!shell && shell.removed === true && shell.admitted === true && !!outL.sealed && outL.sealed.file === "lamps.ec",
       restarted: !!restarted && restarted.removed === true,
-      told: en.indexOf(NO_LONGER) >= 0 && en.indexOf("is sealed for its team") < 0 && /data-join="ask"/.test(en)
+      told: en.indexOf(NO_LONGER) >= 0 && en.indexOf("is sealed for its team") < 0 && !/data-join="ask"/.test(en) && /data-join="load"/.test(en)
         && en.indexOf("Once the team&#39;s lead lets this desk in again, the catalog opens here by itself.") >= 0,
       polish: pl.indexOf("To stanowisko nie należy już do zespołu osoby Lamp lead") >= 0 && pl.indexOf("no longer includes") < 0,
       onTeam: htmlOnTeam.indexOf("no longer includes") < 0,
       never: never.indexOf("lamps.ec is sealed for its team") >= 0 && never.indexOf("no longer includes") < 0 };
     check(Object.keys(f).every(k => f[k]),
       "15bo left off the roster at a newer epoch, the desk is told \"Lamp lead's team no longer includes this desk\" in place of the"
-      + " sealed catalog's ask, in English and in Polish and after a restart; while it is on the roster nothing says so, and a desk"
-      + " never on the team over the same folder still sees the ask: " + JSON.stringify(f)
+      + " sealed catalog's line, in English and in Polish and after a restart, with no Ask to join (P2: the card offers Load another catalog file; the lead lets the desk in again); while it is on the roster nothing says so, and a desk"
+      + " never on the team over the same folder still sees the sealed line: " + JSON.stringify(f)
       + (f.never ? "" : " (that desk's page: " + JSON.stringify(never.replace(/<svg[\s\S]*?<\/svg>/g, "").slice(0, 160)) + ")"));
   });
 
@@ -5108,25 +4829,23 @@ try {
     const mainSrc = fs.readFileSync(path.join(ROOT, "src", "main.js"), "utf8");
     const mainWired = /teamJoin\.wireTeamJoin\(\{\s*holds:\s*signin\.doorHolds,\s*whenOpen:\s*signin\.whenDoorLowers\s*\}\)/.test(mainSrc);
     const runDoorJoin = async (mod) => {
-      const hostWas = window.E_HOST, loadWas = HK.hooks.loadCatalogFromFolder, renderWas = HK.hooks.render, qsWas = document.querySelector;
+      const hostWas = window.E_HOST, loadWas = HK.hooks.loadCatalogFromFolder, renderWas = HK.hooks.render;
       const cardsWas = AS.cards.slice();
       const bodyWas = document.body; /* the first sign-in door opens on an unseated view (src/modules/signin.js openFirstSignin) and marks the body */
       const unseated = { offered: ["microsoft"], signedIn: "", works: false, online: true, registered: true };
       const seated = { offered: ["microsoft"], signedIn: "microsoft", code: "ABCDEFGHJKMNPQRS", works: true, online: true, registered: true,
         now: Date.now(), until: Date.now() + 86400000, holding: { on: "trial", ends: Date.now() + 86400000 } };
-      let cur = unseated, joinCalls = [], loaded = [], pasteVal = "";
+      let cur = unseated, joinCalls = [], loaded = [];
       try {
         document.body = { classList: { add() {}, remove() {}, toggle() {}, contains: () => false } };
         AS.setCards([]);
         HK.hooks.loadCatalogFromFolder = file => { loaded.push(String(file)); };
         HK.hooks.render = () => {};
-        document.querySelector = sel => (sel === "[data-join-paste]" ? { value: pasteVal } : null);
         window.E_HOST = {
           signinState: () => cur,
           onTeamJoin: () => {},
           teamJoin: (op, a, b, c) => {
             joinCalls.push({ op, a, b, c });
-            if (op === "read") return { offer: { lead: "Lead " + a, team: "team-p", relay: "https://relay.example" } };
             return { leads: [] };
           },
         };
@@ -5149,7 +4868,7 @@ try {
         const linkPlayedLatest = hLink.mode === "confirm" && !!hLink.offer && hLink.offer.lead === "Second Lead"
           && hLink.offer.team === "t-2" && !joinCalls.some(x => x.op === "link" || x.op === "invite");
 
-        /* 2. Two pasted invitations while door stands: no read/join sent; joinAct("invite") blocked; latest paste reads to confirm on lower. */
+        /* 2. RETIRED, P2 (no paste box): "two pasted invitations while door stands: no read/join sent; joinAct("invite") blocked; latest paste reads to confirm on lower" (b3a2-2). The step's back and its return to the unseated view stay, for the steps after it. */
         const clickAct = act => {
           const btn = { hasAttribute: () => false, getAttribute: a => (a === "data-join" ? act : null) };
           mod.wireTeamJoinEmpty({ querySelectorAll: () => [btn] });
@@ -5158,18 +4877,6 @@ try {
         await clickAct("back");
         cur = unseated; SGN.signinChanged(unseated, false);
         joinCalls.length = 0;
-        pasteVal = "invite-one";
-        await clickAct("read");
-        pasteVal = "invite-two";
-        await clickAct("read");
-        await clickAct("invite");
-        await clickAct("ask");
-        const pasteHeldWhileStanding = mod.inviteHeld().mode === "" && joinCalls.length === 0;
-        cur = seated; SGN.signinChanged(seated, false);
-        await sleep(25);
-        const hPaste = mod.inviteHeld();
-        const pastePlayedLatest = hPaste.mode === "confirm" && !!hPaste.offer && hPaste.offer.lead === "Lead invite-two"
-          && joinCalls.filter(x => x.op === "read").length === 1 && !joinCalls.some(x => x.op === "invite" || x.op === "ask");
 
         /* 3. Admission auto-load on s.joined and s.opens waits while door stands and loads once seated. */
         cur = unseated; SGN.signinChanged(unseated, false);
@@ -5193,14 +4900,13 @@ try {
         mod.joinTook({ opens: { file: "now.ec" }, offer: { link: true, lead: "Live Lead", team: "t-live", relay: "https://live.example" } });
         const liveOk = loaded.join(",") === "now.ec" && mod.inviteHeld().mode === "confirm" && mod.inviteHeld().offer.lead === "Live Lead";
 
-        return { linkHeldWhileStanding, linkPlayedLatest, pasteHeldWhileStanding, pastePlayedLatest, admitHeld, admitPlayed, opensHeld, opensPlayed, liveOk };
+        return { linkHeldWhileStanding, linkPlayedLatest, admitHeld, admitPlayed, opensHeld, opensPlayed, liveOk };
       } finally {
         mod.wireTeamJoin(null);
         AS.setCards(cardsWas);
         window.E_HOST = hostWas;
         HK.hooks.loadCatalogFromFolder = loadWas;
         HK.hooks.render = renderWas;
-        document.querySelector = qsWas;
         document.body = bodyWas;
       }
     };
@@ -5209,16 +4915,13 @@ try {
     check(mainWired && base.linkHeldWhileStanding && base.linkPlayedLatest && base.liveOk,
       "b3a2-1 etiuda:join# links wait behind the door (latest only), put confirm once deskWorks() is true without joining, and main.js wires the gate: "
       + JSON.stringify({ mainWired, held: base.linkHeldWhileStanding, played: base.linkPlayedLatest, live: base.liveOk }));
-    check(base.pasteHeldWhileStanding && base.pastePlayedLatest,
-      "b3a2-2 pasted invitations wait behind the door (latest only), invite/ask blocked while standing, and confirm shows once deskWorks() is true: "
-      + JSON.stringify({ held: base.pasteHeldWhileStanding, played: base.pastePlayedLatest }));
+    /* RETIRED, P2 (no paste box): b3a2-2, "pasted invitations wait behind the door (latest only), invite/ask blocked while standing, and confirm shows once deskWorks() is true"; and its plant b3a2-p2, "lifting plant:join-paste-door turns red (pasted invitation calls read while door stands)". The link's confirm waits behind the door (b3a2-1, plant b3a2-p1), and the yes and the ask stay blocked while it stands (b3a2-p3). */
     check(base.admitHeld && base.admitPlayed && base.opensHeld && base.opensPlayed,
       "b3a2-3 admission auto-load (s.joined and s.opens) waits while the door stands and loads once deskWorks() is true: "
       + JSON.stringify({ admitHeld: base.admitHeld, admitPlayed: base.admitPlayed, opensHeld: base.opensHeld, opensPlayed: base.opensPlayed }));
 
     const plants = [
       ["b3a2-p1", "plant:join-link-door", r => !r.linkHeldWhileStanding, "etiuda:join# link opens confirm while door stands"],
-      ["b3a2-p2", "plant:join-paste-door", r => !r.pasteHeldWhileStanding, "pasted invitation calls read while door stands"],
       ["b3a2-p3", "plant:join-act-door", async () => {
         const pm = await plantedModule("team-join.js", "plant:join-act-door");
         if (!pm.mod) return { red: false, same: pm.same };
@@ -5242,7 +4945,6 @@ try {
     /* One literal skip per plant, so a static count of the literal skip calls reads them. */
     if (PLANTS_OFF) {
       skip("b3a2-p1 lifting plant:join-link-door turns red (etiuda:join# link opens confirm while door stands) (ETIUDA_PLANTS=off)");
-      skip("b3a2-p2 lifting plant:join-paste-door turns red (pasted invitation calls read while door stands) (ETIUDA_PLANTS=off)");
       skip("b3a2-p3 lifting plant:join-act-door turns red (joinAct(ask) sends while door stands) (ETIUDA_PLANTS=off)");
       skip("b3a2-p4 lifting plant:join-admit-door turns red (s.joined auto-loads while door stands) (ETIUDA_PLANTS=off)");
       skip("b3a2-p5 lifting plant:join-opens-door turns red (s.opens auto-loads while door stands) (ETIUDA_PLANTS=off)");
@@ -5851,7 +5553,7 @@ check(regStand.held(), "rs1 every reg call was answered by the stand-in, the pol
    holds them and as the code says them (the English in a t() call). */
 {
   const ROWS = [
-    ["src/modules/team-join.js", "This computer can only read the team's folder, and joining needs permission to write there. Once that is granted, Join again; the invitation still works.", "Ten komputer może tylko czytać z folderu zespołu, a dołączenie wymaga uprawnień do zapisu. Po ich nadaniu wystarczy ponownie dołączyć; zaproszenie nadal działa."],
+    /* RETIRED, P2: the first row, "This computer can only read the team's folder, and joining needs permission to write there...", went with the folder join. */
     ["src/modules/host.js", "Settings names a file where the team's folder should be, so nothing was opened. The folder can be chosen again from the Library.", "W Ustawieniach wskazano plik tam, gdzie powinien być folder zespołu, więc niczego nie otwarto. Folder można wybrać ponownie w Bibliotece."],
     ["src/modules/host.js", "This computer did not open the team's folder just now. Clicking the link again tries again.", "Ten komputer nie otworzył teraz folderu zespołu. Można spróbować ponownie, klikając ten sam odnośnik."],
     ["src/modules/manage.js", "These changes stay on this desk until Etiuda closes; when it opens again, the catalog is as delivered.", "Zmiany zostają na tym stanowisku do zamknięcia Etiudy; po ponownym uruchomieniu katalog jest taki, jak został dostarczony."]
@@ -5862,7 +5564,7 @@ check(regStand.held(), "rs1 every reg call was answered by the stand-in, the pol
     if (table.indexOf("  " + JSON.stringify(en) + ":" + JSON.stringify(pl) + ",") < 0) bad.push("table: " + en.slice(0, 40));
     if (fs.readFileSync(path.join(ROOT, file), "utf8").indexOf("t(" + JSON.stringify(en) + ")") < 0) bad.push("code: " + en.slice(0, 40));
   }
-  check(bad.length === 0, "15ex the folder-not-writable, not-a-folder and could-not-open lines and the local-changes note stand as the copywriter wrote them, in both languages: " + JSON.stringify(bad));
+  check(bad.length === 0, "15ex the not-a-folder and could-not-open lines and the local-changes note stand as the copywriter wrote them, in both languages (P2: the folder-not-writable line went with the folder join): " + JSON.stringify(bad));
 }
 console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + " expected=" + EXPECTED);
 if (asserted + skipped < EXPECTED) {
