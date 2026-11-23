@@ -6872,11 +6872,12 @@ function folderOutboxOwes(t) {
   return !!owe && Object.keys(owe).some(k => !!owe[k] && owe[k].owe === true);
 }
 function leadsView() {
-  /* The list is taken here and the policy is first said below (readJoinPolicy does not say it; folderTeamHere and pinTrusted do), and
-     its first saying lets go a join kept from an invitation with the pin that invitation set (policyLetsInviteGo). A pin gone by the
-     time its row's turn comes has no row. */
+  /* The list is taken here and the policy is first said below (readJoinPolicy does not say it; sayJoinPolicy does), and its first
+     saying lets go a join kept from an invitation with the pin that invitation set (policyLetsInviteGo). A pin gone by the time its
+     row's turn comes has no row. */
   const teams = Object.keys(teamPins).filter(t => SEALED_TEAM_RE.test(t) && !!teamPins[t] && typeof teamPins[t].public === "string");
   const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "", named = teams.length ? readJoinPolicy("en") : null;
+  if (teams.length) { try { sayJoinPolicy(); } catch { /* read again by the next ask */ } }
   return teams.map(t => {
     const pin = teamPins[t];
     if (!pin) return null; /* plant:leads-pin-gone */

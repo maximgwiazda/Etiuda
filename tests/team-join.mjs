@@ -3737,16 +3737,18 @@ try {
       page: !TJ.teamLeads().some(l => l.team === TEAM) && settingsAfter.indexOf("data-leave-team") < 0,
       catalog: AS.cards.length === 1 && AS.cards[0].id === "c-leave" && ST.lsGet(CAT.E_CATALOG_STORE) === stored
         && JSON.stringify(Dl.envelope().keys) === keysBefore,
-      /* MOVED, P4 (said: "under the team's folder it removes only this desk's own in-use note and writes nothing else"): the leave sets the team file aside
-         in the mirror and removes no note of the desk's there; the relay drops what a removed desk held (relay/core.cjs). Finding: the note stays in the mirror. */
-      folder: noteKept && fs.existsSync(path.join(mirrorL, note)) && hits.every(h => /^(renameSync|unlinkSync) etiuda-team.json(.aside)?$/.test(h)) };
+      /* MOVED, fold 129. Was (said): "under the team's folder it removes only this desk's own in-use note and writes nothing else". P4 moved it to "it only sets the
+         team file aside, and the desk's in-use note stays there", recording the stay as a finding; the in-use mend and the test architect's clearing of it
+         (forgetting a lead ends what the desk said about the team) hold that the note goes, so the original sentence is back, with the team file set aside beside it. */
+      folder: noteKept && !fs.existsSync(path.join(mirrorL, note)) && hits.indexOf("unlinkSync " + note) >= 0
+        && hits.every(h => h === "unlinkSync " + note || /^(renameSync|unlinkSync) etiuda-team.json(.aside)?$/.test(h)) };
     AS.setCards([]);
     ST.lsDel(CAT.E_CATALOG_STORE);
     check(Object.keys(f).every(k => f[k]),
       "15br Leave this team, pressed in Settings, keeps the pin, the keys and the bar until Undo lapses, and once it"
       + " lapses forgets the team here, its lead's pin, its keys, its name and place, and bars a first admission as"
       + " Forget did; Settings lists it no more; the catalog in use stays loaded and stored; and under the team's"
-      + " mirror it only sets the team file aside, and the desk's in-use note stays there: " + JSON.stringify(f) + " " + hits.join(","));
+      + " mirror it removes this desk's own in-use note and sets the team file aside, and writes nothing else: " + JSON.stringify(f) + " " + hits.join(","));
   });
 
   await legTry("15bw", async () => {
