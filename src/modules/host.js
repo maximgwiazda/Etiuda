@@ -19,13 +19,11 @@ function eHost(){
   try{ return (typeof window!=="undefined" && window.E_HOST) || null; }catch(e){ return null; }
 }
 
-/* WHERE CATALOGS COME FROM, per build, in one place so the four screens that say it cannot
-   drift: a host reads every .ec in a folder of the desk's own, newest first, and a browser reads
-   the one sibling script its tag can name. The KEY outranks what the host answered, because the
-   host answered at boot and Settings may have moved the folder since. Empty string in a browser,
-   which is the test every caller makes. */
+/* WHERE CATALOGS COME FROM, in one place so the screens that say it cannot drift: a host reads
+   every .ec in a folder of the desk's own, newest first. The KEY outranks what the host answered,
+   because the host answered at boot and Settings may have moved the folder since. Empty string
+   where no host answers, which is the test every caller makes. */
 const E_CATALOG_FOLDER_KEY="eCatalogFolder";
-const E_CATALOG_SCRIPT="etiuda-catalog.js";
 function eCatalogFolder(){
   const h=eHost(); if(!h) return "";
   if(h.catalogFolderPolicy) return String(h.catalogFolderPolicy);
@@ -631,7 +629,6 @@ export {
   eSharedRead,
   eSharedWrite,
   E_CATALOG_FOLDER_KEY,
-  E_CATALOG_SCRIPT,
   eCatalogFile,
   eCatalogFolder,
   eCatalogFolderShort,

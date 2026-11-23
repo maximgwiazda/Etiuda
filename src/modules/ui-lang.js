@@ -53,8 +53,6 @@ UI_STRINGS.pl={
   "maintenance␟folder":"folder",
   "maintenance␟id":"identyfikator",
   "maintenance␟signature":"podpis",
-  "maintenance␟beside this page":"obok tej strony",
-  "maintenance␟imported into this browser":"wczytany do tej przeglądarki",
   "maintenance␟the chosen catalog folder's":"z folderu z plikami katalogów wybranego w Ustawieniach",
   "maintenance␟the program's own":"dołączona do programu",
   "maintenance␟found beside the program":"znaleziona obok programu",

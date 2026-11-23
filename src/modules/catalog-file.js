@@ -38,11 +38,9 @@ import { doorHolds, whenDoorLowers } from "./signin.js";
 
 /* ---- one catalog format, one export, one import -----------------------------------------
    A catalog carries everything Etiuda has no content of its own for: cards, intents,
-   categories and quick facts. Export writes it; Import reads it; the auto-load path reads the
-   same file. The file is `.js` only because that is the one envelope a page opened from
-   file:// can read on its own (measured blocked for .json on Firefox, Chrome and Edge alike).
-   The payload inside is plain JSON, and **import parses it, never executes it** - so the only
-   path that ever runs catalog code is the sibling auto-load, which the user consents to. */
+   categories and quick facts. Export writes it; Import reads it; the hand-over from the host
+   reads the same file. The payload is plain JSON, and **import parses it, never executes it**:
+   no path runs catalog code. */
 /** The intents block of an export. Separate so an optional non-primary topic can be omitted
  *  rather than written as undefined. The key ORDER is the one the whitelist reads back and a
  *  catalog's signature is a hash of: every declared clause, the primary's action and topic,
@@ -679,7 +677,7 @@ function takeCatalog(c,opts){
   } else if(loose) LAYER_KEYS.forEach(n=>lyDel(n));
   nsDel("CatalogNo");
   /* Set here, because EVERY route to a catalog passes
-     through this function - an import, a Library row, accepting the sibling file. Loading
+     through this function - an import, a Library row, accepting a handed file. Loading
      anything without the flag therefore clears the watermark by itself, with no path that can
      leave it stranded over real content. */
   try{

@@ -34,11 +34,10 @@
  *   4  Chromium refused exactly those two and named the plant's own hash, so 3 is the policy's
  *      doing and not a typo in either plant
  *   5  a sibling script, present and readable, is refused, which is what "a catalog is data"
- *      means once it is enforced rather than merely true. The tag is THIS FILE'S OWN PLANT, not
- *      the engine's: the shell no longer serves the engine's two sibling tags (5b), so a proof
- *      that leaned on them would have had nothing left to refuse
- *   5b the engine's own two sibling tags are not in the copy the shell serves, although both
- *      files sit beside the engine in the lab, so no boot under the shell asks for them
+ *      means once it is enforced rather than merely true. The tag is THIS FILE'S OWN PLANT: the
+ *      engine carries no sibling tag at all (5b)
+ *   5b the engine carries no sibling script tag, so none is in the copy the shell serves, although
+ *      two catalog files sit beside the engine in the lab, so no boot under the shell asks for them
  *   6  nothing else in the running app violates the policy
  *   7  the shell found no catalog, so nothing of this desk was read
  *
@@ -104,7 +103,7 @@ const PLANT = "window.__planted = 1;";
 const PLANT_HASH = "sha256-" + crypto.createHash("sha256").update(PLANT, "utf8").digest("base64");
 const PLANT_SIBLING = "planted-sibling.js";
 const PLANT_SIBLING_TAG = '<script src="' + PLANT_SIBLING + '"></script>';
-/* The engine's own sibling files, as a refusal or a src attribute names them. */
+/* The two catalog files the lab leaves beside the engine, as a refusal or a src attribute names them. */
 const ENGINE_SIBLING = /(?:etiuda|sample)-catalog\.js/i;
 
 /* The boot guard is the first inline script of the artefact, hashed here the same way. */
@@ -145,15 +144,15 @@ function buildApp(opts) {
   /* Appended, because the document carries no closing body tag to splice in front of: it ends
      on the app script, and the parser puts what follows in the body all the same. */
   if (!/<\/script>\s*$/.test(html)) throw new Error("the engine does not end on a script tag; the plant needs a new anchor");
-  /* Two plants, one inline and one a sibling of this file's own naming: a name the engine never
-     writes, so the shell's strip of the engine's own tags cannot reach it and the policy is the
-     only thing between that file and a run. The clean lab carries neither. */
+  /* Two plants, one inline and one a sibling of this file's own naming: the engine writes no
+     sibling tag, so the policy is the only thing between that file and a run. The clean lab
+     carries neither. */
   fs.writeFileSync(path.join(dir, "engine", "etiuda.html"),
     (opts && opts.clean) ? html
       : html + "<script>" + PLANT + "</script>\n" + PLANT_SIBLING_TAG + "\n", "utf8");
   fs.writeFileSync(path.join(dir, "engine", PLANT_SIBLING), "window.__plantedSibling = 1;\n", "utf8");
-  /* The engine's own two siblings exist in every lab, so that 5b's "not served" and the clean
-     boot's silence are not a missing file answering in the tag's place. */
+  /* Two catalog files exist beside the engine in every lab, so that 5b's "not served" and the
+     clean boot's silence are not a missing file answering in the tag's place. */
   fs.writeFileSync(path.join(dir, "engine", "etiuda-catalog.js"), "window.__sibling = 1;\n", "utf8");
   fs.writeFileSync(path.join(dir, "engine", "sample-catalog.js"), "window.__sibling2 = 1;\n", "utf8");
   return { dir: dir, bootGuardHash: bg };
@@ -276,7 +275,7 @@ let LAB2 = null, LAB3 = null;
   const engineServed = got.served.filter(src => ENGINE_SIBLING.test(src));
   const onDisk = ["etiuda-catalog.js", "sample-catalog.js"].filter(f => fs.existsSync(path.join(APP, "engine", f)));
   check(engineServed.length === 0 && engineSaid.length === 0 && !got.sibling && onDisk.length === 2,
-    "the engine's own two sibling tags are not in the copy the shell serves (" + engineServed.length
+    "the engine carries no sibling script tag, so none is in the copy the shell serves (" + engineServed.length
     + " served, " + engineSaid.length + " console line(s) naming one), with both files on disk beside it ("
     + onDisk.length + " of 2)" + (engineServed.length ? ": " + engineServed.join(", ") : ""));
 

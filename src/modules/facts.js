@@ -39,9 +39,9 @@ function renderFacts(){
     const raw=m[0];
     // Skip "fee-like" leftovers if any; require a real TLD segment of letters only
     if(!/\.[a-z]{2,}(?:\/|$)/i.test(raw)) continue;
-    /* Filenames are not links: "etiuda-catalog.js" parses as host + TLD, and the sample
-       facts mention filenames - they rendered as copyable https:// phantoms. A known file
-       extension with no path after it is a file somebody typed, not a site. */
+    /* Filenames are not links: "notes.js" parses as host + TLD and rendered as a copyable
+       https:// phantom. A known file extension with no path after it is a file somebody
+       typed, not a site. */
     if(!/\//.test(raw) &&
        /\.(?:m?jsx?|json|html?|css|txt|md|pdf|docx?|xlsx?|pptx?|csv|xml|ya?ml|ini|log|zip|rar|7z|exe|msi|bat|cmd|ps1|png|jpe?g|gif|svg|webp|ico|mp[34]|wav)$/i.test(raw)) continue;
     const full=/^https?:\/\//i.test(raw) ? raw : "https://"+raw;
