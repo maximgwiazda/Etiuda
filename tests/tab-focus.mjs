@@ -256,6 +256,13 @@ check("card-body.js", "1123cf8 the Hide control is kept in the code behind one s
     return eq([off, on.join(" | "), read("en")].join(" || "),
       ["none", "Put this card away: it greys out at the foot of this category=Put this card away: it greys out at the foot of this category | Odłóż tę kartę: trafi, wyszarzona, na koniec swojej kategorii=Odłóż tę kartę: trafi, wyszarzona, na koniec swojej kategorii", "none"].join(" || "));
   });
+check("render.js", "1123cf10 render tells the fold whether the list is foldable by the groups' own test (no search running), and a card's signature carries its fold in both places that write one",
+  () => {
+    const r = read("src/modules/render.js"), pool = read("src/modules/card-pool.js");
+    const wired = /const groupList = !terms\.length;\s*setCardsFoldable\(groupList\);/.test(r);
+    const signed = /shareSig\(m\)\+"\|"\+cardFoldSig\(m\.id\)/.test(r) && /shareSig\(m\)\+"\|"\+cardFoldSig\(m\.id\);\s*const ord/.test(pool);
+    return eq([wired, signed].join("/"), "true/true");
+  });
 check("template.html", "1123cf9 the sheet turns a fold control as a group's turns (down open, right shut, the same turn animations), keeps its resting ink while expanded, and keeps a folded card's actions shown in every rule that fades them",
   () => {
     const sheet = read("src/template.html");
