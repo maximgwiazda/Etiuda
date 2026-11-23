@@ -22,7 +22,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 24;
+const EXPECTED = 18;
 /* The plant of 15we is skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
@@ -379,58 +379,11 @@ try {
         + detail + ", sha " + (same ? "restored" : "differs"));
     }
 
-    /* 15sg: a desk that had the setting "Edit the shared catalog file directly" on is told once, at boot, that changes no longer go
-       into the shared file, in its own language; a desk that never had it is told nothing, and the key that held the setting is let go
-       as the notice is shown, so it is not said a second time. The notice is read off the page as 15wb reads its own. */
-    const sayOf = lang => {
-      delete byId.eSharedEditGone;
-      S.lsSet("eUiLang", lang);
-      S.lsSet("eSharedEdit", "1");
-      P.showDeskNotices();
-      return { text: textOf(byId.eSharedEditGone), kept: S.lsGet("eSharedEdit") };
-    };
-    const sgEn = sayOf("en");
-    const sgOnce = (() => { delete byId.eSharedEditGone; P.showDeskNotices(); return textOf(byId.eSharedEditGone); })();
-    const sgPl = sayOf("pl");
-    delete byId.eSharedEditGone;
-    S.lsDel("eSharedEdit");
-    P.showDeskNotices();
-    const sgNever = textOf(byId.eSharedEditGone);
-    check(sgEn.text.indexOf("This desk keeps its changes in its own file.") >= 0 && sgEn.text.indexOf("this desk no longer writes into it") >= 0 && sgEn.text.indexOf("Dismiss") >= 0 && sgEn.kept == null,
-      "15sga a desk that had the setting on is told, in English, that it keeps its changes in its own file and no longer writes into the shared one, and the setting's key is let go: " + sgEn.text.slice(0, 120));
-    check(sgEn.text !== "" && sgOnce === "", "15sgb the notice is shown, and the next boot says nothing: it is said once (" + sgOnce.slice(0, 60) + ")");
-    check(sgPl.text.indexOf("To stanowisko zapisuje zmiany we własnym pliku.") >= 0 && sgPl.text.indexOf("już do niego nie zapisuje") >= 0 && sgPl.text.indexOf("Zamknij") >= 0 && sgPl.text.indexOf("no longer writes") < 0,
-      "15sgc the same notice in Polish for a Polish desk, and none of the English: " + sgPl.text.slice(0, 120));
-    check(sgNever === "", "15sgd THE CONTROL: a desk that never had the setting is told nothing (" + sgNever.slice(0, 60) + ")");
-    S.lsSet("eUiLang", "en");
-    const liftSg = async (tag, from, to) => {
-      const raw = fs.readFileSync(packPath, "utf8");
-      const lines = raw.split(/\r?\n/);
-      const i = lines.findIndex(l => l.indexOf(tag) >= 0);
-      if (i < 0 || lines[i].indexOf(from) < 0) return { found: false };
-      lines[i] = lines[i].replace(from, to);
-      const file = path.join(UD, "pack-plant-" + tag.replace(/\W/g, "") + ".mjs");
-      fs.writeFileSync(file, lines.join("\n").replace(/from "\.\/([^"]+)"/g, (_, n) => "from " + JSON.stringify(MOD(n))));
-      const Q = await import(pathToFileURL(file).href);
-      delete byId.eSharedEditGone;
-      S.lsSet("eSharedEdit", "1");
-      Q.showDeskNotices();
-      const first = textOf(byId.eSharedEditGone), kept = S.lsGet("eSharedEdit");
-      delete byId.eSharedEditGone;
-      Q.showDeskNotices();
-      return { found: true, first, kept, second: textOf(byId.eSharedEditGone) };
-    };
-    if (PLANTS_OFF) {
-      skip("15sgp lifting plant:shared-gone-show turns 15sga red (ETIUDA_PLANTS=off)");
-      skip("15sgq lifting plant:shared-gone-once turns 15sgb red (ETIUDA_PLANTS=off)");
-    } else {
-      const noShow = await liftSg("plant:shared-gone-show", "===\"1\"", "===\"never\"");
-      check(noShow.found && noShow.first === "", "15sgp lifting plant:shared-gone-show turns 15sga red: a desk with the setting on is told nothing (" + JSON.stringify(noShow).slice(0, 120) + ")");
-      S.lsDel("eSharedEdit");
-      const twice = await liftSg("plant:shared-gone-once", "lsDel(\"eSharedEdit\");", "");
-      check(twice.found && twice.first !== "" && twice.second !== "", "15sgq lifting plant:shared-gone-once turns 15sgb red: the notice is said at every boot (" + JSON.stringify(twice).slice(0, 120) + ")");
-      S.lsDel("eSharedEdit");
-    }
+    /* 15sga to 15sgd, 15sgp and 15sgq RETIRED (until the first sale nothing is said for a desk that ran an older 2.0.0 build): they held that a desk that
+       had "Edit the shared catalog file directly" on is told once at boot, in its own language, "This desk keeps its changes in its own file." and
+       "The shared catalog file stays as it was: nothing in it was changed or removed, and this desk no longer writes into it. To work on a catalog with
+       others, a team's lead sends an invitation.", that the key that held the setting is let go as the notice shows, and that a desk that never had it
+       is told nothing; with plant:shared-gone-show and plant:shared-gone-once lifted. No notice is built; the key is left as it is, read by nothing. */
   }
 } catch (e) {
   failed++;

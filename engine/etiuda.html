@@ -9442,8 +9442,6 @@ What is typed here stays in this browser.`;
     "Saved copies": "Zapisane kopie",
     "Each catalog file this desk opens or saves leaves a copy here, kept for 30 days.": "Każdy plik katalogu, który to stanowisko otwiera lub zapisuje, zostawia tu kopię, przechowywaną przez 30 dni.",
     "This desk's own file": "Własny plik tego stanowiska",
-    "This desk keeps its changes in its own file.": "To stanowisko zapisuje zmiany we własnym pliku.",
-    "The shared catalog file stays as it was: nothing in it was changed or removed, and this desk no longer writes into it. To work on a catalog with others, a team's lead sends an invitation.": "Wspólny plik katalogu pozostaje taki, jaki był: niczego w nim nie zmieniono ani nie usunięto, a to stanowisko już do niego nie zapisuje. Do wspólnej pracy nad katalogiem potrzebne jest zaproszenie od lidera zespołu.",
     "Current": "Aktualna",
     "Saved on this desk": "Zapisana na tym stanowisku",
     "Open this copy": "Otwórz tę kopię",
@@ -10973,7 +10971,6 @@ What is typed here stays in this browser.`;
     eTeamRemoved: "#catNow",
     eTeamElsewhere: "#catNow",
     eMigrateWarn: "#catNow",
-    eSharedEditGone: "#catNow",
     eHotkeyNote: "#settingsBtn"
   };
   var NOTICE_ETIUDA = ".row .brand";
@@ -11074,20 +11071,9 @@ What is typed here stays in this browser.`;
       t("Installing the newest Etiuda opens them as they were.")
     );
   }
-  function showSharedEditGone() {
-    const had = lsGet("eSharedEdit") === "1";
-    if (!had || document.getElementById("eSharedEditGone")) return;
-    lsDel("eSharedEdit");
-    eNotice(
-      "eSharedEditGone",
-      t("This desk keeps its changes in its own file."),
-      t("The shared catalog file stays as it was: nothing in it was changed or removed, and this desk no longer writes into it. To work on a catalog with others, a team's lead sends an invitation.")
-    );
-  }
   function showDeskNotices() {
     showDeskNewer();
     showDeskRefused();
-    showSharedEditGone();
     syncSaveNotice();
   }
   var TAG_KEYED = "tag";

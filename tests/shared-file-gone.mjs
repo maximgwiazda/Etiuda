@@ -1,7 +1,7 @@
 /* No desk writes into a catalog file on a share, in bare node: shell/main.js under a stubbed electron over a catalog folder,
  * and shell/preload.js over a stub of the bridge. A desk reads the catalog folder, works from its own copy, and holds no lock
- * beside a catalog, no shared read, write or put-back for the page, and no setting to turn them on. The page's half (the Settings row,
- * the one notice a desk that had the setting on is given) is held in tests/module-calls.mjs and tests/desk-growth.mjs.
+ * beside a catalog, no shared read, write or put-back for the page, and no setting to turn them on. The page's half (the Settings row) is held in
+ * tests/module-calls.mjs, and the desk's own file under a setting left on from an older build in tests/card-flag.mjs (nsfe7).
  *
  *   node tests/shared-file-gone.mjs      exit code is the number of failed checks, capped at 63
  */

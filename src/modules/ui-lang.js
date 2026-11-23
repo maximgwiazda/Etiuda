@@ -1367,8 +1367,6 @@ UI_STRINGS.pl={
   "Saved copies":"Zapisane kopie",
   "Each catalog file this desk opens or saves leaves a copy here, kept for 30 days.":"Każdy plik katalogu, który to stanowisko otwiera lub zapisuje, zostawia tu kopię, przechowywaną przez 30 dni.",
   "This desk's own file":"Własny plik tego stanowiska",
-  "This desk keeps its changes in its own file.":"To stanowisko zapisuje zmiany we własnym pliku.",
-  "The shared catalog file stays as it was: nothing in it was changed or removed, and this desk no longer writes into it. To work on a catalog with others, a team's lead sends an invitation.":"Wspólny plik katalogu pozostaje taki, jaki był: niczego w nim nie zmieniono ani nie usunięto, a to stanowisko już do niego nie zapisuje. Do wspólnej pracy nad katalogiem potrzebne jest zaproszenie od lidera zespołu.",
   "Current":"Aktualna",
   "Saved on this desk":"Zapisana na tym stanowisku",
   "Open this copy":"Otwórz tę kopię",
