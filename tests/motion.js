@@ -532,12 +532,17 @@ leg("m12", "a star and a hide glide the cards that stay on screen at the top and
         s.scrollTop = Math.round(d * (s.scrollHeight - s.clientHeight)); }, depth);
       await sleep(900);
       /* A card in the middle of the screen, neither starred nor put away. */
-      const o = await offerCards(p, "#list .card[data-id]:not(.is-hidden)", '[data-act="' + act + '"]', true);
+      /* The card draws no Hide control, so a hide is pressed through a control made at the press: the mechanic's click branch stays. */
+      const o = await offerCards(p, "#list .card[data-id]:not(.is-hidden)", '[data-act="' + (act === "hide" ? "fav" : act) + '"]', true);
       const id = middleCard(o.cards, o.vh, o.top);
       if (!id) { ok = false; out.push(act + " at " + depth + ": no card in the middle of the screen"); continue; }
       await p.evaluate((id, act) => { window.__mtId = id; window.__mtActName = act; }, id, act);
-      const r = await track(p, "cards", 700, () => { window.__mtAct = () =>
-        document.querySelector('#list .card[data-id="' + CSS.escape(window.__mtId) + '"] [data-act="' + window.__mtActName + '"]').click(); });
+      const r = await track(p, "cards", 700, () => { window.__mtAct = () => {
+        const card = document.querySelector('#list .card[data-id="' + CSS.escape(window.__mtId) + '"]');
+        if (window.__mtActName === "hide") {
+          const b = document.createElement("button"); b.type = "button"; b.setAttribute("data-act", "hide"); card.querySelector(".cacts").appendChild(b); b.click();
+        } else card.querySelector('[data-act="' + window.__mtActName + '"]').click();
+      }; });
       const j = judge(r, { wantArrivals: true, wantLeaves: true, leaves: act === "hide" ? ["c:" + id] : [] });
       /* A star moves cards on screen at either depth; a hide always leaves, and what closes its gap
          may come from below the screen. */

@@ -814,6 +814,35 @@ const CARD_B = {
     () => eq(C.isCollapsed(""), false));
   check("collapse.js", "groupKeyOf falls through to the card's own category",
     () => eq(C.groupKeyOf(CARD_A), "gen"));
+  /* THE CARD'S OWN FOLD (1123cf): a view state kept with the groups' folds, under a key no category and neither sentinel can be. */
+  check("collapse.js", "1123cf1 a card folds and unfolds by its id and is remembered across a restart in the settings' own key, and folding it folds no group of that name",
+    () => {
+      UILANG_STORE.lsDel("eCollapsed"); C.rereadCollapsed(); C.setCardsFoldable(true);
+      const k = C.cardFoldKey("gen"), before = C.isCardFolded("gen");
+      C.toggleCardFold("gen");
+      const after = C.isCardFolded("gen");
+      C.rereadCollapsed();
+      const kept = C.isCardFolded("gen"), stored = JSON.parse(UILANG_STORE.lsGet("eCollapsed")).join();
+      const group = C.isCollapsed("gen");
+      C.toggleCardFold("gen");
+      const back = C.isCardFolded("gen");
+      UILANG_STORE.lsDel("eCollapsed"); C.rereadCollapsed();
+      return eq([before, after, kept, stored === k, k[0] === ":" && k !== C.COLLAPSE_BAND && k !== C.COLLAPSE_FAV, group, back].join("|"),
+        "false|true|true|true|true|false|false");
+    });
+  check("collapse.js", "1123cf2 a card's fold shows only where the groups' folds show: with the list not foldable (a search) the stored fold is kept and the card is drawn open, and its signature says which",
+    () => {
+      UILANG_STORE.lsDel("eCollapsed"); C.rereadCollapsed(); C.setCardsFoldable(true);
+      C.toggleCardFold("c-a");
+      const sigs = [C.cardFoldSig("c-a"), C.cardFoldSig("c-b")];
+      C.setCardsFoldable(false);
+      const search = [C.isCardFolded("c-a"), C.cardFoldSig("c-a"), C.cardFoldSig("c-b")];
+      C.setCardsFoldable(true);
+      const kept = C.isCardFolded("c-a");
+      C.toggleCardFold("c-a");
+      UILANG_STORE.lsDel("eCollapsed"); C.rereadCollapsed();
+      return eq([sigs.join(), search.join(), kept, C.isCardFolded("")].join("|"), "f,o|false,n,n|true|false");
+    });
 }
 
 /* ------------------------------------------------------------------ shortcuts.js */
@@ -5411,8 +5440,8 @@ const CARD_B = {
     const names = rows => rows.map(r => (r === "-" ? "-" : r.label)).join("|");
     const run = (rows, name) => { const r = rows.find(x => x !== "-" && x.label === name); if (r) r.act(); return !!r; };
     AS.setCards([{ id: "c-cx", c: "gen", t: "Lost parcel", en: "Your parcel is on its way back.", pl: "Paczka do nas wraca." }]);
-    const cbtn = a => node({}, { attrs: { "aria-label": { edit: "Edit this card", fav: "Remove from Favourites", note: "Internal note", hide: "x" }[a] } });
-    const cb = { edit: cbtn("edit"), fav: cbtn("fav"), note: cbtn("note"), hide: cbtn("hide") };
+    const cbtn = a => node({}, { attrs: { "aria-label": { edit: "Edit this card", fav: "Remove from Favourites", note: "Internal note", fold: "x" }[a], "aria-expanded": a === "fold" ? "true" : undefined } });
+    const cb = { edit: cbtn("edit"), fav: cbtn("fav"), note: cbtn("note"), fold: cbtn("fold") };
     const card = node({}, { dataset: { id: "c-cx" }, classList: on(new Set()),
       querySelector: s => { const m = /data-act="(\w+)"/.exec(s); return m ? cb[m[1]] || null : null; } });
     const block = node({ "#list .card[data-id]": card, ".txt[data-v]": null }, { dataset: { v: "0" } });
@@ -5420,11 +5449,29 @@ const CARD_B = {
     copied.length = 0;
     const replyRows = CX.ctxRowsFor(block);
     const replyNames = names(replyRows);
-    ["Edit this card", "Remove from Favourites", "Show the note", "Put this card away"].forEach(n => run(replyRows, n));
+    ["Edit this card", "Remove from Favourites", "Show the note", "Fold this card away"].forEach(n => run(replyRows, n));
     run(replyRows, "Copy"); run(replyRows, "Copy the PL version");
-    check("context-menu.js", "1012x1 a reply's menu: Copy, Copy in the other language, and the card's own Edit, Favourite, note and Put away, each pressing its control",
-      () => eq([replyNames, ["edit", "fav", "note", "hide"].map(a => (cb[a].pressed || []).join()).join(","), copied.join(";")].join("|"),
-        "Copy|Copy the PL version|-|Edit this card|Remove from Favourites|Show the note|Put this card away|click,click,click,click|copy:Your parcel is on its way back.;copy:Paczka do nas wraca."));
+    check("context-menu.js", "1012x1 a reply's menu: Copy, Copy in the other language, and the card's own Edit, Favourite, note and Fold, each pressing its control, and no row that puts the card away",
+      () => eq([replyNames, ["edit", "fav", "note", "fold"].map(a => (cb[a].pressed || []).join()).join(","), copied.join(";")].join("|"),
+        "Copy|Copy the PL version|-|Edit this card|Remove from Favourites|Show the note|Fold this card away|click,click,click,click|copy:Your parcel is on its way back.;copy:Paczka do nas wraca."));
+    {
+      const shutBtn = node({}, { attrs: { "aria-label": "x", "aria-expanded": "false" } });
+      const cb2 = Object.assign({}, cb, { fold: shutBtn });
+      const card2 = node({}, { dataset: { id: "c-cx" }, classList: on(new Set()),
+        querySelector: s => { const m = /data-act="(\w+)"/.exec(s); return m ? cb2[m[1]] || null : null; } });
+      const block2 = node({ "#list .card[data-id]": card2, ".txt[data-v]": null }, { dataset: { v: "0" } });
+      block2.up[".txt[data-v]"] = block2;
+      const shutRows = CX.ctxRowsFor(block2);
+      run(shutRows, "Show this card");
+      check("context-menu.js", "1123cf3 the menu of a folded card offers to show it and presses the fold control; a card with no fold control drawn (a search) offers neither",
+        () => {
+          const none = node({}, { dataset: { id: "c-cx" }, classList: on(new Set()), querySelector: () => null });
+          const block3 = node({ "#list .card[data-id]": none, ".txt[data-v]": null }, { dataset: { v: "0" } });
+          block3.up[".txt[data-v]"] = block3;
+          return eq([names(shutRows).split("|").pop(), (shutBtn.pressed || []).join(), names(CX.ctxRowsFor(block3)).split("|").filter(n => /fold|Show this card/i.test(n)).join()].join(" | "),
+            "Show this card | click | ");
+        });
+    }
 
     {
       const TJ2 = await import(MOD("team-join.js"));
@@ -5579,10 +5626,17 @@ const CARD_B = {
         copied.length = 0; calls.length = 0;
         const nxRows = CX.ctxRowsFor(nx), nxNames = names(nxRows);
         run(nxRows, "Copy");
-        run(nxRows, "Put this card away");
-        check("context-menu.js", "983y3 a next reply in an editor gives the reply's own menu less Show the note; Copy copies its first variant and Put away calls what the reply's control calls, with no reply drawn",
+        check("context-menu.js", "983y3 a next reply in an editor gives the reply's own menu less Show the note and with no row that puts the card away; Copy copies its first variant",
           () => eq([nxNames, copied.join(";"), calls.filter(c => /hideCard/.test(c)).join()].join(" | "),
-            "Copy|Copy the PL version|-|Edit this card|Add to Favourites|Put this card away | copy:Your parcel is on its way back. | hideCard(c-cx)"));
+            "Copy|Copy the PL version|-|Edit this card|Add to Favourites | copy:Your parcel is on its way back. | "));
+        /* 1123cf4: the put-away mechanic is kept and still answers: a card already put away offers Show this card again, calling what the hide control called. */
+        AS.cards.find(c => c.id === "c-cx")._hidden = 1;
+        copied.length = 0; calls.length = 0;
+        const awayRows = CX.ctxRowsFor(nx), awayNames = names(awayRows);
+        run(awayRows, "Show this card again");
+        delete AS.cards.find(c => c.id === "c-cx")._hidden;
+        check("context-menu.js", "1123cf4 a card already put away offers Show this card again, which calls the hide mechanic's own toggle, with no reply drawn",
+          () => eq([awayNames.split("|").pop(), calls.filter(c => /hideCard/.test(c)).join()].join(" | "), "Show this card again | hideCard(c-cx)"));
 
         calls.length = 0;
         const viaF2 = CX.ctxEditorAct(chip);

@@ -85,7 +85,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    greens only that block's spine, a card's title has the row while its controls wait, the
    scrollbar's thumb is opaque, every theme has one blue, an idle tab's dot is the band's ink, and
    Maintenance fits its window unscrolled; 278 was the tour's walk by its acts. */
-const EXPECTED = { chrome: 308 };
+const EXPECTED = { chrome: 310 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -2800,6 +2800,9 @@ const t0 = Date.now();
     return { present: !!c, pressed: b && b.getAttribute("aria-pressed"), on: !!(b && b.classList.contains("on")),
       fill: !!(b && b.querySelector("svg.ic-fill")), idx: c ? cs.indexOf(c) : -1, n: cs.length }; }, id);
   const press = (id, act) => p.evaluate((i, a) => document.querySelector('#list .card[data-id="' + CSS.escape(i) + '"] [data-act="' + a + '"]').click(), id, act);
+  /* The card draws no Hide control; the mechanic and its click branch stay, so a control made here is pressed. */
+  const pressHide = id => p.evaluate(i => { const acts = document.querySelector('#list .card[data-id="' + CSS.escape(i) + '"] .cacts');
+    const b = document.createElement("button"); b.type = "button"; b.setAttribute("data-act", "hide"); acts.appendChild(b); b.click(); }, id);
   const s0 = await readStar(pick.id);
   await press(pick.id, "fav"); await sleep(1200);
   const s1 = await readStar(pick.id);
@@ -2810,8 +2813,23 @@ const t0 = Date.now();
   check(!s0.on && s1.on && s1.fill && !s2.on && !s2.fill, "and fills and empties its own icon");
   check(s0.idx > 0 && s1.idx === 0 && s2.idx === s0.idx,
     "and carries the card to the head of the list and back (" + s0.idx + " to " + s1.idx + " to " + s2.idx + ")");
+  /* 1123cf: the card's fold. Folded it is its title row alone (no block of text), in the place it held, and a second press restores it. */
+  const readFold = id => p.evaluate(i => { const c = document.querySelector('#list .card[data-id="' + CSS.escape(i) + '"]');
+    const b = c && c.querySelector('[data-act="fold"]'), cs = [...document.querySelectorAll("#list .card")];
+    return { present: !!c, folded: !!(c && c.classList.contains("is-folded")), expanded: b && b.getAttribute("aria-expanded"), hideBtn: !!(c && c.querySelector('[data-act="hide"]')),
+      blocks: c ? c.querySelectorAll(".txt").length : -1, title: c ? (c.querySelector(".ctitle") || {}).textContent : null, idx: c ? cs.indexOf(c) : -1, n: cs.length }; }, id);
+  const f0 = await readFold(pick.id);
+  await press(pick.id, "fold"); await sleep(1200);
+  const f1 = await readFold(pick.id);
+  await press(pick.id, "fold"); await sleep(1200);
+  const f2 = await readFold(pick.id);
+  check(f0.expanded === "true" && f0.blocks > 0 && !f0.hideBtn && f1.folded && f1.expanded === "false" && f1.blocks === 0 && f1.title === f0.title
+      && !f2.folded && f2.expanded === "true" && f2.blocks === f0.blocks,
+    "1123cf a card's fold leaves its title alone and a second press restores its blocks exactly (" + f0.blocks + " to " + f1.blocks + " to " + f2.blocks + ")");
+  check(f1.idx === f0.idx && f2.idx === f0.idx && f1.n === f0.n && f2.n === f0.n,
+    "1123cf and the card keeps its place and the list its length through the fold (" + f0.idx + " to " + f1.idx + " to " + f2.idx + " of " + f0.n + ")");
   const h0 = await readStar(pick.id);
-  await press(pick.id, "hide"); await sleep(1200);
+  await pressHide(pick.id); await sleep(1200);
   const h1 = await readStar(pick.id);
   check(h0.present && !h1.present && h1.n === h0.n - 1,
     "a hide takes the card off the desk (" + h0.n + " cards to " + h1.n + ")");
