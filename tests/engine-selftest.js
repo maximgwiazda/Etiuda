@@ -1747,6 +1747,7 @@ Module.prototype._compile = function (content, filename) {
 {
   const NOT_GATES = {
     "engine.js": "the library every gate requires, not a gate",
+    "relay-mirror-desk.mjs": "the helper that puts a desk on a relay team's mirror and stands for the relay between desks, which the team legs import, not a gate",
     "deadcode.js": "a report: a hit is a candidate to read, not a verdict; its scanner is held by tests/text-scan-selftest.js",
     "css-dead.js": "a report, as deadcode.js; its scanner is held by tests/text-scan-selftest.js",
     "ghosts.js": "a report, as deadcode.js; its scanner is held by tests/text-scan-selftest.js",
