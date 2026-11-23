@@ -7475,17 +7475,16 @@ function policyHoldsTeam(t, named) {
   return !!named.folder; /* plant:folder-holds-team */
 }
 function leadsView() {
-  /* The policy is said before the pins are listed: its first saying lets go a join kept from an invitation, with the pin that invitation
-     set (policyLetsInviteGo), and a list taken before it named a pin the map below then read as nothing. The map still skips a pin that
-     is gone when its turn comes. */
-  try { sayJoinPolicy(); } catch { /* read again below, as it always was */ } /* plant:leads-after-say */
+  /* The list is taken here and the policy is first said below (readJoinPolicy does not say it; folderTeamHere and pinTrusted do), and
+     its first saying lets go a join kept from an invitation with the pin that invitation set (policyLetsInviteGo). A pin gone by the
+     time its row's turn comes has no row. */
   const teams = Object.keys(teamPins).filter(t => SEALED_TEAM_RE.test(t) && !!teamPins[t] && typeof teamPins[t].public === "string");
   const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "", named = teams.length ? readJoinPolicy("en") : null;
   const ftHere = folderTeamHere();
   const reading = ftHere && folderStillReading() ? shellWords().stillReading : "";
   return teams.map(t => {
     const pin = teamPins[t];
-    if (!pin) return null; /* no scene reaches this: the saying above is synchronous, so only a later change of the policy could let a pin go */
+    if (!pin) return null; /* plant:leads-pin-gone */
     const shown = teamShown[t] || {}, admitted = newestEpoch(t) > 0, roster = teamRoster[t];
     const relayRemoved = teamRelayGone[t] === true;
     let relayHost = shown.relay || "";
