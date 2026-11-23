@@ -2297,6 +2297,67 @@ Module.prototype._compile = function (content, filename) {
   }
 }
 
+/* 34za. ADDRESSES AND IDENTIFIERS ARE REFUSED (the published tree's scan). tools/pre-commit refuses a mail address unless its
+   domain is reserved for examples, it is a no-reply address, or the repository declares the domain its own (.etiuda-scan-mode,
+   address <domain>); and refuses a labelled tax, registration or telephone number, a +country number, PL and ten digits, and a
+   street address. The seller's line (seller <page> in the same file) lets that line's name and NIP stand, and no other NIP.
+   In a throwaway repository with invented words and a held-back home: 34za1 a private address in a message is refused and an
+   example, a no-reply and a declared own address pass; 34za2 a telephone, a labelled NIP and a street address are each refused;
+   34za3 the seller's own name and NIP pass and another NIP beside them is refused; 34za4 CONTROL: a plain long number with no
+   label passes, so 34za2 refused by the patterns and not by length. */
+{
+  const cp = require("child_process");
+  let bash = "bash";
+  if (process.platform === "win32") {
+    const ex = cp.execFileSync("git", ["--exec-path"], { encoding: "utf8" }).trim();
+    bash = [["bin", "bash.exe"], ["usr", "bin", "bash.exe"], ["usr", "bin", "sh.exe"]]
+      .map(p => path.join(ex, "..", "..", "..", ...p)).find(p => fs.existsSync(p)) || path.join(ex, "..", "..", "..", "bin", "bash.exe");
+  }
+  const lab = path.join(tmp, "scan-ids");
+  const home = path.join(tmp, "scan-ids-held");
+  fs.mkdirSync(lab); fs.mkdirSync(home);
+  const git = (...a) => cp.execFileSync("git", ["-c", "user.name=selftest", "-c",
+    "user.email=selftest@invalid", "-c", "core.autocrlf=false", ...a],
+    { cwd: lab, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  if (cp.spawnSync(bash, ["-c", "exit 0"]).status !== 0) ok(false, "34za needs git's own shell, and none answers at " + bash);
+  else {
+    git("init", "-q");
+    fs.writeFileSync(path.join(lab, ".etiuda-scan-mode"), "address quietlane.test.dev\nseller seller.md\n");
+    fs.writeFileSync(path.join(lab, "seller.md"), "# Seller\n\nHarbour Lantern Works, Example Way, NIP 1112223344\n");
+    git("add", ".etiuda-scan-mode", "seller.md");
+    git("commit", "-q", "--no-verify", "-m", "published");
+    git("update-ref", "refs/remotes/origin/main", "HEAD");
+    fs.writeFileSync(path.join(lab, ".git", "etiuda-names"), "zqxwvname\n");
+    fs.writeFileSync(path.join(home, "held-catalog.js"), 'var s = "violet harbour lanterns sway beside sleepy granite piers";\n');
+    fs.writeFileSync(path.join(lab, ".git", "etiuda-held-back"), home.split(path.sep).join("/") + "\n");
+    const script = fs.readFileSync(path.join(E.ROOT, "tools", "pre-commit"), "utf8");
+    const quiet = { ...process.env };
+    delete quiet.ETIUDA_SCAN_OFF;
+    const scan = (body) => {
+      fs.writeFileSync(path.join(lab, "scan.sh"), script);
+      fs.writeFileSync(path.join(lab, "msg.txt"), body);
+      const r = cp.spawnSync(bash, ["scan.sh", "msg.txt"], { cwd: lab, encoding: "utf8", env: quiet });
+      return r.status;
+    };
+    const addr = scan("Subject\nwrite to rowan.pike@mailhaven.com about it\n");
+    const fine = scan("Subject\nwrite to dev@example.com, noreply@mailhaven.com or desk@quietlane.test.dev\n");
+    ok(addr === 1 && fine === 0, "34za1 a private address in a message is refused (exit " + addr + ") and an example, a no-reply and a"
+       + " declared own address pass (exit " + fine + ")");
+    const tel = scan("Subject\ncall +44 20 7946 0018 after nine\n");
+    const nip = scan("Subject\nthe buyer's NIP 7010203040 is on the order\n");
+    const street = scan("Subject\nsent to ul. Przykładowa 12 in the morning\n");
+    ok(tel === 1 && nip === 1 && street === 1, "34za2 a telephone (exit " + tel + "), a labelled NIP (exit " + nip
+       + ") and a street address (exit " + street + ") are each refused");
+    const seller = scan("Subject\nHarbour Lantern Works, NIP 1112223344, issued the invoice\n");
+    const other = scan("Subject\nHarbour Lantern Works, NIP 1112223344, and the buyer's NIP 7010203040\n");
+    ok(seller === 0 && other === 1, "34za3 the seller's own name and NIP pass (exit " + seller + ") and another NIP beside them is"
+       + " refused (exit " + other + ")");
+    const plain = scan("Subject\nbuild 7010203040 of the page, seen at 600 100 200 pixels\n");
+    ok(plain === 0, "34za4 CONTROL: a plain long number with no label passes, so 34za2 refused by the patterns: exit " + plain);
+  }
+}
+
+
 /* 35. A BUILD THE HARNESS MAKES SIGNS NOTHING (board 827, item A). electron-builder signs a --dir build
    too, and a token route asks for a PIN in a window nobody sees behind stdio "ignore", where Artifact
    Signing installs a module and signs in. So the three builds the gates make (shell-smoke, reinstall,
