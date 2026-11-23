@@ -18,7 +18,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 10;
+const EXPECTED = 12;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -157,6 +157,35 @@ try {
       fs.unlinkSync(PL);
     }
     check(!!turned && turned.wrote === true, "nsfe3p lifting plant:put-back-own turns nsfe3 red: a file this desk only read is written over (" + JSON.stringify(turned) + ")");
+  }
+
+  /* nsfe3d: a file this desk wrote and somebody else has since changed is no longer its own. The desk keeps A with wrote, B is written from outside, and a
+     put-back of an earlier version answers notOwn, leaves B byte for byte, and the list says mine false. The plant lifts the own check over that file too (nsfe3q). */
+  const CH = path.join(FOLDER, "changed.ec"), c0 = catalog("changed", 1, "First"), cA = catalog("changed", 2, "Mine"), cB = catalog("changed", 3, "Theirs");
+  const changedScene = async (desk, file) => {
+    fs.writeFileSync(file, cA);
+    desk.test.keepHist(file, c0);
+    desk.test.keepHist(file, cA, true);
+    fs.writeFileSync(file, cB);
+    const row = ((await desk.ask("etiuda:history-list")) || []).find(v => v.path === path.resolve(file) && v.sha === sha(Buffer.from(c0)));
+    const r = await desk.ask("etiuda:history-put", sha(Buffer.from(c0)), file);
+    return { row: row && row.mine, put: r, kept: fs.readFileSync(file, "utf8") === cB };
+  };
+  const chg = await changedScene(A, CH);
+  check(chg.row === false && !!chg.put && chg.put.ok === false && chg.put.notOwn === true && chg.kept,
+    "nsfe3d a file this desk wrote and somebody else has since changed is not its own: mine false, the put-back answers notOwn, and the other's bytes are intact (" + JSON.stringify(chg) + ")");
+  fs.unlinkSync(CH);
+  if (PLANTS_OFF) { skipped++; console.log("  SKIP  nsfe3q lifting plant:put-back-own turns nsfe3d red (ETIUDA_PLANTS=off)"); }
+  else {
+    const lines = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8").split("\n");
+    const hit = lines.map((l, i) => (l.indexOf("plant:put-back-own") >= 0 ? i : -1)).filter(i => i >= 0);
+    let red = null;
+    if (hit.length === 1) {
+      lines[hit[0]] = "";
+      red = await changedScene(boot(lines.join("\n")), CH);
+      fs.unlinkSync(CH);
+    }
+    check(!!red && !!red.put && red.put.ok === true && red.kept === false, "nsfe3q lifting plant:put-back-own turns nsfe3d red: the other's bytes are written over (" + JSON.stringify(red) + ")");
   }
 
   /* nsfe5: no source of the shell takes a lock beside a catalog, by the name the lock was kept under. */

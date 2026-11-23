@@ -5664,9 +5664,9 @@ function activeStateTests() {
     const naming = ["function catalogVersionLabel(", "function editionNameOf(", "function editionRevText(", "function editionLabel("]
       .map(m => slice("catalog.js", m)).join("\n");
     const plainEsc = s => String(s == null ? "" : s), noCounts = () => "";
-    const historyRowHtml = new Function("t", "esc", "fileStamp", "catalogCountsLine", "historyActs", "ICON_LOAD",
+    const historyRowHtml = new Function("t", "esc", "fileStamp", "catalogCountsLine", "historyActs", "ICON_LOAD", "historyPutRoute", "eHost",
       naming + "\n" + slice("catalog-history.js", "function historyRowHtml(") + "\nreturn historyRowHtml;")(
-      s => s, plainEsc, () => "the day it came", noCounts, () => ["open"], "");
+      s => s, plainEsc, () => "the day it came", noCounts, () => ["open"], "", () => "desk", () => ({}));
     const metaOf = html => ((/<small class="ec-meta">([^<]*)<\/small>/.exec(html) || [])[1] || "");
     const loadedAt = (version, rev) => new Function("t", "esc", "catalogCountsLine", "E_CATALOG_VERSION", "E_CATALOG_REV", "cards",
       "totalMacroCount", "liveIntentCount", "CATS", "ecAwaitingHtml", "liveAwaiting",
