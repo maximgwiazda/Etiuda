@@ -63,7 +63,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 593;
+const EXPECTED = 598;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -8870,9 +8870,14 @@ async function rmoTeam(mod, tag0) {
   const docAt = (epoch, rev, key, ds) => JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: tm.id, catalogs: ["lane-board"],
     lead: { keyId: LEAD.keyId, public: LEAD.pub, box: LBX.pub }, sealed: true, exportsSealed: false, epoch, rev,
     channel: { kind: "relay", rt: tm.rt, url: URLV1 }, roster: ds.map(d => row(d, epoch, key)) }, LEAD), null, 1) + "\n";
-  const lead = (name, keys) => Object.assign(opened(mod, name + "-" + tag, tm, LEAD, "root", { keyFor: e => keys.get(e) || null,
-    sealEpoch: () => Math.max(...keys.keys()), agree: agreeWith(LBX),
-    me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root", box: LBX.pub }) }), { keys });
+  const lead = (name, keys, wrap) => {
+    const p = opened(mod, name + "-" + tag, tm, LEAD, "root", { keyFor: e => keys.get(e) || null,
+      sealEpoch: () => Math.max(...keys.keys()), agree: agreeWith(LBX),
+      me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root", box: LBX.pub }),
+      ...(wrap ? { request: (...a) => wrap(p0.t, ...a) } : {}) });
+    const p0 = p;
+    return Object.assign(p, { keys });
+  };
   const desk = (D, name) => {
     const held = new Map([[1, k1]]), nm = name + "-" + tag;
     const p = opened(mod, nm, tm, D.k, "desk:" + D.k.keyId, {
@@ -8989,6 +8994,53 @@ async function rmoFresh(mod) {
   await a.ch.stop(); await b.ch.stop();
   return out;
 }
+/* The race (the test architect zeta's pZeta run 7): both computers in step, each removes one desk within one sync. A's file goes up
+   between B's catch-up and B's uploads, so B's team file is refused and the edition B published after its move goes up under B's
+   own epoch-2 key, which no desk can open. B's Studio, modelled: it sets that key aside for the one A's file carries, the channel
+   owes again what went under it (resendEpoch), and B applies its pending removal on top. */
+async function rmoRace(mod) {
+  const w = await rmoTeam(mod, "r"), { K, X, Y, k1 } = w;
+  const k2a = crypto.randomBytes(32), k2b = crypto.randomBytes(32), k3 = crypto.randomBytes(32);
+  let between = null;
+  const a = w.lead("rmr-a", new Map([[1, k1]]));
+  const b = w.lead("rmr-b", new Map([[1, k1]]), async (t, method, url, headers, body) => {
+    if (between && method === "PUT") { const f = between; between = null; await f(); }
+    return t.request(method, url, headers, body);
+  });
+  put(a.mirror, C.TEAM_NAME, w.docAt(1, 1, k1, [K, X, Y]));
+  a.ch.start(); await settle(a);
+  b.ch.start(); await settle(b);
+  const dK = w.desk(K, "rmr-k"), dY = w.desk(Y, "rmr-y");
+  dK.ch.start(); dY.ch.start(); await settle(dK, dY);
+  a.keys.set(2, k2a);
+  put(a.mirror, C.TEAM_NAME, w.docAt(2, 2, k2a, [K, Y]));
+  b.keys.set(2, k2b);
+  put(b.mirror, C.TEAM_NAME, w.docAt(2, 2, k2b, [K, X]));
+  const ED = "{\"note\":\"B after its move\"}\n";
+  put(b.mirror, "lane.ec", ED);
+  between = async () => { await settle(a); };
+  await once(b);
+  const out = { aFirst: w.teamOf(a.mirror), relayAfterRace: w.relayEpoch() };
+  await settle(b); await settle(dK, dY);
+  out.bFile = w.teamOf(b.mirror);
+  /* B's Studio: the key minted here for epoch 2 set aside for A's, what went under it owed again, then its removal of Y on top. */
+  b.keys.set(2, k2a);
+  if (typeof b.prog.resendEpoch === "function") b.prog.resendEpoch(2);
+  await settle(b);
+  out.bStep = w.inStep(b);
+  await settle(dK);
+  out.edAtK = read(dK.mirror, "lane.ec") === ED;
+  let cur = null;
+  try { cur = JSON.parse(read(b.mirror, C.TEAM_NAME)); } catch { cur = null; }
+  if (cur && w.inStep(b) && cur.roster.some(r => r.desk.id === Y.k.keyId)) {
+    b.keys.set(3, k3);
+    put(b.mirror, C.TEAM_NAME, w.docAt(cur.epoch + 1, cur.rev + 1, k3, [K]));
+    await settle(b);
+  }
+  out.final = { b: w.teamOf(b.mirror), relayEpoch: w.relayEpoch() };
+  await a.ch.stop(); await b.ch.stop(); await dK.ch.stop(); await dY.ch.stop();
+  return out;
+}
 /* The test architect's pWW, every interleaving that matters: A offline takes X off ("same": epoch 2; "higher": epochs 2 and 3), B
    online takes Y off (epoch 2, its own key), goes up and posts its device list. A reconnects. Its Studio is modelled as the ruling
    has it: a removal is kept as pending until the relay's current team file lacks the person; the key of an epoch this computer
@@ -9009,6 +9061,9 @@ async function rmoDouble(mod, variant) {
   put(a.mirror, C.TEAM_NAME, w.docAt(2, 2, k2a, [K, Y]));
   await once(a);
   if (variant === "higher") { a.keys.set(3, k3a); put(a.mirror, C.TEAM_NAME, w.docAt(3, 3, k3a, [K, Y])); await once(a); }
+  const OFF = "{\"note\":\"an edition A published offline after its move\"}\n";
+  put(a.mirror, "offline.ec", OFF);
+  await once(a);
   b.keys.set(2, k2b);
   put(b.mirror, C.TEAM_NAME, w.docAt(2, 2, k2b, [K, X]));
   await settle(b);
@@ -9020,6 +9075,7 @@ async function rmoDouble(mod, variant) {
   a.t.down = false;
   const seq0 = w.seqNow(), said0 = a.said.length;
   await settle(a); await settle(b); await settle(a); await settle(dK, dX, dY);
+  out.relayEpochAtReconnect = w.relayEpoch();
   out.afterReconnect = { a: w.teamOf(a.mirror), relayEpoch: w.relayEpoch(), aStep: w.inStep(a), aPuts: w.copiesAfter(seq0),
     clash: typeof a.prog.rootClash === "function" ? a.prog.rootClash().map(c => ({ kept: c.kept, dropped: c.dropped })) : null,
     saidA: a.said.slice(said0).filter(l => /changed on this computer and on another/.test(l)).length };
@@ -9028,6 +9084,7 @@ async function rmoDouble(mod, variant) {
   /* A's Studio: the relay's file at epoch 2 is B's; the key minted here for epoch 2 (and 3) is set aside, and the one the recovery
      copy gives is taken. */
   a.keys.delete(3); a.keys.set(2, k2b);
+  if (typeof a.prog.resendEpoch === "function") { a.prog.resendEpoch(2); a.prog.resendEpoch(3); }
   await settle(a);
   out.aStepAfterKey = w.inStep(a);
   /* The removal still pending here (X), re-applied on top of the relay's file as the next epoch, by itself, once in step. */
@@ -9047,6 +9104,7 @@ async function rmoDouble(mod, variant) {
   put(a.mirror, "lane.ec", LATE);
   await settle(a); await settle(b); await settle(dK, dX, dY);
   out.read = { k: read(dK.mirror, "lane.ec") === LATE, x: read(dX.mirror, "lane.ec") === LATE, y: read(dY.mirror, "lane.ec") === LATE };
+  out.offlineAtK = read(dK.mirror, "offline.ec") === OFF;
   out.yNewKeys = [...dY.held.keys()].filter(e => yKeys0.indexOf(e) < 0);
   out.xKeys = [...dX.held.keys()];
   out.bFile = w.teamOf(b.mirror);
@@ -9074,6 +9132,10 @@ if (partOn("pRmo")) {
     check(!!f.bFile && f.bFile.epoch === 2 && f.bFile.names === "" && f.stepNoKey === false && f.stepWithKey === true,
       "rmo5a a profile of the lead's key restored after the move, holding no team file and key 1 alone, reaches the epoch-2 file through the lead's own copy by the box it holds, and is in step once it holds its key: "
       + JSON.stringify(f));
+    const rr = await rmoRace(C);
+    check(!!rr.bFile && rr.bFile.names === "KY" && rr.edAtK && !!rr.final.b && rr.final.b.names === "K" && rr.final.relayEpoch === 3,
+      "rmo7a the race: A's file stands; the edition B published after its own move, sealed under the key it set aside, goes again under the key that stands and the remaining desk reads it; B's removal is then applied on top as epoch 3: "
+      + JSON.stringify(rr));
     for (const v of ["same", "higher"]) {
       const x = await rmoDouble(C, v);
       const tag = v === "same" ? "rmo2" : "rmo3";
@@ -9087,11 +9149,21 @@ if (partOn("pRmo")) {
       check(!!x.final.a && x.final.a.names === "K" && x.final.relayEpoch === 3 && x.final.aStep === true && x.read.k && !x.read.x && !x.read.y,
         tag + "c (" + v + ") both removals survive: the first computer, in step, applies its pending removal on top as epoch 3, the relay's file names K alone, and only K reads the next edition: "
         + JSON.stringify({ final: x.final, read: x.read, aEnrol: x.aEnrol, b: x.bFile }));
+      check(x.offlineAtK && x.relayEpochAtReconnect === 2,
+        tag + "f (" + v + ") an edition the first computer published offline after its move is held while it is behind the relay's file and goes, under the key that stands, once it is in step: the remaining desk reads it, and the relay's epoch is never moved by it: "
+        + JSON.stringify({ offlineAtK: x.offlineAtK, relayEpochAtReconnect: x.relayEpochAtReconnect }));
     }
     if (PLANTS_OFF) skip("rmo5b lifting plant:lead-own-fresh leaves a restored profile with no team file");
     else {
       const q3 = await liftChannel("plant:lead-own-fresh", async mod => { const y = await rmoFresh(mod); return !y.bFile; });
       check(q3.turned && q3.back, "rmo5b lifting plant:lead-own-fresh leaves a restored profile with no team file, and the product file is never written: " + q3.detail + ", sha " + (q3.back ? "restored" : "differs"));
+    }
+    if (PLANTS_OFF) { skip("rmo7b lifting plant:resend-aside leaves B's edition under the key set aside"); skip("rmo2g lifting plant:behind-hold sends the first computer's offline edition under its forked key"); }
+    else {
+      const q4 = await liftChannel("plant:resend-aside", async mod => { const y = await rmoRace(mod); return !y.edAtK; });
+      check(q4.turned && q4.back, "rmo7b lifting plant:resend-aside leaves B's edition under the key set aside, which no desk reads, and the product file is never written: " + q4.detail + ", sha " + (q4.back ? "restored" : "differs"));
+      const q5 = await liftChannel("plant:behind-hold", async mod => { const y = await rmoDouble(mod, "higher"); return y.relayEpochAtReconnect !== 2 || !y.offlineAtK; });
+      check(q5.turned && q5.back, "rmo2g lifting plant:behind-hold sends the first computer's offline edition while it is behind, under its forked key, and the product file is never written: " + q5.detail + ", sha " + (q5.back ? "restored" : "differs"));
     }
     if (PLANTS_OFF) { skip("rmo4b lifting plant:lead-own-copy sends no copy to the lead's own box"); skip("rmo4c lifting plant:lead-own-open opens no copy at the lead's own box"); }
     else {
