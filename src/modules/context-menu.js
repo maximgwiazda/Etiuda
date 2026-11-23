@@ -118,7 +118,7 @@ function replyRows(id, target, o){
   if(shareOfferedNow() && cardIsShareable(m)) rows.push({ label:t("Share with…"), act:()=>sharePressed(id, o.anchor || anchor) });
   rows.push({ label:label(fav, t(isFavourite(id) ? "Remove from Favourites" : "Add to Favourites")), act:pressOr(fav, null, ()=>toggleFavourite(id)) });
   if(note && o.note!==false) rows.push({ label:t("Show the note"), act:()=>press(note) });
-  if(fold) rows.push({ label:t(fold.getAttribute("aria-expanded")==="false" ? "Show this card" : "Fold this card away"), act:()=>press(fold) });
+  if(fold) rows.push({ label:t(fold.getAttribute("aria-expanded")==="false" ? "Unfold this card" : "Fold this card"), act:()=>press(fold) });
   if(m._hidden) rows.push({ label:t("Show this card again"), act:()=>hooks.hideCard(id) });
   return rows;
 }

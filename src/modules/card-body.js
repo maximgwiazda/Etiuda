@@ -68,7 +68,7 @@ function cardBodyHtml(m,i,ctx){
       ? "Show this card again"
       : (fav ? "Put this card away: it greys out at the foot of this category and loses its star"
              : "Put this card away: it greys out at the foot of this category"));
-    const foldTip=t(folded?"Show this card":"Fold this card away");
+    const foldTip=t(folded?"Unfold this card":"Fold this card");
     const foldBtn=foldOn
       ? '<button type="button" class="card-fold'+(folded?" shut":"")+'" data-act="fold" title="'+esc(foldTip)+'" aria-label="'+esc(foldTip)+'"'
         +' aria-expanded="'+(folded?"false":"true")+'">'+ICON_CHEVRON_R+'</button>' : '';

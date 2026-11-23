@@ -8110,8 +8110,8 @@ What is typed here stays in this browser.`;
     "The card keeps this language whatever the EN|PL toggle says, tokens included": "Karta i jej tokeny zostają w tym języku niezależnie od przełącznika EN|PL",
     "Fold this group away": "Zwiń tę grupę",
     "Show these cards": "Pokaż te karty",
-    "Fold this card away": "Zwiń tę kartę",
-    "Show this card": "Pokaż tę kartę",
+    "Fold this card": "Zwiń tę kartę",
+    "Unfold this card": "Rozwiń tę kartę",
     "Matching your intent": "Pasujące do intencji",
     "Settings reset": "Przywrócono ustawienia domyślne",
     "Put every setting on this screen back to what it ships with. Cards and edits are not affected.": "Przywraca domyślne wartości wszystkich ustawień na tym ekranie. Karty i zmiany w nich zostają nienaruszone.",
@@ -9416,7 +9416,7 @@ What is typed here stays in this browser.`;
     'A click on a category shows only its cards, and <kbd>Ctrl</kbd>+click keeps several. A <b class="t-go">green</b> ring marks one holding a card for the chosen intent, and a <b class="t-acc">blue</b> one a supporting category, useful for any question.': 'Kliknięcie kategorii zostawia tylko jej karty, a <kbd>Ctrl</kbd>+kliknięcie pozwala wybrać kilka. <b class="t-go">Zielona</b> obwódka oznacza kategorię z kartą dla wybranej intencji, a <b class="t-acc">niebieska</b> kategorię wspierającą, przydatną przy każdym pytaniu.',
     "Each customer on the chat gets a tab of their own here, with their name, intent and language, so a reply never carries the wrong name. <b>+</b> or {NEW} opens another conversation, {KEY} moves to the next and {PREV} to the one before.": "Każdy klient na czacie ma tu osobną rozmowę, z własnym imieniem, intencją i językiem, więc żadna odpowiedź nie pójdzie z cudzym imieniem. Kolejną rozmowę otwiera <b>+</b> albo skrót {NEW}, {KEY} przechodzi do następnej, a {PREV} do poprzedniej.",
     "Replies in this conversation follow the language chosen here, so each customer is answered in their own. {KEY} switches it from anywhere.": "Odpowiedzi w tej rozmowie idą w języku wybranym tutaj, więc każdy klient dostaje odpowiedź w swoim. {KEY} przełącza język z dowolnego miejsca.",
-    'The star lifts a card to the top of its category, and under <span class="t-pill"><span data-icon="all"></span>All</span> into <b class="t-fav"><span data-icon="star"></span>Favourites</b>.<br>The chevron folds it to its title, and opens it again.<br>The pencil opens it for editing, and <b>Reset</b> in the editor brings back the catalog\'s own words.<br>Click the pencil on this card.': 'Gwiazdka przenosi kartę na początek jej kategorii, a w widoku <span class="t-pill"><span data-icon="all"></span>Wszystkie</span> do <b class="t-fav"><span data-icon="star"></span>Ulubionych</b>.<br>Strzałka zwija ją do samego tytułu i rozwija ponownie.<br>Ołówek otwiera ją do poprawek, a <b>Przywróć</b> w edytorze wraca do treści z katalogu.<br>Proszę kliknąć ołówek na tej karcie.',
+    'The star lifts a card to the top of its category, and under <span class="t-pill"><span data-icon="all"></span>All</span> into <b class="t-fav"><span data-icon="star"></span>Favourites</b>.<br>The chevron folds it to its title and unfolds it again.<br>The pencil opens it for editing, and <b>Reset</b> in the editor brings back the catalog\'s own words.<br>Click the pencil on this card.': 'Gwiazdka przenosi kartę na początek jej kategorii, a w widoku <span class="t-pill"><span data-icon="all"></span>Wszystkie</span> do <b class="t-fav"><span data-icon="star"></span>Ulubionych</b>.<br>Strzałka zwija ją do samego tytułu i ponownie rozwija.<br>Ołówek otwiera ją do poprawek, a <b>Przywróć</b> w edytorze wraca do treści z katalogu.<br>Proszę kliknąć ołówek na tej karcie.',
     '<span class="t-sec">Content</span> holds the text in both languages and the internal note; the folds below hold the keywords, the category, the linked intents, the next replies and the advanced settings. <b>Cancel</b> leaves everything as it was.': '<span class="t-sec">Treść</span> to tekst w obu językach i notatka wewnętrzna; w zwiniętych sekcjach poniżej są słowa kluczowe, kategoria, powiązane intencje, kolejne odpowiedzi i ustawienia zaawansowane. <b>Anuluj</b> zostawia wszystko bez zmian.',
     "Click <b>+</b> to write a card of your own, in the category open now or in any other chosen in the editor.": "Proszę kliknąć <b>+</b>, żeby napisać własną kartę: trafi do otwartej teraz kategorii albo do innej, wybranej w edytorze.",
     "A new card": "Nowa karta",
@@ -28178,7 +28178,7 @@ What is typed here stays in this browser.`;
     if (edMark) cardH += '<span class="cbadge edn" title="' + esc(edMark.k === "new" ? editionSaid(edMark, t("New in rev {R}"), t("New in edition {E}")) : editionSaid(edMark, t("Changed in rev {R}"), t("Changed in edition {E}"))) + '">' + esc(edMark.k === "new" ? t("new") : t("changed")) + "</span>";
     const favTip = t(fav ? "Remove from Favourites" : "Add to Favourites");
     const hideTip = t(m._hidden ? "Show this card again" : fav ? "Put this card away: it greys out at the foot of this category and loses its star" : "Put this card away: it greys out at the foot of this category");
-    const foldTip = t(folded ? "Show this card" : "Fold this card away");
+    const foldTip = t(folded ? "Unfold this card" : "Fold this card");
     const foldBtn = foldOn ? '<button type="button" class="card-fold' + (folded ? " shut" : "") + '" data-act="fold" title="' + esc(foldTip) + '" aria-label="' + esc(foldTip) + '" aria-expanded="' + (folded ? "false" : "true") + '">' + ICON_CHEVRON_R + "</button>" : "";
     const hideBtn = cardHideButton ? '<button type="button" class="' + (m._hidden ? "" : "danger") + '" data-act="hide" title="' + esc(hideTip) + '" aria-label="' + esc(hideTip) + '">' + (m._hidden ? ICON_EYE_SHUT : ICON_EYE_OPEN) + "</button>" : "";
     const _note = noteFor(m);
@@ -33141,7 +33141,7 @@ What is typed here stays in this browser.`;
       tab: "chat",
       prep: tourRevealCardActions,
       title: "A card's buttons",
-      body: `The star lifts a card to the top of its category, and under <span class="t-pill"><span data-icon="all"></span>All</span> into <b class="t-fav"><span data-icon="star"></span>Favourites</b>.<br>The chevron folds it to its title, and opens it again.<br>The pencil opens it for editing, and <b>Reset</b> in the editor brings back the catalog's own words.<br>Click the pencil on this card.`,
+      body: `The star lifts a card to the top of its category, and under <span class="t-pill"><span data-icon="all"></span>All</span> into <b class="t-fav"><span data-icon="star"></span>Favourites</b>.<br>The chevron folds it to its title and unfolds it again.<br>The pencil opens it for editing, and <b>Reset</b> in the editor brings back the catalog's own words.<br>Click the pencil on this card.`,
       opens: "editor",
       open: () => tourPress(cardBtn('[data-act="edit"]'), '[data-act="edit"]'),
       pad: 8
@@ -44409,7 +44409,7 @@ What is typed here stays in this browser.`;
     if (shareOfferedNow() && cardIsShareable(m)) rows.push({ label: t("Share with…"), act: () => sharePressed(id, o.anchor || anchor) });
     rows.push({ label: label(fav, t(isFavourite(id) ? "Remove from Favourites" : "Add to Favourites")), act: pressOr(fav, null, () => toggleFavourite(id)) });
     if (note && o.note !== false) rows.push({ label: t("Show the note"), act: () => press(note) });
-    if (fold) rows.push({ label: t(fold.getAttribute("aria-expanded") === "false" ? "Show this card" : "Fold this card away"), act: () => press(fold) });
+    if (fold) rows.push({ label: t(fold.getAttribute("aria-expanded") === "false" ? "Unfold this card" : "Fold this card"), act: () => press(fold) });
     if (m._hidden) rows.push({ label: t("Show this card again"), act: () => hooks.hideCard(id) });
     return rows;
   }

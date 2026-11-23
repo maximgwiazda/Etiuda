@@ -206,7 +206,7 @@ check("card-body.js", "810tf1 a card's note, edit, fold and star are buttons in 
       ".cacts button.danger:focus-visible{box-shadow:inset 0 0 0 1px #c44}",
       ".cacts button.star-btn:focus-visible{box-shadow:inset 0 0 0 1px var(--fav)}"].every(s => sheet.indexOf(s) >= 0);
     return eq([en.acts.join(" ~ "), en.txtStopped, en.n > 0, pl.acts.join(" ~ "), pl.txtStopped, edge].join(" || "),
-      ["note|Internal note ~ edit|Edit this card ~ fold|Fold this card away ~ fav|Add to Favourites",
+      ["note|Internal note ~ edit|Edit this card ~ fold|Fold this card ~ fav|Add to Favourites",
         false, true,
         "note|Notatka wewnętrzna ~ edit|Edytuj tę kartę ~ fold|Zwiń tę kartę ~ fav|Dodaj do Ulubionych",
         false, true].join(" || "));
@@ -223,7 +223,7 @@ check("card-body.js", "1123cf5 an open card carries a fold control, expanded and
     const en = read("en", card), pl = read("pl", card), away = read("en", Object.assign({}, card, { _hidden: 1 }));
     ST.lsDel("eUiLang");
     return eq([en, pl, away].join(" || "),
-      ["true/card-fold/true/Fold this card away/Fold this card away/false/true", "true/card-fold/true/Zwiń tę kartę/Zwiń tę kartę/false/true", "true/card-fold/true/Fold this card away/Fold this card away/false/true"].join(" || "));
+      ["true/card-fold/true/Fold this card/Fold this card/false/true", "true/card-fold/true/Zwiń tę kartę/Zwiń tę kartę/false/true", "true/card-fold/true/Fold this card/Fold this card/false/true"].join(" || "));
   });
 check("card-body.js", "1123cf6 a folded card is its header alone: the title, its badges and its actions, the fold control shut and naming the way back, and no block of text, no miss line, no swap strip",
   () => {
@@ -235,7 +235,7 @@ check("card-body.js", "1123cf6 a folded card is its header alone: the title, its
       const acts = [...h.matchAll(/data-act="(\w+)"/g)].map(x => x[1]).join();
       return eq([/class="card is-folded[ "]/.test(h), (h.match(/class="chead"/g) || []).length, /class="ctitle"/.test(h), /cbadge hit/.test(h) && /cbadge fav/.test(h),
         attrOf(b, "class"), attrOf(b, "aria-expanded"), attrOf(b, "title"), acts, /class="txt|class="miss|class="swap/.test(h)].join("/"),
-        "true/1/true/true/card-fold shut/false/Show this card/note,edit,fold,fav/false");
+        "true/1/true/true/card-fold shut/false/Unfold this card/note,edit,fold,fav/false");
     } finally { COLL.toggleCardFold(card.id); ST.lsDel("eCollapsed"); COLL.rereadCollapsed(); }
   });
 check("card-body.js", "1123cf7 the fold shows where the groups' folds show: a stored fold with the list not foldable (a search) draws the card open and offers no fold control",

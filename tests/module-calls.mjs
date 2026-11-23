@@ -5449,11 +5449,11 @@ const CARD_B = {
     copied.length = 0;
     const replyRows = CX.ctxRowsFor(block);
     const replyNames = names(replyRows);
-    ["Edit this card", "Remove from Favourites", "Show the note", "Fold this card away"].forEach(n => run(replyRows, n));
+    ["Edit this card", "Remove from Favourites", "Show the note", "Fold this card"].forEach(n => run(replyRows, n));
     run(replyRows, "Copy"); run(replyRows, "Copy the PL version");
     check("context-menu.js", "1012x1 a reply's menu: Copy, Copy in the other language, and the card's own Edit, Favourite, note and Fold, each pressing its control, and no row that puts the card away",
       () => eq([replyNames, ["edit", "fav", "note", "fold"].map(a => (cb[a].pressed || []).join()).join(","), copied.join(";")].join("|"),
-        "Copy|Copy the PL version|-|Edit this card|Remove from Favourites|Show the note|Fold this card away|click,click,click,click|copy:Your parcel is on its way back.;copy:Paczka do nas wraca."));
+        "Copy|Copy the PL version|-|Edit this card|Remove from Favourites|Show the note|Fold this card|click,click,click,click|copy:Your parcel is on its way back.;copy:Paczka do nas wraca."));
     {
       const shutBtn = node({}, { attrs: { "aria-label": "x", "aria-expanded": "false" } });
       const cb2 = Object.assign({}, cb, { fold: shutBtn });
@@ -5462,14 +5462,14 @@ const CARD_B = {
       const block2 = node({ "#list .card[data-id]": card2, ".txt[data-v]": null }, { dataset: { v: "0" } });
       block2.up[".txt[data-v]"] = block2;
       const shutRows = CX.ctxRowsFor(block2);
-      run(shutRows, "Show this card");
+      run(shutRows, "Unfold this card");
       check("context-menu.js", "1123cf3 the menu of a folded card offers to show it and presses the fold control; a card with no fold control drawn (a search) offers neither",
         () => {
           const none = node({}, { dataset: { id: "c-cx" }, classList: on(new Set()), querySelector: () => null });
           const block3 = node({ "#list .card[data-id]": none, ".txt[data-v]": null }, { dataset: { v: "0" } });
           block3.up[".txt[data-v]"] = block3;
-          return eq([names(shutRows).split("|").pop(), (shutBtn.pressed || []).join(), names(CX.ctxRowsFor(block3)).split("|").filter(n => /fold|Show this card/i.test(n)).join()].join(" | "),
-            "Show this card | click | ");
+          return eq([names(shutRows).split("|").pop(), (shutBtn.pressed || []).join(), names(CX.ctxRowsFor(block3)).split("|").filter(n => /fold|Unfold this card/i.test(n)).join()].join(" | "),
+            "Unfold this card | click | ");
         });
     }
 
