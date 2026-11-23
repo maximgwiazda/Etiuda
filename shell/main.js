@@ -7246,23 +7246,28 @@ function folderOutboxOwes(t) {
   return !!owe && Object.keys(owe).some(k => !!owe[k] && owe[k].owe === true);
 }
 function leadsView() {
+  /* The list is taken here and the policy is first said below (readJoinPolicy does not say it; folderTeamHere and pinTrusted do), and
+     its first saying lets go a join kept from an invitation with the pin that invitation set (policyLetsInviteGo). A pin gone by the
+     time its row's turn comes has no row. */
   const teams = Object.keys(teamPins).filter(t => SEALED_TEAM_RE.test(t) && !!teamPins[t] && typeof teamPins[t].public === "string");
   const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "", named = teams.length ? readJoinPolicy("en") : null;
   return teams.map(t => {
+    const pin = teamPins[t];
+    if (!pin) return null; /* plant:leads-pin-gone */
     const shown = teamShown[t] || {}, admitted = newestEpoch(t) > 0, roster = teamRoster[t];
     const relayRemoved = teamRelayGone[t] === true;
     let relayHost = shown.relay || "";
     if (!relayHost && teamChannel[t] && teamChannel[t].kind === "relay" && teamChannel[t].url) {
       try { relayHost = new URL(teamChannel[t].url).host; } catch { relayHost = ""; }
     }
-    const row = { team: t, print: leadPrint(teamPins[t].public), admitted: admitted, seen: teamSeen.has(t),
+    const row = { team: t, print: leadPrint(pin.public), admitted: admitted, seen: teamSeen.has(t),
       lead: shown.lead || "", folder: shown.folder || "",
       removed: (admitted && !!me && !!roster && roster.desks.indexOf(me) < 0) || relayRemoved,
       policy: policyHoldsTeam(t, named) };
     /* No Leave is offered while machine policy has not answered, since it could hold this team. */
     if (named && named.unread === true && named.held !== true) row.waiting = true;
     /* Machine policy names another lead: nothing this team's lead signed is used here, and the row says so. */
-    else if (named && named.lead && named.lead !== teamPins[t].public) row.otherLead = true;
+    else if (named && named.lead && named.lead !== pin.public) row.otherLead = true;
     if (relayHost) row.relay = relayHost; /* plant:settings-relay-row */
     if (relayRemoved) row.relayRemoved = true;
     const head = headShown(t);
@@ -7289,7 +7294,7 @@ function leadsView() {
     }
     if (admitted && !row.removed && awaitsFirstEdition(t)) row.awaitsEdition = true;
     return row;
-  });
+  }).filter(Boolean);
 }
 /* A lead's name as an invitation carries it, as inviteRead takes one: text, at most 120 characters, nothing hidden. */
 function shownName(name) {
@@ -7322,6 +7327,11 @@ function forgetLead(team, left) {
   if (left === true && (policyWaits() || policyHoldsTeam(team, readJoinPolicy("en")))) return joinView(); /* plant:leave-waits */
   const ch = teamChannel[team];
   if (ch && ch.kind === "relay") setRelayTeamAside(ch.rt); /* plant:leave-aside */
+  /* The note this desk left in the team's mirror goes too, owed to that share where it is a folder team's, so a later return does not
+     send it: forgetting a lead ends what this desk said about the team. The mirror is the relay's where the team's channel is one;
+     releaseInUse below runs after the channel is gone and reaches neither. */
+  const mirrorOfTeam = ch && ch.kind === "relay" && /^[0-9a-f]{32}$/.test(String(ch.rt)) ? relayMirrorOf(ch.rt) : folderMirrorOf(team); /* plant:forget-note-relay */
+  const noteInMirror = deskBranch ? path.join(mirrorOfTeam, "desks", branchIdOf(deskBranch.sign.pub), IN_USE_STEM + ".ec") : "";
   delete teamPins[team];
   delete teamKeys[team];
   delete teamShown[team];
@@ -7368,6 +7378,7 @@ function forgetLead(team, left) {
   teamStamp = "";
   persistDeskEnvelope();
   releaseInUse();
+  if (noteInMirror) { try { unlinkOwn(noteInMirror); } catch { /* never written there */ } }
   releaseOpened();
   relaySoon();
   catalogFolderChanged();
