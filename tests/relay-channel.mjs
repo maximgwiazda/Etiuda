@@ -3535,8 +3535,19 @@ if (deskOn()) try {
          parallel edition, and it never went to the team); in a folder a copy that leads still opens, and on a tie the canonical
          name wins. The file the desk picks is read from the list pickEdition is given, in either order. */
       const cfuName = "quay-board", cfuCopy = cfuName + " (conflicted copy 2026-11-22).ec", cfuCanon = cfuName + ".ec";
+      /* A desk that holds a team through a shared folder (a pin, no relay, no channel), P4's held folder team: the folder is where its files are and no relay mirror is
+         anywhere, so the channel's kept-copy rule has no place to apply. e6Desk("folder") is a relay desk now (P4 left its name), so the folder half is built here. */
+      const cfuFolderDesk = async src => {
+        const ud = path.join(LAB, "cfu-folder-" + hex(3)), share = path.join(LAB, "cfu-folder-share-" + hex(3)), team = "t-" + hex(8);
+        fs.mkdirSync(share, { recursive: true }); fs.mkdirSync(ud, { recursive: true });
+        fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: share, eUiLang: "en" },
+          teamPins: { [team]: { keyId: LEAD.keyId, public: LEAD.pub } }, teamPinFrom: { [team]: "invite" }, teamShown: { [team]: { folder: share, lead: "Quay lead" } } }), "utf8");
+        const D = await loadDesk(ud, src);
+        await D.ask("etiuda:branch-identity", true);
+        return { D, mir: share };
+      };
       const cfuPick = async (kind, copyRev, canonRev, src) => {
-        const d = await e6Desk(kind, src), out = [];
+        const d = kind === "folder" ? await cfuFolderDesk(src) : await e6Desk(kind, src), out = [];
         const item = (name, rev) => ({ file: path.join(d.mir, name), data: JSON.parse(catOf(cfuName, rev)) });
         for (const order of [[item(cfuCopy, copyRev), item(cfuCanon, canonRev)], [item(cfuCanon, canonRev), item(cfuCopy, copyRev)]]) {
           const got = d.D.api.pickEdition(order);
