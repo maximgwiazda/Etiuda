@@ -33,7 +33,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
-const EXPECTED = 34;
+const EXPECTED = 35;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -1854,6 +1854,13 @@ function leadsAfterLetGo(shell) {
   try { problems = leadsAfterLetGo(null); } catch (e) { problems.push("harness: " + ((e && e.stack) || e)); }
   check(problems.length === 0, "19w Settings' team rows read no pin the policy let go: the first leads ask after a restart under a policy that lets an invitation go"
     + " lists the pins that stand, the request and its pin gone, a relay or a folder one, and the controls keep both teams: " + (problems.join("; ") || "no row throws"));
+  if (PLANTS_OFF) skip("19w lifting plant:leads-after-say turns 19w red (ETIUDA_PLANTS=off)");
+  else {
+    const src = liftPlant(SHELL, "leads-after-say", "  void 0;");
+    let p = [];
+    try { p = src ? leadsAfterLetGo(src) : ["the plant is not on exactly one line"]; } catch (e) { p = ["harness: " + e.message]; }
+    check(!!src && p.length > 0, "19w lifting plant:leads-after-say turns 19w red: " + (p.join("; ") || "still green"));
+  }
 }
 
 try { fs.rmSync(LAB, { recursive: true, force: true }); } catch { /* the temp folder's own to clear */ }

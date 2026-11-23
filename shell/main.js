@@ -7475,25 +7475,31 @@ function policyHoldsTeam(t, named) {
   return !!named.folder; /* plant:folder-holds-team */
 }
 function leadsView() {
+  /* The policy is said before the pins are listed: its first saying lets go a join kept from an invitation, with the pin that invitation
+     set (policyLetsInviteGo), and a list taken before it named a pin the map below then read as nothing. The map still skips a pin that
+     is gone when its turn comes. */
+  try { sayJoinPolicy(); } catch { /* read again below, as it always was */ } /* plant:leads-after-say */
   const teams = Object.keys(teamPins).filter(t => SEALED_TEAM_RE.test(t) && !!teamPins[t] && typeof teamPins[t].public === "string");
   const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "", named = teams.length ? readJoinPolicy("en") : null;
   const ftHere = folderTeamHere();
   const reading = ftHere && folderStillReading() ? shellWords().stillReading : "";
   return teams.map(t => {
+    const pin = teamPins[t];
+    if (!pin) return null; /* no scene reaches this: the saying above is synchronous, so only a later change of the policy could let a pin go */
     const shown = teamShown[t] || {}, admitted = newestEpoch(t) > 0, roster = teamRoster[t];
     const relayRemoved = teamRelayGone[t] === true;
     let relayHost = shown.relay || "";
     if (!relayHost && teamChannel[t] && teamChannel[t].kind === "relay" && teamChannel[t].url) {
       try { relayHost = new URL(teamChannel[t].url).host; } catch { relayHost = ""; }
     }
-    const row = { team: t, print: leadPrint(teamPins[t].public), admitted: admitted, seen: teamSeen.has(t),
+    const row = { team: t, print: leadPrint(pin.public), admitted: admitted, seen: teamSeen.has(t),
       lead: shown.lead || "", folder: shown.folder || "",
       removed: (admitted && !!me && !!roster && roster.desks.indexOf(me) < 0) || relayRemoved,
       policy: policyHoldsTeam(t, named) };
     /* No Leave is offered while machine policy has not answered, since it could hold this team. */
     if (named && named.unread === true && named.held !== true) row.waiting = true;
     /* Machine policy names another lead: nothing this team's lead signed is used here, and the row says so. */
-    else if (named && named.lead && named.lead !== teamPins[t].public) row.otherLead = true;
+    else if (named && named.lead && named.lead !== pin.public) row.otherLead = true;
     if (relayHost) row.relay = relayHost; /* plant:settings-relay-row */
     if (relayRemoved) row.relayRemoved = true;
     const head = headShown(t);
@@ -7522,7 +7528,7 @@ function leadsView() {
     if (reading && ftHere && t === ftHere.team) row.reading = reading; /* plant:still-reading-shown */
     if (admitted && !row.removed && awaitsFirstEdition(t)) row.awaitsEdition = true;
     return row;
-  });
+  }).filter(Boolean);
 }
 /* A lead's name as an invitation carries it, as inviteRead takes one: text, at most 120 characters, nothing hidden. */
 function shownName(name) {
