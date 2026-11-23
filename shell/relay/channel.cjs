@@ -1351,7 +1351,15 @@ function createProgram(opts) {
   function leadCopies(held, ctx) {
     const out = [];
     const self = ctx && ctx.self;
-    if (!held || !self || self.place !== "root" || typeof ctx.agree !== "function" || !table(held.doc.lead) || !HEX64.test(String(held.doc.lead.box))) return out;
+    if (!self || self.place !== "root" || typeof ctx.agree !== "function") return out;
+    /* A profile of the lead's key restored after a move holds no team file to read the lead's box from: its own copy is placed by the
+       box it holds itself, which is the lead's. */
+    if (!held || !table(held.doc.lead) || !HEX64.test(String(held.doc.lead.box))) {
+      let mine = null;
+      mine = HEX64.test(String(self.box)) ? ownLeadCopy({ lead: { box: self.box } }, ctx) : null; /* plant:lead-own-fresh */
+      if (mine) out.push({ id: mine.id, key: mine.key, lead: true });
+      return out;
+    }
     for (const r of Array.isArray(held.doc.roster) ? held.doc.roster : []) {
       if (!table(r) || !table(r.desk) || !HEX64.test(String(r.desk.box)) || !rosterOf({ roster: [r] }).length) continue;
       const c = copyFor(ctx, r.desk.box, held.doc.lead.box, r.desk.id, r.desk.box);
