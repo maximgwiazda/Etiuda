@@ -19236,7 +19236,7 @@ What is typed here stays in this browser.`;
   function wireTeamJoinEmpty(root) {
     if (!root) return;
     root.querySelectorAll("[data-join]").forEach((el) => {
-      if (el.getAttribute && el.getAttribute("data-join")) el.onclick;
+      if (el.getAttribute && el.getAttribute("data-join")) el.onclick = () => joinAct(el.getAttribute("data-join"));
     });
   }
   var bubbleClosers = /* @__PURE__ */ new Map();

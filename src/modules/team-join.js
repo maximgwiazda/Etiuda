@@ -799,7 +799,7 @@ function teamJoinEmptyHtml(){
 function wireTeamJoinEmpty(root){
   if(!root) return;
   root.querySelectorAll("[data-join]").forEach(el=>{
-    if(el.getAttribute && el.getAttribute("data-join")) el.onclick;
+    if(el.getAttribute && el.getAttribute("data-join")) el.onclick=()=>joinAct(el.getAttribute("data-join"));
   });
 }
 /* THE BUBBLE, where a catalog is already open: hung from the catalog's name as the offer is, one at a time, and back
