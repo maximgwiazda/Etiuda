@@ -1,6 +1,6 @@
 import { CATS, intentCount, SW_IDS } from "./content-model.js";
 import { M, WHO_BASE, normWhoList } from "./stock.js";
-import { eResetKey, lsDel, lsKeys, ssDel, lyGet, lySet, lyDel,
+import { eResetKey, lsGet, lsDel, lsKeys, ssDel, lyGet, lySet, lyDel,
   eSaveTrouble, eDeskNewer, eDeskRefused, eDeskRefusedSeen, eHomeless, eDeskHome } from "./storage.js";
 import { t, toast, fileStamp } from "./ui-lang.js";
 import { hooks } from "./hooks.js";
@@ -83,7 +83,7 @@ function showPackMigrationWarning(){
    the catalog's name for a catalog's matter, the Menu where Settings hold its equal, else Etiuda's name at the band's
    left. Two from one control hang one from the other. Built from text nodes, so a path is never read as markup. */
 const NOTICE_FROM={
-  eTeamLapse:"#catNow", eTeamFork:"#catNow", eTeamStranded:"#catNow", eTeamRemoved:"#catNow", eTeamElsewhere:"#catNow", eMigrateWarn:"#catNow",
+  eTeamLapse:"#catNow", eTeamFork:"#catNow", eTeamStranded:"#catNow", eTeamRemoved:"#catNow", eTeamElsewhere:"#catNow", eMigrateWarn:"#catNow", eSharedEditGone:"#catNow",
   eHotkeyNote:"#settingsBtn"
 };
 const NOTICE_ETIUDA=".row .brand";
@@ -175,9 +175,20 @@ function showDeskNewer(){
     t("This desk's settings were saved by a newer Etiuda, so this version leaves them untouched and does not start over."),
     t("Installing the newest Etiuda opens them as they were."));
 }
+/* A desk that had "Edit the shared catalog file directly" on is told once that changes no longer go there: the key that held the
+   setting is let go as the notice is shown, which is what makes it once. */
+function showSharedEditGone(){
+  const had=lsGet("eSharedEdit")==="1"; /* plant:shared-gone-show */
+  if(!had || document.getElementById("eSharedEditGone")) return;
+  lsDel("eSharedEdit"); /* plant:shared-gone-once */
+  eNotice("eSharedEditGone",
+    t("Changes no longer go into the shared catalog file."), /* words: placeholder */
+    t("Etiuda no longer edits a catalog file in a shared folder: this desk keeps its changes in its own file, and nothing in the shared file was changed or removed. To work with others, ask your team's lead for an invitation."));
+}
 function showDeskNotices(){
   showDeskNewer();
   showDeskRefused();
+  showSharedEditGone();
   syncSaveNotice();
 }
 /* ---- positions, then tag ids ---------------------------------------------------------------

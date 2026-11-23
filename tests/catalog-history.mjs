@@ -77,7 +77,7 @@ function boot(src) {
     + " invite: { id: \"cc\".repeat(4), proof: \"dd\".repeat(16), lead: { keyId: \"lead-key\", public: pinPublic, name: \"Lead\" }, pinned: true,"
     + " relay: { rt: rt, url: \"https://etiuda.dev/relay/v1\", inv: \"ee\".repeat(8), token: \"tok\", seal: \"sea\" } } };"
     + " };"
-    + " __test.sharedWrite = sharedWrite;"
+    + " __test.setFolder = v => { if (deskKeys === undefined) deskKeys = readDesk(); deskKeys[CATALOG_FOLDER_KEY] = v; };"
     + " __test.keepHist = function(file, text) { return historyKeep(file, text, false); };")(
     n => (n === "electron" ? electron : nodeRequire(n)), path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"),
     { exports: {} }, {}, quiet, test);
@@ -251,6 +251,15 @@ try {
     && L.some(v => v.path === OWN) && L.some(v => v.path === OUT),
     "2b the desk's own file and a file outside the catalog folder are listed in their places, and neither ever goes back");
 
+  /* nsfe8 (moved from catalog-shared's 9a, retired with that leg): with the folder setting in forward slashes and a trailing one, the
+     history still lists the folder's versions as the folder's and offers them back. */
+  const slashed = boot();
+  slashed.test.setFolder(FOLDER.split(path.sep).join("/") + "/");
+  const slashedRows = ((await slashed.ask("etiuda:history-list")) || []).filter(v => v.path === path.resolve(SHOP));
+  check(slashedRows.length > 1 && slashedRows.every(v => v.place === "folder") && slashedRows.some(v => v.put === true),
+    "nsfe8 with the folder setting in forward slashes and a trailing one, the history still lists the folder's versions as the folder's, and offers them back ("
+    + slashedRows.map(v => v.place).filter((x, i, a) => a.indexOf(x) === i).join() + ")");
+
   const opened = await A.ask("etiuda:history-read", old ? old.sha : "", SHOP);
   const stranger = await A.ask("etiuda:history-read", old ? old.sha : "", OTHER);
   check(!!opened && opened.name === "shop.ec" && opened.text === shop1.trim() && stranger === null,
@@ -383,39 +392,24 @@ try {
     R.test.keepHist(file, second);
     const here = R.test.relayHere();
     const before = fs.readFileSync(file, "utf8");
-    const wrote = await Promise.resolve(R.test.sharedWrite("mirror.ec", catalog("mirrorcat", 3, "Edited"), sha(Buffer.from(before)), false));
-    const afterWrite = fs.readFileSync(file, "utf8");
     const list = (await R.ask("etiuda:history-list")) || [];
     const older = list.find(v => v.path === path.resolve(file) && v.sha === sha(Buffer.from(first)));
     const put = await R.ask("etiuda:history-put", sha(Buffer.from(first)), file);
     const afterPut = fs.readFileSync(file, "utf8");
-    check(!!here && wrote && wrote.ok === false && wrote.refused === true && afterWrite === before
-      && !!older && older.put === false && put && put.ok === false && afterPut === second,
-      "15ib a relay desk does not write an unsigned catalog in its mirror, and does not put an earlier version back over it: "
-      + JSON.stringify({ here: !!here, wrote: wrote, held: afterWrite === before,
-        offered: !!(older && older.put), put: put && put.ok, restored: afterPut === second }));
+    check(!!here && before === second && !!older && older.put === false && put && put.ok === false && afterPut === second,
+      "15ib a relay desk does not put an earlier version back over a catalog in its mirror, and does not offer one (was 15ib, which held the shared write refused there too, retired with it): "
+      + JSON.stringify({ here: !!here, held: before === second, offered: !!(older && older.put), put: put && put.ok, restored: afterPut === second }));
   }
 
-  /* 2r23 (Grok's review 23, finding 2): a put-back takes the lock a shared write takes beside the file, so it waits while
-     another desk holds it, the file as it was; with the lock free it puts back and lets its own lock go. */
+  /* 2q23 (Grok's review 23, finding 2's second question; its first, the lock a put-back took, retired with the lock, and nsfe3 and nsfe4 of
+     tests/shared-file-gone.mjs hold that a put-back takes none): an index this run did not build, saying a signed copy is free, puts nothing
+     back: the bytes are judged as they are about to be written. */
   {
     const B = boot();
     const older = catalog("shop", 5, "Older one"), current = catalog("shop", 6, "Current one");
     B.test.keepHist(SHOP, older);
     write(SHOP, current, Date.now() + 6000);
     B.test.keepHist(SHOP, current);
-    fs.writeFileSync(SHOP + ".lock", JSON.stringify({ kind: "etiuda-lock", token: "another-desk", at: Date.now() }));
-    const held = await B.ask("etiuda:history-put", sha(Buffer.from(older)), SHOP);
-    const heldKept = fs.readFileSync(SHOP, "utf8") === current && fs.existsSync(SHOP + ".lock");
-    fs.unlinkSync(SHOP + ".lock");
-    const free = await B.ask("etiuda:history-put", sha(Buffer.from(older)), SHOP);
-    const wrote = fs.readFileSync(SHOP, "utf8") === older && !fs.existsSync(SHOP + ".lock");
-    check(!!held && held.ok === false && heldKept && !!free && free.ok === true && wrote,
-      "2r23 a put-back waits while another desk holds the lock beside the file, the file as it was; THE CONTROL, the lock free,"
-      + " it puts back and leaves no lock: " + JSON.stringify({ held: held, heldKept: heldKept, free: free, wrote: wrote }));
-
-    /* 2q23 (the review's second question): an index this run did not build, saying a signed copy is free, puts nothing back:
-       the bytes are judged as they are about to be written. */
     const signedOld = catalog("shop", 7, "Signed", SIGNED);
     B.test.keepHist(SHOP, signedOld);
     const doc = JSON.parse(fs.readFileSync(path.join(HIST, "index.json"), "utf8"));
@@ -425,24 +419,19 @@ try {
     const forged = await C.ask("etiuda:history-put", sha(Buffer.from(signedOld)), SHOP);
     check(!!forged && forged.ok === false && fs.readFileSync(SHOP, "utf8") === cur,
       "2q23 an index row saying a signed copy is free puts nothing back: the stored bytes are judged before they are written: " + JSON.stringify(forged));
-    if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP 2r23 lifting plant:put-back-lock and plant:put-back-bytes (ETIUDA_PLANTS=off)");
+    if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP 2r23 lifting plant:put-back-bytes (ETIUDA_PLANTS=off)");
     else {
       const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8").split("\n");
       const lifted = (tag, line) => { const at = MAIN.map((l, i) => (l.indexOf(tag) >= 0 ? i : -1)).filter(i => i >= 0); if (at.length !== 1) return null; const c = MAIN.slice(); c[at[0]] = line; return c.join("\n"); };
-      const noLock = lifted("plant:put-back-lock", "  if (false) {"), noBytes = lifted("plant:put-back-bytes", "");
+      const noBytes = lifted("plant:put-back-bytes", "");
       let turned = null;
-      if (noLock && noBytes) {
-        const L = boot(noLock), now = fs.readFileSync(SHOP, "utf8");
-        fs.writeFileSync(SHOP + ".lock", JSON.stringify({ kind: "etiuda-lock", token: "another-desk", at: Date.now() }));
-        const r = await L.ask("etiuda:history-put", sha(Buffer.from(current)), SHOP);
-        const overLock = !!r && r.ok === true && fs.readFileSync(SHOP, "utf8") !== now;
-        fs.unlinkSync(SHOP + ".lock");
+      if (noBytes) {
         const Bt = boot(noBytes), before = fs.readFileSync(SHOP, "utf8");
         const r2 = await Bt.ask("etiuda:history-put", sha(Buffer.from(signedOld)), SHOP);
-        turned = { overLock: overLock, signedWritten: !!r2 && r2.ok === true && fs.readFileSync(SHOP, "utf8") !== before };
+        turned = { signedWritten: !!r2 && r2.ok === true && fs.readFileSync(SHOP, "utf8") !== before };
       }
-      check(!!turned && turned.overLock && turned.signedWritten,
-        "2r23 lifting plant:put-back-lock writes under another desk's lock, and lifting plant:put-back-bytes puts the signed copy back: " + JSON.stringify(turned));
+      check(!!turned && turned.signedWritten,
+        "2r23 lifting plant:put-back-bytes puts the signed copy back: " + JSON.stringify(turned));
     }
   }
 
