@@ -714,6 +714,7 @@ UI_STRINGS.pl={
   "Move or delete cards in this category first":"Kategorię można usunąć, gdy jej karty zostaną przeniesione albo usunięte",
   "Move or delete the cards in this category first":"Kategorię można usunąć, gdy jej karty zostaną przeniesione albo usunięte",
   "Delete card":"Usuń kartę",
+  /* The copywriter's words, for the Library's Delete and the editors' alike, this and "Delete this intent" */
   "Delete this card":"Usuń tę kartę",
   "New intent":"Nowa intencja",
   "New intent…":"Nowa intencja…",
@@ -847,8 +848,6 @@ UI_STRINGS.pl={
   "Close without saving any change":"Zamknij bez zapisywania zmian",
   "Save this card on this computer":"Zapisz tę kartę na tym komputerze",
   "Save this intent on this computer":"Zapisz tę intencję na tym komputerze",
-  "Delete this card: a built-in one returns on Reset, one you made does not":"Usuń tę kartę: wbudowana wróci po zresetowaniu, własna nie",
-  "Delete this intent: a built-in one returns on Reset, one you made does not":"Usuń tę intencję: wbudowana wróci po zresetowaniu, własna nie",
   "Discard your edits and restore the catalog wording.":"Odrzuca zmiany i przywraca treść z katalogu.",
   "Restore built-in quick facts":"Przywróć wbudowane szybkie fakty",
   "{KEY} is fixed and keeps its own meaning":"{KEY} to klawisz stały i zachowuje swoje znaczenie",
@@ -1725,6 +1724,8 @@ UI_STRINGS.pl={
   /* Claudette's words, 2026-11-17, a team file naming a relay this build does not use: one sentence and the next, on the row whole. */
   "The team file of {TEAM} names a relay this Etiuda does not use, so this desk does not follow it: it keeps its team, its catalog and its connection as they were, and sends nothing there.":"{TEAM} wskazuje w swoim pliku przekaźnik, z którego ta Etiuda nie korzysta, więc to stanowisko za nim nie podąża: zachowuje zespół, katalog i połączenie bez zmian i niczego tam nie wysyła.",
   "If the team moves back, nothing is needed; otherwise a new invitation from the team's lead is.":"Jeśli zespół wróci na poprzedni przekaźnik, nic nie trzeba robić; w przeciwnym razie potrzebne jest nowe zaproszenie od lidera zespołu.",
+  "{TEAM} worked through a shared folder, which Etiuda no longer follows: its catalog stays on this computer as it is, and a new invitation from the team's lead brings the team back.":"{TEAM} korzysta ze wspólnego folderu, którego Etiuda już nie obsługuje: katalog tego zespołu zostaje na tym komputerze bez zmian, a nowe zaproszenie od lidera zespołu przywróci zespół.",
+  "What this desk had not yet sent to the shared folder stays on this computer, unsent, in the folder {FOLDER}.":"To, czego to stanowisko nie zdążyło wysłać do wspólnego folderu, zostaje na tym komputerze, niewysłane, w folderze {FOLDER}.",
   "Another catalog of the team has a newer edition.":"Inny katalog zespołu ma nowsze wydanie.",
   "Other catalogs of the team with a newer edition: {N}.":"Inne katalogi zespołu z nowszym wydaniem: {N}.",
   "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.":"Na prośbę Studia lidera zespołu przesłano zespołowi kopię katalogu używanego na tym stanowisku.",
@@ -1929,6 +1930,8 @@ UI_STRINGS.pl={
   "This card is too large to share, so nothing was sent.":"Ta karta jest za duża, by ją udostępnić, więc nic nie wysłano.",
   "This desk has no current seat, so nothing was sent; sharing works again once it has one.":"To stanowisko nie ma teraz ważnego miejsca w licencji, więc nic nie wysłano; udostępnianie zadziała ponownie, gdy je odzyska.",
   "This card could not be sent just now.":"Nie udało się teraz wysłać tej karty.",
+  /* words: placeholder */
+  "This catalog is private, so this card stays on this desk.":"Ten katalog jest prywatny, więc ta karta zostaje na tym stanowisku.",
   "This card could not be kept just now.":"Nie udało się teraz zachować tej karty."
 };
 // Is this a language this build carries? The table itself stays private to this file.

@@ -856,12 +856,14 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     const run = (body.map(l => /^!insertmacro etiudaAsUser (\w+)$/.exec(l)).find(Boolean) || [])[1] || "";
     const asUser = asUserHolds(nsh);
     const ranThere = code(macro(nsh, run)).filter(l => l === call).length === 1;
-    /* Started elevated, with no unelevated instance: the file is not run at all, and the finish page says the copy stays
-       wherever HKCU names an uninstaller (decision 28's option b). */
+    /* Started elevated, with no unelevated instance: the file is not run here at all. Was (decision 28's option b): the copy stays
+       registered and the finish page says so. Now (Claude alpha's change of decision 28, on his ordinary-rights condition): wherever
+       HKCU names an uninstaller it is left to HKCU's own RunOnce, per-user, for that account's next sign-in, and the page says so. */
     const rest = m.slice(outer);
     const left = !rest.includes(call) && !rest.some(l => /uninstallOldVersion|ExecWait|Exec\b/.test(l))
       && rest.includes("ReadRegStr $R9 HKCU \"${UNINSTALL_REGISTRY_KEY}\" UninstallString")
-      && rest.indexOf("StrCpy $etiudaFinishText \"$(etiudaOldCopyLeft)\"") > rest.indexOf("${If} $R9 != \"\"");
+      && rest.indexOf("WriteRegStr HKCU \"Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce\" \"${APP_ID}.per-user-copy\" \"$R9 /currentuser /S /KEEP_APP_DATA\"") > rest.indexOf("${If} $R9 != \"\"")
+      && rest.indexOf("StrCpy $etiudaFinishText \"$(etiudaOldCopyGoes)\"") > rest.indexOf("${If} $R9 != \"\"");
     const ok = !!run && asUser && ranThere && !body.includes(call) && left;
     return { ok, left };
   };
@@ -882,8 +884,8 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     + JSON.stringify({ asItsOwnerPatched: status.asItsOwnerPatched, asUser: hk.ok, stray }));
   ok(!hkcuAsUser(T, NSH.replace(/(\$\{Else\}\r?\n)(\s*# An installer started elevated)/, "$1    !insertmacro uninstallOldVersion HKEY_CURRENT_USER\n$2")).ok,
     "14a control: an installer started elevated running that uninstaller itself, as main's template did, reads red");
-  ok(!hkcuAsUser(T, NSH.replace("StrCpy $etiudaFinishText \"$(etiudaOldCopyLeft)\"", "Nop")).ok,
-    "14a control: the copy left registered without a word on the finish page reads red");
+  ok(!hkcuAsUser(T, NSH.replace("StrCpy $etiudaFinishText \"$(etiudaOldCopyGoes)\"", "Nop")).ok,
+    "14a control: the copy left to its next sign-in without a word on the finish page reads red");
   const mainSec = T["installSection.nsh"] ? T["installSection.nsh"].replace(/!ifmacrodef etiudaOldUserCopy\r?\n\s*!insertmacro etiudaOldUserCopy\r?\n\s*!else\r?\n\s*(!insertmacro uninstallOldVersion HKEY_CURRENT_USER\r?\n\s*!insertmacro handleUninstallResult HKEY_CURRENT_USER)\r?\n\s*!endif/, "$1") : "";
   ok(!hkcuAsUser(Object.assign({}, T, { "installSection.nsh": mainSec }), NSH).ok,
     "14a control: the template's elevated run, as main's patch tool leaves it, reads red");
@@ -954,7 +956,7 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     const init = code(macro(nsh, "customInit"));
     const lang = macro(nsh, "TurnLang ID") || (/!macro TurnLang ID\r?\n([\s\S]*?)!macroend/.exec(nsh) || [])[1] || "";
     const defs = lang.split(/\r?\n/).map((l, i, all) => ({ l: l.trim(), guarded: all.slice(0, i).reverse().find(x => /^\s*!(ifndef|endif)\b/.test(x)) }))
-      .filter(x => /^LangString etiudaOldCopyLeft \$\{ID\} "[^"]+"$/.test(x.l));
+      .filter(x => /^LangString etiudaOldCopyGoes \$\{ID\} "[^"]+"(?: ; (?:placeholder: Claudette|the copywriter's words))?$/.test(x.l));
     return at > -1 && open !== null && /^Var etiudaFinishText$/m.test(nsh)
       && init[0] === "StrCpy $etiudaFinishText \"$(MUI_TEXT_FINISH_INFO_TEXT)\""
       && defs.length === 2 && defs.every(d => d.guarded && /!ifndef BUILD_UNINSTALLER/.test(d.guarded))
@@ -964,7 +966,7 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     + " language string in both languages; the page keeps its Run box, so the label stays 195 by 40 dialog units");
   ok(!finishSays(NSH.replace(/^\s*StrCpy \$etiudaFinishText "\$\(MUI_TEXT_FINISH_INFO_TEXT\)"\r?\n/m, "")),
     "14d control: no default, so every other install's finish page would be blank, reads red");
-  ok(!finishSays(NSH.replace(/(LangString RecogniseUnreadableText \$\{ID\} "Na tym[^\n]*\n)\s*LangString etiudaOldCopyLeft[^\n]*\n/, "$1")),
+  ok(!finishSays(NSH.replace(/(LangString RecogniseUnreadableText \$\{ID\} "Na tym[^\n]*\n)\s*LangString etiudaOldCopyGoes[^\n]*\n/, "$1")),
     "14d control: the Polish branch without its string reads red");
   ok(!finishSays(NSH.replace("!define MUI_FINISHPAGE_TEXT \"$etiudaFinishText\"", "")),
     "14d control: the page left on Modern UI's fixed text reads red");
@@ -1110,7 +1112,8 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     const touched = (b.match(/\b(RMDir|Delete|Rename|CopyFiles)\b[^\n]*|!insertmacro etiudaRemoveTree [^\n]*/g) || []).sort();
     /* The stage and the copy aside go by the walk that never enters a link (repair 10); 14b holds that no RMDir /r is left. */
     return gone.length === 3 && gone[0] === "!insertmacro etiudaRemoveTree \"$etiudaStage\"" && gone.slice(1).every(l => l.indexOf("$LOCALAPPDATA\\") > -1)
-      && JSON.stringify(touched) === JSON.stringify(["!insertmacro etiudaRemoveTree \"$etiudaAside\"", "!insertmacro etiudaRemoveTree \"$etiudaStage\"", "RMDir \"$etiudaBase\""])
+      /* Was: the stage's start also removed the copy aside whole. Now it is cleared by its own list at the swap (installer-mends im1d). */
+      && JSON.stringify(touched) === JSON.stringify(["!insertmacro etiudaRemoveTree \"$etiudaStage\"", "RMDir \"$etiudaBase\""])
       && (b.match(/!insertmacro etiudaRenameRetry [^\n]*/g) || []).join() === "!insertmacro etiudaRenameRetry \"$etiudaAside\" \"$etiudaBase\"";
   };
   /* (The older copy's move back, and when the copy aside may go, are replayed in 16m.) */
@@ -1122,12 +1125,13 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     const e = code(macro(nsh, "etiudaStageEnd"));
     return /\$\{IfNot\} \$\{FileExists\} "\$etiudaStage\\\$\{APP_EXECUTABLE_FILENAME\}"/.test(e)
       && /\$\{IfNot\} \$\{FileExists\} "\$etiudaStage\\\$\{UNINSTALL_FILENAME\}"/.test(e)
-      && /\$\{GetSize\} "\$etiudaStage" "\/S=0K" \$0 \$3 \$4\n\s*IntOp \$0 \$0 \* 100\n\s*IntOp \$3 \$\{APP_64_UNPACKED_SIZE\} \* 99\n\s*\$\{If\} \$0 < \$3\n\s*StrCpy \$1 "0"/.test(e)
+      /* Was: at least 99 per cent of the size electron-builder measured. Now every listed file at its size (installer-mends im5b, im5c). */
+      && /Call etiudaStageWhole\n\s*Pop \$0\n\s*\$\{If\} \$0 != "1"\n\s*StrCpy \$1 "0"/.test(e)
       && /\$\{If\} \$1 != "1"\n[\s\S]*?!insertmacro etiudaStageAbort\n[\s\S]*?SetErrorLevel 2\n\s*Quit\b/.test(e);
   };
-  ok(wholeOnly(NSH), "16c a stage without the program, its uninstaller, or 99 per cent of the size electron-builder measured is taken"
+  ok(wholeOnly(NSH), "16c a stage without the program, its uninstaller, or every file its list names at its size is taken"
     + " back and the run ends 2 before the app is closed");
-  ok(!wholeOnly(NSH.replace("IntOp $3 ${APP_64_UNPACKED_SIZE} * 99", "IntOp $3 0 * 99")), "16c control: the size left unchecked reads red");
+  ok(!wholeOnly(NSH.replace("  Call etiudaStageWhole\n", "")), "16c control: the stage judged without its list reads red");
 
   /* 16d. The swap: out of both folders, the older copy aside, the stage into its place, and the older copy put back where the
      second rename will not go; each rename tried as a locked extract is. */
@@ -1146,7 +1150,7 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     + " where that will not go puts the older copy back and ends 1618 (2 only if even that fails); each rename tried 30 times 2 s apart");
   ok(!swapRestores(NSH.replace("        !insertmacro etiudaRenameRetry \"$etiudaAside\" \"$etiudaBase\"\n", "")),
     "16d control: the older copy left aside when the stage cannot take its place reads red");
-  ok(!swapRestores(NSH.replace("  Push $0\n  SetOutPath $PLUGINSDIR\n  ${If} ${FileExists} \"$etiudaBase", "  Push $0\n  ${If} ${FileExists} \"$etiudaBase")),
+  ok(!swapRestores(NSH.replace("!macro etiudaSwap\n  Push $0\n  SetOutPath $PLUGINSDIR\n", "!macro etiudaSwap\n  Push $0\n")),
     "16d control: the installer still working inside the folder it renames reads red");
 
   /* 16e. The registration is never removed where the older copy's folder is the one replaced, and written again at once where it
@@ -1161,8 +1165,8 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     const goesOn = ["customUnInstallCheck", "customUnInstallCheckCurrentUser"]
       .every(n => { const b = code(macro(nsh, n)); return !!b.trim() && !/\b(Quit|Abort|SetErrorLevel)\b/.test(b); });
     const d = code(macro(nsh, "etiudaDropAside"));
-    const dropOnly = /\$\{If\} \$etiudaAsideMade == "1"\n\s*!insertmacro etiudaRemoveTree "\$etiudaAside"\n\s*\$\{EndIf\}/.test(d)
-      && (d.match(/\b(RMDir|Delete|Rename)\b|etiudaRemoveTree/g) || []).length === 1;
+    /* Was: the copy aside went here, after customInstall. Now it stays until the new copy has started (installer-mends im5d). */
+    const dropOnly = !/etiudaAside/.test(d) && (d.match(/\b(RMDir|Delete|Rename)\b|etiudaRemoveTree/g) || []).length === 0;
     return same && order && goesOn && dropOnly;
   };
   ok(keepsRegistration(S, NSH), "16e where the older copy was in the folder replaced its uninstaller is not run, so its registration stands"
@@ -1595,7 +1599,10 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
      was wholly absent, once, and the copy aside was then removed whatever had happened. Removed only once the folder holds the
      program: a run cut short after its swap, before the copy aside went, leaves both, and that copy aside is the older one. */
   const asideSeg = nsh => {
-    const b = code(macro(nsh, "etiudaStageBegin")), from = at(b, "SetOutPath $PLUGINSDIR"), to2 = at(b, "!insertmacro etiudaRemoveTree \"$etiudaStage\"");
+    const b = code(macro(nsh, "etiudaStageBegin")), from = at(b, "SetOutPath $PLUGINSDIR");
+    /* Ends before the refusal of a folder that is not ours, which installer-mends im1e holds. */
+    const refusal = at(b, "${If} ${FileExists} \"$etiudaBase\\*.*\"");
+    const to2 = refusal > -1 ? refusal : at(b, "!insertmacro etiudaRemoveTree \"$etiudaStage\"");
     return from > -1 && to2 > from ? b.slice(from + "SetOutPath $PLUGINSDIR".length, to2) : "";
   };
   const restoresAside = nsh => {
@@ -1620,7 +1627,9 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
       && refused(r.strayLeft) && holds(r.strayLeft, "A") && r.strayLeft.fsys.files.has("B\\stray.log")
       && refused(r.stuck) && holds(r.stuck, "A")
       && goesOn(r.briefLock) && holds(r.briefLock, "B")
-      && goesOn(r.both) && holds(r.both, "B") && !r.both.fsys.dirs.has("A")
+      /* Was: the copy aside was removed here once the folder held the program. Now it stays for the swap, which drops it by its own
+         list (installer-mends im1c, im1d). */
+      && goesOn(r.both) && holds(r.both, "B") && r.both.fsys.dirs.has("A")
       && goesOn(r.none) && holds(r.none, "B");
   };
   ok(restoresAside(NSH), "16m an older copy aside with no program in the folder goes back with the swap's retry, into the folder only where"
@@ -1628,7 +1637,7 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     + " was; it is removed only where the folder holds the program");
   const asideAt9cb = "\n  ${IfNot} ${FileExists} \"$etiudaBase\\*.*\"\n  ${AndIf} ${FileExists} \"$etiudaAside\\${APP_EXECUTABLE_FILENAME}\"\n"
     + "    Rename \"$etiudaAside\" \"$etiudaBase\"\n  ${EndIf}";
-  ok(!restoresAside(NSH.replace(/\n  \$\{If\} \$\{FileExists\} "\$etiudaAside\\\$\{APP_EXECUTABLE_FILENAME\}"\n[\s\S]*?(?=\n  !insertmacro etiudaRemoveTree "\$etiudaAside")/, () => asideAt9cb)),
+  ok(!restoresAside(NSH.replace(/\n  \$\{If\} \$\{FileExists\} "\$etiudaAside\\\$\{APP_EXECUTABLE_FILENAME\}"\n[\s\S]*?(?=\n  # AN INSTALL NEVER REMOVES)/, () => asideAt9cb)),
     "16m control: 9cb2a8ff's lines put back, the move back only into a folder wholly absent and the copy aside then removed regardless, reads red");
   ok(!restoresAside(NSH.replace("      !insertmacro etiudaRenameRetry \"$etiudaAside\" \"$etiudaBase\"\n", "      Rename \"$etiudaAside\" \"$etiudaBase\"\n")),
     "16m control: one plain Rename in place of the retry, a brief lock then ending the run, reads red");

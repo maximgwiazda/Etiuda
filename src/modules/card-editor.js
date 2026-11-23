@@ -515,7 +515,7 @@ function openCardEditor(id, presetCat, fromManage){
          button whose absence must not move the others - .mf-left holds the pair. */
       '<span class="mf-left">'+
         (isNew ? "" : '<button type="button" class="btn danger mf-del" id="meDelete" '+
-          'title="Delete this card: a built-in one returns on Reset, one you made does not">Delete</button>')+
+          'title="Delete this card">Delete</button>')+
         '<button type="button" class="btn mf-reset" id="meReset">Reset</button>'+
       '</span>'+
       '<button type="button" class="btn" id="meCancel" title="Close without saving any change">Cancel</button>'+

@@ -22,7 +22,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none but where a leg (930g) writes the export a policy names. */
 const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
-const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
+import { relayMirrorOf, relayMirrorProgram, writeRelayDesk, relayChannelOf } from "./relay-mirror-desk.mjs";
 const EXPECTED = 32;
 const WORK = path.join(ROOT, "shell", "main.js");
 const GOOD = fs.readFileSync(WORK);
@@ -83,11 +83,15 @@ function loadDesk(ud) {
   api.setStatsClock(CLOCK);
   return { api, ask, said, ud, sent, win, setPage: fn => { page = fn; }, invoke };
 }
+/* A desk on a relay team's mirror (tests/relay-mirror-desk.mjs): `folder` is what stands for the relay's copy of the team, and the desk's
+   own catalog folder a folder beside it. It was a desk whose catalog folder setting was the team's shared folder. */
 function newDesk(folder, pins) {
   const ud = path.join(LAB, "desk-" + (++seq));
   fs.mkdirSync(ud, { recursive: true });
-  fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(Object.assign({ kind: "etiuda-desk", schema: 1,
-    keys: { eCatalogFolder: folder, eUiLang: "en", eAgent: "North desk" } }, pins ? { teamPins: pins } : {})), "utf8");
+  const team = pins ? Object.keys(pins)[0] : "";
+  if (team) writeRelayDesk(ud, { team: team, lead: pins[team], own: path.join(ud, "own"), keys: { eAgent: "North desk" } });
+  else fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
+    keys: { eCatalogFolder: folder, eUiLang: "en", eAgent: "North desk" } }), "utf8");
   const D = loadDesk(ud);
   D.share = folder;
   return D;
@@ -123,17 +127,9 @@ try {
   const other = crypto.generateKeyPairSync("ed25519");
   const LEAD = { keyId: "quay-lead", public: pubHex(lead.publicKey), box: pubHex(leadBox.publicKey) };
   const OTHER = { keyId: "other-lead", public: pubHex(other.publicKey) };
+  /* The relay's stand-in carries the store's files to the desk's mirror, and the desk's own files back (it was the folder syncer). */
   syncMirror = (box) => {
-    const mirror = syncerMod.folderMirrorOf(box.D.ud, box.team);
-    const keys = Object.assign({ 1: box.key }, box.extraKeys || {});
-    const prog = syncerMod.createFolderProgram({
-      team: box.team,
-      folder: box.share,
-      mirror: mirror,
-      pin: LEAD,
-      keys: keys,
-      checks: box.D.api.deskTrustChecks(),
-    });
+    const prog = box.relayProgram || (box.relayProgram = relayMirrorProgram({ store: box.share, mirror: relayMirrorOf(box.D.ud, box.team) }));
     prog.syncOnce();
     prog.syncOnce();
   };
@@ -171,7 +167,7 @@ try {
     if (withBox !== false) leadRec.box = LEAD.box;
     return signTeam({
       format: 1, kind: "etiuda-team", id: id, catalogs: ["north-lamps"], lead: leadRec,
-      sealed: true, exportsSealed: false, epoch: epoch, roster: roster,
+      sealed: true, exportsSealed: false, epoch: epoch, roster: roster, channel: relayChannelOf(id),
     });
   };
   async function joined(badWrap) {
@@ -193,12 +189,12 @@ try {
     box.D.setPage(() => pageBody(n == null ? 2 : n));
     box.D.api.catalogChanged(box.D.win);
   }
-  /* Where the desk's own files land: on a folder team the mirror, whose outbox carries them to the share (board 945 stage 3 (b)
-     slice 2), so the answer is read there, and a check that nothing was written looks in both. */
-  const ownPlace = box => path.join(syncerMod.folderMirrorOf(box.D.ud, box.team), "desks", box.me.id);
+  /* Where the desk's own files land: on a relay team the mirror, which the relay carries on, so the answer is read there, and a check
+     that nothing was written looks in both. */
+  const ownPlace = box => path.join(relayMirrorOf(box.D.ud, box.team), "desks", box.me.id);
   const statsAt = box => path.join(ownPlace(box), "stats.estat");
-  const estatOf = box => estat(box.share).concat(estat(syncerMod.folderMirrorOf(box.D.ud, box.team)));
-  const oldEstatOf = box => oldEstat(box.share).concat(oldEstat(syncerMod.folderMirrorOf(box.D.ud, box.team)));
+  const estatOf = box => estat(box.share).concat(estat(relayMirrorOf(box.D.ud, box.team)));
+  const oldEstatOf = box => oldEstat(box.share).concat(oldEstat(relayMirrorOf(box.D.ud, box.team)));
   const openStats = (box) => {
     try {
       const raw = JSON.parse(fs.readFileSync(statsAt(box), "utf8"));
@@ -340,7 +336,7 @@ try {
     const boxB = crypto.generateKeyPairSync("x25519"), next = crypto.generateKeyPairSync("ed25519");
     const NEXT = { keyId: "quay-lead-next", public: pubHex(next.publicKey) };
     const docOf = (box, leadRec, key, epoch, roster, handover) => {
-      const o = { format: 1, kind: "etiuda-team", id: box.team, catalogs: ["north-lamps"], lead: leadRec, sealed: true, exportsSealed: false, epoch: epoch, roster: roster };
+      const o = { format: 1, kind: "etiuda-team", id: box.team, catalogs: ["north-lamps"], lead: leadRec, sealed: true, exportsSealed: false, epoch: epoch, roster: roster, channel: relayChannelOf(box.team) };
       if (handover) o.handover = handover;
       o.sig = { alg: "Ed25519", keyId: leadRec.keyId };
       o.sig.value = crypto.sign(null, Buffer.from(V2.v2SignedBytes(o)), key).toString("hex");
@@ -423,7 +419,7 @@ try {
     const S1 = crypto.generateKeyPairSync("x25519"), S2 = crypto.generateKeyPairSync("x25519"), heir = crypto.generateKeyPairSync("ed25519");
     const HEIR = { keyId: "quay-lead-heir", public: pubHex(heir.publicKey) };
     const signed = (box, leadRec, key, handover) => {
-      const o = { format: 1, kind: "etiuda-team", id: box.team, catalogs: ["north-lamps"], lead: leadRec, sealed: true, exportsSealed: false, epoch: 1,
+      const o = { format: 1, kind: "etiuda-team", id: box.team, channel: relayChannelOf(box.team), catalogs: ["north-lamps"], lead: leadRec, sealed: true, exportsSealed: false, epoch: 1,
         roster: [entry(box.D, box.me, box.key, box.team, 1)] };
       if (handover) o.handover = handover;
       o.sig = { alg: "Ed25519", keyId: leadRec.keyId };

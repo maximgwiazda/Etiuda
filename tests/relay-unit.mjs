@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 648;
+const EXPECTED = 653; /* fold 128: 648 + 3 (relay admission) + 2 (the join link key) */
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -160,6 +160,7 @@ async function tokenHello(w, inv, token, nonce, key, o) {
     sig: signHex(who, C.helloBytes(w.rt, n, who.keyId)),
     seat: opts.seat !== undefined ? opts.seat : seatOf(w, who.pub) };
   if (body.seat === null) delete body.seat;
+  if (opts.lead !== undefined) body.lead = opts.lead;
   return call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: body });
 }
 async function sessionOf(w, key) {
@@ -2036,6 +2037,35 @@ async function main() {
     });
     check(unusedPlant.turned && unusedPlant.back, "962f lifting plant:token-removed opens that hello or spends its token, and the product file is never written: "
       + unusedPlant.detail + ", sha " + (unusedPlant.back ? "unchanged" : "CHANGED"));
+
+    /* A token hello naming the lead key the desk pinned from its invitation: another key, or one not of that shape, is lead-other
+       and spends nothing; the team's own lead key opens the session and spends the token; a hello naming none is judged as before. */
+    const leadFirst = async () => {
+      const y = await world();
+      const token = hex(32), id = hex(16);
+      await invites(y, [{ id, hash: sha(token) }], []);
+      const other = await tokenHello(y, id, token, null, null, { lead: keyPair(false).pub });
+      const shape = await tokenHello(y, id, token, null, null, { lead: "ab" });
+      const kept = y.R.stores.get(y.rt).get("inv:" + id);
+      const right = await tokenHello(y, id, token, null, null, { lead: y.lead.pub });
+      const after = y.R.stores.get(y.rt).get("inv:" + id);
+      const token2 = hex(32), id2 = hex(16);
+      await invites(y, [{ id: id2, hash: sha(token2) }], []);
+      const none = await tokenHello(y, id2, token2);
+      return { other, shape, unspent: !!kept && !kept.spent, right, spent: !!(after && after.spent), none };
+    };
+    const lf = await leadFirst();
+    check(refused(lf.other, "lead-other") && refused(lf.shape, "lead-other") && lf.unspent && lf.right.status === 200 && lf.spent
+      && lf.none.status === 200,
+      "jlk1 a token hello naming a lead key that is not the team's lead, or not a key at all, is lead-other and spends nothing; the lead's own key "
+      + "opens the session and spends it; a hello naming none opens as before: " + said(lf.other) + ", " + said(lf.shape) + ", unspent " + lf.unspent
+      + ", lead's key " + lf.right.status + ", spent " + lf.spent + ", none " + lf.none.status);
+    const leadPlant = await liftCore("plant:token-lead", async () => {
+      const y = await leadFirst();
+      return y.other.status === 200 || !y.unspent;
+    });
+    check(leadPlant.turned && leadPlant.back, "jlk2 lifting plant:token-lead opens the hello naming another lead key and spends its token, and the product file is never written: "
+      + leadPlant.detail + ", sha " + (leadPlant.back ? "unchanged" : "CHANGED"));
 
     /* A key removed while holding a bound, unuploaded invitation registered before the removal: its key hello is answered
        removed, never the invitation's session again (edit 3). */
@@ -8013,8 +8043,10 @@ async function main() {
     /* Where this half met the relay seats (integration, Held for decision 49), the digest is the relay seats branch's wire: its seats grant
        and its status; this half changes neither. A person's store moved it: the notice route, and the store grant, store certificate,
        notice and store computer list byte forms. A seat certificate's signed marks moved it: the "desk-only" and "member" lines, signed
-       from CERT_MARKS, whose rows the digest reads beside the byte forms. The addressed place (board 1013, piece 2) added one refusal, recipient-full (403): its reason word and its STATUS row. */
-    const WIRE_SHA = "a7788ffa9e175f3a7da8a5fee0a31800026618705eb46d3006e3a78c55a31bf6";
+       from CERT_MARKS, whose rows the digest reads beside the byte forms. The addressed place (board 1013, piece 2) added one refusal, recipient-full (403): its reason word and its STATUS row.
+       A token hello naming a lead key not the team's added one more, lead-other (403): its reason word and its STATUS row. Its words then
+       became the copywriter's, true after a lead handover too. */
+    const WIRE_SHA = "99d43e7143d006ff6a09579b025898804c5c66121bc1cb1128a59f8188296d79";
     check(sha(wire) === WIRE_SHA && forms.length > 200,
       "1013w the relay's wire is as it was: its routes, methods, refusals and their words, socket closes and signed byte forms digest to "
       + WIRE_SHA.slice(0, 12) + ": " + sha(wire).slice(0, 12));
@@ -8293,6 +8325,47 @@ async function main() {
         if (PLANTS_OFF) { skip("1013bj" + leg + " lifting plant:" + tag + " turns 1013" + leg + " red"); continue; }
         const p = await liftCore("plant:" + tag, turns);
         check(kp.rowAfter === false && p.turned && p.back, "1013bj" + leg + " lifting plant:" + tag + " turns 1013" + leg + " red (" + say + "), and the product file is never written: " + how(p));
+      }
+    }
+    /* ---- 1013bk: an item addressed to a desk still on the team outlives its writer's removal for its addressee, to the removal's grace
+       (the relay-admission review's class B); the lead still never reads it ---- */
+    async function heldToScene() {
+      const w = await world();
+      const sA = await sessionOf(w, w.desk);
+      const toB = "to:" + w.otherId;
+      const sent = await put2(w, sA, w.desk, toB, 1);
+      const out = { sent: sent.r.status };
+      out.dropped = (await devices(w, [w.devs[1]])).status;
+      let sB = await sessionOf(w, w.other);
+      const sL = await sessionOf(w, w.lead);
+      out.listB = listed(await since(w, sB), sent.b.id);
+      const rB = await getBlob(w, sB, sent.b.id);
+      out.readB = rB.status === 200 && !!rB.meta && rB.meta.place === toB;
+      out.listL = listed(await since(w, sL), sent.b.id);
+      out.readL = await getBlob(w, sL, sent.b.id);
+      w.R.clock.now += C.REMOVED_KEEP_MS + MIN;
+      sB = await sessionOf(w, w.other);
+      out.listPast = listed(await since(w, sB), sent.b.id);
+      out.readPast = (await getBlob(w, sB, sent.b.id)).status;
+      return out;
+    }
+    const hk = await heldToScene();
+    const goodHk = o => o.sent === 200 && o.dropped === 200 && o.listB === true && o.readB === true && o.listL === false && refused(o.readL, "missing")
+      && o.listPast === false && o.readPast !== 200;
+    check(goodHk(hk), "1013bk an item addressed to a desk still on the team, its writer then removed, is listed to and served to that desk until the removal's grace ends,"
+      + " the lead told missing and seeing nothing, and past the grace neither listed nor served: "
+      + JSON.stringify({ sent: hk.sent, dropped: hk.dropped, listB: hk.listB, readB: hk.readB, listL: hk.listL, readL: hk.readL && hk.readL.status, listPast: hk.listPast, readPast: hk.readPast }));
+    {
+      const LIFTS = [
+        ["held-to-since", "the addressee's list leaves the held item out", async () => (await heldToScene()).listB !== true],
+        ["held-to-blob", "the addressee is told the held item is missing", async () => (await heldToScene()).readB !== true],
+      ];
+      let n = 0;
+      for (const [tag, say, turns] of LIFTS) {
+        const id = "1013bl" + String.fromCharCode(97 + n++);
+        if (PLANTS_OFF) { skip(id + " lifting plant:" + tag + " turns 1013bk red"); continue; }
+        const p = await liftCore("plant:" + tag, turns);
+        check(goodHk(hk) && p.turned && p.back, id + " lifting plant:" + tag + " turns 1013bk red (" + say + "), and the product file is never written: " + how(p));
       }
     }
   }

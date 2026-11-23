@@ -141,6 +141,7 @@ Limits, and the reason when they trip:
 | a token already used once | `token-spent` |
 | a wrap whose canonical JSON is longer than 1024 bytes | `blob-size` |
 | a token hello after the invitation's end, the token not yet spent | `invite-ended` |
+| a token hello naming a lead key that is not the team's lead, the token not yet spent | `lead-other` |
 | a deletion record older than 30 days of this clock | `expired` |
 | a challenge older than 5 minutes | `nonce-stale` |
 
@@ -183,6 +184,7 @@ The relay and the program each apply the blob, team and rate limits. An incoming
 | `revoked` | That grant was signed by a revoked key, so the relay did not take it. |
 | `withdrawn` | That desk has withdrawn its request, so it was not let in. |
 | `seat-lapsed` | This desk's seat needs a current certificate, so the relay did not open a session. |
+| `lead-other` | This invitation link does not match its team's lead: it may be damaged or altered, or the team may have a new lead since it was sent. Nothing was used or sent. A new link from the team's lead, or an invitation to this account's email address, works. |
 
 A swap of id, team, epoch, counter or `supersedes` fails closed as `bad-signature`. A path written onto the blob is not where the file lands. A blob sealed for an epoch the team file does not carry is `epoch`.
 

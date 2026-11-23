@@ -35,7 +35,16 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 191;
+/* RETIRED, P4 (no folder is read as a team, and the folder syncer is never started): every check below guards a folder team's mirror, outbox or
+ * syncer through the shell (a desk on a shared folder reads from the mirror the syncer keeps, writes to it and owes the share through the outbox,
+ * the syncer's listings, put-backs, conflict siblings, links, seat and ask files for that team), or the syncer program run for such a team. They
+ * were 191 checks, and with the shell no longer starting a syncer the first of them failed (26 red) and the next threw (folderMirrorHere is gone).
+ * The body is kept under the switch as the record of what each held (its sentences are the old ones): the retirement is the whole leg, and
+ * P3, which removes the syncer, removes this file with it. The syncer's own legs that need no shell (tests/syncer-invariants.mjs,
+ * syncer-outbox-unread.mjs, syncer-rename-busy.mjs) stand. The leg still starts and makes its lab, so tests/relay-channel-clean.mjs, which
+ * holds that every lab leg removes its folder on every exit path, holds this one too. */
+const FOLDER_MIRROR_RETIRED = true;
+const EXPECTED = FOLDER_MIRROR_RETIRED ? 0 : 191;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const { offWindows } = nodeRequire("./off-windows.cjs");
@@ -190,6 +199,11 @@ function seal(key, epoch, docText, teamId) {
 }
 
 async function run() {
+  if (FOLDER_MIRROR_RETIRED) {
+    console.log("  RETIRED the folder team's mirror, outbox and syncer legs (191 checks) with the folder team: see FOLDER_MIRROR_RETIRED");
+    console.log("#counts checks=0 skipped=0 failures=0 expected=0");
+    process.exit(0);
+  }
   const SHARE = folder("share");
   const CAT_A1 = text(catalog("lamp-shop", 1, "Lamp Shop", "2026-02-01"));
   const CAT_A2 = text(catalog("lamp-shop", 2, "Lamp Shop", "2026-02-02"));
@@ -5859,6 +5873,50 @@ async function run() {
   await keepPlant("keep-twice", "p3", k => !(k.r2 && k.r2.ok === false && k.r2.already === true && k.twiceSame));
   await keepPlant("keep-shelf", "p5", k => !(k.r8 && k.r8.ok === false && k.misfit.same && k.misfit.problems.length === 0));
   await keepPlant("keep-from", "p4", k => !(k.r1 && k.r1.card && k.r1.card.from && k.r1.card.from.desk === KEEP_SENDER && k.r1.card.from.card === "c-shared"));
+
+  /* An unsigned catalog may reach an empty mirror. It may not take the name of a signed catalog already there, and a later
+     file the lead signed still may. The plant drops only the assignment, so the refusal is gone and the unsigned file lands. */
+  const editionAt = p => {
+    try {
+      const d = JSON.parse(fs.readFileSync(p, "utf8"));
+      return { rev: d.rev, signed: !!(d.sig && d.sig.value) };
+    } catch { return { rev: null, signed: false }; }
+  };
+  const unsignedOverScene = (mod, tag) => {
+    const share = folder("share-" + tag);
+    const mirror = folder("mirror-" + tag);
+    const team = "t-" + crypto.randomBytes(8).toString("hex");
+    const signedText = text(catalog("north-desk", 2, "North lamps", "2026-02-02"));
+    fs.writeFileSync(path.join(share, "north.ec"), signedText, "utf8");
+    const prog = mod.createFolderProgram({ team, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks });
+    prog.syncOnce();
+    const first = editionAt(path.join(mirror, "north.ec"));
+    const bare = { format: 2, kind: "etiuda-catalog", id: "north-desk", rev: 9, name: "North lamps", date: "2026-02-09",
+      langs: [{ code: "en", label: "EN" }], tags: [], cards: [] };
+    fs.writeFileSync(path.join(share, "north.ec"), JSON.stringify(bare, null, 1) + "\n", "utf8");
+    const fresh = { format: 2, kind: "etiuda-catalog", id: "south-note", rev: 1, name: "South note", date: "2026-02-01",
+      langs: [{ code: "en", label: "EN" }], tags: [], cards: [] };
+    fs.writeFileSync(path.join(share, "south-note.ec"), JSON.stringify(fresh, null, 1) + "\n", "utf8");
+    prog.syncOnce();
+    const kept = editionAt(path.join(mirror, "north.ec"));
+    const south = editionAt(path.join(mirror, "south-note.ec"));
+    fs.writeFileSync(path.join(share, "north.ec"), text(catalog("north-desk", 4, "North lamps", "2026-02-04")), "utf8");
+    prog.syncOnce();
+    const later = editionAt(path.join(mirror, "north.ec"));
+    return { firstSigned: first.signed && first.rev === 2, keptSigned: kept.signed && kept.rev === 2,
+      southLanded: south.rev === 1, leadReplaced: later.signed && later.rev === 4, replaced: !kept.signed };
+  };
+  {
+    const s = unsignedOverScene(syncerMod, "st3a");
+    check(s.firstSigned && s.keptSigned && s.southLanded && s.leadReplaced,
+      "st3a an unsigned catalog does not take a signed catalog's name, a new unsigned file still lands, and a later file the lead signed still replaces it: "
+      + "first " + s.firstSigned + ", kept " + s.keptSigned + ", south " + s.southLanded + ", later " + s.leadReplaced);
+  }
+  if (PLANTS_OFF) skip("st3b lifting plant:unsigned-over-signed lets the unsigned file take the signed catalog's name (ETIUDA_PLANTS=off)");
+  else {
+    const r = await testPlant("unsigned-over-signed", syncerFile, async scratch => unsignedOverScene(nodeRequire(scratch), "st3b").replaced);
+    check(r.ok, "st3b lifting plant:unsigned-over-signed lets the unsigned file take the signed catalog's name (FAIL st3a): " + JSON.stringify(r));
+  }
 
   if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") {
     syncerMod.stopAllFolderSyncers();

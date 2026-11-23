@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-seats-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 208;
+const EXPECTED = 236;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* ETIUDA_PLANT_ONLY, a comma list of plant tags or planted names: only those plants run, every other is skipped, so one plant is proved
    alone without the whole sweep. */
@@ -1208,6 +1208,179 @@ async function main() {
   await leg("s24f", leadOrdinaryScene, "the lead's key opens with no certificate on an ordinary team, its session keeping no seat, and is refused with none on an Entra team");
   await leg("s24g", inviteStageScene, "the invitation stage on every team: an unseated token hello is refused seat-lapsed, its token unspent, no try counted and its challenge good, which then opens with a current certificate and spends the token; both resumes ask the seat again; on an Entra team another licence's certificate opens it and none is refused");
   await leg("s24h", lapseFirstScene, "lapse first: a lapsed ordinary team's desk is told team-lapsed seated or not, and so is the lead; a read-only team's desk meets the seat, refused with none and open with one");
+  /* ---- A freed key at the invitation stage (the relay-admission review's class A): the grant's freed list is the seat rule's at every
+     hello that reads the team, so a key named as freed on a certificate issued before the freeing opens no invitation session, a token's,
+     a resume's or a door's reopening of a token-bound request, loses the invitation session and socket it holds, and opens again on a
+     certificate issued since. ---- */
+  const freeGrant = (w, pub, at) => grantAt(w.lead.pub, w.R.clock.now, { licence: w.licence, live: w.R.clock.now, freed: [{ key: pub, at }] });
+  async function freedTokenScene() {
+    const w = await team({ seats: true }), j = joiner(w, "j"), inv = await inviteOn(w), early = certFor(j.pub, w.licence, T0, DAY);
+    w.R.clock.now = T0 + HOUR;
+    const named = await renew(w, freeGrant(w, j.pub, w.R.clock.now));
+    const hello = await helloWith(w, j, { invite: inv.token, inv: inv.inv, seat: early });
+    const row = storeOf(w).get("inv:" + inv.inv) || {};
+    const ok = named.status === 200 && refused(hello, "seat-lapsed") && row.spent === false;
+    return { ok, detail: brief({ named: said(named), tokenHello: said(hello), spent: row.spent }) };
+  }
+  async function freedResumeScene() {
+    const w = await team({ seats: true }), j = joiner(w, "j"), inv = await inviteOn(w), early = certFor(j.pub, w.licence, T0, DAY);
+    const first = await helloWith(w, j, { invite: inv.token, inv: inv.inv, seat: early });
+    w.R.clock.now = T0 + HOUR;
+    const named = await renew(w, freeGrant(w, j.pub, w.R.clock.now));
+    const resume = await helloWith(w, j, { seat: early });
+    const ok = opened(first) && named.status === 200 && refused(resume, "seat-lapsed");
+    return { ok, detail: brief({ first: said(first), named: said(named), resume: said(resume) }) };
+  }
+  async function freedInviteSessionScene() {
+    const w = await team({ seats: true }), j = joiner(w, "j"), inv = await inviteOn(w), early = certFor(j.pub, w.licence, T0, DAY);
+    const s = await helloWith(w, j, { invite: inv.token, inv: inv.inv, seat: early });
+    const before = await listWith(w, s), token = opened(s) ? s.json.session : "";
+    const up = await W.fetch(new Request("https://relay.test/relay/v1/t/" + w.rt + "/socket", { method: "GET", headers: { authorization: "Bearer " + token, upgrade: "websocket" } }), w.R.env);
+    const sockId = up.headers.get("x-stand-in-socket");
+    const ws = [...w.R.hubs.values()].map(h => h.open.find(x => x.id === sockId)).find(Boolean) || null;
+    w.R.clock.now = T0 + 5 * MIN;
+    const named = await renew(w, freeGrant(w, j.pub, w.R.clock.now));
+    const after = await listWith(w, s);
+    const shut = !!ws && !!ws.closed && ws.closed.code === 4401;
+    const ok = opened(s) && before.status === 200 && named.status === 200 && after.status === 401 && !!after.json && after.json.error === "no-hello" && shut;
+    return { ok, detail: brief({ token: said(s), listedBefore: said(before), named: said(named), listedAfter: said(after), socket: ws ? ws.closed : "none" }) };
+  }
+  async function freedSinceInviteScene() {
+    const w = await team({ seats: true }), j = joiner(w, "j"), inv = await inviteOn(w);
+    w.R.clock.now = T0 + HOUR;
+    const named = await renew(w, freeGrant(w, j.pub, w.R.clock.now));
+    w.R.clock.now += 5 * MIN;
+    const late = certFor(j.pub, w.licence, w.R.clock.now, DAY);
+    const hello = await helloWith(w, j, { invite: inv.token, inv: inv.inv, seat: late });
+    const list = await listWith(w, hello);
+    w.R.clock.now += 40 * MIN;
+    const resume = await helloWith(w, j, { seat: late });
+    const ok = named.status === 200 && opened(hello) && list.status === 200 && opened(resume);
+    return { ok, detail: brief({ named: said(named), tokenHello: said(hello), listed: said(list), resume: said(resume) }) };
+  }
+  async function freedDoorScene() {
+    const w = await team({ seats: true }), j = joiner(w, "j"), inv = await inviteOn(w), early = certFor(j.pub, w.licence, T0, DAY);
+    const door = await doorOf(w, [w.licence]);
+    const first = await helloWith(w, j, { invite: inv.token, inv: inv.inv, seat: early });
+    w.R.clock.now = T0 + HOUR;
+    const named = await renew(w, freeGrant(w, j.pub, w.R.clock.now));
+    const knock = await knockWith(w, j, early);
+    w.R.clock.now += 5 * MIN;
+    const late = await knockWith(w, j, certFor(j.pub, w.licence, w.R.clock.now, DAY));
+    const ok = door.status === 200 && opened(first) && named.status === 200 && refused(knock, "seat-lapsed") && opened(late);
+    return { ok, detail: brief({ door: said(door), first: said(first), named: said(named), knockBefore: said(knock), knockSince: said(late) }) };
+  }
+  await leg("s30a", freedTokenScene, "a key the grant names as freed, on a current certificate issued before the freeing, is refused seat-lapsed at an invitation's token hello, the token unspent");
+  await leg("s30b", freedResumeScene, "a key bound to an invitation and then named as freed is refused seat-lapsed at its resume on the certificate it joined with");
+  await leg("s30c", freedInviteSessionScene, "an invitation session open when the grant newly names its key as freed ends at that renewal, its list no-hello and its socket closed");
+  await leg("s30d", freedSinceInviteScene, "a key named as freed and then given a certificate issued since opens an invitation's token hello, lists, and resumes");
+  await leg("s30e", freedDoorScene, "a token-bound key named as freed reopens no invitation session at the door on its earlier certificate, and does on one issued since");
+  /* An enrolled desk the lead frees (the service's freed list for its key): its next device hello and its next invitation hello are
+     refused, and the device and invitation sessions it holds end on the renewal that frees it. */
+  async function freedEveryPathScene() {
+    const w = await team({ seats: true }), a = w.desks.a, inv = await inviteOn(w), inv2 = await inviteOn(w);
+    prove(w, "a", DAY);
+    const dev = await sessionAs(w, "a");
+    const invS = await helloWith(w, a, { invite: inv.token, inv: inv.inv, seat: a.cert });
+    const devBefore = await listWith(w, dev), invBefore = await listWith(w, invS);
+    w.R.clock.now = T0 + 5 * MIN;
+    const named = await renew(w, freeGrant(w, a.pub, w.R.clock.now));
+    const devAfter = await listWith(w, dev), invAfter = await listWith(w, invS);
+    const devHello = await sessionAs(w, "a");
+    const invHello = await helloWith(w, a, { invite: inv2.token, inv: inv2.inv, seat: a.cert });
+    const ended = r => r.status === 401 && !!r.json && r.json.error === "no-hello";
+    const ok = opened(dev) && opened(invS) && devBefore.status === 200 && invBefore.status === 200 && named.status === 200
+      && ended(devAfter) && ended(invAfter) && refused(devHello, "seat-lapsed") && refused(invHello, "seat-lapsed");
+    return { ok, detail: brief({ device: said(dev), invitation: said(invS), named: said(named), deviceListAfter: said(devAfter), invitationListAfter: said(invAfter),
+      nextDeviceHello: said(devHello), nextInvitationHello: said(invHello) }) };
+  }
+  await leg("s30f", freedEveryPathScene, "an enrolled desk the grant names as freed: its device and invitation sessions end no-hello on that renewal, and its next device hello and next invitation hello are each refused seat-lapsed");
+  /* An ordinary licence's grant carrying the service's freed list, a top-level freed: [{key, at}] on a grant without seats, newest first:
+     the team stays ordinary (no seats row, any licence's certificate still opens a desk not named), a named key is refused at once at the
+     device hello and on the invitation path and loses the sessions it holds, a certificate issued since opens it, and a later grant
+     naming nobody lifts the name. Any other placement, or a list out of shape, is refused shape. */
+  async function freedOrdinaryScene() {
+    const w = await team({}), a = w.desks.a, j = joiner(w, "j"), inv = await inviteOn(w), inv2 = await inviteOn(w);
+    a.cert = certFor(a.pub, hex(16), T0, DAY);
+    const jc = certFor(j.pub, hex(16), T0, DAY);
+    const dev = await sessionAs(w, "a"), invS = await helloWith(w, j, { invite: inv.token, inv: inv.inv, seat: jc });
+    w.R.clock.now = T0 + 5 * MIN;
+    const at = w.R.clock.now, freed = [{ key: a.pub, at }, { key: j.pub, at: at - MIN }];
+    const top = list => grantAt(w.lead.pub, at, undefined, { fields: { freed: list } });
+    const why = g => C.grantWhy(g, w.lead.pub, at, K.ROOTS);
+    const bad = {
+      empty: why(top([])), notList: why(top({ key: a.pub, at })), oldestFirst: why(top(freed.slice().reverse())), twice: why(top([freed[0], freed[0]])),
+      afterIssue: why(top([{ key: a.pub, at: at + 1 }])), extraField: why(top([{ key: a.pub, at, licence: hex(16) }])), bareKey: why(top([a.pub])),
+      upperKey: why(top([{ key: a.pub.toUpperCase(), at }])), tooMany: why(top(Array.from({ length: C.FREED_MAX + 1 }, (_, i) => ({ key: hex(32), at: at - i })))),
+      inSeats: why(grantAt(w.lead.pub, at, { freed })), besideSeats: why(grantAt(w.lead.pub, at, { licence: w.licence, live: at }, { fields: { freed } })),
+    };
+    const full = why(top(Array.from({ length: C.FREED_MAX }, (_, i) => ({ key: hex(32), at: at - i }))));
+    const named = await renew(w, top(freed));
+    const devAfter = await listWith(w, dev), invAfter = await listWith(w, invS);
+    const devHello = await sessionAs(w, "a"), resume = await helloWith(w, j, { seat: jc });
+    const invHello = await helloWith(w, a, { invite: inv2.token, inv: inv2.inv, seat: a.cert });
+    const other = await session(w, w.desks.b, certFor(w.desks.b.pub, hex(16), w.R.clock.now, DAY));
+    const stillOrdinary = storeOf(w).get("seats") === undefined;
+    w.R.clock.now += MIN;
+    const since = await session(w, a, certFor(a.pub, hex(16), w.R.clock.now, DAY));
+    w.R.clock.now += MIN;
+    const lifted = await renew(w, grantAt(w.lead.pub, w.R.clock.now));
+    const back = await sessionAs(w, "a");
+    /* A name lapses at its at plus the longest certificate span, never because a grant omits the list (G1): a grant past that span
+       keeps a newer name and drops the lapsed one. */
+    w.R.clock.now = at + 30 * DAY + MIN;
+    const fresh = hex(32), past = await renew(w, grantAt(w.lead.pub, w.R.clock.now, undefined, { fields: { freed: [{ key: fresh, at: w.R.clock.now }] } }));
+    const keptKeys = ((storeOf(w).get("freedAll") || {}).freed || []).map(x => x.key);
+    const lapsedDropped = past.status === 200 && keptKeys.indexOf(fresh) > -1 && keptKeys.indexOf(a.pub) < 0 && keptKeys.indexOf(j.pub) < 0;
+    const ended = r => r.status === 401 && !!r.json && r.json.error === "no-hello";
+    const ok = opened(dev) && opened(invS) && Object.values(bad).every(v => v === "shape") && full === null && named.status === 200 && ended(devAfter) && ended(invAfter)
+      && refused(devHello, "seat-lapsed") && refused(resume, "seat-lapsed") && refused(invHello, "seat-lapsed") && opened(other) && stillOrdinary
+      && opened(since) && lifted.status === 200 && refused(back, "seat-lapsed") && lapsedDropped;
+    return { ok, detail: brief({ device: said(dev), invitation: said(invS), refusedShapes: bad, fullList: full, named: said(named), deviceListAfter: said(devAfter),
+      invitationListAfter: said(invAfter), nextDeviceHello: said(devHello), resume: said(resume), nextInvitationHello: said(invHello), otherDesk: said(other),
+      stillOrdinary, certSince: said(since), lifted: said(lifted), earlierCertAfterListlessGrant: said(back), lapsedDropped, keptKeys }) };
+  }
+  await leg("s30g", freedOrdinaryScene, "an ordinary licence's grant naming keys as freed (a top-level freed list on a grant without seats, newest first): the team stays ordinary, the named desk's device and invitation sessions end no-hello, its next device hello, invitation resume and invitation hello are refused seat-lapsed, a desk not named opens on any licence, a certificate issued since opens, a later grant naming nobody lifts the name; a full list of FREED_MAX is taken, and an empty list, one not a list, oldest first, a key twice, an entry after the grant's issue, an entry with another field, a bare key, an upper-case key, one past FREED_MAX, the list inside seats, or the list beside seats is refused shape");
+  /* The ordinary licence's kept freed names, merged from every grant that lists them (the test architect's read of G1). A name held
+     at T and named again by a grant at an earlier instant keeps T: a certificate issued between the two instants is still refused, and
+     what the relay stores for the key is T. A later instant replaces it, so the control reads the same key at the later one. */
+  async function freedOlderAtScene() {
+    const w = await team({}), a = w.desks.a;
+    w.R.clock.now = T0 + 10 * MIN;
+    const T = w.R.clock.now, E = T - 5 * MIN;
+    const first = await renew(w, grantAt(w.lead.pub, T, undefined, { fields: { freed: [{ key: a.pub, at: T }] } }));
+    w.R.clock.now = T + 10 * MIN;
+    const replay = await renew(w, grantAt(w.lead.pub, w.R.clock.now, undefined, { fields: { freed: [{ key: a.pub, at: E }] } }));
+    const keptAt = () => ((storeOf(w).get("freedAll") || {}).freed || []).filter(x => x.key === a.pub).map(x => x.at);
+    const afterReplay = keptAt();
+    const between = await session(w, a, certFor(a.pub, hex(16), T - 2 * MIN, DAY));
+    const since = await session(w, a, certFor(a.pub, hex(16), T + MIN, DAY));
+    w.R.clock.now += 10 * MIN;
+    const later = w.R.clock.now - MIN;
+    const newer = await renew(w, grantAt(w.lead.pub, w.R.clock.now, undefined, { fields: { freed: [{ key: a.pub, at: later }] } }));
+    const afterNewer = keptAt();
+    const ok = first.status === 200 && replay.status === 200 && afterReplay.length === 1 && afterReplay[0] === T && refused(between, "seat-lapsed") && opened(since)
+      && newer.status === 200 && afterNewer.length === 1 && afterNewer[0] === later;
+    return { ok, detail: brief({ first: said(first), olderReplay: said(replay), keptAfterOlder: afterReplay, certBetween: said(between), certSince: said(since), newer: said(newer), keptAfterNewer: afterNewer }) };
+  }
+  await leg("s30h", freedOlderAtScene, "an ordinary licence's name held at T, named again by a grant at an earlier instant, keeps T: a certificate issued between the two is still refused seat-lapsed and one issued after T opens; a grant naming it at a later instant replaces T");
+  /* The merged list's cap: a grant past FREED_MAX names in all keeps the FREED_MAX newest by instant and drops the oldest. */
+  async function freedMergeCapScene() {
+    const w = await team({});
+    w.R.clock.now = T0 + 10 * MIN;
+    const t1 = w.R.clock.now, old = Array.from({ length: C.FREED_MAX }, (_, i) => ({ key: hex(32), at: t1 - i }));
+    const first = await renew(w, grantAt(w.lead.pub, t1, undefined, { fields: { freed: old } }));
+    w.R.clock.now = t1 + MIN;
+    const t2 = w.R.clock.now, extra = Array.from({ length: 3 }, (_, i) => ({ key: hex(32), at: t2 - i }));
+    const second = await renew(w, grantAt(w.lead.pub, t2, undefined, { fields: { freed: extra } }));
+    const kept = ((storeOf(w).get("freedAll") || {}).freed || []).map(x => x.key);
+    const dropped = old.slice(-3).map(x => x.key), survived = old.slice(0, C.FREED_MAX - 3).map(x => x.key);
+    const ok = first.status === 200 && second.status === 200 && kept.length === C.FREED_MAX && extra.every(x => kept.indexOf(x.key) > -1)
+      && survived.every(k => kept.indexOf(k) > -1) && dropped.every(k => kept.indexOf(k) < 0);
+    return { ok, detail: brief({ first: said(first), second: said(second), kept: kept.length, max: C.FREED_MAX, newestKept: extra.every(x => kept.indexOf(x.key) > -1),
+      oldestDropped: dropped.every(k => kept.indexOf(k) < 0) }) };
+  }
+  await leg("s30i", freedMergeCapScene, "an ordinary licence's merged freed list never holds more than FREED_MAX: a second grant naming three new keys on a full list keeps the FREED_MAX newest by instant and drops the three oldest");
   /* No folder arm: a working team's lead writing its team file with a channel keeps no team file or move row, and a
      read-only team's lead moving it to a folder is refused team-lapsed, as every write there is. */
   async function folderGoneScene() {
@@ -1516,6 +1689,25 @@ async function main() {
     ["withdraw-only", "s26a", withdrawScene, "a withdrawal's session sends another request"],
     [PLANTED.withdrawAny, "s26a", withdrawScene, "the exemption widened to any resume, so a resume that is not a withdrawal opens"],
     [PLANTED.withdrawAny, "s24g", inviteStageScene, "the exemption widened to any resume, so an unseated resume opens"],
+    ["invite-freed", "s30a", freedTokenScene, "a freed key's token hello opens an invitation session"],
+    ["invite-freed", "s30b", freedResumeScene, "a freed key resumes its invitation"],
+    ["freed-invite-sessions", "s30c", freedInviteSessionScene, "a freed key's invitation session lives out its thirty minutes"],
+    ["freed-invite-sockets", "s30c", freedInviteSessionScene, "a freed key's invitation socket stays open"],
+    ["freed-issued", "s30d", freedSinceInviteScene, "the issue-time comparison dropped, so a certificate issued after the freeing is refused at the invitation"],
+    ["door-freed", "s30e", freedDoorScene, "a freed key reopens its token-bound invitation at the door"],
+    ["seat-freed", "s30f", freedEveryPathScene, "a freed key's device hello opens"],
+    ["invite-freed", "s30f", freedEveryPathScene, "a freed key's invitation hello opens"],
+    ["freed-sessions", "s30f", freedEveryPathScene, "a freed key's device session lives on"],
+    ["freed-invite-sessions", "s30f", freedEveryPathScene, "a freed key's invitation session lives on"],
+    ["grant-freed-top", "s30g", freedOrdinaryScene, "an ordinary licence's freed list is taken whatever its shape or placement"],
+    ["freed-ordinary-kept", "s30g", freedOrdinaryScene, "an ordinary licence's freed list is not kept"],
+    ["freed-ordinary-read", "s30g", freedOrdinaryScene, "an ordinary licence's freed list is never read at a hello"],
+    ["freed-ordinary-stands", "s30g", freedOrdinaryScene, "a later grant without the list lifts every name"],
+    ["freed-ordinary-lapse", "s30g", freedOrdinaryScene, "a name is kept past its at plus the longest certificate span"],
+    ["freed-sessions", "s30g", freedOrdinaryScene, "an ordinary freed key's device session lives on"],
+    ["freed-invite-sessions", "s30g", freedOrdinaryScene, "an ordinary freed key's invitation session lives on"],
+    ["freed-ordinary-later", "s30h", freedOlderAtScene, "a grant naming a held key at an earlier instant replaces the later one"],
+    ["freed-ordinary-cap", "s30i", freedMergeCapScene, "the merged freed list has no cap"],
     ["store-session", "s24i", storeScene, "a store's session is judged by the seat gate, so its store certificate is refused and a seat certificate opens it"],
   ];
   for (const [tag, id, scene, what] of PLANTS) {

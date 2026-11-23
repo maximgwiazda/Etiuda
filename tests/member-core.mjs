@@ -757,7 +757,7 @@ if (M && J) {
       "function placeKindOk(", "function driveTops(", "function placeSlash(", "function placeLeaf(", "function placeJoin(",
       "function placeUnder(", "function placeRest(", "function syncRootsFrom(", "function placeOf(",
       "function placeCandidates(", "function placeResolve(", "function placeKept(", "function readSyncRecords(",
-      "function liveSyncIo(", "function invitePlacePlan(", "function driveLook(", "function readInvite(", "function pageRemotePath("];
+      "function liveSyncIo(", "function invitePlacePlan(", "function driveLook(", "function inviteKeyHolds(", "function readInvite(", "function pageRemotePath("];
     const asyncDecls = ["function driveSeen(", "function readInviteLooked(", "function chooseInviteFolder(", "function askInviteFolder("];
     const body = decls.map(m => sliceDecl(src, m)).concat(asyncDecls.map(m => "async " + sliceDecl(src, m))).join("\n");
     const parsed = { team: "t-harbour", lead: { name: "Lead", public: "ab".repeat(32) }, secret: "cd".repeat(16),

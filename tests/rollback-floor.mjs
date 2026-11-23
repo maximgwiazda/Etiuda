@@ -62,47 +62,17 @@ const inert = new Proxy(function () {}, { get: () => inert, set: () => true, app
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
 const eventFor = () => ({ sender: { id: 1, once: noop }, senderFrame: ENGINE_FRAME, returnValue: undefined });
 
-const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
+/* Every desk below that pins a team is put on the team's relay mirror (tests/relay-mirror-desk.mjs): the folder a leg calls the share
+   stands for the relay's copy of the team, and carrying it to a desk's mirror, and the desk's own files back, is the stand-in's. */
+import { relayizeDesk, carryDesks, relayMirrorOf, relayChannelOf } from "./relay-mirror-desk.mjs";
 const allDesks = [];
 const knownTeamKeys = new Map();
 function syncFolder(dir) {
-  if (!dir) return;
-  const targetDir = path.resolve(dir);
-  for (const D of allDesks) {
-    let folder = "";
-    try {
-      const env = D.envelope();
-      folder = env.keys && env.keys.eCatalogFolder;
-    } catch {}
-    if (!folder) continue;
-    const resolvedFolder = path.resolve(folder);
-    if (targetDir === resolvedFolder || targetDir.startsWith(resolvedFolder + path.sep)) {
-      const teamFilePath = path.join(resolvedFolder, "etiuda-team.json");
-      if (fs.existsSync(teamFilePath)) {
-        let tDoc = null;
-        try { tDoc = JSON.parse(fs.readFileSync(teamFilePath, "utf8")); } catch {}
-        if (tDoc && tDoc.id) {
-          const mirror = syncerMod.folderMirrorOf(D.ud, tDoc.id);
-          const floor = (D.envelope().teamRevSeen || {})[tDoc.id] ? (D.envelope().teamRevSeen[tDoc.id])[tDoc.lead.public] || null : null;
-          const prog = syncerMod.createFolderProgram({
-            team: tDoc.id,
-            folder: resolvedFolder,
-            mirror,
-            pin: tDoc.lead,
-            floor,
-            keyFor: (ep) => knownTeamKeys.get(tDoc.id + ":" + ep) || null,
-            logger: (msg) => { D.said.push(msg); },
-            checks: D.api.deskTrustChecks(),
-          });
-          prog.syncOnce();
-          prog.syncOnce();
-        }
-      }
-    }
-  }
+  carryDesks(allDesks, dir);
 }
 
 function loadDesk(ud, src = SRC) {
+  const relay = relayizeDesk(ud);
   const said = [], on = {}, invoke = {};
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop, info: noop };
   const safeStorage = {
@@ -124,28 +94,28 @@ function loadDesk(ud, src = SRC) {
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
   const ask = async (ch, ...args) => {
     const res = await Promise.resolve(invoke[ch](eventFor(), ...args));
-    if (ch === "etiuda:branch-write") {
-      try {
-        const env = envelope();
-        const f = env.keys && env.keys.eCatalogFolder;
-        if (f) syncFolder(f);
-      } catch {}
-    }
+    if (ch === "etiuda:branch-write") syncFolder(relay && relay.store);
     return res;
   };
   const sync = (ch, ...args) => { const ev = eventFor(); if (on[ch]) on[ch](ev, ...args); return ev.returnValue; };
   const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
   const sent = [];
   const win = { isDestroyed: () => false, webContents: { send: (...a) => sent.push(a) } };
-  const deskObj = { api, ask, said, ud, envelope, sent, win, sync };
+  const deskObj = { api, ask, said, ud, envelope, sent, win, sync, relay };
   allDesks.push(deskObj);
+  /* What the store already holds reaches this desk's mirror before it reads (the relay brings a team's files to a desk that joins), where
+     a carry at a write only reaches the desks whose store the write was in. */
+  carryDesks([deskObj]);
   return deskObj;
 }
-function newDesk(name, folder) {
+/* `team` named: the desk pins its lead (LEAD, once the leg has made it) under that team, as a desk joined by invitation does. */
+let LEAD_PIN = null;
+function newDesk(name, folder, team) {
   const ud = path.join(LAB, name);
   fs.mkdirSync(ud, { recursive: true });
   fs.writeFileSync(path.join(ud, "desk.json"),
-    JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: folder, eUiLang: "en" } }), "utf8");
+    JSON.stringify(Object.assign({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: folder, eUiLang: "en" } },
+      team ? { teamPins: { [team]: { keyId: LEAD_PIN.keyId, public: LEAD_PIN.public } } } : {})), "utf8");
   return loadDesk(ud);
 }
 const folder = name => { const f = path.join(LAB, name); fs.mkdirSync(f, { recursive: true }); return f; };
@@ -165,6 +135,7 @@ try {
   const pubHex = k => k.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
   const lead = crypto.generateKeyPairSync("ed25519");
   const LEAD = { keyId: "quay-lead", public: pubHex(lead.publicKey) };
+  LEAD_PIN = LEAD;
   const sign = (doc) => {
     const o = JSON.parse(JSON.stringify(doc));
     delete o.sig;
@@ -188,7 +159,7 @@ try {
   const RING = { format: 1, kind: "etiuda-ring", keys: [{ catalog: "quay-board", keyId: LEAD.keyId, alg: "Ed25519", public: LEAD.public }] };
   const teamFile = (id, epoch, roster) => textOf(sign({
     format: 1, kind: "etiuda-team", id, catalogs: ["quay-board"], lead: LEAD,
-    sealed: true, exportsSealed: false, epoch, roster,
+    sealed: true, exportsSealed: false, epoch, roster, channel: relayChannelOf(id),
   }));
   const entry = (D, who, key, team, epoch) => {
     knownTeamKeys.set(team + ":" + epoch, key);
@@ -221,10 +192,10 @@ try {
   /* ---- a removed desk, then the older team file put back, then a newer epoch that lists it -------- */
   {
     const SHARE = folder("team");
-    put(SHARE, "etiuda-ring.json", RING);
-    const D = newDesk("member", SHARE);
-    const me = await D.ask("etiuda:branch-identity", true);
     const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
+    put(SHARE, "etiuda-ring.json", RING);
+    const D = newDesk("member", SHARE, TEAM);
+    const me = await D.ask("etiuda:branch-identity", true);
     const K1 = crypto.randomBytes(32), K3 = crypto.randomBytes(32);
     put(SHARE, "board.ec", JSON.stringify(D.api.sealCatalog(K1, TEAM, 1, CAT2)));
     put(SHARE, "etiuda-team.json", teamFile(TEAM, 1, [entry(D, me, K1, TEAM, 1)]));
@@ -265,10 +236,10 @@ try {
   /* ---- the same epoch, the roster drops the desk, no newer file ----------------------------------- */
   {
     const SHARE = folder("same");
-    put(SHARE, "etiuda-ring.json", RING);
-    const D = newDesk("same", SHARE);
-    const me = await D.ask("etiuda:branch-identity", true);
     const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
+    put(SHARE, "etiuda-ring.json", RING);
+    const D = newDesk("same", SHARE, TEAM);
+    const me = await D.ask("etiuda:branch-identity", true);
     const K1 = crypto.randomBytes(32);
     const file = roster => teamFile(TEAM, 1, roster);
     put(SHARE, "board.ec", JSON.stringify(D.api.sealCatalog(K1, TEAM, 1, CAT2)));
@@ -289,10 +260,10 @@ try {
   /* ---- the kept keys are gone, the removal file stands, then the older file is put back ----------- */
   {
     const SHARE = folder("wrap");
-    put(SHARE, "etiuda-ring.json", RING);
-    const D = newDesk("wrap", SHARE);
-    const me = await D.ask("etiuda:branch-identity", true);
     const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
+    put(SHARE, "etiuda-ring.json", RING);
+    const D = newDesk("wrap", SHARE, TEAM);
+    const me = await D.ask("etiuda:branch-identity", true);
     const K1 = crypto.randomBytes(32);
     const oldTeam = teamFile(TEAM, 1, [entry(D, me, K1, TEAM, 1)]);
     put(SHARE, "board.ec", JSON.stringify(D.api.sealCatalog(K1, TEAM, 1, CAT2)));
@@ -321,12 +292,12 @@ try {
   /* ---- a colleague reads a desk file whose older bytes were put back ------------------------------ */
   {
     const SHARE = folder("own");
+    const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
     put(SHARE, "etiuda-ring.json", RING);
-    const A = newDesk("owner", SHARE);
-    const B = newDesk("colleague", SHARE);
+    const A = newDesk("owner", SHARE, TEAM);
+    const B = newDesk("colleague", SHARE, TEAM);
     const me = await A.ask("etiuda:branch-identity", true);
     const other = await B.ask("etiuda:branch-identity", true);
-    const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
     const K1 = crypto.randomBytes(32);
     put(SHARE, "etiuda-team.json", teamFile(TEAM, 1, [entry(A, me, K1, TEAM, 1), entry(A, other, K1, TEAM, 1)]));
     put(SHARE, "board.ec", JSON.stringify(A.api.sealCatalog(K1, TEAM, 1, CAT2)));
@@ -621,12 +592,12 @@ try {
   }
   {
     const SHARE = folder("revs-mark");
+    const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
     put(SHARE, "etiuda-ring.json", RING);
-    const A = newDesk("revs-owner", SHARE);
-    const B = newDesk("revs-reader", SHARE);
+    const A = newDesk("revs-owner", SHARE, TEAM);
+    const B = newDesk("revs-reader", SHARE, TEAM);
     const me = await A.ask("etiuda:branch-identity", true);
     const other = await B.ask("etiuda:branch-identity", true);
-    const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
     const K1 = crypto.randomBytes(32);
     put(SHARE, "etiuda-team.json", teamFile(TEAM, 1, [entry(A, me, K1, TEAM, 1), entry(A, other, K1, TEAM, 1)]));
     put(SHARE, "board.ec", JSON.stringify(A.api.sealCatalog(K1, TEAM, 1, CAT2)));
@@ -742,12 +713,12 @@ try {
   /* ---- removed at epoch 2 with no wrap, then the epoch 1 file put back --------------------------- */
   {
     const SHARE = folder("plain-back");
+    const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
     put(SHARE, "etiuda-ring.json", RING);
-    const A = newDesk("plain-writer", SHARE);
-    const B = newDesk("plain-reader", SHARE);
+    const A = newDesk("plain-writer", SHARE, TEAM);
+    const B = newDesk("plain-reader", SHARE, TEAM);
     const me = await A.ask("etiuda:branch-identity", true);
     const other = await B.ask("etiuda:branch-identity", true);
-    const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
     const K1 = crypto.randomBytes(32);
     const listed = teamFile(TEAM, 1, [entry(A, me, K1, TEAM, 1), entry(A, other, K1, TEAM, 1)]);
     put(SHARE, "board.ec", JSON.stringify(A.api.sealCatalog(K1, TEAM, 1, CAT2)));
@@ -785,12 +756,12 @@ try {
   /* ---- a colleague's signed file names another desk's file id at a huge rev ---------------------- */
   {
     const SHARE = folder("stranger-mark");
+    const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
     put(SHARE, "etiuda-ring.json", RING);
-    const A = newDesk("mark-owner", SHARE);
-    const B = newDesk("mark-reader", SHARE);
+    const A = newDesk("mark-owner", SHARE, TEAM);
+    const B = newDesk("mark-reader", SHARE, TEAM);
     const me = await A.ask("etiuda:branch-identity", true);
     const other = await B.ask("etiuda:branch-identity", true);
-    const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
     const K1 = crypto.randomBytes(32);
     put(SHARE, "etiuda-team.json", teamFile(TEAM, 1, [entry(A, me, K1, TEAM, 1), entry(A, other, K1, TEAM, 1)]));
     put(SHARE, "board.ec", JSON.stringify(A.api.sealCatalog(K1, TEAM, 1, CAT2)));
@@ -869,10 +840,10 @@ try {
   /* ---- an unsigned file in this desk's own folder at a huge rev ---------------------------------- */
   {
     const SHARE = folder("unsigned-rev");
-    put(SHARE, "etiuda-ring.json", RING);
-    const A = newDesk("rev-owner", SHARE);
-    const me = await A.ask("etiuda:branch-identity", true);
     const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
+    put(SHARE, "etiuda-ring.json", RING);
+    const A = newDesk("rev-owner", SHARE, TEAM);
+    const me = await A.ask("etiuda:branch-identity", true);
     const K1 = crypto.randomBytes(32);
     put(SHARE, "etiuda-team.json", teamFile(TEAM, 1, [entry(A, me, K1, TEAM, 1)]));
     put(SHARE, "board.ec", JSON.stringify(A.api.sealCatalog(K1, TEAM, 1, CAT2)));
@@ -937,10 +908,10 @@ try {
   /* ---- a file in this desk's folder, signed by some other key, at a huge rev ---------------------- */
   {
     const SHARE = folder("other-key");
-    put(SHARE, "etiuda-ring.json", RING);
-    const A = newDesk("other-key", SHARE);
-    const me = await A.ask("etiuda:branch-identity", true);
     const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
+    put(SHARE, "etiuda-ring.json", RING);
+    const A = newDesk("other-key", SHARE, TEAM);
+    const me = await A.ask("etiuda:branch-identity", true);
     const K1 = crypto.randomBytes(32);
     put(SHARE, "etiuda-team.json", teamFile(TEAM, 1, [entry(A, me, K1, TEAM, 1)]));
     put(SHARE, "board.ec", JSON.stringify(A.api.sealCatalog(K1, TEAM, 1, CAT2)));
@@ -1262,12 +1233,12 @@ try {
   /* ---- a colleague's desk file below the mark, opened on purpose ---------------------------------- */
   {
     const SHARE = folder("own-asked");
+    const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
     put(SHARE, "etiuda-ring.json", RING);
-    const A = newDesk("owner-asked", SHARE);
-    const B = newDesk("colleague-asked", SHARE);
+    const A = newDesk("owner-asked", SHARE, TEAM);
+    const B = newDesk("colleague-asked", SHARE, TEAM);
     const me = await A.ask("etiuda:branch-identity", true);
     const other = await B.ask("etiuda:branch-identity", true);
-    const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
     const K1 = crypto.randomBytes(32);
     put(SHARE, "etiuda-team.json", teamFile(TEAM, 1, [entry(A, me, K1, TEAM, 1), entry(A, other, K1, TEAM, 1)]));
     put(SHARE, "board.ec", JSON.stringify(A.api.sealCatalog(K1, TEAM, 1, CAT2)));
@@ -1282,7 +1253,7 @@ try {
     fs.writeFileSync(file, firstBytes);
     touch(file, Date.now());
     /* The syncer's floor keeps the share's older copy out of B's mirror, so the reader's case is planted there. */
-    fs.writeFileSync(path.join(syncerMod.folderMirrorOf(B.ud, TEAM), "desks", me.id, g.stem + ".ec"), firstBytes);
+    fs.writeFileSync(path.join(relayMirrorOf(B.ud, TEAM), "desks", me.id, g.stem + ".ec"), firstBytes);
     const quietText = await readText(B, g.stem + ".ec", me.id);
     const asked = facts(((await B.ask("etiuda:catalog-read", g.stem + ".ec", me.id, true)) || {}).text || "");
     const markAfter = (B.envelope().readRevs || {})[g.doc.id];
@@ -1409,9 +1380,10 @@ try {
   {
     const SHARE = folder("colleague-taken");
     put(SHARE, "etiuda-ring.json", RING);
-    const A = newDesk("owner-taken", SHARE), B = newDesk("colleague-taken", SHARE);
-    const me = await A.ask("etiuda:branch-identity", true), other = await B.ask("etiuda:branch-identity", true);
+    /* A desk is a team's desk by its pin, as an invitation made it (a team file in a plain folder pins nothing). */
     const TEAM = "t-" + crypto.randomBytes(8).toString("hex"), K1 = crypto.randomBytes(32);
+    const A = newDesk("owner-taken", SHARE, TEAM), B = newDesk("colleague-taken", SHARE, TEAM);
+    const me = await A.ask("etiuda:branch-identity", true), other = await B.ask("etiuda:branch-identity", true);
     put(SHARE, "etiuda-team.json", teamFile(TEAM, 1, [entry(A, me, K1, TEAM, 1), entry(A, other, K1, TEAM, 1)]));
     put(SHARE, "board.ec", JSON.stringify(A.api.sealCatalog(K1, TEAM, 1, CAT2)));
     const g = grown(A, me, await readText(A, "board.ec"));
@@ -1588,15 +1560,19 @@ try {
     await opened.D.ask("etiuda:catalog-read", "board.ec", "", true);
     opened.D.sync("etiuda:catalog-taken", pinOf(CAT2), CAT2);
     const openOk = folderRead(opened.D);
-    check(forgetOk && leaveOk && ejectOk && openOk,
+    /* MOVED, P4: forget and leave took the desk off a folder team, whose folder (the share) it then still read the team's edition in; they take it off a relay team,
+       whose mirror it then leaves for its own folder, where the team's edition is not. Said before: "leaving the outside file clears it, by forget, leave, eject and
+       opening another", each then reading the share's edition. Now forget and leave clear it (nothing opened, and not the outside file's edition) and the desk reads from its own folder. */
+    const clearedOn = D => { const r = facts(D.api.readCatalog() || ""); return !hostOpened(D) && r.name !== "Quay Side"; };
+    check(clearedOn(forgotten.D) && clearedOn(left.D) && ejectOk && openOk,
       "888be leaving the outside file clears it, by forget, leave, eject and opening another: "
-      + (forgetOk ? "forget" : "FORGET") + " " + (leaveOk ? "leave" : "LEAVE") + " "
+      + (clearedOn(forgotten.D) ? "forget" : "FORGET") + " " + (clearedOn(left.D) ? "leave" : "LEAVE") + " "
       + (ejectOk ? "eject" : "EJECT") + " " + (openOk ? "open" : "OPEN"));
   }
   /* ---- 962 stage 5 (the design's 3.4): with two catalogs on one team, neither interrupts the other ---- */
   {
     const TWO_TEAM = "t-" + crypto.randomBytes(8).toString("hex");
-    const twoTeamFile = textOf(sign({ format: 1, kind: "etiuda-team", id: TWO_TEAM, catalogs: ["quay-board", "pebble-board"], lead: LEAD,
+    const twoTeamFile = textOf(sign({ format: 1, kind: "etiuda-team", id: TWO_TEAM, channel: relayChannelOf(TWO_TEAM), catalogs: ["quay-board", "pebble-board"], lead: LEAD,
       sealed: true, exportsSealed: false, epoch: 1, roster: [] }));
     const twoDesk = (name, share, src) => {
       const ud = path.join(LAB, name);
@@ -1705,7 +1681,7 @@ try {
     /* 962s5m6 (round two): a desk working in a catalog its team does not list keeps it as its pick, and is sent nothing of
        another id, when a catalog the team lists is published with a newer file time. */
     const ONE_TEAM = "t-" + crypto.randomBytes(8).toString("hex");
-    const oneTeamFile = textOf(sign({ format: 1, kind: "etiuda-team", id: ONE_TEAM, catalogs: ["pebble-board"], lead: LEAD,
+    const oneTeamFile = textOf(sign({ format: 1, kind: "etiuda-team", id: ONE_TEAM, channel: relayChannelOf(ONE_TEAM), catalogs: ["pebble-board"], lead: LEAD,
       sealed: true, exportsSealed: false, epoch: 1, roster: [] }));
     const unlisted = (src, gone) => {
       const tag = "s5m6" + (gone ? "-gone" : "") + (src ? "-plant" + crypto.randomBytes(2).toString("hex") : "");
@@ -1719,8 +1695,9 @@ try {
       const D = loadDesk(ud, src || undefined);
       syncFolder(share);
       const booted = facts(D.sync("etiuda:catalog") || "");
-      /* `gone`: the file in use rewritten by hand, so no edition of it is one the lead signed. */
-      if (gone) put(share, "board.ec", JSON.stringify(Object.assign(JSON.parse(CAT2), { sig: undefined, rev: 3 }), null, 1) + "\n");
+      /* `gone`: the file in use moved out of the share, so no edition of it the lead signed is left there. WAS: rewritten by hand,
+         unsigned; since the signing-trust build an unsigned file no longer replaces the lead-signed edition, so that left one. */
+      if (gone) { fs.renameSync(path.join(share, "board.ec"), path.join(path.dirname(share), path.basename(share) + "-board-away.ec")); syncFolder(share); }
       put(share, "pebble.ec", sideOf("pebble-board", 1, "Pebble Board"));
       touch(path.join(share, "pebble.ec"), Date.now() + 3000);
       const pick = facts(D.api.readCatalog() || "").name || "nothing";
@@ -1730,7 +1707,7 @@ try {
     };
     const m6 = unlisted(null, false), m7 = unlisted(null, true);
     check(m6.booted === 2 && m6.pick === "Quay Board" && m6.sent.length === 0 && m7.pick === "nothing" && m7.sent.length === 0,
-      "962s5m6 a desk working in a catalog its team does not list keeps it as its pick and is sent nothing of another id; with no edition of it the lead signed left, it picks nothing: pick "
+      "962s5m6 a desk working in a catalog its team does not list keeps it as its pick and is sent nothing of another id; with the file in use gone from the share, so no edition the lead signed is left, it picks nothing: pick "
       + m6.pick + ", sent " + (m6.sent.join(",") || "nothing") + "; rewritten, pick " + m7.pick + ", sent " + (m7.sent.join(",") || "nothing"));
     if (PLANTS_OFF) skip("962s5m7 lifting plant:pick-in-use-gone picks the team's catalog over the one in use");
     else {
@@ -1760,7 +1737,7 @@ try {
 
   /* ---- the team file's revision and its channel ------------------------------------------------- */
   const revTeam = (team, epoch, roster, more) => textOf(sign(Object.assign({
-    format: 1, kind: "etiuda-team", id: team, catalogs: ["quay-board"], lead: LEAD,
+    format: 1, kind: "etiuda-team", id: team, channel: relayChannelOf(team), catalogs: ["quay-board"], lead: LEAD,
     sealed: true, exportsSealed: false, epoch, roster,
   }, more || {})));
   const member = n => ({ desk: { id: "k-" + String(n).repeat(16), key: "ab".repeat(32), box: "cd".repeat(32) } });
@@ -1781,6 +1758,8 @@ try {
     const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
     const D = pinnedDesk("team-rev", SHARE, TEAM);
     const at = path.join(SHARE, "etiuda-team.json");
+    /* The desk reads and says its team file at the relay's mirror, where it said the share's. */
+    const atM = path.join(relayMirrorOf(D.ud, TEAM), "etiuda-team.json");
     let t = Date.now();
     const heed = (desk, text) => { put(SHARE, "etiuda-team.json", text); t += 5000; touch(at, t); desk.api.readCatalog(); };
 
@@ -1788,24 +1767,25 @@ try {
     const a1 = rosterNow(D, TEAM);
     heed(D, revTeam(TEAM, 1, [member(2)]));
     const a2 = rosterNow(D, TEAM);
-    const env = D.envelope(), bare = !("teamRevSeen" in env) && !("teamChannel" in env);
+    const env = D.envelope(), bare = !("teamRevSeen" in env);
     heed(D, revTeam(TEAM, 1, [member(1), member(2)], { rev: 1 }));
     const a3 = rosterNow(D, TEAM);
     const fromA = D.said.length;
     heed(D, revTeam(TEAM, 1, [member(3)]));
     const a4 = rosterNow(D, TEAM);
-    check(a1 === ids(1) && a2 === ids(2) && bare && a3 === ids(1, 2) && a4 === ids(1, 2) && saidSince(D, fromA, at, "older"),
+    check(a1 === ids(1) && a2 === ids(2) && bare && a3 === ids(1, 2) && a4 === ids(1, 2) && saidSince(D, fromA, atM, "older"),
+      /* 900a, moved: it also said "or channel" (the file named none, a folder's; a relay desk keeps the relay the invitation gave it). */
       "900a a team file with no rev reads as rev 0: two such files at one epoch are taken in turn as before and keep no floor"
-      + " or channel in desk.json, and once rev 1 is taken a file with none at that epoch is refused and said: rosters "
-      + [a1, a2, a3, a4].join(" | ") + ", envelope " + (bare ? "bare" : "carries a floor or channel")
-      + ", said " + saidSince(D, fromA, at, "older"));
+      + " in desk.json, and once rev 1 is taken a file with none at that epoch is refused and said: rosters "
+      + [a1, a2, a3, a4].join(" | ") + ", envelope " + (bare ? "bare" : "carries a floor")
+      + ", said " + saidSince(D, fromA, atM, "older"));
 
     heed(D, revTeam(TEAM, 1, [member(1)], { rev: 3 }));
     const b1 = rosterNow(D, TEAM);
     const fromB = D.said.length;
     heed(D, revTeam(TEAM, 1, [member(1), member(2), member(3)], { rev: 2 }));
     const b2 = rosterNow(D, TEAM);
-    const saidB = saidSince(D, fromB, at, "rev 2, below 3 at key number 1");
+    const saidB = saidSince(D, fromB, atM, "rev 2, below 3 at key number 1");
     check(b1 === ids(1) && b2 === ids(1) && saidB,
       "900b a team file with a lower rev at the same epoch is refused, its roster unused, and the desk says so: rosters "
       + b1 + " then " + b2 + ", said " + saidB);
@@ -1822,17 +1802,21 @@ try {
     const fromD = D2.said.length;
     heed(D2, revTeam(TEAM, 2, [member(1)]));
     const d1 = rosterNow(D2, TEAM), fd = floorNow(D2, TEAM);
-    check(d1 === ids(3) && fd === JSON.stringify({ epoch: 2, rev: 1 }) && saidSince(D2, fromD, at, "older"),
+    check(d1 === ids(3) && fd === JSON.stringify({ epoch: 2, rev: 1 }) && saidSince(D2, fromD, atM, "older"),
       "900d the floor survives a restart: the next process refuses a file with no rev at that epoch and says so: roster "
-      + d1 + ", floor " + fd + ", said " + saidSince(D2, fromD, at, "older"));
+      + d1 + ", floor " + fd + ", said " + saidSince(D2, fromD, atM, "older"));
 
-    heed(D2, revTeam(TEAM, 2, [member(1)], { rev: 2, channel: RELAY, ring: RING }));
+    const RELAY_T = relayChannelOf(TEAM);
+    heed(D2, revTeam(TEAM, 2, [member(1)], { rev: 2, channel: RELAY_T, ring: RING }));
     const e1 = JSON.stringify((D2.envelope().teamChannel || {})[TEAM] || null);
-    heed(D2, revTeam(TEAM, 2, [member(2)], { rev: 3, channel: { kind: "folder" } }));
+    heed(D2, revTeam(TEAM, 2, [member(2)], { rev: 3, channel: RELAY_T }));
     const e2 = JSON.stringify((D2.envelope().teamChannel || {})[TEAM] || null), e2r = rosterNow(D2, TEAM);
-    check(e1 === JSON.stringify(RELAY) && e2 === "null" && e2r === ids(2),
-      "900e the channel is kept with the team as its signed file names it, and a folder channel keeps none: relay "
-      + e1 + ", then folder " + e2 + " with roster " + e2r);
+    /* 900e, moved: it also said "and a folder channel keeps none", a signed file naming a folder taking the desk's channel off it. A relay desk's team file that names a folder
+       is a move to a folder, which is not followed (tests/relay-desk-to-folder.mjs, retired with it), so the channel stays the relay's; this check says the relay's file
+       names it again and the roster moves. */
+    check(e1 === JSON.stringify(RELAY_T) && e2 === JSON.stringify(RELAY_T) && e2r === ids(2),
+      "900e the channel is kept with the team as its signed file names it, and a later file naming it again moves the roster: relay "
+      + e1 + ", then relay " + e2 + " with roster " + e2r);
 
     const fromF = D2.said.length;
     heed(D2, revTeam(TEAM, 2, [member(3)], { rev: "4" }));
@@ -1841,7 +1825,7 @@ try {
     const f4 = rosterNow(D2, TEAM);
     heed(D2, revTeam(TEAM, 2, [member(3)], { rev: 6, channel: { kind: "relay", rt: RT, url: "http://etiuda.dev/relay/v1" } }));
     const f5 = rosterNow(D2, TEAM);
-    const saidF = D2.said.slice(fromF).filter(l => l.indexOf(at) >= 0 && l.indexOf("does not read") >= 0).length;
+    const saidF = D2.said.slice(fromF).filter(l => l.indexOf(atM) >= 0 && l.indexOf("does not read") >= 0).length;
     check(f3 === ids(2) && f4 === ids(2) && f5 === ids(2) && saidF >= 1,
       "900f a rev that is not a whole number, a channel of another kind and a relay not on https are each refused and said: rosters "
       + [f3, f4, f5].join(" | ") + ", lines " + saidF);
@@ -1849,7 +1833,7 @@ try {
     const fromM = D2.said.length;
     heed(D2, revTeam(TEAM, 1, [member(1)], { rev: 9 }));
     const mRoster = rosterNow(D2, TEAM), mFloor = floorNow(D2, TEAM);
-    const saidM = saidSince(D2, fromM, at, "key number 1, below 2");
+    const saidM = saidSince(D2, fromM, atM, "key number 1, below 2");
     check(mRoster === ids(2) && mFloor === JSON.stringify({ epoch: 2, rev: 3 }) && saidM,
       "900m a team file of an older epoch than the floor is refused, its roster unused, and the desk says the key number is below: roster "
       + mRoster + ", floor " + mFloor + ", said " + saidM);
@@ -1905,9 +1889,11 @@ try {
     fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: SHARE, eUiLang: "en" },
       teamPins: { [TEAM]: { keyId: LEAD.keyId, public: LEAD.public } } }), "utf8");
     const D = load(ud);
-    const at = path.join(SHARE, "etiuda-team.json");
+    const atShare = path.join(SHARE, "etiuda-team.json");
+    /* The desk reads and says its team file at the relay's mirror, where it said the share's. */
+    const at = path.join(relayMirrorOf(ud, TEAM), "etiuda-team.json");
     let t = Date.now();
-    const heed = (desk, text) => { put(SHARE, "etiuda-team.json", text); t += 5000; touch(at, t); desk.api.readCatalog(); };
+    const heed = (desk, text) => { put(SHARE, "etiuda-team.json", text); t += 5000; touch(atShare, t); desk.api.readCatalog(); };
     heed(D, revTeam(TEAM, 1, [member(1)], { rev: 3 }));
     const was = floorNow(D, TEAM);
     heed(D, revTeam(TEAM, 2, [member(2)]));
@@ -1986,9 +1972,11 @@ try {
     put(SHARE, "etiuda-ring.json", ringIntr);
     const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
     const D = pinnedDesk("relay-ring", SHARE, TEAM);
-    const at = path.join(SHARE, "etiuda-team.json");
+    const atShare = path.join(SHARE, "etiuda-team.json");
+    const at = path.join(relayMirrorOf(D.ud, TEAM), "etiuda-team.json");
+    const RELAY = relayChannelOf(TEAM);
     let t = Date.now();
-    const heed = (desk, text) => { put(SHARE, "etiuda-team.json", text); t += 5000; touch(at, t); desk.api.readCatalog(); };
+    const heed = (desk, text) => { put(SHARE, "etiuda-team.json", text); t += 5000; touch(atShare, t); desk.api.readCatalog(); };
     const leadDoc = JSON.parse(CAT2), intrDoc = JSON.parse(intruderCat(5, "2026-08-05"));
     const ringKeys = async desk => {
       const text = (await desk.ask("etiuda:catalog-ring")) || "";
@@ -2001,12 +1989,12 @@ try {
     const g1 = await believes(D);
     heed(D, revTeam(TEAM, 1, [], { rev: 2, channel: RELAY }));
     const g2 = await believes(D);
-    heed(D, revTeam(TEAM, 1, [], { rev: 3 }));
-    const g3 = await believes(D);
-    check(g1 === "lead/-/" + LEAD.keyId && g2 === "-/-/none" && g3 === "-/intruder/" + INTR.keyId,
+    /* 900g, moved: it also said "and a folder channel reads etiuda-ring.json as before" (a team file naming no relay, third in the run: a ring file at the folder's
+       root believed). No folder is read as a team now, so no ring file is believed for one; the two relay halves stand. */
+    check(g1 === "lead/-/" + LEAD.keyId && g2 === "-/-/none",
       "900g on the relay the ring is the one inside the signed team file and etiuda-ring.json is not read even where it names a key,"
-      + " no ring in the file is no ring, and a folder channel reads etiuda-ring.json as before (catalog signer and the page's ring): "
-      + [g1, g2, g3].join(" | "));
+      + " no ring in the file is no ring (catalog signer and the page's ring): "
+      + [g1, g2].join(" | "));
 
     const current = revTeam(TEAM, 1, [], { rev: 4, channel: RELAY, ring: RING });
     heed(D, current);
@@ -2037,20 +2025,22 @@ try {
   {
     const pinOf = (name, ring, more) => {
       const SHARE = folder(name);
-      if (ring) put(SHARE, "etiuda-ring.json", ring);
-      const D = newDesk(name, SHARE);
       const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
+      if (ring) put(SHARE, "etiuda-ring.json", ring);
+      /* A desk that pins nothing: its first pin would come from the file alone, which no invitation, admission or policy vouches for. */
+      const D = newDesk(name, SHARE);
       put(SHARE, "etiuda-team.json", revTeam(TEAM, 1, [], Object.assign({ rev: 1 }, more)));
       D.api.readCatalog();
       return ((D.envelope().teamPins || {})[TEAM] || {}).public === LEAD.public ? "pinned" : "not pinned";
     };
     const relayFileRing = pinOf("first-relay", RING, { channel: RELAY });
-    const folderFileRing = pinOf("first-folder", RING, { channel: { kind: "folder" } });
     const relaySigned = pinOf("first-signed", null, { channel: RELAY, ring: RING });
-    check(relayFileRing === "not pinned" && folderFileRing === "not pinned" && relaySigned === "not pinned",
+    /* 900i, moved: it also said "and on the folder the ring file vouches for nothing either" with a team file naming a folder (a first run of the folder's). No
+       folder is read as a team, so that case is retired; the two relay cases stand. */
+    check(relayFileRing === "not pinned" && relaySigned === "not pinned",
       "900i a first pin with no invitation, no admission and no policy: on the relay etiuda-ring.json vouches for nothing and neither"
-      + " does the signed file's own ring (board 907), and on the folder the ring file vouches for nothing either, since a lead is"
-      + " heeded only by machine policy, an invitation or an admission's wrap (review 14): " + [relayFileRing, folderFileRing, relaySigned].join(" | "));
+      + " does the signed file's own ring (board 907), since a lead is"
+      + " heeded only by machine policy, an invitation or an admission's wrap (review 14): " + [relayFileRing, relaySigned].join(" | "));
   }
 
   /* ---- updates 2, the desk's half: a desk.json a later Etiuda saved (its schema above this one's) is refused whole. No

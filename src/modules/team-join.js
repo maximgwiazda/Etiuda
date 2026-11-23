@@ -14,6 +14,7 @@ import { hooks } from "./hooks.js";
 import { ICON_LOCK, ICON_KEY, ICON_DESK } from "./icons.js";
 import { nsGet } from "./storage.js";
 import { eNotice, dropNotice } from "./pack.js";
+import { setStatsWithheld } from "./desk-stats.js";
 
 let joinNow=null;                 // the shell's last answer: {sealed:{file,team}|null, join:{...}|null, leads:[{team,print,admitted,seen,lead,folder,removed,policy}]}
 let joinShut="";                  // the answer the agent last hid the bubble on
@@ -93,6 +94,13 @@ function setContentNow(v){
   return contentNow;
 }
 function teamContentNow(){ return contentNow; }
+/* The catalog in use, by the id its layer is kept under, is marked private here: a day counted now is kept off the
+   lead's answer (desk-stats.js). */
+function inUsePrivateNow(){
+  const cur=hooks.storedCatalog(), id=cur && cur.id ? String(cur.id) : "";
+  return !!id && !!contentNow && contentNow.private.indexOf(id)>=0;
+}
+setStatsWithheld(inUsePrivateNow);
 function teamContent(){
   if(!eHasJoin()) return Promise.resolve(null);
   let asked;
@@ -432,6 +440,31 @@ function relayElsewhereWords(l){
 }
 /* The team's row in Settings says both, for as long as the file names that relay. */
 function relayElsewhereNote(l){ const w=relayElsewhereWords(l); return w.lead+" "+w.body; }
+/* A team this desk holds through a shared folder, which Etiuda no longer follows: the copywriter's sentence, {TEAM} as the row names
+   the team, and where the folder's local copy still owes the share, that it stays here unsent, and in which folder. */
+function folderHeldWords(l){
+  const team=l&&l.lead?t("{LEAD}'s team").split("{LEAD}").join(l.lead):t("Team");
+  return {lead:t("{TEAM} worked through a shared folder, which Etiuda no longer follows: its catalog stays on this computer as it is, and a new invitation from the team's lead brings the team back.").split("{TEAM}").join(team),
+    body:l&&l.folderOwed?t("What this desk had not yet sent to the shared folder stays on this computer, unsent, in the folder {FOLDER}.").split("{FOLDER}").join(String(l.folderCopy||"")) /* words: placeholder */:""};
+}
+function folderHeldNote(l){ const w=folderHeldWords(l); return w.body?w.lead+" "+w.body:w.lead; }
+/* And a notice once a run, as the relay's below: Dismiss takes it down for that run; the row still says it. */
+let folderHeldUp="";
+const folderHeldDismissed=new Set();
+function syncFolderHeld(){
+  if(typeof document==="undefined" || typeof document.getElementById!=="function" || typeof document.createElement!=="function") return;
+  const l=((joinNow&&joinNow.leads)||[]).filter(x=>x.folderHeld===true && !folderHeldDismissed.has(x.team))[0]||null;
+  const want=l?l.team:"", up=document.getElementById("eTeamFolderHeld");
+  if(want===folderHeldUp && (!want || up)) return;
+  if(up) dropNotice(up);
+  folderHeldUp=want;
+  if(!l) return;
+  const w=folderHeldWords(l);
+  eNotice("eTeamFolderHeld", w.lead, w.body, ()=>{
+      folderHeldDismissed.add(want);
+      if(folderHeldUp===want) folderHeldUp="";
+    });
+}
 /* And a notice, once a run for each such team: Dismiss takes it down for that run; the row still says it. */
 let elsewhereUp="";
 const elsewhereDismissed=new Set();
@@ -466,6 +499,8 @@ function joinTook(v,changed){
              if(typeof l.relay==="string" && l.relay) row.relay=String(l.relay);
              if(l.relayRemoved===true) row.relayRemoved=true;
              if(l.relayElsewhere===true) row.relayElsewhere=true; /* plant:elsewhere-kept */
+             if(l.folderHeld===true) row.folderHeld=true;
+             if(l.folderOwed===true){ row.folderOwed=true; row.folderCopy=String(l.folderCopy||""); }
              const head=headKept(l.head);
              if(head) row.head=head;
              const lapse=lapseKept(l.lapse);
@@ -503,6 +538,7 @@ function joinTook(v,changed){
   syncLapseNotice();
   syncRelayRemoved();
   syncRelayElsewhere(); /* plant:elsewhere-notice */
+  syncFolderHeld(); /* plant:folder-held-notice */
   syncForkNotice();
   syncStrandedNotice();
   const refusal=s.linkRefusal;
@@ -547,6 +583,7 @@ function joinTook(v,changed){
     const heldOffer={lead:String(offer.lead||""), team:String(offer.team||""), relay:String(offer.relay), link:true, code:"", left:String(offer.left||"")};
     if(joinDoorHolds()){ pendingInvite={kind:"link", offer:heldOffer}; whenJoinDoorOpens(replayPendingInvite); return joinNow; } /* plant:join-link-door */
     joinOffer=heldOffer;
+    joinShut=""; /* plant:link-unshut */ // a link's offer is not in the state a hidden bubble was shut at, so each new link is drawn
     joinRead="link"; joinBlob=""; joinTyped=""; joinWhy=""; joinLinkSaid=null;
     joinMode="confirm"; /* plant:link-page */
     paintJoin();
@@ -993,8 +1030,13 @@ function openJoinBubble(){
   if(!b) return;
   const wrap=b.wrap, close=b.close;
   joinBubbleClose=close;
-  // Hiding the lead's key counts as having been shown it; the key stays in Settings. Hiding an invitation lets it go.
-  const hide=()=>{ joinShut=JSON.stringify(joinNow); dropInvite(); close(); joinPainted(); if(p.lead) joinAsk("seen",p.lead); };
+  // Hiding the lead's key counts as having been shown it; the key stays in Settings. Hiding an invitation lets it go, a link's in the shell too,
+  // as Cancel does, so a link waiting behind it is offered.
+  const hide=()=>{
+    const link=!!(joinOffer&&joinOffer.link) || (joinMode==="refused"&&joinWhy==="link");
+    joinShut=JSON.stringify(joinNow); dropInvite(); close(); joinPainted(); if(p.lead) joinAsk("seen",p.lead);
+    if(link) joinAsk("link-no"); /* plant:hide-link-no */
+  };
   wrap.querySelectorAll("[data-join], [data-join-paste], [data-join-check]").forEach(el=>{
     if(el.hasAttribute("data-join-paste")){ el.oninput=()=>{ joinBlob=String(el.value||""); }; return; }
     if(el.hasAttribute("data-join-check")){ el.oninput=()=>followCheck(wrap,el); return; }
@@ -1087,4 +1129,4 @@ function shareDropItem(blobId){
   catch(e){ return Promise.resolve({ok:false}); }
 }
 
-export { lapseNote, shareRefusedNotes, keptApartNotes, relayElsewhereNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, teamPolicySaid, relayDesk, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, openJoinPaste, teamCanJoin, inviteHeld, noteCatalogCopy, joinTook, teamContent, teamContentNow, markCatalogPrivate, onContentChanged, openTeamBubble, closeTeamBubble, teamShareState, shareToTeammate, shareInboxList, shareKeepCard, shareKeptNote, shareDropItem };
+export { lapseNote, shareRefusedNotes, keptApartNotes, relayElsewhereNote, folderHeldNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, teamPolicySaid, relayDesk, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, openJoinPaste, teamCanJoin, inviteHeld, noteCatalogCopy, joinTook, teamContent, teamContentNow, markCatalogPrivate, onContentChanged, openTeamBubble, closeTeamBubble, teamShareState, shareToTeammate, shareInboxList, shareKeepCard, shareKeptNote, shareDropItem };

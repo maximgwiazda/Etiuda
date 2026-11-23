@@ -49,6 +49,7 @@ export const HELPERS = {
   "tests/no-crash-dialog.js": "the crash guard loaded into Electron main process, not a gate",
   "tests/no-crash-dialog-desk.js": "a machine-window gate, not in either chain",
   "tests/lab-owner.mjs": "the lab owner file, exit cleanup and stale sweep tests require, not a gate",
+  "tests/relay-mirror-desk.mjs": "the helper that puts a desk on a relay team's mirror and stands for the relay between desks, which the team legs import, not a gate",
 };
 
 /* Nightly-only legs (rule 7): load-sensitive legs and self-tests that run only in nightly */

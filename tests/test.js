@@ -4654,7 +4654,7 @@ function installerUpdateTests() {
   };
   const keeps = text => {
     const m = macro(text, "customRemoveFiles");
-    return [!!m, /\$\{IfNot\} \$\{isUpdated\}[^\n]*\r?\n\s*SetOutPath \$TEMP\r?\n\s*Push \$INSTDIR\r?\n\s*Call un\.etiudaRemoveTree\r?\n\s*\$\{EndIf\}/.test(m),
+    return [!!m, /\$\{IfNot\} \$\{isUpdated\}[^\n]*\r?\n\s*SetOutPath \$TEMP\r?\n\s*Push \$INSTDIR\r?\n\s*Call un\.etiudaRemoveTree\r?\n[\s\S]*?\r?\n  \$\{EndIf\}\r?\n?$/.test(m.replace(/\s+$/, "")),
       (m.match(/RMDir|Delete|Rename|etiudaRemoveTree/g) || []).length];
   };
   let nsh = "", got;
@@ -4678,7 +4678,9 @@ function installerUpdateTests() {
     got = keeps(nsh).concat([/!ifmacrodef customRemoveFiles\r?\n\s*!insertmacro customRemoveFiles\r?\n\s*!else/.test(un)]);
   } catch (e) { got = "electron-builder's templates could not be read: " + e.message; }
   eq("1152c an update's uninstall leaves the installed files in place (the new installer swaps the folder whole once its staged copy is complete, tools/patch-nsis.cjs fix 6), while a plain uninstall still removes the folder; electron-builder's uninstaller calls this in place of its own removal",
-    got, [true, true, 1, true]);
+    /* WAS: one removal in the macro. NOW: two, the folder and the copy an update set aside beside it, both under ${IfNot} ${isUpdated}
+       (the installer mends, B5: the old copy is kept until the new one has started, and a plain uninstall takes both). */
+    got, [true, true, 2, true]);
   const lift = tag => { const lines = nsh.split("\n"), at = lines.findIndex(l => l.indexOf(tag) >= 0); if (at < 0) return null; lines.splice(at, 1); return lines.join("\n"); };
   const l1 = lift("plant:installer-asks-close"), l2 = lift("plant:installer-gives-up"), l3 = lift("plant:update-keeps-files");
   got = [!!l1 && asks(l1)[1] === false, !!l2 && asks(l2)[5] === false, !!l3 && keeps(l3)[1] === false];

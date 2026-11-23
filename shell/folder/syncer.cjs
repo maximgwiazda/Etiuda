@@ -1169,6 +1169,17 @@ function createFolderProgram(opts) {
     }
     return doc && typeof doc === "object" ? doc : null;
   }
+  /* True where this path in the mirror already holds a signed catalog. The floor key names the signer, so it does not
+     by itself keep an unsigned file from taking a signed file's name. */
+  function signedEditionAt(relPath) {
+    try {
+      const target = path.join(mirror, normRel(relPath));
+      if (!io.exists(target)) return false;
+      const cur = catalogIn(io.readFile(target, "utf8"));
+      const sig = cur && cur.sig;
+      return !!(cur && cur.kind === "etiuda-catalog" && sig && typeof sig === "object" && String(sig.value || ""));
+    } catch { return false; }
+  }
   /* (scope, id) at its path and the number that may only rise there: a root edition's rev under its signer, a desk file's
      rev, in-use's n. Per path, so an older edition the folder keeps under a name of its own still reaches the mirror. */
   function floorKeyOf(relPath, cat) {
@@ -1888,9 +1899,16 @@ function createFolderProgram(opts) {
             const target = path.join(mirror, relPath);
             if (landStaged(item, target)) applied.push(relPath);
           } else {
-            // Unsigned shared catalog (no doc.sig) or signed catalog
+            /* A signed catalog at this path stays: an unsigned file is not that edition and does not take its name. */
             const authKeys = teamAuthorizedKeys(folder, mirror, io, pin, opts.authorizedKeys);
             if (doc.sig && !authKeys.some(pub => catalogSigValid(doc, pub))) {
+              try { io.unlink(tmpPath); } catch {}
+              refuse(item);
+              continue;
+            }
+            let bareOverSigned = false;
+            if (!doc.sig && signedEditionAt(relPath)) bareOverSigned = true; /* plant:unsigned-over-signed */
+            if (bareOverSigned) {
               try { io.unlink(tmpPath); } catch {}
               refuse(item);
               continue;

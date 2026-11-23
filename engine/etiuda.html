@@ -8791,6 +8791,7 @@ What is typed here stays in this browser.`;
     "Move or delete cards in this category first": "Kategorię można usunąć, gdy jej karty zostaną przeniesione albo usunięte",
     "Move or delete the cards in this category first": "Kategorię można usunąć, gdy jej karty zostaną przeniesione albo usunięte",
     "Delete card": "Usuń kartę",
+    /* The copywriter's words, for the Library's Delete and the editors' alike, this and "Delete this intent" */
     "Delete this card": "Usuń tę kartę",
     "New intent": "Nowa intencja",
     "New intent…": "Nowa intencja…",
@@ -8924,8 +8925,6 @@ What is typed here stays in this browser.`;
     "Close without saving any change": "Zamknij bez zapisywania zmian",
     "Save this card on this computer": "Zapisz tę kartę na tym komputerze",
     "Save this intent on this computer": "Zapisz tę intencję na tym komputerze",
-    "Delete this card: a built-in one returns on Reset, one you made does not": "Usuń tę kartę: wbudowana wróci po zresetowaniu, własna nie",
-    "Delete this intent: a built-in one returns on Reset, one you made does not": "Usuń tę intencję: wbudowana wróci po zresetowaniu, własna nie",
     "Discard your edits and restore the catalog wording.": "Odrzuca zmiany i przywraca treść z katalogu.",
     "Restore built-in quick facts": "Przywróć wbudowane szybkie fakty",
     "{KEY} is fixed and keeps its own meaning": "{KEY} to klawisz stały i zachowuje swoje znaczenie",
@@ -9801,6 +9800,8 @@ What is typed here stays in this browser.`;
     /* Claudette's words, 2026-11-17, a team file naming a relay this build does not use: one sentence and the next, on the row whole. */
     "The team file of {TEAM} names a relay this Etiuda does not use, so this desk does not follow it: it keeps its team, its catalog and its connection as they were, and sends nothing there.": "{TEAM} wskazuje w swoim pliku przekaźnik, z którego ta Etiuda nie korzysta, więc to stanowisko za nim nie podąża: zachowuje zespół, katalog i połączenie bez zmian i niczego tam nie wysyła.",
     "If the team moves back, nothing is needed; otherwise a new invitation from the team's lead is.": "Jeśli zespół wróci na poprzedni przekaźnik, nic nie trzeba robić; w przeciwnym razie potrzebne jest nowe zaproszenie od lidera zespołu.",
+    "{TEAM} worked through a shared folder, which Etiuda no longer follows: its catalog stays on this computer as it is, and a new invitation from the team's lead brings the team back.": "{TEAM} korzysta ze wspólnego folderu, którego Etiuda już nie obsługuje: katalog tego zespołu zostaje na tym komputerze bez zmian, a nowe zaproszenie od lidera zespołu przywróci zespół.",
+    "What this desk had not yet sent to the shared folder stays on this computer, unsent, in the folder {FOLDER}.": "To, czego to stanowisko nie zdążyło wysłać do wspólnego folderu, zostaje na tym komputerze, niewysłane, w folderze {FOLDER}.",
     "Another catalog of the team has a newer edition.": "Inny katalog zespołu ma nowsze wydanie.",
     "Other catalogs of the team with a newer edition: {N}.": "Inne katalogi zespołu z nowszym wydaniem: {N}.",
     "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.": "Na prośbę Studia lidera zespołu przesłano zespołowi kopię katalogu używanego na tym stanowisku.",
@@ -10005,6 +10006,8 @@ What is typed here stays in this browser.`;
     "This card is too large to share, so nothing was sent.": "Ta karta jest za duża, by ją udostępnić, więc nic nie wysłano.",
     "This desk has no current seat, so nothing was sent; sharing works again once it has one.": "To stanowisko nie ma teraz ważnego miejsca w licencji, więc nic nie wysłano; udostępnianie zadziała ponownie, gdy je odzyska.",
     "This card could not be sent just now.": "Nie udało się teraz wysłać tej karty.",
+    /* words: placeholder */
+    "This catalog is private, so this card stays on this desk.": "Ten katalog jest prywatny, więc ta karta zostaje na tym stanowisku.",
     "This card could not be kept just now.": "Nie udało się teraz zachować tej karty."
   };
   function uiLangKnown(l) {
@@ -10498,6 +10501,10 @@ What is typed here stays in this browser.`;
     const p = (v) => String(v).padStart(2, "0");
     return x.getUTCFullYear() + "-" + p(x.getUTCMonth() + 1) + "-" + p(x.getUTCDate());
   }
+  var statsWithheld = null;
+  function setStatsWithheld(fn) {
+    statsWithheld = typeof fn === "function" ? fn : null;
+  }
   function statsDay(pack2, at) {
     const day = STATS_YMD.test(String(at || "")) ? String(at) : statsYmd();
     if (!pack2.days || typeof pack2.days !== "object" || Array.isArray(pack2.days)) pack2.days = {};
@@ -10513,6 +10520,12 @@ What is typed here stays in this browser.`;
       statsTouch(pack2, "*");
       statsCompact(pack2);
     } else statsTouch(pack2, day);
+    let held = false;
+    try {
+      held = !!(statsWithheld && statsWithheld());
+    } catch (e) {
+    }
+    if (held) b.x = 1;
     return b;
   }
   var STATS_TOUCHED = /* @__PURE__ */ new WeakMap();
@@ -10771,7 +10784,7 @@ What is typed here stays in this browser.`;
       misses = 0;
       suggestTaken = 0;
       suggestOpen = 0;
-      Object.keys(days).filter((d) => STATS_YMD.test(d) && d >= from && d <= to).sort().forEach((d) => {
+      Object.keys(days).filter((d) => STATS_YMD.test(d) && d >= from && d <= to && !(days[d] && days[d].x)).sort().forEach((d) => {
         const b = days[d] || {};
         suggestTaken += b.g | 0;
         suggestOpen += b.o | 0;
@@ -17518,7 +17531,7 @@ What is typed here stays in this browser.`;
   function eSharedWrite(name, text, sha, create) {
     if (!eHasShared()) return Promise.resolve({ ok: false });
     try {
-      return Promise.resolve(eHost().sharedWrite(String(name || ""), String(text || ""), String(sha || ""), create === true)).then((v) => v && typeof v === "object" ? { ok: v.ok === true, changed: v.changed === true, busy: v.busy === true, taken: v.taken === true, refused: v.refused === true, sealed: v.sealed === true } : { ok: false }).catch(() => ({ ok: false }));
+      return Promise.resolve(eHost().sharedWrite(String(name || ""), String(text || ""), String(sha || ""), create === true)).then((v) => v && typeof v === "object" ? { ok: v.ok === true, changed: v.changed === true, busy: v.busy === true, taken: v.taken === true, refused: v.refused === true, sealed: v.sealed === true, private: v.private === true } : { ok: false }).catch(() => ({ ok: false }));
     } catch (e) {
       return Promise.resolve({ ok: false });
     }
@@ -18333,6 +18346,7 @@ What is typed here stays in this browser.`;
   __export(team_join_exports, {
     closeJoinBubble: () => closeJoinBubble,
     closeTeamBubble: () => closeTeamBubble,
+    folderHeldNote: () => folderHeldNote,
     forgetTeamLead: () => forgetTeamLead,
     inviteHeld: () => inviteHeld,
     joinStands: () => joinStands,
@@ -18470,6 +18484,11 @@ What is typed here stays in this browser.`;
   function teamContentNow() {
     return contentNow;
   }
+  function inUsePrivateNow() {
+    const cur = hooks.storedCatalog(), id = cur && cur.id ? String(cur.id) : "";
+    return !!id && !!contentNow && contentNow.private.indexOf(id) >= 0;
+  }
+  setStatsWithheld(inUsePrivateNow);
   function teamContent() {
     if (!eHasJoin()) return Promise.resolve(null);
     let asked;
@@ -18869,6 +18888,33 @@ What is typed here stays in this browser.`;
     const w = relayElsewhereWords(l);
     return w.lead + " " + w.body;
   }
+  function folderHeldWords(l) {
+    const team = l && l.lead ? t("{LEAD}'s team").split("{LEAD}").join(l.lead) : t("Team");
+    return {
+      lead: t("{TEAM} worked through a shared folder, which Etiuda no longer follows: its catalog stays on this computer as it is, and a new invitation from the team's lead brings the team back.").split("{TEAM}").join(team),
+      body: l && l.folderOwed ? t("What this desk had not yet sent to the shared folder stays on this computer, unsent, in the folder {FOLDER}.").split("{FOLDER}").join(String(l.folderCopy || "")) : ""
+    };
+  }
+  function folderHeldNote(l) {
+    const w = folderHeldWords(l);
+    return w.body ? w.lead + " " + w.body : w.lead;
+  }
+  var folderHeldUp = "";
+  var folderHeldDismissed = /* @__PURE__ */ new Set();
+  function syncFolderHeld() {
+    if (typeof document === "undefined" || typeof document.getElementById !== "function" || typeof document.createElement !== "function") return;
+    const l = (joinNow && joinNow.leads || []).filter((x) => x.folderHeld === true && !folderHeldDismissed.has(x.team))[0] || null;
+    const want = l ? l.team : "", up = document.getElementById("eTeamFolderHeld");
+    if (want === folderHeldUp && (!want || up)) return;
+    if (up) dropNotice(up);
+    folderHeldUp = want;
+    if (!l) return;
+    const w = folderHeldWords(l);
+    eNotice("eTeamFolderHeld", w.lead, w.body, () => {
+      folderHeldDismissed.add(want);
+      if (folderHeldUp === want) folderHeldUp = "";
+    });
+  }
   var elsewhereUp = "";
   var elsewhereDismissed = /* @__PURE__ */ new Set();
   function syncRelayElsewhere() {
@@ -18910,6 +18956,11 @@ What is typed here stays in this browser.`;
         if (typeof l.relay === "string" && l.relay) row2.relay = String(l.relay);
         if (l.relayRemoved === true) row2.relayRemoved = true;
         if (l.relayElsewhere === true) row2.relayElsewhere = true;
+        if (l.folderHeld === true) row2.folderHeld = true;
+        if (l.folderOwed === true) {
+          row2.folderOwed = true;
+          row2.folderCopy = String(l.folderCopy || "");
+        }
         const head = headKept(l.head);
         if (head) row2.head = head;
         const lapse = lapseKept(l.lapse);
@@ -18952,6 +19003,7 @@ What is typed here stays in this browser.`;
     syncLapseNotice();
     syncRelayRemoved();
     syncRelayElsewhere();
+    syncFolderHeld();
     syncForkNotice();
     syncStrandedNotice();
     const refusal = s.linkRefusal;
@@ -19003,6 +19055,7 @@ What is typed here stays in this browser.`;
         return joinNow;
       }
       joinOffer = heldOffer;
+      joinShut = "";
       joinRead = "link";
       joinBlob = "";
       joinTyped = "";
@@ -19471,11 +19524,13 @@ What is typed here stays in this browser.`;
     const wrap = b.wrap, close = b.close;
     joinBubbleClose = close;
     const hide = () => {
+      const link = !!(joinOffer && joinOffer.link) || joinMode === "refused" && joinWhy === "link";
       joinShut = JSON.stringify(joinNow);
       dropInvite();
       close();
       joinPainted();
       if (p.lead) joinAsk("seen", p.lead);
+      if (link) joinAsk("link-no");
     };
     wrap.querySelectorAll("[data-join], [data-join-paste], [data-join-check]").forEach((el) => {
       if (el.hasAttribute("data-join-paste")) {
@@ -20600,7 +20655,19 @@ What is typed here stays in this browser.`;
   function wholeRefusalLine(reason) {
     if (reason === "too-large") return t("This card is too large to share, so nothing was sent.");
     if (reason === "seat-lapsed") return t("This desk has no current seat, so nothing was sent; sharing works again once it has one.");
+    if (reason === "private") return t("This catalog is private, so this card stays on this desk.");
     return t("This card could not be sent just now.");
+  }
+  function sharePrivateNow() {
+    const cur = hooks.storedCatalog();
+    const id = cur && cur.id ? String(cur.id) : "";
+    const c = teamContentNow();
+    let marked = false;
+    marked = !!id && !!(c && Array.isArray(c.private) && c.private.indexOf(id) >= 0);
+    return marked;
+  }
+  function sharePrivateLine() {
+    return t("This catalog is private, so this card stays on this desk.");
   }
   function sharePressed(id, fallbackOrigin) {
     if (closeShareOut && shareOpenId === id) {
@@ -20611,6 +20678,10 @@ What is typed here stays in this browser.`;
     if (closeShareIn) closeShareIn();
     const st = teamShareState(), m = findCard(id);
     if (!st || st.off || !m || !cardIsShareable(m)) return;
+    if (sharePrivateNow()) {
+      toast(sharePrivateLine());
+      return;
+    }
     const mates = (st.teammates || []).slice();
     const selected = /* @__PURE__ */ new Set();
     let query = "", noteText = "", sending2 = false;
@@ -20730,13 +20801,17 @@ What is typed here stays in this browser.`;
         const sentNames = [], refusedList = [];
         let wholeWhy = "";
         for (const mate of chosen) {
+          if (sharePrivateNow()) {
+            wholeWhy = "private";
+            break;
+          }
           const r = await shareToTeammate(mate.id, cardJson, noteText);
           if (r && r.ok) {
             sentNames.push(mate.name);
             continue;
           }
           const why = r && r.reason || "failed";
-          if ((why === "too-large" || why === "seat-lapsed") && sentNames.length === 0 && refusedList.length === 0) {
+          if ((why === "too-large" || why === "seat-lapsed" || why === "private") && sentNames.length === 0 && refusedList.length === 0) {
             wholeWhy = why;
             break;
           }
@@ -22344,23 +22419,39 @@ What is typed here stays in this browser.`;
     edBaseline = edFormState();
     edBaseTyped = edTyped();
   }
+  function edKeyOf(el) {
+    if (el.id) return String(el.id);
+    return el.type === "checkbox" || el.type === "radio" ? String(el.name || "") + "=" + String(el.value) : String(el.name || "");
+  }
   function edTyped(root) {
     root = root || modalCard;
     if (!root) return null;
+    const els = Array.from(root.querySelectorAll("input,textarea,select"));
     return {
-      fields: Array.from(root.querySelectorAll("input,textarea,select")).map((el) => el.type === "checkbox" || el.type === "radio" ? el.checked : String(el.value || "")),
+      fields: els.map((el) => el.type === "checkbox" || el.type === "radio" ? el.checked : String(el.value || "")),
+      keys: els.map(edKeyOf),
       segs: Array.from(root.querySelectorAll("[data-v]")).map((el) => el.classList.contains("on"))
     };
   }
-  function edRetype(was) {
+  function edRetype(was, keep) {
     if (!was || !modalCard) return;
     const segs = Array.from(modalCard.querySelectorAll("[data-v]"));
-    segs.forEach((el, i) => {
-      if (was.segs[i] && !el.classList.contains("on")) el.click();
+    if (segs.length === was.segs.length) segs.forEach((el, i) => {
+      if (was.segs[i] && (!keep || keep.s(i)) && !el.classList.contains("on")) el.click();
     });
-    Array.from(modalCard.querySelectorAll("input,textarea,select")).forEach((el, i) => {
-      if (i >= was.fields.length) return;
-      const v = was.fields[i];
+    const els = Array.from(modalCard.querySelectorAll("input,textarea,select"));
+    const once = /* @__PURE__ */ new Map(), twice = /* @__PURE__ */ new Set();
+    (was.keys || []).forEach((k, j) => {
+      if (!k) return;
+      if (once.has(k)) twice.add(k);
+      else once.set(k, j);
+    });
+    const same = els.length === was.fields.length;
+    els.forEach((el, i) => {
+      const k = edKeyOf(el);
+      const j = was.keys && k ? once.has(k) && !twice.has(k) ? once.get(k) : -1 : same ? i : -1;
+      if (j < 0 || keep && !keep.f(j)) return;
+      const v = was.fields[j];
       if (el.type === "checkbox" || el.type === "radio") {
         if (el.checked !== v) {
           el.checked = v;
@@ -23132,7 +23223,7 @@ What is typed here stays in this browser.`;
   }
   function edMergeUnder() {
     const base = edBaseTyped, was = edTyped();
-    const same = (a, b) => !!(a && b && a.fields.length === b.fields.length && a.segs.length === b.segs.length);
+    const same = (a, b) => !!(a && b && a.fields.length === b.fields.length && a.segs.length === b.segs.length && String(a.keys) === String(b.keys));
     if (!same(base, was)) return null;
     const tf = was.fields.map((v, i) => v !== base.fields[i]), ts = was.segs.map((v, i) => v !== base.segs[i]);
     edStepping = true;
@@ -23143,7 +23234,7 @@ What is typed here stays in this browser.`;
     }
     const now = edTyped();
     if (!same(now, was)) {
-      edRetype(was);
+      edRetype(was, { f: (i) => tf[i], s: (i) => ts[i] });
       return null;
     }
     const under = now.fields.some((v, i) => tf[i] && v !== base.fields[i] && v !== was.fields[i]) || now.segs.some((v, i) => ts[i] && v !== base.segs[i] && v !== was.segs[i]);
@@ -34203,7 +34294,7 @@ What is typed here stays in this browser.`;
       return Promise.resolve(io.write(JSON.stringify(doc, null, 1) + "\n", r.sha || "", !F)).then((w) => {
         if (w && w.ok) return { route, state: m.state, fresh: m.fresh, pin: io.pinOf(doc), others, wrote: true };
         if (w && w.changed && n < 1) return attempt(n + 1);
-        return quit(w && w.busy ? "busy" : w && w.taken ? "taken" : w && w.changed ? "beaten" : w && w.sealed ? "sealed" : "refused");
+        return quit(w && w.private ? "private" : w && w.busy ? "busy" : w && w.taken ? "taken" : w && w.changed ? "beaten" : w && w.sealed ? "sealed" : "refused");
       });
     });
     return attempt(0);
@@ -35065,8 +35156,17 @@ What is typed here stays in this browser.`;
     const own = sharedOwnPin();
     return !!own && pinned(c).pin === own;
   }
+  function sharedPrivateNow(loose, origin) {
+    const id = String(loose ? origin && origin.id || lyGet("LooseId") || "" : origin && origin.id || "");
+    const c = teamContentNow();
+    const list2 = c && Array.isArray(c.private) ? c.private : [];
+    let on = false;
+    on = !!id && list2.indexOf(id) >= 0;
+    return on;
+  }
   function writeShared(loose, origin, holds, layer) {
     if (!sharedEditing()) return null;
+    if (sharedPrivateNow(loose, origin)) return Promise.resolve({ route: "none" });
     const pin = loose ? "" : String(origin.pin || "");
     const at = loose ? String(lyGet("SharedFile") || "") : String(nsGet("CatalogFile") || "");
     if (!loose && !at) return null;
@@ -35093,6 +35193,7 @@ What is typed here stays in this browser.`;
         today: todayEdition()
       }).then((r) => {
         if (!same()) return { route: "branch" };
+        if (r && r.why === "private") return { route: "none", why: "private", state: r.state, fresh: [] };
         if (!at && (r.why === "taken" || r.why === "other") && n + 1 < SHARED_NAMES) return go(n + 1);
         lySet("Shared", JSON.stringify({ file: name, pin, state: r.state }));
         if (r.wrote) {
@@ -37340,7 +37441,7 @@ What is typed here stays in this browser.`;
            from Save. Delete is offered for BUILT-IN intents as well, which it was not - Manage
            could already delete one, so the editor refusing was the surface disagreeing with
            itself rather than a rule being enforced. */
-        '<span class="mf-left">' + (isNew ? "" : '<button type="button" class="btn danger mf-del" id="ieDelete" title="Delete this intent: a built-in one returns on Reset, one you made does not">Delete</button>') + '<button type="button" class="btn mf-reset" id="ieReset">Reset</button></span><button type="button" class="btn" id="ieCancel" title="Close without saving any change">Cancel</button><button type="button" class="btn primary" id="ieSave" title="Save this intent on this computer">Save</button>'
+        '<span class="mf-left">' + (isNew ? "" : '<button type="button" class="btn danger mf-del" id="ieDelete" title="Delete this intent">Delete</button>') + '<button type="button" class="btn mf-reset" id="ieReset">Reset</button></span><button type="button" class="btn" id="ieCancel" title="Close without saving any change">Cancel</button><button type="button" class="btn primary" id="ieSave" title="Save this intent on this computer">Save</button>'
       )
     });
     $("#ieCancel").onclick = doneIntentEditor;
@@ -37383,7 +37484,12 @@ What is typed here stays in this browser.`;
         }
         pack.intentCustom[ix] = Object.assign({ id }, next);
       } else {
-        pack.intentOverrides[id] = Object.assign({}, next);
+        const at = intentIdxOfId(id), own = {};
+        Object.keys(next).forEach((k) => {
+          if (next[k] !== String((BASE_STORE[k] || [])[at] || "").trim()) own[k] = next[k];
+        });
+        if (Object.keys(own).length) pack.intentOverrides[id] = own;
+        else delete pack.intentOverrides[id];
       }
       savePack();
       refreshAfterIntents();
@@ -38380,7 +38486,7 @@ What is typed here stays in this browser.`;
         /* Delete and Reset are both "undo my work", so they sit together at the left, away from
            Save. Reset only exists when there is something to reset, which is why it is the one
            button whose absence must not move the others - .mf-left holds the pair. */
-        '<span class="mf-left">' + (isNew ? "" : '<button type="button" class="btn danger mf-del" id="meDelete" title="Delete this card: a built-in one returns on Reset, one you made does not">Delete</button>') + '<button type="button" class="btn mf-reset" id="meReset">Reset</button></span><button type="button" class="btn" id="meCancel" title="Close without saving any change">Cancel</button><button type="button" class="btn primary" id="meSave" title="Save this card on this computer">Save</button>'
+        '<span class="mf-left">' + (isNew ? "" : '<button type="button" class="btn danger mf-del" id="meDelete" title="Delete this card">Delete</button>') + '<button type="button" class="btn mf-reset" id="meReset">Reset</button></span><button type="button" class="btn" id="meCancel" title="Close without saving any change">Cancel</button><button type="button" class="btn primary" id="meSave" title="Save this card on this computer">Save</button>'
       )
     });
     $("#meCancel").onclick = doneCardEditor;
@@ -42685,6 +42791,7 @@ What is typed here stays in this browser.`;
       tip: t("This network does not let the live connection to the relay through, so Etiuda asks the relay about once a minute instead. Nothing is lost, and nothing needs doing.")
     });
     if (l.relayElsewhere) notes.push(relayElsewhereNote(l));
+    if (l.folderHeld) notes.push(folderHeldNote(l));
     if (l.needsFolder) notes.push(t("This team now works from a shared folder. The team's lead can say which one; once it is open here with Open a folder, everything carries on as before."));
     if (l.reading) notes.push(l.reading);
     return '<div class="set-row"><div class="set-label">' + esc(l.lead ? t("{LEAD}'s team").split("{LEAD}").join(l.lead) : t("Team")) + notes.filter(Boolean).map((n) => typeof n === "object" ? '<small title="' + esc(n.tip) + '">' + esc(n.text) + "</small>" : "<small>" + esc(n) + "</small>").join("") + '</div><div class="set-ctl"><span class="e-lead-key">' + keySignHtml("studio", l.print) + "</span>" + (l.needsFolder ? '<button type="button" class="btn" data-team-pick-folder="' + esc(l.team) + '">' + esc(t("Open a folder")) + "</button>" : "") + (l.policy || l.waiting ? "" : '<button type="button" class="btn danger" data-leave-team="' + esc(l.team) + '">' + esc(t("Leave this team")) + "</button>") + "</div></div>";

@@ -70,10 +70,9 @@ function syncIntentOrder(){
   setIntentOrder(out);
   saveIntentOrder();
 }
-/* Removal is the third state, below hidden: gone from the interface and from an export,
-   recoverable by Reset because it lives in the pack and the catalog keeps the entry. A
-   custom has nothing to recover from and is spliced for real - Reset wipes customs anyway,
-   so "Reset brings it back" stays true either way. */
+/* Removal is the third state, below hidden: gone from the interface and from an export. A built-in
+   is listed in the pack, so its Undo brings it back, and Clear local changes with every other edit;
+   a custom is spliced for real. No Reset reaches a removed entry. */
 /* A deletion's Undo hangs from the thing's own control, in the Library or else on the desk, read before it goes so the
    Undo hangs from the one now in its place; `from` names another. */
 function removeCard(id, from){

@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 339;
+const PLANTS = 343;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 217 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 220 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -597,7 +597,7 @@ CASES.renewFail = async s => {
 const WIRE_DECLS = ["const SIGNIN_RENEW_MS =", "const SIGNIN_FIRST_MS =", "async function signinRenewNow(", "function armSigninRenew(", "function signinOutNow(",
   "function signinOutSend(", "function signinOutAgain(", "function signinLeave(", "function signinAccountKept(", "function signinPolicyRefuses(", "function signinOutWanted("];
 const WIRE_STANDS = ["harnessLaunch", "PLACED_ASIDE", "signinState", "signinOffered", "branchIdentity", "signinIo", "net", "signinRenewHeld",
-  "signinSave", "tellSignin", "setTimeout", "pinnedLead", "signinTeamHere", "fs", "path", "sharedFolderForWrite", "SEAT_NAME", "signinView", "signoutAsk", "signinLabHeld", "teamJoin", "cancelJoin", "sendJoin", "theWindow", "unlinkOwn", "stand", "signinRevokedNext",
+  "signinSave", "tellSignin", "setTimeout", "pinnedLead", "signinTeamHere", "fs", "path", "catalogFolder", "SEAT_NAME", "signinView", "signoutAsk", "signinLabHeld", "teamJoin", "cancelJoin", "sendJoin", "theWindow", "unlinkOwn", "stand", "signinRevokedNext",
   "storeTurn", "storeForget", "storeEndAgain", "storeLeaveNow"];
 /* The store's look after a renewal, its forgetting at a sign out, an owed store/end posted again and an owed leave tried again
    (tests/desk-store-shell.mjs holds them): counted, never run here. */
@@ -627,7 +627,7 @@ function wireStand(s, reply, serve) {
       tokenAsk: async () => { st.asked++; return reply ? reply() : answer({}); }, serviceAsk: async () => { st.posted++; return serve ? serve() : answer({}); } }),
     net: { fetch: () => { throw new Error("no network in a leg"); } },
     signinRenewHeld: s.signinRenewHeld, signinSave: () => { st.saves++; }, tellSignin: () => { st.tells++; },
-    pinnedLead: () => false, signinTeamHere: () => false, fs, path, sharedFolderForWrite: () => "", SEAT_NAME: "seat.json", signoutAsk: s.signoutAsk,
+    pinnedLead: () => false, signinTeamHere: () => false, fs, path, catalogFolder: () => "", SEAT_NAME: "seat.json", signoutAsk: s.signoutAsk,
     signinView: () => ({ offered: [], signedIn: st.store.held ? "microsoft" : "" }),
     teamJoin: null, cancelJoin: () => { st.cancels++; }, sendJoin: () => { st.sends++; }, theWindow: null, unlinkOwn: f => { st.unlinked.push(String(f)); },
     setTimeout: (fn, ms) => { st.timers.push({ fn, ms }); return { unref() {} }; },
@@ -673,7 +673,7 @@ CASES.renewWire = async (s, swap) => {
 
 /* ---- the seat's write, evaluated with stand-ins: the folder, the team, the files ---------------------------------------- */
 const FLUSH_DECLS = ["function signinTeamHere(", "function signinFlush("];
-const FLUSH_STANDS = ["signinState", "branchIdentity", "pinnedLead", "teamJoin", "sharedFolderForWrite", "folderAnswers", "fs", "path", "writeReplacing",
+const FLUSH_STANDS = ["signinState", "branchIdentity", "pinnedLead", "teamJoin", "catalogFolder", "folderAnswers", "fs", "path", "writeReplacing",
   "seatFileText", "SEAT_NAME", "console", "signinRevokedHas", "signinCertOk", "signinCertEarly", "Date"];
 /* `st`: {held, lead, join, root, files (a Set of paths), writes}; the desk's flush as the wiring has it, its mark kept between calls. */
 function loadFlush(s, st, swap) {
@@ -683,7 +683,7 @@ function loadFlush(s, st, swap) {
     text = text.replace(swap[0], swap[1]);
   }
   const vals = { signinState: () => ({ held: st.held }), branchIdentity: () => ({ id: DESK_ID, key: DESK_KEY }), pinnedLead: () => st.lead,
-    sharedFolderForWrite: () => st.root, folderAnswers: () => true, path,
+    catalogFolder: () => st.root, folderAnswers: () => true, path,
     fs: { existsSync: p => st.files.has(p), mkdirSync: () => {} }, writeReplacing: (p, t) => { st.files.add(p); st.writes.push({ p, t }); },
     seatFileText: s.seatFileText, SEAT_NAME: s.SEAT_NAME, console: { error() {} }, signinRevokedHas: s.signinRevokedHas, signinCertOk: s.signinCertOk, signinCertEarly: s.signinCertEarly,
     Date: { now: () => NOW } };
@@ -893,7 +893,7 @@ CASES.doorsKept = s => {
   return JSON.stringify(got.doors) === JSON.stringify(DOORS_TWO()) && JSON.stringify(dropped.doors) === "[]" && JSON.stringify(refused.doors) === JSON.stringify(DOORS_TWO())
     && !!back && JSON.stringify(back.doors) === JSON.stringify(DOORS_TWO()) && !!forged && JSON.stringify(forged.doors) === "[]";
 };
-const DOORJOIN_DECLS = ["function signinDoorsShown(", "function signinDoorJoin(", "function teamPinStands(", "function inviteDoor(", "function policySameFolder("];
+const DOORJOIN_DECLS = ["function signinDoorsShown(", "function signinDoorJoin(", "function teamPinStands(", "function inviteDoor("];
 const DOORJOIN_STANDS = ["init", "readDesk", "signinState", "branchIdentity", "signinCertOk", "pinnedLead", "joinView", "inviteBeforeFor", "joinCommit",
   "newestEpoch", "teamPins", "teamSeen", "teamPinFrom", "relayMirrorOf", "teamShown", "teamRelayGone", "relayCatalogNamed", "persistDeskEnvelope",
   "relayRun", "catalogFolderChanged", "leadPrint", "crypto", "URL", "Date", "signinDoorAddressOk", "SIGNIN_DESK_PACKED",
@@ -2379,8 +2379,9 @@ CASES.noKeyring = async (s, swapOrPage) => {
 const OTHER_LEAD = rawPub(crypto.generateKeyPairSync("ed25519").publicKey);
 const OTHER_KEY_ID = "studio-" + crypto.createHash("sha256").update(Buffer.from(OTHER_LEAD, "hex")).digest("hex").slice(0, 16);
 const shownOf = (s, over, swap) => { const q = doorJoinStand(over); return loadDoorJoin(s, q, swap).signinDoorsShown(q.held, NOW).map(d => d.n).join(); };
-/* Machine policy binds a door as it binds an invitation: none where it names a folder, only the named lead's where it names a lead,
-   none where it names both (a door has no folder); a press at a door it does not offer changes nothing. */
+/* Machine policy binds a door as it binds an invitation: only the named lead's where it names a lead; a press at a door it does not
+   offer changes nothing. Was also none where it names a folder, or both; now a team works over the relay only and a folder in the
+   policy is not read, so a folder binds nothing and both bind as the lead alone. */
 CASES.doorPolicy = (s, swap) => {
   const mixed = heldOf({ doors: [doorOf(), doorOf({ team: "t-fedcba9876543210", lead: OTHER_LEAD, keyId: OTHER_KEY_ID })] });
   const share = "\\\\server\\team";
@@ -2388,7 +2389,7 @@ CASES.doorPolicy = (s, swap) => {
   const lead = shownOf(s, { held: mixed, policy: { lead: DOOR_LEAD } }, swap), other = shownOf(s, { held: mixed, policy: { lead: OTHER_LEAD } }, swap);
   const both = shownOf(s, { held: mixed, policy: { lead: DOOR_LEAD, folder: share } }, swap);
   const q = doorJoinStand({ held: mixed, policy: { lead: OTHER_LEAD } }), x = loadDoorJoin(s, q, swap), r = x.signinDoorJoin(0);
-  return free === "0,1" && folder === "" && lead === "0" && other === "1" && both === ""
+  return free === "0,1" && folder === "0,1" && lead === "0" && other === "1" && both === "0"
     && !!r && r.refused === "door" && x.join() === null && Object.keys(q.pins).length === 0 && q.persists === 0;
 };
 /* No door while a pinned team stands (its roster still names this desk, or it holds no key yet, and the relay has not refused it);
@@ -2430,7 +2431,7 @@ function loadCancel(st, swap) {
     deskBranch: {}, unlinkOwn: f => { st.unlinked.push(f); }, joinFile: () => "/relay/" + RT + "/desks/" + DESK_ID + "/join.json", newestEpoch: () => 0,
     undoInvite: () => { st.undone++; }, persistDeskEnvelope: () => {}, joinView: () => ({ view: true }), endRefusedRelay: j => { st.ended.push(j); },
     requestSent: () => st.sent !== false, signinOutWanted: () => false, signinTeamHere: () => false, sendJoin: () => {}, storeForget: () => {}, signinOutSend: () => {} };
-  const body = "let deskKeys = {}, teamJoin = init.join, joinTold = true, signinWrote = \"\", theWindow = null, SEAT_NAME = \"seat.json\", path = null, sharedFolderForWrite = () => \"\";\n" + text + "\nreturn { cancelJoin, refusedWithdrawEnds, signinLeave, join: () => teamJoin };";
+  const body = "let deskKeys = {}, teamJoin = init.join, joinTold = true, signinWrote = \"\", theWindow = null, SEAT_NAME = \"seat.json\", path = null, catalogFolder = () => \"\";\n" + text + "\nreturn { cancelJoin, refusedWithdrawEnds, signinLeave, join: () => teamJoin };";
   return new Function(...CANCEL_STANDS, body)(...CANCEL_STANDS.map(n => vals[n]));
 }
 const cancelStand = (join, accepted) => ({ join, accepted, withdrawn: [], unlinked: [], undone: 0, ended: [] });
@@ -2473,7 +2474,7 @@ CASES.signoutUnlinkOwn = async (s, swap) => {
   const st = outStand(s);
   let raw = 0;
   st.signinTeamHere = () => true;
-  st.sharedFolderForWrite = () => path.join(path.sep, "share", "team");
+  st.catalogFolder = () => path.join(path.sep, "share", "team");
   st.fs = Object.assign({}, fs, { unlinkSync: () => { raw++; } });
   loadWire(st, swap).signinOutNow();
   await tick(5);
@@ -2559,7 +2560,7 @@ const SWITCH_STANDS = ["ipcMain", "fromEngine", "LINK_CLICK_MS", "signinState", 
   "sealsForReal", "safeStorage", "process", "branchIdentity", "signinIo", "storeOn", "signinFolderApart", "SIGNIN_FOLDER_LAND_MS", "signinAccessFor", "signinRun",
   "signinSeat", "signinSeatAccess", "storeTokenTake", "storeEndAgain", "storeLeaveNow", "signinFolderAfter", "storeTurn", "signinLanding", "signinSave",
   "signinKeep", "signinKept", "signinSame", "signinSettle", "harnessLaunch", "signinLabHeld", "teamJoin", "cancelJoin", "sendJoin", "theWindow", "pinnedLead",
-  "unlinkOwn", "path", "sharedFolderForWrite", "SEAT_NAME", "storeForget", "signoutAsk", "signinCertEarly", "signinRevokedHas", "signinCertOk", "folderAnswers",
+  "unlinkOwn", "path", "catalogFolder", "SEAT_NAME", "storeForget", "signoutAsk", "signinCertEarly", "signinRevokedHas", "signinCertOk", "folderAnswers",
   "fs", "writeReplacing", "seatFileText", "console", "signinRenewHeld", "signinRevokedNext", "signinClaims", "signinPinOk"];
 const SUB_B = "s-2";
 function switchStand(s, o) {
@@ -2582,7 +2583,7 @@ function switchStand(s, o) {
     signinKeep: (ss, pl, t) => (t ? "sealed:" + t : ""), signinKept: (ss, x) => String(x || "").replace(/^sealed:/, ""), signinSame: (a, b) => a === b,
     signinSettle: s.signinSettle, harnessLaunch: () => false, signinLabHeld: () => false, teamJoin: opt.join || null,
     cancelJoin: () => { st.cancels++; }, sendJoin: () => { st.sends++; }, theWindow: null, pinnedLead: () => (opt.join ? null : { team: TEAM }),
-    unlinkOwn: f => { st.unlinked.push(String(f) + " " + who()); }, path, sharedFolderForWrite: () => path.join(path.sep, "share", "team"), SEAT_NAME: "seat.json",
+    unlinkOwn: f => { st.unlinked.push(String(f) + " " + who()); }, path, catalogFolder: () => path.join(path.sep, "share", "team"), SEAT_NAME: "seat.json",
     storeForget: () => { st.forgets++; }, signoutAsk: async () => { const o = "signout/desk " + who(); st.order.push(o); await (st.outGate || tick(2)); st.order.push(o + " answered"); return st.outOk; },
     signinCertEarly: () => false, signinRevokedHas: () => false, signinCertOk: c => !!c, folderAnswers: () => true,
     fs: { existsSync: () => false, mkdirSync: () => {} }, writeReplacing: f => { st.writes.push(String(f)); }, seatFileText: s.seatFileText, console: { error() {} },
@@ -3887,7 +3888,8 @@ CASES.clockBackClosed = (s, swap) => {
   const end = w2.signinClockNow().desk;
   return kept && stood && still && end === until && s.signinWorks(st.held, DESK_KEY, end) === false;
 };
-/* Set back a year while running: the monotonic clock carries the desk on, and the next run measures from the set-back clock. */
+/* Set back a year while running: the monotonic clock carries the desk on; the next run counts nothing while the system clock stays
+   behind where the desk's reckoning left it, and the time closed once it is put right. */
 CASES.clockBackRunning = (s, swap) => {
   const st = clockStand({ held: heldOf(), wall: NOW, mono: 1000 }), w = clockWire(s, st, swap);
   w.signinClockNow();
@@ -3897,7 +3899,10 @@ CASES.clockBackRunning = (s, swap) => {
   const b = w.signinClockNow().desk === NOW + 10000 + 86400000;
   w.signinSave();
   st.wall += HOUR_MS; st.mono = 3;
-  return a && b && clockWire(s, st, swap).signinClockNow().desk === NOW + 10000 + 86400000 + HOUR_MS;
+  const w2 = clockWire(s, st, swap), behind = w2.signinClockNow().desk === NOW + 10000 + 86400000;
+  w2.signinSave();
+  st.wall = NOW + 10000 + 86400000 + 2 * HOUR_MS; st.mono = 4;
+  return a && b && behind && clockWire(s, st, swap).signinClockNow().desk === NOW + 10000 + 86400000 + 2 * HOUR_MS;
 };
 /* An old answer replayed: its certificate, genuine and older, rewinds nothing, in the run or the next, and stands ended on the desk's
    clock; today's calm lapse on a clock set back to its days reads it as held. */
@@ -4260,6 +4265,58 @@ CASES.clockKeyLate = (s, swap) => {
   const before = w2.signinClockNow().desk;
   next.key = undefined;
   return before === 0 && w2.signinClockNow().desk === NOW + 3 * DAY_MS;
+};
+/* A CLOCK SET BACK, THEN PUT RIGHT (Grok psi's B1, the backward half, which its verification found): the correction is no time passed.
+   A desk kept at the true time starts on a system clock read at a firmware date, and is put right a minute later in the run, or after
+   an hour's running and the next start: the desk's time lands at the true time, the closed days counted once, never the years between. */
+CASES.clockKeptBack = (s, swap) => {
+  const FIRM = Date.UTC(2010, 0, 1), held = heldOf();
+  const kept = () => { const st = clockStand({ held, wall: NOW }), w = clockWire(s, st, swap); w.signinClockNow(); clockRun(st, DAY_MS); w.signinSave(); return st.file; };
+  const a = clockStand({ held, file: kept(), wall: FIRM, mono: 5 }), wa = clockWire(s, a, swap);
+  const seen = wa.signinClockNow().desk;
+  a.wall = NOW + 3 * DAY_MS + 60000; a.mono += 60000;
+  const inRun = wa.signinClockNow().desk;
+  const b = clockStand({ held, file: kept(), wall: FIRM, mono: 5 }), wb = clockWire(s, b, swap);
+  wb.signinClockNow(); clockRun(b, HOUR_MS); wb.signinSave();
+  b.wall = NOW + 3 * DAY_MS; b.mono = 9;
+  const next = clockWire(s, b, swap).signinClockNow().desk;
+  return seen === NOW + DAY_MS && inRun === NOW + 3 * DAY_MS + 60000 && next === NOW + 3 * DAY_MS
+    && s.signinWorks(held, DESK_KEY, inRun) === true && s.signinWorks(held, DESK_KEY, next) === true;
+};
+/* A running clock stepped back two hours and forward two hours: the desk's time moves by the real time passed and no more, in the run
+   and in the next; a sleep after the step (the monotonic clock standing, the system clock on) still counts the time asleep. */
+CASES.clockStepBack = (s, swap) => {
+  const st = clockStand({ held: heldOf(), wall: NOW, mono: 1000 }), w = clockWire(s, st, swap);
+  const t0 = w.signinClockNow().desk;
+  st.wall -= 2 * HOUR_MS; clockRun(st, 60000);
+  const back = w.signinClockNow().desk;
+  clockRun(st, 60000); st.wall += 2 * HOUR_MS;
+  const put = w.signinClockNow().desk;
+  clockRun(st, HOUR_MS);
+  w.signinSave();
+  st.wall += DAY_MS; st.mono = 3;
+  const w2 = clockWire(s, st, swap), next = w2.signinClockNow().desk;
+  st.wall -= 2 * HOUR_MS; w2.signinClockNow();
+  st.wall += 2 * HOUR_MS + 3 * HOUR_MS;
+  const slept = w2.signinClockNow().desk;
+  return t0 === NOW && back === NOW + 60000 && put === NOW + 120000 && next === NOW + 120000 + HOUR_MS + DAY_MS
+    && slept === next + 3 * HOUR_MS;
+};
+/* THE STOP MENDED ONLINE: a running desk whose clock is carried past its certificate's end (a forward step, which stays until the next
+   certificate) stops and asks one renewal at once; the renewal's certificate, issued on the service's time, sets the desk's time back
+   to its issue and the desk works again, no second renewal asked. */
+CASES.clockStopRenewed = (s, swap) => {
+  let at = NOW + DAY_MS, mono = 1;
+  const st = stopStand({ held: heldOf({ seated: true }), clock: { now: () => at }, mono: { now: () => mono }, setTimeout: () => ({ unref() {} }), clearTimeout: () => {} });
+  const w = stopWire(s, st, swap);
+  w.signinClockNow(); w.signinStopArm();
+  const works = w.signinWorksNow() === true && st.renews === 0;
+  at += 40 * DAY_MS; mono += 1000;
+  w.signinStopArm(); w.signinStopArm();
+  const stopped = w.signinWorksNow() === false && st.renews === 1;
+  st.held = heldOf({ seated: true, cert: cert({ issued: NOW + DAY_MS + 2000, until: NOW + 31 * DAY_MS }) });
+  w.signinStopArm();
+  return works && stopped && w.signinClockNow().desk === NOW + DAY_MS + 2000 && w.signinWorksNow() === true && st.renews === 1;
 };
 /* THE QUICK REPLIES ON A DESK THAT DOES NOT WORK: neither the key nor the tray opens them, and the desk's window comes forward instead;
    on a desk that works they open as before, and a second press still closes one that stands. */
@@ -5670,7 +5727,7 @@ const LEGS = [
   ["ds16g", "stagingCmd", "tools/signin-staging.cmd is outside the packaged files and starts this tree's own Electron with a profile of its own, never the installed desk, with ETIUDA_SIGNIN_LAB for that start alone"],
   ["ds18a", "waitRead", "no free seat is a wait: the service's 200 with no certificate and the reason \"waiting\" is kept as the said reason with the refresh token, asking nobody; none without it stays no licence; the certificate after it ends the wait; a 409 \"full\" reads as before"],
   ["ds18b", "waitRenew", "the quiet renewal while waiting waits again with its token renewed and nobody asked, and seats the desk once a seat frees; an older service's \"full\" keeps its token as before"],
-  ["ds21a", "doorPolicy", "machine policy binds a door as an invitation: no door where it names a folder, only the named lead's where it names a lead, none where it names both; a press at a door not offered changes nothing"],
+  ["ds21a", "doorPolicy", "machine policy binds a door as an invitation: only the named lead's where it names a lead, a folder it names binding nothing; a press at a door not offered changes nothing"],
   ["ds21b", "doorPins", "no door while a pinned team stands; a team the roster or the relay took off leaves the doors; a door of a team pinned under another lead is not offered, under the same lead it is"],
   ["ds21c", "doorUnbar", "a team left, or whose key did not match, is offered at its door, and the press lifts the leave and the doubt after Cancel's snapshot has taken them"],
   ["ds21d", "doorCancel", "Cancel at a door the relay named withdraws the request there and keeps the join until the relay takes it; a door request never named or turned away goes at once; an accepted invitation as before"],
@@ -5753,7 +5810,7 @@ const LEGS = [
   ["dsw8", "clockSlow", "the system clock five minutes slow, or ten, at a fresh sign-in: the desk works from the certificate's issue and runs on, where today's calm lapse reads it lapsed"],
   ["dsw9", "clockFast", "a year fast at the sign-in: the desk works and runs on, the next run carrying on from the kept clock, where today's calm lapse reads it ended"],
   ["dsw10", "clockBackClosed", "set back a year between two runs: the desk's time stands only while it was closed and it stops at the certificate's end after thirty days of running, where today's calm lapse reads it lapsed, issued in the future"],
-  ["dsw11", "clockBackRunning", "set back a year while running: the monotonic clock carries the desk on, and the next run measures from the set-back clock"],
+  ["dsw11", "clockBackRunning", "set back a year while running: the monotonic clock carries the desk on; the next run counts nothing while the system clock stays behind where the desk's reckoning left it, and the time closed once it is put right"],
   ["dsw12", "clockReplay", "an old answer replayed rewinds the desk's clock neither in the run nor in the next, and its certificate stands ended on it"],
   ["dsw13", "clockTick", "the tick is armed once by the first ask and unref'd, keeps the clock at its first turn and then hourly, writes nothing before an anchor, and tells the page once each time the network comes or goes"],
   ["dsk1","answerWords","B-2b: the answer's seat is read as {on, ends, lead?}, on one of the five words or no seat, a team's lead plain text of at most 120 characters with no markup, control or bidirectional character, each trial an end; an answer without them reads as before; the service's record reads as it says"],
@@ -5766,6 +5823,9 @@ const LEGS = [
   ["dsk8","clockLater","B-2b: a forward jump while running, then corrected, leaves the desk's time ahead until the next certificate, issued later than any taken, sets it back to its issue; a replay still moves nothing"],
   ["dsk9","clockLost","B-2b: with the record deleted before every start a run restarts at the later of the issue and the system clock: an honest clock ends the certificate at its end over thirty-two starts, a slow clock works at once, a year fast reads ended, and a clock set back gets one span per run and never more within one"],
   ["dsk10","clockB2a","B-2b: a file written by B-2a's clock is no clock here, the run restarting at the later of the issue and the system clock with the seat whole; the issue is under the mark"],
+  ["dsc1","clockKeptBack","psi's B1, the backward half: a kept clock that starts on a system clock read at 2010 and is put right, in the run or after the next start, lands at the true time, the closed days counted once and never the years between"],
+  ["dsc2","clockStepBack","psi's B1, the backward half: a running clock stepped back two hours and forward two hours moves the desk's time by the real time passed and no more, in the run and the next; a sleep after the step still counts"],
+  ["dsc3","clockStopRenewed","a desk carried past its certificate's end stops and asks one renewal at once, and the renewal's certificate sets the desk's time back to its issue and the desk works again"],
   ["dsk11","clockKeyLate","B-2b, the test architect's candidate: a start whose first ask comes before the desk's key still reads the kept clock once the key answers"],
   ["dsk12","pickRefused","B-2b: the quick replies' key and tray open nothing on a desk that does not work and bring its window forward; on one that works they open as before, and a second press still closes one that stands"],
   ["dsk13","noProvider","B-2b: a build offering no provider works with no certificate, a genuine one held, arms no stop, asks no renewal and tells the page registered false; machine policy pinning the providers away leaves registered as the build is; nothing held is dropped"],
@@ -6306,7 +6366,7 @@ if (!PLANTS_OFF) {
   await plantWire("dsp97b", ["inviteAccepted(j) && requestSent(j)) return withdrawJoin(j); /* plant:h35-keep */", "inviteAccepted(j)) return withdrawJoin(j); /* plant:h35-keep */"], "cancelUnsent");
   await plantWire("dsp98", ["  if (j.refused !== true && j.invite.relay.door !== true) return false; /* plant:door-withdrawn-ends */", "  if (j.refused !== true) return false;"], "doorWithdrawnEnds");
   await plantWire("dsp99", ["  if (inv.withdrawing === true) return inv.rt === rt &&", "  if (false) return inv.rt === rt &&"], "doorWithdrawInvite");
-  await plantWire("dsp99a", ["try { unlinkOwn(path.join(sharedFolderForWrite(), \"desks\", me.id, SEAT_NAME)); }", "try { fs.unlinkSync(path.join(sharedFolderForWrite(), \"desks\", me.id, SEAT_NAME)); }"], "signoutUnlinkOwn");
+  await plantWire("dsp99a", ["try { unlinkOwn(path.join(catalogFolder(), \"desks\", me.id, SEAT_NAME)); }", "try { fs.unlinkSync(path.join(catalogFolder(), \"desks\", me.id, SEAT_NAME)); }"], "signoutUnlinkOwn");
   await plantWire("dsp99b", ["  signinRenewing = pending; /* plant:renew-marked */\n", ""], "signoutAfterRenew");
   await plantWire("dsp99c", ["const flight = (signinRenewing ? signinRenewing.then(send, send) : send()).then(ok => { /* plant:signout-after-renew */", "const flight = send().then(ok => {"], "signoutAfterRenew");
   await plant("dsp99d", ["  if (/^[0-9a-f]{64}$/.test(String(d.out))) out.out = String(d.out); /* plant:out-kept */\n", ""], "signoutOwed");
@@ -6474,6 +6534,11 @@ if (!PLANTS_OFF) {
   await plant("dswp13", ["licenceManaged: signedIn ? held.managed === true : o.licenceManaged === true,", "licenceManaged: signedIn ? held.managed === true : false,"], "viewSame");
   await plant("dswp14", ["  let desk = c.desk > 0 ? c.desk + Math.round(Math.max(0, byWall, byMono)) : 0; /* plant:clock-forward */", "  let desk = c.desk > 0 ? c.desk + Math.round(byWall) : 0;"], "clockRules");
   await plant("dswp15", ["  let desk = c.desk > 0 ? c.desk + Math.round(Math.max(0, byWall, byMono)) : 0; /* plant:clock-forward */", "  let desk = c.desk > 0 ? c.desk + Math.round(Math.max(byWall, byMono)) : 0;"], "clockRules");
+  /* psi's B1, the backward half: the system clock held where the monotonic clock carries it while it stands behind. */
+  await plant("dscp1", ["  const at = Number.isFinite(c.wall) ? Math.max(wall, c.wall + byMono) : wall; /* plant:clock-wall-behind */", "  const at = wall;"], "clockKeptBack");
+  await plant("dscp2", ["  const at = Number.isFinite(c.wall) ? Math.max(wall, c.wall + byMono) : wall; /* plant:clock-wall-behind */", "  const at = wall;"], "clockStepBack");
+  await plant("dscp3", ["    if (cert.issued > issued) { desk = cert.issued; issued = cert.issued; } /* plant:clock-anchor */\n", ""], "clockStopRenewed");
+  await plantWire("dscp4", ["    signinEndAsked = String(cert.sig.value); /* plant:end-asked-once */", "    signinEndAsked = \"\";"], "clockStopRenewed");
   await plant("dswp16", ["    if (cert.issued > issued) { desk = cert.issued; issued = cert.issued; } /* plant:clock-anchor */\n",""], "clockSlow");
   await plant("dswp17", ["    if (cert.issued > issued) { desk = cert.issued; issued = cert.issued; } /* plant:clock-anchor */","    { desk = cert.issued; issued = cert.issued; }"], "clockReplay");
   await plant("dswp18", ["  if (!/^[0-9a-f]{64}$/.test(String(deskKey || \"\")) || !signinVerified(String(deskKey), signinClockBytes(c), d.clockMark)) return null; /* plant:clock-mark */\n", ""], "clockMark");

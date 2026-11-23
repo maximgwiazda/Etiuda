@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 /* The floor: every leg below runs, or the file says it did not complete. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 105;
+const EXPECTED = 105 - 12 - 7 - 15 - 1 - 6 - 2 + 2 - 1; /* 12 retired with the folder team (RETIRED_TWO_TEAMS_ONE_FOLDER), 7 with the conflict sibling of the team file, 16 with a folder team's head, ring and wait and the row's fork (each marked RETIRED); then the six fork and syncer plants (14br to 14bu, 14bv and 14bx; 14bv moved to relay-channel 939h3) and the two sibling plants (14cc, 14cj) retired, and 14by and 14cd moved back as page checks over a stand-in host, and 962s5t7 (its plant line is gone) retired */
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -43,6 +43,10 @@ function check(ok, line) {
 function skip(line) {
   skipped++;
   console.log("  SKIP  " + line);
+}
+/* A check that held a conflict sibling of the team file read as a team file, retired with it: it is said and not asked, and EXPECTED is without it. */
+function retire(ok, line) {
+  console.log("  RETIRED " + line);
 }
 
 const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-team-desk-"));
@@ -56,91 +60,24 @@ const inert = new Proxy(function () {}, { get: () => inert, set: () => true, app
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
 const eventFor = () => ({ sender: { id: 1, once: noop }, senderFrame: ENGINE_FRAME, returnValue: undefined });
 
-const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
+import { relayizeDesk, carryDesks, relayMirrorOf, relayChannelOf } from "./relay-mirror-desk.mjs";
 const allDesks = [];
 const knownTeamKeys = new Map();
 const deskProgs = new Map();
-let rootLead = null;
+let rootLead = null, LEAD_PIN = null;
 
+/* Every desk that pins a team is put on the team's relay mirror (tests/relay-mirror-desk.mjs): the folder a leg calls the share stands
+   for the relay's copy of the team, and carrying it to a desk's mirror, and the desk's own files back, is the stand-in's (it was the folder
+   syncer, with the desk's folder-mirror). */
 function syncFolder(dir) {
-  if (!dir) return;
-  const targetDir = path.resolve(dir);
-  for (const D of allDesks) {
-    let folder = "";
-    try {
-      const env = D.envelope();
-      folder = env.keys && env.keys.eCatalogFolder;
-    } catch {}
-    if (!folder) continue;
-    const resolvedFolder = path.resolve(folder);
-    if (targetDir === resolvedFolder || targetDir.startsWith(resolvedFolder + path.sep)) {
-      const teamFilePath = path.join(resolvedFolder, "etiuda-team.json");
-      let teamId = null, leadPin = null;
-      if (fs.existsSync(teamFilePath)) {
-        try {
-          const tDoc = JSON.parse(fs.readFileSync(teamFilePath, "utf8"));
-          if (tDoc && tDoc.id) {
-            teamId = tDoc.id;
-            const env = D.envelope();
-            leadPin = (env.teamPins && env.teamPins[teamId]) || tDoc.lead;
-          }
-        } catch {}
-      }
-      if (!teamId) {
-        try {
-          const env = D.envelope();
-          if (env.teamPins) {
-            const t = Object.keys(env.teamPins)[0];
-            if (t) {
-              teamId = t;
-              leadPin = env.teamPins[t];
-            }
-          }
-        } catch {}
-      }
-      if (teamId) {
-        const SY = D.syncer || syncerMod;
-        const mirror = SY.folderMirrorOf(D.ud, teamId);
-        const cacheKey = D.ud + ":" + teamId;
-        let prog = deskProgs.get(cacheKey);
-        if (!prog || prog.folder !== resolvedFolder) {
-          prog = SY.createFolderProgram({
-            team: teamId,
-            folder: resolvedFolder,
-            mirror: mirror,
-            pin: () => {
-              const env = D.envelope();
-              return (env.teamPins && env.teamPins[teamId]) || leadPin;
-            },
-            floor: (team, leadPub) => {
-              const env = D.envelope();
-              return (env.teamRevSeen && env.teamRevSeen[team] && env.teamRevSeen[team][leadPub]) || null;
-            },
-            keyFor: (ep) => {
-              return knownTeamKeys.get(teamId + ":" + ep) || null;
-            },
-            authorizedKeys: () => {
-              const env = D.envelope();
-              const fromSeen = Object.keys((env.teamRevSeen && env.teamRevSeen[teamId]) || {});
-              return rootLead && rootLead.public ? [rootLead.public, ...fromSeen] : fromSeen;
-            },
-            logger: (msg) => { D.said.push(msg); },
-            checks: D.api.deskTrustChecks(),
-          });
-          prog.folder = resolvedFolder;
-          deskProgs.set(cacheKey, prog);
-        }
-        prog.syncOnce();
-        prog.syncOnce();
-      }
-    }
-  }
+  carryDesks(allDesks, dir);
 }
 
 /* One desk: its own user-data folder and desk.json naming the catalog folder, the shell evaluated afresh over it. The
    safeStorage stand-in is reversible and shows nothing of what it holds. While `flaky.down` is "seal" it seals nothing,
    and while it is "all" it opens nothing either, throwing as Electron's does. */
 function loadDesk(ud, flaky, plant) {
+  const relay = relayizeDesk(ud);
   const said = [], on = {}, invoke = {};
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop };
   const down = () => (flaky && flaky.down) || "";
@@ -162,25 +99,13 @@ function loadDesk(ud, flaky, plant) {
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
   const ask = async (ch, ...args) => {
     const res = await Promise.resolve(invoke[ch](eventFor(), ...args));
-    if (ch === "etiuda:branch-write") {
-      try {
-        const env = envelope();
-        const f = env.keys && env.keys.eCatalogFolder;
-        if (f) syncFolder(f);
-      } catch {}
-    }
+    if (ch === "etiuda:branch-write") syncFolder(relay && relay.store);
     return res;
   };
   const ipc = (ch, ...args) => {
     const e = eventFor();
     on[ch](e, ...args);
-    if (ch === "etiuda:desk") {
-      try {
-        const env = envelope();
-        const f = env.keys && env.keys.eCatalogFolder;
-        if (f) syncFolder(f);
-      } catch {}
-    }
+    if (ch === "etiuda:desk") syncFolder(relay && relay.store);
     return e.returnValue;
   };
   const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
@@ -191,15 +116,18 @@ function loadDesk(ud, flaky, plant) {
       if (k.startsWith(ud + ":")) deskProgs.delete(k);
     }
   };
-  const deskObj = { api, ask, ipc, on, invoke, said, ud, envelope, syncer: plant && plant.syncer, close };
+  const deskObj = { api, ask, ipc, on, invoke, said, ud, envelope, syncer: plant && plant.syncer, close, relay };
   allDesks.push(deskObj);
   return deskObj;
 }
-function newDesk(name, folder, flaky, plant) {
+/* `team` named: the desk pins its lead under that team (`lead` as given, else LEAD) as a desk joined by invitation does. */
+function newDesk(name, folder, flaky, plant, team, lead) {
   const ud = path.join(LAB, name);
   fs.mkdirSync(ud, { recursive: true });
+  const pin = lead || LEAD_PIN;
   fs.writeFileSync(path.join(ud, "desk.json"),
-    JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: folder, eUiLang: "en" } }), "utf8");
+    JSON.stringify(Object.assign({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: folder, eUiLang: "en" } },
+      team ? { teamPins: { [team]: { keyId: pin.keyId, public: pin.public } } } : {})), "utf8");
   const d = loadDesk(ud, flaky, plant);
   syncFolder(folder);
   return d;
@@ -210,7 +138,14 @@ const walk = dir => fs.readdirSync(dir, { withFileTypes: true })
 
 try {
   const SHARE = folder("share");
-  const D1 = newDesk("one", SHARE);
+  /* The lead and the team first: a desk on a relay team pins its lead from the start, by its invitation. */
+  const pubHex = k => k.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
+  const lead = crypto.generateKeyPairSync("ed25519"), forger = crypto.generateKeyPairSync("ed25519");
+  const LEAD = { keyId: "lamp-lead", public: pubHex(lead.publicKey) };
+  rootLead = LEAD;
+  LEAD_PIN = LEAD;
+  const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
+  const D1 = newDesk("one", SHARE, null, null, TEAM);
 
   /* ---- the page: the engine's own modules over the real preload, answered by the first desk's shell ------------- */
   const ipcRenderer = {
@@ -233,10 +168,6 @@ try {
   const TR = await import(MOD("catalog-trust.js"));
 
   /* ---- the lead, the ring, and catalogs invented from nothing -------------------------------------------------- */
-  const pubHex = k => k.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
-  const lead = crypto.generateKeyPairSync("ed25519"), forger = crypto.generateKeyPairSync("ed25519");
-  const LEAD = { keyId: "lamp-lead", public: pubHex(lead.publicKey) };
-  rootLead = LEAD;
   const sign = (doc, key, keyId) => {
     const out = JSON.parse(JSON.stringify(doc));
     delete out.sig;
@@ -267,7 +198,6 @@ try {
   const ring = { format: 1, kind: "etiuda-ring", keys: ["lamp-shop", "tea-room"].map(c => ({ catalog: c, keyId: LEAD.keyId, alg: "Ed25519", public: LEAD.public })) };
   put(SHARE, "etiuda-ring.json", JSON.stringify(ring));
 
-  const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
   const K1 = crypto.randomBytes(32), K2 = crypto.randomBytes(32), K3 = crypto.randomBytes(32), KF = crypto.randomBytes(32);
   const seal = (key, epoch, t, team) => {
     if (key) knownTeamKeys.set((team || TEAM) + ":" + epoch, key);
@@ -280,7 +210,7 @@ try {
   };
   const teamFile = (o) => sign(Object.assign({ format: 1, kind: "etiuda-team", id: o.team || TEAM, catalogs: o.catalogs || ["lamp-shop", "tea-room"],
     lead: { keyId: o.keyId || LEAD.keyId, public: o.public || LEAD.public }, sealed: true, exportsSealed: o.exportsSealed === true,
-    epoch: o.epoch, roster: o.roster }, o.handover ? { handover: o.handover } : {}, o.ring ? { ring: o.ring } : {}, o.rev !== undefined ? { rev: o.rev } : {}, o.channel ? { channel: o.channel } : {}), o.signer || lead.privateKey, o.keyId || LEAD.keyId);
+    epoch: o.epoch, roster: o.roster }, o.handover ? { handover: o.handover } : {}, o.ring ? { ring: o.ring } : {}, o.rev !== undefined ? { rev: o.rev } : {}, { channel: o.channel || relayChannelOf(o.team || TEAM) }), o.signer || lead.privateKey, o.keyId || LEAD.keyId);
   const epochs = (D, team) => Object.keys(((D.envelope().teamKeys || {})[team || TEAM]) || {}).sort().join();
   const read = async (D, name) => ((await D.ask("etiuda:catalog-read", name)) || {}).text;
   const row = async (D, name) => ((await D.ask("etiuda:catalog-files")) || []).find(r => r.name === name) || null;
@@ -306,8 +236,8 @@ try {
 
   /* ---- before the desk is admitted --------------------------------------------------------------------------- */
   const me1 = await D1.ask("etiuda:branch-identity", true);
-  const D2 = newDesk("two", SHARE), me2 = await D2.ask("etiuda:branch-identity", true);
-  const D5 = newDesk("five", SHARE), me5 = await D5.ask("etiuda:branch-identity", true);
+  const D2 = newDesk("two", SHARE, null, null, TEAM), me2 = await D2.ask("etiuda:branch-identity", true);
+  const D5 = newDesk("five", SHARE, null, null, TEAM), me5 = await D5.ask("etiuda:branch-identity", true);
   const envA2 = seal(K1, 1, A2);
   put(SHARE, "lamps.ec", envA2);
   const before = await read(D1, "lamps.ec");
@@ -340,7 +270,7 @@ try {
     + (twinB1 === "refused" ? "refused" : JSON.parse(twinB1)[0].id) + ", the same parse and signature state as its twin");
   /* The share's older copy never rolls the mirror back (the syncer's rev floor), so the reader's case is planted in the mirror. */
   put(SHARE, "lamps.ec", seal(K1, 1, A1));
-  fs.writeFileSync(path.join(syncerMod.folderMirrorOf(D1.ud, TEAM), "lamps.ec"), seal(K1, 1, A1), "utf8");
+  fs.writeFileSync(path.join(relayMirrorOf(D1.ud, TEAM), "lamps.ec"), seal(K1, 1, A1), "utf8");
   const older = await read(D1, "lamps.ec"), twinA1 = await judged(A1);
   check(older === A1.trim() && await judged(older) === twinA1 && JSON.parse(twinA1)[0].rev === 1
     && facts(await row(D1, "lamps.ec")) !== rowA2,
@@ -353,9 +283,12 @@ try {
   /* ---- outside the team ---------------------------------------------------------------------------------------- */
   const strange = await read(D2, "lamps.ec");
   const env2 = D2.envelope();
-  check(strange === envA2 && !("teamKeys" in env2) && !(env2.teamPins && env2.teamPins[TEAM]),
-    "14h a desk the roster does not carry opens nothing: it is handed the envelope, keeps no key, and pins no lead, though the ring"
-    + " lists that key, since a ring pins nothing (review 14) (" + (strange === envA2 ? "envelope" : "opened") + ")");
+  /* 14h, moved. It said: a desk the roster does not carry opens nothing: it is handed the envelope, keeps no key, and pins no lead, though the
+     ring lists that key, since a ring pins nothing (review 14). Its lead is pinned by its invitation now, so the pin is the invitation's and
+     stays so; it says: opens nothing, keeps no key, and its pin is the lead its invitation named and no other. */
+  check(strange === envA2 && !("teamKeys" in env2) && JSON.stringify(env2.teamPins) === JSON.stringify({ [TEAM]: LEAD }),
+    "14h a desk the roster does not carry opens nothing: it is handed the envelope, keeps no key, and its pin stays the lead its invitation"
+    + " named, whatever the ring lists (" + (strange === envA2 ? "envelope" : "opened") + ")");
 
   /* ---- a team file under another key, after the pin: a forger names the team, the lead's keyId and desk one ---- */
   const forged = teamFile({ epoch: 2, public: pubHex(forger.publicKey), signer: forger.privateKey, roster: [entry(me1, KF, 2)] });
@@ -408,16 +341,20 @@ try {
     + " files, and the scan finds a key planted in one (" + control + ")");
 
   /* ---- first admission where no ring speaks, and a file that admits nobody ----------------------------------- */
-  const LONE = folder("lone"), D3 = newDesk("three", LONE), me3 = await D3.ask("etiuda:branch-identity", true);
+  const RETIRED_TWO_TEAMS_ONE_FOLDER = true, RETIRED_SIBLING_TEAM_FILES = true;
   const TEAM3 = "t-" + crypto.randomBytes(8).toString("hex");
+  const LONE = folder("lone"), D3 = newDesk("three", LONE, null, null, TEAM3), me3 = await D3.ask("etiuda:branch-identity", true);
   put(LONE, "lone.ec", seal(K1, 1, A2, TEAM3));
   put(LONE, "etiuda-team.json", JSON.stringify(teamFile({ team: TEAM3, epoch: 1, roster: [] })));
   const unpinned = await read(D3, "lone.ec");
-  check(JSON.parse(unpinned).kind === "etiuda-sealed" && !("teamPins" in D3.envelope()) && !("teamKeys" in D3.envelope()),
-    "14o where no ring lists the lead, a team file that does not admit this desk is trusted for nothing: no pin, no key");
+  /* 14o, moved. It said: where no ring lists the lead, a team file that does not admit this desk is trusted for nothing: no pin, no key.
+     A desk's lead is pinned by its invitation now, so the pin is there from the start and unchanged; it says: a team file that does not
+     admit this desk gives it nothing: no key, the pin the invitation made as it was. */
+  check(JSON.parse(unpinned).kind === "etiuda-sealed" && JSON.stringify(D3.envelope().teamPins) === JSON.stringify({ [TEAM3]: LEAD }) && !("teamKeys" in D3.envelope()),
+    "14o a team file that does not admit this desk gives it nothing: no key, and the lead its invitation pinned stays the pin");
   put(LONE, "etiuda-team.json", JSON.stringify(teamFile({ team: TEAM3, epoch: 1, roster: [entry(me3, K1, 1, TEAM3)] })));
   check(await read(D3, "lone.ec") === A2.trim() && JSON.stringify(D3.envelope().teamPins) === JSON.stringify({ [TEAM3]: LEAD }),
-    "14p where no ring lists the lead, the first file that admits this desk pins its lead and opens the catalog");
+    "14p the first file that admits this desk gives it the key and opens the catalog, under the lead its invitation pinned (was: pins its lead where no ring lists it)");
   const altered = JSON.parse(JSON.stringify(teamFile({ team: TEAM3, epoch: 2, roster: [entry(me3, K2, 2, TEAM3)] })));
   altered.exportsSealed = true;
   put(LONE, "etiuda-team.json", JSON.stringify(altered));
@@ -427,18 +364,19 @@ try {
     && D3.said.some(l => /not a team file whole/.test(l)),
     "14q a team file changed after it was signed is not whole and opens nothing, under the pinned lead's own keyId");
 
-  const RINGED = folder("ringed"), D8 = newDesk("eight", RINGED);
+  const RINGED = folder("ringed"), D8 = newDesk("eight", RINGED, null, null, TEAM3);
   await D8.ask("etiuda:branch-identity", true);
   fs.writeFileSync(path.join(RINGED, "etiuda-ring.json"), JSON.stringify(ring), "utf8");
   put(RINGED, "etiuda-team.json", JSON.stringify(teamFile({ team: TEAM3, epoch: 1, roster: [], public: pubHex(forger.publicKey), signer: forger.privateKey })));
   put(RINGED, "lone.ec", seal(K1, 1, A2, TEAM3));
   const rLone8 = await read(D8, "lone.ec");
-  check((!rLone8 || JSON.parse(rLone8).kind === "etiuda-sealed") && !("teamPins" in D8.envelope()),
-    "14z a ring that lists the lead's key for the team's catalogs vouches for that key only: a file whose lead is another key"
-    + " gets no pin from it");
+  /* 14z, moved. It said: a ring that lists the lead's key for the team's catalogs vouches for that key only: a file whose lead is another key
+     gets no pin from it (no pin at all). The pin is the invitation's now: a file whose lead is another key opens nothing and changes no pin. */
+  check((!rLone8 || JSON.parse(rLone8).kind === "etiuda-sealed") && JSON.stringify(D8.envelope().teamPins) === JSON.stringify({ [TEAM3]: LEAD }),
+    "14z a file whose lead is another key than the one this desk's invitation pinned opens nothing and changes no pin");
 
   /* ---- an admission arriving while the desk runs --------------------------------------------------------------- */
-  const LATE = folder("late"), D6 = newDesk("six", LATE), me6 = await D6.ask("etiuda:branch-identity", true);
+  const LATE = folder("late"), D6 = newDesk("six", LATE, null, null, TEAM3), me6 = await D6.ask("etiuda:branch-identity", true);
   put(LATE, "late.ec", seal(K1, 1, A2, TEAM3));
   const sent = [];
   const win = { isDestroyed: () => false, webContents: { send: (...a) => sent.push(a) } };
@@ -472,7 +410,7 @@ try {
   const logged = [D0, D1, D2, D3, D5, D6].reduce((all, D) => all.concat(D.said), []).join("\n");
   check(logged.length > 0 && [K1, K2, KF].every(k => spellings(k).every(x => logged.indexOf(x) < 0)),
     "14v no shell's log holds a team key in any spelling, over " + logged.split("\n").length + " logged lines");
-  const D7 = newDesk("seven", SHARE);
+  const D7 = newDesk("seven", SHARE, null, null, TEAM);
   check(JSON.parse(await read(D7, "lamps.ec")).kind === "etiuda-sealed" && !("branch" in D7.envelope()),
     "14w a desk with no identity of its own is on no roster: it opens nothing and makes no key pair to find out");
   const leadOff = teamFile({ epoch: 1, roster: [entry(me1, K1, 1)] });
@@ -483,9 +421,9 @@ try {
     "14x an unsigned team file takes nothing away: the kept key opens what it opened and the pin stands");
 
   /* ---- the desk's own file: what the page writes after an edit, grown from the catalog it was handed ----------- */
-  const OWN = folder("own"), D9 = newDesk("nine", OWN), me9 = await D9.ask("etiuda:branch-identity", true);
-  const D12 = newDesk("twelve", OWN), me12 = await D12.ask("etiuda:branch-identity", true);
-  const D13 = newDesk("thirteen", OWN);
+  const OWN = folder("own"), D9 = newDesk("nine", OWN, null, null, TEAM), me9 = await D9.ask("etiuda:branch-identity", true);
+  const D12 = newDesk("twelve", OWN, null, null, TEAM), me12 = await D12.ask("etiuda:branch-identity", true);
+  const D13 = newDesk("thirteen", OWN, null, null, TEAM);
   await D13.ask("etiuda:branch-identity", true);
   fs.writeFileSync(path.join(OWN, "etiuda-ring.json"), JSON.stringify(ring), "utf8");
   put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 1, roster: [entry(me9, K1, 1), entry(me12, K1, 1)] })));
@@ -642,7 +580,7 @@ try {
     /* The same inner text, sealed for a second team, read in this run. The pin's team is the shell's own map. */
     {
       const QUAY = folder("quay"), BERTH = folder("berth");
-      const Q = newDesk("quaydesk", QUAY);
+      const Q = newDesk("quaydesk", QUAY, null, null, TEAM);
       const meQ = await Q.ask("etiuda:branch-identity", true);
       fs.writeFileSync(path.join(QUAY, "etiuda-ring.json"), JSON.stringify(ring), "utf8");
       fs.writeFileSync(path.join(BERTH, "etiuda-ring.json"), JSON.stringify(ring), "utf8");
@@ -712,7 +650,9 @@ try {
     /* The folder's own team seals an export when that team held the pin, whichever envelope was read first,
        and when that team's envelope lies unread in the folder after another team's was read.
        A claim that does not open, and a folder that holds the pin under two teams, still refuse. */
-    {
+    /* 14aw, 14ax, 14ay, 14az and 14ba (5 asserted) are RETIRED likewise: they held the export at one team's folder where another team's envelope of the
+       same pin had been read, in either order. */
+    if (!RETIRED_TWO_TEAMS_ONE_FOLDER) {
       const prevSave = process.env.ETIUDA_TEST_SAVE_AS;
       const take = async (D, save, name, made, pin) => {
         process.env.ETIUDA_TEST_SAVE_AS = save;
@@ -845,7 +785,10 @@ try {
   put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 3, roster: [entry(me9, K3, 3)] })));
 
   /* ---- two teams, one catalog id: the desk lists the other team's folder, then writes in its own --------------- */
-  {
+  /* TWO TEAMS IN ONE FOLDER, RETIRED with the folder team: these checks (14ae to 14ai, 7 asserted) held a desk that moves its catalog folder from one
+     team's shared folder to another's and reads two teams' envelopes of one catalog id side by side. A desk is on one relay team's mirror, whose
+     files are that team's alone, so two teams never meet in one folder; the code stays under the switch as the record of what each held. */
+  if (!RETIRED_TWO_TEAMS_ONE_FOLDER) {
     const OTHER = folder("other"), TB = "t-" + crypto.randomBytes(8).toString("hex"), KB = crypto.randomBytes(32);
     const point = (D, dir) => {
       const e = D.envelope();
@@ -955,8 +898,9 @@ try {
   /* ---- the lead hands the team to a new key: a statement signed by the pinned key, in the team file ---------------
      The statement's bytes are made here from the engine's own v2SignedBytes behind the handover prefix, not by the shell. */
   {
-    const ROT = folder("rotate"), R = newDesk("rotate", ROT), meR = await R.ask("etiuda:branch-identity", true);
-    const TR = "t-" + crypto.randomBytes(8).toString("hex"), KR = [0, 1, 2, 3, 4, 5].map(() => crypto.randomBytes(32));
+    const TR = "t-" + crypto.randomBytes(8).toString("hex");
+    const ROT = folder("rotate"), R = newDesk("rotate", ROT, null, null, TR), meR = await R.ask("etiuda:branch-identity", true);
+    const KR = [0, 1, 2, 3, 4, 5].map(() => crypto.randomBytes(32));
     const keys = [lead, 2, 3, 4, 5].map(k => (k === lead ? lead : crypto.generateKeyPairSync("ed25519")));
     const L = keys.map((k, i) => ({ keyId: "lead-" + i, public: pubHex(k.publicKey) }));
     L[0] = LEAD;
@@ -1029,10 +973,11 @@ try {
     /* A folder team led by key 0, a desk admitted to it under that key, and keys 1 to 3. `plant` is {src} or {syncer}. */
     async function forkWorld(plant) {
       const n = "fork-" + (++forkN);
-      const FD = folder(n), D = newDesk(n, FD, null, plant), me = await D.ask("etiuda:branch-identity", true);
+      /* The team and its first lead are made first: a desk on a relay team pins its lead from the start, by its invitation. */
       const T = "t-" + crypto.randomBytes(8).toString("hex"), KT = [0, 1, 2, 3, 4].map(() => crypto.randomBytes(32));
       const keys = [0, 1, 2, 3].map(() => crypto.generateKeyPairSync("ed25519")), stranger = crypto.generateKeyPairSync("ed25519");
       const L = keys.map((k, i) => ({ keyId: n + "-lead-" + i, public: pubHex(k.publicKey) }));
+      const FD = folder(n), D = newDesk(n, FD, null, plant, T, L[0]), me = await D.ask("etiuda:branch-identity", true);
       const step = (from, to, signer) => {
         const s = { format: 1, kind: "etiuda-team-handover", team: T, from: L[from], to: L[to], sig: { alg: "Ed25519", keyId: L[from].keyId } };
         s.sig.value = crypto.sign(null, Buffer.concat([Buffer.from("etiuda-team-handover\n", "utf8"), Buffer.from(V2.v2SignedBytes(s))]),
@@ -1094,7 +1039,7 @@ try {
       w.both(w.led(1, 2, [w.step(0, 1)]), w.led(2, 2, [w.step(0, 2)]));
       const opened = await w.opens(2), pinAfter = w.pin(), said = w.said(FORK_TWO), row = await w.row();
       /* What the syncer keeps of the share for the shell to read: the team file it had, and no sibling. */
-      const mdir = syncerMod.folderMirrorOf(w.D.ud, w.T), mt = JSON.parse(fs.readFileSync(path.join(mdir, "etiuda-team.json"), "utf8"));
+      const mdir = relayMirrorOf(w.D.ud, w.T), mt = JSON.parse(fs.readFileSync(path.join(mdir, "etiuda-team.json"), "utf8"));
       const mirrorTeam = mt.lead.keyId + ":" + mt.epoch + (fs.existsSync(path.join(mdir, "etiuda-team (1).json")) ? " and a sibling" : "");
       fs.unlinkSync(path.join(w.FD, "etiuda-team (1).json"));
       syncFolder(w.FD);
@@ -1103,7 +1048,8 @@ try {
     }
 
     const ls = await laterScene(null);
-    check(ls.w.admitted && ls.followed && !ls.k2Opens && ls.pinAfter === ls.w.L[1].public && ls.saidFirst === 1
+    /* RETIRED, P4 (no folder is read as a team): the row's fork notice (a key's handover seen twice, or a later one) was raised by the folder's own reading of a team file; a team file read from a relay's mirror raises it through the relay channel (tests/relay-channel.mjs), and the shell's heed no longer gives the row the fork. It said what its sentence below says. */
+    retire(ls.w.admitted && ls.followed && !ls.k2Opens && ls.pinAfter === ls.w.L[1].public && ls.saidFirst === 1
       && !!ls.rowFirst && !!ls.rowFirst.fork && ls.rowFirst.fork.kind === "later" && ls.rowFirst.fork.seen === false
       && ls.saidAgain === 1 && ls.saidRestart === 0 && !!ls.rowRestart && !!ls.rowRestart.fork && ls.saidNew === 1 && ls.pinEnd === ls.w.L[1].public,
       "14bm a desk that followed key 0 to key 1 and then sees a genuine handover of key 0 to key 2 stays on key 1, says so once and"
@@ -1113,7 +1059,8 @@ try {
       + ls.saidRestart + ", key 3 " + ls.saidNew + ", row " + JSON.stringify(ls.rowFirst && ls.rowFirst.fork));
 
     const ts = await twoScene(null);
-    check(ts.w.admitted && !ts.opened && ts.pinAfter === ts.w.L[0].public && ts.mirrorTeam === ts.w.L[0].keyId + ":1" && ts.said === 1
+    /* RETIRED, P4 (no folder is read as a team): a conflict sibling of the team file was the file a sync tool made of one it could not reconcile, and the desk heeded the genuine one at a higher epoch or rev; a team file arrives over the relay, which makes none, so no sibling is a team file (tests/sync-conflict.mjs f3i, f3m and f4b hold that). It said what its sentence below says. */
+    retire(ts.w.admitted && !ts.opened && ts.pinAfter === ts.w.L[0].public && ts.mirrorTeam === ts.w.L[0].keyId + ":1" && ts.said === 1
       && !!ts.row && !!ts.row.fork && ts.row.fork.kind === "two" && ts.resolved,
       "14bn a desk pinned to key 0 whose share holds the team file and a conflict sibling handing key 0 to key 1 and to key 2"
       + " follows neither and keeps what it has, says so once with the fork on the team's row, and follows the one file left"
@@ -1126,27 +1073,25 @@ try {
     const faFollowed = await fa.opens(2);
     put(fa.FD, "etiuda-team.json", fa.led(2, 3, [fa.forged(0, 2)]));
     const faOpens = await fa.opens(3), faRow = await fa.row();
-    const fb = await forkWorld(null);
-    fb.both(fb.led(1, 2, [fb.step(0, 1)]), fb.led(2, 2, [fb.forged(0, 2)]));
-    const fbOpens = await fb.opens(2), fbRow = await fb.row();
-    check(faFollowed && !faOpens && fa.pin() === fa.L[1].public && fa.said(FORK_LATER) + fa.said(FORK_TWO) === 0 && !!faRow && !faRow.fork
-      && fbOpens && fb.pin() === fb.L[1].public && fb.said(FORK_LATER) + fb.said(FORK_TWO) === 0 && !!fbRow && !fbRow.fork,
+    /* 14bo, moved. It also said: and beside the genuine file in one sync (a conflict sibling) the desk follows key 1 and says nothing. No sibling is a
+       team file now, so that half is gone with the siblings; the half after the handover stays. */
+    check(faFollowed && !faOpens && fa.pin() === fa.L[1].public && fa.said(FORK_LATER) + fa.said(FORK_TWO) === 0 && !!faRow && !faRow.fork,
       "14bo a second successor whose step key 0 did not sign shows no fork: after the handover its file is refused as before and"
-      + " nothing is said (epoch 3 opens " + faOpens + ", row fork " + !!(faRow && faRow.fork) + "), and beside the genuine file in"
-      + " one sync the desk follows key 1 and says nothing (opens " + fbOpens + ", row fork " + !!(fbRow && fbRow.fork) + ")");
+      + " nothing is said (epoch 3 opens " + faOpens + ", row fork " + !!(faRow && faRow.fork) + ")");
 
     /* The shell's own look, where a team file is read from the folder itself: both successors written beside each other in
        the folder the shell reads, past the syncer. */
     async function heedScene(plant) {
       const w = await forkWorld(plant);
-      const mirror = syncerMod.folderMirrorOf(w.D.ud, w.T);
+      const mirror = relayMirrorOf(w.D.ud, w.T);
       fs.writeFileSync(path.join(mirror, "etiuda-team.json"), w.led(1, 2, [w.step(0, 1)]), "utf8");
       fs.writeFileSync(path.join(mirror, "etiuda-team (1).json"), w.led(2, 2, [w.step(0, 2)]), "utf8");
       await read(w.D, "lamps.ec");
       return { w, pin: w.pin(), said: w.said(FORK_TWO), row: await w.row() };
     }
     const hs = await heedScene(null);
-    check(hs.w.admitted && hs.pin === hs.w.L[0].public && hs.said === 1 && !!hs.row && !!hs.row.fork && hs.row.fork.kind === "two",
+    /* RETIRED, P4 (no folder is read as a team): a conflict sibling of the team file was the file a sync tool made of one it could not reconcile, and the desk heeded the genuine one at a higher epoch or rev; a team file arrives over the relay, which makes none, so no sibling is a team file (tests/sync-conflict.mjs f3i, f3m and f4b hold that). It said what its sentence below says. */
+    retire(hs.w.admitted && hs.pin === hs.w.L[0].public && hs.said === 1 && !!hs.row && !!hs.row.fork && hs.row.fork.kind === "two",
       "14bp the shell reading the team file and a conflict sibling that hand key 0 to two keys follows neither and says so, so a"
       + " folder read without the syncer holds the same rule: pin key 0 " + (hs.pin === hs.w.L[0].public) + ", said " + hs.said
       + ", row " + JSON.stringify(hs.row && hs.row.fork));
@@ -1162,13 +1107,15 @@ try {
         canonLead: canon.lead && canon.lead.public, sibLead: sib.lead && sib.lead.public };
     }
     const ho = await handoverSibling(null);
-    check(ho.w.admitted && ho.canonLead === ho.w.L[0].public && ho.sibLead === ho.w.L[1].public
+    /* RETIRED, P4 (no folder is read as a team): a conflict sibling of the team file was the file a sync tool made of one it could not reconcile, and the desk heeded the genuine one at a higher epoch or rev; a team file arrives over the relay, which makes none, so no sibling is a team file (tests/sync-conflict.mjs f3i, f3m and f4b hold that). It said what its sentence below says. */
+    retire(ho.w.admitted && ho.canonLead === ho.w.L[0].public && ho.sibLead === ho.w.L[1].public
       && ho.opened && ho.pin === ho.w.L[1].public && ho.two === 0,
       "14ca a handover in the conflict sibling, the canonical file still the old lead's, and the desk follows: "
       + "canonical the old lead " + (ho.canonLead === ho.w.L[0].public) + ", sibling the new lead " + (ho.sibLead === ho.w.L[1].public)
       + ", epoch 2 opens " + ho.opened + ", pin the new lead " + (ho.pin === ho.w.L[1].public) + ", said two " + ho.two);
 
-    check(hs.w.admitted && hs.pin === hs.w.L[0].public && hs.said === 1 && !!hs.row && !!hs.row.fork && hs.row.fork.kind === "two",
+    /* RETIRED, P4 (no folder is read as a team): a conflict sibling of the team file was the file a sync tool made of one it could not reconcile, and the desk heeded the genuine one at a higher epoch or rev; a team file arrives over the relay, which makes none, so no sibling is a team file (tests/sync-conflict.mjs f3i, f3m and f4b hold that). It said what its sentence below says. */
+    retire(hs.w.admitted && hs.pin === hs.w.L[0].public && hs.said === 1 && !!hs.row && !!hs.row.fork && hs.row.fork.kind === "two",
       "14cb THE CONTROL: two successors, the canonical file and a conflict sibling, are still refused as two and the pin stays"
       + " the old lead: pin key 0 " + (hs.pin === hs.w.L[0].public) + ", said " + hs.said
       + ", row " + JSON.stringify(hs.row && hs.row.fork));
@@ -1188,7 +1135,8 @@ try {
         two: w.said(FORK_TWO), later: w.said(FORK_LATER), canonLead: canon.lead && canon.lead.public };
     }
     const ps = await pinnedSibling(null);
-    check(ps.w.admitted && ps.firstOpens && ps.pin1 === ps.w.L[1].public
+    /* RETIRED, P4 (no folder is read as a team): a conflict sibling of the team file was the file a sync tool made of one it could not reconcile, and the desk heeded the genuine one at a higher epoch or rev; a team file arrives over the relay, which makes none, so no sibling is a team file (tests/sync-conflict.mjs f3i, f3m and f4b hold that). It said what its sentence below says. */
+    retire(ps.w.admitted && ps.firstOpens && ps.pin1 === ps.w.L[1].public
       && ps.canonLead === ps.w.L[0].public
       && ps.sibL1Opens && ps.pin1Stay === ps.w.L[1].public
       && ps.sibL2Opens && ps.pin2 === ps.w.L[2].public
@@ -1200,11 +1148,12 @@ try {
 
     /* Nothing is loosened: under a pinned L1 with canonical still L0, a sibling under an untrusted lead, a sibling not
        ahead, an altered sibling, and a sibling of another pinned team's id stay refused. */
-    {
+    /* 14cg and 14ci (and the conflict-sibling fixtures round them) are RETIRED with the conflict sibling of the team file: see the retired checks above. */
+    if (!RETIRED_SIBLING_TEAM_FILES) {
       const rw = await forkWorld(null);
       rw.both(rw.led(0, 1), rw.led(1, 2, [rw.step(0, 1)]));
       const rwPin1 = await rw.opens(2) && rw.pin() === rw.L[1].public;
-      const rwMirror = syncerMod.folderMirrorOf(rw.D.ud, rw.T);
+      const rwMirror = relayMirrorOf(rw.D.ud, rw.T);
       const putMirror = (dir, name, txt) => {
         clock += 1000;
         const p = path.join(dir, name);
@@ -1247,12 +1196,13 @@ try {
       const D_oth2 = loadDesk(D_oth.ud);
       syncFolder(FD_main);
       const mainPinned = (await read(D_oth2, "lamps.ec")) === A2At(1).trim();
-      const othMirror = syncerMod.folderMirrorOf(D_oth2.ud, T_main);
+      const othMirror = relayMirrorOf(D_oth2.ud, T_main);
       putMirror(othMirror, "etiuda-team (1).json", JSON.stringify(teamFile({ team: T_oth, epoch: 2, roster: [entry(me_oth, KO2, 2, T_oth)] })));
       put(FD_main, "lamps.ec", seal(KO2, 2, A2At(2), T_oth));
       const otherTeamOpens = (await read(D_oth2, "lamps.ec")) === A2At(2).trim();
       D_oth2.close();
-      check(rwPin1 && !untrustedOpens && untrustedPinOk && !equalOpens && !lowerOpens && !badSibOpens
+      /* RETIRED, P4 (no folder is read as a team): a conflict sibling of the team file was the file a sync tool made of one it could not reconcile, and the desk heeded the genuine one at a higher epoch or rev; a team file arrives over the relay, which makes none, so no sibling is a team file (tests/sync-conflict.mjs f3i, f3m and f4b hold that). It said what its sentence below says. */
+      retire(rwPin1 && !untrustedOpens && untrustedPinOk && !equalOpens && !lowerOpens && !badSibOpens
         && othPinned && mainPinned && !otherTeamOpens,
         "14cg nothing is loosened for a conflict sibling under a pinned lead: untrusted opens " + untrustedOpens
         + ", equal rank opens " + equalOpens + ", lower epoch opens " + lowerOpens
@@ -1274,14 +1224,15 @@ try {
         epoch: 2, roster: [entry(me_np, KN2, 2, T_np)], handover: [npStep] }));
       put(FD_np, "etiuda-team.json", npCanon);
       put(FD_np, "etiuda-team (1).json", npSibNoStep);
-      putMirror(syncerMod.folderMirrorOf(D_np.ud, T_np), "etiuda-team (1).json", npSibNoStep);
+      putMirror(relayMirrorOf(D_np.ud, T_np), "etiuda-team (1).json", npSibNoStep);
       put(FD_np, "lamps.ec", seal(KN2, 2, A2At(2), T_np));
       const noPinRefused = (await read(D_np, "lamps.ec")) !== A2At(2).trim() && !((D_np.envelope().teamPins || {})[T_np]);
       put(FD_np, "etiuda-team (1).json", npSibWithStep);
       const noPinFollowed = (await read(D_np, "lamps.ec")) === A2At(2).trim()
         && ((D_np.envelope().teamPins || {})[T_np] || {}).public === LN1.public;
       D_np.close();
-      check(noPinRefused && noPinFollowed,
+      /* RETIRED, P4 (no folder is read as a team): a conflict sibling of the team file was the file a sync tool made of one it could not reconcile, and the desk heeded the genuine one at a higher epoch or rev; a team file arrives over the relay, which makes none, so no sibling is a team file (tests/sync-conflict.mjs f3i, f3m and f4b hold that). It said what its sentence below says. */
+      retire(noPinRefused && noPinFollowed,
         "14ci a desk with no pin yet still refuses a sibling without a step from canonical and follows one with it: refused "
         + noPinRefused + ", followed " + noPinFollowed);
     }
@@ -1293,13 +1244,17 @@ try {
     dz.w.restart();
     await read(dz.w.D, "lamps.ec");
     const dzFresh = await dz.w.row();
-    check(!!dzRow && !!dzRow.fork && dzRow.fork.seen === true && !!dzFresh && !!dzFresh.fork && dzFresh.fork.seen === true,
+    /* RETIRED, P4 (no folder is read as a team): the row's fork notice (a key's handover seen twice, or a later one) was raised by the folder's own reading of a team file; a team file read from a relay's mirror raises it through the relay channel (tests/relay-channel.mjs), and the shell's heed no longer gives the row the fork. It said what its sentence below says. */
+    retire(!!dzRow && !!dzRow.fork && dzRow.fork.seen === true && !!dzFresh && !!dzFresh.fork && dzFresh.fork.seen === true,
       "14bq a dismissed fork notice stays dismissed for that fork, a restart included: seen " + (dzRow && dzRow.fork && dzRow.fork.seen)
       + ", after the restart " + (dzFresh && dzFresh.fork && dzFresh.fork.seen));
 
-    /* The page: the team's notice in the copywriter's words, English for one fork and Polish for the other, and its
-       dismissal sent to the shell. A DOM as much as a lasting notice touches, as tests/relay-channel.mjs 978 draws it. */
-    {
+    /* The page's fork notice, over a stand-in host that answers every ask with the team's row as the shell gives it: the fork with its own key,
+       `seen` once "fork-seen" arrives for that team. A relay team's row has its fork from the relay channel; the shell's half (the fork reaching
+       the row, and the agent's dismissal marked seen and kept) is tests/relay-channel.mjs 939h2's. These checks (14by, 14cd, 14ce) were
+       driven by a folder team's fork through the shell; the page's half is what they hold now. A DOM as much as a lasting notice touches,
+       as tests/relay-channel.mjs 978 draws it. */
+    async function forkPageScene(TJ) {
       const nodes = new Map();
       const mk = tag => ({ tag, id: "", className: "", textContent: "", type: "", children: [], attrs: {}, style: {}, parent: null, onclick: null,
         classList: { add() {}, remove() {}, contains: () => false, toggle() {} },
@@ -1310,115 +1265,51 @@ try {
       const textOf = e => (e.textContent || "") + (e.children || []).map(textOf).join("");
       const pause = ms => new Promise(r => setTimeout(r, ms));
       const was = { document: globalThis.document, host: window.E_HOST, add: globalThis.addEventListener, remove: globalThis.removeEventListener };
-      const asked = [];
-      let shown = { en: "", pl: "" }, dismissed = false, seenAfter = null;
-      try {
-        const pl = await laterScene(null), pt = await twoScene(null);
-        let deskNow = pl, took = null;
-        globalThis.document = { body: mk("body"), documentElement: mk("html"), createElement: mk,
-          createTextNode: s => ({ textContent: String(s), children: [] }), getElementById: id => nodes.get(id) || null,
-          querySelector: () => null, querySelectorAll: () => [], addEventListener() {}, removeEventListener() {} };
-        globalThis.addEventListener = () => {};
-        globalThis.removeEventListener = () => {};
-        window.E_HOST = { teamJoin: (...a) => { asked.push(a[0]); return deskNow.w.D.ask("etiuda:team-join", ...a); }, onTeamJoin: fn => { took = fn; } };
-        const HK = await import(MOD("hooks.js"));
-        HK.hooks.render = () => {};
-        const ST = await import(MOD("storage.js")), TJ = await import(MOD("team-join.js"));
-        const notice = () => { const n = nodes.get("eTeamFork"); return n && n.children[0] ? textOf(n.children[0]) : ""; };
-        ST.lsSet("eUiLang", "en");
-        TJ.wireTeamJoin();
-        await pause(30);
-        shown.en = notice();
-        deskNow = pt;
-        ST.lsSet("eUiLang", "pl");
-        took(await pt.w.D.ask("etiuda:team-join", "state"));
-        await pause(30);
-        shown.pl = notice();
-        ST.lsSet("eUiLang", "en");
-        const buttons = [];
-        (function walk(e) { if (e.tag === "button") buttons.push(e); for (const c of e.children || []) walk(c); })(nodes.get("eTeamFork") || { children: [] });
-        if (buttons.length) { buttons[buttons.length - 1].onclick(); dismissed = true; }
-        await pause(30);
-        const r = await pt.w.row();
-        seenAfter = r && r.fork ? r.fork.seen : null;
-      } finally {
-        globalThis.document = was.document;
-        window.E_HOST = was.host;
-        globalThis.addEventListener = was.add;
-        globalThis.removeEventListener = was.remove;
-      }
       const LATER_EN = "Someone has used this team's old lead key to hand the team to another key as well, so that key is evidently in someone else's hands. This desk stays with the key it already follows, and the catalogs on it stay as they are. Tell the team's lead about it.";
       const TWO_PL = "Klucz lidera tego zespołu przekazano jednocześnie dwóm różnym nowym kluczom, więc stanowisko nie podąża za żadnym z nich. Katalogi na nim zostają bez zmian. Proszę powiedzieć o tym liderowi zespołu.";
-      check(shown.en === LATER_EN && shown.pl === TWO_PL && dismissed && asked.indexOf("fork-seen") >= 0 && seenAfter === true,
-        "14by the page shows the fork on the team's lasting notice in the copywriter's words, here one after the other in English and"
-        + " two at once in Polish, and a dismissal reaches the shell: English " + JSON.stringify(shown.en) + ", Polish " + JSON.stringify(shown.pl)
-        + ", dismissed " + dismissed + ", asked " + asked.filter(a => a === "fork-seen").length + ", seen " + seenAfter);
-    }
-
-    /* A dismissed fork stays dismissed. A later fork of the same kind, with its own key, is said.
-       The second file lands after a restart, which is when the shell says a new fork of a key it has
-       already followed. The page keeps the dismissal in its own memory across that restart. */
-    async function dismissedThenLater(TJ) {
-      const nodes = new Map();
-      const mk = tag => ({ tag, id: "", className: "", textContent: "", type: "", children: [], attrs: {}, style: {}, parent: null, onclick: null,
-        classList: { add() {}, remove() {}, contains: () => false, toggle() {} },
-        setAttribute(k, v) { this.attrs[k] = String(v); },
-        appendChild(c) { c.parent = this; this.children.push(c); if (c.id) nodes.set(c.id, c); return c; },
-        remove() { if (this.parent) this.parent.children = this.parent.children.filter(x => x !== this); if (this.id && nodes.get(this.id) === this) nodes.delete(this.id); this.parent = null; },
-        get firstChild() { return this.children[0] || null; } });
-      const textOf = e => (e.textContent || "") + (e.children || []).map(textOf).join("");
-      const pause = ms => new Promise(r => setTimeout(r, ms));
-      const hexKey = k => typeof k === "string" && /^[0-9a-f]{64}$/.test(k);
-      const was = { document: globalThis.document, host: window.E_HOST, add: globalThis.addEventListener, remove: globalThis.removeEventListener };
-      const LATER_EN = "Someone has used this team's old lead key to hand the team to another key as well, so that key is evidently in someone else's hands. This desk stays with the key it already follows, and the catalogs on it stay as they are. Tell the team's lead about it.";
-      const out = { firstShown: "", downAfter: true, secondShown: "", seenFirst: null, saidSecond: 0,
-        keyFirst: "", keySecond: "", envFirst: "", envSecond: "", secondSeen: null, secondKind: "", LATER_EN, hexKey };
+      const T = "t-" + crypto.randomBytes(4).toString("hex");
+      const keyN = n => crypto.createHash("sha256").update("fork " + n).digest("hex");
+      const asked = [];
+      let fork = { kind: "later", key: keyN(1), seen: false }, took = null;
+      const view = () => ({ leads: [Object.assign({ team: T, print: "0123456789abcdef", admitted: true, seen: true, lead: "Ada Quay", folder: "", relay: "relay.test" },
+        fork ? { fork: Object.assign({}, fork) } : {})] });
+      const out = { LATER_EN, TWO_PL, asked, firstShown: "", seenFirst: null, downAfter: null, stays: null, secondShown: "", secondKind: "", pl: "", keysDiffer: keyN(1) !== keyN(3) };
       try {
-        const w = await forkWorld(null);
-        put(w.FD, "etiuda-team.json", w.led(1, 2, [w.step(0, 1)]));
-        const followed = await w.opens(2) && w.pin() === w.L[1].public;
-        put(w.FD, "etiuda-team.json", w.led(2, 3, [w.step(0, 2)]));
-        await read(w.D, "lamps.ec");
-        const rowFirst = await w.row();
-        const firstLast = ((w.D.envelope().teamForks || {})[w.T] || {}).last;
-        out.envFirst = firstLast && firstLast.key || "";
-        out.keyFirst = rowFirst && rowFirst.fork ? rowFirst.fork.key || "" : "";
-        let took = null;
         globalThis.document = { body: mk("body"), documentElement: mk("html"), createElement: mk,
           createTextNode: s => ({ textContent: String(s), children: [] }), getElementById: id => nodes.get(id) || null,
           querySelector: () => null, querySelectorAll: () => [], addEventListener() {}, removeEventListener() {} };
         globalThis.addEventListener = () => {};
         globalThis.removeEventListener = () => {};
-        window.E_HOST = { teamJoin: (...a) => w.D.ask("etiuda:team-join", ...a), onTeamJoin: fn => { took = fn; } };
+        window.E_HOST = { teamJoin: (...a) => { asked.push(a.slice(0, 2)); if (a[0] === "fork-seen" && a[1] === T && fork) fork.seen = true; return Promise.resolve(view()); },
+          onTeamJoin: fn => { took = fn; } };
         const HK = await import(MOD("hooks.js"));
         HK.hooks.render = () => {};
-        const ST = await import(MOD("storage.js"));
-        const page = TJ || await import(MOD("team-join.js"));
+        const ST = await import(MOD("storage.js")), page = TJ || await import(MOD("team-join.js"));
         const notice = () => { const n = nodes.get("eTeamFork"); return n && n.children[0] ? textOf(n.children[0]) : ""; };
         ST.lsSet("eUiLang", "en");
         page.wireTeamJoin();
         await pause(30);
-        out.firstShown = followed && notice() === LATER_EN ? "shown" : notice();
+        out.firstShown = notice() === LATER_EN ? "shown" : notice();
         const buttons = [];
         (function walk(e) { if (e.tag === "button") buttons.push(e); for (const c of e.children || []) walk(c); })(nodes.get("eTeamFork") || { children: [] });
         if (buttons.length) buttons[buttons.length - 1].onclick();
         await pause(30);
-        const rowDismissed = await w.row();
-        out.seenFirst = rowDismissed && rowDismissed.fork ? rowDismissed.fork.seen : null;
+        out.seenFirst = fork.seen;
         out.downAfter = !nodes.get("eTeamFork");
-        w.restart();
-        put(w.FD, "etiuda-team.json", w.led(3, 3, [w.step(0, 3)]));
-        await read(w.D, "lamps.ec");
-        out.saidSecond = w.said(FORK_LATER);
-        const rowSecond = await w.row();
-        out.keySecond = rowSecond && rowSecond.fork ? rowSecond.fork.key || "" : "";
-        out.secondSeen = rowSecond && rowSecond.fork ? rowSecond.fork.seen : null;
-        out.secondKind = rowSecond && rowSecond.fork ? rowSecond.fork.kind : "";
-        const secondLast = ((w.D.envelope().teamForks || {})[w.T] || {}).last;
-        out.envSecond = secondLast && secondLast.key || "";
-        if (took) took(await w.D.ask("etiuda:team-join", "state"));
+        took(view());
+        await pause(30);
+        out.stays = !nodes.get("eTeamFork");
+        fork = { kind: "later", key: keyN(3), seen: false };
+        took(view());
         await pause(30);
         out.secondShown = notice();
+        out.secondKind = fork.kind;
+        fork = { kind: "two", key: keyN(2), seen: false };
+        ST.lsSet("eUiLang", "pl");
+        took(view());
+        await pause(30);
+        out.pl = notice();
+        ST.lsSet("eUiLang", "en");
       } finally {
         globalThis.document = was.document;
         window.E_HOST = was.host;
@@ -1428,16 +1319,21 @@ try {
       return out;
     }
     {
-      const d = await dismissedThenLater(null);
-      check(d.firstShown === "shown" && d.seenFirst === true && d.downAfter && d.saidSecond === 1
-        && d.hexKey(d.keyFirst) && d.hexKey(d.keySecond) && d.keyFirst !== d.keySecond && d.secondShown === d.LATER_EN,
-        "14cd a dismissed fork stays dismissed, and a second fork with a different key is said: first " + d.firstShown
-        + ", seen " + d.seenFirst + ", down " + d.downAfter + ", said after the restart " + d.saidSecond
-        + ", row keys differ " + (d.hexKey(d.keyFirst) && d.hexKey(d.keySecond) && d.keyFirst !== d.keySecond)
-        + ", envelope keys differ " + (d.hexKey(d.envFirst) && d.hexKey(d.envSecond) && d.envFirst !== d.envSecond)
-        + ", second kind " + d.secondKind + " seen " + d.secondSeen
+      const d = await forkPageScene(null);
+      /* MOVED, P4 (the row's fork was raised through the shell by a folder's own reading of a team file, which no folder has): the page's half stays, over a stand-in host.
+         Said before: "the page shows the fork on the team's lasting notice in the copywriter's words, here one after the other in English and two at once in
+         Polish, and a dismissal reaches the shell", through a folder team's shell. */
+      check(d.firstShown === "shown" && d.pl === d.TWO_PL && d.asked.some(a => a[0] === "fork-seen" && a[1] !== undefined) && d.seenFirst === true,
+        "14by the page shows the fork on the team's lasting notice in the copywriter's words, one fork in English and another in Polish, and a dismissal reaches the shell"
+        + " as fork-seen for the team: English " + JSON.stringify(d.firstShown) + ", Polish " + JSON.stringify(d.pl) + ", asked fork-seen "
+        + d.asked.filter(a => a[0] === "fork-seen").length + ", seen " + d.seenFirst);
+      /* MOVED likewise. Said before: "a dismissed fork stays dismissed, and a second fork with a different key is said", with the second file landing after a restart. */
+      check(d.firstShown === "shown" && d.seenFirst === true && d.downAfter === true && d.stays === true && d.keysDiffer && d.secondShown === d.LATER_EN,
+        "14cd a dismissed fork stays dismissed on the page, and a second fork of the same kind with a different key is said: first " + d.firstShown
+        + ", seen " + d.seenFirst + ", down " + d.downAfter + ", down at the next view " + d.stays + ", second kind " + d.secondKind
         + ", second " + JSON.stringify(d.secondShown));
     }
+
 
     /* The page, for a desk left behind (the test architect's E1 on the lead box): the team's row as the shell gives it
        (tests/relay-channel.mjs 939l drives the shell's half), shown in English, taken down by a view without it, shown again
@@ -1532,22 +1428,17 @@ try {
       } catch (e) { detail = e && e.stack ? e.stack : String(e); }
       return { turned, back: shaOf(src) === digest, detail };
     }
-    const lifts = [
-      ["14br", "main.js", "fork-in-desk", "shows no fork, so the desk says nothing of key 0 handed on twice and follows one of two successors",
-        async p => { const a = await laterScene(p), b = await heedScene(p); return a.saidFirst === 0 && b.pin !== b.w.L[0].public; }],
-      ["14bs", "main.js", "fork-once-desk", "says the same fork again after a restart",
-        async p => (await laterScene(p)).saidRestart > 0],
-      ["14bt", "main.js", "fork-was", "forgets the keys the desk followed, so after a restart key 0 handed to key 3 is not said",
-        async p => (await laterScene(p)).saidNew === 0],
-      ["14bu", "main.js", "fork-two-heed", "follows one of two successors the shell reads in its own look",
-        async p => { const h = await heedScene(p); return h.pin === h.w.L[1].public; }],
-      ["14bv", "main.js", "fork-row", "keeps the fork from the team's row, so the notice never shows",
-        async p => { const a = await laterScene(p); return a.saidFirst === 1 && !!a.rowFirst && !a.rowFirst.fork; }],
-      ["14bw", "main.js", "fork-seen", "forgets the dismissal",
-        async p => { const a = await laterScene(p); await a.w.D.ask("etiuda:team-join", "fork-seen", a.w.T); const r = await a.w.row(); return !!r && !!r.fork && r.fork.seen === false; }],
-      ["14bx", "folder/syncer.cjs", "syncer-fork-two", "lets the syncer take one of two successors in one sync into the copy the shell reads",
-        async p => { const t = await twoScene(p); return t.mirrorTeam !== t.w.L[0].keyId + ":1"; }],
-    ];
+    /* RETIRED, P4 (no folder is read as a team): the plants of the fork scenes and of the syncer's fork. Each said that lifting its plant undid what a folder
+       team's check held, and those checks are retired above (14bm and 14bq, the shell's half, came from the folder's own reading of a team file, which a relay team's
+       mirror never gives the shell: the relay channel judges a fork and writes no forked file there):
+         14br plant:fork-in-desk   "shows no fork, so the desk says nothing of key 0 handed on twice and follows one of two successors"
+         14bs plant:fork-once-desk "says the same fork again after a restart"
+         14bt plant:fork-was       "forgets the keys the desk followed, so after a restart key 0 handed to key 3 is not said"
+         14bu plant:fork-two-heed  "follows one of two successors the shell reads in its own look"
+         14bx plant:syncer-fork-two "lets the syncer take one of two successors in one sync into the copy the shell reads" (the syncer is no longer run)
+       14bv plant:fork-row and 14bw plant:fork-seen are MOVED to tests/relay-channel.mjs 939h3 and 939h4 (the row's fork and its dismissal, for a relay team). The
+       plants stay in shell/main.js and are removed with their dead code in P3 (folderForkSeen, forkChain, deskForkNoted's heed caller). */
+    const lifts = [];
     for (const [id, file, tag, what, fn] of lifts) {
       const r = await liftDesk(file, tag, fn);
       check(r.turned && r.back, id + " lifting plant:" + tag + " in shell/" + file + " " + what + ", and the product file is never written: "
@@ -1566,32 +1457,15 @@ try {
       const mod = await import(pathToFileURL(path.join(dir, file)).href);
       return { mod, same: fs.readFileSync(at).equals(before), detail: "loaded" };
     }
-    if (PLANTS_OFF) skip("14cc lifting plant:sib-handover in a scratch copy of shell/main.js leaves the desk on the old lead");
-    else {
-      const r = await liftDesk("main.js", "sib-handover", async p => {
-        const h = await handoverSibling(p);
-        return h.pin !== h.w.L[1].public;
-      });
-      check(r.turned && r.back,
-        "14cc lifting plant:sib-handover in a scratch copy of shell/main.js leaves the desk on the old lead, and the product file is never written: "
-        + r.detail + ", sha " + (r.back ? "restored" : "differs"));
-    }
-    if (PLANTS_OFF) skip("14cj lifting plant:sib-pin in a scratch copy of shell/main.js strands the desk on canonical L0 after L0 to L1");
-    else {
-      const r = await liftDesk("main.js", "sib-pin", async p => {
-        const s = await pinnedSibling(p);
-        return s.firstOpens && !s.sibL1Opens && !s.sibL2Opens && s.pin2 !== s.w.L[2].public;
-      });
-      check(r.turned && r.back,
-        "14cj lifting plant:sib-pin in a scratch copy of shell/main.js strands the desk on canonical L0 after L0 to L1, and the product file is never written: "
-        + r.detail + ", sha " + (r.back ? "restored" : "differs"));
-    }
+    /* RETIRED, P4 (a conflict sibling of the team file is no team file, the canonical alone is heeded): 14cc, "lifting plant:sib-handover in a scratch copy of
+       shell/main.js leaves the desk on the old lead", and 14cj, "lifting plant:sib-pin in a scratch copy of shell/main.js strands the desk on canonical L0 after
+       L0 to L1", each with its check above (14bn, 14bp, 14ca, 14cb, 14cf, 14cg, 14ci). */
     if (PLANTS_OFF) skip("14ce lifting plant:fork-note-key in a scratch copy of src/modules/team-join.js leaves the second fork unsaid");
     else {
       const planted = await plantedPage("team-join.js", "fork-note-key");
       let stayed = false;
       if (planted.mod) {
-        const d = await dismissedThenLater(planted.mod);
+        const d = await forkPageScene(planted.mod);
         stayed = d.firstShown === "shown" && d.seenFirst === true && d.downAfter && d.secondShown !== d.LATER_EN;
       }
       check(!!planted.mod && planted.same && stayed,
@@ -1602,7 +1476,7 @@ try {
 
   /* ---- a keep that fails: safeStorage away for one read, the team file unchanged after it ----------------------- */
   const FLAKY = folder("flaky"), flaky10 = { down: "" }, flaky11 = { down: "" };
-  const D10 = newDesk("ten", FLAKY, flaky10), D11 = newDesk("eleven", FLAKY, flaky11);
+  const D10 = newDesk("ten", FLAKY, flaky10, null, TEAM), D11 = newDesk("eleven", FLAKY, flaky11, null, TEAM);
   const me10 = await D10.ask("etiuda:branch-identity", true), me11 = await D11.ask("etiuda:branch-identity", true);
   put(FLAKY, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 1, roster: [entry(me10, K1, 1), entry(me11, K1, 1)] })));
   put(FLAKY, "lamps.ec", seal(K1, 1, A2));
@@ -1634,7 +1508,8 @@ try {
   await read(DF6, "lamps.ec");
   const ringAsked = await DF6.ask("etiuda:catalog-ring");
   const ringRead = DF6.api.readRing();
-  check(ringAsked === JSON.stringify(embeddedRing) && JSON.stringify(ringRead) === JSON.stringify(embeddedRing),
+  /* RETIRED, P4 (no folder is read as a team): a folder team's head, ring, epoch wait and first listing were read off its team file in the share (the seal wait and the folder's own ring and head are gone; relay-channel's head and ring checks hold a team's). It said what its sentence below says. */
+  retire(ringAsked === JSON.stringify(embeddedRing) && JSON.stringify(ringRead) === JSON.stringify(embeddedRing),
     "14bb a folder team file with an embedded ring is read from the team file itself, with no loose etiuda-ring.json: "
     + (ringAsked === JSON.stringify(embeddedRing) ? "embedded" : "missed"));
 
@@ -1665,7 +1540,8 @@ try {
   put(F6, "etiuda-head.json", JSON.stringify(freshHead));
   const leads1 = await DF6.ask("etiuda:team-join", "leads");
   const row1 = ((leads1 && leads1.leads) || []).find(r => r.team === T6);
-  check(!!row1 && !!row1.head && row1.head.edition === "Lamp Shop v3" && row1.head.published === "2026-02-03" && row1.head.t === headNow,
+  /* RETIRED, P4 (no folder is read as a team): a folder team's head, ring, epoch wait and first listing were read off its team file in the share (the seal wait and the folder's own ring and head are gone; relay-channel's head and ring checks hold a team's). It said what its sentence below says. */
+  retire(!!row1 && !!row1.head && row1.head.edition === "Lamp Shop v3" && row1.head.published === "2026-02-03" && row1.head.t === headNow,
     "14bd a newer genuine etiuda-head.json on a folder team shows its edition and publish time in leadsView(): "
     + (row1 && row1.head ? row1.head.edition + " / " + row1.head.published : "no head"));
 
@@ -1674,21 +1550,10 @@ try {
   const lowHead = makeHead(T6, [{ catalog: "lamp-shop", rev: 4, edition: "Lamp Shop v4", published: "2026-02-04" }], headNow + 500, null, null, 1);
   put(F6, "etiuda-head.json", JSON.stringify(lowHead));
   const rowLow = (((await DF6.ask("etiuda:team-join", "leads")) || {}).leads || []).find(r => r.team === T6);
-  check(!!rowLow && !rowLow.head, "962s5t6 a genuine newer head below the folder team file's epoch shows nothing in leadsView(): "
+  /* RETIRED, P4 (no folder is read as a team): a folder team's head, ring, epoch wait and first listing were read off its team file in the share (the seal wait and the folder's own ring and head are gone; relay-channel's head and ring checks hold a team's). It said what its sentence below says. */
+  retire(!!rowLow && !rowLow.head, "962s5t6 a genuine newer head below the folder team file's epoch shows nothing in leadsView(): "
     + (rowLow && rowLow.head ? rowLow.head.edition : "nothing"));
-  if (PLANTS_OFF) skip("962s5t7 lifting plant:folder-head-epoch shows the head below the team file's epoch");
-  else {
-    const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:folder-head-epoch") >= 0);
-    let shown = "plant line absent";
-    if (at >= 0) {
-      lines.splice(at, 1);
-      const DP = loadDesk(DF6.ud, null, { src: lines.join("\n") });
-      await DP.ask("etiuda:branch-identity", true);
-      const rowP = (((await DP.ask("etiuda:team-join", "leads")) || {}).leads || []).find(r => r.team === T6);
-      shown = rowP && rowP.head ? rowP.head.edition : "nothing";
-    }
-    check(shown === "Lamp Shop v4", "962s5t7 lifting plant:folder-head-epoch shows the head below the team file's epoch (FAIL 962s5t6): " + shown);
-  }
+  /* RETIRED, P4 (no folder is read as a team): 962s5t7, "lifting plant:folder-head-epoch shows the head below the team file's epoch (FAIL 962s5t6)". The plant line is gone from shell/main.js with the folder's head (the check above it, 962s5t6, is retired), so the lift had no line to take (plant line absent). */
 
   // 14bj: forged head shows nothing in leadsView()
   const forgedHead = JSON.parse(JSON.stringify(freshHead));
@@ -1696,7 +1561,8 @@ try {
   put(F6, "etiuda-head.json", JSON.stringify(forgedHead));
   const leadsForged = await DF6.ask("etiuda:team-join", "leads");
   const rowForged = ((leadsForged && leadsForged.leads) || []).find(r => r.team === T6);
-  check(!!rowForged && !rowForged.head,
+  /* RETIRED, P4 (no folder is read as a team): a folder team's head, ring, epoch wait and first listing were read off its team file in the share (the seal wait and the folder's own ring and head are gone; relay-channel's head and ring checks hold a team's). It said what its sentence below says. */
+  retire(!!rowForged && !rowForged.head,
     "14bj a forged etiuda-head.json on a folder team shows nothing in leadsView(): "
     + (rowForged && !rowForged.head ? "nothing shown" : "showed head"));
 
@@ -1705,7 +1571,8 @@ try {
   put(F6, "etiuda-head.json", JSON.stringify(foreignHead));
   const leadsForeign = await DF6.ask("etiuda:team-join", "leads");
   const rowForeign = ((leadsForeign && leadsForeign.leads) || []).find(r => r.team === T6);
-  check(!!rowForeign && !rowForeign.head,
+  /* RETIRED, P4 (no folder is read as a team): a folder team's head, ring, epoch wait and first listing were read off its team file in the share (the seal wait and the folder's own ring and head are gone; relay-channel's head and ring checks hold a team's). It said what its sentence below says. */
+  retire(!!rowForeign && !rowForeign.head,
     "14bk a foreign-key etiuda-head.json on a folder team shows nothing in leadsView(): "
     + (rowForeign && !rowForeign.head ? "nothing shown" : "showed head"));
 
@@ -1715,7 +1582,8 @@ try {
   put(F6, "etiuda-head.json", JSON.stringify(olderHead));
   const leadsOlder = await DF6.ask("etiuda:team-join", "leads");
   const rowOlder = ((leadsOlder && leadsOlder.leads) || []).find(r => r.team === T6);
-  check(!!rowOlder && !rowOlder.head,
+  /* RETIRED, P4 (no folder is read as a team): a folder team's head, ring, epoch wait and first listing were read off its team file in the share (the seal wait and the folder's own ring and head are gone; relay-channel's head and ring checks hold a team's). It said what its sentence below says. */
+  retire(!!rowOlder && !rowOlder.head,
     "14bl an older etiuda-head.json (rev 1 below the desk's rev 2) on a folder team shows nothing in leadsView(): "
     + (rowOlder && !rowOlder.head ? "nothing shown" : "showed head"));
 
@@ -1727,7 +1595,8 @@ try {
   const chWithRing = chProg.readRing({ teamDoc: folderDocWithRing, looseRing: looseRing });
   const chLoose = chProg.readRing({ teamDoc: folderDocNoRing, looseRing: looseRing });
   const chNone = chProg.readRing({ teamDoc: folderDocNoRing, looseRing: null });
-  check(chWithRing.source === "team" && JSON.stringify(chWithRing.ring) === JSON.stringify(embeddedRing)
+  /* RETIRED, P4 (no folder is read as a team): a folder team's head, ring, epoch wait and first listing were read off its team file in the share (the seal wait and the folder's own ring and head are gone; relay-channel's head and ring checks hold a team's). It said what its sentence below says. */
+  retire(chWithRing.source === "team" && JSON.stringify(chWithRing.ring) === JSON.stringify(embeddedRing)
     && chLoose.source === "loose" && JSON.stringify(chLoose.ring) === JSON.stringify(looseRing)
     && chNone.source === "none" && chNone.ring === null,
     "14bh channel.cjs readRing accepts embedded ring in folder teamDoc and falls back to looseRing without one: "
@@ -1742,7 +1611,8 @@ try {
   const ownOnRelay = relayProg.readRing({ teamDoc: relayDoc, looseRing: looseRing });
   const bareOnRelay = relayProg.readRing({ teamDoc: bareRelayDoc, looseRing: looseRing });
   const loadedFolder = relayProg.loadTeamFile(folderDocWithRing);
-  check(folderOnRelay.source === "loose" && JSON.stringify(folderOnRelay.ring) === JSON.stringify(looseRing)
+  /* RETIRED, P4 (no folder is read as a team): a folder team's head, ring, epoch wait and first listing were read off its team file in the share (the seal wait and the folder's own ring and head are gone; relay-channel's head and ring checks hold a team's). It said what its sentence below says. */
+  retire(folderOnRelay.source === "loose" && JSON.stringify(folderOnRelay.ring) === JSON.stringify(looseRing)
     && ownOnRelay.source === "team" && JSON.stringify(ownOnRelay.ring) === JSON.stringify(embeddedRing)
     && bareOnRelay.source === "none" && bareOnRelay.ring === null
     && loadedFolder.ok === false && loadedFolder.reason === "wrong-team",
@@ -1756,7 +1626,7 @@ try {
 
   /* ---- an edition at the next epoch, before the team file that carries its key -------------------------------- */
   {
-    const AHEAD = folder("ahead"), DA = newDesk("ahead", AHEAD), meA = await DA.ask("etiuda:branch-identity", true);
+    const AHEAD = folder("ahead"), DA = newDesk("ahead", AHEAD, null, null, TEAM), meA = await DA.ask("etiuda:branch-identity", true);
     fs.writeFileSync(path.join(AHEAD, "etiuda-ring.json"), JSON.stringify(ring), "utf8");
     const sentA = [];
     const winA = { isDestroyed: () => false, webContents: { send: (...a) => sentA.push(a) } };
@@ -1776,7 +1646,8 @@ try {
     DA.api.catalogChanged(winA);
     const openedNew = DA.api.readCatalog();
     const offers = sentA.filter(a => a[0] === "etiuda:catalog-file");
-    check(quiet && held === A2.trim() && openedNew === A3.trim() && offers.some(a => a[1] === A3.trim() && a[2] === "lamps.ec")
+    /* RETIRED, P4 (no folder is read as a team): a folder team's head, ring, epoch wait and first listing were read off its team file in the share (the seal wait and the folder's own ring and head are gone; relay-channel's head and ring checks hold a team's). It said what its sentence below says. */
+    retire(quiet && held === A2.trim() && openedNew === A3.trim() && offers.some(a => a[1] === A3.trim() && a[2] === "lamps.ec")
       && !keyMiss(DA),
       "14be an edition sealed one epoch ahead of the team file keeps the edition in use and says nothing, and opens once"
       + " the file lands: held " + (held === A2.trim() ? "yes" : "no") + ", quiet " + (quiet ? "yes" : "no")
@@ -1786,7 +1657,7 @@ try {
 
   /* ---- the team file never comes: the wait ends in the words a sealed edition already gets -------------------- */
   {
-    const LATE = folder("latekey"), DB = newDesk("latekey", LATE), meB = await DB.ask("etiuda:branch-identity", true);
+    const LATE = folder("latekey"), DB = newDesk("latekey", LATE, null, null, TEAM), meB = await DB.ask("etiuda:branch-identity", true);
     fs.writeFileSync(path.join(LATE, "etiuda-ring.json"), JSON.stringify(ring), "utf8");
     const winB = quietWin();
     put(LATE, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 1, roster: [entry(meB, K1, 1)] })));
@@ -1812,7 +1683,8 @@ try {
       lateSaid = !!(lateJoin && lateJoin.sealed && lateJoin.sealed.team === TEAM) && keyMiss(DB);
       lateFile = lateJoin && lateJoin.sealed ? lateJoin.sealed.file : "";
     } finally { Date.now = realNow; }
-    check(earlyQuiet && midQuiet && lateSaid && lateFile === "lamps.ec",
+    /* RETIRED, P4 (no folder is read as a team): a folder team's head, ring, epoch wait and first listing were read off its team file in the share (the seal wait and the folder's own ring and head are gone; relay-channel's head and ring checks hold a team's). It said what its sentence below says. */
+    retire(earlyQuiet && midQuiet && lateSaid && lateFile === "lamps.ec",
       "14bf a team file that never comes keeps the edition until the wait's last moment and then says this desk holds no"
       + " key, naming the file: quiet before " + (earlyQuiet ? "yes" : "no") + ", at "
       + (WAIT_MS - 1) + " ms " + (midQuiet ? "yes" : "no") + ", at " + WAIT_MS + " ms "
@@ -1821,7 +1693,7 @@ try {
 
   /* ---- a desk the new epoch's team file has already left off is refused at once, as before -------------------- */
   {
-    const GONE = folder("gone"), DG = newDesk("gone", GONE), meG = await DG.ask("etiuda:branch-identity", true);
+    const GONE = folder("gone"), DG = newDesk("gone", GONE, null, null, TEAM), meG = await DG.ask("etiuda:branch-identity", true);
     fs.writeFileSync(path.join(GONE, "etiuda-ring.json"), JSON.stringify(ring), "utf8");
     const winG = quietWin();
     put(GONE, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 1, roster: [entry(meG, K1, 1)] })));
@@ -1887,13 +1759,15 @@ try {
       shown = d.api.readCatalog();
       const reading = d.said.some(l => l.indexOf("still reading the team's shared folder") >= 0);
       const slate = d.said.some(l => l.indexOf("no catalog found") >= 0);
-      check(!!s && before === 0 && early == null && shareClosed && reading && !slate && shown === A1.trim(),
+      /* RETIRED, P4 (no folder is read as a team): a folder team's head, ring, epoch wait and first listing were read off its team file in the share (the seal wait and the folder's own ring and head are gone; relay-channel's head and ring checks hold a team's). It said what its sentence below says. */
+      retire(!!s && before === 0 && early == null && shareClosed && reading && !slate && shown === A1.trim(),
         "14ch a desk started on a folder team reads nothing under the share before the first listing lands (" + before
         + (before ? ": " + hits.slice(0, before).join("; ") : "") + "), says it is still reading, and then the catalog shows (shown "
         + (shown === A1.trim()) + ", share closed " + shareClosed + ")");
     } catch (e) {
       err = String(e && e.stack || e);
-      check(false, "14ch a desk started on a folder team reads nothing under the share before the first listing lands: " + err);
+      /* RETIRED, P4 (no folder is read as a team): a folder team's head, ring, epoch wait and first listing were read off its team file in the share (the seal wait and the folder's own ring and head are gone; relay-channel's head and ring checks hold a team's). It said what its sentence below says. */
+      retire(false, "14ch a desk started on a folder team reads nothing under the share before the first listing lands: " + err);
     } finally {
       for (const n of spyNames) fs[n] = spyOrig[n];
       try { if (s && typeof s.stop === "function") s.stop(); } catch {}
@@ -1905,7 +1779,7 @@ try {
      and the two must agree. The plants lift a line of the gate in a scratch copy of main.js: the answer follows the gate. */
   {
     const FLG = folder("flag");
-    let DF = newDesk("flag", FLG);
+    let DF = newDesk("flag", FLG, null, null, TEAM);
     const meF = await DF.ask("etiuda:branch-identity", true);
     const TX2 = "t-" + crypto.randomBytes(8).toString("hex"), KX2 = crypto.randomBytes(32);
     const listing = ["lamp-shop", "tea-room", "kiln-hall"];

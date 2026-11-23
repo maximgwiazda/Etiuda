@@ -102,16 +102,6 @@ let folderSyncerLayer = null;
 function FolderSyncer() {
   return folderSyncerLayer || (folderSyncerLayer = require(path.join(__dirname, "folder", "syncer.cjs")));
 }
-/* Why the folder mirror's syncer could not start on this desk, or "" while it can (Argon's updates review of 2026-11-01,
-   finding 1): a desk whose syncer does not run reads the shared folder itself, as it did before the mirror, and says
-   why once, rather than reading an empty mirror and taking itself for no member of its team. */
-let folderSyncerBroken = "";
-function folderSyncerFailed(e) {
-  const why = String(e && e.message || e || "unknown").split("\n")[0];
-  if (folderSyncerBroken === why) return;
-  folderSyncerBroken = why;
-  teamSay("the shared folder's local copy could not be kept on this desk, so it reads the shared folder itself: " + why);
-}
 
 /* THE PROXY IS CHOSEN HERE, BEFORE READY: a setProxy after ready would not stop the first lookup.
    Windows' own setting is followed where it names a setup script or a server (machine policy first,
@@ -254,82 +244,40 @@ function defaultCatalogFolder() { return path.join(app.getPath("documents"), "Et
 function folderMirrorOf(teamId) { return path.join(app.getPath("userData"), "folder-mirror", String(teamId)); }
 function rawCatalogFolder() {
   if (deskKeys === undefined) deskKeys = readDesk();
-  const named = sayJoinPolicy().folder;
-  if (named) return named;
   const set = deskKeys[CATALOG_FOLDER_KEY];
   return (typeof set === "string" && set.trim()) ? set.trim() : defaultCatalogFolder();
 }
-function folderTeamHere() {
-  if (deskKeys === undefined) deskKeys = readDesk();
-  if (relayHere() || relayFlagged()) return null;
-  const rawFolder = rawCatalogFolder();
-  const j = teamJoin;
-  if (j && j.team && (!j.invite || !j.invite.relay)) {
-    if (policyWaits()) return null;
-    const folder = (j.invite && j.invite.folder) || rawFolder;
-    return { team: j.team, folder: folder, joining: true };
-  }
-  const teams = Object.keys(teamPins).filter(t => {
-    if (!pinTrusted(t)) return false; /* plant:folder-team-trusted */
-    if (teamBarred.has(t)) return false;
-    if (teamRelayGone[t] === true) return false;
-    if (teamShown[t] && teamShown[t].relay) return false;
-    if (teamChannel[t] && teamChannel[t].kind === "relay") return false;
-    const shown = teamShown[t];
-    if (shown && shown.folder) {
-      return path.resolve(shown.folder) === path.resolve(rawFolder)
-        || path.resolve(shown.folder) === path.resolve(folderMirrorOf(t));
-    }
-    return false;
-  }).sort();
-  if (teams.length) {
-    return { team: teams[0], folder: rawFolder, joining: false };
-  }
+/* The local copy of a team held through a shared folder, where the person's catalog folder setting is that team's share and the
+   copy holds anything, else "". A folder team no longer syncs, so the copy is what the desk last had: it holds what the share
+   does not (an owed file), and it opens with the share out of reach. Never a team's place: the copy is read as a plain folder. */
+/* The folder team this desk holds at the folder `setting`, as {team}, or null. */
+function heldTeamAt(setting) {
+  const s = path.resolve(String(setting || ""));
+  for (const t of Object.keys(teamShown)) if (folderHeld(t) && path.resolve(teamShown[t].folder) === s) return { team: t };
   return null;
 }
-/* The mirror a joined folder team reads from, or "". Under machine policy, not until one answered listing has been
-   taken, so the named folder is not swapped for an empty mirror before that. The catalog itself waits for the mirror. */
-const mirrorsMade = new Set();
-function folderMirrorHere() {
-  const ft = folderTeamHere();
-  if (!ft) return "";
-  const mirror = folderMirrorOf(ft.team);
-  if (sayJoinPolicy().folder && !fs.existsSync(path.join(mirror, FolderSyncer().PRIMED_NAME))) return ""; /* plant:policy-primed */
-  if (!mirrorsMade.has(mirror)) { try { fs.mkdirSync(mirror, { recursive: true }); mirrorsMade.add(mirror); } catch { /* made by the syncer */ } }
-  return mirror;
+function heldLocalCopy(setting) {
+  const s = path.resolve(String(setting || ""));
+  for (const t of Object.keys(teamShown)) {
+    if (!folderHeld(t) || path.resolve(teamShown[t].folder) !== s) continue;
+    const copy = folderMirrorOf(t);
+    try { if (fs.statSync(copy).isDirectory() && fs.readdirSync(copy).length) return copy; } catch { /* no copy kept: the share is read */ }
+  }
+  return "";
 }
-/* Where the desk writes. On a folder team that is the mirror, and the syncer's outbox carries each write to the share. */
-function sharedFolderForWrite() {
-  const mirror = folderMirrorHere();
-  if (mirror) return mirror; /* plant:mirror-write-root */
-  return shareFolderShown();
-}
-/* The team's own folder, for what the person is shown or picks from: never the mirror. */
-function shareFolderShown() {
-  const named = sayJoinPolicy().folder;
-  if (named) return named;
-  const relay = relayHere();
-  if (relay) return relayMirrorOf(relay.rt);
-  const ft = folderTeamHere();
-  if (ft) return ft.folder;
-  return catalogFolder();
-}
+/* The catalog folder: a relay team's mirror, the mirror a team moving to a folder waits in, else the person's own setting.
+   A team held through a shared folder is not read as a team (folderHeld): its folder is a plain catalog folder, and where this
+   desk keeps a local copy of it, that copy (heldLocalCopy). */
 function catalogFolder() {
   if (deskKeys === undefined) deskKeys = readDesk();
-  const named = sayJoinPolicy().folder;
-  if (named) return folderMirrorHere() || named;
   /* On the relay the team folder is the mirror the channel layer keeps, beside the desk's own file (shell/relay/channel.cjs). */
   const relay = relayHere();
   if (relay) return relayMirrorOf(relay.rt);
   const need = Object.values(teamNeedsFolder)[0];
   if (need && need.mirror) return need.mirror;
-  /* On a folder team the catalog folder is the local mirror the syncer keeps. */
-  const ft = folderTeamHere();
-  if (ft && !ft.joining && folderSyncerBroken) return ft.folder; /* plant:syncer-broken-share */
-  if (ft && !ft.joining) return folderMirrorOf(ft.team); /* plant:catalog-folder-mirror */
-  if (ft && ft.joining) return folderMirrorOf(ft.team); /* plant:mirror-while-joining */
-  const set = deskKeys[CATALOG_FOLDER_KEY];
-  return (typeof set === "string" && set.trim()) ? set.trim() : defaultCatalogFolder();
+  const raw = rawCatalogFolder(), copy = heldLocalCopy(raw);
+  if (copy) return copy; /* plant:held-local-copy */
+  return raw;
 }
 /* Made on first run, and only where nobody has chosen one: a folder somebody picked existed when
    they picked it, so making it again would quietly stand in for a share that has gone away. */
@@ -477,6 +425,9 @@ const LINK_NO_TEAM = "This invitation names no team this desk can join, so nothi
 const LINK_NO_TEAM_PL = "To zaproszenie nie wskazuje zespołu, do którego to stanowisko mogłoby dołączyć, więc niczego nie wysłano. Nowe wystawi lider zespołu.";
 const LINK_LONG = "This invitation is longer than Etiuda opens, so it was not opened. Ask your lead for a new one.";
 const LINK_LONG_PL = "To zaproszenie jest dłuższe, niż Etiuda może otworzyć, więc go nie otwarto. Nowe wystawi lider zespołu.";
+/* The copywriter's words; the relay's lead-other refusal is said in them too (joinLeadOther). */
+const LINK_KEY = "This invitation link does not match its team's lead: it may be damaged or altered, or the team may have a new lead since it was sent. Nothing was used or sent. A new link from the team's lead, or an invitation to this account's email address, works.";
+const LINK_KEY_PL = "Ten link z zaproszeniem nie zgadza się z liderem zespołu: mógł zostać uszkodzony albo zmieniony, albo zespół ma już innego lidera niż w chwili wysłania. Niczego nie użyto ani nie wysłano. Zadziała nowy link od lidera zespołu albo zaproszenie na adres e-mail tego konta.";
 function linkRefusal(en, pl) { return { refused: en, saidEn: en, saidPl: pl }; }
 function linkLooks(s) {
   const head = s.slice(0, 12).toLowerCase();
@@ -495,6 +446,7 @@ function linkFromArg(arg) {
   const parsed = inviteRead(handed, process.platform !== "win32");
   if (!parsed) return linkRefusal(LINK_FORM, LINK_FORM_PL);
   if (!parsed.relay) return linkRefusal(LINK_FOLDER, LINK_FOLDER_PL); /* plant:link-folder */
+  if (!inviteKeyHolds(parsed)) return linkRefusal(LINK_KEY, LINK_KEY_PL); /* plant:link-key */
   return { text: handed, parsed: parsed };
 }
 function linkArgFrom(argv) {
@@ -503,6 +455,23 @@ function linkArgFrom(argv) {
 }
 let pendingLink = null, pendingLinkArg = "";
 let heldLinkText = "", heldLinkView = null;
+/* Links a second launch hands over while the start's own link waits for the first window, and any after them: each is offered in
+   turn once the one before is answered, by Cancel or by a yes, and a repeat of one already waiting is not offered twice. */
+const linkQueue = [];
+function queueLink(arg) {
+  if (!pendingLinkArg && !linkQueue.length) return false;
+  if (arg !== pendingLinkArg && linkQueue.indexOf(arg) < 0) linkQueue.push(arg);
+  return true;
+}
+/* On the shell's next turn, so the answer to the press reaches the page before the next confirm does. */
+function offerNextLink() {
+  if (!linkQueue.length) return;
+  setTimeout(() => {
+    const next = linkQueue.shift();
+    try { if (next) acceptLink(next); }
+    catch (e) { console.error("etiuda: a waiting link could not be offered - " + (e && e.message || e)); }
+  }, 0);
+}
 /* What the page may see of a link: the lead's name, the team and the relay's host. The invitation
    text stays here, so a yes can name it and the secret never enters the renderer. */
 function linkOfferView(view, parsed) {
@@ -559,6 +528,7 @@ function declineHeldLink() {
   heldLinkView = null;
   pendingLink = null;
   pendingLinkArg = "";
+  offerNextLink(); /* plant:link-next-no */
   return joinView();
 }
 async function takeHeldLink(name) {
@@ -572,6 +542,7 @@ async function takeHeldLink(name) {
     heldLinkView = null;
     pendingLink = null;
     pendingLinkArg = "";
+    offerNextLink(); /* plant:link-next-yes */
   }
   return ans;
 }
@@ -613,6 +584,44 @@ function registerEtiudaLink() {
     ok = app.setAsDefaultProtocolClient("etiuda") === true;
   } catch (e) { ok = false; }
   if (!ok) console.error("etiuda: Windows did not make this desk the program that opens an etiuda: link");
+}
+/* THE COPY AN UPDATE SET ASIDE ("<folder>.setup-previous", shell/installer.nsh etiudaSwap) loses, once this copy has started,
+   the files its own list names (shell/install-files.cjs) and the folders they leave empty; never a link, never anything else.
+   Where this account may not write there (an all-users install), it stays for the next installer or the uninstall. */
+async function setAsideDrop(fsp, join, aside, own, exe) {
+  const st = await fsp.lstat(aside).catch(() => null);
+  if (!st || !st.isDirectory() || st.isSymbolicLink() || !(await fsp.lstat(join(aside, exe)).catch(() => null))) return "none";
+  let text = await fsp.readFile(join(aside, "etiuda-files.ini"), "utf8").catch(() => null), wide = false;
+  if (text === null) { wide = true; text = await fsp.readFile(join(own, "etiuda-files.ini"), "utf8").catch(() => null); }
+  if (text === null) return "no list";
+  const listed = { files: new Set(), dirs: new Set() };
+  let sect = "";
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim(), head = /^\[([^\]]*)\]$/.exec(line), eq = line.indexOf("=");
+    if (head) sect = head[1].toLowerCase();
+    else if (eq > 0 && listed[sect]) listed[sect].add(line.slice(0, eq).trim().toLowerCase());
+  }
+  const whole = key => wide && /^(resources|locales)(\\|$)/.test(key); /* a copy installed before the list: as etiudaDropOld counts them */
+  const walk = async rel => {
+    for (const name of await fsp.readdir(rel ? join(aside, rel) : aside).catch(() => [])) {
+      const r = rel ? rel + "\\" + name : name, key = r.toLowerCase(), p = join(aside, r);
+      const s = await fsp.lstat(p).catch(() => null);
+      if (!s || s.isSymbolicLink()) continue;
+      if (s.isDirectory()) { if (listed.dirs.has(key) || whole(key)) { await walk(r); await fsp.rmdir(p).catch(() => {}); } }
+      else if (listed.files.has(key) || whole(key)) await fsp.unlink(p).catch(() => {});
+    }
+  };
+  await walk("");
+  return fsp.rmdir(aside).then(() => "gone", () => "kept");
+}
+function dropSetAside() {
+  if (process.platform !== "win32" || !app.isPackaged) return;
+  const own = path.dirname(process.execPath);
+  /* Electron's node:fs reads an .asar as a folder, so resources\app.asar would be walked and never unlinked, and the copy aside
+     never emptied: original-fs sees it as the file it is (outside Electron, as in the harness, node:fs already does). */
+  let ofs = fs;
+  try { ofs = require("original-fs"); } catch { ofs = fs; }
+  setAsideDrop(ofs.promises, path.join, own + ".setup-previous", own, path.basename(process.execPath)).catch(() => {});
 }
 /* The lead's standing span, at the root of the team's folder. It replaces the old request file, which nothing here reads. */
 const SPAN_NAME = "stats-span.json";
@@ -678,8 +687,7 @@ function isV2(data) {
   return !!data && typeof data === "object" && +data.format === 2 && data.kind === "etiuda-catalog";
 }
 /* catalogPayload with a sealed envelope opened first, so every route hands the page the catalog inside and the page
-   reads it as it reads an unsealed file, signature and identity alike. One this desk holds no key for throws. An epoch
-   the team file has not named yet, on a folder team this desk already holds a key for, is the same throw marked to wait. */
+   reads it as it reads an unsealed file, signature and identity alike. One this desk holds no key for throws. */
 function catalogRead(text) {
   const got = catalogPayload(text);
   if (!got.data || typeof got.data !== "object" || got.data.kind !== SEALED_KIND) return got;
@@ -855,53 +863,21 @@ function pinnedLeadPubs() {
   pinnedLeadKeys().forEach(k => { if (out.indexOf(k.public) < 0) out.push(k.public); });
   return out;
 }
-/* Conflict copies of the team file in this folder, by name only. A backup that is not one of those
-   tails is not a candidate, and nothing here is renamed or deleted. */
-function teamSiblingFiles(root) {
-  let names = [];
-  try { names = fs.readdirSync(root); } catch { return []; }
-  return names.filter(n => conflictSiblingName(TEAM_NAME, n)).sort();
-}
-function teamChoiceStamp(root) {
-  return teamSiblingFiles(root).map(n => n + "=" + fileStamp(path.join(root, n))).join(",");
-}
 function teamParse(text) {
   try { return JSON.parse(String(text).replace(/^\uFEFF/, "").trim()); } catch { return null; }
 }
-function teamRank(doc) {
-  if (!doc || typeof doc !== "object") return null;
-  const rev = teamRevOf(doc);
-  if (!Number.isInteger(doc.epoch) || rev === null) return null;
-  return { epoch: doc.epoch, rev: rev };
+/* Whether `root` is a team's place: a relay mirror, or the mirror a team moving to a folder waits in. No other folder is a team's,
+   so a team file there is no team's (teamTextChosen). */
+function teamPlaceAt(root) {
+  const r = path.resolve(String(root || ""));
+  if (r.indexOf(path.resolve(app.getPath("userData"), "relay") + path.sep) === 0) return true;
+  return Object.values(teamNeedsFolder).some(n => !!n && !!n.mirror && path.resolve(n.mirror) === r);
 }
-/* Strictly newer: a higher epoch, or the same epoch and a higher rev. Equal is not newer. */
-function teamAhead(doc, cur) {
-  if (!cur) return true;
-  const a = teamRank(doc), b = teamRank(cur);
-  if (!a) return false;
-  if (!b) return true;
-  if (a.epoch !== b.epoch) return a.epoch > b.epoch;
-  return a.rev > b.rev;
-}
-/* The sibling has to be the same team and the same lead where the canonical file parses as one. */
-function sameTeamLead(doc, cur) {
-  if (!cur || !doc) return true;
-  if (cur.id && doc.id !== cur.id) return false;
-  const cl = cur.lead, dl = doc.lead;
-  if (cl && typeof cl === "object" && cl.keyId && cl.public) {
-    if (!dl || dl.keyId !== cl.keyId || dl.public !== cl.public) return false;
-  }
-  return true;
-}
-/* The team file this folder is read as. The canonical file wins unless a conflict sibling is a
-   genuine team file at a higher epoch or rev, under the same team and lead where the canonical
-   file parses. A sibling under another lead of the same team is read only where its handovers run
-   from that canonical lead to the lead it names, or where it is under the lead this desk has pinned
-   for this team or its handovers run from that pinned lead to the lead it names, and it is ahead.
-   A sibling that is not genuine, or lower, stays on disk and is not the one read.
-   `missing` is the canonical file being absent and no sibling taken, which is still "no team file". */
+/* The team file this folder is read as, the canonical file alone: `missing` where it is absent or the folder is no team's place,
+   `unreadable` where it would not read. A conflict copy beside it is not a team file here: a team's file arrives over the relay. */
 function teamTextChosen(root) {
   const file = path.join(root, TEAM_NAME);
+  if (!teamPlaceAt(root)) return { file: file, text: null, doc: null, missing: true, unreadable: false }; /* plant:team-file-place */
   let text = null, missing = false, unreadable = false;
   try {
     if (fs.statSync(file).size <= TEAM_MAX) text = fs.readFileSync(file, "utf8");
@@ -909,31 +885,7 @@ function teamTextChosen(root) {
     if (e && e.code === "ENOENT") missing = true;
     else unreadable = true;
   }
-  const canonDoc = text != null ? teamParse(text) : null;
-  let best = { file: file, text: text, doc: canonDoc };
-  for (const name of teamSiblingFiles(root)) {
-    const sib = path.join(root, name);
-    let sibText = null;
-    try {
-      if (fs.statSync(sib).size > TEAM_MAX) continue;
-      sibText = fs.readFileSync(sib, "utf8");
-    } catch { continue; }
-    const doc = teamParse(sibText);
-    if (!doc || !teamWhole(doc)) continue;
-    if (canonDoc && canonDoc.id && doc.id !== canonDoc.id) continue;
-    if (canonDoc && !sameTeamLead(doc, canonDoc)) {
-      /* The pin as every reading path takes it (pinTrusted): none while machine policy has not answered, and none that policy's lead
-         does not confirm, so a sibling under a merely kept pin is not chosen. */
-      const pin = pinTrusted(doc.id);
-      const byPin = !!pin && (pin.keyId !== canonDoc.lead.keyId || pin.public !== canonDoc.lead.public);
-      if (handedTo(doc, canonDoc.lead) && teamAhead(doc, best.doc)) best = { file: sib, text: sibText, doc: doc }; /* plant:sib-handover */
-      if (byPin && ((doc.lead.keyId === pin.keyId && doc.lead.public === pin.public) || handedTo(doc, pin)) && teamAhead(doc, best.doc)) best = { file: sib, text: sibText, doc: doc }; /* plant:sib-pin */
-      continue;
-    }
-    if (teamAhead(doc, best.doc)) best = { file: sib, text: sibText, doc: doc }; /* plant:f3-team-sibling */
-  }
-  if (best.file !== file) missing = false;
-  return { file: best.file, text: best.text, doc: best.doc, missing: missing && best.file === file, unreadable: unreadable && best.file === file };
+  return { file: file, text: text, doc: text != null ? teamParse(text) : null, missing: missing, unreadable: unreadable };
 }
 /* The team file in this folder where it is whole under the lead it names, else null.
    A conflict sibling that is genuine and newer is that file. The one on disk is left where it is. */
@@ -944,20 +896,25 @@ function folderTeamDoc() {
   const doc = teamTextChosen(root).doc;
   return doc && teamWhole(doc) && !teamFileBehind(doc) ? doc : null; /* plant:s0b-floor-doc */
 }
-/* null: no pin, so the ring decides. []: a whole team file whose lead this desk has not pinned.
-   Otherwise the publics that may sign a catalog chosen here. */
+/* null: no pin, so the ring decides. []: this folder's team is known and its lead is not pinned, or a whole
+   team file names a lead this desk has not pinned. Otherwise the publics that may sign a catalog chosen here. */
 function folderLeadPublics() {
   const all = pinnedLeadPubs();
   if (!all.length) return null;
   const doc = folderTeamDoc();
-  if (!doc) return all;
-  const pin = pinTrusted(doc.id); /* plant:folder-publics-trusted */
-  if (pin && doc.lead && pin.keyId === doc.lead.keyId && pin.public === doc.lead.public) return [String(pin.public)];
-  return [];
+  if (doc) {
+    const pin = pinTrusted(doc.id); /* plant:folder-publics-trusted */
+    if (pin && doc.lead && pin.keyId === doc.lead.keyId && pin.public === doc.lead.public) return [String(pin.public)];
+    return [];
+  }
+  /* The team this desk holds at this folder (P4: no folder is read as a team, so the team known here is the one held, folderHeld). */
+  const here = heldTeamAt(rawCatalogFolder());
+  if (here) { const pin = pinTrusted(here.team); return (pin && typeof pin.public === "string") ? [String(pin.public)] : []; } /* plant:folder-publics-here */
+  return all;
 }
 /* The public a catalog may be chosen under without the agent asking. With no lead pinned, any key the ring verifies.
-   Where this folder's team file is whole, only the key pinned for that team: a key pinned for another team verifies
-   nothing here. With no whole team file, any pinned lead's key, verified against the pin, since the ring is the share's to write. */
+   Where this folder's team is known, only the key pinned for that team, team file or none: a key pinned for another
+   team verifies nothing here. With no team known and no whole team file, any pinned lead's key, since the ring is the share's to write. */
 function catalogLeadOk(data) {
   const bound = folderLeadPublics();
   if (bound === null) return catalogSigValid(data);
@@ -973,9 +930,9 @@ function catalogLeadOk(data) {
 function catalogTrustedPub(data) {
   return pinnedLeadPubs().length ? catalogLeadOk(data) : catalogSigValid(data); /* plant:trusted-pub-lead */
 }
-/* The leads the page verifies against, the same publics catalogLeadOk uses. A whole team file narrows them to that
-   team's pin. Where that lead is not pinned, one key that verifies nothing, so another team's pin is not read and
-   the ring is not read in its place. */
+/* The leads the page verifies against, the same publics catalogLeadOk uses. The folder's own team narrows them,
+   team file or none. Where that lead is not pinned, one key that verifies nothing, so another team's pin and the
+   ring are not read in its place. */
 function leadsForPage() {
   const bound = folderLeadPublics();
   if (bound === null) return [];
@@ -985,7 +942,8 @@ function leadsForPage() {
     const pin = pinTrusted(doc.id);
     if (pin && bound.indexOf(String(pin.public)) >= 0) return [{ keyId: pin.keyId, public: String(pin.public) }];
   }
-  return pinnedLeadKeys();
+  const keys = pinnedLeadKeys().filter(k => k && bound.indexOf(String(k.public)) >= 0);
+  return keys.length ? keys : [LEAD_NONE];
 }
 function editionRev(data) {
   const n = data && +data.rev;
@@ -1078,8 +1036,6 @@ function readCatalog() {
       found.push({ file: file, text: text, data: peeked.data });
       seenOk = true;
     } catch (e) {
-      /* A key the team file has not brought is not a refusal, and it is not logged: the edition already open stays. */
-      if (e && e.sealWait) continue;
       if (seenOk) continue;
       console.error("etiuda: " + file + " did not parse as a catalog - " + e.message);
       refuseOpened(file, "parse");
@@ -1088,14 +1044,7 @@ function readCatalog() {
   if (catalogWaitNewer) console.log("etiuda: " + catalogWaitNewer.name + " needs Etiuda " + catalogWaitNewer.version + " or newer, so it is kept and not read");
   const chosen = pickEdition(found);
   if (!chosen) {
-    if (sealAnyWaiting() || catalogWaitNewer) return typeof catalogJson === "string" ? catalogJson : null;
-    /* An unprimed folder team is still being read. A clean slate here would tell the person there is no team. */
-    let waiting = false;
-    waiting = folderStillReading(); /* plant:prime-no-slate */
-    if (waiting) {
-      teamSay(shellWords().stillReading);
-      return typeof catalogJson === "string" ? catalogJson : null;
-    }
+    if (catalogWaitNewer) return typeof catalogJson === "string" ? catalogJson : null;
     console.log(!found.length ? "etiuda: no catalog found, so Etiuda starts as a clean slate"
       : teamListedMany(found) ? "etiuda: the team lists more than one catalog here, so none is chosen without being asked for"
       : "etiuda: no catalog here is signed by this desk's lead, so none is chosen without being asked for");
@@ -1105,7 +1054,6 @@ function readCatalog() {
   let opened;
   try { opened = catalogRead(chosen.text); }
   catch (e) {
-    if (e && e.sealWait) return typeof catalogJson === "string" ? catalogJson : null;
     console.error("etiuda: " + chosen.file + " did not parse as a catalog - " + e.message);
     refuseOpened(chosen.file, "parse");
     catalogFrom = "";
@@ -1148,68 +1096,10 @@ function deskTrustChecks() {
     forkSeen: folderForkSeen
   };
 }
-function folderSyncerRun(win) {
-  const ft = folderTeamHere();
-  if (!ft) {
-    if (folderSyncer) { folderSyncer.stop(); folderSyncer = null; }
-    return null;
-  }
-  /* A syncer that failed once stays off until the desk restarts, so the desk does not swing between share and mirror. */
-  if (folderSyncerBroken) return null;
-  const pin = pinTrusted(ft.team) || (teamJoin && teamJoin.team === ft.team && teamJoin.invite ? teamJoin.invite.lead : null);
-  const mirror = folderMirrorOf(ft.team);
-  try { fs.mkdirSync(mirror, { recursive: true }); } catch {}
-
-  const opts = {
-    team: ft.team,
-    folder: ft.folder,
-    mirror: mirror,
-    pin: pin ? { keyId: pin.keyId, public: pin.public } : null,
-    keyFor: (epoch) => teamKeyAt(ft.team, epoch),
-    /* The floor heedTeam keeps, so a team file put back from an older rev never reaches the mirror, a restart included. */
-    floor: (t, pub) => (teamRevSeen[t] || {})[pub], /* plant:s0b-syncer-floor */
-    checks: deskTrustChecks(), /* plant:syncer-checks */
-    /* Read at each listing, so a desk key made after the syncer started is this desk's own folder at once. */
-    own: () => deskBranch ? branchIdOf(deskBranch.sign.pub) : "",
-    onOwed: () => { if (theWindow && !theWindow.isDestroyed()) sendJoin(theWindow); },
-    /* A team file in the share that is not the lead's is left aside and the desk works on the last genuine one, so it says
-       so through teamSay, once a line (the test architect's C1 to slice 2): the old refusal of a write was the only alarm a
-       tampered share gave. The syncer's other lines go to the log as before. */
-    logger: (line) => {
-      const said = String(line || "");
-      let toTeam = false;
-      toTeam = /etiuda-team\.json is .*so nothing in it is used$/.test(said); /* plant:syncer-team-said */
-      if (toTeam) teamSay(said.replace(/^etiuda: /, ""));
-      else console.log(said);
-    },
-    onStatus: (status) => {
-      settleFolder(status.folder, status.answers);
-    },
-    onChange: (change) => {
-      if (change && change.primed) noteFolderPrimed(true);
-      /* The desk window, where one exists. A syncer started with a window before that exists tells that window, so a page already up hears the listing. A running desk is unchanged. */
-      const notify = (theWindow && !theWindow.isDestroyed()) ? theWindow
-        : (win && typeof win.isDestroyed === "function" && !win.isDestroyed() ? win : null);
-      if (notify && !notify.isDestroyed()) {
-        if (change && change.primed && catalogFolder() !== watchedFolder && notify === theWindow) catalogFolderChanged();
-        else catalogChanged(notify);
-      }
-    }
-  };
-  opts.onFail = (err) => {
-    if (folderSyncer) { try { folderSyncer.stop(); } catch { /* already gone */ } folderSyncer = null; }
-    folderSyncerFailed(err);
-    noteFolderPrimed(false);
-    if (theWindow && !theWindow.isDestroyed()) catalogChanged(theWindow);
-  };
-  try {
-    folderSyncer = FolderSyncer().startFolderSyncer(opts);
-  } catch (e) {
-    folderSyncer = null;
-    folderSyncerFailed(e); /* plant:syncer-start-said */
-    noteFolderPrimed(false);
-  }
-  return folderSyncer;
+/* No team works through a folder: a syncer still running is stopped, and none starts. */
+function folderSyncerRun() {
+  if (folderSyncer) { folderSyncer.stop(); folderSyncer = null; }
+  return null;
 }
 function watchCatalog(win) {
   relayRun();
@@ -1383,52 +1273,10 @@ function watchDesks(win) {
    window and the page frozen behind it. So it is asked first by an asynchronous stat with a time
    limit, and read as empty and left unwatched until one comes back. One ask in flight at a time.
    A watch that stops and a resume from sleep both leave it unread until it has answered again. */
-const FOLDER_ASK_MS = 3000, FOLDER_RETRY_MS = 30000, FOLDER_SOON_MS = 1000, FOLDER_PRIME_MS = 4000;
+const FOLDER_ASK_MS = 3000, FOLDER_RETRY_MS = 30000, FOLDER_SOON_MS = 1000;
 let folderDown = "", folderAsking = null, folderRetry = null, folderSaidDown = "";
-let folderPrimeResolve = null;
-/* A known folder team's share stays quiet on this thread until the mirror has taken one answered listing.
-   Callers then read the mirror, or nothing. A join still reads the invitation folder: nothing is joined yet.
-   The syncer that cannot start keeps the share as its fallback, the read folderSyncerFailed already chooses. */
-/* A failed syncer reads the share. These gates stay off, or a desk whose worker failed waits for a listing that will not come. */
-function folderSyncerReadsShare() {
-  return !!folderSyncerBroken; /* plant:broken-reads-share */
-}
-function shareUnread(dir) {
-  if (!dir || folderSyncerReadsShare()) return false;
-  const ft = folderTeamHere();
-  if (!ft || ft.joining) return false;
-  if (path.resolve(String(dir)) !== path.resolve(ft.folder)) return false;
-  let primed = false;
-  try { primed = fs.existsSync(path.join(folderMirrorOf(ft.team), FolderSyncer().PRIMED_NAME)); } catch { primed = false; }
-  return !primed; /* plant:prime-share-quiet */
-}
-function folderStillReading() {
-  if (folderSyncerReadsShare()) return false;
-  const ft = folderTeamHere();
-  if (!ft || ft.joining) return false;
-  try { if (fs.existsSync(path.join(folderMirrorOf(ft.team), FolderSyncer().PRIMED_NAME))) return false; } catch { return false; }
-  return true;
-}
 function folderAnswers(dir) {
-  if (shareUnread(dir)) return false;
   return !folderDown || dir !== folderDown;
-}
-function noteFolderPrimed(done) {
-  const settle = folderPrimeResolve;
-  folderPrimeResolve = null;
-  if (settle) settle(done === true);
-}
-/* The boot waits out the first listing. A press does not start a syncer from here: only this wait, and the looks that
-   already start one, do. Past the bound the desk says it is still reading and the listing arrives when it can. */
-function awaitFolderPrime() {
-  const ft = folderTeamHere();
-  if (!ft || ft.joining || folderSyncerReadsShare() || !folderStillReading()) return Promise.resolve(false);
-  folderSyncerRun(theWindow);
-  return new Promise(resolve => {
-    const timer = setTimeout(() => { folderPrimeResolve = null; resolve(false); }, FOLDER_PRIME_MS);
-    if (timer.unref) timer.unref();
-    folderPrimeResolve = (ok) => { clearTimeout(timer); resolve(ok === true); };
-  });
 }
 function fileAnswers(file) { return folderAnswers(path.dirname(file)); }
 /* ONLY A STAT THAT SUCCEEDS ANSWERS. A share that has just timed out fails every call at once for
@@ -1471,14 +1319,6 @@ function settleFolder(dir, ok) {
 }
 function armFolder(win) {
   clearTimeout(folderRetry);
-  const ft = folderTeamHere();
-  if (ft) {
-    folderSyncerRun(win);
-    if (!win || win.isDestroyed()) return;
-    watchCatalog(win);
-    catalogChanged(win);
-    return;
-  }
   const dir = catalogFolder();
   return askFolder(dir).then(ok => {
     if (!settleFolder(dir, ok)) { if (dir === catalogFolder()) retryFolder(FOLDER_RETRY_MS); return; }
@@ -1487,13 +1327,9 @@ function armFolder(win) {
     catalogChanged(win);
   });
 }
-/* After a sleep the folder is asked again before it is read. On a folder team that is the share, never the mirror,
-   which is on this computer and answers; the syncer is kicked and says how the share answers. */
+/* After a sleep the folder is asked again before it is read. */
 function resumeFromSleep(win) {
-  const mirror = folderMirrorHere();
-  const ft = mirror ? folderTeamHere() : null;
   folderDown = catalogFolder();
-  if (ft && path.resolve(folderDown) === path.resolve(mirror)) folderDown = ft.folder; /* plant:resume-mirror */
   armFolder(win);
 }
 function retryFolder(ms) {
@@ -1512,8 +1348,6 @@ function catalogFolderChanged() {
   setImmediate(() => signinFlush());
   if (catalogFolder() === watchedFolder) return;
   const win = theWindow;
-  /* A different folder is a different team file. A wait begun for the one before must not hide a failure here. */
-  sealWaitStop();
   folderSyncerRun(win);
   console.log("etiuda: catalog folder " + catalogFolder());
   // Somebody has just picked this folder, so it is read as answering while it is asked.
@@ -1538,7 +1372,6 @@ function otherTeamCatalog(text) {
    rather than the moment it lands. Seeding happens before there is a window, so the case is a
    copy made by hand under an open Library. */
 function catalogChanged(win) {
-  sealWaitWin = win;
   releaseInUse();
   tryHeldUse();
   resealHeld(win);
@@ -2104,7 +1937,19 @@ function mirrorOwes(file) {
     if (s) s.owe(inside); else FolderSyncer().noteOwed(mirror, inside); /* plant:mirror-owes */
   } catch (e) { console.error("etiuda: a write into the team's mirror could not be noted for the team's folder - " + (e && e.message)); }
 }
+/* Whether `file` lies in the folder of a team held through a shared folder (folderHeld), where nothing of this desk's is removed. */
+function inHeldFolder(file) {
+  const f = path.resolve(String(file));
+  return Object.keys(teamShown).some(t => folderHeld(t) && f.indexOf(path.resolve(teamShown[t].folder) + path.sep) === 0);
+}
+/* Or in that team's local copy, which the desk reads (heldLocalCopy) and which keeps what was owed. */
+function inHeldCopy(file) {
+  const f = path.resolve(String(file));
+  return Object.keys(teamShown).some(t => folderHeld(t) && f.indexOf(path.resolve(folderMirrorOf(t)) + path.sep) === 0);
+}
 function unlinkOwn(file) {
+  if (inHeldFolder(file)) return; /* plant:held-folder-kept */
+  if (inHeldCopy(file)) return; /* plant:held-copy-kept */
   fs.unlinkSync(file);
   mirrorOwes(file);
 }
@@ -2205,7 +2050,7 @@ function statsContentKey(out) {
 function statsFile() {
   const me = branchIdentity(false);
   if (!me || !/^k-[0-9a-f]{16}$/.test(me.id)) return null;
-  const root = sharedFolderForWrite();
+  const root = catalogFolder();
   const dir = path.join(root, "desks", me.id);
   const dest = path.join(dir, "stats.estat");
   if (path.dirname(dest) !== dir || path.basename(dest) !== "stats.estat") return null;
@@ -2412,6 +2257,7 @@ function writeStatsAnswer(text, askId, forced) {
   statsHeld = null;
   statsWroteKey = key;
   statsWroteNamed = out.catalog ? { id: out.catalog.id, text: String(text || "") } : null;
+  statsNamedNote(out.catalog ? out.catalog.id : "");
   statsLastWrite = now.getTime();
   statsSealNote(got.seal);
   return { ok: true, sync: out.sync, syncMs: now.getTime(), why: why };
@@ -2436,6 +2282,40 @@ function statsWithdrawn() {
   if (!statsSpan) return;
   statsSpan = ""; statsPeriod = null; statsHeld = null; statsWroteKey = ""; /* plant:stats-withdrawn */
   armMidnight();
+}
+/* The catalog the statistics on the share last named, "" for none, kept in stats-named.json beside desk.json so a later
+   process knows it. Written when it changes. */
+let statsNamedKept = null;
+function statsNamedNote(id) {
+  if (statsNamedKept === id) return;
+  statsNamedKept = id;
+  try { writeReplacing(path.join(app.getPath("userData"), "stats-named.json"), JSON.stringify({ id: id }) + "\n"); }
+  catch (e) { console.error("etiuda: the catalog the statistics named could not be kept - " + e.message); }
+}
+function statsNamedLast() {
+  if (statsWroteNamed) return statsWroteNamed.id;
+  if (statsNamedKept === null) {
+    let v = null;
+    try { v = JSON.parse(fs.readFileSync(path.join(app.getPath("userData"), "stats-named.json"), "utf8")); } catch { v = null; }
+    statsNamedKept = v && typeof v.id === "string" ? v.id : "";
+  }
+  return statsNamedKept;
+}
+/* Empties the statistics already on the share where they name a catalog now private, even after this process has
+   forgotten writing them. Where no span is held the file is taken off. Statistics that name another catalog, or none,
+   or that this desk never recorded naming, are left. */
+function withdrawPrivateStats(id) {
+  if (!statsCatalogPrivate(id)) return;
+  const named = statsNamedLast();
+  if (!named || !statsCatalogPrivate(named)) return; /* plant:pcm-withdraw-named */
+  if (statsSpan && statsPeriod) {
+    const text = statsWroteNamed && statsWroteNamed.id === named ? statsWroteNamed.text : JSON.stringify({ catalog: { id: named } });
+    const r = writeStatsAnswer(text, "", "close");
+    if (r && r.ok) return;
+  }
+  const at = statsFile();
+  if (!at) return;
+  try { unlinkOwn(at.dest); statsNamedNote(""); } catch { /* the next pass tries again */ }
 }
 function tryLiveStats(win) {
   if (!folderAnswers(catalogFolder())) return;
@@ -3176,7 +3056,7 @@ function branchStemOk(s) {
 /* Where this desk's own file for a catalog goes, and null where the catalog folder is not there to
    hold it: the folder is never made here, since a share that has gone away would be made again. */
 function branchDest(stem) {
-  const root = sharedFolderForWrite(), dir = path.join(root, "desks", deskBranch ? branchIdOf(deskBranch.sign.pub) : "");
+  const root = catalogFolder(), dir = path.join(root, "desks", deskBranch ? branchIdOf(deskBranch.sign.pub) : "");
   const dest = path.join(dir, stem + ".ec");
   if (path.dirname(dest) !== dir || path.basename(dest) !== stem + ".ec") return null;
   return { root: root, dir: dir, dest: dest };
@@ -3261,7 +3141,7 @@ function sealFor(catalogId, pin, root) {
   let team = asked ? (editionTeam.get(asked) || "") : "";
   if (asked && (!team || pinsTorn(root, asked))) return null;
   let cover = team ? teamCovering(root, catalogId) : null;
-  /* The scan above stops once editionTeam holds the pin, so a folder team this run has not opened is read here. */
+  /* The scan above stops once editionTeam holds the pin, so a team this run has not opened is read here. */
   if (asked && cover && !(editionTeams.get(asked) && editionTeams.get(asked).has(String(cover.id)))) {
     ecFilesIn(root).forEach(f => ecFacts(f, "")); /* plant:seal-read */
   }
@@ -3422,7 +3302,7 @@ function keepSharedCard(opened, catalogId) {
   const me = branchIdentity(false);
   if (!me) return no("card: this desk has no key of its own to sign with yet");
   const id = me.id + "-" + crypto.createHash("sha256").update(String(catalogId || "")).digest("hex").slice(0, 8);
-  const held = ownFilesWithId(path.join(sharedFolderForWrite(), "desks", me.id), id).filter(e => e.doc && branchGenuine(e.doc))
+  const held = ownFilesWithId(path.join(catalogFolder(), "desks", me.id), id).filter(e => e.doc && branchGenuine(e.doc))
     .sort((a, b) => (+b.doc.rev || 0) - (+a.doc.rev || 0))[0] || null;
   let doc = held ? JSON.parse(JSON.stringify(held.doc)) : null;
   if (!doc) {
@@ -3470,7 +3350,7 @@ function declineSharedCard(opened) {
    folder changing and the page finishing a load both call this. */
 function tryHeldBranches() {
   tryHeldUse();
-  if (!heldBranch.size || !folderAnswers(sharedFolderForWrite())) return;
+  if (!heldBranch.size || !folderAnswers(catalogFolder())) return;
   for (const [stem, text] of Array.from(heldBranch)) {
     const r = writeBranch(stem, text);
     if (!r.ok && !r.held) heldBranch.delete(stem);
@@ -3552,7 +3432,7 @@ function teamUse() {
 }
 function inUseFile() {
   const me = branchIdentity(false);
-  return me ? path.join(sharedFolderForWrite(), "desks", me.id, IN_USE_STEM + ".ec") : "";
+  return me ? path.join(catalogFolder(), "desks", me.id, IN_USE_STEM + ".ec") : "";
 }
 function writeClearedInUse() {
   const use = teamUse();
@@ -3577,7 +3457,7 @@ function writeClearedInUse() {
 }
 function clearInUseFile() {
   const dest = inUseFile();
-  if (!dest || !folderAnswers(sharedFolderForWrite())) { heldInUse = { remove: true }; return; }
+  if (!dest || !folderAnswers(catalogFolder())) { heldInUse = { remove: true }; return; }
   let written = false;
   try { written = writeClearedInUse(); } catch { written = false; }
   if (!written) {
@@ -3591,7 +3471,7 @@ function clearInUseFile() {
 }
 function releaseInUse() {
   if (!inUseKept) return;
-  if (!folderAnswers(sharedFolderForWrite())) { heldInUse = { remove: true }; return; }
+  if (!folderAnswers(catalogFolder())) { heldInUse = { remove: true }; return; }
   const use = teamUse();
   if (use.away) { heldInUse = { remove: true }; return; }
   if (use.member) { if (heldInUse && heldInUse.remove) heldInUse = null; return; }
@@ -3659,7 +3539,7 @@ function ejectLoadedCatalog() {
   loadedText = "";
   dropLoadedCatalog();
   const dest = inUseFile();
-  if (!dest || !folderAnswers(sharedFolderForWrite())) {
+  if (!dest || !folderAnswers(catalogFolder())) {
     if (dest) rememberEjectOwed();
     heldInUse = dest ? { eject: true } : null;
     inUseKept = null;
@@ -3713,7 +3593,7 @@ function writeInUse(pin, win) {
   /* A pin other than the one already recorded drops the kept file before the returns below,
      so a take the share has not recorded cannot leave the previous catalog to be reloaded. */
   if (!inUseKept || inUseKept.sha !== String(pin || "")) dropLoadedCatalog();
-  const root = sharedFolderForWrite();
+  const root = catalogFolder();
   if (!folderAnswers(root)) { heldInUse = { text: got.text, source: got.source }; return; }
   let isDir = false;
   try { isDir = fs.statSync(root).isDirectory(); } catch { isDir = false; }
@@ -3845,7 +3725,7 @@ function askFresh(doc, me, lead, want) {
 }
 function removeAnswer() {
   const me = branchIdentity(false);
-  const root = sharedFolderForWrite();
+  const root = catalogFolder();
   if (!me || !folderAnswers(root)) { heldAnswer = { remove: true }; return; }
   try { unlinkOwn(path.join(root, "desks", me.id, ANSWER_NAME)); }
   catch (e) { if (e.code !== "ENOENT") { heldAnswer = { remove: true }; return; } }
@@ -4054,14 +3934,9 @@ function idListedHere(id) {
 function boxAnswerHere(file) {
   try { const d = JSON.parse(fs.readFileSync(file, "utf8")); return !!d && d.kind === ANSWER_LEAD_KIND; } catch { return false; }
 }
-/* Whether sharedFolderForWrite resolves to a team's place: a relay team's mirror, a folder team's share or mirror (joining or
-   removed included), a managed folder holding a team file or a team's primed mirror, or the mirror a team moving to a folder
-   waits in. A managed folder with no team there yet is the desk's own. */
+/* Whether catalogFolder resolves to a team's place: a relay team's mirror, or the mirror a team moving to a folder waits in. */
 function teamWriteHere() {
-  if (relayHere() || folderTeamHere()) return true;
-  const named = sayJoinPolicy().folder;
-  if (named && (fs.existsSync(path.join(named, TEAM_NAME))
-    || Object.keys(teamPins).some(t => fs.existsSync(path.join(folderMirrorOf(t), FolderSyncer().PRIMED_NAME))))) return true;
+  if (relayHere()) return true;
   const need = Object.values(teamNeedsFolder)[0];
   return !!(need && need.mirror); /* plant:team-write-moving */
 }
@@ -4102,7 +3977,7 @@ function branchReach() {
   try {
     const use = teamUse();
     if (!(use.member && use.seal)) return false;
-    const gate = branchGate(doc), root = sharedFolderForWrite();
+    const gate = branchGate(doc), root = catalogFolder();
     if (gate.none || gate.hold || gate.box || !branchRootReady(root)) return false;
     return branchSealStep(doc, null, root) !== null;
   } finally { lineageAsked = null; }
@@ -4111,7 +3986,7 @@ function branchReach() {
    is no longer told for this team, and any answer or working copy about a catalog now private. */
 function withdrawClosed() {
   const me = branchIdentity(false);
-  const root = sharedFolderForWrite();
+  const root = catalogFolder();
   if (!me || !folderAnswers(root)) return;
   const dir = path.join(root, "desks", me.id);
   let names = [];
@@ -4144,6 +4019,30 @@ function withdrawClosed() {
     if (gone) { try { unlinkOwn(file); } catch { /* the next pass tries again */ } } /* plant:s0b-withdraw-branch */
   }
 }
+/* The root file of a shared catalog sits outside desks/, so the walk above never sees it. A mark takes off only
+   a file this desk wrote, at the root it writes to, while that file is still this catalog and still unsigned.
+   A neighbor, a signed or sealed file, and a file that now holds another catalog stay. */
+function withdrawSharedRoot(id) {
+  const root = catalogFolder();
+  if (!root || !folderAnswers(root)) return;
+  const want = new Set(privateChain(lineageOfId(id)));
+  const base = path.resolve(root);
+  const seen = new Set();
+  let versions = [];
+  try { versions = historyRead().versions; } catch { versions = []; }
+  for (const v of versions) {
+    if (!v || !v.wrote || typeof v.path !== "string" || !want.has(String(v.id || ""))) continue;
+    const file = path.resolve(v.path);
+    if (seen.has(file)) continue;
+    if (path.resolve(path.dirname(file)) !== base || !/\.ec$/i.test(path.basename(file))) continue;
+    seen.add(file);
+    let text = "";
+    try { text = fs.readFileSync(file, "utf8"); } catch { continue; }
+    const facts = historyFacts(text);
+    if (!historyFree(facts) || !want.has(String(facts.id || ""))) continue;
+    try { unlinkOwn(file); } catch { /* the next pass tries again */ }
+  }
+}
 /* Whether the kept answer is about a catalog now private: its chain carries a mark, and the edition it answered with is not the
    team's (privateHere). An edition this desk no longer holds is taken as private, so the doubt takes the answer back. */
 function answerPrivateNow(use) {
@@ -4164,7 +4063,7 @@ function writeAnswer(use, pin, catalogDoc, toLead, askId) {
   if (!me || !seal) return false;
   if (privateHere(catalogDoc, use)) return false; /* plant:s0b-private */
   if (toLead && !contentApplies(seal.team)) return false; /* plant:s0b-switch */
-  const root = sharedFolderForWrite();
+  const root = catalogFolder();
   if (!folderAnswers(root)) return false;
   const inner = signedAnswer(me, seal.team, askId, pin, catalogDoc, toLead ? teamContentSaid[seal.team] : "", lineageOf(catalogDoc));
   const at = branchDest("catalog-answer");
@@ -4222,7 +4121,7 @@ function checkWithdrawnAsks(root, me, lead) {
 /* An ask is answered once, and the answer is taken away when the ask is gone, unsigned, or expired. */
 function tryCatalogAsk(win) {
   try {
-    if (!folderAnswers(sharedFolderForWrite())) return;
+    if (!folderAnswers(catalogFolder())) return;
     resealHeld(win);
     withdrawClosed();
     const got = readAskFile();
@@ -4320,7 +4219,6 @@ let teamRevSeen = {};                          // team id -> {lead public -> {ep
 let teamChannel = {};                          // team id -> {kind: "relay", rt, url}: the channel of the file heeded; none is the folder
 let teamPinFrom = {};                          // team id -> "invite", "policy" or "answer": what pinned its lead; none is the file's own vouching
 let teamRingAt = null;                         // {root, relay, ring}: the channel and signed ring of the file last heeded at root; this run only
-let teamHeadT = {};                            // team id -> highest t seen in a genuine head; this run only
 let teamShown = {};                            // team id -> {lead?, folder?}: the lead's name an invitation gave, the folder its file was heeded in
 const teamElsewhere = new Set();               // team ids whose last file read names a relay this build does not use (heededChannelOf)
 const teamOpened = new Set();                  // catalog ids this desk has opened from an envelope, kept in the desk envelope
@@ -4528,26 +4426,19 @@ function memberHeed(doc, state, seen) {
   return ret({ key: key, stampClear: key === false, changed: changed, team: doc.id, epoch: doc.epoch,
     keep: !!(key && !kept[doc.epoch] && !(seenAt > 0 && doc.epoch < seenAt)), unbar: unbar, pinned: pinned });
 }
-/* AN ADMINISTRATOR NAMES THE TEAM IN MACHINE POLICY. The desk reads the Etiuda pair; Studio's pair
-   is in the same template and is not read here. A value that is not the form below is said and
-   ignored, and one bad value of a pair leaves the other unused. Nothing set leaves heeding as it was.
-   An expandable TeamFolder is filled from the person's environment on purpose, since a synced share is pinned only
-   through a variable: a person can move their own desk's pinned folder, and a lead named beside it still refuses any
-   team file it did not sign. */
+/* AN ADMINISTRATOR NAMES THE TEAM'S LEAD IN MACHINE POLICY. The desk reads the Etiuda LeadKey; Studio's values are in the
+   same template and are not read here. A value that is not the form below is said and ignored. Nothing set leaves heeding as
+   it was. */
 const REG_TOOL = "C:\\Windows\\System32\\reg.exe";
 const POLICY_KEY = "HKLM\\SOFTWARE\\Policies\\Etiuda";
 const POLICY_LEAD_RE = /^[0-9a-f]{64}$/;
 const POLICY_WORDS = {
   en: {
-    folder: "The team folder set in Group Policy is not a full path, so this desk keeps the folder it already uses.",
     lead: "The team lead's key set in Group Policy is not written as 64 lowercase hexadecimal characters, so this desk does not trust it.",
-    beside: "The other value set beside it is not used either: the two are taken together or not at all.",
     unread: "The organisation's settings could not be read just now. Etiuda will try again.",
   },
   pl: {
-    folder: "Folder zespołu ustawiony w zasadach grupy nie jest pełną ścieżką, więc stanowisko zostaje przy folderze, którego już używa.",
     lead: "Klucz lidera zespołu ustawiony w zasadach grupy nie ma postaci 64 małych znaków szesnastkowych, więc stanowisko go nie przyjmuje.",
-    beside: "Druga wartość ustawiona obok też nie zostanie użyta: obie są przyjmowane razem albo wcale.",
     unread: "Nie udało się teraz odczytać ustawień organizacji. Etiuda spróbuje ponownie.",
   },
 };
@@ -4592,45 +4483,11 @@ function policyValues(text) {
   }
   return section ? own : null;
 }
-function policyExpand(s) {
-  if (typeof s !== "string" || s.indexOf("%") < 0) return s;
-  const env = (typeof process !== "undefined" && process && process.env) || {};
-  let bad = false;
-  const res = s.replace(/%([^%]+)%/g, (match, name) => {
-    if (Object.prototype.hasOwnProperty.call(env, name) && typeof env[name] === "string") return env[name];
-    const upper = name.toUpperCase();
-    for (const k of Object.keys(env)) {
-      if (k.toUpperCase() === upper && typeof env[k] === "string") return env[k];
-    }
-    bad = true;
-    return match;
-  });
-  return bad ? null : res;
-}
 /* One named value, or unset where it is absent or an empty string. */
 function policyRegSz(values, name) {
   const v = values ? values[name.toLowerCase()] : undefined;
   if (!v || ((v.type === "REG_SZ" || v.type === "REG_EXPAND_SZ") && v.value === "")) return { set: false, type: "", value: "" };
   return { set: true, type: v.type, value: v.value };
-}
-/* A Windows absolute path: a drive or a share, no segment that walks out of it or names a stream, and no space at either end. */
-function policyFolderOk(s) {
-  if (typeof s !== "string" || s.length < 3 || s.length > 1024) return false;
-  if (s !== s.trim()) return false;
-  if (/[\u0000-\u001f\u007f]/.test(s)) return false;
-  if (/[*?"<>|]/.test(s)) return false;
-  const drive = /^[A-Za-z]:[\\/]/.test(s);
-  const unc = /^\\\\[^\\]+\\[^\\]+/.test(s);
-  if (!drive && !unc) return false;
-  const trimmed = /[\\/]$/.test(s) ? s.slice(0, -1) : s;
-  const parts = trimmed.split(/[\\/]/);
-  const segment = p => p.length > 0 && p !== "." && p !== ".." && p.indexOf(":") < 0;
-  if (drive) {
-    if (!/^[A-Za-z]:$/.test(parts[0])) return false;
-    return parts.slice(1).every(segment);
-  }
-  if (parts.length < 4 || parts[0] !== "" || parts[1] !== "") return false;
-  return parts.slice(2).every(segment);
 }
 function policyLeadOk(s) { return typeof s === "string" && POLICY_LEAD_RE.test(s); }
 /* AN ADMINISTRATOR TURNS THE HOURLY LOOK FOR A NEW VERSION OFF (Claude α's decision 10, 2026-11-11): DeskNoUpdateCheck in
@@ -4643,44 +4500,29 @@ function policyNoUpdate(values) {
   return !((v.type === "dword" || v.type === "REG_SZ" || v.type === "REG_EXPAND_SZ") && (s === "" || s === "0"));
 }
 /* `text` is the text of reg export's file for the policy key, or empty where there is none; `unread` true where the key was
-   there to read and the read failed. Returns {folder, lead, bad, noUpdate, values, unread}: folder and lead empty where unused, bad
+   there to read and the read failed. Returns {lead, bad, noUpdate, values, unread}: lead empty where unused, bad
    the names of the words to say, noUpdate true where policy turns the version look off, values policyValues' reading for the
    readers of the key's other values, unread true where a read failed or a text would not parse, so no part of it is used. */
 function joinPolicyFacts(text, unread) {
   const values = text ? policyValues(text) : null;
   const doubt = unread === true || (!!text && values === null);
   const noUpdate = policyNoUpdate(values);
-  const folder = policyRegSz(values, "TeamFolder");
   const lead = policyRegSz(values, "LeadKey");
   const bad = [];
-  let folderOk = !folder.set, leadOk = !lead.set, folderValue = "", leadValue = "";
-  if (folder.set) {
-    if (folder.type === "REG_SZ" && policyFolderOk(folder.value)) { folderOk = true; folderValue = folder.value; }
-    else if (folder.type === "REG_EXPAND_SZ") {
-      const exp = policyExpand(folder.value);
-      if (exp !== null && policyFolderOk(exp)) { folderOk = true; folderValue = exp; }
-      else bad.push("folder");
-    }
-    else bad.push("folder");
-  }
-  /* An expandable folder is filled from the desk's environment; the lead is taken as written whatever its type, so no
-     variable a person sets becomes the key this desk trusts. */
+  let leadValue = "";
+  /* The lead is taken as written whatever its type, so no variable a person sets becomes the key this desk trusts. A team works
+     over the relay only, so a TeamFolder set beside it is not read. */
   if (lead.set) {
-    if ((lead.type === "REG_SZ" || lead.type === "REG_EXPAND_SZ") && policyLeadOk(lead.value)) { leadOk = true; leadValue = lead.value; } /* plant:lead-as-written */
+    if ((lead.type === "REG_SZ" || lead.type === "REG_EXPAND_SZ") && policyLeadOk(lead.value)) leadValue = lead.value; /* plant:lead-as-written */
     else bad.push("lead");
   }
-  if ((folder.set || lead.set) && (!folderOk || !leadOk)) {
-    if (folder.set && folderOk && !leadOk) bad.push("beside");
-    if (lead.set && leadOk && !folderOk) bad.push("beside");
-    return { folder: "", lead: "", bad: bad, noUpdate: noUpdate, values: values, unread: doubt };
-  }
-  return { folder: folderValue, lead: leadValue, bad: bad, noUpdate: noUpdate, values: values, unread: doubt };
+  return { lead: leadValue, bad: bad, noUpdate: noUpdate, values: values, unread: doubt };
 }
-/* The facts with their sentences in `lang`, "pl" or anything else for English: {folder, lead, said, noUpdate, unread, held},
+/* The facts with their sentences in `lang`, "pl" or anything else for English: {lead, said, noUpdate, unread, held},
    held true where an unread key's last good read stands in for it. */
 function policyWords(facts, lang) {
   const words = POLICY_WORDS[lang === "pl" ? "pl" : "en"];
-  return { folder: facts.folder, lead: facts.lead, said: facts.bad.map(k => words[k]).concat(facts.unread === true ? [words.unread] : []),
+  return { lead: facts.lead, said: facts.bad.map(k => words[k]).concat(facts.unread === true ? [words.unread] : []),
     noUpdate: facts.noUpdate === true, unread: facts.unread === true, held: facts.held === true };
 }
 function joinPolicyFrom(text, lang) { return policyWords(joinPolicyFacts(text), lang); }
@@ -4722,7 +4564,7 @@ function policyTake(text, unread) {
   else {
     /* A read that failed holds this run's last good read, every pin and switch it set, said as unread; with none, policy waits. */
     const good = joinPolicyGood;
-    if (good) { read.folder = good.folder; read.lead = good.lead; read.bad = good.bad; read.noUpdate = good.noUpdate; read.values = good.values; read.held = true; } /* plant:policy-hold-good */
+    if (good) { read.lead = good.lead; read.bad = good.bad; read.noUpdate = good.noUpdate; read.values = good.values; read.held = true; } /* plant:policy-hold-good */
   }
   const was = joinPolicyRead;
   joinPolicyRead = read;
@@ -5133,23 +4975,13 @@ function sayJoinPolicy() {
   }
   return got;
 }
-/* Case-insensitive path comparison on Windows. A UNC path and a mapped drive read as different folders. */
-function policySameFolder(a, b) {
-  if (typeof a !== "string" || typeof b !== "string") return false;
-  const ra = path.resolve(a), rb = path.resolve(b);
-  return process.platform === "win32" ? ra.toLowerCase() === rb.toLowerCase() : ra === rb;
-}
-/* Once a run, where machine policy names a folder or a lead: a join this desk keeps from an invitation is let go, with the
-   pin that invitation set where it still stands, and the desk's own folder setting where the invitation's is still there,
-   put back as it was before. A pin, a key or a folder the desk held before stays, and the request stays where it was
-   written: that folder is not asked again. */
+/* Once a run, where machine policy names a lead: a join this desk keeps from an invitation under another lead is let go, with
+   the pin that invitation set where it still stands. A pin or a key the desk held before stays. */
 function policyLetsInviteGo(named) {
   if (deskKeys === undefined) deskKeys = readDesk();
   const j = teamJoin, inv = j && j.invite;
-  if (!inv || !(named.folder || named.lead)) return;
-  if (named.lead && inv.lead && inv.lead.public === named.lead) {
-    if (!named.folder || (typeof inv.folder === "string" && policySameFolder(inv.folder, named.folder))) return;
-  }
+  if (!inv || !named.lead) return;
+  if (inv.lead && inv.lead.public === named.lead) return;
   teamJoin = null;
   const pin = teamPins[j.team];
   if (inv.pinned === true && pin && pin.keyId === inv.lead.keyId && pin.public === inv.lead.public) {
@@ -5219,10 +5051,10 @@ function teamSay(line) {
 function fileStamp(file) {
   try { const st = fs.statSync(file); return Math.round(st.mtimeMs) + "|" + st.size; } catch { return "-"; }
 }
-/* Every whole team file in `root`, the canonical one and its conflict siblings. */
+/* The whole team file in `root`, as a look of one. */
 function teamLook(root) {
   const out = [];
-  for (const name of [TEAM_NAME].concat(teamSiblingFiles(root))) {
+  for (const name of [TEAM_NAME]) {
     try {
       const f = path.join(root, name);
       if (fs.statSync(f).size > TEAM_MAX) continue;
@@ -5279,21 +5111,21 @@ function heedTeam() {
   const root = catalogFolder();
   if (!folderAnswers(root)) return;
   const file = path.join(root, TEAM_NAME);
-  const stamp = [file, fileStamp(file), teamChoiceStamp(root), fileStamp(path.join(root, RING_NAME)), deskBranch ? deskBranch.box.pub : "",
+  const stamp = [file, fileStamp(file), fileStamp(path.join(root, RING_NAME)), deskBranch ? deskBranch.box.pub : "",
     teamJoin && teamJoin.opened ? teamJoin.team + ":" + teamJoin.opened.lead.public : "", teamJoin ? teamJoin.commit : "",
     teamJoin && teamJoin.invite ? fileStamp(path.join(root, "invites", teamJoin.invite.id + ".wrap.json")) + ":" + fileStamp(path.join(root, "invites", teamJoin.invite.id + ".refused.json")) : ""].join("|");
   if (stamp === teamStamp) return;
   /* The stamp is a verdict on the text, so a read that fails or a key that is not kept leaves it unset and the next
-     call reads again. A conflict sibling is part of the stamp, so a newer genuine copy is noticed. */
+     call reads again. */
   const chosen = teamTextChosen(root);
   if (chosen.missing) { teamStamp = stamp; return; }
   teamStamp = stamp;
-  /* A canonical file that is not JSON, and no sibling taken in its place, is the same quiet return as before. */
-  if (chosen.text != null && chosen.doc == null && chosen.file === file) return;
+  /* A file that is not JSON is a quiet return. */
+  if (chosen.text != null && chosen.doc == null) return;
   const doc = chosen.doc;
   const used = chosen.file;
-  /* The team file and its conflict siblings are one look: a lead key shown in two hands there is said, and where the pinned
-     key is handed to two keys nothing in them is heeded. */
+  /* A lead key shown in two hands in the team file is said, and where the pinned key is handed to two keys nothing in it is
+     heeded. */
   if (doc && teamWhole(doc) && teamPins[doc.id]) {
     const fork = folderForkSeen(teamLook(root), doc.id, null);
     if (fork && fork.kind === "two") return; /* plant:fork-two-heed */
@@ -5369,13 +5201,6 @@ function heedTeam() {
         teamShown[r.team] = Object.assign({}, was, { folder: root }, host ? { relay: host } : {}); /* plant:relay-shown-folder */
         changed = true;
       }
-    } else {
-      const share = rawCatalogFolder();
-      if ((teamShown[r.team] || {}).folder !== share) {
-        teamShown[r.team] = Object.assign({}, teamShown[r.team], { folder: share });
-        delete teamShown[r.team].relay;
-        changed = true;
-      }
     }
   }
   if (r.team && Number.isInteger(r.epoch) && r.epoch >= 1 && r.epoch > (teamEpochSeen[r.team] || 0)) {
@@ -5407,8 +5232,7 @@ function heedTeam() {
       const mirror = relayMirrorOf(channel.rt);
       const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "";
       if (me) {
-        const srcDirs = [path.join(rawCatalogFolder(), "desks", me)];
-        if (root !== rawCatalogFolder()) srcDirs.push(path.join(root, "desks", me));
+        const srcDirs = [path.join(root, "desks", me)];
         const dstDir = path.join(mirror, "desks", me);
         try {
           fs.mkdirSync(dstDir, { recursive: true });
@@ -5515,9 +5339,7 @@ function teamOpen(data) {
   if (!sealed) return null;
   let key = null;
   try { key = Buffer.from(safeStorage.decryptString(Buffer.from(sealed, "base64")), "base64"); } catch { return null; }
-  const opened = openSealed(key, data);
-  if (typeof opened === "string") sealWaitDone(data);
-  return opened;
+  return openSealed(key, data);
 }
 
 /* ---- this desk asking to join a team: one request at a time, made by the agent's press ---------------
@@ -5552,7 +5374,7 @@ function teamSealedHere(team) {
   let best = "", bestEpoch = -1, bestRev = -1;
   let files = ecFilesIn(catalogFolder());
   if (!files.length) {
-    const raw = shareFolderShown();
+    const raw = catalogFolder();
     if (raw && raw !== catalogFolder()) files = ecFilesIn(raw);
   }
   for (const f of files) {
@@ -5620,90 +5442,10 @@ function finishJoin(admitted) {
 function newestEpoch(team, skip) {
   return Object.keys(teamKeys[team] || {}).reduce((hi, n) => (skip && skip.indexOf(+n) >= 0 ? hi : Math.max(hi, +n || 0)), 0);
 }
-/* An edition sealed above the epoch the team file names waits for that file, on a folder team this
-   desk already holds a key for. The wait matches the relay's pending retry, two seconds backing off
-   to sixty, and ends at sixty seconds in the words a sealed edition this desk cannot open already uses. */
-const SEAL_RETRY_MS = 2000;
-const SEAL_WAIT_MS = 60 * 1000;
-const sealWaitAt = new Map();                   // team id and epoch -> the millisecond the wait began
-let sealWaitWin = null;                         // the window a retry reads through
-let sealRetry = null;
-let sealRetryDelay = SEAL_RETRY_MS;
-function sealEpochAwait(epoch, named, held, folder, now, since) {
-  if (!folder || !held) return "say";
-  if (!Number.isInteger(epoch) || epoch < 1) return "say";
-  if (!Number.isInteger(named) || !(epoch > named)) return "say";
-  if (!Number.isFinite(now) || !Number.isFinite(since) || now - since >= SEAL_WAIT_MS) return "say";
-  return "wait"; /* plant:seal-wait */
-}
-function sealWaitKey(data) {
-  return String(data && data.team) + "\n" + String(data && data.epoch);
-}
-/* A stamp kept after the minute is a refusal that must not start again, so only a stamp still inside the minute is a wait. */
-function sealAnyWaiting() {
-  const now = Date.now();
-  for (const since of sealWaitAt.values()) {
-    if (Number.isFinite(since) && now - since < SEAL_WAIT_MS) return true;
-  }
-  return false;
-}
-function sealWaitIdle() {
-  clearTimeout(sealRetry);
-  sealRetry = null;
-  sealRetryDelay = SEAL_RETRY_MS;
-}
-function sealWaitDone(data) {
-  sealWaitAt.delete(sealWaitKey(data));
-  if (!sealAnyWaiting()) sealWaitIdle();
-}
-function sealWaitStop() {
-  sealWaitAt.clear();
-  sealWaitIdle();
-}
-function armSealRetry() {
-  if (sealRetry) return;
-  const delay = sealRetryDelay;
-  sealRetry = setTimeout(() => {
-    sealRetry = null;
-    sealRetryDelay = Math.min(SEAL_WAIT_MS, delay * 2);
-    const win = sealWaitWin;
-    if (win && typeof win.isDestroyed === "function" && !win.isDestroyed()) {
-      try { catalogChanged(win); } catch { /* read again at the next interval */ }
-    }
-    if (sealAnyWaiting()) armSealRetry();
-    else sealRetryDelay = SEAL_RETRY_MS;
-  }, delay);
-  if (typeof sealRetry.unref === "function") sealRetry.unref();
-}
-/* "wait" while that epoch is ahead of the team file and the minute has not run out, and "say" otherwise.
-   Once the minute has run out the start is kept, so a later read does not begin the minute again. */
-function sealVerdict(data) {
-  const team = String(data && data.team || "");
-  const epoch = data && data.epoch;
-  const held = !!(teamKeys[team] && Object.keys(teamKeys[team]).length);
-  const channel = teamChannel[team];
-  const folder = !(channel && channel.kind === "relay");
-  const named = teamEpochSeen[team] || 0;
-  const now = Date.now();
-  const key = sealWaitKey(data);
-  const seen = sealWaitAt.get(key);
-  const since = seen == null ? now : seen;
-  if (sealEpochAwait(epoch, named, held, folder, now, since) === "wait") {
-    if (seen == null) sealWaitAt.set(key, now);
-    armSealRetry();
-    return "wait";
-  }
-  const ahead = folder && held && Number.isInteger(epoch) && epoch >= 1 && Number.isInteger(named) && epoch > named;
-  if (!ahead) sealWaitAt.delete(key);
-  return "say";
-}
 function sealMiss(data) {
-  const err = new Error("sealed for team " + String(data.team) + ", which this desk holds no key for");
-  if (sealVerdict(data) === "wait") err.sealWait = true;
-  return err;
+  return new Error("sealed for team " + String(data.team) + ", which this desk holds no key for");
 }
-/* The newest envelope in the catalog folder whose epoch this desk keeps no key for, as {file, team}, or null.
-   One the team file has not reached, where this desk already holds a key, is waited on and not shown. */
+/* The newest envelope in the catalog folder whose epoch this desk keeps no key for, as {file, team}, or null. */
 function sealedOutside() {
   heedTeam();
   const places = [catalogFolder()];
@@ -5715,7 +5457,6 @@ function sealedOutside() {
       try { if (fs.statSync(f).size <= BRANCH_TEXT_MAX) d = catalogPayload(fs.readFileSync(f, "utf8")).data; } catch { continue; }
       if (!d || d.kind !== SEALED_KIND || !SEALED_TEAM_RE.test(String(d.team)) || !Number.isInteger(d.epoch)) continue;
       if (!(teamKeys[d.team] && teamKeys[d.team][d.epoch])) {
-        if (sealVerdict(d) === "wait") continue;
         console.error("etiuda: " + f + " did not parse as a catalog - sealed for team " + String(d.team) + ", which this desk holds no key for");
         return { file: path.basename(f), team: String(d.team) };
       }
@@ -5726,7 +5467,7 @@ function sealedOutside() {
 /* The request to join is written to the team's folder itself, never a mirror: it is made before this desk has joined, while
    no syncer keeps one for it. */
 function joinFile() {
-  return path.join(shareFolderShown(), "desks", branchIdOf(deskBranch.sign.pub), "join.json");
+  return path.join(catalogFolder(), "desks", branchIdOf(deskBranch.sign.pub), "join.json");
 }
 /* Signs the request with the desk's key under the join prefix and writes it by replacement; throws what stopped it. */
 function writeJoin(doc, at) {
@@ -6329,6 +6070,15 @@ function inviteRead(text, posix) {
   }
   return out;
 }
+/* Whether a relay invitation's lead key is the one its key id names, by any form the relay takes for a lead (relay/core.cjs
+   leadKeyMatches), so the key a yes pins is never a claim beside the id. A folder invitation's id is the share's to choose. */
+function inviteKeyHolds(parsed) {
+  if (!parsed || !parsed.relay) return true;
+  const pub = String(parsed.lead && parsed.lead.public || ""), id = String(parsed.lead && parsed.lead.keyId || "");
+  if (!/^[0-9a-f]{64}$/.test(pub)) return false;
+  const print = crypto.createHash("sha256").update(Buffer.from(pub, "hex")).digest("hex").slice(0, 16);
+  return id === pub || id === "k-" + print || id === "studio-" + print;
+}
 /* An invitation's relay as {rt, url, token, inv}, or null where any field is not that shape: the address as a team file's
    channel takes it (https, a host, a path), the token 32 bytes and the invitation's id 16, in lower-case hex. */
 function inviteRelay(r) {
@@ -6555,6 +6305,21 @@ function cancelJoin() {
   persistDeskEnvelope();
   return joinView();
 }
+/* The relay refused this join's token hello because the lead key this desk pinned from the invitation is not the team's lead.
+   Nothing was spent and nothing reached the lead, so the request and all the invitation set go back as Cancel puts them, the
+   pin included, and the person is told in the link's own sentence. */
+function joinLeadOther(team) {
+  const j = teamJoin;
+  if (!j || j.team !== team || !j.invite || !j.invite.relay || j.invite.relay.door === true) return;
+  if (deskBranch) { try { unlinkOwn(joinFile()); } catch { /* gone already */ } }
+  teamJoin = null;
+  joinTold = false;
+  if (j.invite.before) undoInvite(team, j.invite.before, j.invite); /* plant:lead-other-undo */
+  persistDeskEnvelope();
+  console.error("etiuda: " + LINK_KEY + " " + LINK_KEY_PL);
+  heldLinkText = "";
+  handLinkView(Object.assign({}, joinView(), { linkRefusal: { en: LINK_KEY, pl: LINK_KEY_PL } }));
+}
 /* What an invitation changes for `team`, as this desk holds it before: an entry the desk did not hold is left out, and `epoch`
    is the newest key it held, the mark Cancel compares the key it holds then with. */
 function inviteBefore(team) {
@@ -6617,7 +6382,7 @@ function refusedWithdrawEnds(j) {
 function checkInviteRefusal() {
   const j = teamJoin;
   if (!j || !j.invite || (j.invite.relay && !j.invite.folder) || j.refused) return false;
-  const root = folderTeamHere() ? catalogFolder() : (j.invite.folder || catalogFolder());
+  const root = j.invite.folder || catalogFolder();
   if (!folderAnswers(root)) return false;
   const invId = j.invite.id;
   if (!invId) return false;
@@ -6845,16 +6610,12 @@ function relayKept(r) {
 }
 /* Whether this desk takes invitations: "" where it does, else the refusal every invitation gets, at read and at yes.
    "waiting" while machine policy has not answered (policyWaits).
-   "policy" while machine policy names a team folder or a lead, unless an invitation matches the policy.
-   A named lead must match, and a named folder must match. LeadKey-only needs the lead alone; folder-only
-   stays shut, since nothing names who may invite. A UNC path and a mapped drive read as different folders. */
+   "policy" while machine policy names a lead and the invitation is another lead's. */
 function inviteDoor(parsed) {
   if (policyWaits()) return "waiting"; /* plant:invite-waits */
   const named = sayJoinPolicy();
-  if (!named.folder && !named.lead) return "";
-  if (!named.lead) return "policy";
+  if (!named.lead) return "";
   if (!parsed || !parsed.lead || parsed.lead.public !== named.lead) return "policy";
-  if (named.folder && (!parsed.folder || !policySameFolder(parsed.folder, named.folder))) return "policy";
   return "";
 }
 /* An invitation, its folder read as this system reaches it. */
@@ -6904,6 +6665,7 @@ function readInvite(text, io) {
   const shut = inviteDoor(parsed);
   if (shut) return Object.assign({}, view, { refused: shut });
   if (!parsed) return Object.assign({}, view, { refused: "unread" });
+  if (!inviteKeyHolds(parsed)) return Object.assign({}, view, { refused: "unread" }); /* plant:read-key */
   const settled = inviteSettled(parsed.team, parsed.lead);
   if (settled && !inviteStranded(parsed)) return Object.assign({}, view, { refused: settled });
   /* A relay invitation is judged by what it is and not by how it arrived: the lead, the team and the relay's host, and no check
@@ -7006,6 +6768,7 @@ async function takeInvite(text, name, check) {
   const shut = inviteDoor(parsed);
   if (shut) return Object.assign({}, joinView(), { refused: shut });
   if (!parsed) return Object.assign({}, joinView(), { refused: "unread" });
+  if (!inviteKeyHolds(parsed)) return Object.assign({}, joinView(), { refused: "unread" }); /* plant:take-key */
   const settled = inviteSettled(parsed.team, parsed.lead);
   const stranded = !!settled && inviteStranded(parsed);
   if (settled && !stranded) return Object.assign({}, joinView(), { refused: settled });
@@ -7250,7 +7013,8 @@ function leadPrint(publicHex) {
 /* Every lead this desk trusts, for the agent to compare once after admission and to leave at any time: the team by its lead's
    name and folder where known; `removed` where the roster of the epoch accepted leaves out this desk, which once held a key;
    `policy` where machine policy names this lead, which pins it again after any leave. */
-/* The newest rev this desk has of `catalogId`, among the active catalog, recorded revs and the folder's catalogs. */
+/* The newest rev this desk has of `catalogId`, among the active catalog, recorded revs and the folder's catalogs.
+   A folder file counts only where it is genuine, so an unsigned rev cannot hide the head. */
 function deskEditionRev(catalogId, folder, leadPublic) {
   let maxRev = -1;
   if (leadPublic && catalogRevs[catalogId] && Number.isInteger(catalogRevs[catalogId][leadPublic])) {
@@ -7268,51 +7032,11 @@ function deskEditionRev(catalogId, folder, leadPublic) {
     for (const f of ecFilesIn(folder)) {
       try {
         const facts = ecFacts(f, "");
-        if (facts && facts.id === catalogId && facts.rev > maxRev) maxRev = facts.rev;
+        if (facts && facts.id === catalogId && facts.genuine && facts.rev > maxRev) maxRev = facts.rev; /* plant:head-unsigned-rev */
       } catch { /* skip */ }
     }
   }
   return maxRev;
-}
-/* The head of a folder team from its signed etiuda-head.json. Only a genuine head signed by the pinned lead under
-   HEAD_PREFIX, and never an older rev than the desk has or an older t than one already seen. */
-function folderHeadShown(team) {
-  const pin = pinTrusted(team);
-  if (!pin || !pin.public || typeof pin.public !== "string") return null;
-  const folder = folderMirrorOf(team);
-  if (!folder || !folderAnswers(folder)) return null;
-  const file = path.join(folder, "etiuda-head.json");
-  let text = "";
-  try {
-    if (fs.statSync(file).size > 65536) return null;
-    text = fs.readFileSync(file, "utf8");
-  } catch { return null; }
-  let doc = null;
-  try { doc = JSON.parse(text.replace(/^\uFEFF/, "")); } catch { return null; }
-  if (!doc || typeof doc !== "object" || !doc.sig || typeof doc.sig !== "object") return null;
-  if (doc.v !== 1 || doc.team !== team) return null;
-  if (!Number.isInteger(doc.epoch) || doc.epoch < 1 || !Number.isInteger(doc.rev) || doc.rev < 0 || !Number.isFinite(doc.t)) return null;
-  const sig = doc.sig;
-  if (sig.alg !== "Ed25519" || !/^[0-9a-f]{128}$/.test(String(sig.value || ""))) return null;
-  let bytes;
-  try { bytes = signedBytesOf(doc); } catch { return null; }
-  let genuine = false;
-  try {
-    const pubKey = crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(pin.public, "hex")]), format: "der", type: "spki" });
-    genuine = crypto.verify(null, Buffer.concat([Buffer.from("etiuda-relay-head\n", "utf8"), bytes]), pubKey, Buffer.from(sig.value, "hex"));
-  } catch { genuine = false; }
-  if (!genuine) return null; /* plant:folder-head-sig */
-  /* Below the epoch of the team file this mirror holds: left out, as the relay leaves it out. */
-  const held = teamTextChosen(folder).doc;
-  if (held && teamWhole(held) && String(held.id) === team && Number.isInteger(held.epoch) && doc.epoch < held.epoch) return null; /* plant:folder-head-epoch */
-  const RCh = RelayChannel();
-  /* Dated past the allowance ahead of this clock: refused, not floored, and read again at the next look. */
-  if (doc.t > Date.now() + RCh.HEAD_AHEAD_MS) return null; /* plant:folder-head-ahead */
-  const view = headView(team, RCh.headEditions(doc.editions), doc.t, folder);
-  if (!view) return null;
-  if (Number.isFinite(teamHeadT[team]) && doc.t < teamHeadT[team]) return null;
-  teamHeadT[team] = doc.t;
-  return view;
 }
 /* A head's entries as the team row carries them: only catalogs the team's whole file lists, none below the rev this desk has
    seen of that catalog, each `newer` where its rev is above what the desk has loaded of it, never a file unread in the
@@ -7358,10 +7082,10 @@ function headShown(team) {
     if (!n || n.shown !== true) return null;
     return headView(team, n.editions, n.time, relayMirrorOf(here.rt));
   }
-  return folderHeadShown(team);
+  return null;
 }
 /* Where the relay team this desk follows stands past its grant, for the team row, as the channel judges it by the relay's
-   clock; `seen` once the agent has dismissed this step's notice. Nothing for a team inside its grant or a folder team. */
+   clock; `seen` once the agent has dismissed this step's notice. Nothing for a team inside its grant. */
 function lapseShown(team) {
   const here = relayHere();
   if (!here || here.team !== team || !relayChannel || typeof relayChannel.lapse !== "function") return null;
@@ -7420,8 +7144,10 @@ function markPrivate(id, on) {
     /* An answer whose catalog this desk did not record goes too, since it cannot be told apart. */
     if (on && !answerKept) removeAnswer();
     tryCatalogAsk(theWindow);
-    /* Statistics already on the share about the catalog now private are written again at once with nothing of it. */
-    if (on && statsWroteNamed && statsCatalogPrivate(statsWroteNamed.id)) writeStatsAnswer(statsWroteNamed.text, "", "close"); /* plant:pcm-stats-mark */
+    /* Statistics already on the share are emptied now, or taken off where this process cannot write them. */
+    if (on) withdrawPrivateStats(id); /* plant:pcm-stats-mark */
+    /* A root file this desk wrote of this catalog is taken off the share, and only that file. */
+    if (on) withdrawSharedRoot(id); /* plant:pcm-shared-root */
   }
   return contentView();
 }
@@ -7474,14 +7200,14 @@ function forkDismissed(team) {
   }
   return joinView();
 }
-/* The mirror this team's row is read from: the relay mirror while this desk follows that team, otherwise the folder mirror. */
+/* The mirror this team's row is read from: the relay mirror while this desk follows that team, else none. */
 function teamStateMirror(team) {
   if (teamChannel[team] && teamChannel[team].kind === "relay") {
     const here = relayHere();
     if (!here || here.team !== team) return "";
     return relayMirrorOf(here.rt);
   }
-  return folderMirrorOf(team);
+  return "";
 }
 /* True while the team's file lists a catalog the mirror holds no edition of. An edition is a catalog file there,
    signed so this desk accepts it. The head's announcement is not one: the file is. An empty list, or a team file
@@ -7503,34 +7229,53 @@ function awaitsFirstEdition(team) {
   }
   return doc.catalogs.some(id => !have.has(String(id)));
 }
-/* Whether machine policy holds this desk to team `t`, so a leave could not be undone: its lead named and pinned for `t`, or a
-   folder named alone, under which every invitation is refused. `named` is readJoinPolicy's answer. */
+/* Whether machine policy holds this desk to team `t`, so a leave could not be undone: its lead named and pinned for `t`.
+   `named` is readJoinPolicy's answer. */
 function policyHoldsTeam(t, named) {
   const pin = teamPins[t];
   if (!pin || !named) return false;
-  if (named.lead) return named.lead === pin.public;
-  return !!named.folder; /* plant:folder-holds-team */
+  return !!named.lead && named.lead === pin.public;
+}
+/* A team this desk holds through a shared folder: its folder kept, and no relay (leadsView asks it of the pinned teams alone). No
+   folder is read as a team, so its row says so (folderHeld), and what the folder's local copy still owed the share stays there,
+   said on the row (folderOwed), with the folder it stays in (folderCopy). */
+function folderHeld(t) {
+  const shown = teamShown[t];
+  if (!shown || !shown.folder || shown.relay || teamRelayGone[t] === true || teamNeedsFolder[t]) return false;
+  if (teamChannel[t] && teamChannel[t].kind === "relay") return false;
+  return path.resolve(shown.folder).indexOf(path.resolve(app.getPath("userData"), "relay") + path.sep) !== 0;
+}
+/* Whether the folder's local copy still owes the share a file, by its outbox, read and never written or moved. */
+function folderOutboxOwes(t) {
+  let doc = null;
+  try { doc = JSON.parse(fs.readFileSync(path.join(folderMirrorOf(t), ".outbox.json"), "utf8")); } catch { return false; }
+  const owe = doc && doc.kind === "etiuda-folder-outbox" && doc.owe && typeof doc.owe === "object" ? doc.owe : null;
+  return !!owe && Object.keys(owe).some(k => !!owe[k] && owe[k].owe === true);
 }
 function leadsView() {
+  /* The list is taken here and the policy is first said below (readJoinPolicy does not say it; sayJoinPolicy does), and its first
+     saying lets go a join kept from an invitation with the pin that invitation set (policyLetsInviteGo). A pin gone by the time its
+     row's turn comes has no row. */
   const teams = Object.keys(teamPins).filter(t => SEALED_TEAM_RE.test(t) && !!teamPins[t] && typeof teamPins[t].public === "string");
   const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "", named = teams.length ? readJoinPolicy("en") : null;
-  const ftHere = folderTeamHere();
-  const reading = ftHere && folderStillReading() ? shellWords().stillReading : "";
+  if (teams.length) { try { sayJoinPolicy(); } catch { /* read again by the next ask */ } }
   return teams.map(t => {
+    const pin = teamPins[t];
+    if (!pin) return null; /* plant:leads-pin-gone */
     const shown = teamShown[t] || {}, admitted = newestEpoch(t) > 0, roster = teamRoster[t];
     const relayRemoved = teamRelayGone[t] === true;
     let relayHost = shown.relay || "";
     if (!relayHost && teamChannel[t] && teamChannel[t].kind === "relay" && teamChannel[t].url) {
       try { relayHost = new URL(teamChannel[t].url).host; } catch { relayHost = ""; }
     }
-    const row = { team: t, print: leadPrint(teamPins[t].public), admitted: admitted, seen: teamSeen.has(t),
+    const row = { team: t, print: leadPrint(pin.public), admitted: admitted, seen: teamSeen.has(t),
       lead: shown.lead || "", folder: shown.folder || "",
       removed: (admitted && !!me && !!roster && roster.desks.indexOf(me) < 0) || relayRemoved,
       policy: policyHoldsTeam(t, named) };
     /* No Leave is offered while machine policy has not answered, since it could hold this team. */
     if (named && named.unread === true && named.held !== true) row.waiting = true;
     /* Machine policy names another lead: nothing this team's lead signed is used here, and the row says so. */
-    else if (named && named.lead && named.lead !== teamPins[t].public) row.otherLead = true;
+    else if (named && named.lead && named.lead !== pin.public) row.otherLead = true;
     if (relayHost) row.relay = relayHost; /* plant:settings-relay-row */
     if (relayRemoved) row.relayRemoved = true;
     const head = headShown(t);
@@ -7551,18 +7296,13 @@ function leadsView() {
       row.openFolder = shellWords().openFolder;
       row.meetsInFolder = shellWords().teamMeetsInFolder;
     }
-    /* What this desk owes the share and the share refuses as read-only, on the row until it lands: the outbox tries it at each scan. */
-    if (ftHere && t === ftHere.team) {
-      let owed = [];
-      try { owed = FolderSyncer().owedList(folderMirrorOf(t)); } catch { owed = []; }
-      const refused = owed.filter(o => o.readOnly).map(o => ({ file: o.rel, kind: o.readOnly })).slice(0, 3);
-      if (refused.length) row.shareRefused = refused; /* plant:share-refused-row */
+    if (folderHeld(t)) {
+      row.folderHeld = true; /* plant:folder-held-row */
+      if (folderOutboxOwes(t)) { row.folderOwed = true; row.folderCopy = folderMirrorOf(t); } /* plant:folder-owed-row */
     }
-    /* The same sentence the log says, on this team's row, until the listing lands. The page prints it. */
-    if (reading && ftHere && t === ftHere.team) row.reading = reading; /* plant:still-reading-shown */
     if (admitted && !row.removed && awaitsFirstEdition(t)) row.awaitsEdition = true;
     return row;
-  });
+  }).filter(Boolean);
 }
 /* A lead's name as an invitation carries it, as inviteRead takes one: text, at most 120 characters, nothing hidden. */
 function shownName(name) {
@@ -7595,8 +7335,11 @@ function forgetLead(team, left) {
   if (left === true && (policyWaits() || policyHoldsTeam(team, readJoinPolicy("en")))) return joinView(); /* plant:leave-waits */
   const ch = teamChannel[team];
   if (ch && ch.kind === "relay") setRelayTeamAside(ch.rt); /* plant:leave-aside */
-  /* The note this desk left in a folder team's mirror goes too, owed to that share, so a later return does not send it. */
-  const noteInMirror = deskBranch ? path.join(folderMirrorOf(team), "desks", branchIdOf(deskBranch.sign.pub), IN_USE_STEM + ".ec") : "";
+  /* The note this desk left in the team's mirror goes too, owed to that share where it is a folder team's, so a later return does not
+     send it: forgetting a lead ends what this desk said about the team. The mirror is the relay's where the team's channel is one;
+     releaseInUse below runs after the channel is gone and reaches neither. */
+  const mirrorOfTeam = ch && ch.kind === "relay" && /^[0-9a-f]{32}$/.test(String(ch.rt)) ? relayMirrorOf(ch.rt) : folderMirrorOf(team); /* plant:forget-note-relay */
+  const noteInMirror = deskBranch ? path.join(mirrorOfTeam, "desks", branchIdOf(deskBranch.sign.pub), IN_USE_STEM + ".ec") : "";
   delete teamPins[team];
   delete teamKeys[team];
   delete teamShown[team];
@@ -7614,7 +7357,6 @@ function forgetLead(team, left) {
   delete teamRelayGone[team];
   delete teamWas[team];
   delete teamForks[team];
-  delete teamHeadT[team];
   relayCatalogNamed.delete(team);
   if (relayCatalogOwed === team) relayCatalogOwed = "";
   teamBarred.add(team);
@@ -7688,8 +7430,7 @@ function relayFollowed(team) {
   const policy = sayJoinPolicy().lead;
   if (policy && policy === pin.public) return true;
   /* A desk that pinned its lead from the folder itself follows the team to the relay only when the lead-signed roster names
-     it, no machine policy names a folder, and the address is the built-in relay (board 945 stage 3 (a)). */
-  if (sayJoinPolicy().folder) return false;
+     it and the address is the built-in relay (board 945 stage 3 (a)). */
   const ch = teamChannel[team];
   if (!ch || ch.kind !== "relay" || !isBuiltinRelayUrl(ch.url)) return false;
   const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "";
@@ -7801,8 +7542,6 @@ function findMatchingFolderInKnownRoots(teamId, leadPub, minRev, currentRoot, do
   if (deskKeys && typeof deskKeys[CATALOG_FOLDER_KEY] === "string" && deskKeys[CATALOG_FOLDER_KEY].trim()) {
     candidates.add(deskKeys[CATALOG_FOLDER_KEY].trim());
   }
-  const policyFolder = sayJoinPolicy().folder;
-  if (policyFolder) candidates.add(policyFolder);
   if (teamJoin) {
     if (teamJoin.invite && typeof teamJoin.invite.folder === "string") candidates.add(teamJoin.invite.folder);
     if (typeof teamJoin.was === "string") candidates.add(teamJoin.was);
@@ -7861,14 +7600,8 @@ function setTeamNeedsFolder(teamId, doc, mirrorDir) {
   sendJoin(theWindow);
 }
 
-/* The page may name only the folder this shell's picker returned for it. Anything else is not read. A folder machine policy
-   names is the only one a moved team may take, picked or not. */
+/* The page may name only the folder this shell's picker returned for it. Anything else is not read. */
 function pickMovedFolder(teamId, pickedFolder, senderId) {
-  const named = sayJoinPolicy().folder;
-  if (named && !policySameFolder(pickedFolder, named)) {
-    teamSay("a folder picked for team " + teamId + " is not the one machine policy names, so this desk stays with the policy's folder");
-    return { ok: false, error: "policy" };
-  }
   if (!offeredFolder(senderId, pickedFolder)) return { ok: false, error: "unpicked" }; /* plant:moved-folder-offered */
   const need = teamNeedsFolder[teamId];
   const pinned = teamPins[teamId];
@@ -7950,14 +7683,11 @@ function relayRun() {
     teamSay("team " + t + " names a relay at " + teamChannel[t].url + ", and its lead was pinned by no invitation, machine policy or"
       + " answered request, so this desk does not follow that address and keeps its folder");
   }
-  const named = sayJoinPolicy().folder;
-  const open = named ? null : relayHere();
-  const flagged = !open && !named ? relayFlagged() : null; /* plant:h35-probe */
+  const open = relayHere();
+  const flagged = !open ? relayFlagged() : null; /* plant:h35-probe */
   const want = open || flagged;
   if (!want) { clearTimeout(relayProbeTimer); relayProbeTimer = null; }
   if (!flagged) relayProbeMs = RELAY_PROBE_FIRST;
-  if (named && Object.keys(teamChannel).some(t => relayFollowed(t))) teamSay("machine policy names the team folder " + named
-    + ", so this desk keeps that folder and not the relay its team file names");
   /* The lead this desk follows for a team, read when asked: the pin, or while joining the lead the invitation names. */
   const pinFor = w => {
     const j = teamJoin;
@@ -8030,6 +7760,9 @@ function relayRun() {
       if (wrapKey && wrapKey.length === 32) out.wrapKey = wrapKey;
       /* The lead's box the invitation named, so this desk finds its own copy of the team file before it holds one (F6). */
       if (/^[0-9a-f]{64}$/.test(String(inv.box))) out.box = inv.box; /* plant:f6-box-lent */
+      /* The lead key this desk pinned, which the token hello names so the relay refuses it, unspent, where it is not the team's lead. */
+      const pinNow = pinTrusted(team); /* the one place decides (join-policy 19u): a pin machine policy does not trust names no lead */
+      if (pinNow && /^[0-9a-f]{64}$/.test(String(pinNow.public))) out.lead = pinNow.public; /* plant:token-lead-pin */
       return out;
     },
     /* The relay named this desk's request at the standing door: kept, and the request written with its seat and that id. */
@@ -8056,6 +7789,7 @@ function relayRun() {
     /* The relay refused this invitation's token, as spent or past its end, or turned a door request away. Kept with the request,
        and the page told now. */
     onInviteEnd: kind => {
+      if (kind === "other") { joinLeadOther(team); return; } /* plant:lead-other-join */
       const j = teamJoin, inv = j && j.team === team && j.invite && j.invite.relay;
       const known = kind === "used" || kind === "ended" || kind === "removed" || (kind === "turned" && !!inv && inv.door === true);
       if (!known || !inv || inv.end === kind) return;
@@ -8379,18 +8113,15 @@ function historyOpen(sha, file) {
 /* Writes a kept version back over its file in the catalog folder, by the rule at historyFree and only after the bytes it
    replaces are kept themselves: `replaced` names them, so the page can offer them back. The kept bytes are judged as they
    are written, whatever the index says of them, and the write is sharedWrite's: under the lock beside the file, {busy}
-   while another desk holds it, except in a folder team's mirror, which is this desk's own and which the syncer swaps. */
+   while another desk holds it. */
 function historyPutBack(sha, file) {
   if (relayHere()) return { ok: false }; /* See sharedWrite. */
   const v = historyFind(sha, file), root = path.resolve(catalogFolder());
   if (!v || !historyFree(v) || !v.path || path.dirname(v.path) !== root || !/\.ec$/i.test(v.path) || !folderAnswers(catalogFolder())) return { ok: false };
-  const mirror = folderMirrorHere();
   let held = null;
-  if (!mirror || path.resolve(mirror) !== root) { /* plant:put-back-lock */
-    try { held = sharedLock(v.path); }
-    catch (e) { console.error("etiuda: the lock beside " + v.path + " could not be taken - " + e.message); return { ok: false, busy: true }; }
-    if (!held) return { ok: false, busy: true };
-  }
+  try { held = sharedLock(v.path); }
+  catch (e) { console.error("etiuda: the lock beside " + v.path + " could not be taken - " + e.message); return { ok: false, busy: true }; }
+  if (!held) return { ok: false, busy: true };
   try {
     const text = historyText(v.sha);
     if (!historyFree(historyFacts(text))) return { ok: false }; /* plant:put-back-bytes */
@@ -8422,7 +8153,7 @@ function historyPutBack(sha, file) {
 // A lock this old is a desk that stopped mid-write, and is taken over.
 const SHARED_LOCK_MS = 30 * 1000;
 function sharedFile(name) {
-  const base = String(name || ""), root = sharedFolderForWrite();
+  const base = String(name || ""), root = catalogFolder();
   if (!base || base !== path.basename(base) || !/\.ec$/i.test(base) || !folderAnswers(root)) return "";
   return path.resolve(root, base);
 }
@@ -8432,7 +8163,7 @@ function sharedFile(name) {
 function canonicalEditionName(name) {
   const base = path.basename(String(name || ""));
   if (!base || !isConflictName(base)) return "";
-  const root = sharedFolderForWrite();
+  const root = catalogFolder();
   if (!root || !folderAnswers(root)) return "";
   let names = [];
   try { names = fs.readdirSync(root); } catch { return ""; }
@@ -8477,21 +8208,10 @@ function sharedRead(name, pin) {
   if (relayHere()) return null; /* See sharedWrite. */
   const file = sharedFile(editionWriteName(name));
   if (!file) return null;
-  const share = shareSyncer(path.dirname(file));
-  if (share) return share.then(s => (s ? s.shareRead(path.basename(file)) : null)).then(got => (got ? sharedReadOf(file, got.text, pin) : null));
   let text = "";
   try { text = fs.readFileSync(file, "utf8"); }
   catch (e) { if (e.code !== "ENOENT") return null; }
   return sharedReadOf(file, text, pin);
-}
-/* On a folder team the shared catalog is read and swapped against the share by the syncer's worker, never on this thread:
-   a promise of the running syncer where `dir` is the team's mirror, else null and the file is read where it is. */
-function shareSyncer(dir) {
-  const mirror = folderMirrorHere();
-  if (!mirror || path.resolve(dir) !== path.resolve(mirror)) return null;
-  let s = folderSyncer && !folderSyncer.stopped && path.resolve(folderSyncer.mirror) === path.resolve(mirror) ? folderSyncer : null;
-  if (!s) s = folderSyncerRun(theWindow);
-  return Promise.resolve(s || null);
 }
 function sharedReadOf(file, text, pin) {
   const base = sharedBase(file, text, String(pin || ""));
@@ -8523,17 +8243,16 @@ function sharedHolds(held) {
   try { return JSON.parse(fs.readFileSync(held.lock, "utf8")).token === held.token; } catch { return false; }
 }
 /* The folder's team file, whole under the lead this desk pinned, says its catalogs stay sealed. */
-function shareMustSeal(root) {
-  heedTeam();
-  const doc = teamTextChosen(root).doc;
-  if (!doc || !teamWhole(doc) || doc.sealed !== true || doc.exportsSealed === false) return false;
-  const pinned = pinTrusted(doc.id);
-  return !!pinned && pinned.keyId === doc.lead.keyId && pinned.public === doc.lead.public;
+/* The catalog in these bytes is private here, as the statistics and the working copy judge it. */
+function sharedCatalogPrivate(data) {
+  if (!data || typeof data !== "object") return false;
+  const use = teamUse();
+  return use.member && use.seal ? privateHere(data, use) : catalogMarkedPrivate(data);
 }
 /* Writes the page's merged catalog over the file it read, answered {ok, rev}, or {changed} where the file is no longer
    the one read, {busy} where another desk holds the lock, {taken} where a file to be created is already there, and
-   {refused} for a signed or sealed catalog on either side. A sealed team's share is written sealed, or refused,
-   and a relay mirror is refused outright, since a write there would stay on this desk. */
+   {refused} for a signed or sealed catalog on either side. A relay mirror is refused outright, since a write there would stay on
+   this desk, and so is a folder holding a team's file: no team works through a folder, so the change stays in the desk's own file. */
 function sharedWrite(name, text, sha, create) {
   if (relayHere()) return { ok: false, refused: true };
   const file = sharedFile(editionWriteName(name));
@@ -8542,15 +8261,15 @@ function sharedWrite(name, text, sha, create) {
   let data = null;
   try { data = catalogPayload(text).data; } catch { return { ok: false }; }
   if (!isV2(data) || !historyFree(historyFacts(text))) return { ok: false, refused: true };
-  const root = sharedFolderForWrite();
+  /* A catalog marked private is not written into the shared file: the lead and every teammate can open it. */
+  if (sharedCatalogPrivate(data)) return { ok: false, refused: true, private: true }; /* plant:pcm-shared-private */
+  const root = catalogFolder();
+  if (fs.existsSync(path.join(root, TEAM_NAME))) return { ok: false, refused: true, sealed: true }; /* plant:shared-team-folder */
   const seal = sealFor(String(data.id || ""), "", root);
   if (seal && !seal.plain) {
     try { text = JSON.stringify(sealCatalog(seal.key, seal.team, seal.epoch, text), null, 1) + "\n"; }
     catch { return { ok: false, refused: true, sealed: true }; }
-  } else if (!seal && shareMustSeal(root)) return { ok: false, refused: true, sealed: true };
-  let share = null;
-  share = shareSyncer(root); /* plant:cas-off-thread */
-  if (share) return share.then(s => (s ? sharedSwap(s, file, text, sha, create, data) : { ok: false, busy: true }));
+  }
   let held = null;
   try { held = sharedLock(file); }
   catch (e) { console.error("etiuda: the lock beside " + file + " could not be taken - " + e.message); }
@@ -8573,25 +8292,6 @@ function sharedWrite(name, text, sha, create) {
   } finally {
     if (sharedHolds(held)) { try { fs.unlinkSync(held.lock); } catch { /* stale in SHARED_LOCK_MS */ } }
   }
-}
-
-/* sharedWrite's swap on a folder team: the worker holds the share's lock while this thread judges the bytes there and
-   keeps them in the history, then writes the share and the mirror before letting the lock go. */
-function sharedSwap(s, file, text, sha, create, data) {
-  return s.shareSwap(path.basename(file), sha, create, now => {
-    if (now && !historyFree(historyFacts(now))) return { result: { ok: false, refused: true } };
-    if (now) {
-      const buf = Buffer.from(now, "utf8");
-      if (!historyShipped(buf, sha256Hex(buf)) && !historyKeep(file, now, false)) return { result: { ok: false, busy: true } };
-    }
-    return { text: text };
-  }).then(r => {
-    if (!r || !r.ok) return Object.assign({ ok: false }, r && r.changed ? { changed: true } : r && r.taken ? { taken: true }
-      : r && r.refused ? { refused: true } : { busy: true });
-    historyKeep(file, text, true);
-    console.log("etiuda: " + file + " now holds this desk's changes, rev " + (+data.rev || 0));
-    return { ok: true, rev: +data.rev || 0 };
-  });
 }
 
 function deskFile() { return path.join(app.getPath("userData"), "desk.json"); }
@@ -8991,10 +8691,7 @@ function offeredFolder(senderId, folder) {
 function catalogFolderAllowed(next, senderId) {
   if (typeof next !== "string" || next === "") return false;
   if (deskKeys && deskKeys[CATALOG_FOLDER_KEY] === next) return true;
-  if (offeredFolder(senderId, next)) return true;
-  let named = "";
-  try { named = sayJoinPolicy().folder || ""; } catch (e) { named = ""; }
-  return !!named && policySameFolder(next, named);
+  return offeredFolder(senderId, next);
 }
 function confineCatalogFolder(map, senderId) {
   if (!map || !Object.prototype.hasOwnProperty.call(map, CATALOG_FOLDER_KEY)) return false;
@@ -9582,8 +9279,6 @@ ipcMain.on("etiuda:host", (e) => {
        them and the offer's line names the folder it accepts from. The preload asks for the
        catalog first, so catalogFrom is already the answer by the time this is read. */
     catalogFolder: catalogFolder(),
-    // The folder machine policy names, or "": the page shows it over the desk key and offers no other.
-    catalogFolderPolicy: sayJoinPolicy().folder,
     catalogFile: catalogFrom ? path.basename(catalogFrom) : "",
     catalogIn: folderShown(catalogFrom),
     catalogBuiltIn: isBuiltIn(catalogFrom),
@@ -9776,39 +9471,15 @@ function ecFacts(file, deskFolder) {
               deskOk: deskFileGenuine(data, deskFolder), bytesSha: crypto.createHash("sha256").update(text, "utf8").digest("hex").slice(0, 32),
               genuine: !!(pinnedLeadPubs().length ? catalogLeadOk(data) : catalogSigValid(data)) };
     }
-  } catch (e) {
-    /* A key that has not arrived is not a verdict: the row already shown stays, and the next read tries the file again. */
-    if (e && e.sealWait) return had ? had[1] : null;
-  }
+  } catch { /* a file that does not read has no facts */ }
   ecFactsRead.set(file, [stamp, out]);
   return out;
-}
-/* True while the outbox owes the share this file of the folder team's mirror. */
-function mirrorOwed(file) {
-  const mirror = folderMirrorHere();
-  if (!mirror) return false;
-  const rel = path.relative(mirror, path.resolve(file));
-  if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return false;
-  try { return FolderSyncer().owedAt(mirror, rel.split(path.sep).join("/")); } catch { return false; }
-}
-/* True while the running syncer has been unable to read its outbox for longer than the bound. */
-function outboxUnreadFault(mirror) {
-  let unread = false;
-  if (mirror && folderSyncer) {
-    try {
-      if (path.resolve(folderSyncer.mirror) === path.resolve(mirror)
-          && typeof folderSyncer.outboxUnread === "function" && folderSyncer.outboxUnread()) {
-        unread = true; /* plant:own-outbox-unread-row */
-      }
-    } catch { /* no outbox */ }
-  }
-  return unread;
 }
 function deskRowOf(file, folder) {
   const x = ecFacts(file, folder);
   if (!x || !x.deskOk) return null;
   const me = branchIdentity(false);
-  let reached = true, fault = "";
+  let reached = true;
   if (me && folder === me.id) {
     const relay = relayHere();
     if (relay) {
@@ -9821,20 +9492,14 @@ function deskRowOf(file, folder) {
       reached = !!(sent && !sent.del && !sent.owe && sent.sha === fileSha); /* plant:w1-relay-reached */
     } else {
       reached = !heldBranch.has(path.basename(file, ".ec")); /* plant:w1-folder-reached */
-      if (reached && mirrorOwed(file)) reached = false; /* plant:outbox-row-kept */
-      const mirror = folderMirrorHere();
-      try { if (mirror && FolderSyncer().takenBackList(mirror, "desks/" + folder + "/").length) fault = "taken-back"; } catch { /* no outbox */ } /* plant:own-fault-row */
-      if (mirror && outboxUnreadFault(mirror)) fault = "outbox-unread";
     }
   }
   return { name: path.basename(file), mtime: x.mtime, cards: x.cards, edition: x.edition, macros: x.macros, intents: x.intents, cats: x.cats,
            awaiting: x.awaiting, sample: false, id: x.id, builtIn: false, rev: x.rev, grew: x.grew, sha: x.sha,
-           genuine: true, reached: reached, relay: !!relayHere(), fault: fault, desk: { id: folder, name: x.deskName } };
+           genuine: true, reached: reached, relay: !!relayHere(), fault: "", desk: { id: folder, name: x.deskName } };
 }
 function deskRows() {
   const root = catalogFolder();
-  const mirror = folderMirrorHere();
-  const unread = !!(mirror && outboxUnreadFault(mirror));
   let out = [];
   if (folderAnswers(root)) {
     let ids = [];
@@ -9842,12 +9507,6 @@ function deskRows() {
     const onTeam = deskRoster();
     out = ids.filter(n => /^k-[0-9a-f]{16}$/.test(n) && onTeam(n)).sort().reduce((acc, n) =>
       acc.concat(ecFilesIn(path.join(root, "desks", n)).map(f => deskRowOf(f, n)).filter(Boolean)), []);
-  }
-  if (unread && !out.some(r => r && r.fault === "outbox-unread")) {
-    const me = branchIdentity(false);
-    out.push({ name: ".outbox.json", mtime: 0, cards: -1, edition: "", macros: -1, intents: -1, cats: -1,
-      awaiting: [], sample: false, id: "", builtIn: false, rev: 0, grew: null, sha: "",
-      reached: false, relay: false, fault: "outbox-unread", desk: { id: me ? me.id : "self", name: "" } });
   }
   return out;
 }
@@ -9946,11 +9605,10 @@ function listingRows() {
 ipcMain.handle("etiuda:catalog-files", (e) => (fromEngine(e) ? listingRows() : []));
 /* The page asks. The files stay until the next start: this process still holds them. The catalog
    folder is the setting in the desk file, not the live mirror, which can point somewhere else. */
-/* The team folders a reset never sweeps, whatever their path: machine policy's folder and every folder team's share. The
-   desk file's own are read again by the next start itself (shell/desk-reset.cjs deskFacts). */
+/* The team folders a reset never sweeps, whatever their path: every folder a team was held through. The desk file's own are
+   read again by the next start itself (shell/desk-reset.cjs deskFacts). */
 function resetShares() {
   const out = [];
-  try { const named = readJoinPolicy("en").folder; if (named) out.push(named); } catch { /* no policy is read as none */ }
   Object.keys(teamShown).forEach(t => { const s = teamShown[t]; if (s && typeof s.folder === "string" && s.folder) out.push(s.folder); });
   return out;
 }
@@ -10045,7 +9703,7 @@ function sealBlockedWhy(text) {
   try { data = catalogPayload(text).data; } catch { return ""; }
   if (!data || data.kind !== SEALED_KIND) return "";
   if (teamKeys[data.team] && teamKeys[data.team][data.epoch]) return "";
-  return sealVerdict(data) === "wait" ? "sealed-wait" : "sealed";
+  return "sealed";
 }
 /* A stable reason for the page, never the raw message and never a path. */
 function readFailWhy(err) {
@@ -10053,7 +9711,6 @@ function readFailWhy(err) {
   if (m === "the catalog folder is not answering") return "not-answering";
   if (m === "not a desk's own file") return "not-desk-file";
   if (m === "its desk is not on the team's roster") return "off-roster";
-  if (err && err.sealWait) return "sealed-wait";
   if (m.indexOf("sealed for team ") === 0 || m === "an envelope sealed inside another") return "sealed";
   return "unreadable";
 }
@@ -10126,9 +9783,9 @@ ipcMain.handle("etiuda:catalog-ring", (e) => {
   } catch { /* no ring, which is the ordinary case */ }
   return text;
 });
-/* THE LEADS THIS PAGE VERIFIES AGAINST: the keys catalogLeadOk uses, the team file heeded first. A whole
-   team file narrows them to that team's pin, or one key that verifies nothing where it is not pinned, so
-   another team's pin and the ring are not read for it. [] where no lead is pinned, and the ring decides. */
+/* THE LEADS THIS PAGE VERIFIES AGAINST: the keys catalogLeadOk uses, the team file heeded first. This folder's
+   own team narrows them to that team's pin, team file or none, or one key that verifies nothing where it is not
+   pinned, so another team's pin and the ring are not read for it. [] where no lead is pinned, and the ring decides. */
 ipcMain.handle("etiuda:catalog-leads", (e) => {
   if (!fromEngine(e)) return [];
   heedTeam();
@@ -10192,7 +9849,15 @@ function shareActiveContext() {
   const entries = roster && Array.isArray(roster.entries) ? roster.entries : [];
   return { team: here.team, me, entries, off: !!roster && roster.sharing === "off" };
 }
+/* The catalog in use is private here, so a card from it is not sent. */
+function shareCatalogPrivate() {
+  const doc = loadedText ? catalogDocIn(loadedText) : null;
+  if (!doc || doc.kind !== "etiuda-catalog" || typeof doc.id !== "string" || !doc.id) return false;
+  const use = teamUse();
+  return use.member && use.seal ? privateHere(doc, use) : catalogMarkedPrivate(doc);
+}
 async function shareToCard(recipientId, cardJson, note) {
+  if (shareCatalogPrivate()) return { ok: false, reason: "private" }; /* plant:pcm-share-private */
   const ctx = shareActiveContext();
   if (!ctx) return { ok: false, reason: "not-on-team" };
   if (ctx.off) return { ok: false, reason: "sharing-off" }; /* plant:share-off */
@@ -10323,11 +9988,10 @@ ipcMain.handle("etiuda:team-join", (e, op, file, name, check) => (!fromEngine(e)
    setting is the engine's, through the ordinary desk key the search order above reads. */
 ipcMain.handle("etiuda:pick-catalog-folder", async (e, title) => {
   if (!fromEngine(e)) return "";
-  if (sayJoinPolicy().folder) return ""; /* plant:pick-under-policy */
   const win = BrowserWindow.fromWebContents(e.sender);
   const opts = {
     title: String(title || "Etiuda").slice(0, 120),
-    defaultPath: shareFolderShown(),
+    defaultPath: catalogFolder(),
     properties: ["openDirectory", "createDirectory"],
   };
   const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
@@ -10409,7 +10073,7 @@ function exportText(text, from) {
   const id = from && typeof from === "object" ? String(from.id || "") : "";
   if (!id || !teamOpened.has(id)) return text;
   const pin = String(from.sha || "");
-  const seal = PIN_RE.test(pin) ? sealFor(id, pin, sharedFolderForWrite()) : null;
+  const seal = PIN_RE.test(pin) ? sealFor(id, pin, catalogFolder()) : null;
   if (!seal) return null;
   return seal.plain ? text : JSON.stringify(sealCatalog(seal.key, seal.team, seal.epoch, text), null, 1) + "\n";
 }
@@ -10531,7 +10195,7 @@ ipcMain.on("etiuda:offer-dropped", (e, file) => {
    folder is opened. */
 ipcMain.handle("etiuda:open-catalog-folder", async (e) => {
   if (!fromEngine(e)) return false;
-  const dir = shareFolderShown(); /* plant:open-catalog-shared */
+  const dir = catalogFolder(); /* plant:open-catalog-shared */
   // A folder that is not answering cannot be shown to be a folder, so it is not opened either.
   if (!folderAnswers(dir)) {
     console.error("etiuda: " + dir + " is not answering, so it is not opened");
@@ -11820,7 +11484,8 @@ function signinSaidOf(held) {
 }
 /* THE DESK'S OWN CLOCK {desk, wall, mono, last, issued}: `desk` the service's time as this desk reckons it, 0 until a certificate
    anchors it; `wall` and `mono` the system clock and the run's monotonic one at the last observation (`mono` null when read from the
-   file); `last` the last certificate's end; `issued` the latest issue taken. Each observation moves `desk` on by the larger of the two
+   file), `wall` held where the monotonic clock carries it while the system clock stands behind, so putting right a clock set back is no
+   time passed; `last` the last certificate's end; `issued` the latest issue taken. Each observation moves `desk` on by the larger of the two
    differences, never back, so only differences of the system clock count, and none below zero. A certificate issued later than any
    taken sets `desk` to its signed `issued`, forward or back, so the next certificate rights a clock carried ahead; an older one, a
    replay, moves nothing. */
@@ -11835,7 +11500,8 @@ function signinClockObserve(clock, wall, mono, held, deskKey) {
     if (cert.issued > issued) { desk = cert.issued; issued = cert.issued; } /* plant:clock-anchor */
     last = cert.until;
   }
-  return { desk: desk, wall: wall, mono: Number.isFinite(mono) ? mono : null, last: last, issued: issued };
+  const at = Number.isFinite(c.wall) ? Math.max(wall, c.wall + byMono) : wall; /* plant:clock-wall-behind */
+  return { desk: desk, wall: at, mono: Number.isFinite(mono) ? mono : null, last: last, issued: issued };
 }
 /* A RUN'S FIRST CLOCK: the one kept in signin.json, or, where none is kept or it is broken while the file holds this desk's
    certificate, the later of that certificate's `issued` and the system clock, so neither a lost record nor a clock set back gives a
@@ -12278,7 +11944,7 @@ function signinSign(bytes) {
   const key = deskBranch ? openPrivate(deskBranch.sign.priv) : null;
   return key ? crypto.sign(null, bytes, key).toString("hex") : "";
 }
-/* Whether this desk has a team folder to write its seat into: a team whose lead it pinned, or a folder team it asks to join, so the
+/* Whether this desk has a team folder to write its seat into: a team whose lead it pinned, or a team it asks to join, so the
    lead's watch can read the seat beside the request. */
 function signinTeamHere() {
   if (pinnedLead()) return true;
@@ -12296,7 +11962,7 @@ function signinFlush() {
   /* Only a certificate given to this desk key is its seat: one kept from a key made again since is never written under the new id. */
   if (!signinCertOk(cert, me.key)) return false; /* plant:flush-own-key */
   try {
-    const root = sharedFolderForWrite();
+    const root = catalogFolder();
     if (!folderAnswers(root)) return false;
     const dir = path.join(root, "desks", me.id), file = path.join(dir, SEAT_NAME), mark = file + "\n" + cert.sig.value;
     if (signinWrote === mark && fs.existsSync(file)) return false; /* plant:flush-mark */
@@ -12756,7 +12422,7 @@ function signinLeave(s, me, sent) {
   }
   if (teamJoin && teamJoin.invite && teamJoin.invite.relay && teamJoin.invite.relay.door === true) { cancelJoin(); sendJoin(theWindow); } /* plant:signout-door */
   if (s.held && me && signinTeamHere()) {
-    try { unlinkOwn(path.join(sharedFolderForWrite(), "desks", me.id, SEAT_NAME)); } catch { /* not written, or the folder is away */ } /* plant:signout-unlink-own */
+    try { unlinkOwn(path.join(catalogFolder(), "desks", me.id, SEAT_NAME)); } catch { /* not written, or the folder is away */ } /* plant:signout-unlink-own */
   }
   s.held = null;
   if (typeof signinRelaySeatClear === "function") signinRelaySeatClear("out"); /* plant:relay-seat-leave */
@@ -13803,12 +13469,16 @@ function storeSyncOf() {
   });
   return storeSyncing;
 }
-/* The person's own catalog folder, or "" while the catalog folder is a team's (its mirror, its share, a folder policy names): a
-   team's catalogs never enter the person's store and the person's never reach the team, the catalog files waiting meanwhile. */
+/* The person's own catalog folder, or "" while the catalog folder is a team's (a relay team's mirror, a moving team's, or the
+   folder of a team held from before, folderHeld): a team's catalogs never enter the person's store and the person's never reach
+   the team, the catalog files waiting meanwhile. */
 function storeSyncFolder() {
   if (deskKeys === undefined) deskKeys = readDesk();
-  if (sayJoinPolicy().folder || relayHere() || folderTeamHere() || Object.keys(teamNeedsFolder).length) return ""; /* plant:sync-team-folder */
-  return catalogFolder();
+  if (relayHere() || Object.keys(teamNeedsFolder).length) return ""; /* plant:sync-team-folder */
+  const root = catalogFolder();
+  if (Object.keys(teamShown).some(t => folderHeld(t) && path.resolve(teamShown[t].folder) === path.resolve(root))) return ""; /* plant:sync-held-folder */
+  if (Object.keys(teamShown).some(t => folderHeld(t) && path.resolve(folderMirrorOf(t)) === path.resolve(root))) return ""; /* plant:sync-held-copy */
+  return root;
 }
 /* This desk's items that follow: its desk keys, and the catalog files at the top of the person's own catalog folder. Null while that
    folder does not answer, so a folder out of reach is never read as every catalog removed; what is left out (for its size, or every
@@ -16942,7 +16612,7 @@ function onSecondInstance(argv) {
     return;
   }
   const link = linkArgFrom(args);
-  if (link) acceptLink(link);
+  if (link && !queueLink(link)) acceptLink(link); /* plant:link-queue */
   const file = ecFromArgv(args);
   if (args.indexOf("--hidden") > -1) {
     if (file) offerFile(theWindow, file);
@@ -17025,27 +16695,24 @@ if (!theOnlyOne || (Array.isArray(process.argv) && process.argv.includes("--upda
     if (got && got.text) pendingLinkArg = link; /* plant:link-hold */
   }
   openedWith = ecFromArgv(process.argv);
-  /* The window waits on the folder's first answer, FOLDER_ASK_MS at most, and on a folder team's first
-     listing, FOLDER_PRIME_MS at most, rather than on a synchronous read of a share that is not there.
-     A policy folder names no team until its team file is read, which is the one share read the syncer
-     cannot start without. The catalog waits for the mirror. */
+  /* The window waits on the folder's first answer, FOLDER_ASK_MS at most, rather than on a synchronous read of a share
+     that is not there. */
   app.whenReady().then(() => {
     dropSessionStorage(); hardenSession(); applyThemeSource();
     const dir = catalogFolder();
     return askFolder(dir).then(ok => {
       settleFolder(dir, ok);
       ensureCatalogFolder();
-      if (!folderTeamHere() && sayJoinPolicy().folder && folderAnswers(sayJoinPolicy().folder)) heedTeam();
-      return awaitFolderPrime().then(() => {
-        createWindow();
-        armNoteLook();
-        armSigninRenew();
-        try { ensureTray(); } catch { /* the window still opens */ }
-        try { syncJumpList(); } catch { /* the jump list still stands */ }
-        hotkeyReady = true; syncHotkey();
-        // Asked for here: powerMonitor is not to be used before the app is ready.
-        require("electron").powerMonitor.on("resume", () => { resumeFromSleep(theWindow); proxyCheckedAt = 0; proxyRecheck(); });
-      });
+      createWindow();
+      armNoteLook();
+      armSigninRenew();
+      const asideAt = setTimeout(dropSetAside, 10000);
+      if (asideAt && asideAt.unref) asideAt.unref();
+      try { ensureTray(); } catch { /* the window still opens */ }
+      try { syncJumpList(); } catch { /* the jump list still stands */ }
+      hotkeyReady = true; syncHotkey();
+      // Asked for here: powerMonitor is not to be used before the app is ready.
+      require("electron").powerMonitor.on("resume", () => { resumeFromSleep(theWindow); proxyCheckedAt = 0; proxyRecheck(); });
     });
   });
 }

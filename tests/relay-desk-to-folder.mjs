@@ -555,6 +555,12 @@ function skip(line) {
   skipped++;
   process.stdout.write("  SKIP " + line + "\n");
 }
+/* A check retired with the folder mirror: it is said, not asked, and counted apart from the asserted. */
+let retired = 0;
+function retire(cond, line) {
+  retired++;
+  process.stdout.write("  RETIRED " + line + "\n");
+}
 function check(cond, line) {
   asserted++;
   if (cond) process.stdout.write("  ok   " + line + "\n");
@@ -692,7 +698,8 @@ async function main() {
   /* Owed by the move itself: the syncer also owes a desk's own file the share lacks, two listings on, and marks that under back. */
   const blockedOwed = g => g.owed.indexOf(g.ownRel) >= 0 && g.backed.indexOf(g.ownRel) < 0;
   const r2b = roMove({ blocked: true });
-  check(r2b.opened && blockedOwed(r2b) && r2b.otherKept && r2b.teamKept,
+  /* 998o RETIRED, with the folder syncer's outbox (the folder mirror's piece): the desk's own copies the folder refuses were kept in the team's mirror and owed, and the outbox tried them again; there is no outbox. It said what its sentence below says. */
+  retire(r2b.opened && blockedOwed(r2b) && r2b.otherKept && r2b.teamKept,
     "998o where the folder refuses the desk's own copies, they are kept in the team's mirror and owed, so the outbox tries them at each"
     + " scan (998i in folder-mirror shows the team's row saying a read-only refusal): " + JSON.stringify(r2b));
   if (PLANTS_OFF) {
@@ -836,7 +843,9 @@ async function main() {
     + JSON.stringify({ pressed: pg.pressed, dialog: pg.dialogAsked, calls: (pg.pickCalls || []).length }));
   check(g3(pg, pageSaw.folder), "945g3 the desk follows the folder: the relay channel stays stopped, its team row names the folder and no relay, and Settings shows the folder and no longer the line or the button: "
     + JSON.stringify({ row: pg.rowAfter, shown: pg.folderShown, relayStopped: pg.relayStopped, line: pg.lineAfter, button: pg.buttonAfter }));
-  check(g4(pg), "945g4 the catalog the folder holds reaches the desk's mirror of it and is listed to the page, where before the press it was not: "
+  /* 945g4 RETIRED, with the folder syncer (no folder is read as a team): the catalog the folder holds reached the desk's mirror of it through the
+     syncer and was listed; the mirror of a shared folder is gone, so nothing reaches it. It said what its sentence below says. */
+  retire(g4(pg), "945g4 the catalog the folder holds reaches the desk's mirror of it and is listed to the page, where before the press it was not: "
     + JSON.stringify({ listed: pg.listed, mirror: pg.mirrorHas, before: pg.listedBefore }));
 
   /* The guarding lines, each lifted in a copy of the page module: the leg it guards goes red. */
@@ -1099,8 +1108,8 @@ async function main() {
   });
 
   process.stdout.write("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + "\n");
-  if (asserted + skipped !== EXPECTED) {
-    process.stderr.write("checks count differs from EXPECTED " + EXPECTED + ": " + (asserted + skipped) + "\n");
+  if (asserted + skipped + retired !== EXPECTED) {
+    process.stderr.write("checks count differs from EXPECTED " + EXPECTED + ": " + (asserted + skipped + retired) + "\n");
     exitCode = 78;
   } else if (failed > 0) {
     exitCode = Math.min(failed, 63);

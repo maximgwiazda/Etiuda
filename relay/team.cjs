@@ -10,7 +10,7 @@ const core = require("./core.cjs");
 const JSON_MAX = 256 * 1024;
 const STATUS = {
   "no-hello": 401, "hello-replay": 401, "nonce-stale": 401, "not-enrolled": 403, "bad-signature": 403, "removed": 403,
-  "outside-place": 403, "token-spent": 403, "invite-ended": 403, "token-tries": 403, "team-size": 403, "recipient-full": 403, "team-count": 403, "epoch": 409, "replay-counter": 409,
+  "outside-place": 403, "token-spent": 403, "invite-ended": 403, "lead-other": 403, "token-tries": 403, "team-size": 403, "recipient-full": 403, "team-count": 403, "epoch": 409, "replay-counter": 409,
   "replay-rev": 409, "bad-grant": 403, "swept-other-lead": 403, "revoked": 403, "team-lapsed": 403, "withdrawn": 403, "seat-lapsed": 403, "missing": 404, "superseded": 410, "expired": 410, "blob-size": 413, "rate": 429,
 };
 const CLOSE = { "no-hello": 4401, "removed": 4403, "handed-over": 4403 };
@@ -416,6 +416,7 @@ function teamObject(deps) {
       const renewed = c.renew(rt, body);
       /* A pooled desk the grant newly names as freed holds no session now (takeSeats); its socket goes with it. */
       if (renewed.ok) closeWhere(a => !!a.key && !c.sessionByHash(a.ses).ok, "no-hello"); /* plant:freed-sockets */
+      if (renewed.ok) closeWhere(a => !a.key && !!a.inv && !c.sessionByHash(a.ses).ok, "no-hello"); /* plant:freed-invite-sockets */
       if (renewed.ok) await arm(); /* plant:arm-renew */
       return answer(renewed, r => ({ ok: true, lapse: r.lapse }));
     }

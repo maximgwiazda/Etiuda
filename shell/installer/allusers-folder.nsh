@@ -153,6 +153,12 @@
       ${If} $1 == ""
         StrCpy $0 "$0\${APP_FILENAME}"
       ${EndIf}
+      # Resolved first, as Windows will resolve it: "C:\Program Files\..\Users\Public" is no folder under Program Files.
+      System::Call 'kernel32::GetFullPathNameW(w r0, i ${NSIS_MAX_STRLEN}, w .r1, i 0) i .r2'
+      ${If} $2 > 0
+      ${AndIf} $2 < ${NSIS_MAX_STRLEN}
+        StrCpy $0 $1
+      ${EndIf}
       StrCpy $2 "0"
       StrLen $3 $PROGRAMFILES64
       StrCpy $4 $0 $3
