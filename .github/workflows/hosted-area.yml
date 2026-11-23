@@ -81,6 +81,20 @@ jobs:
           npm ci
           echo "#hosted shard=${{ matrix.shard }} npm-ci-s=$(( $(date +%s) - s ))"
 
+      # EVERY LEG PARSES, the ones no shard runs included. A leg left to the desk, or one that skips here for want of a fixture,
+      # is otherwise first read by the local area, so a builder's edit that does not parse escapes every hosted check (smoke.js
+      # once redeclared a name and ran nowhere). One shard reads them all with node --check; a file that does not parse is named.
+      - name: every leg parses
+        if: matrix.shard == 1
+        shell: bash
+        run: |
+          bad=0
+          for f in tests/*.js tests/*.mjs tests/*.cjs tools/*.mjs tools/*.js tools/runner/*.mjs; do
+            [ -f "$f" ] || continue
+            if ! node --check "$f" 2>"$RUNNER_TEMP/parse.err"; then echo "FAIL does not parse: $f"; sed 's/^/       /' "$RUNNER_TEMP/parse.err" | head -5; bad=1; fi
+          done
+          exit $bad
+
       # The base is where this branch left main, so the plan is the tree's own diff plus this branch's harness files.
       - name: the shard
         shell: bash
