@@ -25,7 +25,7 @@ const nodeRequire = createRequire(import.meta.url);
 import { relayizeDesk, relayMirrorOf, relayMirrorProgram, relayChannelOf } from "./relay-mirror-desk.mjs";
 let LEAD_PIN = null;
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 148 - 1 - 1; /* 890v retired with the folder team's folder write, r16b with the forged ring file; see their places */
+const EXPECTED = 148 + 4; /* 890v is counted again, OWED (skipped until its finding is mended); r16b moved onto the ring inside the team file, with r16n; 890aq to 890as added; see their places */
 
 const JOIN_EN = "Once this desk joins, the team's lead can see the catalogs it uses, their content included, and this desk's changes to them. The lead's Studio can take a copy of any of them at any time, without asking here: of a team catalog, one the lead publishes to the team, sealed for the team; of a personal catalog, any other on this desk, sealed for the lead alone. A personal catalog can be marked Private in the Library, under Catalog & data; the lead then sees nothing of it, not even that it is used. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses unless that catalog is Private, and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, none of them from a Private catalog, and Studio shows them in the team's totals.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi katalogi, których używa to stanowisko, razem z ich treścią, oraz zmiany wprowadzone w nich na tym stanowisku. Studio lidera może w każdej chwili, bez pytania tutaj, pobrać kopię każdego z nich: katalogu zespołowego, czyli publikowanego przez lidera dla zespołu, zapieczętowaną dla zespołu, a katalogu osobistego, czyli każdego innego na tym stanowisku, zapieczętowaną wyłącznie dla lidera. Katalog osobisty można oznaczyć jako Prywatny w Bibliotece, w części Katalog i dane; lider nie widzi wtedy nic z niego, nawet tego, że jest używany. Studio lidera wymienia to stanowisko z nazwy, chyba że organizacja wyłączy nazwy, razem z używanym katalogiem i jego wydaniem, o ile nie jest to katalog prywatny, oraz z okresem zliczania, i wymienia je dalej, gdy przestanie się odzywać. Własne dane stanowiska trafiają do lidera zapieczętowane, bez żadnych danych z katalogu prywatnego, a Studio pokazuje je w sumach zespołu.";
@@ -161,10 +161,11 @@ try {
   };
   const RING = { format: 1, kind: "etiuda-ring", keys: [
     { catalog: "north-lamps", keyId: LEAD.keyId, alg: "Ed25519", public: LEAD.public }] };
-  const teamFile = (D, id, epoch, roster, catalogs) => textOf(sign({
+  /* `ring`, where given, is the ring inside the signed team file: the only ring a relay team has (a ring file in the mirror is read nowhere). */
+  const teamFile = (D, id, epoch, roster, catalogs, ring) => textOf(sign(Object.assign({
     format: 1, kind: "etiuda-team", id, catalogs: catalogs || ["not-this"], lead: Object.assign({}, LEAD, { box: BOX }),
     sealed: true, exportsSealed: false, epoch, roster, channel: relayChannelOf(id),
-  }, lead.privateKey, LEAD));
+  }, ring ? { ring } : {}), lead.privateKey, LEAD));
   const entry = (D, who, key, team, epoch) => ({
     desk: { id: who.id, key: who.key, box: who.box },
     wrap: D.api.wrapTeamKey(key, who.box, team, epoch, who.id),
@@ -210,8 +211,8 @@ try {
     boxMap.set(share, box);
     return box;
   };
-  const join = (box, epoch, roster, catalogs, untold) => {
-    put(box.share, "etiuda-team.json", teamFile(box.D, box.team, epoch, roster, catalogs));
+  const join = (box, epoch, roster, catalogs, untold, ring) => {
+    put(box.share, "etiuda-team.json", teamFile(box.D, box.team, epoch, roster, catalogs, ring));
     if (!untold) box.D.ask("etiuda:team-join", "content-said", box.team, "");
   };
   const declOf = (src, marker) => {
@@ -255,7 +256,39 @@ try {
     check(r.took && r.signer === "" && !r.floored,
       "r16a a catalog signed under the lead's key id by a key only the share's ring file names is recorded with no signer, and moves no rev floor: "
       + JSON.stringify(r));
-    /* RETIRED, P4 (no ring file is believed for a team): r16b, "rewriting plant:trusted-pub-lead to the ring's check names the lead as that catalog's signer (FAIL r16a)". It lifted the line that keeps a pinned lead's catalogs to the lead's own check, so that a share's ring file (r16a's forged ring) named the lead's key id for another key. A relay team's ring is the signed team file's own, never a ring file in the mirror, so the forged ring this scene writes is read nowhere and the plant, which rewrites the line to the ring's check, leaves the signer empty: it no longer has a scene to turn red. */
+    /* r16b, MOVED, P4 (no ring file is believed for a team). It said: "rewriting plant:trusted-pub-lead to the ring's check names the lead as that catalog's signer
+       (FAIL r16a)", on a ring FILE in the share that vouched for the lead's key id (r16a's forged ring). A relay team's ring is the signed team file's own, and a ring file in
+       the mirror is read nowhere, so r16a's scene no longer bites on the line. Where a relay team's ring does reach the check is the ring inside its signed team file, and
+       that ring may name another key for the lead's key id (it is the lead's to write): the catalog that other key signed is still no catalog the pinned lead signed, so it
+       is recorded with no signer and moves no rev floor (r16n); lifting the line makes the ring's check decide, and names the lead (r16b). */
+    const forgedTeamRing = async (name, src) => {
+      const box = await arm(name, src);
+      join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], undefined, undefined,
+        { format: 1, kind: "etiuda-ring", keys: [{ catalog: "north-lamps", keyId: LEAD.keyId, alg: "Ed25519", public: OTHER.public }] });
+      box.D.sync("etiuda:catalog");
+      const forged = textOf(sign(catalog(3, { unsigned: true }), other.privateKey, LEAD));
+      const pin = pinOf(box.D, forged);
+      take(box.D, pin, forged);
+      const inner = openSealedDoc(box.D, inUsePath(box.share, box.me.id), box.key);
+      const cat = inner && inner.catalog || {};
+      const floor = JSON.stringify(box.D.envelope().catalogRevs || {});
+      return { took: !!inner && cat.sha256 === pin, signer: cat.signer, floored: floor.indexOf(OTHER.public) >= 0 };
+    };
+    {
+      const r = await forgedTeamRing("ring-in-team");
+      check(r.took && r.signer === "" && !r.floored,
+        "r16n a catalog signed under the lead's key id by a key only the ring inside the signed team file names is recorded with no signer, and moves no rev floor: "
+        + JSON.stringify(r));
+      if (PLANTS_OFF) skip("r16b rewriting plant:trusted-pub-lead to the ring's check names the lead as that catalog's signer");
+      else {
+        const from = "pinnedLeadPubs().length ? catalogLeadOk(data) : catalogSigValid(data)";
+        const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:trusted-pub-lead") >= 0);
+        let p = null;
+        if (at >= 0 && lines[at].split(from).length === 2) { lines[at] = lines[at].replace(from, () => "catalogSigValid(data)"); p = await forgedTeamRing("ring-in-team-plant", lines.join("\n")); }
+        check(!!p && p.took && p.signer === LEAD.keyId, "r16b rewriting plant:trusted-pub-lead to the ring's check names the lead as that catalog's signer (FAIL r16n): "
+          + JSON.stringify(p));
+      }
+    }
   }
 
 
@@ -448,6 +481,48 @@ try {
     check(box.D.api.asksWatching() === true, "890o while the desk runs, catalog-asks is watched");
   }
 
+  /* ---- 890aq to 890at: the proofs of the two lines that decide where an ask is read and whether its answer outlives it (board 962; P4 moved them here) ----
+     plant:follow-ask-keep (`if (!relayHere()) removeAnswer()`, in tryCatalogAsk) was held by relay-desk-follow's 945s6 and 945s11, for a folder desk that followed
+     to the relay, both retired with the folder follow; 890n holds the line's behaviour with plants off, and this is its lift. plant:read-ask-mirror
+     (`readAskFile` reads `catalogFolder()`, the relay's mirror for a relay desk) was lifted by folder-mirror's 42h, retired with that leg. One scene, a relay desk
+     whose lead files a signed ask and then withdraws the file: the answer is sent from the mirror's ask (890aq), and it stays when the file is gone (890ar). */
+  const askKeepScene = async (name, src) => {
+    const box = await arm(name, src);
+    put(box.share, "board.ec", textOf(catalog(2)));
+    join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["north-lamps"]);
+    const booted = box.D.sync("etiuda:catalog");
+    const pin = pinOf(box.D, booted || "");
+    take(box.D, pin);
+    putAsk(box, "Askkeep9", pin, 1);
+    box.D.api.tryCatalogAsk(box.D.win);
+    const ans = answerPath(box.share, box.me.id);
+    const answered = fs.existsSync(ans);
+    fs.unlinkSync(path.join(box.share, "catalog-asks", box.me.id + ".json"));
+    syncMirror(box);
+    syncMirror(box);
+    box.D.api.tryCatalogAsk(box.D.win);
+    return { answered, kept: fs.existsSync(ans) };
+  };
+  {
+    const r = await askKeepScene("ask-keep");
+    check(r.answered && r.kept,
+      "890aq a relay desk answers the ask the lead filed in its mirror, and when the lead withdraws the file the answer already sent stays: " + JSON.stringify(r));
+    if (PLANTS_OFF) { skip("890ar lifting plant:follow-ask-keep (an ask gone from the mirror removes the answer) turns 890aq red"); skip("890as lifting plant:read-ask-mirror reads no ask from the desk's mirror, so none is answered"); }
+    else {
+      const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:follow-ask-keep") >= 0);
+      let p = null;
+      if (at >= 0 && lines[at].split("if (!relayHere()) removeAnswer();").length === 2) {
+        lines[at] = lines[at].replace("if (!relayHere()) removeAnswer();", () => "removeAnswer();");
+        p = await askKeepScene("ask-keep-plant", lines.join("\n"));
+      }
+      check(!!p && p.answered && !p.kept, "890ar lifting plant:follow-ask-keep (an ask gone from the mirror removes the answer) turns 890aq red: " + JSON.stringify(p));
+      const ln2 = SRC.split("\n"), at2 = ln2.findIndex(l => l.indexOf("plant:read-ask-mirror") >= 0);
+      let q = null;
+      if (at2 >= 0) { ln2.splice(at2, 1); q = await askKeepScene("ask-mirror-plant", ln2.join("\n")); }
+      check(!!q && !q.answered, "890as lifting plant:read-ask-mirror reads no ask from the desk's mirror, so none is answered (FAIL 890aq): " + JSON.stringify(q));
+    }
+  }
+
   /* ---- the other confirming routes ---------------------------------------------------------------- */
   {
     const box = await arm("routes");
@@ -537,14 +612,17 @@ try {
     take(box.D, pinOf(box.D, bootedL || ""));
     const had = fs.existsSync(inUsePath(box.share, box.me.id));
     await box.D.ask("etiuda:team-join", "forget", box.team);
-    /* RETIRED, P4 (890v said: "forgetting the lead removes in-use.ec"): it held that a desk forgetting the lead of a folder team took its in-use note out of the
-       team's folder, by its own write there. On a relay team the note is in the desk's mirror, which forgetting sets aside, and the team's copy of it leaves the lead's reach
-       by the relay: a desk taken off gives back what it held, its blobs readable by the lead alone until they are deleted (relay/core.cjs), and the desk's leave goes
-       there (tests/relay-channel.mjs 987). No folder of the team is this desk's to write. What the desk's own mirror holds is printed, not asserted. */
-    console.log("  RETIRED 890v forgetting the lead removes in-use.ec; in the desk's own relay mirror the note " + (fs.existsSync(inUsePath(box.share, box.me.id)) ? "stays" : "is gone") + " after forgetting");
-    if (false) check(had && !fs.existsSync(inUsePath(box.share, box.me.id)) && !fs.existsSync(path.join(box.share, "desks", box.me.id, "in-use.ec"))
-        && !box.D.envelope().inUse,
-      "890v forgetting the lead removes in-use.ec");
+    /* 890v, OWED (P4 retired it; the test architect's read of 2026-11-23 holds that it still describes what a relay team's desk should do, and the product fails it). It said
+       "forgetting the lead removes in-use.ec", and held it for a folder team by the desk's own write into the team's folder. For a relay team the note is in the desk's own relay
+       mirror, and forgetLead (shell/main.js) deletes the team's channel before releaseInUse() runs, so catalogFolder() no longer names the mirror and the note stays there: a
+       finding, not mended here (another builder is on it). The check stays with its own assertion, unchanged, and is OWED_890V until that is mended: it counts as skipped and prints
+       what is measured, and the moment the product removes the note it FAILS ("890v is mended") so that whoever mends it sets OWED_890V to false and the check is asserted. */
+    const OWED_890V = true;
+    const holds890v = had && !fs.existsSync(inUsePath(box.share, box.me.id)) && !fs.existsSync(path.join(box.share, "desks", box.me.id, "in-use.ec"))
+      && !box.D.envelope().inUse;
+    if (!OWED_890V) check(holds890v, "890v forgetting the lead removes in-use.ec");
+    else if (holds890v) check(false, "890v is mended: forgetting the lead removes in-use.ec now, so set OWED_890V to false in this leg and let it be asserted");
+    else skip("OWED 890v forgetting the lead removes in-use.ec: the desk's note " + (fs.existsSync(inUsePath(box.share, box.me.id)) ? "stays in its relay mirror" : "is gone from the mirror, the envelope's in-use " + (box.D.envelope().inUse ? "kept" : "cleared")) + " after forgetting");
 
     const drop = await arm("drop");
     put(drop.share, "board.ec", textOf(catalog(2)));

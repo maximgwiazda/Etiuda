@@ -30,7 +30,7 @@ const MODS = path.join(ROOT, "src", "modules"), MOD_DIR = pathToFileURL(MODS).hr
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 28;
+const EXPECTED = 30;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -51,13 +51,13 @@ const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
 const eventFor = () => ({ sender: { id: 1, once: noop }, senderFrame: ENGINE_FRAME, returnValue: undefined });
 
 function loadDesk(ud, src) {
-  const said = [], on = {}, invoke = {};
+  const said = [], on = {}, invoke = {}, opened = [];
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop };
   const electron = {
     app: { getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop, getVersion: () => "0.0.0",
       whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
     ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
-    BrowserWindow: inert, Menu: inert, dialog: inert, net: inert, protocol: inert, session: inert, shell: inert,
+    BrowserWindow: inert, Menu: inert, dialog: inert, net: inert, protocol: inert, session: inert, shell: { openPath: async p => { opened.push(p); return ""; } },
     screen: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" },
     safeStorage: {
       isEncryptionAvailable: () => true,
@@ -73,7 +73,7 @@ function loadDesk(ud, src) {
   const boot = eventFor();
   if (typeof on["etiuda:desk"] === "function") on["etiuda:desk"](boot);
   const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
-  return { api, ask, said };
+  return { api, ask, said, opened };
 }
 
 const V2 = await import(pathToFileURL(path.join(MODS, "catalog-v2.js")).href);
@@ -279,6 +279,13 @@ try {
   check(!!row && row.folderOwed === true, "fth5 the team's row says the mirror's outbox still owes the folder: " + JSON.stringify(row && { folderOwed: row.folderOwed }));
   check(!!row && row.folderCopy === A.mirror, "fth26 the owed row names the folder the unsent files stay in, the local copy: " + JSON.stringify(row && { folderCopy: row.folderCopy }));
 
+  /* fth29 (new, moved from folder-mirror's 42g, retired with that leg, whose proof of plant:open-catalog-shared it was): Open folder opens the folder the owed line names, the
+     local copy: it is where the unsent files are found, and the share (the setting) is not what it opens while a copy is kept. */
+  let openedAt = null;
+  try { await desk.ask("etiuda:open-catalog-folder"); openedAt = desk.opened[0] || null; } catch (e) { openedAt = "threw " + e.message; }
+  check(!!openedAt && path.resolve(openedAt) === path.resolve(A.mirror) && !!row && row.folderCopy === A.mirror,
+    "fth29 Open folder opens the local copy the owed line names, where the unsent files are, and not the share: " + JSON.stringify({ opened: openedAt, folderCopy: row && row.folderCopy }));
+
   /* fth6: a desk whose outbox owes nothing is told nothing of it. */
   const B = makeDesk("clear", false);
   const deskB = loadDesk(B.ud);
@@ -416,6 +423,10 @@ try {
     ["fth28", "held-copy-kept", async (d, P) => { const f = path.join(P.mirror, "desks", OTHER_DESK, "note.txt"); try { d.api.unlinkOwn(f); } catch { /* kept */ } return !fs.existsSync(f); }, "fth18"],
     ["fth24", "held-local-copy", async (d, P) => path.resolve(d.api.catalogFolder()) !== path.resolve(P.mirror), "fth1"],
     ["fth27", "sync-held-copy", async (d, P) => d.api.storeSyncFolder() !== "", "fth25"],
+    ["fth30", "open-catalog-shared", async (d, P) => {
+      try { await d.ask("etiuda:open-catalog-folder"); } catch { /* the lifted line throws: nothing is opened */ }
+      return d.opened.length === 0 || path.resolve(d.opened[0]) !== path.resolve(P.mirror);
+    }, "fth29"],
     ["fth17", "shared-team-folder", async (d, P) => {
       fs.writeFileSync(path.join(P.ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: P.share, eUiLang: "en" } }), "utf8");
       const r = await loadDesk(P.ud, d.src).api.sharedWrite("loose.ec", sharedText(), "", true);
