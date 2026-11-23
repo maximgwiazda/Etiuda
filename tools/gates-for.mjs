@@ -237,6 +237,7 @@ export const SCANS = {
   ],
   "tests/tray.mjs": ["shell/tray.cjs"],
   "tests/one-logo.mjs": ["shell/etiuda.ico", "shell/etiuda-tray.png", "shell/installer/**", "src/template.html", "src/modules/about.js", "src/modules/launch-mark.js", "shell/main.js", "engine/etiuda.html"],
+  "tests/no-html-form.mjs": ["src/template.html", "src/modules/*.js", "engine/etiuda.html", "shell/main.js", "shell/desk-reset.cjs", "README.md", "package.json", "tools/catalog-v2/convert.mjs", "tools/catalog-v2/README.md", "tools/gates-for.mjs"],
   "tests/no-crash-dialog.mjs": ["tests/**/*.{js,mjs,cjs}"],
   "tests/off-windows-selftest.cjs": ["tests/*.{js,mjs,cjs}"],
   "tests/control-bytes.mjs": ["**/*.{js,mjs,cjs}"],
