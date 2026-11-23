@@ -7555,8 +7555,11 @@ function forgetLead(team, left) {
   if (left === true && (policyWaits() || policyHoldsTeam(team, readJoinPolicy("en")))) return joinView(); /* plant:leave-waits */
   const ch = teamChannel[team];
   if (ch && ch.kind === "relay") setRelayTeamAside(ch.rt); /* plant:leave-aside */
-  /* The note this desk left in a folder team's mirror goes too, owed to that share, so a later return does not send it. */
-  const noteInMirror = deskBranch ? path.join(folderMirrorOf(team), "desks", branchIdOf(deskBranch.sign.pub), IN_USE_STEM + ".ec") : "";
+  /* The note this desk left in the team's mirror goes too, owed to that share where it is a folder team's, so a later return does not
+     send it: forgetting a lead ends what this desk said about the team. The mirror is the relay's where the team's channel is one;
+     releaseInUse below runs after the channel is gone and reaches neither. */
+  const mirrorOfTeam = ch && ch.kind === "relay" && /^[0-9a-f]{32}$/.test(String(ch.rt)) ? relayMirrorOf(ch.rt) : folderMirrorOf(team); /* plant:forget-note-relay */
+  const noteInMirror = deskBranch ? path.join(mirrorOfTeam, "desks", branchIdOf(deskBranch.sign.pub), IN_USE_STEM + ".ec") : "";
   delete teamPins[team];
   delete teamKeys[team];
   delete teamShown[team];
