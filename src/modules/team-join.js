@@ -1,8 +1,9 @@
 /* Asking to join: the empty desk and a bubble where a catalog is open.
    The shell keeps the request and says where it stands; this paints that answer and sends the agent's
    acts back. Joining leaves a catalog the desk already has loaded. Once admitted, the same place shows the pinned
-   lead's key once, to compare with the lead's, and Settings lists every such team with a way to leave it. An
-   invitation's wait names the lead and draws no code until the opening is read; the code then shows. */
+   lead's key once, to compare with the lead's, and Settings lists every such team with a way to leave it. A team is
+   joined over the relay, by a link or by an invitation to the person's address: no code is shown, typed or read out,
+   and no invitation is pasted (board 1017; the shared folder's join went with it). */
 import { eHost, eOnCatalogCopy, ePickCatalogFolder } from "./host.js";
 import { t, toast, uiLang } from "./ui-lang.js";
 import { esc } from "./esc.js";
@@ -18,17 +19,12 @@ import { setStatsWithheld } from "./desk-stats.js";
 
 let joinNow=null;                 // the shell's last answer: {sealed:{file,team}|null, join:{...}|null, leads:[{team,print,admitted,seen,lead,folder,removed,policy}]}
 let joinShut="";                  // the answer the agent last hid the bubble on
-let joinMode="";                  // "" | "paste" | "confirm" | "refused": the invitation, held on the page until it is answered
-let joinOffer=null;               // {folder, lead, code, host, cloud, local, left} the shell read from joinRead; {lead, team, relay} for a relay invitation, with link:true where the shell holds the link
-let joinBlob="";                  // the paste box's text while it is open, so a repaint keeps it
-let joinRead="";                  // the text the shell read for the confirm on screen: yes sends this, never the box
-let joinTyped="";                 // the check code the agent typed on the confirm
+let joinMode="";                  // "" | "confirm" | "refused": the invitation, held on the page until it is answered
+let joinOffer=null;               // {lead, team, relay, left} for a relay invitation, with link:true where the shell holds the link
+let joinRead="";                  // "link" while the shell holds the link the confirm on screen is for: yes names it
 let joinDoubt="";                 // the team whose "It does not match" is being asked about once before its keys go
 let joinWhy="";                   // the refusal's word, as the shell said it
-let askWhy="";                    // why ask to join did nothing ("no-identity" | "folder-not-answering" | "folder-not-writable")
-let askPlatform="";               // platform reported with the refusal ("win32" | "darwin" | "linux")
 let joinLinkSaid=null;            // {en, pl} when a link was refused: the shell's two sentences, the secret never among them
-let joinReads=0;                  // which read an answer belongs to: only the last one asked is shown
 let lapseUp="";                   // "team|step|until" of the lapse notice on screen
 const lapseDismissed=new Set();   // the same keys, dismissed here while the shell's answer is on its way
 let joinGate=null;                // door gate wired from main.js to avoid a signin.js <-> team-join.js import cycle
@@ -52,7 +48,7 @@ function replayPendingInvite(){
   if(!inv) return;
   if(inv.kind==="link" && inv.offer){
     joinOffer=Object.assign({}, inv.offer);
-    joinRead="link"; joinBlob=""; joinTyped=""; joinWhy=""; joinLinkSaid=null;
+    joinRead="link"; joinWhy=""; joinLinkSaid=null;
     joinMode="confirm";
     paintJoin();
   }else if(inv.kind==="link-refusal" && inv.refusal){
@@ -60,10 +56,6 @@ function replayPendingInvite(){
     joinLinkSaid=Object.assign({}, inv.refusal);
     joinWhy="link"; joinMode="refused";
     paintJoin();
-  }else if(inv.kind==="paste" && inv.text){
-    const sent=String(inv.text), n=++joinReads;
-    joinMode="paste"; joinBlob=sent;
-    joinAsk("read",sent,"","",v=>readTook(v,n,sent));
   }
 }
 let contentNow=null;              // {team, told, private:[ids], listed:[ids]} from teamJoin("content")
@@ -128,17 +120,12 @@ function eHasJoin(){
   const h=eHost();
   return !!h && typeof h.teamJoin==="function";
 }
-function deskPlatform(){
-  const h=eHost();
-  const p=(h && h.platform) || askPlatform || (typeof process!=="undefined" && process.platform) || "";
-  return String(p).toLowerCase();
-}
 /* A failed call lets go of any invitation the page holds, and of what it shows. `before` sees the answer first and
    says whether it changed what the invitation shows. */
-function joinAsk(op,file,name,check,before){
+function joinAsk(op,file,name,before){
   if(!eHasJoin()) return Promise.resolve(null);
   let asked;
-  try{ asked=Promise.resolve(eHost().teamJoin(op,file||"",name||"",check||"")); }
+  try{ asked=Promise.resolve(eHost().teamJoin(op,file||"",name||"")); }
   catch(e){ asked=Promise.reject(e); }
   return asked.then(v=>joinTook(v,typeof before==="function"&&before(v)),()=>{
     const shown=joinMode!=="";
@@ -147,22 +134,13 @@ function joinAsk(op,file,name,check,before){
     return null;
   });
 }
-/* Lets go of every copy of an invitation the page holds; a read still in flight is then answered to nobody. */
+/* Lets go of every copy of an invitation the page holds. */
 function dropInvite(){
-  joinMode=""; joinOffer=null; joinBlob=""; joinRead=""; joinTyped=""; joinWhy=""; joinLinkSaid=null; joinDoubt=""; joinReads++;
+  joinMode=""; joinOffer=null; joinRead=""; joinWhy=""; joinLinkSaid=null; joinDoubt="";
 }
-/* Whether the agent typed this invitation's check code, which the shell made at read and checks again at yes. */
-function typedOk(){
-  const want=joinOffer?joinOffer.code:"";
-  return /^[0-9]{5}$/.test(want) && joinTyped.replace(/\s+/g,"")===want;
-}
-/* A relay invitation's confirm asks for no check code: the link itself is the lead's word. */
-function relayConfirm(){ return !!(joinOffer && joinOffer.relay); }
-function confirmReady(){ return relayConfirm() || typedOk(); }
-function typedWrong(){ return joinTyped.replace(/\s+/g,"").length>=5 && !typedOk(); }
 /* What the page still holds of an invitation, for the legs that check it lets go. */
 function inviteHeld(){
-  return {mode:joinMode, draft:joinBlob, read:joinRead, typed:joinTyped, offer:joinOffer?Object.assign({},joinOffer):null};
+  return {mode:joinMode, read:joinRead, offer:joinOffer?Object.assign({},joinOffer):null};
 }
 /* Whether an invitation is held, or the join stands on screen as the empty desk's form or the bubble: what the tour gives way to. */
 function joinStands(){
@@ -210,24 +188,6 @@ function keyTipHtml(tip,print,kind){
   const fours=print?leadKeyText(print):"";
   return fours && String(tip).indexOf(fours)>=0 ? String(tip).split(fours).map(esc).join(keySignHtml(kind,print)) : null;
 }
-/* The shell's answer to a read: the confirm for exactly the text that was read, or the refusal. An answer to an older
-   read, or one that comes after the paste box was left, shows nothing. A relay invitation is judged by what it is and not by
-   how it arrived: its offer names the lead, the team and the relay's host, and it gets the link's confirm and no check code. */
-function readTook(v,n,sent){
-  if(n!==joinReads || joinMode!=="paste") return false;
-  const o=v&&typeof v==="object"?v.offer:null;
-  if(o && typeof o.relay==="string" && o.relay){
-    joinOffer={lead:String(o.lead||""),team:String(o.team||""),relay:String(o.relay),code:"",left:String(o.left||"")};
-    joinRead=sent; joinBlob=""; joinTyped=""; joinWhy=""; joinMode="confirm"; /* plant:paste-relay */
-  }else if(o && typeof o.folder==="string"){
-    joinOffer={folder:String(o.folder),lead:String(o.lead||""),code:String(o.code||""),
-      host:String(o.host||""),cloud:String(o.cloud||""),local:o.local===true,left:String(o.left||""),
-      relay:String(o.relay||""),team:String(o.team||""),
-      how:String(o.how||""),why:String(o.why||""),kind:String(o.kind||"")};
-    joinRead=sent; joinBlob=""; joinTyped=""; joinWhy=""; joinMode="confirm";
-  }else refuseInvite(v);
-  return true;
-}
 /* The shell's answer to a yes: a refusal stays on screen with only its sentence, a cancelled picker keeps the confirmation card as it was, and anything else lets go. */
 function yesTook(v,sent){
   if(joinRead!==sent) return false;
@@ -241,10 +201,10 @@ function refuseInvite(v){
   dropInvite();
   joinWhy=why; joinMode="refused";
 }
-/* The request as the page shows it. An invitation names its lead and keeps the code the shell sent. */
+/* The request as the page shows it. An invitation names its lead. */
 function joinShown(j){
   if(!j || !(j.file||j.state)) return null;
-  const row={file:String(j.file||""),state:String(j.state||""),code:String(j.code||""),
+  const row={file:String(j.file||""),state:String(j.state||""),
     asked:+j.asked||0,name:String(j.name||""),team:String(j.team||"")};
   if(j.invite && typeof j.invite==="object") row.invite=Object.assign({lead:String(j.invite.lead||""),relay:String(j.invite.relay||"")}, j.invite.wrapped ? {wrapped:true} : {},
     j.invite.open===true ? {open:true} : {}, j.invite.door===true ? {door:true} : {});
@@ -570,26 +530,18 @@ function joinTook(v,changed){
     }
     if(s.share.off===true) joinNow.share.off=true;
   }
-  const hadAskWhy=askWhy;
-  if(s.askRefused || s.refused==="no-identity" || s.refused==="folder-not-answering" || s.refused==="folder-not-writable"){
-    askWhy=s.askRefused || s.refused;
-    if(s.platform) askPlatform=String(s.platform);
-  }else if(s.join){
-    askWhy="";
-    askPlatform="";
-  }
   const offer=s.offer;
   if(offer && offer.link===true && typeof offer.relay==="string" && offer.relay){
-    const heldOffer={lead:String(offer.lead||""), team:String(offer.team||""), relay:String(offer.relay), link:true, code:"", left:String(offer.left||"")};
+    const heldOffer={lead:String(offer.lead||""), team:String(offer.team||""), relay:String(offer.relay), link:true, left:String(offer.left||"")};
     if(joinDoorHolds()){ pendingInvite={kind:"link", offer:heldOffer}; whenJoinDoorOpens(replayPendingInvite); return joinNow; } /* plant:join-link-door */
     joinOffer=heldOffer;
     joinShut=""; /* plant:link-unshut */ // a link's offer is not in the state a hidden bubble was shut at, so each new link is drawn
-    joinRead="link"; joinBlob=""; joinTyped=""; joinWhy=""; joinLinkSaid=null;
+    joinRead="link"; joinWhy=""; joinLinkSaid=null;
     joinMode="confirm"; /* plant:link-page */
     paintJoin();
     return joinNow;
   }
-  if(changed===true || JSON.stringify(joinNow)!==was || askWhy!==hadAskWhy) paintJoin();
+  if(changed===true || JSON.stringify(joinNow)!==was) paintJoin();
   if(JSON.stringify(joinNow)!==was || (s.joined && s.joined.file)) teamContent();
   return joinNow;
 }
@@ -617,18 +569,6 @@ function joinTime(ms){
   const d=new Date(ms||Date.now());
   return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
 }
-/* The six digits in two threes, or six empty places while there is no code yet; the gap and the places are drawn. */
-function joinCodeHtml(code){
-  return code?'<div class="e-join-code"><span>'+esc(code.slice(0,3))+'</span><span>'+esc(code.slice(3))+'</span></div>'
-    :'<div class="e-join-code e-join-wait" aria-hidden="true"><span><i></i><i></i><i></i></span><span><i></i><i></i><i></i></span></div>';
-}
-function pastedText(){
-  try{
-    const el=document.querySelector("[data-join-paste]");
-    if(el && typeof el.value==="string") return el.value;
-  }catch(e){}
-  return joinBlob;
-}
 function repaintJoin(){
   if(wholeThingEmpty()){ closeJoinBubble(); hooks.render(); joinPainted(); return; }
   paintJoin();
@@ -637,43 +577,13 @@ function clearJoinAsk(){
   dropInvite();
   repaintJoin();
 }
-/* The paste, opened from the empty desk alone. */
-function openJoinPaste(){
-  if(!teamCanJoin() || joinDoorHolds()) return;
-  dropInvite();
-  joinMode="paste";
-  repaintJoin();
-}
 function joinDisclosure(){
   return '<div class="e-join-meta">'+esc(t("Once this desk joins, the team's lead can see the catalogs it uses, their content included, and this desk's changes to them. The lead's Studio can take a copy of any of them at any time, without asking here: of a team catalog, one the lead publishes to the team, sealed for the team; of a personal catalog, any other on this desk, sealed for the lead alone. A personal catalog can be marked Private in the Library, under Catalog & data; the lead then sees nothing of it, not even that it is used. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses unless that catalog is Private, and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, none of them from a Private catalog, and Studio shows them in the team's totals."))+'</div>';
 }
-/* The name of a sync root's kind, as the absent-root sentence names it. */
-function joinKindWord(kind){
-  return kind==="onedrive"?t("OneDrive")
-    :kind==="onedrive-business"?t("OneDrive for Business")
-    :kind==="dropbox"?t("Dropbox")
-    :kind==="gdrive"?t("Google Drive")
-    :kind==="mapped"?t("a mapped network drive")
-    :t("a shared network folder");
-}
-function joinWhere(o){
-  if(!o) return "";
-  const host=o.host?t("This folder is on the computer {HOST}.").split("{HOST}").join(o.host):"";
-  const cloud=o.cloud==="sharepoint"?t("This folder is a SharePoint library that OneDrive keeps in sync.")
-    :o.cloud==="onedrive"?t("OneDrive keeps this folder in sync.")
-    :o.cloud==="dropbox"?t("Dropbox keeps this folder in sync.")
-    :o.cloud==="gdrive"?t("Google Drive keeps this folder in sync.")
-    :o.local?t("Teammates on other computers read this folder only if it is shared with them."):"";
-  return [host,cloud].filter(Boolean).join(" ");
-}
 function joinInviteParts(){
-  if(joinMode==="paste") return {title:t("Join a team"), line:t("Paste the invitation from the team's lead."),
-    body:'<textarea class="e-join-paste" data-join-paste spellcheck="false" autocomplete="off" aria-label="'
-      +esc(t("Paste the invitation from the team's lead."))+'">'+esc(joinBlob)+'</textarea>'+joinDisclosure(),
-    acts:[["read",t("Continue")],["back",t("Cancel")]]};
-  /* Neither the key nor the code is shown here: a code on the screen proves only that it was read off it. */
+  /* The link's confirm, which names the lead, the team and the relay's host and asks for no code. */
   if(joinMode==="confirm" && joinOffer){
-    const o=joinOffer, ask=t("Ask the team's lead for this invitation's check code, and type its five digits here.");
+    const o=joinOffer;
     const title=o.left?t("This desk left this team on {DATE}. Join it again?").split("{DATE}").join(leftDay(o.left)):t("Join this team?");
     /* The relay link names the lead, the team and the host, and it asks for no code. */
     if(o.relay){
@@ -687,20 +597,6 @@ function joinInviteParts(){
           +disc,
         acts:[["invite",t("Join this team"),false],["back",t("Cancel")]]};
     }
-    /* Claudette's words, 2026-10-28 */
-    const absentSentence=t("The team's folder is kept somewhere this computer does not have: {KIND}. The path below is the one from the lead's computer, so it may not open here. Once this computer has it too, starting Etiuda again and then opening the invitation finds the folder.").split("{KIND}").join(joinKindWord(o.kind));
-    const absent=o.why==="absent"?'<div class="e-join-meta">'+esc(absentSentence)+'</div>':"";
-    return {title:title, line:joinWhere(o),
-      body:absent+'<div class="e-join-meta">'+esc(t("Folder: {FOLDER}").split("{FOLDER}").join(o.folder))+'</div>'
-        +'<div class="e-join-meta">'+esc(t("Lead: {NAME}").split("{NAME}").join(o.lead))+'</div>'
-        +'<div class="e-join-ask">'+esc(ask)+'</div>'
-        +'<div class="e-join-why">'+esc(t("Only the real invitation gives this code, so it confirms the invitation comes from the team's own lead."))+'</div>'
-        +'<input type="text" class="e-join-check" data-join-check maxlength="5" inputmode="numeric" spellcheck="false" autocomplete="off" aria-label="'
-        +esc(t("Check"))+'" value="'+esc(joinTyped)+'">'
-        +'<div class="e-join-ask e-join-miss" data-join-miss'+(typedWrong()?'':' hidden')+'>'
-        +esc(t("This code does not match this invitation. Ask the lead again before joining."))+'</div>'
-        +joinDisclosure(),
-      acts:[["invite",t("Join this team"),!typedOk()],["back",t("Cancel")]]};
   }
   if(joinMode==="refused" && joinWhy==="link" && joinLinkSaid){
     const said=uiLang()==="pl" && joinLinkSaid.pl ? joinLinkSaid.pl : joinLinkSaid.en;
@@ -708,13 +604,9 @@ function joinInviteParts(){
   }
   if(joinMode==="refused") return {title:t("Join a team"),
     line:joinWhy==="relay-mirror"?t("Etiuda could not make its own copy of the team's files on this computer, so nothing was written. Once the disk has room and Etiuda may write in its folder, Join again; the invitation still works.")
-      :joinWhy==="folder-not-writable"?t("This computer can only read the team's folder, and joining needs permission to write there. Once that is granted, Join again; the invitation still works.")
       :joinWhy==="silent"?t("This folder could not be reached, so nothing was written.")
       :joinWhy==="pinned"?t("This invitation names a team this desk already knows, but with a different lead's key. It was not used, and nothing changed. Tell the team's lead about it.")
-      :joinWhy==="barred"?t("This invitation names a team whose lead was forgotten on this desk. It was not used, and nothing changed. To join, ask from the team's catalog instead.")
-      :joinWhy==="foreign"?t("This folder holds another team, or the same team under a different lead's key, so nothing was written. Tell the team's lead about it.")
-      :joinWhy==="unreadable"?t("The team file in this folder could not be read, so this desk did not join and nothing was written. Let the team's lead know, so they can check the folder.")
-      :joinWhy==="check"?t("This code does not match this invitation. Ask the lead again before joining.")
+      :joinWhy==="barred"?t("This invitation names a team whose lead was forgotten on this desk. It was not used, and nothing changed. To join, the team's lead sends a new invitation.")
       :joinWhy==="policy"?t("The organisation's IT sets this desk's team, so invitations are turned off.")
       :joinWhy==="waiting"?t("This invitation waits until Etiuda can read what the organisation's IT set for this computer. Nothing is lost: it can be used again then.")
       :t("This invitation cannot be read, so nothing was changed."),
@@ -742,7 +634,7 @@ function joinParts(){
   if(invited) return invited;
   const meta=j?'<div class="e-join-meta">'+esc(t("{NAME}, asked at {TIME}").split("{NAME}").join(j.name||who)
     .split("{TIME}").join(joinTime(j.asked)))+'</div>':'';
-  /* An invitation waits under its lead's name only until the opening is read. The code then follows the request's own door. */
+  /* An invitation waits under its lead's name until the lead lets the desk in. */
   if(j && j.invite && j.state==="waiting"){
     const lead=String(j.invite.lead||"").trim()||t("the lead");
     const isLeft=j.left===true;
@@ -790,7 +682,7 @@ function joinParts(){
     return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
       line:j.paused?t("The team's lead cannot let anyone in for now, as the lead's licence is paused. Nothing needs doing here: once the licence is active again, this desk is let in by itself.") /* copywriter, 2026-10-30 00:20 */
         :(j.invite.relay || j.invite.wrapped)?relayWait
-        :t("Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead."),
+        :t("Waiting for the team's lead to let this desk in. Nothing more is needed here."),
       body:meta, acts:[["cancel",t("Cancel the request")]]};
   }
   /* A request at the team's standing door the relay or the lead turned away, or the relay refused as removed: the desk cannot tell
@@ -814,20 +706,16 @@ function joinParts(){
       +'<div class="e-join-meta">'+esc(t("Team: {TEAM}").split("{TEAM}").join(j.team))+'</div>'
       +'<div class="e-join-meta">'+esc(t("Relay: {HOST}").split("{HOST}").join(j.invite.relay))+'</div>',
     acts:[["cancel",t("Cancel the request")],["load",t("Load another catalog file")]]};
-  if(j && j.state==="code") return {title:t("Read this code to the team's lead"),
-    line:t("They type it in Studio, and the catalog opens here once they let this desk in."),
-    body:joinCodeHtml(j.code)+meta, acts:[["cancel",t("Cancel the request")]]};
   if(j && j.state==="refused"){
     if(j.invite) return {title:t("The lead turned the request down"), line:t("To join, a new invitation from the team's lead is needed."), body:meta, acts:[["cancel",t("Cancel the request")],["load",t("Load another catalog file")]]}; /* plant:relay-refused-card */
     return {title:t("The lead turned the request down"),
       line:t("Asking again sends a new request."), body:meta, acts:[["ask",t("Ask again")],["load",t("Load another catalog file")]]};
   }
-  if(j) return {title:t("Waiting for the lead to open the request"),
+  if(j) return {title:t("Join a team"),
     line:j.paused?t("The team's lead cannot let anyone in for now, as the lead's licence is paused. Nothing needs doing here: once the licence is active again, this desk is let in by itself.") /* copywriter, 2026-10-30 00:20 */
-      :t("The code to read to them appears here as soon as they do."), body:joinCodeHtml("")+meta,
+      :t("Waiting for the team's lead to let this desk in. Nothing more is needed here."), body:meta,
     acts:[["cancel",t("Cancel the request")]]};
-  const ask='<div class="e-join-meta">'+esc(t("Asks as {NAME}, the name in Settings.").split("{NAME}").join(who))+'</div>'+joinDisclosure();
-  const acts=[["ask",t("Ask to join")],["load",t("Load another catalog file")]];
+  const acts=[["load",t("Load another catalog file")]];
   /* A team whose roster no longer lists this desk says so in place of the ask a desk never on it gets. */
   const gone=s?((joinNow&&joinNow.leads)||[]).filter(x=>x.team===s.team && x.removed)[0]:null;
   if(gone){
@@ -837,40 +725,21 @@ function joinParts(){
     /* Claudette's words, 2026-10-27. */
     if(hushLine) return {title:title,
       line:t("The relay says this desk is no longer on the team, so nothing new reaches it. The catalogs on it stay as they are. Once the team's lead lets this desk in again, the catalog opens here by itself."),
-      body:ask, acts:acts};
-    return {title:title, line:t("Once the team's lead lets this desk in again, the catalog opens here by itself."), body:ask, acts:acts};
+      body:"", acts:acts};
+    return {title:title, line:t("Once the team's lead lets this desk in again, the catalog opens here by itself."), body:"", acts:acts};
   }
-  let line=t("Once the team's lead lets this desk in, the catalog opens here by itself.");
-  if(askWhy==="no-identity"){
-    const p=deskPlatform();
-    line=(p==="win32")
-      ? t("Ask to join works once this computer's secure storage can keep this desk's own key, which it cannot just now; on Windows, signing in with a person's own account, not a service account or a temporary profile, usually does it. Then press Ask to join again.")
-      : (p==="darwin")
-      ? t("Ask to join works once this computer's secure storage can keep this desk's own key, which it cannot just now; on macOS, allowing Etiuda to use the Keychain when asked usually does it. Then press Ask to join again.")
-      : t("Ask to join works once this computer's secure storage can keep this desk's own key, which it cannot just now; on Linux, unlocking the system keyring usually does it. Then press Ask to join again.");
-  }
-  else if(askWhy==="folder-not-answering")
-    line=t("Ask to join again once the team's folder can be reached; just now it does not answer from this computer, so nothing was written.");
-  else if(askWhy==="folder-not-writable")
-    line=t("Whoever manages the team's folder can let this computer write in it, which the request needs; until then nothing was written here. After that, press Ask to join again.");
+  /* A sealed catalog this desk holds no key for is joined through the team's lead: an invitation to the person's address or a link, never a request of the desk's own. */
+  const line=t("This catalog belongs to a team. Once the team's lead has invited this desk and it has joined, the catalog opens here by itself.");
   return {title:t("{FILE} is sealed for its team").split("{FILE}").join(s?s.file:""),
-    line:line, body:ask, acts:acts};
+    line:line, body:"", acts:acts};
 }
 function joinAct(act){
   const j=joinNow&&joinNow.join, s=joinNow&&joinNow.sealed;
-  if(joinDoorHolds() && (act==="invite" || act==="ask" || act==="join")) return Promise.resolve(null); /* plant:join-act-door */
-  if(act==="join") return Promise.resolve(openJoinPaste());
+  if(joinDoorHolds() && (act==="invite" || act==="ask")) return Promise.resolve(null); /* plant:join-act-door */
   if(act==="back"){
     if((joinOffer&&joinOffer.link) || (joinMode==="refused"&&joinWhy==="link"))
-      return joinAsk("link-no","","","",()=>{ dropInvite(); return true; });
+      return joinAsk("link-no","","",()=>{ dropInvite(); return true; });
     return Promise.resolve(clearJoinAsk());
-  }
-  if(act==="read"){
-    const sent=pastedText();
-    if(joinDoorHolds()){ if(String(sent||"").trim()){ pendingInvite={kind:"paste", text:String(sent)}; whenJoinDoorOpens(replayPendingInvite); } return Promise.resolve(null); } /* plant:join-paste-door */
-    const n=++joinReads;
-    joinBlob=sent;
-    return joinAsk("read",sent,"","",v=>readTook(v,n,sent));
   }
   if(act==="invite"){
     if(joinMode!=="confirm" || !joinOffer) return Promise.resolve(null);
@@ -884,11 +753,8 @@ function joinAct(act){
       else teamContent();
       return v;
     };
-    if(joinOffer.link) return joinAsk("link","",agentName(),"",v=>yesTook(v,"link")).then(afterJoin);
-    /* A pasted relay invitation sends the text that was read and no code; a folder invitation sends the code the agent typed. */
-    if(!joinRead || (!joinOffer.relay && !typedOk())) return Promise.resolve(null);
-    const sent=joinRead;
-    return joinAsk("invite",sent,agentName(),joinOffer.relay?"":joinTyped,v=>yesTook(v,sent)).then(afterJoin);
+    if(joinOffer.link) return joinAsk("link","",agentName(),v=>yesTook(v,"link")).then(afterJoin);
+    return Promise.resolve(null);
   }
   if(act==="ask"){
     const askTeam=String((j&&j.team)||(s&&s.team)||"");
@@ -930,20 +796,10 @@ function teamJoinEmptyHtml(){
       +esc(a[1])+'</button>').join("")
     +'</div></div>';
 }
-/* The confirm's yes and its line for a wrong code follow the typing, with no repaint to take the caret away. */
-function followCheck(root,el){
-  joinTyped=String(el.value||"");
-  if(!root || typeof root.querySelector!=="function") return;
-  const yes=root.querySelector('[data-join="invite"]'), miss=root.querySelector("[data-join-miss]");
-  if(yes) yes.disabled=!typedOk();
-  if(miss) miss.hidden=!typedWrong();
-}
 function wireTeamJoinEmpty(root){
   if(!root) return;
-  root.querySelectorAll("[data-join], [data-join-paste], [data-join-check]").forEach(el=>{
-    if(el.hasAttribute && el.hasAttribute("data-join-paste")) el.oninput=()=>{ joinBlob=String(el.value||""); };
-    else if(el.hasAttribute && el.hasAttribute("data-join-check")) el.oninput=()=>followCheck(root,el);
-    else if(el.getAttribute && el.getAttribute("data-join")) el.onclick=()=>joinAct(el.getAttribute("data-join"));
+  root.querySelectorAll("[data-join]").forEach(el=>{
+    if(el.getAttribute && el.getAttribute("data-join")) el.onclick;
   });
 }
 /* THE BUBBLE, where a catalog is already open: hung from the catalog's name as the offer is, one at a time, and back
@@ -1037,9 +893,7 @@ function openJoinBubble(){
     joinShut=JSON.stringify(joinNow); dropInvite(); close(); joinPainted(); if(p.lead) joinAsk("seen",p.lead);
     if(link) joinAsk("link-no"); /* plant:hide-link-no */
   };
-  wrap.querySelectorAll("[data-join], [data-join-paste], [data-join-check]").forEach(el=>{
-    if(el.hasAttribute("data-join-paste")){ el.oninput=()=>{ joinBlob=String(el.value||""); }; return; }
-    if(el.hasAttribute("data-join-check")){ el.oninput=()=>followCheck(wrap,el); return; }
+  wrap.querySelectorAll("[data-join]").forEach(el=>{
     const act=el.getAttribute("data-join");
     el.onclick=()=>{ if(act==="hide") return hide(); close(); joinAct(act); };
   });
@@ -1129,4 +983,4 @@ function shareDropItem(blobId){
   catch(e){ return Promise.resolve({ok:false}); }
 }
 
-export { lapseNote, shareRefusedNotes, keptApartNotes, relayElsewhereNote, folderHeldNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, teamPolicySaid, relayDesk, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, openJoinPaste, teamCanJoin, inviteHeld, noteCatalogCopy, joinTook, teamContent, teamContentNow, markCatalogPrivate, onContentChanged, openTeamBubble, closeTeamBubble, teamShareState, shareToTeammate, shareInboxList, shareKeepCard, shareKeptNote, shareDropItem };
+export { lapseNote, shareRefusedNotes, keptApartNotes, relayElsewhereNote, folderHeldNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, teamPolicySaid, relayDesk, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, teamCanJoin, inviteHeld, noteCatalogCopy, joinTook, teamContent, teamContentNow, markCatalogPrivate, onContentChanged, openTeamBubble, closeTeamBubble, teamShareState, shareToTeammate, shareInboxList, shareKeepCard, shareKeptNote, shareDropItem };
