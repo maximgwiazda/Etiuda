@@ -39,7 +39,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 169 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 13);
+const EXPECTED = 170 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 13);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2346,6 +2346,19 @@ try {
   deskOf([A, B]); copies("c-b", 40); copies("c-a", 9);
   check(RD.rankedCards([], () => true).hits.map(m => m.id).join(" ") === resting && resting.split(" ").slice(-2).join(" ") === "c-a c-b",
     "6m the desk's resting list is the same order with copies counted as without: " + resting.split(" ").slice(-3).join(" "));
+
+  /* 1123cf: a folded card is a view state alone. It keeps its place in the desk's order, stays in a search's hits and in the picker's rows. */
+  {
+    const FD = await import(MOD("collapse.js"));
+    deskOf([A, B]); AS.setCards(six.map(c => Object.assign({}, c)).concat([A, B]));
+    const snap = () => [RD.rankedCards([], () => true).hits.map(m => m.id).join(" "), rIds(find("refund")), ids(PICK.pickRows("")), ids(PICK.pickRows("refund"))].join(" | ");
+    FD.setCardsFoldable(true); const openAll = snap();
+    FD.toggleCardFold("c-r2"); FD.toggleCardFold("c-a"); FD.toggleCardFold("c-b");
+    const folded = snap(), count = ["c-r2", "c-a", "c-b"].filter(i => FD.isCardFolded(i)).length;
+    FD.toggleCardFold("c-r2"); FD.toggleCardFold("c-a"); FD.toggleCardFold("c-b");
+    check(count === 3 && folded === openAll && openAll.split(" | ")[1] === "c-r1 c-r2 c-r3 c-r4 c-r5 c-r6" && openAll.split(" | ")[2].indexOf("c-r2/0") > -1,
+      "cf1123a three cards folded leave the desk's order, a search's hits and the picker's rows exactly as they were: " + folded.slice(0, 120));
+  }
 
   /* Row 1: On a desk where an unlinked card has 5 copies and the linked one has 0, taking the suggestion puts the linked card at row 0. */
   const bandedRow1 = [

@@ -587,8 +587,9 @@ try {
 
   // 7. Blue bubbles (Undo bubble on hiding a card + note-pane + notice with .e-notice-err & join/fingerprint tokens)
   const hideClicked = await page.evaluate(() => {
-    const b = document.querySelector('#list .card .cacts [data-act="hide"]');
-    if (b) { b.click(); return true; }
+    /* The card draws no Hide control; the mechanic stays, and the Undo bubble it raises is what this step audits. */
+    const c = document.querySelector("#list .card[data-id]");
+    if (c) { hideCard(c.dataset.id); return true; }
     return false;
   });
   await sleep(80);

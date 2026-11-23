@@ -19,7 +19,7 @@ import { catIconSvg, catSlot } from "./cat-identity.js";
 import { chordChips } from "./shortcuts.js";
 import { ICON_TEAM } from "./icons.js";
 import { applyCardColumns, remPx } from "./columns.js";
-import { groupKeyOf, COLLAPSE_BAND, COLLAPSE_FAV, isCollapsed, collapseCtrlHtml } from "./collapse.js";
+import { groupKeyOf, COLLAPSE_BAND, COLLAPSE_FAV, isCollapsed, collapseCtrlHtml, setCardsFoldable, isCardFolded, cardFoldSig } from "./collapse.js";
 import { isFavourite, ePackEpoch, pack } from "./pack.js";
 import { statsLift, statsRecentUse } from "./desk-stats.js";
 import { ICON_INTENT_LINK, _STAR } from "./icons.js";
@@ -206,6 +206,7 @@ function render(){
      the first landmark is, it does not remove them all. The hidden tail is one "put away"
      zone and gets no labels. */
   const groupList = !terms.length;
+  setCardsFoldable(groupList);
   /* Owning up to a spelling fix, ahead of everything the list holds. Prepending it costs the
      first landmark its `:first-child` zero top margin, which is right: there is content above
      it now, so the gap it was suppressing is the gap it should have. */
@@ -289,8 +290,8 @@ function render(){
     const body=()=>built||(built=cardBodyHtml(m,i,{hit:hit,catHit:catHit,fav:fav,band:band,other:other,dragTip:dragTip}));
     return {sepH:sepH, body:body, id:m.id,
       sig:ePackEpoch+"|"+renderKey+"|"+cardFillKey(m)
-        +"|"+(entrySel&&entrySel.id===m.id?entrySel.vi:-1)+"|"+editionMarkSig(m.id)+"|"+flagSig(String(m.id||""))+"|"+rewordSig(m.id)+"|"+shareSig(m),
-      hit:hit, catHit:catHit, hidden:!!m._hidden, rw:!!rewordShown(m), i:i, band:band,
+        +"|"+(entrySel&&entrySel.id===m.id?entrySel.vi:-1)+"|"+editionMarkSig(m.id)+"|"+flagSig(String(m.id||""))+"|"+rewordSig(m.id)+"|"+shareSig(m)+"|"+cardFoldSig(m.id),
+      hit:hit, catHit:catHit, hidden:!!m._hidden, folded:isCardFolded(m.id), rw:!isCardFolded(m.id) && !!rewordShown(m), i:i, band:band,
       dragging:!!(cardDrag&&cardDrag.moved&&cardDrag.key===m.id),
       dragTip:dragTip};
   });

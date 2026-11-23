@@ -1,5 +1,6 @@
 import { CONTENT_LANGS } from "./content-model.js";
-import { ICON_EDIT, ICON_EYE_OPEN, ICON_EYE_SHUT, ICON_STAR_OFF, ICON_STAR_ON, _NOTE, _svg } from "./icons.js";
+import { ICON_CHEVRON_R, ICON_EDIT, ICON_EYE_OPEN, ICON_EYE_SHUT, ICON_STAR_OFF, ICON_STAR_ON, _NOTE, _svg } from "./icons.js";
+import { isCardFolded, cardFoldOffered } from "./collapse.js";
 import { stampHtml } from "./card-chain.js";
 import { cardDrag } from "./list-pointer.js";
 import { altLabelAt, cardCommits, cardLang, cardTitle, noteFor, parts, rewordShown } from "./card-model.js";
@@ -21,12 +22,17 @@ import { rewordButtonHtml, rewordChipHtml, rewordAnswersHtml } from "./card-rewo
 /* The card body, extracted so a language flip can rebuild one card at a time - the
    render map and the flip's idle chunks must write the same bytes (verifyPool checks).
    ctx carries the map's per-card locals; everything else the body reads is global. */
+/* THE HIDE CONTROL IS OFF, NOT REMOVED: the mechanic (hideCard, the grey, the foot of the category, the click branch in
+   list-pointer.js) stays whole, and this switch draws the control again. */
+let cardHideButton=false;
+function setCardHideButton(on){ cardHideButton=!!on; }
 function cardBodyHtml(m,i,ctx){
   const hit=ctx.hit, catHit=ctx.catHit, fav=ctx.fav, band=ctx.band,
         other=ctx.other, dragTip=ctx.dragTip;
   let cardH="";
-    const rw=rewordShown(m);
-    cardH+='<div class="card'+(m._hidden?" is-hidden":"")+(rw?" rw-on":"")+(hit?" intent-hit":"")+(catHit?" cat-hit":"")
+    const foldOn=cardFoldOffered(m.id), folded=foldOn && isCardFolded(m.id);
+    const rw=folded?null:rewordShown(m);
+    cardH+='<div class="card'+(m._hidden?" is-hidden":"")+(folded?" is-folded":"")+(rw?" rw-on":"")+(hit?" intent-hit":"")+(catHit?" cat-hit":"")
       +(cardDrag&&cardDrag.moved&&cardDrag.key===m.id?" dragging":"")
       +'" data-i="'+i+'" data-id="'+esc(m.id||'')+'" data-rank="'+esc(band)+'"'
       +(catSlot(m.c)>=0?' data-ec="'+catSlot(m.c)+'"':'')
@@ -62,15 +68,23 @@ function cardBodyHtml(m,i,ctx){
       ? "Show this card again"
       : (fav ? "Put this card away: it greys out at the foot of this category and loses its star"
              : "Put this card away: it greys out at the foot of this category"));
+    const foldTip=t(folded?"Unfold this card":"Fold this card");
+    const foldBtn=foldOn
+      ? '<button type="button" class="card-fold'+(folded?" shut":"")+'" data-act="fold" title="'+esc(foldTip)+'" aria-label="'+esc(foldTip)+'"'
+        +' aria-expanded="'+(folded?"false":"true")+'">'+ICON_CHEVRON_R+'</button>' : '';
+    const hideBtn=cardHideButton
+      ? '<button type="button" class="'+(m._hidden?"":"danger")+'" data-act="hide" title="'+esc(hideTip)+'" aria-label="'+esc(hideTip)+'">'+(m._hidden?ICON_EYE_SHUT:ICON_EYE_OPEN)+'</button>' : '';
     const _note=noteFor(m);
-    cardH+='<span class="cacts">'+rewordButtonHtml()
+    cardH+='<span class="cacts">'+(folded?'':rewordButtonHtml())
       +(_note ? '<button type="button" data-act="note" title="'+esc(t("Internal note"))+'" aria-label="'+esc(t("Internal note"))+'" aria-expanded="false">'+_svg("ic",_NOTE)+'</button>' : '')
       +'<button type="button" data-act="edit" title="'+esc(t("Edit this card"))+'" aria-label="'+esc(t("Edit this card"))+'">'+ICON_EDIT+'</button>'
       +shareButtonHtml(m)
       +flagButtonHtml(String(m.id||""))
-      +'<button type="button" class="'+(m._hidden?"":"danger")+'" data-act="hide" title="'+esc(hideTip)+'" aria-label="'+esc(hideTip)+'">'+(m._hidden?ICON_EYE_SHUT:ICON_EYE_OPEN)+'</button>'
+      +hideBtn+foldBtn
       +'<button type="button" class="star-btn'+(fav?" on":"")+'" data-act="fav" title="'+esc(favTip)+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(fav?"true":"false")+'">'+(fav?ICON_STAR_ON:ICON_STAR_OFF)+'</button>'
       +'</span></div>';
+    /* A folded card is its header alone, as a folded group leaves only its heading. */
+    if(folded) return {cardH:cardH+'</div>', hitBadge:hitBadge, catBadge:catBadge};
     /* A pinned card shows the version it speaks, not the one the toggle names. */
     const _L=cardLang(m);
     /* Spec 2.6: the primary is untinted and every other language shares the secondary tint.
@@ -130,6 +144,7 @@ function swapStripHtml(sws){
 }
 
 export {
+  setCardHideButton,
   cardBodyHtml,
   swapStripHtml
 };

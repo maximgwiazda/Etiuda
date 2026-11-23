@@ -153,6 +153,8 @@ Dom.grabDom();
 const SC = await import(MOD("shortcuts.js"));
 SC.loadShortcuts();
 const CB = await import(MOD("card-body.js"));
+const COLL = await import(MOD("collapse.js"));
+COLL.setCardsFoldable(true);
 const SL = await import(MOD("shortcuts-list.js"));
 const KD = await import(MOD("keydown.js"));
 const mark = heard.length;
@@ -195,7 +197,7 @@ function cardActs(lang) {
   return { acts, txtStopped: txt.some(t => /tabindex/.test(t)), n: txt.length };
 }
 
-check("card-body.js", "810tf1 a card's note, edit, hide and star are buttons in that order, named in English and Polish, and the reply text is not a tab stop",
+check("card-body.js", "810tf1 a card's note, edit, fold and star are buttons in that order, named in English and Polish, and the reply text is not a tab stop",
   () => {
     const en = cardActs("en"), pl = cardActs("pl");
     ST.lsDel("eUiLang");
@@ -204,10 +206,71 @@ check("card-body.js", "810tf1 a card's note, edit, hide and star are buttons in 
       ".cacts button.danger:focus-visible{box-shadow:inset 0 0 0 1px #c44}",
       ".cacts button.star-btn:focus-visible{box-shadow:inset 0 0 0 1px var(--fav)}"].every(s => sheet.indexOf(s) >= 0);
     return eq([en.acts.join(" ~ "), en.txtStopped, en.n > 0, pl.acts.join(" ~ "), pl.txtStopped, edge].join(" || "),
-      ["note|Internal note ~ edit|Edit this card ~ hide|Put this card away: it greys out at the foot of this category ~ fav|Add to Favourites",
+      ["note|Internal note ~ edit|Edit this card ~ fold|Fold this card ~ fav|Add to Favourites",
         false, true,
-        "note|Notatka wewnętrzna ~ edit|Edytuj tę kartę ~ hide|Odłóż tę kartę: trafi, wyszarzona, na koniec swojej kategorii ~ fav|Dodaj do Ulubionych",
+        "note|Notatka wewnętrzna ~ edit|Edytuj tę kartę ~ fold|Zwiń tę kartę ~ fav|Dodaj do Ulubionych",
         false, true].join(" || "));
+  });
+
+/* 1123cf: THE CARD'S FOLD in place of its Hide. The markup is the module's, called; the sheet's rules are read in 1123cf8. */
+const attrOf = (s, n) => { const mm = new RegExp("\\s" + n + '="([^"]*)"').exec(s); return mm ? mm[1] : ""; };
+const foldBtn = html => { const mm = /<button\b([^>]*\bdata-act="fold"[^>]*)>/.exec(html); return mm ? mm[1] : ""; };
+const bodyOf = (c, over) => CB.cardBodyHtml(c, 0, Object.assign({}, ctx, over || {})).cardH;
+check("card-body.js", "1123cf5 an open card carries a fold control, expanded and named in both languages, and no Hide control, put away or not; its blocks are drawn",
+  () => {
+    const read = (lang, c) => { ST.lsSet("eUiLang", lang); const h = bodyOf(c), b = foldBtn(h);
+      return [/class="card[ "]/.test(h) && !/is-folded/.test(h), attrOf(b, "class"), attrOf(b, "aria-expanded"), attrOf(b, "title"), attrOf(b, "aria-label"), /data-act="hide"/.test(h), /class="txt/.test(h)].join("/"); };
+    const en = read("en", card), pl = read("pl", card), away = read("en", Object.assign({}, card, { _hidden: 1 }));
+    ST.lsDel("eUiLang");
+    return eq([en, pl, away].join(" || "),
+      ["true/card-fold/true/Fold this card/Fold this card/false/true", "true/card-fold/true/Zwiń tę kartę/Zwiń tę kartę/false/true", "true/card-fold/true/Fold this card/Fold this card/false/true"].join(" || "));
+  });
+check("card-body.js", "1123cf6 a folded card is its header alone: the title, its badges and its actions, the fold control shut and naming the way back, and no block of text, no miss line, no swap strip",
+  () => {
+    COLL.setCardsFoldable(true); ST.lsDel("eCollapsed"); COLL.rereadCollapsed(); COLL.toggleCardFold(card.id);
+    try {
+      ST.lsSet("eUiLang", "en");
+      const h = bodyOf(Object.assign({}, card, { sw: ["x"] }), { hit: true, fav: true }), b = foldBtn(h);
+      ST.lsDel("eUiLang");
+      const acts = [...h.matchAll(/data-act="(\w+)"/g)].map(x => x[1]).join();
+      return eq([/class="card is-folded[ "]/.test(h), (h.match(/class="chead"/g) || []).length, /class="ctitle"/.test(h), /cbadge hit/.test(h) && /cbadge fav/.test(h),
+        attrOf(b, "class"), attrOf(b, "aria-expanded"), attrOf(b, "title"), acts, /class="txt|class="miss|class="swap/.test(h)].join("/"),
+        "true/1/true/true/card-fold shut/false/Unfold this card/note,edit,fold,fav/false");
+    } finally { COLL.toggleCardFold(card.id); ST.lsDel("eCollapsed"); COLL.rereadCollapsed(); }
+  });
+check("card-body.js", "1123cf7 the fold shows where the groups' folds show: a stored fold with the list not foldable (a search) draws the card open and offers no fold control",
+  () => {
+    ST.lsDel("eCollapsed"); COLL.rereadCollapsed(); COLL.toggleCardFold(card.id); COLL.setCardsFoldable(false);
+    try {
+      const h = bodyOf(card);
+      return eq([/is-folded/.test(h), foldBtn(h) === "", /class="txt/.test(h), /data-act="hide"/.test(h)].join("/"), "false/true/true/false");
+    } finally { COLL.setCardsFoldable(true); COLL.toggleCardFold(card.id); ST.lsDel("eCollapsed"); COLL.rereadCollapsed(); }
+  });
+check("card-body.js", "1123cf8 the Hide control is kept in the code behind one switch, off: switched on it draws exactly what it drew, danger-marked and named in both languages, switched off again it is gone",
+  () => {
+    const read = lang => { ST.lsSet("eUiLang", lang); const h = bodyOf(card), m = /<button type="button" class="danger" data-act="hide" title="([^"]*)" aria-label="([^"]*)">/.exec(h); return m ? m[1] + "=" + m[2] : "none"; };
+    const off = read("en");
+    CB.setCardHideButton(true);
+    let on;
+    try { on = [read("en"), read("pl")]; } finally { CB.setCardHideButton(false); ST.lsDel("eUiLang"); }
+    return eq([off, on.join(" | "), read("en")].join(" || "),
+      ["none", "Put this card away: it greys out at the foot of this category=Put this card away: it greys out at the foot of this category | Odłóż tę kartę: trafi, wyszarzona, na koniec swojej kategorii=Odłóż tę kartę: trafi, wyszarzona, na koniec swojej kategorii", "none"].join(" || "));
+  });
+check("render.js", "1123cf10 render tells the fold whether the list is foldable by the groups' own test (no search running), and a card's signature carries its fold in both places that write one",
+  () => {
+    const r = read("src/modules/render.js"), pool = read("src/modules/card-pool.js");
+    const wired = /const groupList = !terms\.length;\s*setCardsFoldable\(groupList\);/.test(r);
+    const signed = /shareSig\(m\)\+"\|"\+cardFoldSig\(m\.id\)/.test(r) && /shareSig\(m\)\+"\|"\+cardFoldSig\(m\.id\);\s*const ord/.test(pool);
+    return eq([wired, signed].join("/"), "true/true");
+  });
+check("template.html", "1123cf9 the sheet turns a fold control as a group's turns (down open, right shut, the same turn animations), keeps its resting ink while expanded, and keeps a folded card's actions shown in every rule that fades them",
+  () => {
+    const sheet = read("src/template.html");
+    const rules = [".chead .cacts button.card-fold svg{", ".chead .cacts button.card-fold.shut svg{transform:rotate(0deg)}",
+      ".chead .cacts button.card-fold.e-turn-shut svg{animation:e-fold-turn-shut", ".chead .cacts button.card-fold.e-turn-open svg{animation:e-fold-turn-open",
+      ".chead .cacts button.card-fold[aria-expanded=true]:not(:hover):not(:focus-visible){color:var(--dim)}",
+      ".card.is-folded .cacts{opacity:1}", ".card:not(:hover,:focus-within,.is-hidden,.is-folded)"].filter(r => sheet.indexOf(r) < 0);
+    return rules.length ? "missing " + rules.join(" ; ") : true;
   });
 
 /* A default desk has body.note-hover and a mouse, so a rule inside @media (hover:hover) applies
@@ -217,7 +280,7 @@ check("card-body.js", "810tf1 a card's note, edit, hide and star are buttons in 
    :focus rule beside them never meets it on the way in. A zero box does not skip it. The note is
    that zero box at rest, so a pointer does not see it, and keyboard focus must give the box back.
    Enter and Space are both left for the button, which opens the note. */
-check("template.html", "810tf8 on a default desk the note, edit, hide and star stay in the tab walk, keyboard focus shows the note, and Enter and Space are left for the button",
+check("template.html", "810tf8 on a default desk the note, edit, fold and star stay in the tab walk, keyboard focus shows the note, and Enter and Space are left for the button",
   () => {
     const raw = read("src/template.html");
     const sheet = styleBlock(raw);
@@ -570,9 +633,9 @@ function cactsTree() {
   const cacts = cactsAdd(chead, cactsNode("span", { classes: ["cacts"] }));
   const note = cactsAdd(cacts, cactsNode("button", { attrs: { type: "button", "data-act": "note", "aria-expanded": "false" } }));
   const edit = cactsAdd(cacts, cactsNode("button", { attrs: { type: "button", "data-act": "edit" } }));
-  const hide = cactsAdd(cacts, cactsNode("button", { classes: ["danger"], attrs: { type: "button", "data-act": "hide" } }));
+  const fold = cactsAdd(cacts, cactsNode("button", { classes: ["card-fold"], attrs: { type: "button", "data-act": "fold", "aria-expanded": "true" } }));
   const star = cactsAdd(cacts, cactsNode("button", { classes: ["star-btn"], attrs: { type: "button", "data-act": "fav", "aria-pressed": "false" } }));
-  return { note, edit, hide, star, all: [note, edit, hide, star] };
+  return { note, edit, fold, star, all: [note, edit, fold, star] };
 }
 function couldHit(sel) {
   const s = String(sel).toLowerCase();
@@ -785,7 +848,7 @@ function matcherSelfCheck(tree) {
     ["body.shed-segfold #seg button:not(.on)", tree.note, null, false],
     ["[hidden]", tree.note, null, false],
     ["html.e-veiled body", tree.note, null, false],
-    ["button:not([disabled])", tree.hide, null, true]
+    ["button:not([disabled])", tree.fold, null, true]
   ];
   for (const [sel, el, focus, want] of cases) {
     let got;

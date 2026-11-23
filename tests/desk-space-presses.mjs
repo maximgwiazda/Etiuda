@@ -512,32 +512,29 @@ async function runSuite(browser, enginePath, opts = {}) {
       );
     }
 
-    // 12. Card hide button (data-act="hide")
+    // 12. Card fold button (data-act="fold"): Enter folds the card, Space shows it again
     {
-      const hitE = await tabTo(page, ".card .cacts button[data-act='hide']");
+      const state = id => page.evaluate(i => ({
+        folded: !!document.querySelector(`#list .card[data-id="${i}"].is-folded`),
+        lanes: document.body.classList.contains("e-lanes")
+      }), id);
+      const hitE = await tabTo(page, ".card .cacts button[data-act='fold']");
       const cidE = await page.evaluate(() => document.activeElement?.closest(".card")?.dataset?.id || "");
+      const beforeE = await state(cidE);
       await page.keyboard.press("Enter");
       await sleep(80);
-      const afterE = await page.evaluate(id => ({
-        present: !!document.querySelector(`#list .card[data-id="${id}"]`),
-        lanes: document.body.classList.contains("e-lanes")
-      }), cidE);
+      const afterE = await state(cidE);
 
-      const hitS = await tabTo(page, ".card .cacts button[data-act='hide']");
-      const cidS = await page.evaluate(() => document.activeElement?.closest(".card")?.dataset?.id || "");
-      const beforeS = await page.evaluate(id => !!document.querySelector(`#list .card[data-id="${id}"]`), cidS);
+      const hitS = await tabTo(page, `.card[data-id="${cidE}"] .cacts button[data-act='fold']`);
       await page.keyboard.press("Space");
       await sleep(80);
-      const afterS = await page.evaluate(id => ({
-        present: !!document.querySelector(`#list .card[data-id="${id}"]`),
-        lanes: document.body.classList.contains("e-lanes")
-      }), cidS);
+      const afterS = await state(cidE);
       if (afterS.lanes) { await page.keyboard.press("Space"); await sleep(80); }
 
       rec(
-        hitE && hitS && !afterE.present && !afterE.lanes && beforeS && !afterS.present && !afterS.lanes,
-        "card: hide button Space hides card like Enter without opening lanes",
-        { cidE, afterE, cidS, beforeS, afterS }
+        hitE && hitS && !beforeE.folded && afterE.folded && !afterE.lanes && !afterS.folded && !afterS.lanes,
+        "card: fold button answers Enter and Space, each without opening lanes",
+        { cidE, beforeE, afterE, afterS }
       );
     }
 

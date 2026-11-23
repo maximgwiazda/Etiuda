@@ -370,7 +370,7 @@ const TOUR_STEPS=[
     tab:"chat",
     prep:tourRevealCardActions,
     title:"A card's buttons",
-    body:"The star lifts a card to the top of its category, and under <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> into <b class=\"t-fav\"><span data-icon=\"star\"></span>Favourites</b>.<br>The eye puts it away, greyed at the foot of its category, and brings it back from there.<br>The pencil opens it for editing, and <b>Reset</b> in the editor brings back the catalog's own words.<br>Click the pencil on this card.",
+    body:"The star lifts a card to the top of its category, and under <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> into <b class=\"t-fav\"><span data-icon=\"star\"></span>Favourites</b>.<br>The chevron folds it to its title and unfolds it again.<br>The pencil opens it for editing, and <b>Reset</b> in the editor brings back the catalog's own words.<br>Click the pencil on this card.",
     opens:"editor",
     open:()=>tourPress(cardBtn('[data-act="edit"]'), '[data-act="edit"]'),
     pad:8

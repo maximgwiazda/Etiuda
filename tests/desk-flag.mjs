@@ -610,7 +610,7 @@ async function noButton(p) {
     const acts = document.querySelector(card + " > .chead .cacts"), ed = acts && acts.querySelector('[data-act="edit"]'), next = ed && ed.nextElementSibling;
     const gap = ed && next ? Math.round((next.getBoundingClientRect().left - ed.getBoundingClientRect().right) * 10) / 10 : null;
     const flexGap = acts ? parseFloat(getComputedStyle(acts).columnGap) || 0 : null;
-    return { any, next: next && next.getAttribute("data-act"), gap, flexGap, ok: any === 0 && !!next && next.getAttribute("data-act") === "hide" && Math.abs(gap - flexGap) <= 0.5 };
+    return { any, next: next && next.getAttribute("data-act"), gap, flexGap, ok: any === 0 && !!next && next.getAttribute("data-act") === "fold" && Math.abs(gap - flexGap) <= 0.5 };
   }, cardSel(CARD));
 }
 
