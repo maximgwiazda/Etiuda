@@ -6253,6 +6253,14 @@ const CARD_B = {
       return !bad.length || "not once: " + bad.map(k => k + " " + count(all, k) + "/" + count(pages, k)).join(", ");
     });
 
+    check("settings.js", "D3-3s no row edits the shared catalog file, though the host this dialog runs under still offers a shared read and write", () => {
+      const all = SET.settingsBodyHtml();
+      const pages = SET.settingsSections().map(s => SET.settingsPageHtml(s.id, "")).join("");
+      return (count(all, 'data-seg="sharededit"') === 0 && count(pages, 'data-seg="sharededit"') === 0
+        && all.indexOf("Edit the shared catalog file directly") < 0 && pages.indexOf("Edit the shared catalog file directly") < 0)
+        || "still there " + count(all, 'data-seg="sharededit"') + "/" + count(pages, 'data-seg="sharededit"');
+    });
+
     check("settings.js", "D3-4 no AI in the section list, and no section listed without a row", () => {
       const n = SET.settingsNavHtml("general");
       const ids = [...n.matchAll(/data-sx="([^"]+)"/g)].map(m => m[1]);
