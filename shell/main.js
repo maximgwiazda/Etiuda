@@ -265,7 +265,7 @@ function heldLocalCopy(setting) {
   }
   return "";
 }
-/* The catalog folder: a relay team's mirror, the mirror a team moving to a folder waits in, else the person's own setting.
+/* The catalog folder: a relay team's mirror, else the person's own setting.
    A team held through a shared folder is not read as a team (folderHeld): its folder is a plain catalog folder, and where this
    desk keeps a local copy of it, that copy (heldLocalCopy). */
 function catalogFolder() {
@@ -273,8 +273,6 @@ function catalogFolder() {
   /* On the relay the team folder is the mirror the channel layer keeps, beside the desk's own file (shell/relay/channel.cjs). */
   const relay = relayHere();
   if (relay) return relayMirrorOf(relay.rt);
-  const need = Object.values(teamNeedsFolder)[0];
-  if (need && need.mirror) return need.mirror;
   const raw = rawCatalogFolder(), copy = heldLocalCopy(raw);
   if (copy) return copy; /* plant:held-local-copy */
   return raw;
@@ -863,12 +861,10 @@ function pinnedLeadPubs() {
 function teamParse(text) {
   try { return JSON.parse(String(text).replace(/^\uFEFF/, "").trim()); } catch { return null; }
 }
-/* Whether `root` is a team's place: a relay mirror, or the mirror a team moving to a folder waits in. No other folder is a team's,
-   so a team file there is no team's (teamTextChosen). */
+/* Whether `root` is a team's place: a relay mirror. No other folder is a team's, so a team file there is no team's (teamTextChosen). */
 function teamPlaceAt(root) {
   const r = path.resolve(String(root || ""));
-  if (r.indexOf(path.resolve(app.getPath("userData"), "relay") + path.sep) === 0) return true;
-  return Object.values(teamNeedsFolder).some(n => !!n && !!n.mirror && path.resolve(n.mirror) === r);
+  return r.indexOf(path.resolve(app.getPath("userData"), "relay") + path.sep) === 0;
 }
 /* The team file this folder is read as, the canonical file alone: `missing` where it is absent or the folder is no team's place,
    `unreadable` where it would not read. A conflict copy beside it is not a team file here: a team's file arrives over the relay. */
@@ -1823,7 +1819,6 @@ function deskEnvelopeBody(keysText) {
     + (catalogAskIds.length ? ',"catalogAsks":' + JSON.stringify(catalogAskIds) : "")
     + (inUseN > 0 ? ',"inUseN":' + inUseN : "")
     + (Object.keys(teamPauseSeen).length ? ',"teamPauseSeen":' + JSON.stringify(teamPauseSeen) : "")
-    + (Object.keys(teamNeedsFolder).length ? ',"teamNeedsFolder":' + JSON.stringify(teamNeedsFolder) : "")
     + (recentCatalogs.length ? ',"recentCatalogs":' + JSON.stringify(recentCatalogs) : "")
     + (deskRefused.length ? ',"refused":' + JSON.stringify(deskRefused) : "")
     + ',"keys":' + keysText + "}";
@@ -3899,11 +3894,9 @@ function idListedHere(id) {
 function boxAnswerHere(file) {
   try { const d = JSON.parse(fs.readFileSync(file, "utf8")); return !!d && d.kind === ANSWER_LEAD_KIND; } catch { return false; }
 }
-/* Whether catalogFolder resolves to a team's place: a relay team's mirror, or the mirror a team moving to a folder waits in. */
+/* Whether catalogFolder resolves to a team's place: a relay team's mirror. */
 function teamWriteHere() {
-  if (relayHere()) return true;
-  const need = Object.values(teamNeedsFolder)[0];
-  return !!(need && need.mirror); /* plant:team-write-moving */
+  return !!relayHere();
 }
 /* Where a working copy may go on a team this desk is on: one the team lists as before; a private one nowhere; any other to the lead's
    box once this desk is told for this team, else held until it is. Not a sealed member where writes reach a team's place: held. Off a
@@ -4205,7 +4198,6 @@ let teamRelayGone = {};                        // team id -> true: the relay ref
 let teamWas = {};                              // team id -> [{keyId, public}]: the leads this desk followed before its pin, oldest first
 let teamForks = {};                            // team id -> {said, last, seen}: the forks of its lead key this desk has said, the latest, and the one the agent dismissed
 let teamPauseSeen = {};                        // team id -> {t: number, paused: boolean}
-let teamNeedsFolder = {};                        // team id -> {rev, lead, mirror}: moved to folder, waiting for folder
 let inUseN = 0;                                // monotonic counter for in-use.ec
 const LAPSE_SEEN_RE = /^(grace|read-only|lapsed|gone|unknown):(-?[0-9]+|null)$/;
 const editionTeam = new Map();                 // an opened edition's pin -> the first team whose envelope held it; this run only
@@ -5118,6 +5110,7 @@ function heedTeam() {
     teamSay(used + " names a rev or a channel this desk does not read, so nothing in it is used");
     return;
   }
+  if (channel.kind === "folder") { teamSay(used + " names a shared folder as the team's channel, which this desk does not read, so nothing in it is used"); return; } /* plant:folder-channel-unread */
   if (teamElsewhere.delete(r.team || doc.id)) sendJoin(theWindow); /* plant:elsewhere-clear */
   const floors = teamRevSeen[r.team] || {}, floor = floors[doc.lead.public];
   if (teamRevRefused(floor, r.epoch, rev)) {
@@ -5179,18 +5172,9 @@ function heedTeam() {
       teamRoster[r.team] = Object.assign({ epoch: r.epoch, desks: ids, entries: ents }, sharingOff ? { sharing: "off" } : {});
       changed = true;
     }
-    const pinned = teamPins[r.team];
-    const isPinnedLead = !!(pinned && pinned.public === doc.lead.public && pinned.keyId === doc.lead.keyId);
-    const heldFloor = (teamRevSeen[r.team] || {})[doc.lead.public];
-    const heldRev = (heldFloor && heldFloor.epoch === r.epoch) ? (heldFloor.rev || 0) : 0;
-    const revAbove = rev > heldRev;
-    const currentCh = teamChannel[r.team];
-    const wasOnRelay = !!(currentCh && currentCh.kind === "relay" && currentCh.rt && relayFollowed(r.team) && root === relayMirrorOf(currentCh.rt));
-    const isFolderMove = wasOnRelay && channel.kind === "folder" && revAbove && isPinnedLead;
-
     const was = JSON.stringify(teamChannel[r.team] || null);
     if (channel.kind === "relay") teamChannel[r.team] = channel;
-    else if (!isFolderMove) delete teamChannel[r.team];
+    else delete teamChannel[r.team];
     if (JSON.stringify(teamChannel[r.team] || null) !== was) { changed = true; relaySoon(); }
     teamRingAt = { root: root, relay: channel.kind === "relay", ring: (channel.kind === "relay" || doc.ring) ? teamRingIn(doc) : null };
     if (channel.kind === "relay" && relayFollowed(r.team) && root !== relayMirrorOf(channel.rt)) {
@@ -5222,16 +5206,6 @@ function heedTeam() {
       }
       tryHeldBranches();
       catalogFolderChanged(); /* plant:follow-folder-changed */
-    }
-    if (isFolderMove) {
-      const mirrorDir = (currentCh && currentCh.rt) ? relayMirrorOf(currentCh.rt) : root;
-        stopRelayChannel(r.team); /* plant:folder-stop-relay */
-      const matchingFolder = findMatchingFolderInKnownRoots(r.team, doc.lead.public, rev, root, doc);
-      if (matchingFolder) {
-        switchToFolderTeam(matchingFolder, r.team, mirrorDir); /* plant:folder-known-root */
-      } else {
-        setTeamNeedsFolder(r.team, doc, mirrorDir); /* plant:folder-not-found-offer */
-      }
     }
   }
   // The floor rises with a newer epoch or a higher rev at its own. A newer epoch with no rev raises a floor already kept to
@@ -6860,7 +6834,7 @@ function policyHoldsTeam(t, named) {
    said on the row (folderOwed), with the folder it stays in (folderCopy). */
 function folderHeld(t) {
   const shown = teamShown[t];
-  if (!shown || !shown.folder || shown.relay || teamRelayGone[t] === true || teamNeedsFolder[t]) return false;
+  if (!shown || !shown.folder || shown.relay || teamRelayGone[t] === true) return false;
   if (teamChannel[t] && teamChannel[t].kind === "relay") return false;
   return path.resolve(shown.folder).indexOf(path.resolve(app.getPath("userData"), "relay") + path.sep) !== 0;
 }
@@ -6910,11 +6884,6 @@ function leadsView() {
     const keptApart = keptApartShown(t);
     if (keptApart) row.keptApart = keptApart.names; /* plant:kept-apart-row */
     if (keptApart && keptApart.more) row.keptApartMore = keptApart.more; /* plant:kept-apart-more-row */
-    if (teamNeedsFolder[t]) {
-      row.needsFolder = true;
-      row.openFolder = shellWords().openFolder;
-      row.meetsInFolder = shellWords().teamMeetsInFolder;
-    }
     if (folderHeld(t)) {
       row.folderHeld = true; /* plant:folder-held-row */
       if (folderOutboxOwes(t)) { row.folderOwed = true; row.folderCopy = folderMirrorOf(t); } /* plant:folder-owed-row */
@@ -6964,7 +6933,6 @@ function forgetLead(team, left) {
   delete teamShown[team];
   delete teamChannel[team];
   delete teamPinFrom[team];
-  delete teamNeedsFolder[team];
   teamRingAt = null;
   teamSeen.delete(team);
   delete teamLapseSeen[team];
@@ -7084,153 +7052,6 @@ function teamPinStands(team) {
 }
 function relayMirrorOf(rt) { return path.join(app.getPath("userData"), "relay", rt); }
 
-function stopRelayChannel(teamId) {
-  delete teamChannel[teamId];
-  if (relayChannel) {
-    const old = relayChannel;
-    relayChannel = null;
-    relayAt = "";
-    old.stop().catch(() => {});
-  }
-  persistDeskEnvelope();
-}
-
-/* A file the folder refuses is put in the team's mirror and owed, so the outbox tries it at each scan and the team's row says a
-   refusal for a read-only file or folder there. */
-function copyDeskFilesToFolder(mirrorDir, targetFolder, teamId) {
-  const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "";
-  if (!me || !mirrorDir) return;
-  const srcDir = path.join(mirrorDir, "desks", me);
-  const dstDir = path.join(targetFolder, "desks", me);
-  let names = [];
-  try { names = fs.existsSync(srcDir) ? fs.readdirSync(srcDir).filter(f => /\.ec$/i.test(f)) : []; } catch { names = []; }
-  let made = true;
-  if (names.length) { try { fs.mkdirSync(dstDir, { recursive: true }); } catch { made = false; } }
-  for (const f of names) {
-    try {
-      if (!made) throw new Error("the folder took no desks/" + me);
-      FolderSyncer().copyClear(path.join(srcDir, f), path.join(dstDir, f));
-    } catch (e) {
-      console.error("etiuda: " + f + " could not be copied to the team's folder - " + e.message);
-      if (!teamId) continue;
-      try {
-        const held = path.join(folderMirrorOf(teamId), "desks", me, f);
-        fs.mkdirSync(path.dirname(held), { recursive: true });
-        FolderSyncer().copyClear(path.join(srcDir, f), held);
-        FolderSyncer().noteOwed(folderMirrorOf(teamId), "desks/" + me + "/" + f); /* plant:move-owes */
-      } catch (e2) { console.error("etiuda: " + f + " could not be kept for the team's folder - " + e2.message); }
-    }
-  }
-}
-
-function checkMatchingFolder(dir, teamId, leadPub, minRev) {
-  if (!dir || typeof dir !== "string") {
-    return { ok: false, error: "wrong-team", said: shellWords().folderRefusedWrongTeam };
-  }
-  const file = path.join(dir, TEAM_NAME);
-  let text = "";
-  try {
-    text = fs.readFileSync(file, "utf8");
-  } catch {
-    return { ok: false, error: "wrong-team", said: shellWords().folderRefusedWrongTeam };
-  }
-  let doc = null;
-  try {
-    doc = JSON.parse(text);
-  } catch {
-    return { ok: false, error: "wrong-team", said: shellWords().folderRefusedWrongTeam };
-  }
-  if (!doc || typeof doc !== "object" || !teamWhole(doc)) {
-    return { ok: false, error: "wrong-team", said: shellWords().folderRefusedWrongTeam };
-  }
-  if (doc.id !== teamId) {
-    return { ok: false, error: "wrong-team", said: shellWords().folderRefusedWrongTeam };
-  }
-  if (!doc.lead || doc.lead.public !== leadPub) {
-    return { ok: false, error: "wrong-lead", said: shellWords().folderRefusedWrongLead };
-  }
-  const rev = teamRevOf(doc);
-  if (typeof minRev === "number" && (rev === null || rev < minRev)) {
-    return { ok: false, error: "lower-rev", said: shellWords().folderRefusedLowerRev };
-  }
-  return { ok: true, doc };
-}
-
-function findMatchingFolderInKnownRoots(teamId, leadPub, minRev, currentRoot, doc) {
-  const candidates = new Set();
-  if (deskKeys && typeof deskKeys[CATALOG_FOLDER_KEY] === "string" && deskKeys[CATALOG_FOLDER_KEY].trim()) {
-    candidates.add(deskKeys[CATALOG_FOLDER_KEY].trim());
-  }
-  if (teamJoin) {
-    if (teamJoin.invite && typeof teamJoin.invite.folder === "string") candidates.add(teamJoin.invite.folder);
-    if (typeof teamJoin.was === "string") candidates.add(teamJoin.was);
-    if (typeof teamJoin.folder === "string") candidates.add(teamJoin.folder);
-  }
-  if (doc) {
-    if (typeof doc.folder === "string" && doc.folder) candidates.add(doc.folder);
-    if (doc.place) {
-      let roots = [];
-      try { roots = syncRootsFrom(readSyncRecords(null)); } catch { roots = []; }
-      try {
-        const res = placeResolve(doc.folder || "", doc.place, roots, d => folderAnswers(d));
-        if (res && res.path) candidates.add(res.path);
-      } catch {}
-      try {
-        const pCands = placeCandidates(doc.folder || "", doc.place, roots);
-        for (const c of pCands) if (c) candidates.add(c);
-      } catch {}
-    }
-  }
-  for (const c of candidates) {
-    if (!c || (currentRoot && path.resolve(c) === path.resolve(currentRoot))) continue;
-    const match = checkMatchingFolder(c, teamId, leadPub, minRev);
-    if (match.ok) return c;
-  }
-  return null;
-}
-
-function switchToFolderTeam(targetFolder, teamId, mirrorDir) {
-  deskSetOwn(CATALOG_FOLDER_KEY, targetFolder);
-  persistDeskEnvelope();
-  copyDeskFilesToFolder(mirrorDir, targetFolder, teamId);
-  tryHeldBranches();
-  if (teamId) {
-    delete teamNeedsFolder[teamId];
-    teamShown[teamId] = Object.assign({}, teamShown[teamId], { folder: targetFolder });
-    delete teamShown[teamId].relay;
-  }
-  folderSyncerRun(theWindow);
-  catalogFolderChanged();
-  sendJoin(theWindow);
-  teamStamp = "";
-  heedTeam();
-}
-
-function setTeamNeedsFolder(teamId, doc, mirrorDir) {
-  const had = teamNeedsFolder[teamId];
-  teamNeedsFolder[teamId] = {
-    rev: doc.rev,
-    lead: { keyId: doc.lead.keyId, public: doc.lead.public },
-    mirror: mirrorDir,
-  };
-  if (!had) {
-    teamSay(shellWords().teamMeetsInFolder);
-  }
-  sendJoin(theWindow);
-}
-
-/* The page may name only the folder this shell's picker returned for it. Anything else is not read. */
-function pickMovedFolder(teamId, pickedFolder, senderId) {
-  if (!offeredFolder(senderId, pickedFolder)) return { ok: false, error: "unpicked" }; /* plant:moved-folder-offered */
-  const need = teamNeedsFolder[teamId];
-  const pinned = teamPins[teamId];
-  const minRev = need ? need.rev : 0;
-  const leadPub = pinned ? pinned.public : (need && need.lead ? need.lead.public : "");
-  const check = checkMatchingFolder(pickedFolder, teamId, leadPub, minRev);
-  if (!check.ok) { teamSay(check.said); return { ok: false, error: check.error }; } /* plant:folder-picked-validate */
-  switchToFolderTeam(pickedFolder, teamId, need ? need.mirror : ""); /* plant:folder-picked-match */
-  return { ok: true };
-}
 function relayOpened(sealed) {
   try { return safeStorage.decryptString(Buffer.from(String(sealed), "base64")); } catch { return null; }
 }
@@ -8151,10 +7972,6 @@ function readDesk() {
       if (!SEALED_TEAM_RE.test(t) || !table(v)) return;
       const said = Array.isArray(v.said) ? v.said.filter(k => typeof k === "string" && FORK_KEY_RE.test(k)).slice(-FORK_SAID_MAX) : [];
       teamForks[t] = { said: said, last: forkKept(v.last), seen: typeof v.seen === "string" && FORK_KEY_RE.test(v.seen) ? v.seen : "" };
-    });
-    if (doc && table(doc.teamNeedsFolder)) Object.keys(doc.teamNeedsFolder).forEach(t => {
-      const v = doc.teamNeedsFolder[t];
-      if (SEALED_TEAM_RE.test(t) && table(v) && Number.isSafeInteger(v.rev)) teamNeedsFolder[t] = v;
     });
     [["teamSeen", teamSeen], ["teamBarred", teamBarred], ["teamHeldOut", teamHeldOut]].forEach(([k, set]) => {
       if (doc && Array.isArray(doc[k])) doc[k].forEach(t => { if (SEALED_TEAM_RE.test(String(t))) set.add(String(t)); });
@@ -9598,7 +9415,6 @@ ipcMain.handle("etiuda:team-join", (e, op, file, name, note) => (!fromEngine(e) 
   : op === "ask" ? askJoin(file, name) : op === "cancel" ? cancelJoin() : op === "seen" ? leadSeen(file)
   : op === "lapse-seen" ? lapseSeen(file, name) : op === "fork-seen" ? forkDismissed(file) : op === "stranded-seen" ? strandedDismissed(file)
   : op === "forget" ? forgetLead(file) : op === "leave" ? forgetLead(file, true) : op === "read" ? readInviteLooked(file) : op === "invite" ? takeInvite(file, name)
-  : op === "pick-moved-folder" ? pickMovedFolder(file, name, e.sender.id)
   : op === "held" ? heldLinkAnswer() : op === "link" ? takeHeldLink(name) : op === "link-no" ? declineHeldLink() : joinView())); /* plant:link-no */
 
 /* The engine calls no OS API, so the folder picker is the shell's. The CAPTION comes from the
@@ -13087,12 +12903,12 @@ function storeSyncOf() {
   });
   return storeSyncing;
 }
-/* The person's own catalog folder, or "" while the catalog folder is a team's (a relay team's mirror, a moving team's, or the
+/* The person's own catalog folder, or "" while the catalog folder is a team's (a relay team's mirror, or the
    folder of a team held from before, folderHeld): a team's catalogs never enter the person's store and the person's never reach
    the team, the catalog files waiting meanwhile. */
 function storeSyncFolder() {
   if (deskKeys === undefined) deskKeys = readDesk();
-  if (relayHere() || Object.keys(teamNeedsFolder).length) return ""; /* plant:sync-team-folder */
+  if (relayHere()) return ""; /* plant:sync-team-folder */
   const root = catalogFolder();
   if (Object.keys(teamShown).some(t => folderHeld(t) && path.resolve(teamShown[t].folder) === path.resolve(root))) return ""; /* plant:sync-held-folder */
   if (Object.keys(teamShown).some(t => folderHeld(t) && path.resolve(folderMirrorOf(t)) === path.resolve(root))) return ""; /* plant:sync-held-copy */
@@ -13598,14 +13414,8 @@ const SHELL_WORDS = {
   en: { lang: "en", undo: "Undo", cut: "Cut", copy: "Copy", paste: "Paste", selectAll: "Select all",
         addWord: "Add to dictionary", gone: "Etiuda stopped unexpectedly.", hung: "Etiuda is not responding.",
         restart: "Restart", close: "Close Etiuda", wait: "Wait",
-        teamMeetsInFolder: "This team now works from a shared folder. The team's lead can say which one; once it is open here with Open a folder, everything carries on as before.",
-        openFolder: "Open a folder",
-        folderRefusedWrongTeam: "That folder holds no files of this team, so nothing was changed. The team's lead can say which folder it is.",
-        folderRefusedWrongLead: "The team file in that folder is not signed by this team's lead, so nothing was changed. Tell the team's lead about it.",
-        folderRefusedLowerRev: "The team file in that folder is older than the one this desk holds, so nothing was changed. The team's lead can say which folder is the current one.",
         relayElsewhere: "The team file of {TEAM} names a relay this Etiuda does not use, so this desk does not follow it: it keeps its team, its catalog and its connection as they were, and sends nothing there. If the team moves back, nothing is needed; otherwise a new invitation from the team's lead is.",
         teamOfLead: "{LEAD}'s team", teamUnnamed: "Team",
-        pickTeamFolder: "Choose the team's shared folder",
         stillReading: "Etiuda is still reading the team's shared folder, so the catalog is not open yet. Once that is done, Etiuda offers the catalog in a window of its own, and loading it from there opens it.",
         trayOpen: "Open Etiuda",
         trayReplies: "Quick replies",
@@ -13627,14 +13437,8 @@ const SHELL_WORDS = {
   pl: { lang: "pl", undo: "Cofnij", cut: "Wytnij", copy: "Kopiuj", paste: "Wklej", selectAll: "Zaznacz wszystko",
         addWord: "Dodaj do słownika", gone: "Etiuda niespodziewanie się zatrzymała.",
         hung: "Etiuda nie odpowiada.", restart: "Uruchom ponownie", close: "Zamknij Etiudę", wait: "Czekaj",
-        teamMeetsInFolder: "Ten zespół pracuje teraz ze wspólnego folderu. Lider zespołu może wskazać, z którego; gdy zostanie on otwarty tutaj przez Otwórz folder, wszystko będzie działać jak dotąd.",
-        openFolder: "Otwórz folder",
-        folderRefusedWrongTeam: "W tym folderze nie ma plików tego zespołu, więc nic nie zmieniono. Lider zespołu może wskazać właściwy folder.",
-        folderRefusedWrongLead: "Plik zespołu w tym folderze nie jest podpisany przez lidera tego zespołu, więc nic nie zmieniono. Proszę powiedzieć o tym liderowi zespołu.",
-        folderRefusedLowerRev: "Plik zespołu w tym folderze jest starszy niż ten, który ma to stanowisko, więc nic nie zmieniono. Lider zespołu może wskazać aktualny folder.",
         relayElsewhere: "{TEAM} wskazuje w swoim pliku przekaźnik, z którego ta Etiuda nie korzysta, więc to stanowisko za nim nie podąża: zachowuje zespół, katalog i połączenie bez zmian i niczego tam nie wysyła. Jeśli zespół wróci na poprzedni przekaźnik, nic nie trzeba robić; w przeciwnym razie potrzebne jest nowe zaproszenie od lidera zespołu.",
         teamOfLead: "Zespół osoby {LEAD}", teamUnnamed: "Zespół",
-        pickTeamFolder: "Wybierz wspólny folder zespołu",
         stillReading: "Etiuda jeszcze wczytuje wspólny folder zespołu, więc katalog nie jest na razie otwarty. Gdy wczytywanie dobiegnie końca, Etiuda zaproponuje katalog w osobnym oknie; wystarczy go stamtąd wczytać, aby się otworzył.",
         trayOpen: "Otwórz Etiudę",
         trayReplies: "Szybkie odpowiedzi",

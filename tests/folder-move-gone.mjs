@@ -477,7 +477,7 @@ function stayed(r, plan) {
   return r.channelStarted && !r.channelStopped && path.resolve(r.openedDir) === path.resolve(plan.mirrorFolder)
     && !!had && had.kind === "relay" && !!r.envelope && !("teamNeedsFolder" in r.envelope) && !r.folderMirrorMade
     && row.needsFolder === undefined && row.openFolder === undefined && row.meetsInFolder === undefined
-    && !r.said.some(l => /shared folder/.test(l));
+    && !r.said.some(l => /works from a shared folder/.test(l));
 }
 const stayedText = (r, plan) => JSON.stringify({ started: r.channelStarted, stopped: r.channelStopped, opened: path.resolve(r.openedDir) === path.resolve(plan.mirrorFolder) ? "the relay's mirror" : r.openedDir,
   channel: r.envelope && r.envelope.teamChannel && r.envelope.teamChannel[plan.teamId] && r.envelope.teamChannel[plan.teamId].kind,
@@ -549,7 +549,7 @@ async function main() {
 
     /* fmg4: no tree declares a move. */
     const mainText = read("shell", "main.js"), chan = read("shell", "relay", "channel.cjs"), pageText = read("src", "modules", "team-join.js") + read("src", "modules", "settings.js");
-    const gone = [["shell/main.js", mainText, /\b(?:copyDeskFilesToFolder|checkMatchingFolder|findMatchingFolderInKnownRoots|switchToFolderTeam|setTeamNeedsFolder|pickMovedFolder|teamNeedsFolder|isFolderMove|pick-moved-folder|teamMeetsInFolder|folderRefused\w*|meetsInFolder)\b/],
+    const gone = [["shell/main.js", mainText, /\b(?:copyDeskFilesToFolder|checkMatchingFolder|findMatchingFolderInKnownRoots|switchToFolderTeam|setTeamNeedsFolder|pickMovedFolder|teamNeedsFolder|isFolderMove|pick-moved-folder|teamMeetsInFolder|folderRefused(?:WrongTeam|WrongLead|LowerRev)|meetsInFolder)\b/],
       ["shell/relay/channel.cjs", chan, /plant:relay-to-folder|\bmoving\b/],
       ["the page", pageText, /pickMovedFolder|needsFolder|data-team-pick-folder|pick-moved-folder|Open a folder/]];
     const still = gone.filter(g => g[2].test(g[1])).map(g => g[0] + ": " + (g[1].match(g[2]) || [""])[0]);

@@ -20,7 +20,7 @@ import { agentName, typeAgentName, agentNameNote, markAgentNameNoteSeen } from "
 import { eHost, eHasShared, E_AI_OFF_KEY, eAiOn, eAiModel, eTellAi, E_SEARCH_AI_OFF_KEY, eSearchOn, eTellSearch } from "./host.js";
 import { armSearch, clearSearchMeaning } from "./search-meaning.js";
 import { hooks } from "./hooks.js";
-import { lapseNote, shareRefusedNotes, keptApartNotes, relayElsewhereNote, folderHeldNote, teamLeads, teamPolicySaid, relayDesk, keySignHtml, forgetTeamLead, pickMovedFolder, onJoinPainted } from "./team-join.js";
+import { lapseNote, shareRefusedNotes, keptApartNotes, relayElsewhereNote, folderHeldNote, teamLeads, teamPolicySaid, relayDesk, keySignHtml, forgetTeamLead, onJoinPainted } from "./team-join.js";
 import { pack } from "./pack.js";
 import { openScreenTab, registerScreen, screenOn, clearScreenOn } from "./screen-tabs.js";
 import { openAbout } from "./about.js";
@@ -205,12 +205,10 @@ function teamRowHtml(l,status,bar){
     tip:t("This network does not let the live connection to the relay through, so Etiuda asks the relay about once a minute instead. Nothing is lost, and nothing needs doing.")});
   if(l.relayElsewhere) notes.push(relayElsewhereNote(l)); /* plant:elsewhere-row */
   if(l.folderHeld) notes.push(folderHeldNote(l)); /* plant:folder-held-note */
-  if(l.needsFolder) notes.push(t("This team now works from a shared folder. The team's lead can say which one; once it is open here with Open a folder, everything carries on as before."));
   if(l.reading) notes.push(l.reading);
   return '<div class="set-row"><div class="set-label">'+esc(l.lead?t("{LEAD}'s team").split("{LEAD}").join(l.lead):t("Team"))
     +notes.filter(Boolean).map(n=>typeof n==="object"?'<small title="'+esc(n.tip)+'">'+esc(n.text)+'</small>':'<small>'+esc(n)+'</small>').join("")+'</div><div class="set-ctl">'
     +'<span class="e-lead-key">'+keySignHtml("studio",l.print)+'</span>'
-    +(l.needsFolder?'<button type="button" class="btn" data-team-pick-folder="'+esc(l.team)+'">'+esc(t("Open a folder"))+'</button>':'') /* plant:needs-folder-button */
     +(l.policy||l.waiting?'':'<button type="button" class="btn danger" data-leave-team="'+esc(l.team)+'">'+esc(t("Leave this team"))+'</button>')
     +'</div></div>';
 }
@@ -234,9 +232,6 @@ function leaveThisTeam(team, from){
 function wireTeamRows(box){
   box.querySelectorAll("[data-leave-team]").forEach(b=>{
     b.onclick=()=>leaveThisTeam(b.getAttribute("data-leave-team"), originOf(b));
-  });
-  box.querySelectorAll("[data-team-pick-folder]").forEach(b=>{
-    b.onclick=()=>pickMovedFolder(b.getAttribute("data-team-pick-folder"),()=>{ if(document.getElementById("setBody")) paintSettings(); }); /* plant:needs-folder-press */
   });
 }
 /* The row hint says what the setting IS; the option tip says what THIS choice DOES, which is the half a
