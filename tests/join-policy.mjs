@@ -33,7 +33,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
-const EXPECTED = 33;
+const EXPECTED = 34;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -1801,6 +1801,59 @@ function policyTemplateCoversShell(src, docs) {
     check(!!planted && p.some(s => s.includes("undeclaredpolicy")),
       "19v reading an undeclared policy value in shell/main.js turns 19v red: " + (p.join("; ") || "still green"));
   }
+}
+
+/* 19w: SETTINGS' TEAM ROWS NEVER READ A PIN THE POLICY LET GO. leadsView lists the pins first and asks the policy after, and the first
+   ask that says the policy (folderTeamHere, pinTrusted) lets go a join kept from an invitation under a lead or a folder the policy now
+   names, with the pin that invitation set: the map then read `.public` of nothing, and the page's "leads" ask threw. Found by the folder
+   P0 builder on 2026-11-22 (a first etiuda:team-join "leads" after a restart under a policy); a relay invitation reaches it alike. The
+   first thing each desk below does is that ask, so no other read has said the policy before it. */
+function leadsAfterLetGo(shell) {
+  const problems = [];
+  const A = crypto.generateKeyPairSync("ed25519"), B = crypto.generateKeyPairSync("ed25519");
+  const leadA = { keyId: "quay-old", public: pubHex(A.publicKey) }, leadB = { keyId: "quay-new", public: pubHex(B.publicKey) };
+  const T1 = "t-" + hex(8), T2 = "t-" + hex(8), rt = hex(16);
+  const F = path.join(LAB, "w19-folder");
+  fs.mkdirSync(F, { recursive: true });
+  const relayInvite = { id: hex(8), proof: hex(32), lead: { keyId: leadA.keyId, public: leadA.public, name: "Lamp lead" }, pinned: true,
+    relay: { rt: rt, url: "https://etiuda.dev/relay/v1", inv: hex(16), token: "dG9rZW4=", seal: "c2VhbA==", wrapped: [1] } };
+  const folderInvite = { id: hex(8), proof: hex(32), lead: { keyId: leadA.keyId, public: leadA.public, name: "Lamp lead" }, pinned: true, folder: F };
+  const made = invite => ({ keys: { eCatalogFolder: F, eUiLang: "en" },
+    teamJoin: { team: T1, file: "", nonce: hex(32), commit: hex(32), asked: 1, held: 0, name: "Nia", invite: invite },
+    /* T2: a team this desk joined earlier under the same lead, so its pin stands and its row is still listed. */
+    teamPins: { [T1]: leadA, [T2]: leadA }, teamPinFrom: { [T1]: "invite" }, teamShown: { [T1]: { lead: "Lamp lead" } } });
+  const run = (what, invite, registry, want) => {
+    const name = "w19-" + (trustDesks++);
+    const L = asWindows(() => loadDesk(name, made(invite), standInReg(registry, 65001), shell)), D = Object.assign({}, L, L.api);
+    D.peek("if (deskKeys === undefined) deskKeys = readDesk(); 0");
+    try {
+      const rows = asWindows(() => D.peek("leadsView()")).map(r => r.team + (r.otherLead ? "+other" : "")).sort();
+      const again = asWindows(() => D.peek("leadsView()")).length;
+      const env = D.envelope();
+      const got = { rows: rows.join(","), pins: Object.keys(env.teamPins || {}).sort().join(","), join: !!env.teamJoin, again: again };
+      const off = Object.keys(want).filter(k => String(got[k]) !== String(want[k]));
+      if (off.length) problems.push(what + ": " + off.map(k => k + " " + JSON.stringify(got[k])).join(", "));
+    } catch (e) { problems.push(what + ": " + (e && e.message)); }
+    finally { D.peek("typeof joinPolicyAgain !== 'undefined' && joinPolicyAgain && clearTimeout(joinPolicyAgain)"); }
+  };
+  const policy = lead => ({ rows: [["LeadKey", "REG_SZ", lead.public]] });
+  const gone = { rows: T2 + "+other", pins: T2, join: false, again: 1 };
+  /* A relay invitation and a folder invitation kept, policy naming another lead: the request is let go with its pin, the other
+     team's row stands and says the policy names another lead, and a second ask reads the same. */
+  run("a relay invitation under a policy naming another lead", relayInvite, policy(leadB), gone);
+  run("a folder invitation under a policy naming another lead", folderInvite, policy(leadB), gone);
+  run("a folder invitation under a policy naming a folder", folderInvite, { rows: [["TeamFolder", "REG_SZ", path.join(LAB, "w19-other")]] }, Object.assign({}, gone, { rows: T2 }));
+  /* The controls: no policy, and a policy naming the invitation's own lead, keep both teams as they were. */
+  const both = { rows: [T1, T2].sort().join(","), pins: [T1, T2].sort().join(","), join: true, again: 2 };
+  run("the control, a relay invitation and no policy", relayInvite, null, both);
+  run("the control, a relay invitation under a policy naming its lead", relayInvite, policy(leadA), both);
+  return problems;
+}
+{
+  let problems = [];
+  try { problems = leadsAfterLetGo(null); } catch (e) { problems.push("harness: " + ((e && e.stack) || e)); }
+  check(problems.length === 0, "19w Settings' team rows read no pin the policy let go: the first leads ask after a restart under a policy that lets an invitation go"
+    + " lists the pins that stand, the request and its pin gone, a relay or a folder one, and the controls keep both teams: " + (problems.join("; ") || "no row throws"));
 }
 
 try { fs.rmSync(LAB, { recursive: true, force: true }); } catch { /* the temp folder's own to clear */ }
