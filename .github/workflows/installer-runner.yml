@@ -153,6 +153,21 @@ jobs:
 
       # A red stage is a red job: no stage carries continue-on-error, so the run says failure when a leg fails, and this step still
       # uploads what the stage wrote (if: always()). The job once read success on a red leg (Studio 43281788090, 2026-11-12).
+      # NOTHING BUILT IS PUBLISHED. The repository is public, so its artifact is public: the folder uploaded holds logs and
+      # results only. A program, a package or anything over 5 MB found in it is moved out before the upload and the job is red, so
+      # no later change can start publishing a build, which is a release, by accident.
+      - name: nothing built is uploaded
+        if: always()
+        shell: bash
+        run: |
+          out="$RUNNER_TEMP/out"; held="$RUNNER_TEMP/held-back-from-upload"
+          [ -d "$out" ] || exit 0
+          found=$(find "$out" -type f \( -iname '*.exe' -o -iname '*.msi' -o -iname '*.msix' -o -iname '*.appx' -o -iname '*.nupkg' -o -iname '*.zip' -o -iname '*.7z' -o -iname '*.asar' -o -iname '*.dll' -o -size +5M \))
+          [ -z "$found" ] && exit 0
+          mkdir -p "$held"
+          printf '%s\n' "$found" | while IFS= read -r f; do echo "FAIL not uploaded, a build or a file over 5 MB: ${f#$out/}"; mv "$f" "$held/"; done
+          exit 1
+
       - name: results
         if: always()
         uses: actions/upload-artifact@v4
