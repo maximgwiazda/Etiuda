@@ -4,8 +4,8 @@
  *
  * WHAT IT PROVES. The prototype read the catalog once, so an edited file needed the app closed
  * and started again (board item 86). The shell now watches the folders a catalog may sit in and
- * hands the text to the page, which OFFERS it through the dialog the sibling and the picker
- * already end in. So the claim has two halves and each has its own check: the offer appears
+ * hands the text to the page, which OFFERS it through the dialog the host's hand-over and the
+ * picker already end in. So the claim has two halves and each has its own check: the offer appears
  * after an edit, and the document was never reloaded while it did - a sentinel planted on the
  * page before the edit is still there when the offer is up, and it could not survive a restart.
  *

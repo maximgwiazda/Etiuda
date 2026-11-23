@@ -4,7 +4,7 @@ import { layerNsOf, setLayer } from "./storage.js";
 /* The catalog this start applies, or null for the empty desk. */
 function bootCatalog(){
   /* One stored catalog is the source of truth, whether it came from Import or from accepting
-     the sibling file. Falling back to the sibling covers the boot where it was just accepted
+     the handed file. Falling back to the handed catalog covers the boot where it was just accepted
      but the copy could not be written (storage full), so the user still gets what they chose. */
   const stored=storedCatalog();
   if(stored) return stored;

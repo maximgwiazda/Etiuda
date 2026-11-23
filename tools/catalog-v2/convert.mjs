@@ -2,7 +2,7 @@
    nothing: 2.0.0 reads format 2 and has no reader for anything else, so this is the only
    thing left that understands a format 1 file.
    Usage:
-     node tools/catalog-v2/convert.mjs <in.js|in.json> --out <name.ec> [--js <name.js>]
+     node tools/catalog-v2/convert.mjs <in.js|in.json> --out <name.ec>
                                        [--id x] [--rev 1] [--date 2026-09-14]
    It refuses to write over an existing file, and it refuses to write anywhere inside this
    repository, which is public and holds no catalog. */
@@ -23,7 +23,7 @@ function readV1(path) {
   let raw = readFileSync(path, "utf8").replace(/^﻿/, "").trim();
   /* The payload is found by literal search, the way the engine's own importer found it: a
      catalog file is a one-line assignment with a comment header, not a module. Two globals
-     were in circulation, the catalog beside the engine and the sample beside it. */
+     were in circulation, the catalog and the sample. */
   for (const name of ["PB_CATALOG", "PB_SAMPLE"]) {
     const at = raw.indexOf(name);
     if (at < 0) continue;
@@ -62,7 +62,7 @@ function guardDestination(path) {
 }
 
 const args = flags(process.argv.slice(2));
-if (!args._.length || !args.out) die("usage: convert.mjs <in.js|in.json> --out <name.ec> [--js <name.js> [--global E_SAMPLE]] [--eval]");
+if (!args._.length || !args.out) die("usage: convert.mjs <in.js|in.json> --out <name.ec> [--eval]");
 
 const src = args._[0];
 evaluate = args.eval === true || args.eval === "true";
@@ -100,15 +100,3 @@ console.log("  ok  the round trip differs nowhere this converter did not choose"
 guardDestination(args.out);
 writeFileSync(args.out, JSON.stringify(r.v2, null, 1) + "\n", "utf8");
 console.log("  wrote  " + args.out + "  " + JSON.stringify(r.v2).length + " bytes of JSON");
-
-if (typeof args.js === "string") {
-  guardDestination(args.js);
-  /* A page opened from file:// cannot fetch a sibling, but it can run one as a script. So the
-     document is JSON and the sibling is that same JSON behind one assignment: one format, two
-     containers, and the engine's reader strips the assignment if it is there. */
-  const head = "/* Etiuda catalog, format 2. Load it: Library > Import catalog, any filename.\n"
-    + "   A file named etiuda-catalog.js beside the engine also loads on launch. */\n";
-  const global = (typeof args.global === "string") ? args.global : "E_CATALOG";
-  writeFileSync(args.js, head + "window." + global + " = " + JSON.stringify(r.v2, null, 1) + ";\n", "utf8");
-  console.log("  wrote  " + args.js + "  the same catalog behind window." + global);
-}

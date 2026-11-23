@@ -4,8 +4,7 @@
  *
  * A copy a sync client makes of a file it could not reconcile stays listed under its own name,
  * beside the other edition of the same catalog. Nothing is merged and nothing in the folder is
- * renamed or deleted. A direct edit named as the conflict copy writes the canonical file, and the
- * read that supplies the compare is that same file. A conflict sibling of etiuda-team.json is no
+ * renamed or deleted. A conflict sibling of etiuda-team.json is no
  * team file: a team file arrives over the relay, which makes none, so a desk on a relay team's
  * mirror heeds the canonical file alone (it heeded a genuine sibling at a higher epoch or rev while
  * a folder was read as a team). The plant lines are removed only in a scratch copy of shell/main.js.
@@ -27,7 +26,7 @@ const V2 = await import(pathToFileURL(path.join(ROOT, "src", "modules", "catalog
 import { relayizeDesk, relayMirrorOf, relayMirrorProgram, relayChannelOf } from "./relay-mirror-desk.mjs";
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 
-const EXPECTED = 23;
+const EXPECTED = 21;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -420,34 +419,9 @@ try {
       "f3p ordinary editions with different names stay uncollapsed (2 rows)");
   }
 
-  /* A direct edit named as the conflict copy. The compare hash and the write are the canonical file. */
-  async function directOf(source) {
-    const { ud, folder } = fresh();
-    const canonDoc = catalog("lamp-board", 3);
-    const confDoc = catalog("lamp-board", 5);
-    confDoc.cards[0].title = { en: "Other" };
-    const canonAt = put(folder, "guide.ec", canonDoc);
-    const confAt = put(folder, "guide (1).ec", confDoc);
-    const beforeCanon = fileSha(canonAt), beforeConf = fileSha(confAt);
-    const A = boot(ud, source);
-    const read = await A.ask("etiuda:shared-read", "guide (1).ec", "");
-    const next = catalog("lamp-board", 4);
-    next.cards[0].title = { en: "Edited" };
-    const text = JSON.stringify(next) + "\n";
-    const wrote = await A.ask("etiuda:shared-write", "guide (1).ec", text, read && read.sha, false);
-    return {
-      ok: !!(wrote && wrote.ok),
-      canonMoved: fileSha(canonAt) !== beforeCanon,
-      confHeld: fileSha(confAt) === beforeConf,
-      readCanon: !!(read && read.sha === beforeCanon)
-    };
-  }
-  {
-    const got = await directOf();
-    check(got.ok && got.canonMoved && got.confHeld && got.readCanon,
-      "f3t a direct edit named as the conflict copy writes the canonical file, and the conflict copy's bytes stay: "
-      + JSON.stringify(got));
-  }
+  /* RETIRED with the shared write (no desk writes into a catalog file on a share; tests/shared-file-gone.mjs): f3t, which said a direct edit named as
+     the conflict copy writes the canonical file and leaves the conflict copy's bytes, and f3s, which lifted plant:direct-canon-name to show it. The
+     page's direct edit and the shell's shared read and write are gone, so no write is named as a conflict copy; f3a to f3q hold how the copy is listed. */
 
   /* ---- plants: the guarding line, removed only in a scratch copy ----------------------------- */
   {
@@ -480,17 +454,6 @@ try {
     }
     check(conf.found && conf.same && red && sha(fs.readFileSync(path.join(ROOT, "shell", "main.js"))) === conf.digest,
       "f3q removing plant:f3-conflict-only in a scratch copy collapses non-conflict editions, and the checkout is unchanged");
-  }
-  if (PLANTS_OFF) skip("f3s lifting plant:direct-canon-name writes the conflict copy: NOT RUN");
-  else {
-    const src = scratchSource("direct-canon-name");
-    let red = false;
-    if (src.found) {
-      const got = await directOf(fs.readFileSync(src.scratch, "utf8"));
-      red = got.ok && !got.canonMoved && !got.confHeld;
-    }
-    check(src.found && src.same && red && sha(fs.readFileSync(path.join(ROOT, "shell", "main.js"))) === src.digest,
-      "f3s lifting plant:direct-canon-name writes the conflict copy, and the checkout is unchanged");
   }
   if (PLANTS_OFF) skip("f3u lifting plant:editions-both lists one edition again: NOT RUN");
   else {

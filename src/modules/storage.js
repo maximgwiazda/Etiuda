@@ -319,7 +319,8 @@ function nsSet(name,v){ return lsSet(nsKey(name),v); }
 function nsDel(name){ lsDel(nsKey(name)); }
 /* THE PERSONAL LAYER ORBITS ITS CATALOG: what a person makes over a catalog is kept under that
    catalog's own id and shows only while it is loaded, and what is made on the empty desk is loose,
-   under this build's namespace. LAYER_KEYS is the whole layer; the rest of a namespace is the desk's. */
+   under this build's namespace. LAYER_KEYS is the whole layer; the rest of a namespace is the desk's. Shared and SharedOwn are
+   read by nothing; a desk that holds them keeps them with the layer and clears them with it. */
 const LAYER_KEYS=["Pack","Stats","Days","CatOrder","IntentOrder","IntentsAside","LinksAside","RequestsAside","Exported","LooseId","Shared","SharedOwn","SharedFile","EditionMarks","Flags","FlagEnds"];
 function layerNsOf(c){
   const id=c ? String(c.id||"").trim() : "";

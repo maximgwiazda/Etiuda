@@ -3029,10 +3029,9 @@ const placeEc = (dir, from, as, minutesOld) => {
     "5C control: on the good pin the engine boots (E_VERSION " + good.booted + "), Chromium refuses "
     + goodInline + " inline scripts, and the refusal document is nowhere on screen, so 5d and 5e"
     + " below are not reading a page the shell always serves");
-  /* Bug hunt 3, item 21, host half: until the shell stopped serving the engine's two sibling
-     script tags this was a note reading 2, both of them the policy's refusals by design, and a
-     real error on a desk's boot would have been the third line nobody read. On the packaged app,
-     because that is what a desk boots; tests/csp.js holds the same claim over loose files. */
+  /* A healthy desk's boot logs nothing, so a real error would be the first line anyone read. On
+     the packaged app, because that is what a desk boots; tests/csp.js holds the same claim over
+     loose files. */
   check(s.errs.length === 0,
     "5C2 a healthy boot of the packaged app logs " + s.errs.length + " console or page error(s)"
     + (s.errs.length ? ": " + s.errs.slice(0, 3).map(t => t.slice(0, 110)).join(" | ") : "")

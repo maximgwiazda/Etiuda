@@ -19,13 +19,11 @@ function eHost(){
   try{ return (typeof window!=="undefined" && window.E_HOST) || null; }catch(e){ return null; }
 }
 
-/* WHERE CATALOGS COME FROM, per build, in one place so the four screens that say it cannot
-   drift: a host reads every .ec in a folder of the desk's own, newest first, and a browser reads
-   the one sibling script its tag can name. The KEY outranks what the host answered, because the
-   host answered at boot and Settings may have moved the folder since. Empty string in a browser,
-   which is the test every caller makes. */
+/* WHERE CATALOGS COME FROM, in one place so the screens that say it cannot drift: a host reads
+   every .ec in a folder of the desk's own, newest first. The KEY outranks what the host answered,
+   because the host answered at boot and Settings may have moved the folder since. Empty string
+   where no host answers, which is the test every caller makes. */
 const E_CATALOG_FOLDER_KEY="eCatalogFolder";
-const E_CATALOG_SCRIPT="etiuda-catalog.js";
 function eCatalogFolder(){
   const h=eHost(); if(!h) return "";
   if(h.catalogFolderPolicy) return String(h.catalogFolderPolicy);
@@ -410,28 +408,6 @@ function eWriteBranch(stem,text){
       .catch(()=>({ok:false}));
   }catch(e){ return Promise.resolve({ok:false}); }
 }
-/* The shared catalog edited directly, both halves through the host and neither in a browser: the read answers
-   {text,sha,free,base} or null, the write {ok} or why not, {changed}, {busy}, {taken}, {refused}, {sealed} or {private}. */
-function eHasShared(){
-  const h=eHost();
-  return !!h && typeof h.sharedRead==="function" && typeof h.sharedWrite==="function";
-}
-function eSharedRead(name,pin){
-  if(!eHasShared()) return Promise.resolve(null);
-  try{
-    return Promise.resolve(eHost().sharedRead(String(name||""),String(pin||"")))
-      .then(v=>(v&&typeof v==="object")?{text:String(v.text||""),sha:String(v.sha||""),free:v.free===true,base:String(v.base||"")}:null)
-      .catch(()=>null);
-  }catch(e){ return Promise.resolve(null); }
-}
-function eSharedWrite(name,text,sha,create){
-  if(!eHasShared()) return Promise.resolve({ok:false});
-  try{
-    return Promise.resolve(eHost().sharedWrite(String(name||""),String(text||""),String(sha||""),create===true))
-      .then(v=>(v&&typeof v==="object")?{ok:v.ok===true,changed:v.changed===true,busy:v.busy===true,taken:v.taken===true,refused:v.refused===true,sealed:v.sealed===true,private:v.private===true}:{ok:false})
-      .catch(()=>({ok:false}));
-  }catch(e){ return Promise.resolve({ok:false}); }
-}
 /* A file somebody double-clicked that this launch could not open, {name,why} once and then null:
    the host forgets it as it answers, so a reload does not say it twice. */
 function eOpenedRefused(){
@@ -627,11 +603,7 @@ export {
   eHasBranch,
   eBranchReach,
   eWriteBranch,
-  eHasShared,
-  eSharedRead,
-  eSharedWrite,
   E_CATALOG_FOLDER_KEY,
-  E_CATALOG_SCRIPT,
   eCatalogFile,
   eCatalogFolder,
   eCatalogFolderShort,

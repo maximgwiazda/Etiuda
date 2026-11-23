@@ -18,11 +18,11 @@ import { fileStamp, toastRefusal, t } from "./ui-lang.js";
    Applied before BASE_STORE is snapshotted and before rebuildBaseCards() reads M. Asked
    about once per signature: accept and it loads silently from then on; change it and it
    asks again. */
-const E_CATALOG_KEY=nsKey("CatalogOk");      // signature of the sibling catalog the user accepted
+const E_CATALOG_KEY=nsKey("CatalogOk");      // signature of the handed catalog the user accepted
 const E_CATALOG_STORE=nsKey("Catalog");      // the active catalog itself
 /* Read once and remembered, because boot asks more than once and the answer cannot change:
-   a sibling script has run or it has not by the time anything here is called. */
-let E_SIBLING=null, E_SIBLING_READ=false;
+   the host handed the page its catalog before the first script ran, or it did not. */
+let E_GIVEN=null, E_GIVEN_READ=false;
 /* A HOST'S FILE THIS READER REFUSED: the host checks only the format's pair, so a file can pass
    there and fail v2Problems here. The host is told, passes it over and hands the next file it
    would read, and E_HANDED is where that one came from, which host.js answers in place of what
@@ -40,17 +40,17 @@ function eRefuseCatalogFile(name){
 function eCatalogHanded(){ return E_HANDED; }
 function eCatalogRefusedNames(){ return E_REFUSED.slice(); }
 function eCatalog(){
-  if(E_SIBLING_READ) return E_SIBLING;
-  E_SIBLING_READ=true;
+  if(E_GIVEN_READ) return E_GIVEN;
+  E_GIVEN_READ=true;
   let c=(typeof window!=="undefined") ? window.E_CATALOG : null;
   let file=(typeof window!=="undefined" && window.E_HOST) ? String(window.E_HOST.catalogFile||"") : "";
   /* THROUGH THE WHITELIST, exactly as a picked file goes. normaliseCatalog is what refuses the
      reserved category key and a hue no build offers, and this route skipped it, so one file
-     kept more by sitting beside Etiuda than by being imported. tests/catalog-routes.mjs holds
+     kept more by being handed over than by being imported. tests/catalog-routes.mjs holds
      the two routes to the same answer. */
   for(let tries=0; tries<32; tries++){
-    try{ E_SIBLING=isV2(c) ? normaliseCatalog(catalogFromV2(c)) : null; catalogDocKeep(E_SIBLING,c); return E_SIBLING; }
-    catch(e){ E_SIBLING=null; }
+    try{ E_GIVEN=isV2(c) ? normaliseCatalog(catalogFromV2(c)) : null; catalogDocKeep(E_GIVEN,c); return E_GIVEN; }
+    catch(e){ E_GIVEN=null; }
     if(file) E_REFUSED.push(file);
     const next=file ? eRefuseCatalogFile(file) : null;
     if(!next) return null;
@@ -68,9 +68,9 @@ function catalogDocKeep(c,doc){
   if(E_CATALOG_DOCS && c && typeof c==="object" && doc && typeof doc==="object"){ try{ E_CATALOG_DOCS.set(c,doc); }catch(e){} }
 }
 function catalogDocOf(c){ return (E_CATALOG_DOCS && c && typeof c==="object" && E_CATALOG_DOCS.get(c)) || null; }
-/* The active catalog, whether it arrived by import or by accepting the sibling file. Keeping a
-   copy rather than re-reading the sibling every boot is what lets an imported catalog and a
-   sibling catalog be the same thing: one stored catalog, one code path, and Reset clears it. */
+/* The active catalog, whether it arrived by import or by accepting the one the host handed over.
+   Keeping a copy rather than re-reading the hand-over every boot is what lets an imported catalog
+   and a handed one be the same thing: one stored catalog, one code path, and Reset clears it. */
 function storedCatalog(){
   try{
     const t=lsGet(E_CATALOG_STORE);
@@ -155,8 +155,8 @@ function eWatchClear(){
     .catch(()=>null);
 }
 function eWatchName(){ return nsGet("WatchName")||""; }
-/** Accepts a format 2 catalog: a .ec document, or that same JSON behind window.E_CATALOG in a
- *  file a page on file:// can load as a script. Parses, never runs. */
+/** Accepts a format 2 catalog: a .ec document, or that same JSON behind window.E_CATALOG.
+ *  Parses, never runs. */
 function parseCatalogFile(text){
   let raw=String(text||"").replace(/^﻿/,"").trim();
   if(!raw) throw new Error("file is empty");
@@ -238,7 +238,7 @@ function normaliseCatalog(data){
   if(data&&data.rev!=null) cat.rev=+data.rev;
   if(data&&Array.isArray(data.langs)&&data.langs.length) cat.langs=data.langs;
   /* The two tables the catalog may bring for the languages it declares. Whitelisted here as
-     well as read at the sibling load, or Import would drop what the auto-load keeps. */
+     well as read from the handed catalog, or Import would drop what the hand-over keeps. */
   if(data&&data.greet&&typeof data.greet==="object") cat.greet=data.greet;
   if(data&&data.stop&&typeof data.stop==="object") cat.stop=data.stop;
   if(data&&data.variables&&typeof data.variables==="object") cat.variables=JSON.parse(JSON.stringify(data.variables));
@@ -267,7 +267,7 @@ function normaliseCatalog(data){
     });
   }
   /* Carried like the primary's names and refusing the same key. Without it an IMPORTED catalog
-     shows the primary's categories under a Polish interface while the sibling auto-load, which
+     shows the primary's categories under a Polish interface while the handed catalog, which
      never passes through here, shows Polish - and the editor offers an empty Polish field. ONE
      MAP PER NON-PRIMARY LANGUAGE, named by catLabelKey; categoriesPl is pl's legacy spelling. */
   const dataLangs=catalogLangs(data);
@@ -292,7 +292,7 @@ function normaliseCatalog(data){
      undeclared rather than inheriting the current session's list.
      NOTE: `cat` above is a WHITELIST - it copies named fields and drops everything else.
      Every new top-level catalog field must be added here AND to currentCatalog(), or
-     Import silently discards it while the sibling auto-load (which bypasses this parser)
+     Import silently discards it while the handed catalog (which bypasses this parser)
      keeps it - a mismatch that looks like the catalog's own fault. */
   /* Category looks, carried like roles and only when declared. Deliberately NOT validated
      against this engine's CAT_ICONS here: an import should preserve what the file said, and a
@@ -318,7 +318,7 @@ function normaliseCatalog(data){
     const arr=(a,fill)=>{ const out=(Array.isArray(a)?a.slice(0,n):[]).map(x=>String(x==null?"":x));
                           while(out.length<n) out.push(fill); return out; };
     /* THE KEY ORDER IS A CONTRACT: eCatalogSignature hashes this object's JSON, so a reshuffle
-       asks every desk again whether to take the sibling it already has. Every declared clause,
+       asks every desk again whether to take the catalog it already has. Every declared clause,
        the category row, the primary's action and topic, then the rest as the export writes
        them - absent, not empty. topicPl was once missing here and a catalog exported WITH
        Polish topics lost them coming back in. */
@@ -348,7 +348,7 @@ function normaliseCatalog(data){
   return cat;
 }
 /* Full-content hash, not a count fingerprint: rewording a card must change the
-   signature, or the updated sibling is never offered over the stale copy. djb2 over JSON
+   signature, or the updated file is never offered over the stale copy. djb2 over JSON
    plus length. Old-format signatures fail to match once and re-ask - the safe direction. */
 /* Two catalogs are the same if they NORMALISE the same - run back through
    parseCatalogFile(), the one function that decides what a catalog is; hashing the raw
@@ -492,8 +492,8 @@ function eApplyCatalog(c){
 
   if(typeof c.facts==="string" && c.facts) setCatalogFacts(c.facts);
   if(Array.isArray(c.who)) setCatalogWho(normWhoList(c.who));
-  /* Captured from whichever catalog actually APPLIED - stored or sibling. Reading
-     storedCatalog() is not equivalent: a sibling that could not be written is applied unstored. */
+  /* Captured from whichever catalog actually APPLIED - stored or handed. Reading
+     storedCatalog() is not equivalent: a handed catalog that could not be written is applied unstored. */
   E_CATALOG_VERSION=(c.version!=null)?String(c.version):null;
   E_CATALOG_REV=(c.rev!=null && Number.isFinite(+c.rev))?+c.rev:null;
   return true;

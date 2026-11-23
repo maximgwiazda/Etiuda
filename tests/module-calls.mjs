@@ -6205,13 +6205,13 @@ const CARD_B = {
   STUBS.forEach(k => { H.hooks[k] = () => {}; });
   H.hooks.openSettings = SET.openSettings;
   H.hooks.tourActive = () => false;
-  /* A host with every door the dialog's rows wait for: the hotkey, the shared folder, and the join. */
+  /* A host with every door the dialog's rows wait for: the hotkey and the join; and the two shared-file verbs an older shell still offered, which no row waits for now (D3-3s). */
   globalThis.window.E_HOST = { hotkeyState: () => ({ accel: "Control+Shift+Space", taken: false, def: "Control+Shift+Space" }),
     setHotkey: () => ({ ok: true }), sharedRead: () => null, sharedWrite: () => null, teamJoin: () => Promise.resolve({}) };
   Dom.grabDom();
   /* What the dialog held, by the mark each row's control carries in its markup: the rows of today's dialog. */
   /* Board 1017 took Join a team (id="setJoinTeam", the paste) out of the rows: the paste stands on the empty desk alone. */
-  const DIALOG_ROWS = ['id="setAgentName"', 'id="setUiLang"', 'data-seg="sharededit"', 'data-seg="theme"',
+  const DIALOG_ROWS = ['id="setAgentName"', 'id="setUiLang"', 'data-seg="theme"',
     'data-seg="glass"', 'data-seg="motion"', 'data-seg="cols"', 'id="setColFloor"', 'data-seg="raillock"', 'data-seg="pillslock"',
     'data-seg="notehover"', 'data-seg="deck"', 'id="setHotkey"', 'id="scListInline"', 'id="setReset"'];
   const count = (h, s) => h.split(s).length - 1;
@@ -6253,12 +6253,20 @@ const CARD_B = {
       return !bad.length || "not once: " + bad.map(k => k + " " + count(all, k) + "/" + count(pages, k)).join(", ");
     });
 
+    check("settings.js", "D3-3s no row edits the shared catalog file, though the host this dialog runs under still offers a shared read and write", () => {
+      const all = SET.settingsBodyHtml();
+      const pages = SET.settingsSections().map(s => SET.settingsPageHtml(s.id, "")).join("");
+      return (count(all, 'data-seg="sharededit"') === 0 && count(pages, 'data-seg="sharededit"') === 0
+        && all.indexOf("Edit the shared catalog file directly") < 0 && pages.indexOf("Edit the shared catalog file directly") < 0)
+        || "still there " + count(all, 'data-seg="sharededit"') + "/" + count(pages, 'data-seg="sharededit"');
+    });
+
     check("settings.js", "D3-4 no AI in the section list, and no section listed without a row", () => {
       const n = SET.settingsNavHtml("general");
       const ids = [...n.matchAll(/data-sx="([^"]+)"/g)].map(m => m[1]);
       const empty = SET.settingsSections().filter(s => !/class="sx-card"><div class="(set-row|sc-list)/.test(SET.settingsPageHtml(s.id, ""))).map(s => s.id);
       return (ids.indexOf("ai") < 0 && !/>AI</.test(n) && !empty.length
-        && ids.join(",") === "all,account,general,appearance,layout,keys,notifications,teams,data,about") || ids.join(",") + " empty " + empty.join(",");
+        && ids.join(",") === "all,account,general,appearance,layout,keys,notifications,data,about") || ids.join(",") + " empty " + empty.join(",");
     });
 
     check("settings.js", "D3-5 searching \"blur\" finds Blur effects, and \"zzz\" shows the empty line in both languages", () => {
@@ -6316,7 +6324,7 @@ const CARD_B = {
 
     check("settings.js", "D3-6 Reset defaults clears the same keys as the dialog's did, and leaves the name, the reply language and the tabs", () => {
       const TODAY = ["eTheme", "eGlassOff", "eMotionOff", "eUiLang", "ePillsLock", "eRailLock", "ePills", "eRail", "eShortcuts", "eHdrPills",
-        "eNoteHover", "eDeckOff", "eRailW", "eFactsW", "eFactsH", "eCollapsed", "eSharedEdit", "eHotkey"];
+        "eNoteHover", "eDeckOff", "eRailW", "eFactsW", "eFactsH", "eCollapsed", "eHotkey"];
       const KEEP = ["eAgent", "eLang", "eTourSeen", "eCatalogFolder"];
       const was = TODAY.concat(KEEP).map(k => [k, ST.lsGet(k)]), wasNs = [["Cols", ST.nsGet("Cols")], ["Floor", ST.nsGet("Floor")]];
       try {
@@ -6339,7 +6347,7 @@ const CARD_B = {
       /* Reset clears the motion key the later screen-tab checks still need reduced, so put every key back. */
       const KEYS = ["eTheme", "eGlassOff", "eMotionOff", "eUiLang", "ePillsLock", "eRailLock", "ePills", "eRail",
         "eShortcuts", "eHdrPills", "eNoteHover", "eDeckOff", "eRailW", "eFactsW", "eFactsH", "eCollapsed",
-        "eSharedEdit", "eHotkey", "eQuitOnClose"];
+        "eHotkey", "eQuitOnClose"];
       const was = KEYS.map(k => [k, ST.lsGet(k)]);
       const wasNs = [["Cols", ST.nsGet("Cols")], ["Floor", ST.nsGet("Floor")]];
       globalThis.window.E_HOST = Object.assign({}, prev, {

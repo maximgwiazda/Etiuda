@@ -17,7 +17,7 @@ import { pillsLocked, togglePillsLock, syncLayoutPrefs } from "./pills-box.js";
 import { rereadCollapsed } from "./collapse.js";
 import { applyStoredFactsSize } from "./facts.js";
 import { agentName, typeAgentName, agentNameNote, markAgentNameNoteSeen } from "./agent.js";
-import { eHost, eHasShared, E_AI_OFF_KEY, eAiOn, eAiModel, eTellAi, E_SEARCH_AI_OFF_KEY, eSearchOn, eTellSearch } from "./host.js";
+import { eHost, E_AI_OFF_KEY, eAiOn, eAiModel, eTellAi, E_SEARCH_AI_OFF_KEY, eSearchOn, eTellSearch } from "./host.js";
 import { armSearch, clearSearchMeaning } from "./search-meaning.js";
 import { hooks } from "./hooks.js";
 import { lapseNote, shareRefusedNotes, keptApartNotes, relayElsewhereNote, folderHeldNote, teamLeads, teamPolicySaid, relayDesk, keySignHtml, forgetTeamLead, onJoinPainted } from "./team-join.js";
@@ -593,12 +593,6 @@ function teamsGroups(){
   const policySaid=teamPolicySaid();
   if(policySaid.length) rows.unshift({key:"teampolicy", html:'<div class="set-row" data-row="teampolicy">'+sxIcon("desks")+'<div class="set-label">'+esc(t("Team"))
     +policySaid.map(l=>'<small>'+esc(l)+'</small>').join("")+'</div></div>'});
-  /* Under a host only: a browser has no catalog folder to share. */
-  if(eHasShared() && !relayDesk()) rows.push(row("sharededit","teams",t("Edit the shared catalog file directly"),
-    t("For a team that keeps its catalog without Studio: each change is written into the catalog file in the shared folder. A catalog file the team's lead signed is never touched."),
-    onoff("sharededit", lsGet("eSharedEdit")==="1",
-      t("Each change goes into the shared catalog file; where a teammate changed the same text first, theirs stays and yours waits in this desk's own file"),
-      t("Each change stays in this desk's own file"))));
   return rows.length ? [{rows}] : [];
 }
 /* THE AI SECTION'S WORDS, the built-in model's while it ranks and the organisation's while that one does, so the lines that say
@@ -1176,12 +1170,6 @@ function wirePage(box){
           syncDeck();
           toast(on?t("Replies stack behind the first"):t("Replies laid out one below the other"));
         }
-        else if(seg==="sharededit"){
-          if(on) lsSet("eSharedEdit","1"); else lsDel("eSharedEdit");
-          // The desk writes at once, as after an edit, so what it holds already goes where the setting now says.
-          hooks.syncSampleMark();
-          toast(on?t("From now on, changes go into the shared catalog file"):t("From now on, changes stay in this desk's own file"));
-        }
         else if(seg==="aisuggest"){
           if(on) lsDel(E_AI_OFF_KEY); else lsSet(E_AI_OFF_KEY,"1");
           eTellAi();
@@ -1287,7 +1275,7 @@ function resetAllSettings(){
   const from=originOf(document.getElementById("setReset"));
   const was={};
   ["eTheme","eGlassOff","eMotionOff","eUiLang","ePillsLock","eRailLock","ePills","eRail",
-   "eShortcuts","eHdrPills","eNoteHover","eDeckOff","eRailW","eFactsW","eFactsH","eEdPlace","eCollapsed","eSharedEdit",E_HOTKEY_KEY,"eQuitOnClose",
+   "eShortcuts","eHdrPills","eNoteHover","eDeckOff","eRailW","eFactsW","eFactsH","eEdPlace","eCollapsed",E_HOTKEY_KEY,"eQuitOnClose",
    "eNotifyEditionOff","eNotifyCatalogOff",E_AI_OFF_KEY,E_SEARCH_AI_OFF_KEY]
     .forEach(k=>{ was[k]=lsGet(k); try{ lsDel(k); }catch(e){} });
   was[nsKey("Cols")]=nsGet("Cols"); was[nsKey("Floor")]=nsGet("Floor");

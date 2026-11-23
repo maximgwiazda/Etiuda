@@ -9,7 +9,7 @@ import { remPx, colMode, colFloor, colCount, COL_GAP } from "./columns.js";
 import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { dismissModal, closeModal, edDirty, modalFront } from "./dialog.js";
 import { E_VERSION } from "./env.js";
-import { eHost, eCatalogFile, eCatalogIn, eCatalogBuiltIn, eCatalogFolder, E_CATALOG_FOLDER_KEY, E_CATALOG_SCRIPT } from "./host.js";
+import { eHost, eCatalogFile, eCatalogIn, eCatalogBuiltIn, eCatalogFolder, E_CATALOG_FOLDER_KEY } from "./host.js";
 import { lsGet, lsKeys, nsGet, E_NS, E_LS_OK, E_SS_OK, eDeskFileShown, eSaveTrouble, eLastSaved, eHomeless, eDeskHome,
   eDeskRefused } from "./storage.js";
 import { ejectCatalog } from "./local-memory.js";
@@ -77,8 +77,6 @@ function mtCatalogPlace(){
   try{
     if(!catalogLoaded() && !storedCatalog()) return none;
     const home=eDeskHome(), inFolder=String(nsGet("CatalogFile")||"");
-    if(!eHost()) return {file:S(()=>nsGet("CatalogFrom")||(eCatalogAccepted(eCatalog())?E_CATALOG_SCRIPT:"")),
-      copy:eCatalogAccepted(eCatalog())?"beside this page":"imported into this browser", folder:"-"};
     if(inFolder) return {file:inFolder, copy:lsGet(E_CATALOG_FOLDER_KEY)?"the chosen catalog folder's":"Documents\\Etiuda",
       folder:S(()=>eHomeless(eCatalogFolder(),home))};
     if(eCatalogAccepted(eCatalog())) return {file:S(()=>eCatalogFile()),

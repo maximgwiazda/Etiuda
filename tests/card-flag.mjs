@@ -25,7 +25,7 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 85;
+const EXPECTED = 86;
 const PLANT_CHECKS = 12;
 const VECTORS = path.join(ROOT, "tests", "card-flag-vectors.json");
 
@@ -132,8 +132,11 @@ let shell = null, shellErr = "";
 try { shell = bootShell("desk", fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8")); }
 catch (e) { shellErr = e && e.stack ? e.stack : String(e); }
 
-let reachStub = false, writes = 0;
+let reachStub = false, writes = 0, sharedAsked = 0;
 const host = {
+  /* A host that still offers the shared catalog's two verbs, as an older shell does: a desk is never to ask them. */
+  sharedRead: () => { sharedAsked++; return Promise.resolve(null); },
+  sharedWrite: () => { sharedAsked++; return Promise.resolve({ ok: false }); },
   branchIdentity: (make) => Promise.resolve(shell ? shell.ask("etiuda:branch-identity", make !== false) : null),
   writeBranch: (stem, text) => { writes++; return Promise.resolve(shell ? shell.ask("etiuda:branch-write", stem, text) : { ok: false }); },
   branchReach: () => {
@@ -450,12 +453,16 @@ try {
   const freshFlag = Fresh.cardFlag("c-b");
   check(freshFlag && freshFlag.state === "sent" && freshFlag.note === "Looks wrong", "a restart reads the flag from the layer");
 
+  /* The setting "Edit the shared catalog file directly" left on from an earlier Etiuda changes nothing: the write is this desk's own. */
+  ST.lsSet("eSharedEdit", "1");
   const wrote = await CF.writeDeskBranch();
+  ST.lsDel("eSharedEdit");
   const files = deskFiles();
   const raw = files.length === 1 ? fs.readFileSync(files[0], "utf8") : "";
   let doc = null;
   try { doc = raw ? JSON.parse(raw) : null; } catch (e) { doc = null; }
   check(wrote === true && !!doc, "a flag with no edit writes the desk file", "wrote " + wrote + " files " + files.length + (shell ? " " + shell.said.slice(-4).join(" | ") : ""));
+  check(sharedAsked === 0 && wrote === true && !!doc, "nsfe7 a desk that had the shared-file setting on writes its own file and asks no shared read or write (" + sharedAsked + " asked)");
   check(!!doc && verifies(doc), "the file verifies under the desk prefix");
   check(!!doc && doc.hash === V2.v2ContentHash(doc), "the file's hash is the engine's own");
   const flag = doc && Array.isArray(doc.flags) ? doc.flags[0] : null;

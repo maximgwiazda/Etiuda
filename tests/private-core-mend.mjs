@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 import { relayizeDesk, relayMirrorOf, relayMirrorProgram, relayChannelOf } from "./relay-mirror-desk.mjs";
 let LEAD_PIN = null;
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 42;
+const EXPECTED = 38;
 
 const CARD = "The quay lamp is wrapped for the crossing.";
 
@@ -582,29 +582,10 @@ try {
   await planted("pcm11p", "plant:pcm-shared-root", "    /* plant lifted */", pcm11,
     r => !r.gone, "the root file this desk wrote stays on the share");
 
-  /* pcm11w: off a team, the real shared write is refused once the catalog is private, and the file it wrote is gone. */
-  const pcm11w = async src => {
-    const tag = "pcm11w-" + (src ? "p" : "g");
-    const share = folder(tag + "-share");
-    const D = newDesk(tag, share, src);
-    const text = bodyOf("quay-held", { unsigned: true });
-    const first = await D.ask("etiuda:shared-write", "quay-held.ec", text, "", true);
-    const neighbor = path.join(share, "harbour.ec");
-    fs.writeFileSync(neighbor, bodyOf("harbour-board", { unsigned: true, name: "Harbour", card: "harbour lamp" }));
-    await D.ask("etiuda:team-join", "private", "quay-held", "on");
-    const mine = path.join(share, "quay-held.ec");
-    const gone = !fs.existsSync(mine);
-    let neighborId = "";
-    try { neighborId = JSON.parse(fs.readFileSync(neighbor, "utf8")).id; } catch { neighborId = ""; }
-    const second = await D.ask("etiuda:shared-write", "quay-held.ec", text, "", true);
-    return { first: !!(first && first.ok), gone, neighbor: neighborId === "harbour-board",
-      refused: !!(second && second.ok === false && second.refused === true && second.private === true), back: fs.existsSync(mine) };
-  };
-  const r11w = await pcm11w();
-  check(r11w.first && r11w.gone && r11w.neighbor && r11w.refused && !r11w.back,
-    "pcm11w a shared write of a Private catalog is refused, and the unsigned root file that write had put down is gone (" + JSON.stringify(r11w) + ")");
-  await planted("pcm11wp", "plant:pcm-shared-private", "    /* plant lifted */", pcm11w,
-    r => !r.refused || r.back, "a shared write after the mark puts the catalog back");
+  /* RETIRED with the shared write (no desk writes into a shared catalog file; tests/shared-file-gone.mjs): pcm11w, which held that the shared write of a
+     Private catalog was refused (plant:pcm-shared-private) and that the root file it had put down was gone once the mark was made. Its refusal has
+     nothing left to refuse: no desk writes a catalog into a shared file, so none is written for a Private catalog either. Its second half, the root
+     file this desk wrote going with the mark, is pcm11 above, which seeds the file by noteSharedWrote and stands. */
 
   /* pcm12: sharing a card from the catalog in use, once it is private, is refused before any team is asked. */
   const pcm12 = async src => {
@@ -638,17 +619,6 @@ try {
     has: () => true,
     get: (o, k) => (k === Symbol.unscopables ? undefined : (k in own ? own[k] : (k in globalThis ? globalThis[k] : (() => { throw new ReferenceError(String(k) + " is not defined"); })()))),
   });
-  const runWriteShared = async src => {
-    const own = { sharedEditing: () => true, teamContentNow: () => ({ private: ["quay-held"] }), lyGet: () => "" };
-    let writeShared;
-    try {
-      writeShared = new Function("scope", "with(scope){\n" + sliceFn(src, "function sharedPrivateNow(") + "\n" + sliceFn(src, "function writeShared(") + "\nreturn writeShared;\n}")(withScope(own));
-    } catch (e) { return { route: "", threw: true, err: String(e && e.message || e) }; }
-    try {
-      const r = await writeShared(false, { id: "quay-held", pin: "sha256:" + "ab".repeat(32) }, true, "layer");
-      return { route: r && r.route || "", threw: false };
-    } catch (e) { return { route: "", threw: true, err: String(e && e.message || e) }; }
-  };
   const SHARE_EN = "This catalog is private, so this card stays on this desk.";
   const SHARE_PL = "Ten katalog jest prywatny, więc ta karta zostaje na tym stanowisku.";
   const runSharePage = src => {
@@ -666,16 +636,8 @@ try {
   const langText = pageSrc("ui-lang.js"), cardText = pageSrc("card-share.js");
   const words = langText.indexOf("/* words: placeholder */") >= 0 && langText.indexOf('"' + SHARE_EN + '":"' + SHARE_PL + '"') >= 0
     && cardText.indexOf('t("' + SHARE_EN + '")') >= 0 && cardText.indexOf("if(sharePrivateNow())") >= 0;
-  const pageWrite = await runWriteShared(pageSrc("catalog-file.js"));
-  check(pageWrite.route === "none" && !pageWrite.threw,
-    "pcmPage writeShared of a catalog the page knows is private resolves to route none and does not write (" + JSON.stringify(pageWrite) + ")");
-  if (PLANTS_OFF) skip("pcmPagep lifting plant:pcm-write-shared turns its check red");
-  else {
-    const lifted = pageLift("catalog-file.js", "plant:pcm-write-shared", "  on=false;");
-    const red = lifted ? await runWriteShared(lifted) : null;
-    check(!!red && (red.threw || red.route !== "none"),
-      "pcmPagep lifting plant:pcm-write-shared turns its check red: the shared write is not refused (" + (red ? JSON.stringify(red) : "plant not found") + ")");
-  }
+  /* RETIRED with the shared write: pcmPage and pcmPagep, which held that the page's writeShared of a Private catalog resolved to route none
+     (plant:pcm-write-shared). The page writes no shared file now, so there is no write to refuse. */
   const pageShare = runSharePage(cardText);
   check(pageShare.marked && pageShare.line === SHARE_EN && words,
     "pcmSharePage a private catalog is refused in one line, in English and in Polish (" + JSON.stringify(pageShare) + ", words " + words + ")");

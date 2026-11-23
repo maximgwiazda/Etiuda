@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Etiuda - a single-file macro bank for live-chat support agents.
+<!-- Etiuda - a macro bank for live-chat support agents.
      Copyright (c) 2026 Maxim Gwiazda · Etiuda Source-Available Licence 1.0 (notice below).
      No version here: E_VERSION is the one source of truth.
      The charset declaration must sit within the first 1024 bytes of the document, so this
@@ -15,10 +15,9 @@
   release stays MIT, under v1/ of this repository and by v1/LICENSE.
 
   This file is the engine only. It ships with no content: cards, intents, categories
-  and quick facts come from a catalog file named etiuda-catalog.js placed beside it,
-  or from one imported through Manage. The installed edition reads any .ec catalog
-  from a folder of its own instead, which Settings names. With no catalog present
-  Etiuda starts empty.
+  and quick facts come from a catalog, which the desk reads from a folder of its own,
+  the one Settings names, or which is loaded through the Library. With no catalog
+  present Etiuda starts empty.
   A catalog is data and carries its own licence; the grant above covers the engine.
 -->
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -5408,13 +5407,6 @@ body.e-host .row .win-btn:focus-visible{outline-offset:-2px}
   </div>
 </div>
 
-<!-- Optional catalog sitting beside this file. Absent = Etiuda starts as a clean slate.
-     A .js global rather than .json: a page opened from file:// cannot fetch() a sibling,
-     but it can load one as a script. -->
-<!-- ONE filename, fixed and generic: written into the engine, so it cannot carry a
-     customer's name - any other file comes in via Import. A configurable name must be
-     discovered first; one fixed name is what makes the sibling work with no configuration. -->
-<script src="etiuda-catalog.js"></script>
 <script>
 /*@APP*/
 </script>

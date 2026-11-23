@@ -36,13 +36,11 @@ const at = argv.indexOf("--engine");
 const ENGINE = at >= 0 ? path.resolve(argv[at + 1]) : E.ENGINE_PATH;
 
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-dots-ground-"));
-const writeDeskFiles = (dir, htmlText, withCatalog) => {
+/* The catalog reaches the page the desk's way, the preload's, through E.seedCatalog: nothing is written beside the page. */
+const SAMPLE_DOC = fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8");
+const writeDeskFiles = (dir, htmlText) => {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "etiuda.html"), htmlText);
-  if (withCatalog) {
-    fs.writeFileSync(path.join(dir, "etiuda-catalog.js"),
-      "window.E_CATALOG = " + fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8") + ";\n");
-  }
   return "file:///" + path.join(dir, "etiuda.html").replace(/\\/g, "/");
 };
 
@@ -62,6 +60,7 @@ async function boot(browser, pageUrl, theme, lang, withCatalog, vp) {
     } catch (e) {}
   }, theme, lang);
   await seatPage(p);
+  if (withCatalog) await E.seedCatalog(p, SAMPLE_DOC);
   await p.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
   if (withCatalog) {
     await p.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
@@ -194,8 +193,8 @@ try {
   browser = await puppeteer.launch({ executablePath: E.browserPath("chrome"), headless: true, args: ["--hide-scrollbars", "--disable-lcd-text"], protocolTimeout: 180000 });
   decoder = await browser.newPage();
   const rawHtml = fs.readFileSync(ENGINE, "utf8");
-  const urlEmpty = writeDeskFiles(path.join(lab, "empty"), rawHtml, false);
-  const urlFull = writeDeskFiles(path.join(lab, "full"), rawHtml, true);
+  const urlEmpty = writeDeskFiles(path.join(lab, "empty"), rawHtml);
+  const urlFull = writeDeskFiles(path.join(lab, "full"), rawHtml);
   const ONLY = process.env.DOTS_GROUND_ONLY || "";
   const hold = async (p, label) => {
     if (ONLY && !label.includes(ONLY)) return;

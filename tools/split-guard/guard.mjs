@@ -249,7 +249,7 @@ export function moduleFilesFor(entry, except = []) {
 // Names that are meant to stay global after the split, each with the reason it is not a
 // finding. An entry here is a decision; keep it short and keep the reason on the line.
 export const ALLOWED_GLOBAL = new Map([
-  ['E_CATALOG', 'the deployment catalog is a separate <script> the page may or may not carry'],
+  ['E_CATALOG', 'the host hands the page its catalog before the first script runs, and the page may carry none'],
 ]);
 
 const SENTINEL = '__PB_UNBOUND_';

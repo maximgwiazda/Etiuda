@@ -149,8 +149,6 @@ export function plantsTree(root, label) {
         fs.copyFileSync(from, to);
       }
     }
-    const catalog = path.join(root, "etiuda-catalog.js");
-    if (fs.existsSync(catalog)) fs.copyFileSync(catalog, path.join(copy, "etiuda-catalog.js"));
     const nm = path.join(root, "node_modules");
     if (fs.existsSync(nm)) fs.symlinkSync(nm, path.join(copy, "node_modules"), "junction");
     return copy;

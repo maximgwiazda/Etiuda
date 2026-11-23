@@ -30,7 +30,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/desk-ipc.mjs                           no fixtures, the desk's write path, shell stubbed
     node tests/desk-ipc.mjs, legs 77a to 82h          no fixtures, the desk's own signed file under desks/<branch id>/: key pair, name, retry of a held write, a replaced pair, the edition kept past a removal, the category fields, a catalog taken while the identity is asked (78k), a catalog made from nothing on the empty desk (82)
     node tests/catalog-history.mjs                    no fixtures, the desk's hidden backups: a catalog it reads or writes kept once per content beside desk.json and never in the catalog folder, a colleague's file not kept, 30 days from last seen with the newest of each file kept longer, the list, the open and the putting back, never for a signed or sealed catalog nor over one, and an index that will not read losing nothing; the page's grouping imported from src/modules/catalog-history.js
-    node tests/catalog-shared.mjs                     no fixtures, the shared catalog edited directly by two desks over one documents folder: edits to different cards both land, a key the file changed since keeps the file's value and sends the desk's to its own file, signed, sealed and signed-grown files never written, a beaten or locked file, the history kept first, nothing written where nothing changed, a catalog made from nothing; legs 10a to 10f the page's half sliced from catalog-file.js and catalog-offer.js, what the layer touches by the file's ids and the desk's own edition offered back only when asked
+    node tests/shared-file-gone.mjs                   no fixtures, no desk writes into a catalog file on a share: the shell has no shared read or write, the bridge offers neither, a put-back over bytes this desk did not write leaves the shared file byte for byte (another desk's lock file beside it is left as it was), over bytes it wrote it goes in place with its Undo and takes no lock, and nothing in the shell names a lock kept beside a catalog
     node tests/desk-growth.mjs                        no fixtures, a desk of 300 days: a count or a resize sends only what changed
     node tests/shell-office.mjs                       no fixtures, the shell against a busy file, a refused catalog, a folder that does not answer
     node tests/hpke.mjs                               no fixtures, the shell's HPKE held to RFC 9180 appendix A.1.1 byte for byte, its refusals, and a one-byte label mutation that must miss; then the sealed envelope, AES-256-GCM under the team key, and what must not open it; then the team key wrapped for one desk, bound to its team, epoch and desk id
@@ -154,7 +154,7 @@ third column is how to check this one.
 | `module-calls.mjs` | `src/` modules, RUN | a text reading cannot say the code is reached; this one imports each module through node's own loader and compares an answer, which is the only reading that dies when the module does |
 | `catalog-trust-desk.mjs` | `src/` modules and `shell/`, RUN | the claim is that the desk still calls the verifier and still says its answer, which only running the boot's and the Library's own calls can show; what it reads is the markup they rendered, which is also where an offer answered Yes is seen to be down before the desk starts again |
 | `catalog-history.mjs` | `shell/` and `src/` modules, RUN | the backups are kept, pruned and put back by the shell, so it runs `shell/main.js` under a stubbed electron over temp folders and reads the bytes on disk; the rows the Library shows are the page's, so `catalog-history.js` is imported and called rather than read |
-| `catalog-shared.mjs` | `shell/` and `src/` modules, RUN, and `src/` sliced | two desks are two evaluations of `shell/main.js` sharing one documents folder, and each page's write is the real `catalog-merge.js`; legs 10a to 10f slice the page's own half out of `catalog-file.js` and `catalog-offer.js` and run it over a stated scope, the way `test.js` does, by choice rather than need, since other gates import `catalog-file.js` in bare node; a name the scope does not state throws |
+| `shared-file-gone.mjs` | `shell/` and `src/` modules, RUN | the claim is an absence, so it is read where a presence would show: the shell under a stubbed electron is asked for the two shared channels and answers nothing, the bridge is run and its verbs listed, and a put-back is asked of the shell over a file the desk only read and over one it wrote, beside another desk's lock file, which must be left as it was; the page's half (the Settings row, the one notice) is in `module-calls.mjs` and `desk-growth.mjs` |
 | `token-canary.mjs` | `src/` modules, RUN, and `sourceDoc()` | it calls `fill()` and compares what it takes with the canary as its two readers read it; the source is read only as a list of candidate names |
 | `variables.mjs` | `src/` modules, RUN, and the same modules at e3fe06b out of git | a rule and a card are read through the evaluator and `fill()` themselves; whether a catalog without variables copies what it copied before is a comparison with the code before, which only that code can answer |
 | `smoke.js` | artefact | a browser opens the file that ships |
@@ -900,9 +900,8 @@ ladder, and every Electron reading this harness had taken before that date was t
 And `@electron/asar` caches an archive's header by path, so a read-back after a repack answers
 with the previous archive's offsets unless `uncacheAll()` is called.
 
-**A healthy boot of the packaged app logs two console errors**, the sibling catalog scripts the
-engine asks for at boot and the policy refuses by design. A leg counting console errors over the
-shell has to expect exactly those two.
+**A healthy boot of the packaged app logs no console error.** The page asks for no script by
+address, so a leg counting console errors over the shell expects none.
 
 **What a run leaves behind is a check, not a hope.** `tests/csp.js` and `tests/desk.js` both
 ended in `try { fs.rmSync(lab, ...) } catch {}` and both left their throwaway Chromium profile in
@@ -1000,7 +999,7 @@ bytes. The `sample-*` files still in the fixtures folder serve branches older th
 **A catalog reaches a browser leg's page one way: `E.seedCatalog(page, catalog)`.** It is the
 desk's own way, the preload's: the catalog's JSON is parsed into `window.E_CATALOG` before the
 engine's first script runs (puppeteer's `evaluateOnNewDocument`). No leg writes a catalog beside
-the page, so no leg leans on the browser form's sibling script tag. A run folder holds the
+the page, because the page loads none from there. A run folder holds the
 catalog key's text as `catalog` and hands it over with `seed(page)`; a non-catalog key, such as
 `sampleV2`, is still written beside the engine under its `SIBLING_AS` name.
 
