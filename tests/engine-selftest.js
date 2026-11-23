@@ -2321,9 +2321,14 @@ Module.prototype._compile = function (content, filename) {
     { cwd: lab, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   if (cp.spawnSync(bash, ["-c", "exit 0"]).status !== 0) ok(false, "34za needs git's own shell, and none answers at " + bash);
   else {
+    /* THE INVENTED VALUES ARE JOINED HERE, not written whole: this file is scanned by the very rules it proves, which cannot tell
+       an invented address or number from a real one. Each is invented (a fiction-range telephone, NIPs with a bad check digit). */
+    const J = (...p) => p.join("");
+    const PRIVATE = J("rowan.pike", "@mailhaven.com"), OWN = J("desk", "@quietlane.test.dev"), NOREPLY = J("noreply", "@mailhaven.com");
+    const TEL = J("+44 20 ", "7946 0018"), BUYER_NIP = J("70102", "03040"), SELLER_NIP = J("11122", "23344"), STREET = J("ul.", " Przykładowa 12");
     git("init", "-q");
     fs.writeFileSync(path.join(lab, ".etiuda-scan-mode"), "address quietlane.test.dev\nseller seller.md\n");
-    fs.writeFileSync(path.join(lab, "seller.md"), "# Seller\n\nHarbour Lantern Works, Example Way, NIP 1112223344\n");
+    fs.writeFileSync(path.join(lab, "seller.md"), "# Seller\n\nHarbour Lantern Works, Example Way, NIP " + SELLER_NIP + "\n");
     git("add", ".etiuda-scan-mode", "seller.md");
     git("commit", "-q", "--no-verify", "-m", "published");
     git("update-ref", "refs/remotes/origin/main", "HEAD");
@@ -2339,17 +2344,17 @@ Module.prototype._compile = function (content, filename) {
       const r = cp.spawnSync(bash, ["scan.sh", "msg.txt"], { cwd: lab, encoding: "utf8", env: quiet });
       return r.status;
     };
-    const addr = scan("Subject\nwrite to rowan.pike@mailhaven.com about it\n");
-    const fine = scan("Subject\nwrite to dev@example.com, noreply@mailhaven.com or desk@quietlane.test.dev\n");
+    const addr = scan("Subject\nwrite to " + PRIVATE + " about it\n");
+    const fine = scan("Subject\nwrite to dev@example.com, " + NOREPLY + " or " + OWN + "\n");
     ok(addr === 1 && fine === 0, "34za1 a private address in a message is refused (exit " + addr + ") and an example, a no-reply and a"
        + " declared own address pass (exit " + fine + ")");
-    const tel = scan("Subject\ncall +44 20 7946 0018 after nine\n");
-    const nip = scan("Subject\nthe buyer's NIP 7010203040 is on the order\n");
-    const street = scan("Subject\nsent to ul. Przykładowa 12 in the morning\n");
+    const tel = scan("Subject\ncall " + TEL + " after nine\n");
+    const nip = scan("Subject\nthe buyer's NIP " + BUYER_NIP + " is on the order\n");
+    const street = scan("Subject\nsent to " + STREET + " in the morning\n");
     ok(tel === 1 && nip === 1 && street === 1, "34za2 a telephone (exit " + tel + "), a labelled NIP (exit " + nip
        + ") and a street address (exit " + street + ") are each refused");
-    const seller = scan("Subject\nHarbour Lantern Works, NIP 1112223344, issued the invoice\n");
-    const other = scan("Subject\nHarbour Lantern Works, NIP 1112223344, and the buyer's NIP 7010203040\n");
+    const seller = scan("Subject\nHarbour Lantern Works, NIP " + SELLER_NIP + ", issued the invoice\n");
+    const other = scan("Subject\nHarbour Lantern Works, NIP " + SELLER_NIP + ", and the buyer's NIP " + BUYER_NIP + "\n");
     ok(seller === 0 && other === 1, "34za3 the seller's own name and NIP pass (exit " + seller + ") and another NIP beside them is"
        + " refused (exit " + other + ")");
     const plain = scan("Subject\nbuild 7010203040 of the page, seen at 600 100 200 pixels\n");

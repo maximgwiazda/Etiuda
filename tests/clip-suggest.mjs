@@ -76,7 +76,7 @@ check(shown.length === 1 && shown[0].id === "t:wick" && shown[0].score > SUGGEST
 const nameScore = scoreSuggestions("Ada Maria Quinn", model);
 check(nameScore.length === 0, "a three-word name leaves the strip empty: " + JSON.stringify(nameScore));
 /* Text that is no customer's sentence is scored like any other selection, and offers nothing here. */
-for (const [name, text] of [["bare code", "X7K2P9"], ["labelled code", "Booking code X7K2P9"], ["phone", "07700 900123"],
+for (const [name, text] of [["bare code", "X7K2P9"], ["labelled code", "Booking code X7K2P9"], ["dialling digits", "07700 900123"],
   ["email", "ada@example.com"], ["url", "https://example.com/lamps"], ["card", "4242 4242 4242 4242"], ["one name", "Ada"],
   ["two names", "Ada Lovelace"], ["code and two names", "X7K2P9 Ada Lovelace"], ["empty", ""], ["blank", "   "]]) {
   check(scoreSuggestions(text, model).length === 0, name + " offers no intent: " + JSON.stringify(text));
