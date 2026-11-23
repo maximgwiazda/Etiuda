@@ -33,9 +33,10 @@
    a profile restored with no record fetches the team file and the rest back, and one key on two computers fetches the
    other's uploads. A blob of this key that the record does not show is judged and applied as anyone's is, and once more
    against the record: not later than what this computer last sent for the path, it is older and changes nothing; later,
-   but the mirror holds neither its bytes nor what was last sent there, an edit is waiting to go up, which stays, the blob
-   becoming the one that edit replaces. Else it is written and recorded as sent, so the next edit replaces it and the chain
-   stays one. The record is the sent paths as before; no field is added, and a state written earlier reads as it did.
+   but the mirror holds neither its bytes nor what was last sent there, the path changed on two computers, and ownHeld says which
+   stands, the team file across an epoch move too (landTeam). Else it is written and recorded as sent, so the next edit
+   replaces it and the chain stays one. The record is the sent paths as before, and `clash` for a root file both changed; a state written earlier reads
+   as it did.
 
    AN EPOCH MOVE (F1 of the slice 1 review). The team file of a new epoch carries each remaining desk's wrap of the new key,
    and at the root it is sealed under that key, which a desk holding only the old one cannot open. So the lead also seals
@@ -447,11 +448,21 @@ function readState(file) {
 
 /* ---- the program: judges, writes the mirror, says what it owes ---------------------------------------------------- */
 
+/* Where a root file stands in its own order: a team file by epoch then rev, the head by its time. */
+const rootOrderOk = o => table(o) && (Number.isFinite(o.t) || (Number.isSafeInteger(o.epoch) && o.epoch >= 1 && Number.isSafeInteger(o.rev) && o.rev >= 0));
+/* The ids of `a` that `b` does not hold, once each and in order; a clash keeps at most DROPPED_MAX. */
+const onlyIn = (a, b) => [...new Set(a.filter(x => b.indexOf(x) < 0))].sort();
+const isDeskId = d => typeof d === "string" && (/^k-[0-9a-f]{16}$/.test(d) || B.isId(d));
+const DROPPED_MAX = 512;
+const rootOrderOf = o => (Number.isFinite(o.t) ? { t: o.t } : { epoch: o.epoch, rev: o.rev });
+const rootAhead = (a, b) => (Number.isFinite(a.t) ? a.t > b.t : a.epoch > b.epoch || (a.epoch === b.epoch && a.rev > b.rev));
+const rootSaid = o => (Number.isFinite(o.t) ? new Date(o.t).toISOString() : "rev " + o.rev + " at key number " + o.epoch);
+
 function freshState() {
   return { kind: STATE_KIND, v: 1, seq: 0, counters: {}, revs: {}, trust: {}, applied: {}, taken: {}, sent: {}, sentInv: {},
     refused: {}, own: 0, bytes: 0, leadEpoch: 0, pending: [], gone: {}, tokenUsed: false, invited: false,
     tokenUsedIds: {}, invitedIds: {}, replyLostIds: {}, lostBlobs: {}, withdrawLostIds: {}, unkeptIds: {}, headT: null, heldHead: null, heldItem: null, lapse: null, skew: 0, made: null, suspect: false,
-    pin: null, chain: null, was: [], forks: {}, fork: null, behind: {}, stranded: null, listed: null, listedAsked: null, ahead: { held: [], steps: [] }, later: [] };
+    pin: null, chain: null, was: [], forks: {}, fork: null, behind: {}, stranded: null, listed: null, listedAsked: null, ahead: { held: [], steps: [] }, later: [], clash: {} };
 }
 
 /* A state read back, field by field: what is not its shape is dropped, so a damaged file costs that field and no more. */
@@ -564,6 +575,12 @@ function stateOf(x, now) {
   const laterRows = Array.isArray(x.later) ? x.later.filter(p => table(p) && count(p.seq) && HEX32.test(String(p.id)) && isCount(p.epoch) && B.isId(p.writer)
     && count(p.floor)).slice(-LATER_MAX).map(p => ({ seq: p.seq, id: p.id, epoch: p.epoch, writer: p.writer, floor: p.floor })) : [];
   s.later = laterRows; /* plant:later-kept */
+  if (table(x.clash)) for (const k of [TEAM_NAME, HEAD_NAME]) {
+    const c = x.clash[k];
+    if (table(c) && (c.kept === "here" || c.kept === "team") && Number.isFinite(c.at) && rootOrderOk(c.here) && rootOrderOk(c.team))
+      s.clash[k] = Object.assign({ kept: c.kept, here: rootOrderOf(c.here), team: rootOrderOf(c.team), at: c.at },
+        Array.isArray(c.dropped) ? { dropped: onlyIn(c.dropped.filter(isDeskId), []).slice(0, DROPPED_MAX) } : {});
+  }
   if (table(x.ahead)) {
     if (Array.isArray(x.ahead.held)) s.ahead.held = heldOf(x.ahead.held); /* plant:ahead-kept */
     if (Array.isArray(x.ahead.steps)) s.ahead.steps = x.ahead.steps.filter(aheadStep).slice(-AHEAD_STEPS_MAX);
@@ -1018,8 +1035,10 @@ function createProgram(opts) {
      Not later than the last upload recorded for the path: older, and nothing changes. Later, but the mirror holds neither
      its bytes nor the bytes last sent there: the path changed here and on another computer of this key, and the relay
      serves the other. That blob is written; the bytes here are kept beside it first (keepApart) and never replace it. The
-     team file and the head keep the edit and take the blob as the last sent, as their own judgements order them. Null: it
-     is written as any blob is. The relay keeps one live blob a chain and takes a key's counters in order. */
+     team file and the head, which no copy may sit beside, go by their own order (rootHere): the newer stands, the relay's
+     at a tie, and the one passed over is said and kept in `clash`. The edit here, where newer, takes the blob as the last
+     sent, so it replaces it. Null: it is written as any blob is. The relay keeps one live blob a chain and takes a key's
+     counters in order. */
   function ownHeld(r, key) {
     const base = has(st.sent, key) ? st.sent[key] : null;
     if (base && !later(r, base)) return { ok: true, path: r.path, stale: true }; /* plant:own-older */
@@ -1030,11 +1049,58 @@ function createProgram(opts) {
     const edit = have !== want && have !== sent;
     let parallel = false;
     parallel = edit && key !== pathKey(TEAM_NAME) && key !== pathKey(HEAD_NAME); /* plant:own-parallel */
-    if (edit && !parallel) { sentFrom(r, key); persist(); return { ok: true, path: r.path, stale: true, kept: true }; } /* plant:own-edit */
+    const rootName = key === pathKey(HEAD_NAME) ? HEAD_NAME : TEAM_NAME;
+    const root = edit && !parallel ? rootHere(r, rootName === HEAD_NAME, now) : null;
+    let here = !!root;
+    here = !!root && root.here; /* plant:own-root-newer */
+    if (root && root.orders) rootClash(rootName, root.orders, here, root.dropped); /* plant:root-clash */
+    if (here) { sentFrom(r, key); persist(); return { ok: true, path: r.path, stale: true, kept: true }; } /* plant:own-edit */
     let kept = true;
     kept = !parallel || now == null || keepApart(r.path, now); /* plant:own-apart */
     if (!kept) return { ok: false, reason: "unwritten", said: "That file could not be written into the mirror.", served: false };
     return null;
+  }
+
+  /* The team file or the head changed here and served by the relay from another computer of this key: whether the edit here is the
+     newer, and both orders. An edit here that does not read as this team's file or head is not the newer; a blob the head's own
+     judgement would leave out leaves the edit as it is, with no orders. */
+  function rootHere(r, head, now) {
+    const gone = r.kind === "delete";
+    if (gone) return { here: true, orders: null };
+    let theirs = null, mine = null, ids = null;
+    if (head) {
+      const h = headJudged(r.body, false);
+      if (!h.ok) return { here: true, orders: null };
+      theirs = { t: h.t };
+      const m = now == null ? null : headJudged(toBytes(now).toString("utf8"), false);
+      mine = m && m.ok ? { t: m.t } : null;
+    } else {
+      const t = judgedBytes(r.body);
+      if (!t) return { here: true, orders: null };
+      theirs = { epoch: t.epoch, rev: t.rev };
+      const m = now == null ? null : judgedBytes(now);
+      mine = m ? { epoch: m.epoch, rev: m.rev } : null;
+      ids = m ? { here: rosterOf(m.doc).map(d => d.deskId), team: rosterOf(t.doc).map(d => d.deskId) } : null;
+    }
+    if (!mine) return { here: false, orders: null };
+    const here = rootAhead(mine, theirs);
+    /* Of the team file, each member the passed-over roster names and the standing one does not, so none goes in silence. */
+    let dropped;
+    dropped = ids ? onlyIn(here ? ids.team : ids.here, here ? ids.here : ids.team) : undefined; /* plant:clash-dropped */
+    return { here, orders: { here: mine, team: theirs }, dropped };
+  }
+
+  /* Both computers changed a root file: the one passed over is said once and kept for the lead's Studio to tell (rootClash), with,
+     for the team file, the members only it named (`dropped`): a member the other computer added, or one the standing file took off. */
+  function rootClash(rel, orders, here, dropped) {
+    st.clash[rel] = { kept: here ? "here" : "team", here: orders.here, team: orders.team, at: clock() };
+    if (Array.isArray(dropped)) st.clash[rel].dropped = dropped;
+    persist();
+    say(here
+      ? rel + " changed on this computer and on another at once; this computer's (" + rootSaid(orders.here) + ") is the newer and replaces the team's ("
+        + rootSaid(orders.team) + "), so a change made only on the other is no longer the team's"
+      : rel + " changed on this computer and on another at once; the team's (" + rootSaid(orders.team) + ") is the newer and stands, and this computer's ("
+        + rootSaid(orders.here) + ") was not sent, so a change made only here is no longer the team's");
   }
 
   /* Bytes of `rel` kept beside it under a sync client's conflict name, which the desk and Studio read as a copy of that file and
@@ -1056,6 +1122,22 @@ function createProgram(opts) {
     say(rel + " changed on this computer and on another at once; the other's is the team's, and this computer's is kept beside it as "
       + copy + ", which stays on this computer");
     return true;
+  }
+
+  /* The copies keepApart made that still sit in the mirror as they were kept, for the desk to tell the person where their version
+     went: each whole file stopped as kept-apart whose bytes are still the stopped ones. A copy edited since would go up as a new
+     file, and a copy removed is gone, so neither is listed. */
+  function keptApart() {
+    const out = [];
+    for (const rel of io.list()) {
+      if (TMP_RE.test(rel)) continue;
+      const key = pathKey(rel), stop = has(st.refused, key) ? st.refused[key] : null;
+      const bytes = stop && stop.why === KEPT_APART ? io.read(rel) : null;
+      let listed = false;
+      listed = bytes != null && sha256(toBytes(bytes)) === stop.sha; /* plant:kept-apart-listed */
+      if (listed) out.push(rel);
+    }
+    return out;
   }
 
   /* A counter this key already used, whether the blob landed or a newer one of its path passed over it. The next upload
@@ -1150,6 +1232,12 @@ function createProgram(opts) {
       return { ok: true, path: TEAM_NAME, same: true };
     }
     const held = heldTeam();
+    /* This key's own file at an older epoch than an edit here never sent (a move made offline, met by the other computer's edit
+       at the old epoch): the same rule as within an epoch (ownHeld), so the edit, the newer by epoch, takes that blob as the last
+       sent and replaces it at the relay, and the other is said and kept. Anything else at an older epoch is a replay. */
+    let ahead = null;
+    ahead = held && t.epoch < held.epoch && ownOf(ctx, r) ? ownHeld(r, pathKey(TEAM_NAME)) : null; /* plant:own-epoch-ahead */
+    if (ahead && ahead.kept) return ahead;
     if (held && t.epoch < held.epoch) return R("replay-rev"); /* plant:epoch-hold */
     const lr = B.revLoad(st.revs, revKey(t));
     if (!lr.ok) return lr; /* plant:team-rev */
@@ -1933,6 +2021,10 @@ function createProgram(opts) {
     /* Left behind (judgeBehind): the epoch it holds, the one it cannot open, and whether the agent dismissed the notice. */
     stranded: () => (st.stranded ? { epoch: st.stranded.epoch, above: st.stranded.above, seen: st.stranded.seen } : null),
     strandedSeen() { if (st.stranded && !st.stranded.seen) { st.stranded.seen = true; persist(); } },
+    keptApart,
+    /* The root files both computers of this key changed: which stood ("here" or "team"), both orders, and when; until seen. */
+    rootClash: () => Object.keys(st.clash).map(k => Object.assign({ path: k }, st.clash[k])),
+    rootClashSeen(rel) { if (has(st.clash, rel)) { delete st.clash[rel]; persist(); } },
     setSeq(n) { if (Number.isSafeInteger(n) && n > st.seq) { st.seq = n; persist(); } },
     markTokenUsed(id) {
       st.tokenUsed = true;
@@ -3444,6 +3536,9 @@ function createChannel(opts) {
     fork: () => prog.fork(),
     stranded: () => prog.stranded(),
     strandedSeen: () => prog.strandedSeen(),
+    keptApart: () => prog.keptApart(),
+    rootClash: () => prog.rootClash(),
+    rootClashSeen: rel => prog.rootClashSeen(rel),
   };
 }
 

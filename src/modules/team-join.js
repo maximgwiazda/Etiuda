@@ -324,6 +324,15 @@ function lapseWords(l){
 /* The team's row in Settings says the title, for as long as the step lasts. */
 function lapseNote(l){ return lapseWords(l).title; }
 /* A write this desk owes the shared folder that the folder refuses as read-only, one sentence a file, until it lands. */
+/* A conflict copy the relay channel kept on this computer beside the team's edition, never sent: one sentence a copy, by its file name,
+   for the three the shell names, then one sentence counting the rest. */
+function keptApartNotes(l){
+  const out=(Array.isArray(l&&l.keptApart)?l.keptApart:[]).filter(f=>typeof f==="string"&&f).map(f=>
+    t("{FILE} was not sent to the team: the team's edition had changed in the meantime, from another computer or from an earlier send of this one. It is kept beside the catalog in the team's folder on this computer, and can be opened and published again if it is the edition wanted.").split("{FILE}").join(f));
+  const more=l&&Number.isSafeInteger(l.keptApartMore)&&l.keptApartMore>0?l.keptApartMore:0;
+  if(out.length&&more) out.push(t("More files kept the same way: {N}.").split("{N}").join(String(more))); /* plant:kept-apart-more-shown */
+  return out;
+}
 function shareRefusedNotes(l){
   return (Array.isArray(l&&l.shareRefused)?l.shareRefused:[]).filter(r=>r&&typeof r.file==="string"&&r.file).map(r=>(r.kind==="folder"
     ? t("The team's shared folder is read-only where {FILE} goes, so this desk keeps the change and tries again at each check.")
@@ -473,6 +482,9 @@ function joinTook(v,changed){
              const fork=forkKept(l.fork);
              if(fork) row.fork=fork;
              if(l.stranded && typeof l.stranded==="object") row.stranded={seen:l.stranded.seen===true};
+             const keptApart=Array.isArray(l.keptApart)?l.keptApart.filter(f=>typeof f==="string"&&f&&f.length<=200).map(String).slice(0,3):[];
+             if(keptApart.length) row.keptApart=keptApart; /* plant:kept-apart-kept */
+             if(keptApart.length && Number.isSafeInteger(l.keptApartMore) && l.keptApartMore>0) row.keptApartMore=l.keptApartMore; /* plant:kept-apart-more-kept */
              if(l.needsFolder===true) row.needsFolder=true; /* plant:needs-folder-kept */
              if(l.awaitsEdition===true) row.awaitsEdition=true;
              /* The shell's still-reading sentence, as text. The page prints it; it is not a translation of its own. */
@@ -1089,4 +1101,4 @@ function shareDropItem(blobId){
   catch(e){ return Promise.resolve({ok:false}); }
 }
 
-export { lapseNote, shareRefusedNotes, relayElsewhereNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, teamPolicySaid, relayDesk, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, openJoinPaste, teamCanJoin, inviteHeld, noteCatalogCopy, joinTook, teamContent, teamContentNow, markCatalogPrivate, onContentChanged, openTeamBubble, closeTeamBubble, teamShareState, shareToTeammate, shareInboxList, shareKeepCard, shareKeptNote, shareDropItem };
+export { lapseNote, shareRefusedNotes, keptApartNotes, relayElsewhereNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, teamPolicySaid, relayDesk, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, openJoinPaste, teamCanJoin, inviteHeld, noteCatalogCopy, joinTook, teamContent, teamContentNow, markCatalogPrivate, onContentChanged, openTeamBubble, closeTeamBubble, teamShareState, shareToTeammate, shareInboxList, shareKeepCard, shareKeptNote, shareDropItem };

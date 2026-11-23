@@ -63,7 +63,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 542; /* fold 128: 533 + 2 (the join link key) + 7 (no older replace) */
+const EXPECTED = 578; /* fold 129: 540 at the merge base + 2 (fold 128: the join link key) + 36 (no older replace, same and cross epoch) */
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -3075,6 +3075,78 @@ if (deskOn()) try {
         const back = sha(fs.readFileSync(src)) === digest;
         check(turned && back, "948h lifting plant:head-show drops the sentence, and the product file is never written: " + detail + ", sha " + (back ? "restored" : "differs"));
       }
+      /* cfu2e to cfu2g, the page's half of the copy the channel kept: the row the shell sends carries the copy's file name, the page
+         keeps it through its own reading of the answer and prints one sentence a copy in the desk's language, and prints none of it
+         where the row names none. KEPT_EN and KEPT_PL, and the count line in kam1, are the copywriter's words. */
+      {
+        const cfuFile = "guide (conflicted copy 2026-11-22).ec";
+        const KEPT_EN = cfuFile + " was not sent to the team: the team's edition had changed in the meantime, from another computer or from an earlier send of this one. It is kept beside the catalog in the team's folder on this computer, and can be opened and published again if it is the edition wanted.";
+        const KEPT_PL = "Pliku " + cfuFile + " nie wysłano zespołowi: wydanie zespołu zmieniło się w międzyczasie, z innego komputera albo po wcześniejszym wysłaniu z tego. Plik zostaje obok katalogu w folderze zespołu na tym komputerze; można go otworzyć i opublikować ponownie, jeśli to właściwe wydanie.";
+        const KEPT_ANY_EN = "was not sent to the team: the team's edition had changed", KEPT_ANY_PL = "nie wysłano zespołowi: wydanie zespołu";
+        const withKept = leads => (leads || []).map(l => l && l.team === TEAM2 ? Object.assign({}, l, { keptApart: [cfuFile] }) : l);
+        const withPage = await pageHtml(withKept(freshLeads));
+        const noPage = await pageHtml(freshLeads);
+        check(withPage.en.indexOf(KEPT_EN) >= 0 && withPage.pl.indexOf(KEPT_PL) >= 0 && noPage.en.indexOf(KEPT_ANY_EN) < 0 && noPage.pl.indexOf(KEPT_ANY_PL) < 0,
+          "cfu2e a team row that names a kept copy shows, in English and in Polish, that the copy was kept on this computer and not sent, and a row that names none shows nothing of it: en "
+          + (withPage.en.indexOf(KEPT_EN) >= 0) + ", pl " + (withPage.pl.indexOf(KEPT_PL) >= 0) + ", none-row en " + (noPage.en.indexOf(KEPT_ANY_EN) >= 0)
+          + ", none-row pl " + (noPage.pl.indexOf(KEPT_ANY_PL) >= 0) + (pageErr ? " page " + pageErr.split("\n")[0] : ""));
+        /* The page's modules copied whole beside a lifted line, loaded as a second page that reads the same row. */
+        const liftedPage = async (file, tag, leadsFn) => {
+          const lines = fs.readFileSync(path.join(ROOT, "src", "modules", file), "utf8").split(/\n/);
+          const at = lines.findIndex(l => l.indexOf(tag) >= 0);
+          if (at < 0) return null;
+          lines.splice(at, 1);
+          const dir = fs.mkdtempSync(path.join(LAB, "page-plant-"));
+          fs.cpSync(path.join(ROOT, "src", "modules"), dir, { recursive: true });
+          fs.writeFileSync(path.join(dir, file), lines.join("\n"), "utf8");
+          const at2 = n => pathToFileURL(path.join(dir, n)).href;
+          const HK2 = await import(at2("hooks.js"));
+          HK2.hooks.render = () => {};
+          const TJ2 = await import(at2("team-join.js")), ST2 = await import(at2("storage.js")), SET2 = await import(at2("settings.js"));
+          let took2 = null;
+          const host = window.E_HOST;
+          window.E_HOST = { teamJoin: () => Promise.resolve({ leads: [] }), onTeamJoin: fn => { took2 = fn; } };
+          TJ2.wireTeamJoin();
+          await wait(40);
+          window.E_HOST = host;
+          if (took2) took2({ leads: (leadsFn || withKept)(freshLeads) });
+          ST2.lsSet("eUiLang", "en");
+          return shownText(SET2.settingsBodyHtml());
+        };
+        if (PLANTS_OFF) {
+          skip("cfu2f lifting plant:kept-apart-shown leaves the kept copy off the team's row on the page");
+          skip("cfu2g lifting plant:kept-apart-kept drops the kept copy from the row the page keeps");
+        } else {
+          let shownEn = null, keptEn = null, err = "";
+          try { shownEn = await liftedPage("settings.js", "plant:kept-apart-shown"); keptEn = await liftedPage("team-join.js", "plant:kept-apart-kept"); } catch (e) { err = e && e.stack ? e.stack : String(e); }
+          check(shownEn !== null && shownEn.indexOf("Newest edition Quay three") >= 0 && shownEn.indexOf(KEPT_ANY_EN) < 0 && !err, "cfu2f lifting plant:kept-apart-shown leaves the kept copy off the team's row on the page (FAIL cfu2e): "
+            + (shownEn === null ? "plant line absent" : "sentence " + (shownEn.indexOf(KEPT_ANY_EN) >= 0 ? "still there" : "gone")) + (err ? " " + err.split("\n")[0] : ""));
+          check(keptEn !== null && keptEn.indexOf("Newest edition Quay three") >= 0 && keptEn.indexOf(KEPT_ANY_EN) < 0 && !err, "cfu2g lifting plant:kept-apart-kept drops the kept copy from the row the page keeps (FAIL cfu2e): "
+            + (keptEn === null ? "plant line absent" : "sentence " + (keptEn.indexOf(KEPT_ANY_EN) >= 0 ? "still there" : "gone")) + (err ? " " + err.split("\n")[0] : ""));
+        }
+        /* kam1: past the three copies the row names, one sentence counts the rest, in English and Polish, after the three; none where
+           the row counts none. */
+        const MORE_EN = "More files kept the same way: 2.", MORE_PL = "Więcej plików zachowanych w ten sam sposób: 2.";
+        const three = ["a (conflicted copy 2026-11-22).ec", "b (conflicted copy 2026-11-22).ec", cfuFile];
+        const withMore = leads => (leads || []).map(l => l && l.team === TEAM2 ? Object.assign({}, l, { keptApart: three, keptApartMore: 2 }) : l);
+        const morePage = await pageHtml(withMore(freshLeads));
+        const after = (h, a, b) => h.indexOf(a) >= 0 && h.indexOf(b) > h.indexOf(a);
+        check(after(morePage.en, KEPT_EN, MORE_EN) && after(morePage.pl, KEPT_PL, MORE_PL) && withPage.en.indexOf("More files kept the same way") < 0
+          && withPage.pl.indexOf("Więcej plików zachowanych") < 0,
+          "kam1a a team row that names three kept copies and counts two more shows the three sentences and then the count, in English and in Polish, and a row that counts none shows no count: en "
+          + after(morePage.en, KEPT_EN, MORE_EN) + ", pl " + after(morePage.pl, KEPT_PL, MORE_PL) + ", none-count en " + (withPage.en.indexOf("More files kept the same way") >= 0)
+          + (pageErr ? " page " + pageErr.split("\n")[0] : ""));
+        if (PLANTS_OFF) {
+          skip("kam1b lifting plant:kept-apart-more-shown leaves the count off the page");
+          skip("kam1c lifting plant:kept-apart-more-kept drops the count from the row the page keeps");
+        } else {
+          let ms = null, mk = null, merr = "";
+          try { ms = await liftedPage("team-join.js", "plant:kept-apart-more-shown", withMore); mk = await liftedPage("team-join.js", "plant:kept-apart-more-kept", withMore); } catch (e) { merr = e && e.stack ? e.stack : String(e); }
+          const noCount = h => h !== null && h.indexOf(KEPT_EN) >= 0 && h.indexOf("More files kept the same way") < 0;
+          check(noCount(ms) && !merr, "kam1b lifting plant:kept-apart-more-shown leaves the count off the page (FAIL kam1a): " + (ms === null ? "plant line absent" : "count " + (noCount(ms) ? "gone" : "still there or row missing")) + (merr ? " " + merr.split("\n")[0] : ""));
+          check(noCount(mk) && !merr, "kam1c lifting plant:kept-apart-more-kept drops the count from the row the page keeps (FAIL kam1a): " + (mk === null ? "plant line absent" : "count " + (noCount(mk) ? "gone" : "still there or row missing")) + (merr ? " " + merr.split("\n")[0] : ""));
+        }
+      }
       /* 962 stage 5, T4, the page's half of the head per catalog: the row keeps each catalog's entry the shell kept, and the note
          under the team's name counts only the team's other catalogs whose edition is newer than the one loaded here. */
       {
@@ -3457,6 +3529,102 @@ if (deskOn()) try {
       check(a6ok(a6f) && a6ok(a6r),
         "962s6e6a a desk working in B keeps B loaded when B leaves its team and B's file leaves the mirror, this run and across a restart, and picks none of the rest: folder "
         + JSON.stringify(a6f) + ", relay " + JSON.stringify(a6r));
+
+      /* cfu1: the lead's own desk opens the team's edition, never the copy the channel kept beside it. In the relay mirror a
+         conflict-named copy of a catalog loses to the file it is a copy of whatever its rev (the copy is the computer's own
+         parallel edition, and it never went to the team); in a folder a copy that leads still opens, and on a tie the canonical
+         name wins. The file the desk picks is read from the list pickEdition is given, in either order. */
+      const cfuName = "quay-board", cfuCopy = cfuName + " (conflicted copy 2026-11-22).ec", cfuCanon = cfuName + ".ec";
+      const cfuPick = async (kind, copyRev, canonRev, src) => {
+        const d = await e6Desk(kind, src), out = [];
+        const item = (name, rev) => ({ file: path.join(d.mir, name), data: JSON.parse(catOf(cfuName, rev)) });
+        for (const order of [[item(cfuCopy, copyRev), item(cfuCanon, canonRev)], [item(cfuCanon, canonRev), item(cfuCopy, copyRev)]]) {
+          const got = d.D.api.pickEdition(order);
+          out.push(got ? path.basename(got.file) : null);
+        }
+        return out;
+      };
+      const cu1 = { relayLead: await cfuPick("relay", 3, 2), relayTie: await cfuPick("relay", 2, 2), folderLead: await cfuPick("folder", 3, 2), folderTie: await cfuPick("folder", 2, 2) };
+      const both = (o, want) => o.length === 2 && o[0] === want && o[1] === want;
+      check(both(cu1.relayLead, cfuCanon) && both(cu1.relayTie, cfuCanon),
+        "cfu1a in the relay mirror the lead's desk opens the team's edition and not the conflict copy beside it, the copy at rev 3 against the team's rev 2, and at the same rev, whichever the order: "
+        + JSON.stringify({ lead: cu1.relayLead, tie: cu1.relayTie }));
+      check(both(cu1.folderLead, cfuCopy) && both(cu1.folderTie, cfuCanon),
+        "cfu1b in a shared folder a conflict copy at the higher rev still opens, as before, and at the same rev the file named as the catalog does: "
+        + JSON.stringify({ lead: cu1.folderLead, tie: cu1.folderTie }));
+      if (PLANTS_OFF) {
+        skip("cfu1c lifting plant:pick-copy-last opens the copy that leads in the relay mirror");
+        skip("cfu1d lifting plant:pick-tie-canonical opens the first of two files at the same rev in a folder");
+      } else {
+        const sc = lifted6("plant:pick-copy-last"), pc = sc ? await cfuPick("relay", 3, 2, sc) : null;
+        check(!!pc && pc.indexOf(cfuCopy) >= 0, "cfu1c lifting plant:pick-copy-last opens the copy that leads in the relay mirror (FAIL cfu1a): " + (sc ? JSON.stringify(pc) : "plant line absent"));
+        const st = lifted6("plant:pick-tie-canonical"), pt = st ? await cfuPick("folder", 2, 2, st) : null;
+        check(!!pt && pt.indexOf(cfuCopy) >= 0, "cfu1d lifting plant:pick-tie-canonical opens the first of two files at the same rev in a folder (FAIL cfu1b): " + (st ? JSON.stringify(pt) : "plant line absent"));
+      }
+
+      /* kct1: in the relay mirror only the channel's own tail, " (conflicted copy <date>[ n])", marks a copy that never opens over
+         the team's file. A name with any other tail a sync client might use ("-FINAL" reads like a computer's) is a catalog file
+         like any other there, and its higher rev opens. */
+      const kctPick = async (aName, aRev, bName, bRev, src) => {
+        const d = await e6Desk("relay", src), out = [];
+        const item = (name, rev) => ({ file: path.join(d.mir, name), data: JSON.parse(catOf(cfuName, rev)) });
+        for (const order of [[item(aName, aRev), item(bName, bRev)], [item(bName, bRev), item(aName, aRev)]]) {
+          const got = d.D.api.pickEdition(order);
+          out.push(got ? path.basename(got.file) : null);
+        }
+        return out;
+      };
+      const kctFinal = cfuName + "-FINAL.ec", kctNumbered = cfuName + " (conflicted copy 2026-11-22 2).ec";
+      const kc1 = { final: await kctPick(kctFinal, 3, cfuCanon, 2), copy: await kctPick(kctNumbered, 3, cfuCanon, 2) };
+      check(both(kc1.final, kctFinal) && both(kc1.copy, cfuCanon),
+        "kct1a in the relay mirror a file named " + kctFinal + " at rev 3 opens over " + cfuCanon + " at rev 2, and the channel's own conflicted copy at rev 3 still does not, whichever the order: "
+        + JSON.stringify(kc1));
+      if (PLANTS_OFF) skip("kct1b lifting plant:pick-kept-tail reads any sync client's tail as the channel's copy");
+      else {
+        const sk = lifted6("plant:pick-kept-tail"), pk = sk ? await kctPick(kctFinal, 3, cfuCanon, 2, sk) : null;
+        check(!!pk && pk.indexOf(cfuCanon) >= 0, "kct1b lifting plant:pick-kept-tail reads any sync client's tail as the channel's copy, so rev 2 opens (FAIL kct1a): " + (sk ? JSON.stringify(pk) : "plant line absent"));
+      }
+
+      /* cfu2c: the team's row names the copy the channel kept (the program's list, by file name, in the mirror) for as long as it
+         sits there as kept. The stop is put in the channel's record as keepApart puts it (cfu2a drives the real parallel edit),
+         because a desk that met one needs two computers of one key; the row is read through the shell's own answer. */
+      const cfuRow = async (src, extra) => {
+        const d = await e6Desk("relay", src), ch = d.D.api.relayRun();
+        const bytes = catOf(cfuName, 3);
+        for (const name of [cfuCopy].concat(extra || [])) {
+          fs.writeFileSync(path.join(d.mir, name), bytes);
+          if (ch) ch.program.state().refused[name] = { sha: sha(Buffer.from(bytes, "utf8")), why: "kept-apart" };
+        }
+        const rowNow = async () => {
+          const v = await d.D.ask("etiuda:team-join", "leads");
+          const r = ((v && v.leads) || []).filter(l => l && l.team === d.team)[0];
+          return r ? (extra ? { names: r.keptApart || null, more: r.keptApartMore === undefined ? null : r.keptApartMore } : (r.keptApart || null)) : undefined;
+        };
+        if (extra) return { running: !!ch, row: await rowNow() };
+        const shown = await rowNow();
+        fs.unlinkSync(path.join(d.mir, cfuCopy));
+        return { running: !!ch, shown, gone: await rowNow() };
+      };
+      const cu2 = await cfuRow();
+      check(cu2.running && JSON.stringify(cu2.shown) === JSON.stringify([cfuCopy]) && cu2.gone === null,
+        "cfu2c the team's row in the shell's answer names the conflict copy the channel kept, by its file name, and names none once the copy is removed: "
+        + JSON.stringify(cu2));
+      if (PLANTS_OFF) skip("cfu2d lifting plant:kept-apart-row leaves the copy off the team's row");
+      else {
+        const sr = lifted6("plant:kept-apart-row"), pr = sr ? await cfuRow(sr) : null;
+        check(!!pr && pr.running && pr.shown === null, "cfu2d lifting plant:kept-apart-row leaves the copy off the team's row (FAIL cfu2c): " + (sr ? JSON.stringify(pr) : "plant line absent"));
+      }
+      /* kam2: with five copies kept, the shell's row names three and counts the other two; with one, it counts none (cfu2c). */
+      const kamExtra = [1, 2, 3, 4].map(n => cfuName + " (conflicted copy 2026-11-22 " + (n + 1) + ").ec");
+      const km2 = await cfuRow(undefined, kamExtra);
+      check(km2.running && km2.row && Array.isArray(km2.row.names) && km2.row.names.length === 3 && km2.row.more === 2,
+        "kam2a with five copies kept the team's row in the shell's answer names three and counts two more: " + JSON.stringify(km2));
+      if (PLANTS_OFF) skip("kam2b lifting plant:kept-apart-more-row leaves the count off the team's row");
+      else {
+        const sm = lifted6("plant:kept-apart-more-row"), pm = sm ? await cfuRow(sm, kamExtra) : null;
+        check(!!pm && pm.running && pm.row && pm.row.names && pm.row.names.length === 3 && pm.row.more === null,
+          "kam2b lifting plant:kept-apart-more-row leaves the count off the team's row (FAIL kam2a): " + (sm ? JSON.stringify(pm) : "plant line absent"));
+      }
 
       if (PLANTS_OFF) {
         skip("962s6e6c2 lifting plant:head-listed keeps naming B on the row");
@@ -8100,7 +8268,7 @@ async function ownSetup(mod) {
   const tm = await freshTeam([deskKey]);
   const tag = tm.rt.slice(0, 8);
   const mk = (name, place) => opened(mod, name + "-" + tag, tm, LEAD, place || "root", { keyFor: e => keys.get(e) || null, sealEpoch: () => 1 });
-  return { tm, mk, teamText: teamBody(tm, 1, 1, [member(deskKey)]) };
+  return { tm, mk, deskKey, keys, teamText: teamBody(tm, 1, 1, [member(deskKey)]) };
 }
   const putsOf = p => p.t.log.filter(l => /^PUT b\//.test(l)).length;
 
@@ -8414,8 +8582,90 @@ async function parallelOffline(mod) {
   out.relayHolds = read(third.mirror, "guide.ec");
   out.copyAtThird = copy ? read(third.mirror, copy) : null;
   await third.ch.stop();
+  /* What the program lists as kept beside the team's edition (keptApart), read from the first computer's record on a program that
+     is never started, so nothing it does is sent: the copy as it was kept, the same copy edited (it would go up, so it is not
+     listed), and the copy removed. */
+  const listed = p => (typeof p.prog.keptApart === "function" ? p.prog.keptApart() : null);
+  const fourth = mk("nor-a");
+  out.listedKept = copy ? listed(fourth) : null;
+  if (copy) put(fourth.mirror, copy, NOR_A2 + "edited afterwards\n");
+  out.listedEdited = copy ? listed(fourth) : null;
+  if (copy) fs.unlinkSync(path.join(fourth.mirror, copy));
+  out.listedGone = copy ? listed(fourth) : null;
   return out;
 }
+/* One key on two computers, the first offline, and a root file both change: the team file (by epoch and rev) or the head (by its
+   time). The first writes its edit `mine` from the file both hold; the second sends `theirs`. When the first reconnects, the newer of
+   the two stands at the relay, on both computers and at a third profile, the relay's at a tie; the one passed over is said once on the
+   first and kept in its record (rootClash); no conflict copy is written beside either. `kind` is "team" or "head"; for the team file
+   `mine` and `theirs` are revs, and the two rosters differ by one desk each, so a tie is two different files. */
+async function rootParallel(mod, kind, mine, theirs) {
+  const { tm, mk, deskKey, keys, teamText } = await ownSetup(mod);
+  const dA = keyPair(true), dB = keyPair(true), base = Date.now() - 60000;
+  /* A desk of the team, by its own key: one following from the start, and one opened only at the end, as a joiner. */
+  const deskOf = n => opened(mod, n + "-" + tm.rt.slice(0, 8), tm, deskKey, "desk:" + deskKey.keyId, { keyFor: e => keys.get(e) || null, sealEpoch: () => 1 });
+  const name = kind === "head" ? HEAD_FILE : C.TEAM_NAME;
+  const head = (t, ed) => headWith(tm.id, t, [{ catalog: "quay-board", rev: 2, edition: ed, published: "1 March 2026" }]);
+  const first = kind === "head" ? head(base, "Quay one") : null;
+  const A = kind === "head" ? head(base + mine, "Quay from the first") : teamBody(tm, 1, mine, [member(deskKey), member(dA)]);
+  const Bt = kind === "head" ? head(base + theirs, "Quay from the second") : teamBody(tm, 1, theirs, [member(deskKey), member(dB)]);
+  const a = mk("rp-a"), b = mk("rp-b");
+  put(a.mirror, C.TEAM_NAME, teamText);
+  if (first) put(a.mirror, HEAD_FILE, first);
+  const dk = kind === "team" ? deskOf("rp-d") : null;
+  a.ch.start(); b.ch.start();
+  await a.ch.idle(); await b.ch.idle();
+  await once(a);
+  await once(b);
+  if (dk) { dk.ch.start(); await dk.ch.idle(); await once(dk); }
+  const both = kind === "head" ? read(a.mirror, HEAD_FILE) === first && read(b.mirror, HEAD_FILE) === first
+    : read(a.mirror, C.TEAM_NAME) === teamText && read(b.mirror, C.TEAM_NAME) === teamText;
+  a.t.down = true;
+  put(a.mirror, name, A);
+  await once(a);
+  put(b.mirror, name, Bt);
+  await once(b);
+  if (dk) await once(dk);
+  a.t.down = false;
+  const at = a.t.log.length, said0 = a.said.length;
+  await once(a);
+  await once(a);
+  await once(b);
+  await once(a);
+  if (dk) await once(dk);
+  const which = v => (v === A ? "the first's" : v === Bt ? "the second's" : v === null ? "none" : "other");
+  const clash = typeof a.prog.rootClash === "function" ? a.prog.rootClash() : null;
+  const out = { both, atA: which(read(a.mirror, name)), atB: which(read(b.mirror, name)),
+    putsBack: a.t.log.slice(at).filter(l => /^PUT b\//.test(l)).length,
+    copies: fs.readdirSync(a.mirror).concat(fs.readdirSync(b.mirror)).filter(n => /conflicted copy/.test(n)),
+    said: a.said.slice(said0).filter(l => l.indexOf(name) >= 0 && l.indexOf("changed on this computer and on another at once") >= 0),
+    clash: clash ? clash.map(c => ({ path: c.path, kept: c.kept, here: c.here, team: c.team })) : null,
+    dropped: clash ? clash.map(c => c.dropped) : null, ids: { dA: dA.keyId, dB: dB.keyId } };
+  out.atDesk = dk ? which(read(dk.mirror, name)) : null;
+  if (dk) await dk.ch.stop();
+  await a.ch.stop(); await b.ch.stop();
+  /* The first started again on its record: the clash is still there to tell, and nothing more goes up. */
+  const again = mk("rp-a");
+  out.clashRestart = typeof again.prog.rootClash === "function" ? again.prog.rootClash().map(c => c.path + ":" + c.kept) : null;
+  const third = mk("rp-c");
+  third.ch.start();
+  await third.ch.idle();
+  await once(third);
+  out.atThird = which(read(third.mirror, name));
+  await third.ch.stop();
+  if (kind === "team") {
+    const late = deskOf("rp-e");
+    late.ch.start();
+    await late.ch.idle();
+    await once(late);
+    out.atLateDesk = which(read(late.mirror, name));
+    await late.ch.stop();
+  }
+  return out;
+}
+const rootTold = (x, path, kept, here, team) => !!x.clash && x.clash.length === 1 && x.clash[0].path === path && x.clash[0].kept === kept
+  && JSON.stringify(x.clash[0].here) === JSON.stringify(here) && JSON.stringify(x.clash[0].team) === JSON.stringify(team) && x.said.length === 1
+  && JSON.stringify(x.clashRestart) === JSON.stringify([path + ":" + kept]);
 if (partOn("pNor")) {
   try {
     markPart("pNor");
@@ -8431,6 +8681,15 @@ if (partOn("pNor")) {
       "nor1c the kept copy is never sent, before or after a restart: at the second computer " + JSON.stringify(n.copyAtB) + ", at a third profile "
       + JSON.stringify(n.copyAtThird) + ", uploads after reconnecting " + n.putsBack + ", after the restart " + n.putsRestart);
     check(n.said === 1, "nor1d the first computer says once that guide.ec changed on two computers and where its own copy is kept: lines " + n.said);
+    check(!!n.copy && JSON.stringify(n.listedKept) === JSON.stringify([n.copy]) && JSON.stringify(n.listedEdited) === "[]" && JSON.stringify(n.listedGone) === "[]",
+      "cfu2a the first computer's program lists the copy it kept, from its record after a restart, and no longer once the copy is edited (it would go up) or removed: kept "
+      + JSON.stringify(n.listedKept) + ", edited " + JSON.stringify(n.listedEdited) + ", removed " + JSON.stringify(n.listedGone));
+    if (PLANTS_OFF) skip("cfu2b lifting plant:kept-apart-listed lists nothing of the copy kept");
+    else {
+      const p = await liftChannel("plant:kept-apart-listed", async mod => { const x = await parallelOffline(mod); return !!x.copy && JSON.stringify(x.listedKept) === "[]"; });
+      check(p.turned && p.back, "cfu2b lifting plant:kept-apart-listed lists nothing of the copy kept, and the product file is never written: "
+        + p.detail + ", sha " + (p.back ? "restored" : "differs"));
+    }
     if (PLANTS_OFF) skip("nor1e lifting plant:own-parallel sends the first computer's rev 2 over the second's");
     else {
       const p = await liftChannel("plant:own-parallel", async mod => (await parallelOffline(mod)).relayHolds === NOR_A2);
@@ -8446,6 +8705,48 @@ if (partOn("pNor")) {
       check(p.turned && p.back, "nor1f lifting plant:own-apart writes the second computer's rev 2 over the first's and keeps no copy, and the product file is never written: "
         + p.detail + ", sha " + (p.back ? "restored" : "differs"));
     }
+    /* tse1: the team file in one epoch, by rev; tse2: the head, by its time. */
+    const T = C.TEAM_NAME;
+    const t1 = await rootParallel(C, "team", 2, 3);
+    check(t1.both && t1.atA === "the second's" && t1.atB === "the second's" && t1.atThird === "the second's" && t1.putsBack === 0 && t1.copies.length === 0,
+      "cfu3a tse1a the first computer's unsent team file at rev 2 never buries the second's rev 3 of the same epoch: the relay, the second computer and a third profile keep rev 3, the first takes it and sends nothing over it, and no copy is written: first "
+      + t1.atA + ", second " + t1.atB + ", third " + t1.atThird + ", uploads after reconnecting " + t1.putsBack + ", copies " + JSON.stringify(t1.copies));
+    check(rootTold(t1, T, "team", { epoch: 1, rev: 2 }, { epoch: 1, rev: 3 }),
+      "tse1b the first computer's rev 2 is not silently lost: said once, and kept in its record as passed over for the team's rev 3, after a restart too: "
+      + JSON.stringify({ clash: t1.clash, said: t1.said.length, restart: t1.clashRestart }));
+    const t2 = await rootParallel(C, "team", 3, 3);
+    check(t2.atA === "the second's" && t2.atB === "the second's" && t2.atThird === "the second's" && t2.putsBack === 0 && rootTold(t2, T, "team", { epoch: 1, rev: 3 }, { epoch: 1, rev: 3 }),
+      "tse1c two different team files at the same rev: the relay's (the second's) stands everywhere, and the first's is said and kept as passed over: first "
+      + t2.atA + ", second " + t2.atB + ", third " + t2.atThird + ", uploads " + t2.putsBack + ", clash " + JSON.stringify(t2.clash));
+    const t3 = await rootParallel(C, "team", 4, 3);
+    check(t3.atA === "the first's" && t3.atB === "the first's" && t3.atThird === "the first's" && t3.putsBack === 1 && t3.copies.length === 0
+      && rootTold(t3, T, "here", { epoch: 1, rev: 4 }, { epoch: 1, rev: 3 }),
+      "tse1d the first computer's unsent team file at rev 4, newer than the second's rev 3, goes up once and stands everywhere, and the second's is said and kept as passed over: first "
+      + t3.atA + ", second " + t3.atB + ", third " + t3.atThird + ", uploads " + t3.putsBack + ", clash " + JSON.stringify(t3.clash));
+    check(t1.atDesk === "the second's" && t1.atLateDesk === "the second's" && t3.atDesk === "the first's" && t3.atLateDesk === "the first's",
+      "tse1g a desk of the team, following throughout, and a desk opened afterwards as a joiner, both hold the newer team file: rev 3 against the first's rev 2 "
+      + JSON.stringify({ following: t1.atDesk, joiner: t1.atLateDesk }) + ", the first's rev 4 against rev 3 " + JSON.stringify({ following: t3.atDesk, joiner: t3.atLateDesk }));
+    const h1 = await rootParallel(C, "head", 1000, 2000), h2 = await rootParallel(C, "head", 3000, 2000);
+    check(h1.atA === "the second's" && h1.atB === "the second's" && h1.atThird === "the second's" && h1.putsBack === 0 && h1.clash && h1.clash.length === 1 && h1.clash[0].kept === "team" && h1.said.length === 1
+      && h2.atA === "the first's" && h2.atB === "the first's" && h2.atThird === "the first's" && h2.putsBack === 1 && h2.clash && h2.clash.length === 1 && h2.clash[0].kept === "here",
+      "tse2a the head both computers wrote: the newer by its time stands at the relay, on both and at a third profile, the relay's where it is the newer and the first's where it is, and the other is said and kept: older here "
+      + JSON.stringify({ a: h1.atA, b: h1.atB, c: h1.atThird, puts: h1.putsBack, clash: h1.clash && h1.clash.map(c => c.kept) }) + ", newer here "
+      + JSON.stringify({ a: h2.atA, b: h2.atB, c: h2.atThird, puts: h2.putsBack, clash: h2.clash && h2.clash.map(c => c.kept) }));
+    if (PLANTS_OFF) {
+      skip("tse1e lifting plant:own-root-newer keeps the first computer's older team file and sends it over the second's");
+      skip("cfu3b lifting plant:own-edit writes the relay's older team file over the first computer's newer edit");
+      skip("tse1f lifting plant:root-clash passes over the first computer's team file in silence");
+    } else {
+      const p1 = await liftChannel("plant:own-root-newer", async mod => (await rootParallel(mod, "team", 2, 3)).atThird === "the first's");
+      check(p1.turned && p1.back, "tse1e lifting plant:own-root-newer keeps the first computer's older team file and sends it over the second's, which a third profile then reads, and the product file is never written: "
+        + p1.detail + ", sha " + (p1.back ? "restored" : "differs"));
+      const p2 = await liftChannel("plant:own-edit", async mod => (await rootParallel(mod, "team", 4, 3)).atA === "the second's");
+      check(p2.turned && p2.back, "cfu3b lifting plant:own-edit writes the relay's older team file over the first computer's newer edit, and the product file is never written: "
+        + p2.detail + ", sha " + (p2.back ? "restored" : "differs"));
+      const p3 = await liftChannel("plant:root-clash", async mod => { const x = await rootParallel(mod, "team", 2, 3); return x.atA === "the second's" && x.said.length === 0 && JSON.stringify(x.clash) === "[]"; });
+      check(p3.turned && p3.back, "tse1f lifting plant:root-clash passes over the first computer's team file in silence, nothing said or kept, and the product file is never written: "
+        + p3.detail + ", sha " + (p3.back ? "restored" : "differs"));
+    }
     if (PLANTS_OFF) skip("nor1g lifting plant:apart-kept forgets at a restart that the copy stays, so it is sent");
     else {
       const p = await liftChannel("plant:apart-kept", async mod => {
@@ -8457,6 +8758,214 @@ if (partOn("pNor")) {
     }
   } catch (e) {
     check(false, "harness (the leg nor1a): " + (e && e.stack ? e.stack : e));
+  }
+}
+
+/* ---- one lead key on two computers across an epoch move (tce). The first moves the team's epoch while offline, taking one desk
+   off; the second, meanwhile, edits the team file at the old epoch and sends it with a copy for each desk its roster names. When
+   the first reconnects, the newer by epoch then rev stands: the relay's main team file, the second computer, each remaining desk's
+   own copy and a desk restored afterwards all reach the epoch-2 file, the desk taken off is never brought back and opens none of
+   it, and the second's edit is said once on the first and kept in its clash record. Keys of both epochs are made here. ---- */
+async function crossEpoch(mod) {
+  const LB = boxPair(), KM1 = crypto.randomBytes(32), KM2 = crypto.randomBytes(32);
+  const rt = hex(16), tm = { rt, id: "t-" + hex(8) };
+  const made = await admin("POST", "/relay/v1/teams", createBody(rt, R.clock.now));
+  if (made.status !== 200) throw new Error("a team for the cross-epoch leg was not made: " + JSON.stringify(made.json));
+  let devRev = 0;
+  const enrol = async (...ks) => {
+    devRev++;
+    const list = ks.map(k => ({ id: k.keyId, pub: k.pub, desk: k.keyId })), t = R.clock.now;
+    return admin("POST", "/relay/v1/t/" + rt + "/devices", { keys: list, rev: devRev, t, sig: signHex(LEAD, core.devicesBytes(rt, devRev, t, list)) });
+  };
+  const tag = rt.slice(0, 8);
+  const pinOf = () => ({ teamId: tm.id, rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } });
+  const doc = (epoch, rev, roster) => JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: tm.id, catalogs: ["quay-board"],
+    lead: { keyId: LEAD.keyId, public: LEAD.pub, box: LB.pub }, sealed: true, exportsSealed: false, epoch, rev,
+    channel: { kind: "relay", rt, url: URLV1 }, ring: RING, roster }, LEAD), null, 1) + "\n";
+  const entry = (d, key, epoch) => ({ desk: { id: d.k.keyId, key: d.k.pub, box: d.box.pub }, wrap: wrapFor(key, d.box.pub, tm.id, epoch, d.k.keyId) });
+  const desk = () => ({ k: keyPair(true), box: boxPair() });
+  const D1 = desk(), D2 = desk(), D3 = desk(), D4 = desk();
+  /* A computer of the lead's key: the one box, keys held by epoch, sealing under the newest. */
+  const leadOf = (name, held) => Object.assign(program(name + "-" + tag, LEAD, "root", { mod, rt, pin: pinOf, keyFor: e => held.get(e) || null,
+    sealEpoch: () => Math.max(...held.keys()), agree: agreeWith(LB) }), { held });
+  /* A desk: its own box, and its onTeam taking the key from its own wrap. */
+  const deskOf = (name, d, start) => {
+    const held = new Map(start || [[1, KM1]]), mirror = path.join(LAB, name + "-" + tag);
+    const heed = () => {
+      let t = null;
+      try { t = JSON.parse(read(mirror, C.TEAM_NAME)); } catch { return; }
+      const mine = t && Array.isArray(t.roster) ? t.roster.find(r => r && r.desk && r.desk.id === d.k.keyId) : null;
+      const key = mine ? unwrapWith(d.box, mine.wrap, tm.id, t.epoch, d.k.keyId) : null;
+      if (key) held.set(t.epoch, key);
+    };
+    return Object.assign(program(name + "-" + tag, d.k, "desk:" + d.k.keyId, { mod, rt, pin: pinOf, watch: false,
+      me: () => ({ keyId: d.k.keyId, public: d.k.pub, privateKey: d.k.privateKey, place: "desk:" + d.k.keyId, box: d.box.pub }),
+      keyFor: e => held.get(e) || null, sealEpoch: () => Math.max(...held.keys()), agree: agreeWith(d.box), onTeam: heed }), { held });
+  };
+  const of = text => { try { const t = JSON.parse(text); return { epoch: t.epoch, rev: t.rev, d3: t.roster.some(r => r.desk.id === D3.k.keyId), d4: t.roster.some(r => r.desk.id === D4.k.keyId) }; } catch { return null; } };
+  const at = p => of(read(p.mirror, C.TEAM_NAME));
+  await enrol(D1.k, D2.k, D3.k);
+  const ONE = doc(1, 1, [entry(D1, KM1, 1), entry(D2, KM1, 1), entry(D3, KM1, 1)]);
+  const a = leadOf("tce-a", new Map([[1, KM1]])), b = leadOf("tce-b", new Map([[1, KM1]]));
+  const d1 = deskOf("tce-d1", D1), d2 = deskOf("tce-d2", D2), d3 = deskOf("tce-d3", D3);
+  put(a.mirror, C.TEAM_NAME, ONE);
+  a.ch.start(); await settle(a);
+  b.ch.start(); await settle(b);
+  d1.ch.start(); d2.ch.start(); d3.ch.start();
+  await settle(d1, d2, d3);
+  const allOne = [a, b, d1, d2, d3].every(p => read(p.mirror, C.TEAM_NAME) === ONE);
+  /* The first, offline, takes D3 off: a new key, a roster without D3. */
+  a.t.down = true;
+  a.held.set(2, KM2);
+  const MOVED = doc(2, 1, [entry(D1, KM2, 2), entry(D2, KM2, 2)]);
+  put(a.mirror, C.TEAM_NAME, MOVED);
+  await settle(a);
+  /* The second, at the old epoch, adds D4 and sends it, with a copy for each desk its roster names. */
+  const EDIT = doc(1, 2, [entry(D1, KM1, 1), entry(D2, KM1, 1), entry(D3, KM1, 1), entry(D4, KM1, 1)]);
+  put(b.mirror, C.TEAM_NAME, EDIT);
+  await settle(b);
+  await settle(d1, d2, d3);
+  const tookEdit = [d1, d2, d3].map(p => at(p));
+  /* The first reconnects. Its Studio sends the device list of the newer file; the second's Studio holds the epoch-2 key, as the
+     lead's own records give it (outside the channel). */
+  a.t.down = false;
+  await enrol(D1.k, D2.k);
+  b.held.set(2, KM2);
+  const said0 = a.said.length, puts0 = a.t.log.length;
+  await settle(a);
+  await settle(b);
+  await settle(d1, d2, d3);
+  await settle(a, b, d1, d2, d3);
+  const clash = typeof a.prog.rootClash === "function" ? a.prog.rootClash().map(c => ({ path: c.path, kept: c.kept, here: c.here, team: c.team, dropped: c.dropped })) : null;
+  const out = { allOne, tookEdit, atA: at(a), atB: at(b), atD1: at(d1), atD2: at(d2), atD3: at(d3), d3Key2: !!d3.held.get(2),
+    d1Key2: !!d1.held.get(2), d2Key2: !!d2.held.get(2), clash,
+    said: a.said.slice(said0).filter(l => l.indexOf(C.TEAM_NAME) >= 0 && l.indexOf("changed on this computer and on another at once") >= 0),
+    waitsA: a.said.slice(said0).filter(l => l.indexOf(B.REASONS.superseded) >= 0).length,
+    putsBack: a.t.log.slice(puts0).filter(l => /^PUT b\//.test(l)).length };
+  /* A desk's upload after the reconnect is taken, sealed at the new epoch, and reaches the lead. */
+  const NOTE = "{\"inUse\":\"quay-board after the move\"}\n";
+  const d1s = d1.said.length;
+  put(d1.mirror, "desks/" + D1.k.keyId + "/in-use.ec", NOTE);
+  await settle(d1);
+  await settle(a);
+  out.deskUp = read(a.mirror, "desks/" + D1.k.keyId + "/in-use.ec") === NOTE;
+  out.deskRefused = d1.said.slice(d1s).length;
+  await a.ch.stop(); await b.ch.stop(); await d1.ch.stop(); await d2.ch.stop(); await d3.ch.stop();
+  /* The first started again on its record: the clash is still there to tell, and nothing more goes up. */
+  const again = leadOf("tce-a", new Map([[1, KM1], [2, KM2]]));
+  out.clashRestart = typeof again.prog.rootClash === "function" ? again.prog.rootClash().map(c => c.path + ":" + c.kept) : null;
+  out.droppedRestart = typeof again.prog.rootClash === "function" ? again.prog.rootClash().map(c => c.dropped) : null;
+  out.ids = { d3: D3.k.keyId, d4: D4.k.keyId };
+  /* The relay's main team file, read by a fresh profile of the lead's key holding both keys, which makes no desk's copy. */
+  const third = Object.assign(program("tce-c-" + tag, LEAD, "root", { mod, rt, pin: pinOf, keyFor: e => (e === 1 ? KM1 : e === 2 ? KM2 : null),
+    sealEpoch: () => 2 }), {});
+  third.ch.start(); await settle(third);
+  out.atRelay = at(third);
+  await third.ch.stop();
+  /* A desk opened afterwards on a fresh profile, holding both keys as its own records would, reads the relay's main team file. */
+  const late = deskOf("tce-d2r", D2, [[1, KM1], [2, KM2]]);
+  late.ch.start(); await settle(late);
+  out.atLate = at(late);
+  await late.ch.stop();
+  /* The second computer, started again, is not left out of step: its next edit, made as its Studio makes one from the team file
+     it holds (the next rev, D4 added back), goes up and stands at the relay. */
+  const b2 = leadOf("tce-b", new Map([[1, KM1], [2, KM2]]));
+  b2.ch.start(); await settle(b2);
+  let hold = null;
+  try { hold = JSON.parse(read(b2.mirror, C.TEAM_NAME)); } catch { hold = null; }
+  if (hold) {
+    const k = hold.epoch === 2 ? KM2 : KM1, keep = hold.roster.filter(r => r.desk.id !== D4.k.keyId).map(r => [D1, D2, D3].find(d => d.k.keyId === r.desk.id));
+    put(b2.mirror, C.TEAM_NAME, doc(hold.epoch, hold.rev + 1, keep.map(d => entry(d, k, hold.epoch)).concat([entry(D4, k, hold.epoch)])));
+  }
+  await settle(b2);
+  out.bNextWaits = b2.said.filter(l => l.indexOf(C.TEAM_NAME) >= 0 && l.indexOf("waits") >= 0).length;
+  await b2.ch.stop();
+  const fourth = program("tce-f-" + tag, LEAD, "root", { mod, rt, pin: pinOf, keyFor: e => (e === 1 ? KM1 : e === 2 ? KM2 : null), sealEpoch: () => 2 });
+  fourth.ch.start(); await settle(fourth);
+  out.atRelayNext = at(fourth);
+  await fourth.ch.stop();
+  return out;
+}
+/* The control: one computer of the lead's key that sent its epoch-2 team file. An own team file at epoch 1, later by its counter,
+   that the relay serves afterwards is older than the last sent, so it is refused as before, the mirror keeps epoch 2, nothing is
+   sent and nothing is kept as a clash. */
+async function crossEpochSent(mod) {
+  const KM1 = crypto.randomBytes(32), KM2 = crypto.randomBytes(32), D = keyPair(true);
+  const tm = await freshTeam([D]);
+  const held = new Map([[1, KM1]]);
+  const a = opened(mod, "tce-s-" + tm.rt.slice(0, 8), tm, LEAD, "root", { keyFor: e => held.get(e) || null, sealEpoch: () => Math.max(...held.keys()) });
+  put(a.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, [member(D)]));
+  a.ch.start(); await a.ch.idle(); await once(a);
+  held.set(2, KM2);
+  const MOVED = teamBody(tm, 2, 1, [member(D)]);
+  put(a.mirror, C.TEAM_NAME, MOVED);
+  await once(a);
+  const sentAt2 = a.prog.state().sent[C.TEAM_NAME] && a.prog.state().sent[C.TEAM_NAME].epoch === 2;
+  const b = B.seal({ relayTeamId: tm.rt, epoch: 1, teamKey: KM1, writer: { keyId: LEAD.keyId, privateKey: LEAD.privateKey }, path: C.TEAM_NAME,
+    body: teamBody(tm, 1, 2, [member(D)]), counter: Date.now() + 5e6, kind: "file" });
+  const s = relayStore(tm.rt), seq = (s.get("seq") || 0) + 1, obj = tm.rt + "/" + b.id + "/" + hex(8);
+  R.bucket.objects.set(obj, Buffer.from(b.ciphertext));
+  s.put("blob:" + b.id, { id: b.id, supersedes: null, epoch: 1, writer: LEAD.keyId, counter: b.counter, del: false, size: b.ciphertext.length,
+    sig: b.signature, nonce: b.nonce, seq, at: R.clock.now, obj });
+  s.put("seq:" + String(seq).padStart(16, "0"), b.id);
+  s.put("seq", seq);
+  const at = a.t.log.length, said0 = a.said.length;
+  await once(a); await once(a);
+  const out = { sentAt2, fetched: a.t.log.slice(at).some(l => l === "GET b/" + b.id), kept: read(a.mirror, C.TEAM_NAME) === MOVED,
+    puts: a.t.log.slice(at).filter(l => /^PUT b\//.test(l)).length, clash: a.prog.rootClash ? a.prog.rootClash().length : null,
+    replay: a.said.slice(said0).some(l => l.indexOf(B.REASONS["replay-rev"]) >= 0) };
+  await a.ch.stop();
+  return out;
+}
+if (partOn("pTce")) {
+  try {
+    markPart("pTce");
+    const T = C.TEAM_NAME;
+    const x = await crossEpoch(C);
+    const two = o => !!o && o.epoch === 2 && o.rev === 1 && o.d3 === false;
+    check(x.allOne && JSON.stringify(x.tookEdit.map(o => o && o.rev)) === "[2,2,2]" && two(x.atA) && two(x.atRelay) && two(x.atB) && two(x.atD1) && two(x.atD2)
+      && x.putsBack >= 1 && x.waitsA === 0,
+      "tce1a the first computer's epoch move, made offline while the second edited the team file at the old epoch, stands after the reconnect: the relay's main team file, the second computer and each remaining desk hold epoch 2 rev 1: "
+      + JSON.stringify({ first: x.atA, relay: x.atRelay, second: x.atB, d1: x.atD1, d2: x.atD2, uploads: x.putsBack, waits: x.waitsA }));
+    const files = [x.atA, x.atRelay, x.atB, x.atD1, x.atD2, x.atLate];
+    check(files.every(o => !!o && o.d3 === false) && !x.d3Key2 && !!x.atD3 && x.atD3.epoch === 1,
+      "tce1b the desk the newer file took off is not brought back: no file the relay, either computer or a remaining desk holds names it, and it holds no epoch-2 key: "
+      + JSON.stringify({ names: files.map(o => o && o.d3), key: x.d3Key2, itsFile: x.atD3 }));
+    check(rootTold(x, T, "here", { epoch: 2, rev: 1 }, { epoch: 1, rev: 2 }),
+      "tce1c the second computer's edit at the old epoch, passed over, is said once on the first and kept in its clash record, after a restart too: "
+      + JSON.stringify({ clash: x.clash, said: x.said.length, restart: x.clashRestart }));
+    check(x.d1Key2 && x.d2Key2 && x.deskUp && x.deskRefused === 0 && two(x.atLate),
+      "tce1d each remaining desk takes the epoch-2 key from its own copy and its upload afterwards reaches the lead, and a desk opened afterwards reads epoch 2 from the relay: "
+      + JSON.stringify({ d1Key: x.d1Key2, d2Key: x.d2Key2, upload: x.deskUp, said: x.deskRefused, late: x.atLate }));
+    const same = await rootParallel(C, "team", 3, 3);
+    check(JSON.stringify(x.clash && x.clash.map(c => c.dropped)) === JSON.stringify([[x.ids.d3, x.ids.d4].sort()])
+      && JSON.stringify(x.droppedRestart) === JSON.stringify([[x.ids.d3, x.ids.d4].sort()])
+      && JSON.stringify(same.dropped) === JSON.stringify([[same.ids.dA]]),
+      "tce1h the clash record names each member the passed-over file has and the standing one does not, so a member the second computer added is not withdrawn in silence: across the move "
+      + JSON.stringify({ dropped: x.clash && x.clash.map(c => c.dropped), restart: x.droppedRestart, want: [x.ids.d3, x.ids.d4].sort() })
+      + ", two files at one rev " + JSON.stringify({ dropped: same.dropped, want: [same.ids.dA] }));
+    const nx = x.atRelayNext;
+    check(!!nx && nx.epoch === 2 && nx.rev === 2 && nx.d4 === true && nx.d3 === false && x.bNextWaits === 0,
+      "tce1g the second computer is not left out of step: started again, its next edit, made from the team file it holds, goes up and stands at the relay at epoch 2, without the desk taken off: "
+      + JSON.stringify({ relay: nx, waits: x.bNextWaits }));
+    const c = await crossEpochSent(C);
+    check(c.sentAt2 && c.fetched && c.kept && c.puts === 0 && c.clash === 0 && c.replay,
+      "tce1f the control: an own epoch-1 team file the relay serves after this computer sent epoch 2 is refused as before, the mirror keeps epoch 2, nothing is sent or kept as a clash: "
+      + JSON.stringify(c));
+    if (PLANTS_OFF) skip("tce1i lifting plant:clash-dropped keeps no member of the passed-over file");
+    else {
+      const p = await liftChannel("plant:clash-dropped", async mod => { const y = await crossEpoch(mod); return !!y.clash && y.clash.length === 1 && y.clash[0].dropped === undefined; });
+      check(p.turned && p.back, "tce1i lifting plant:clash-dropped keeps no member of the passed-over file in the clash record, and the product file is never written: "
+        + p.detail + ", sha " + (p.back ? "restored" : "differs"));
+    }
+    if (PLANTS_OFF) skip("tce1e lifting plant:own-epoch-ahead leaves the relay's main team file at the old epoch");
+    else {
+      const p = await liftChannel("plant:own-epoch-ahead", async mod => { const y = await crossEpoch(mod); return !!y.atRelay && y.atRelay.epoch === 1 && y.atB.epoch === 1; });
+      check(p.turned && p.back, "tce1e lifting plant:own-epoch-ahead leaves the relay's main team file and the second computer at the old epoch, and the product file is never written: "
+        + p.detail + ", sha " + (p.back ? "restored" : "differs"));
+    }
+  } catch (e) {
+    check(false, "harness (the legs tce1a): " + (e && e.stack ? e.stack : e));
   }
 }
 

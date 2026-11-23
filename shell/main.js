@@ -700,6 +700,16 @@ function conflictSiblingName(canonical, name) {
   if (/^(_conf\(\d+\))+$/i.test(tail)) return true;
   return false;
 }
+/* The relay channel's own name for this computer's edition kept beside the team's file (channel.cjs keepApart): the stem, then
+   " (conflicted copy <date>[ n])". Any other tail is a file of its own in the mirror. */
+function keptCopyName(canonical, name) {
+  const c = path.basename(String(canonical || "")), n = path.basename(String(name || ""));
+  const cExt = path.extname(c), nExt = path.extname(n);
+  if (!c || !n || cExt.toLowerCase() !== nExt.toLowerCase()) return false;
+  const cStem = c.slice(0, c.length - cExt.length), nStem = n.slice(0, n.length - nExt.length);
+  if (!cStem || nStem.slice(0, cStem.length).toLowerCase() !== cStem.toLowerCase()) return false;
+  return /^ \(conflicted copy( \d{4}-\d{2}-\d{2})?( \d+)?\)$/.test(nStem.slice(cStem.length));
+}
 function isCatalogName(name) {
   const n = path.basename(String(name || ""));
   /* The head is named with the files the watch already hears, so a landing reaches Settings. */
@@ -1047,6 +1057,22 @@ function editionRev(data) {
   const n = data && +data.rev;
   return Number.isFinite(n) ? n : -1;
 }
+/* Whether edition `a` is the one to open over edition `b`, both of one catalog id. The higher rev, except that in the relay
+   mirror the copy of the other file named as the channel keeps one (keptCopyName) is never opened over it: the relay channel keeps this computer's own parallel
+   edition there, beside the team's, and never sends it, so on the lead's own desk it would show cards the team does not have.
+   At the same rev the file named as the catalog is opened over its copy, where the files are. */
+function editionBeats(a, b, mirror) {
+  const copy = (x, y) => {
+    let tail = conflictSiblingName(y.file, x.file);
+    tail = keptCopyName(y.file, x.file); /* plant:pick-kept-tail */
+    return !!mirror && path.resolve(path.dirname(x.file)) === path.resolve(mirror) && tail;
+  };
+  const ac = copy(a, b), bc = copy(b, a);
+  if (ac !== bc) return bc; /* plant:pick-copy-last */
+  const ar = editionRev(a.data), br = editionRev(b.data);
+  if (ar !== br) return ar > br;
+  return conflictSiblingName(a.file, b.file) && !conflictSiblingName(b.file, a.file); /* plant:pick-tie-canonical */
+}
 /* The file this launch was opened with, else the highest rev of each catalog id that may be chosen
    without the agent asking. With no lead pinned, that is a signature the ring verifies. With a lead
    pinned, only a file catalogLeadOk accepts, and a file it refuses is dropped even when it
@@ -1059,12 +1085,13 @@ function pickEdition(found) {
   }
   const pins = pinnedLeadPubs();
   const best = new Map();
+  const here = relayHere(), mirror = here ? relayMirrorOf(here.rt) : "";
   found.forEach((item, i) => {
     if (!(pins.length ? catalogLeadOk(item.data) : catalogSigValid(item.data))) return;
     const id = String(item.data.id || "");
     if (!id) return;
     const had = best.get(id);
-    if (had === undefined || editionRev(item.data) > editionRev(found[had].data)) best.set(id, i);
+    if (had === undefined || editionBeats(item, found[had], mirror)) best.set(id, i);
   });
   const drop = new Set();
   found.forEach((item, i) => {
@@ -7575,6 +7602,16 @@ function strandedShown(team) {
   try { s = relayChannel.stranded(); } catch { s = null; }
   return s ? { seen: s.seen === true } : null;
 }
+/* The conflict copies the relay channel kept beside the team's edition on this computer and never sent, for the team's row: the
+   first three by file name and how many more; null where there are none or the team is not the one followed. */
+function keptApartShown(team) {
+  const here = relayHere();
+  if (!here || here.team !== team || !relayChannel || typeof relayChannel.keptApart !== "function") return null;
+  let list = null;
+  try { list = relayChannel.keptApart(); } catch { list = null; }
+  const all = (Array.isArray(list) ? list : []).map(rel => path.basename(String(rel))).filter(Boolean);
+  return all.length ? { names: all.slice(0, 3), more: Math.max(0, all.length - 3) } : null;
+}
 function strandedDismissed(team) {
   const here = relayHere();
   if (here && here.team === String(team || "") && relayChannel && typeof relayChannel.strandedSeen === "function") relayChannel.strandedSeen();
@@ -7660,6 +7697,9 @@ function leadsView() {
     if (fork) row.fork = fork; /* plant:fork-row */
     const stranded = strandedShown(t);
     if (stranded) row.stranded = stranded; /* plant:stranded-row */
+    const keptApart = keptApartShown(t);
+    if (keptApart) row.keptApart = keptApart.names; /* plant:kept-apart-row */
+    if (keptApart && keptApart.more) row.keptApartMore = keptApart.more; /* plant:kept-apart-more-row */
     if (teamNeedsFolder[t]) {
       row.needsFolder = true;
       row.openFolder = shellWords().openFolder;
