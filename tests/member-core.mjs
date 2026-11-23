@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const EXPECTED = 36; /* 37 less 16s, retired with the check code (P2) */
+const EXPECTED = 30; /* 37 less 16s, retired with the check code (P2), less 16n, 17b, 17c, 17h and the two 17i, retired with the folder invitation (P2) */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -62,11 +62,11 @@ const MEMBER_DECLS = ["const HPKE_KEM =", "const HPKE_SUITE =", "const SPKI_X255
   "function unwrapTeamKey(", "const JOIN_KIND =", "const HANDOVER_PREFIX =", "const HANDOVER_KIND =",
   "function handoverSignedBytes(", "function handoverGenuine(", "function handedTo(", "const SPKI_ED25519 =",
   "function canonJson(", "function signedBytesOf(", "function teamWhole(",
-  "function memberStateCopy(", "function memberProof(", "function inviteIdOf(", "const INVITE_HIDDEN_RE =", "function inviteFolder(",
+  "function memberStateCopy(", "function memberProof(", "function inviteIdOf(", "const INVITE_HIDDEN_RE =",
   "function placeKindOk(", "function driveTops(", "function placeSlash(", "function placeLeaf(", "function placeJoin(",
   "function placeUnder(", "function placeRest(", "function syncRootsFrom(", "function placeOf(",
   "function placeCandidates(", "function placeResolve(", "function placeKept(", "function readSyncRecords(",
-  "function inviteRead(", "function folderHost(",
+  "function teamChannelOf(", "function inviteRelay(", "function inviteRead(", "function folderHost(",
   "function memberRequestDoc(", "function memberHeed("];
 const BUILD_DECLS = ["function hpkeSeal(", "function wrapTeamKey(", "function branchIdOf("];
 const JOIN_DECLS = ["const SPKI_ED25519 =", "function branchIdOf(", "function canonJson(", "function signedBytesOf(",
@@ -251,27 +251,33 @@ if (M && J) {
 
   const blobOf = (o) => "etiuda-join:" + Buffer.from(JSON.stringify(o)).toString("base64url");
   const leadBlob = { keyId: lead.keyId, public: lead.public, name: "Quay lead" };
-  const goodBlob = M.inviteRead(blobOf({ team: TEAM, folder: "C:/quay/catalogs", lead: leadBlob, secret: secret, v: 1 }));
+  /* P2: an invitation is read only if it names a relay (the folder invitation is gone), so every blob below names one: the relay's id, address, token and invitation id. */
+  const RELAY = { rt: "ab".repeat(16), url: "https://relay.test/relay/v1", token: "cd".repeat(32), inv: "ef".repeat(16) };
+  const goodBlob = M.inviteRead(blobOf({ team: TEAM, relay: RELAY, lead: leadBlob, secret: secret, v: 1 }));
   const badBlobs = ["", "etiuda-join:", "not-an-invitation",
-    blobOf({ team: TEAM, folder: "quay", lead: leadBlob, secret: secret }),
-    blobOf({ team: "nope", folder: "C:/quay", lead: leadBlob, secret: secret }),
-    blobOf({ team: TEAM, folder: "C:/quay", lead: { keyId: "a", public: "abcd", name: "Quay lead" }, secret: secret }),
-    blobOf({ team: TEAM, folder: "C:/quay", lead: leadBlob, secret: "abcd" }),
-    blobOf({ team: TEAM, folder: "C:/quay", lead: Object.assign({}, leadBlob, { box: "abcd" }), secret: secret }),
+    blobOf({ team: TEAM, relay: Object.assign({}, RELAY, { rt: "quay" }), lead: leadBlob, secret: secret }),
+    blobOf({ team: TEAM, relay: Object.assign({}, RELAY, { url: "http://relay.test/relay/v1" }), lead: leadBlob, secret: secret }),
+    blobOf({ team: TEAM, relay: Object.assign({}, RELAY, { token: "abcd" }), lead: leadBlob, secret: secret }),
+    blobOf({ team: "nope", relay: RELAY, lead: leadBlob, secret: secret }),
+    blobOf({ team: TEAM, relay: RELAY, lead: { keyId: "a", public: "abcd", name: "Quay lead" }, secret: secret }),
+    blobOf({ team: TEAM, relay: RELAY, lead: leadBlob, secret: "abcd" }),
+    blobOf({ team: TEAM, relay: RELAY, lead: Object.assign({}, leadBlob, { box: "abcd" }), secret: secret }),
+    blobOf({ team: TEAM, folder: "C:/quay/catalogs", lead: leadBlob, secret: secret }),
+    blobOf({ team: TEAM, folder: "C:/quay/catalogs", relay: RELAY, lead: leadBlob, secret: secret }),
     "etiuda-join:" + Buffer.from("{").toString("base64url")];
-  const wholeBlob = blobOf({ team: TEAM, folder: "C:/quay/catalogs", lead: leadBlob, secret: secret });
+  const wholeBlob = blobOf({ team: TEAM, relay: RELAY, lead: leadBlob, secret: secret });
   /* The lead's box, where an invitation names it beside the lead's key (relay F6), is read as it is written. */
-  const boxed = M.inviteRead(blobOf({ team: TEAM, folder: "C:/quay/catalogs", lead: Object.assign({}, leadBlob, { box: "ab".repeat(32) }), secret: secret }));
+  const boxed = M.inviteRead(blobOf({ team: TEAM, relay: RELAY, lead: Object.assign({}, leadBlob, { box: "ab".repeat(32) }), secret: secret }));
   const tampered = wholeBlob.slice(0, 20) + (wholeBlob[20] === "A" ? "B" : "A") + wholeBlob.slice(21);
   const where = M.folderHost("\\\\quay-host\\catalogs", { SystemDrive: "C:" });
   const onDisk = M.folderHost("C:/quay/catalogs", { SystemDrive: "C:" });
   const otherDisk = M.folderHost("D:/quay/catalogs", { SystemDrive: "C:" });
   check(!!goodBlob && goodBlob.team === TEAM && goodBlob.secret === secret && goodBlob.lead.name === "Quay lead" && goodBlob.lead.box === undefined
       && !!boxed && boxed.lead.box === "ab".repeat(32)
-      && goodBlob.folder === "C:\\quay\\catalogs" && badBlobs.every(b => M.inviteRead(b) === null) && M.inviteRead(tampered) === null
+      && goodBlob.relay.url === RELAY.url && goodBlob.relay.rt === RELAY.rt && goodBlob.folder === undefined && badBlobs.every(b => M.inviteRead(b) === null) && M.inviteRead(tampered) === null
       && where.host === "quay-host" && where.local === false && onDisk.local === true && onDisk.host === ""
       && otherDisk.local === false && otherDisk.host === "" && otherDisk.cloud === "",
-    "16l a malformed or tampered invitation is refused, a well shaped one is read, the lead's box with it where it names one, and a path on another computer is named from its text: "
+    "16l a malformed or tampered invitation is refused, a well shaped relay one is read, the lead's box with it where it names one, an invitation that names a folder, alone or beside a relay, is refused (P2), and a path on another computer is named from its text (folderHost, which the share's watch still asks): "
     + "refused " + badBlobs.filter(b => M.inviteRead(b) === null).length + " of " + badBlobs.length
     + ", host " + where.host);
 
@@ -291,29 +297,7 @@ if (M && J) {
 
   /* ---- what an invitation may name, and what the confirm is then given ----------------------------------------- */
   const BS = "\\";
-  const folderOf = (f, posix) => { const r = M.inviteRead(blobOf({ team: TEAM, folder: f, lead: leadBlob, secret: secret }), posix); return r ? r.folder : null; };
-  // Each is [as pasted, as the system reaches it]: separators made the system's, one trailing separator dropped.
-  const winTaken = [["C:/quay/catalogs", "C:\\quay\\catalogs"], ["C:\\quay\\catalogs\\", "C:\\quay\\catalogs"], ["D:\\", "D:\\"],
-    ["\\\\quay-host\\catalogs", "\\\\quay-host\\catalogs"], ["\\\\quay-host\\catalogs\\team\\", "\\\\quay-host\\catalogs\\team"]];
-  // A path whose text is not where Windows goes: the host it reaches hidden by mixed or forward separators, a device
-  // prefix, a dot segment, an empty segment, a segment Windows renames, a stream, a drive-relative or relative path.
-  const winRefused = ["/\\quay-host\\catalogs", "\\/quay-host/catalogs", "//quay-host/catalogs", "\\\\quay-host/catalogs", "\\\\quay-host\\catalogs/team",
-    "\\\\?\\UNC\\quay-host\\catalogs", "\\\\.\\UNC\\quay-host\\catalogs", "\\\\?\\C:\\quay", "\\\\quay-host",
-    "C:\\OneDrive\\..\\Windows\\Temp\\team", "C:\\quay\\.\\catalogs", "C:\\quay\\\\catalogs", "C:\\quay\\catalogs.",
-    "C:\\quay\\catalogs ", " C:\\quay", "C:\\quay\\catalogs:held", "C:quay", "quay\\catalogs", "/srv/quay/catalogs"];
-  const posixTaken = [["/srv/quay/catalogs/", "/srv/quay/catalogs"], ["/srv/quay", "/srv/quay"]];
-  const posixRefused = ["C:\\quay\\catalogs", "\\\\quay-host\\catalogs", "//quay-host/catalogs", "/srv/../etc/quay",
-    "/srv/./quay", "/srv//quay", "/srv/quay" + BS + "catalogs", "srv/quay"];
-  const winWrong = winTaken.filter(([f, w]) => folderOf(f) !== w).map(x => x[0])
-    .concat(winRefused.filter(f => folderOf(f) !== null));
-  const posixWrong = posixTaken.filter(([f, w]) => folderOf(f, true) !== w).map(x => x[0])
-    .concat(posixRefused.filter(f => folderOf(f, true) !== null));
-  const named = [M.folderHost("\\\\quay-host\\catalogs", {}).host, M.folderHost("//quay-host/catalogs", {}).host];
-  check(winWrong.length === 0 && posixWrong.length === 0 && named.every(h => h === "quay-host"),
-    "16n an invitation's folder is read as the place the system reaches, or refused where its text is not that place, on Windows ("
-    + winTaken.length + " taken, " + winRefused.length + " refused) and elsewhere (" + posixTaken.length + " taken, " + posixRefused.length
-    + " refused), and the host is named from either spelling of a share: wrong " + JSON.stringify(winWrong.concat(posixWrong))
-    + ", hosts " + JSON.stringify(named));
+  /* RETIRED, P2 (an invitation names no folder): 16n, "an invitation's folder is read as the place the system reaches, or refused where its text is not that place, on Windows (5 taken, 19 refused) and elsewhere (2 taken, 8 refused), and the host is named from either spelling of a share". The reader returns a folder for no invitation now (16l holds that one that names a folder is refused); folderHost's naming of a share is 16l's. */
 
   // Built from their code points, so this file holds none of them: the bidirectional marks, overrides and isolates,
   // the zero widths, the separators, the joiners and the byte-order mark, each range by both of its ends, and a point inside
@@ -321,28 +305,24 @@ if (M && J) {
   const hidden = [0x061c, 0x200b, 0x200c, 0x200f, 0x2028, 0x202a, 0x202e, 0x2060, 0x2066, 0x2069, 0xfeff].map(c => String.fromCharCode(c));
   const withChar = (field, ch) => {
     const l = Object.assign({}, leadBlob);
-    let f = "C:\\quay\\catalogs";
     if (field === "name") l.name = "Quay" + ch + " lead";
-    else if (field === "keyId") l.keyId = lead.keyId + ch;
-    else f = "C:\\quay" + ch + "x\\catalogs";
-    return blobOf({ team: TEAM, folder: f, lead: l, secret: secret });
+    else l.keyId = lead.keyId + ch;
+    return blobOf({ team: TEAM, relay: RELAY, lead: l, secret: secret });
   };
   const slipped = [];
-  for (const field of ["name", "keyId", "folder"]) for (const ch of hidden) {
+  for (const field of ["name", "keyId"]) for (const ch of hidden) {
     if (M.inviteRead(withChar(field, ch)) !== null) slipped.push(field + " U+" + ch.charCodeAt(0).toString(16).padStart(4, "0"));
   }
-  const plainRead = ["name", "keyId", "folder"].every(field => M.inviteRead(withChar(field, "e")) !== null);
+  const plainRead = ["name", "keyId"].every(field => M.inviteRead(withChar(field, "e")) !== null);
   check(slipped.length === 0 && plainRead,
-    "16o a character that turns or hides text is refused in the lead's name, its keyId and the folder, every range by both its ends and a point between ("
-    + (hidden.length * 3) + " cases), while the same invitation with a plain letter there is read: slipped " + JSON.stringify(slipped));
+    "16o a character that turns or hides text is refused in the lead's name and its keyId, every range by both its ends and a point between ("
+    + (hidden.length * 2) + " cases), while the same invitation with a plain letter there is read (P2: the folder field it also held is gone): slipped " + JSON.stringify(slipped));
 
-  const bell = String.fromCharCode(7);
-  const longName = n => blobOf({ team: TEAM, folder: "C:\\quay", lead: Object.assign({}, leadBlob, { name: "n".repeat(n) }), secret: secret });
-  const longKeyId = n => blobOf({ team: TEAM, folder: "C:\\quay", lead: Object.assign({}, leadBlob, { keyId: "k".repeat(n) }), secret: secret });
-  check(M.inviteRead(blobOf({ team: TEAM, folder: "C:\\quay" + bell + "\\catalogs", lead: leadBlob, secret: secret })) === null
-      && M.inviteRead(longName(120)) !== null && M.inviteRead(longName(121)) === null
+  const longName = n => blobOf({ team: TEAM, relay: RELAY, lead: Object.assign({}, leadBlob, { name: "n".repeat(n) }), secret: secret });
+  const longKeyId = n => blobOf({ team: TEAM, relay: RELAY, lead: Object.assign({}, leadBlob, { keyId: "k".repeat(n) }), secret: secret });
+  check(M.inviteRead(longName(120)) !== null && M.inviteRead(longName(121)) === null
       && M.inviteRead(longKeyId(80)) !== null && M.inviteRead(longKeyId(81)) === null,
-    "16p a control character in the folder is refused, and the lead's name is read up to 120 characters and its keyId up to 80, one more refused");
+    "16p the lead's name is read up to 120 characters and its keyId up to 80, one more refused (P2: a control character in the folder it also held is gone)");
 
   const TEAM2 = "t-" + hex(8);
   const fileB = signTeam({ format: 1, kind: "etiuda-team", id: TEAM2, catalogs: ["quay-board"], lead: otherLead,
@@ -408,14 +388,13 @@ if (M && J) {
       "16u a UNC path resolves as itself, and is not rewritten onto a mapped letter: "
       + (uncPlace ? uncPlace.kind + " " + (uncBack ? uncBack.path : "") : "no place"));
 
-    const old = M.inviteRead(blobOf({ team: TEAM, folder: "C:/quay/catalogs", lead: leadBlob, secret: secret }));
     const oldBack = P.placeResolve("C:\\quay\\catalogs", null, ben);
     const oldMiss = P.placeResolve("C:\\quay\\catalogs", undefined, ben, function () { return false; });
-    check(!!old && old.place === undefined && old.folder === "C:\\quay\\catalogs" && old.team === TEAM
-        && !!oldBack && oldBack.path === "C:\\quay\\catalogs" && oldBack.how === "absolute" && oldBack.why === "plain"
+    /* P2: 16v also held that an old folder invitation, with no place, still reads; a folder invitation is no invitation now (16l). The resolver's half stands. */
+    check(!!oldBack && oldBack.path === "C:\\quay\\catalogs" && oldBack.how === "absolute" && oldBack.why === "plain"
         && !!oldMiss && oldMiss.how === "ask" && oldMiss.why === "plain" && oldMiss.path === "C:\\quay\\catalogs",
-      "16v an old invitation, with no place, still reads, and resolves as its absolute path: "
-      + (old ? "read" : "refused") + ", " + (oldBack ? oldBack.how + "/" + oldBack.why : "no resolution"));
+      "16v a folder with no place resolves as its absolute path, and asks when that path is not there (P2: the old folder invitation's read it also held is gone): "
+      + (oldBack ? oldBack.how + "/" + oldBack.why : "no resolution"));
 
     const absent = P.placeResolve(annaFolder, place, [], function () { return true; });
     const absentGone = P.placeResolve(annaFolder, place, [], function () { return false; });
@@ -446,20 +425,15 @@ if (M && J) {
       "16x a mapped folder resolves to the reader's own letter for that share, a drive mount joins as a drive, and a folder merely named OneDrive is not a root: "
       + (mappedBack ? mappedBack.path : "no map") + (gBack ? ", drive " + gBack.path : ""));
 
-    const carried = M.inviteRead(blobOf({ team: TEAM, folder: annaFolder, lead: leadBlob, secret: secret, place: place }));
-    const badPlace = M.inviteRead(blobOf({ team: TEAM, folder: annaFolder, lead: leadBlob, secret: secret, place: { kind: "onedrive", rel: ".." } }));
     const miss = P.placeResolve(annaFolder, place, ben, function (p) { return p === annaFolder; });
     const neither = P.placeResolve(annaFolder, place, ben, function () { return false; });
     const junk = P.placeResolve(annaFolder, { kind: "nope", rel: "Etiuda" }, ben);
-    check(!!carried && carried.folder === annaFolder && carried.team === TEAM && carried.secret === secret
-        && !!carried.place && carried.place.kind === "onedrive" && carried.place.rel === "Etiuda" && carried.place.root === "OneDrive"
-        && !!badPlace && badPlace.place === undefined && badPlace.folder === annaFolder && badPlace.team === TEAM
-        && !!miss && miss.path === annaFolder && miss.how === "absolute" && miss.why === "missing"
+    /* P2: 16y also held that a place is kept on the invitation when it is one and dropped when it is not (inviteRead on a folder invitation); an invitation carries no place now. The resolver's half stands. */
+    check(!!miss && miss.path === annaFolder && miss.how === "absolute" && miss.why === "missing"
         && !!neither && neither.path === annaFolder && neither.how === "ask" && neither.why === "missing"
         && !!junk && junk.how === "absolute" && junk.why === "plain",
-      "16y a place is kept on the invitation when it is one, dropped when it is not, and a folder that is not there says missing: "
-      + (carried && carried.place ? carried.place.kind : "place not read")
-      + (miss ? ", missing " + miss.why : ""));
+      "16y a folder that is not there says missing, and asks where neither it nor its place is, and an unknown kind of place resolves as plain (P2: the place kept on an invitation it also held is gone): "
+      + (miss ? "missing " + miss.why : "no resolution"));
 
     const asked = [];
     const io = {
@@ -548,95 +522,7 @@ if (M && J) {
     "17a lifting plant:f4-place leaves the OneDrive folder on the writer's absolute path (why missing), and the checkout's bytes are unchanged: "
     + "line " + plantAt + ", turned " + turned + ", same " + sameBytes);
 
-  const uiSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8");
-  const pageSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "team-join.js"), "utf8");
-  const absentEn = "The team's folder is kept somewhere this computer does not have: {KIND}. The path below is the one from the lead's computer, so it may not open here. Once this computer has it too, starting Etiuda again and then opening the invitation finds the folder.";
-  const absentPl = "Folder zespołu znajduje się w miejscu, którego nie ma na tym komputerze: {KIND}. Ścieżka poniżej pochodzi z komputera lidera zespołu, więc może się tu nie otworzyć. Gdy to miejsce pojawi się także na tym komputerze, po ponownym uruchomieniu Etiudy i otwarciu zaproszenia folder się odnajdzie.";
-  const thirdEn = "Once this computer has it too, opening the invitation again finds the folder.";
-  const thirdPl = "Gdy to miejsce pojawi się także na tym komputerze, po ponownym otwarciu zaproszenia folder się odnajdzie.";
-  check(pageSrc.indexOf(absentEn) >= 0 && pageSrc.indexOf("/* Claudette's words, 2026-10-28 */") >= 0
-      && pageSrc.indexOf("draft words") < 0 && pageSrc.indexOf(thirdEn) < 0 && pageSrc.indexOf(thirdPl) < 0
-      && pageSrc.indexOf("o.why") >= 0 && pageSrc.indexOf("o.how") >= 0 && pageSrc.indexOf("o.kind") >= 0
-      && uiSrc.indexOf(absentEn) >= 0 && uiSrc.indexOf(absentPl) >= 0
-      && uiSrc.indexOf(thirdEn) < 0 && uiSrc.indexOf(thirdPl) < 0
-      && uiSrc.indexOf("\"OneDrive\":\"OneDrive\"") >= 0
-      && uiSrc.indexOf("\"OneDrive for Business\":\"OneDrive dla firm\"") >= 0
-      && uiSrc.indexOf("\"Dropbox\":\"Dropbox\"") >= 0
-      && uiSrc.indexOf("\"Google Drive\":\"Dysk Google\"") >= 0
-      && uiSrc.indexOf("\"a mapped network drive\":\"zmapowany dysk sieciowy\"") >= 0
-      && uiSrc.indexOf("\"a shared network folder\":\"udostępniony folder sieciowy\"") >= 0
-      && uiSrc.indexOf("Dysku Google") < 0 && uiSrc.indexOf("zmapowanego dysku") < 0
-      && uiSrc.indexOf("\"mapped drive\"") < 0 && uiSrc.indexOf("\"shared folder\"") < 0,
-    "17b the confirm names the place this computer does not have, in Claudette's words, and does not promise a later open will find it: "
-    + (pageSrc.indexOf(absentEn) >= 0 ? "page" : "page missing") + ", " + (uiSrc.indexOf(absentPl) >= 0 ? "Polish" : "Polish missing"));
-
-  /* The third sentence would be true only if a second open read the records again. liveSyncIo keeps its first
-     read on the function, and invitePlacePlan always asks that read, so the folder stays the one from the first open. */
-  const reopenCalls = [];
-  let reopenPhase = "empty";
-  const REG = "C:\\Windows\\System32\\reg.exe";
-  const reopenWant = [
-    ["query", "HKCU\\Software\\Microsoft\\OneDrive\\Accounts", "/s", "/v", "UserFolder"],
-    ["query", "HKCU\\Software\\Google\\DriveFS", "/s", "/v", "DefaultMountPoint"],
-    ["query", "HKLM\\SOFTWARE\\Policies\\Google\\DriveFS", "/s", "/v", "DefaultMountPoint"],
-    ["query", "HKLM\\SOFTWARE\\Google\\DriveFS", "/s", "/v", "DefaultMountPoint"],
-    ["query", "HKLM\\SOFTWARE\\WOW6432Node\\Google\\DriveFS", "/s", "/v", "DefaultMountPoint"],
-    ["query", "HKCU\\Network", "/s", "/v", "RemotePath"]
-  ];
-  const reopenSpy = function (file, args, opts) {
-    reopenCalls.push({ file: String(file), args: args, timeout: opts && opts.timeout, hide: opts && opts.windowsHide });
-    if (reopenPhase === "empty") throw new Error("absent");
-    if (String(file).toLowerCase().indexOf("powershell") >= 0) {
-      return JSON.stringify({
-        values: { "HKCU:\\Software\\Microsoft\\OneDrive\\Accounts\\Personal|UserFolder": "D:\\Users\\ben\\OneDrive" },
-        sub: { "HKCU:\\Software\\Microsoft\\OneDrive\\Accounts": ["Personal"] }
-      });
-    }
-    const name = String(args && args[4] || "");
-    if (name !== "UserFolder") return Buffer.from("", "utf8");
-    return Buffer.from([
-      "HKEY_CURRENT_USER\\Software\\Microsoft\\OneDrive\\Accounts\\Personal",
-      "    UserFolder    REG_SZ    D:\\Users\\ben\\OneDrive",
-      ""
-    ].join("\r\n"), "utf8");
-  };
-  let firstPlan = null, secondPlan = null, reopenErr = "", stayed = false;
-  try {
-    const OPEN_DECLS = ["const { execFile, execFileSync } =", "const fs = require(\"node:fs\");", "const REG_TOOL =",
-      "function placeKindOk(", "function driveTops(", "function placeSlash(", "function placeLeaf(", "function placeJoin(",
-      "function placeUnder(", "function placeRest(", "function syncRootsFrom(", "function placeOf(",
-      "function placeCandidates(", "function placeResolve(", "function placeKept(", "function readSyncRecords(",
-      "function liveSyncIo(", "function invitePlacePlan("];
-    const body = OPEN_DECLS.map(m => sliceDecl(SRC, m)).join("\n");
-    /* The slice's reg calls meet the shell's own guard, so its stand-ins are marked (tests/reg-stand.cjs, markStand). */
-    const mcRequire = createRequire(import.meta.url);
-    const reopenExecFile = function () { throw new Error("execFile"); };
-    mcRequire("./reg-stand.cjs").markStand(reopenSpy, reopenExecFile);
-    const opened = new Function("crypto", "Buffer", "require", "process", "regOpts", body + "\nreturn { invitePlacePlan };")(
-      crypto, Buffer, function (name) {
-        if (name === "node:child_process" || name === "child_process") return { execFileSync: reopenSpy, execFile: reopenExecFile };
-        if (name === "node:fs" || name === "fs") return { readFileSync: function () { return ""; } };
-        throw new Error("require " + name);
-      }, { platform: "win32", env: {} }, mcRequire("../shell/win-proxy.cjs").regOpts);
-    const parsed = { folder: annaFolder, place: { kind: "onedrive", rel: "Etiuda", root: "OneDrive" } };
-    firstPlan = opened.invitePlacePlan(parsed);
-    const grew = reopenCalls.length;
-    reopenPhase = "present";
-    secondPlan = opened.invitePlacePlan(parsed);
-    stayed = reopenCalls.length === grew;
-  } catch (e) { reopenErr = e && e.message ? e.message : "reopen failed"; }
-  const regOk = reopenCalls.length === reopenWant.length && reopenCalls.every(function (c, i) {
-    return c.file === REG && JSON.stringify(c.args) === JSON.stringify(reopenWant[i])
-      && typeof c.timeout === "number" && c.timeout >= 1 && c.timeout <= 5000 && c.hide === true;
-  });
-  check(!reopenErr && stayed && regOk
-      && firstPlan && firstPlan.why === "absent" && firstPlan.how === "absolute" && firstPlan.path === annaFolder
-      && secondPlan && secondPlan.why === "absent" && secondPlan.how === "absolute" && secondPlan.path === annaFolder
-      && pageSrc.indexOf(thirdEn) < 0 && uiSrc.indexOf(thirdPl) < 0,
-    "17c an invitation opened where the root is absent stays absent when the root appears and the invitation is opened again: "
-    + (reopenErr || (firstPlan ? firstPlan.why + " " + firstPlan.path : "no first"))
-    + " then " + (secondPlan ? secondPlan.why + " " + secondPlan.path : "no second")
-    + ", calls " + reopenCalls.length + (stayed ? " stayed" : " grew") + (regOk ? "" : " not reg"));
+  /* RETIRED, P2 (an invitation names no folder, so no place): 17b, "the confirm names the place this computer does not have, in Claudette's words, and does not promise a later open will find it", and 17c, "an invitation opened where the root is absent stays absent when the root appears and the invitation is opened again". The confirm's absent-root sentence and invitePlacePlan, which planned a folder invitation's place, left with the folder invitation. */
 
   /* A READ THE DEADLINE CUT SHORT IS NOT KEPT. Where a query ends by its timeout, the records are read again at the next
      ask, so a slow start does not leave the mapped letters out for the life of the process; a whole read is kept (17c).
@@ -729,64 +615,7 @@ if (M && J) {
     else check(true, "17g lifting plant:" + tag + " (ETIUDA_PLANTS=off: not run)");
   }
 
-  /* ONE ACT ASKS THE RECORDS ONCE (the test architect's cost note on 01802957): a pasted invitation's confirm and a folder choice
-     for a place on Drive each look at Drive's roots and plan from the same read of the records, so on a machine whose reg stays
-     slow one act waits on the deadline once, not twice. Every RemotePath read here times out, so no read is kept and each ask
-     shows as six reg calls. */
-  const actScene = (src) => {
-    const calls = [];
-    const spy = function (file, args) {
-      calls.push(String(args && args[1]));
-      if (args && args[4] === "RemotePath") throw Object.assign(new Error("timed out"), { code: "ETIMEDOUT" });
-      return Buffer.from("", "utf8");
-    };
-    const decls = ["const { execFile, execFileSync } =", "const fs = require(\"node:fs\");", "const REG_TOOL =",
-      "function placeKindOk(", "function driveTops(", "function placeSlash(", "function placeLeaf(", "function placeJoin(",
-      "function placeUnder(", "function placeRest(", "function syncRootsFrom(", "function placeOf(",
-      "function placeCandidates(", "function placeResolve(", "function placeKept(", "function readSyncRecords(",
-      "function liveSyncIo(", "function invitePlacePlan(", "function driveLook(", "function inviteKeyHolds(", "function readInvite(", "function pageRemotePath("];
-    const asyncDecls = ["function driveSeen(", "function readInviteLooked(", "function chooseInviteFolder(", "function askInviteFolder("];
-    const body = decls.map(m => sliceDecl(src, m)).concat(asyncDecls.map(m => "async " + sliceDecl(src, m))).join("\n");
-    const parsed = { team: "t-harbour", lead: { name: "Lead", public: "ab".repeat(32) }, secret: "cd".repeat(16),
-      folder: "G:" + BSL + "My Drive" + BSL + "Harbour", place: { kind: "gdrive", root: "My Drive", rel: "Harbour" } };
-    const peers = {
-      inviteParse: () => parsed, joinView: () => ({}), inviteDoor: () => null, inviteSettled: () => null, inviteStranded: () => false,
-      teamBarred: new Set(), teamLeft: {}, folderHost: () => ({ host: "", cloud: "", local: true }), inviteCode: () => "CODE",
-      askFolder: async () => false, askDirItself: async () => false, FOLDER_ASK_MS: 50, regOpts: REG_OPTS,
-    };
-    const names = Object.keys(peers);
-    const acts = new Function("crypto", "Buffer", "require", "process", ...names,
-      body + "\nreturn { readInviteLooked, chooseInviteFolder, placeKept };")(
-      crypto, Buffer, function (name) {
-        if (name === "node:child_process" || name === "child_process") return { execFileSync: markReg(spy), execFile: markReg(function () { throw new Error("execFile"); }) };
-        if (name === "node:fs" || name === "fs") return { readFileSync: function () { return ""; }, promises: { readdir: async () => [] } };
-        throw new Error("require " + name);
-      }, { platform: "win32", env: {} }, ...names.map(n => peers[n]));
-    return { acts, calls, parsed };
-  };
-  const asksPerAct = async (src) => {
-    const p = actScene(src);
-    const kept = p.acts.placeKept(p.parsed.place);
-    await p.acts.readInviteLooked("etiuda-join:harbour");
-    const c = actScene(src);
-    await c.acts.chooseInviteFolder(c.parsed);
-    return { gdrive: !!kept && kept.kind === "gdrive", paste: p.calls.length / 6, choose: c.calls.length / 6 };
-  };
-  const onceOk = r => !!r && r.gdrive && r.paste === 1 && r.choose === 1;
-  let asks = null, asksErr = "";
-  try { asks = await asksPerAct(SRC); } catch (e) { asksErr = e && e.message ? e.message : "the act failed"; }
-  check(!asksErr && onceOk(asks), "17h one paste and one folder choice for a place on Drive each read the records once: " + (asksErr || JSON.stringify(asks)));
-  for (const tag of ["one-ask-paste", "one-ask-choose"]) {
-    const at = SRC.split("\n").findIndex(line => line.indexOf("plant:" + tag) >= 0);
-    let red = false;
-    if (at >= 0 && PLANTS_ON) {
-      const copy = SRC.split("\n");
-      copy.splice(at, 1);
-      try { red = !onceOk(await asksPerAct(copy.join("\n"))); } catch (e) { red = true; }
-    }
-    if (PLANTS_ON) check(at >= 0 && red, "17i lifting plant:" + tag + " reads the records a second time in that act, and 17h turns red: line " + at + ", red " + red);
-    else check(true, "17i lifting plant:" + tag + " (ETIUDA_PLANTS=off: not run)");
-  }
+  /* RETIRED, P2 (no paste, no folder choice for an invitation): 17h, "one paste and one folder choice for a place on Drive each read the records once", and its two plants, 17i, "lifting plant:one-ask-paste (and plant:one-ask-choose) reads the records a second time in that act, and 17h turns red". The act was a pasted invitation's confirm and a folder choice for an invitation's place (readInviteLooked's Drive look, chooseInviteFolder); both left the shell. */
 }
 
 console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);

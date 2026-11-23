@@ -25,7 +25,7 @@ const nodeRequire = createRequire(import.meta.url);
 const TIMED = process.env.ETIUDA_PROFILE === "release";
 const under50 = (ms) => !TIMED || ms < 50;
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 149;
+const EXPECTED = 148; /* 149 less 17d, retired with the folder invitation (P2) */
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -1979,17 +1979,11 @@ try {
     const honest = await yesFolder(yard);
     const stated = honest.calls.some(c => c.indexOf(yard) >= 0);
     const joined = honest.keys && honest.keys.eCatalogFolder === yard && honest.res && !honest.res.refused && !honest.res.canceled;
-    check(stated && joined && honest.dialogs.length === 0 && !touched(honest.calls, unc),
-      "17c a local folder the invitation names is asked and joined, with no dialog: stated " + stated
+    /* P2: 17c was "a local folder the invitation names is asked and joined, with no dialog". A folder invitation is no invitation now, so a local folder is not joined either: it is refused as unread, and nothing is stated there. */
+    check(!stated && !joined && honest.dialogs.length === 0 && !touched(honest.calls, unc) && !!honest.res && honest.res.refused === "unread",
+      "17c a local folder an invitation names is not asked or joined either, and no dialog opens (P2: it was asked and joined): stated " + stated
       + ", joined " + joined + ", dialogs " + honest.dialogs.length + ", answered " + (honest.res && (honest.res.refused || honest.res.canceled || "taken")));
-    if (PLANTS_OFF) notRun("17d lifting plant:invite-remote-folder states the UNC share");
-    else {
-      const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:invite-remote-folder") >= 0);
-      let again = null;
-      if (at >= 0) { lines.splice(at, 1); again = await yesFolder(unc, lines.join("\n")); }
-      const saw = again && again.calls.filter(c => remotePath(c.slice(c.indexOf(" ") + 1))).length;
-      check(!!again && saw > 0, "17d lifting plant:invite-remote-folder states the UNC share: " + (again ? saw + " call(s)" : "plant line absent"));
-    }
+    /* RETIRED, P2: 17d, "lifting plant:invite-remote-folder states the UNC share"; the folder arm and its plant left the shell with the folder invitation, and 17a and 17b hold that a hostile folder is stated by nothing. */
   }
   /* ---- 18. a relay invitation. A customer's start opens a channel only to the built-in relay or staging.
      A harness start may aim at the stand-in the legs already use. ---- */

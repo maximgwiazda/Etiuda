@@ -124,8 +124,9 @@ function loadDesk(src, name) {
 }
 const blob = o => "etiuda-join:" + Buffer.from(JSON.stringify(o)).toString("base64url");
 const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
-const lead = { keyId: "studio-" + crypto.randomBytes(8).toString("hex"), public: crypto.randomBytes(32).toString("hex"), name: "Lamp lead" };
-/* The relay invitation's keyId must be the lead key's own print for a yes, but a read asks no more than the shape. */
+const leadPub = crypto.randomBytes(32).toString("hex");
+/* A relay invitation's keyId must be the id Studio makes of the lead's key ("studio-" and the first 16 hex of its sha256), at the read as at the yes (inviteKeyHolds, the relay's own rule for a lead). */
+const lead = { keyId: "studio-" + crypto.createHash("sha256").update(Buffer.from(leadPub, "hex")).digest("hex").slice(0, 16), public: leadPub, name: "Lamp lead" };
 const secret = () => crypto.randomBytes(16).toString("hex");
 const relay = { rt: crypto.randomBytes(16).toString("hex"), url: "https://relay.test/relay/v1", token: crypto.randomBytes(32).toString("hex"), inv: secret() };
 const folderBlob = blob({ team: TEAM, folder: path.join(LAB, "elsewhere") + path.sep, lead, secret: secret() });

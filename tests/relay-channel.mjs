@@ -63,7 +63,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 578 - 18 + 3; /* fold 129: 533 at the merge base + 45 (fold 128's join link key, and the channel's no older replace, same and cross epoch) - 18 retired with the folder team + 3 asserted again on a relay team (P4's own count, its line in d8d8a5ae) */
+const EXPECTED = 578 - 18 + 3 - 2; /* fold 129: 533 at the merge base + 45 (fold 128's join link key, and the channel's no older replace, same and cross epoch) - 18 retired with the folder team + 3 asserted again on a relay team (P4's own count, its line in d8d8a5ae) - 2 retired with the check code and the folder invitation (P2: 964b, 923e) */
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -1985,21 +1985,8 @@ if (deskOn()) try {
       + ", wrap " + (keptY && keptY.wrap ? "kept" : "absent") + ", secret " + (secretKept ? "kept" : "absent"));
 
   
-  const codePlant = await liftDesk("plant:relay-code", async text => {
-      const invP = await relayInviteOn(RT2, TEAM2);
-      const ud = path.join(LAB, "join-plant-" + hex(4));
-      fs.mkdirSync(ud, { recursive: true });
-      fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: path.join(LAB, "join-plant-share"), eUiLang: "en" } }), "utf8");
-      fs.mkdirSync(path.join(LAB, "join-plant-share"), { recursive: true });
-      const Dp = loadFrom(text, ud);
-      const refused = await Dp.ask("etiuda:team-join", "invite", invP.text, "Desk Nine", "");
-      return !!(refused && refused.refused === "check");
-    });
-
-  
-  check(codePlant.turned && codePlant.back,
-      "964b lifting plant:relay-code refuses a relay yes that carries no check code, and the product file is never written: "
-      + codePlant.detail + ", sha " + (codePlant.back ? "restored" : "differs"));
+  /* RETIRED, P2 (no check code is asked of a yes): 964b, "lifting plant:relay-code refuses a relay yes that carries no check code, and the product file is never written". The shell has no check code and names no refusal for one (tests/folder-join-gone.mjs fjg2), and the plant left with the line it lifted. 964a above holds that yes asks for none. */
+  retire(true, "964b lifting plant:relay-code refuses a relay yes that carries no check code, and the product file is never written");
 
 
   /* Slice 3, item 5: the wrap's team key reads a catalog before the lead admits this desk, on its own relay team so the
@@ -4539,7 +4526,8 @@ if (deskOn()) try {
         const nameBytes = sha(fs.readFileSync(mainFile));
         const liftedNamed = dropLine("plant:c6-named")(mainNow);
         const ln = liftedNamed === null ? null : await heldJoin(liftedNamed, "plant-held", false);
-        check(!!ln && ln.asked && !heldOk(ln) && sha(fs.readFileSync(mainFile)) === nameBytes,
+        /* RETIRED, P2: 923e lifted the plant of 923c and 923d, which hold a folder invitation taken through the share (retired above); no such invitation is taken, so the lift has nothing to redden. */
+        retire(!!ln && ln.asked && !heldOk(ln) && sha(fs.readFileSync(mainFile)) === nameBytes,
           "923e lifting plant:c6-named reddens 923c, and the product file is never written: " + (ln ? heldTold(ln) : "plant line absent"));
         const liftedFresh = swapText("plant:c6-fresh", "raised && ", "")(mainNow);
         const lf = liftedFresh === null ? null : await heldJoin(liftedFresh, "plant-named", true);
