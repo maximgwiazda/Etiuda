@@ -25,7 +25,7 @@ const nodeRequire = createRequire(import.meta.url);
 const TIMED = process.env.ETIUDA_PROFILE === "release";
 const under50 = (ms) => !TIMED || ms < 50;
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 149;
+const EXPECTED = 145; /* 149 less 17d, retired with the folder invitation (P2), and less 20a to 20c, retired with the move to a folder (P1) */
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -1979,17 +1979,11 @@ try {
     const honest = await yesFolder(yard);
     const stated = honest.calls.some(c => c.indexOf(yard) >= 0);
     const joined = honest.keys && honest.keys.eCatalogFolder === yard && honest.res && !honest.res.refused && !honest.res.canceled;
-    check(stated && joined && honest.dialogs.length === 0 && !touched(honest.calls, unc),
-      "17c a local folder the invitation names is asked and joined, with no dialog: stated " + stated
+    /* P2: 17c was "a local folder the invitation names is asked and joined, with no dialog". A folder invitation is no invitation now, so a local folder is not joined either: it is refused as unread, and nothing is stated there. */
+    check(!stated && !joined && honest.dialogs.length === 0 && !touched(honest.calls, unc) && !!honest.res && honest.res.refused === "unread",
+      "17c a local folder an invitation names is not asked or joined either, and no dialog opens (P2: it was asked and joined): stated " + stated
       + ", joined " + joined + ", dialogs " + honest.dialogs.length + ", answered " + (honest.res && (honest.res.refused || honest.res.canceled || "taken")));
-    if (PLANTS_OFF) notRun("17d lifting plant:invite-remote-folder states the UNC share");
-    else {
-      const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:invite-remote-folder") >= 0);
-      let again = null;
-      if (at >= 0) { lines.splice(at, 1); again = await yesFolder(unc, lines.join("\n")); }
-      const saw = again && again.calls.filter(c => remotePath(c.slice(c.indexOf(" ") + 1))).length;
-      check(!!again && saw > 0, "17d lifting plant:invite-remote-folder states the UNC share: " + (again ? saw + " call(s)" : "plant line absent"));
-    }
+    /* RETIRED, P2: 17d, "lifting plant:invite-remote-folder states the UNC share"; the folder arm and its plant left the shell with the folder invitation, and 17a and 17b hold that a hostile folder is stated by nothing. */
   }
   /* ---- 18. a relay invitation. A customer's start opens a channel only to the built-in relay or staging.
      A harness start may aim at the stand-in the legs already use. ---- */
@@ -2093,52 +2087,8 @@ try {
         + (again ? "folder " + JSON.stringify(again.after) + ", remote " + again.remote : "plant line absent"));
     }
   }
-  /* ---- 20. a folder a moved team now lives in. The page may name only the path this shell's picker
-     returned. Any other string is not read, so a remote share is never opened. ---- */
-  {
-    const remotePath = p => { const s = String(p || ""); return s.length >= 2 && ((s.charAt(0) === "\\" && s.charAt(1) === "\\") || (s.charAt(0) === "/" && s.charAt(1) === "/")); };
-    const teamId = "t-" + "ab".repeat(8);
-    const unc = "\\\\evil.example\\share\\moved";
-    const arm = S => {
-      const calls = [];
-      const note = (p) => { calls.push(String(p)); };
-      S.ctl.readFileSync = (real, p, ...a) => { note(p); if (remotePath(p)) { const e = new Error("stand-in"); e.code = "ENOENT"; throw e; } return real(p, ...a); };
-      S.ctl.statSync = (real, p, ...a) => { note(p); if (remotePath(p)) { const e = new Error("stand-in"); e.code = "ENOENT"; throw e; } return real(p, ...a); };
-      return calls;
-    };
-    const askMoved = async (src, folder, openDialog) => {
-      const S = loadShell({ src: src, openDialog: openDialog });
-      const calls = arm(S);
-      let picked = "";
-      if (openDialog) picked = await S.ask("etiuda:pick-catalog-folder", "Library");
-      const res = await S.ask("etiuda:team-join", "pick-moved-folder", teamId, folder);
-      return { res: res, calls: calls, picked: picked, said: S.said.slice() };
-    };
-    const hostile = await askMoved(undefined, unc);
-    const remoteReads = hostile.calls.filter(remotePath).length;
-    const saidWrong = hostile.said.some(s => String(s).indexOf("That folder holds no files") >= 0);
-    check(hostile.res && hostile.res.ok === false && hostile.res.error === "unpicked" && remoteReads === 0 && !saidWrong,
-      "20a a moved-folder path the page names, with no picker behind it, is not read: answered "
-      + (hostile.res && hostile.res.error) + ", remote calls " + remoteReads);
-    const yard = path.join(LAB, "moved-picked");
-    realFs.mkdirSync(yard, { recursive: true });
-    realFs.writeFileSync(path.join(yard, "etiuda-team.json"), "{}\n", "utf8");
-    const honest = await askMoved(undefined, yard, async () => ({ canceled: false, filePaths: [yard] }));
-    const readTeam = honest.calls.some(p => String(p).indexOf("etiuda-team.json") >= 0 && !remotePath(p));
-    check(honest.picked === yard && honest.res && honest.res.error !== "unpicked" && readTeam,
-      "20b the folder the picker returned is read when the page names that same path: picked " + (honest.picked === yard)
-      + ", answered " + (honest.res && (honest.res.ok ? "taken" : honest.res.error)) + ", read " + readTeam);
-    if (PLANTS_OFF) notRun("20c lifting plant:moved-folder-offered reads the page's path");
-    else {
-      const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:moved-folder-offered") >= 0);
-      let again = null;
-      if (at >= 0) { lines.splice(at, 1); again = await askMoved(lines.join("\n"), unc); }
-      const againRemote = again ? again.calls.filter(remotePath).length : 0;
-      check(!!again && againRemote > 0,
-        "20c lifting plant:moved-folder-offered reads the page's path: "
-        + (again ? "remote " + againRemote + ", answered " + (again.res && again.res.error) : "plant line absent"));
-    }
-  }
+  /* RETIRED, P1 (a team's move from the relay to a shared folder is removed): section 20, which held that the page may name only the path this shell's picker returned for a moved team's folder.
+     20a "a moved-folder path the page names, with no picker behind it, is not read", 20b "the folder the picker returned is read when the page names that same path" and 20c "lifting plant:moved-folder-offered reads the page's path" guarded only pick-moved-folder, which is no operation now (tests/folder-move-gone.mjs fmg3 holds that it answers as an unknown one). The picker's own path rule, offeredFolder, is held by 19. */
 } catch (e) {
   failed++;
   console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));

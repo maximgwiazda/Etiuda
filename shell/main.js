@@ -260,7 +260,7 @@ function heldLocalCopy(setting) {
   }
   return "";
 }
-/* The catalog folder: a relay team's mirror, the mirror a team moving to a folder waits in, else the person's own setting.
+/* The catalog folder: a relay team's mirror, else the person's own setting.
    A team held through a shared folder is not read as a team (folderHeld): its folder is a plain catalog folder, and where this
    desk keeps a local copy of it, that copy (heldLocalCopy). */
 function catalogFolder() {
@@ -268,8 +268,6 @@ function catalogFolder() {
   /* On the relay the team folder is the mirror the channel layer keeps, beside the desk's own file (shell/relay/channel.cjs). */
   const relay = relayHere();
   if (relay) return relayMirrorOf(relay.rt);
-  const need = Object.values(teamNeedsFolder)[0];
-  if (need && need.mirror) return need.mirror;
   const raw = rawCatalogFolder(), copy = heldLocalCopy(raw);
   if (copy) return copy; /* plant:held-local-copy */
   return raw;
@@ -411,8 +409,6 @@ function ecFromArgv(argv) {
    base64url, handed to inviteRead as etiuda-join: and the same text. A folder invitation, a page
    address, a link wrapped twice and anything longer than 8192 characters are said and dropped,
    and a refusal reads nothing from disk. Nothing joins: the confirm is still the person's yes. */
-const LINK_FOLDER = "A folder invitation is pasted in Etiuda, not opened from a link.";
-const LINK_FOLDER_PL = "Zaproszenie do folderu wkleja się w Etiudzie; z odnośnika się go nie otwiera.";
 const LINK_FORM = "Etiuda cannot read this link, so nothing was opened or sent. The invitation can be pasted in Etiuda instead.";
 const LINK_FORM_PL = "Etiuda nie potrafi odczytać tego odnośnika, więc niczego nie otwarto ani nie wysłano. Zaproszenie można zamiast tego wkleić w Etiudzie.";
 const LINK_NO_TEAM = "This invitation names no team this desk can join, so nothing was sent. Ask your lead for a new one.";
@@ -438,8 +434,7 @@ function linkFromArg(arg) {
   if (!/^[A-Za-z0-9_-]+$/.test(payload)) return linkRefusal(LINK_FORM, LINK_FORM_PL); /* plant:link-b64 */
   const handed = "etiuda-join:" + payload;
   const parsed = inviteRead(handed, process.platform !== "win32");
-  if (!parsed) return linkRefusal(LINK_FORM, LINK_FORM_PL);
-  if (!parsed.relay) return linkRefusal(LINK_FOLDER, LINK_FOLDER_PL); /* plant:link-folder */
+  if (!parsed) return linkRefusal(LINK_FORM, LINK_FORM_PL); /* a document that names a folder is read as null (inviteRead), so it is this refusal */
   if (!inviteKeyHolds(parsed)) return linkRefusal(LINK_KEY, LINK_KEY_PL); /* plant:link-key */
   return { text: handed, parsed: parsed };
 }
@@ -860,12 +855,10 @@ function pinnedLeadPubs() {
 function teamParse(text) {
   try { return JSON.parse(String(text).replace(/^\uFEFF/, "").trim()); } catch { return null; }
 }
-/* Whether `root` is a team's place: a relay mirror, or the mirror a team moving to a folder waits in. No other folder is a team's,
-   so a team file there is no team's (teamTextChosen). */
+/* Whether `root` is a team's place: a relay mirror. No other folder is a team's, so a team file there is no team's (teamTextChosen). */
 function teamPlaceAt(root) {
   const r = path.resolve(String(root || ""));
-  if (r.indexOf(path.resolve(app.getPath("userData"), "relay") + path.sep) === 0) return true;
-  return Object.values(teamNeedsFolder).some(n => !!n && !!n.mirror && path.resolve(n.mirror) === r);
+  return r.indexOf(path.resolve(app.getPath("userData"), "relay") + path.sep) === 0;
 }
 /* The team file this folder is read as, the canonical file alone: `missing` where it is absent or the folder is no team's place,
    `unreadable` where it would not read. A conflict copy beside it is not a team file here: a team's file arrives over the relay. */
@@ -1291,13 +1284,6 @@ function askFolder(dir) {
   folderAsking = asking;
   settled.then(() => { if (folderAsking === asking) folderAsking = null; });
   return answer;
-}
-/* True only where `dir` itself is a folder, within the same bound: a Drive candidate's parent is one of Drive's own folders,
-   which answers for every spelling beside the right one. */
-function askDirItself(dir) {
-  let timer = null;
-  return Promise.race([fs.promises.stat(dir).then(st => st.isDirectory(), () => false),
-    new Promise(r => { timer = setTimeout(() => r(false), FOLDER_ASK_MS); })]).then(ok => { clearTimeout(timer); return ok; });
 }
 /* Records what an ask found, said in the log once per change, and whether it answered. */
 function settleFolder(dir, ok) {
@@ -1827,7 +1813,6 @@ function deskEnvelopeBody(keysText) {
     + (catalogAskIds.length ? ',"catalogAsks":' + JSON.stringify(catalogAskIds) : "")
     + (inUseN > 0 ? ',"inUseN":' + inUseN : "")
     + (Object.keys(teamPauseSeen).length ? ',"teamPauseSeen":' + JSON.stringify(teamPauseSeen) : "")
-    + (Object.keys(teamNeedsFolder).length ? ',"teamNeedsFolder":' + JSON.stringify(teamNeedsFolder) : "")
     + (recentCatalogs.length ? ',"recentCatalogs":' + JSON.stringify(recentCatalogs) : "")
     + (deskRefused.length ? ',"refused":' + JSON.stringify(deskRefused) : "")
     + ',"keys":' + keysText + "}";
@@ -2668,11 +2653,11 @@ function statsAnswerGenuine(doc, folder, keyHex) {
   } catch { return false; }
 }
 
-/* ---- joining a team: the desk's request, the lead's opening, and the code both sides read --------
-   Commit then reveal: a request commits to the desk's nonce before the lead's opening exists, and the desk
-   reveals it only against the one opening it took, so a request made to match a code has one chance in a
-   million whatever it computes. The code covers the team, both desk keys, the lead's key and both nonces.
-   Studio slices these to read a request and to say its code. */
+/* ---- joining a team: the desk's request and the lead's opening ----------------------------------------
+   A request commits to the desk's nonce before the lead's opening exists, and reveals it only against the one opening it
+   took. No code is made of the two: a desk is let in by the lead's press or by its invitation (board 1017), never by a number
+   read out. The file of openings is read by no desk now, and Studio still slices joinOpening to write a refusal (it goes with
+   Studio's folder door). Studio slices these to read a request. */
 const JOIN_PREFIX = "etiuda-desk-join\n";
 const JOIN_KIND = "etiuda-join", JOINS_KIND = "etiuda-team-joins", JOINS_NAME = "etiuda-team-joins.json";
 const PAUSE_NAME = "etiuda-team-pause.json", PAUSE_KIND = "etiuda-team-pause";
@@ -2684,12 +2669,6 @@ function joinHash(parts) {
 /* The commitment a request carries, in hex: the team, the desk's two keys and its nonce. */
 function joinCommit(teamId, key, box, nonce) {
   return joinHash(["commit", teamId, key, box, nonce]).toString("hex");
-}
-/* Six digits, or "" where any part is malformed. */
-function joinCode(teamId, key, box, lead, deskNonce, leadNonce) {
-  const parts = [key, box, lead, deskNonce, leadNonce];
-  if (!SEALED_TEAM_RE.test(String(teamId)) || !parts.every(p => JOIN_HEX_RE.test(String(p)))) return "";
-  return String(joinHash(["code", teamId].concat(parts)).readUIntBE(0, 6) % 1000000).padStart(6, "0");
 }
 function joinSignedBytes(doc) { return Buffer.concat([Buffer.from(JOIN_PREFIX, "utf8"), signedBytesOf(doc)]); }
 /* Whether a request read from desks/<folder>/join.json is that desk's own, signed under the join prefix, and
@@ -2709,6 +2688,7 @@ function joinGenuine(doc, folder) {
         format: "der", type: "spki" }), Buffer.from(sig.value, "hex"));
   } catch { return false; }
 }
+
 /* The bytes the lead's file of openings is signed over: its own prefix, then the folded form a team file uses. */
 function joinsSignedBytes(doc) {
   return Buffer.concat([Buffer.from("etiuda-team-joins\n", "utf8"), signedBytesOf(doc)]);
@@ -2735,26 +2715,6 @@ function joinOpening(joins, teamId, deskId, commit, trust) {
   if (e.refused === true) return { refused: true };
   return JOIN_HEX_RE.test(String(e.nonce)) ? { lead: { keyId: lead.keyId, public: lead.public }, nonce: e.nonce } : null;
 }
-/* Publics that may sign the joins file for this team. The pin, where this desk has one. The lead of the folder's
-   whole team file when there is no pin, or when that lead is the pin, or a handover from it. Where machine policy names a lead,
-   that lead alone, and none while it has not answered. */
-function joinTrustPubs(team, root) {
-  const p = leadPolicyNow();
-  if (p.waits) return [];
-  if (p.lead) return [p.lead];
-  const pubs = [];
-  const pin = team ? pinTrusted(team) : null;
-  if (pin && JOIN_HEX_RE.test(String(pin.public))) pubs.push(String(pin.public));
-  let chosen = null;
-  try { chosen = root ? teamTextChosen(root).doc : null; } catch { chosen = null; }
-  const named = chosen && chosen.lead;
-  if (chosen && chosen.id === team && teamWhole(chosen) && named && JOIN_HEX_RE.test(String(named.public))) {
-    const pub = String(named.public);
-    if (!pin || pub === String(pin.public) || handedTo(chosen, pin)) pubs.push(pub);
-  }
-  return pubs;
-}
-
 /* ---- the desk's branch: an identity of its own, and its own file in the catalog folder --------
    Two key pairs made here at first need, Ed25519 to sign and X25519 to receive a team key. The
    private halves sit in the desk envelope sealed by safeStorage and never leave it: the page is
@@ -3919,11 +3879,9 @@ function idListedHere(id) {
 function boxAnswerHere(file) {
   try { const d = JSON.parse(fs.readFileSync(file, "utf8")); return !!d && d.kind === ANSWER_LEAD_KIND; } catch { return false; }
 }
-/* Whether catalogFolder resolves to a team's place: a relay team's mirror, or the mirror a team moving to a folder waits in. */
+/* Whether catalogFolder resolves to a team's place: a relay team's mirror. */
 function teamWriteHere() {
-  if (relayHere()) return true;
-  const need = Object.values(teamNeedsFolder)[0];
-  return !!(need && need.mirror); /* plant:team-write-moving */
+  return !!relayHere();
 }
 /* Where a working copy may go on a team this desk is on: one the team lists as before; a private one nowhere; any other to the lead's
    box once this desk is told for this team, else held until it is. Not a sealed member where writes reach a team's place: held. Off a
@@ -4225,7 +4183,6 @@ let teamRelayGone = {};                        // team id -> true: the relay ref
 let teamWas = {};                              // team id -> [{keyId, public}]: the leads this desk followed before its pin, oldest first
 let teamForks = {};                            // team id -> {said, last, seen}: the forks of its lead key this desk has said, the latest, and the one the agent dismissed
 let teamPauseSeen = {};                        // team id -> {t: number, paused: boolean}
-let teamNeedsFolder = {};                        // team id -> {rev, lead, mirror}: moved to folder, waiting for folder
 let inUseN = 0;                                // monotonic counter for in-use.ec
 const LAPSE_SEEN_RE = /^(grace|read-only|lapsed|gone|unknown):(-?[0-9]+|null)$/;
 const editionTeam = new Map();                 // an opened edition's pin -> the first team whose envelope held it; this run only
@@ -5138,6 +5095,9 @@ function heedTeam() {
     teamSay(used + " names a rev or a channel this desk does not read, so nothing in it is used");
     return;
   }
+  /* A team followed through a relay does not leave it for a file that names a folder: nothing in the file is used. */
+  const onRelay = teamChannel[r.team || doc.id];
+  if (channel.kind === "folder" && onRelay && onRelay.kind === "relay") { teamSay(used + " names a folder as the channel of a team this desk follows on a relay, so nothing in it is used"); return; } /* plant:folder-channel-unread */
   if (teamElsewhere.delete(r.team || doc.id)) sendJoin(theWindow); /* plant:elsewhere-clear */
   const floors = teamRevSeen[r.team] || {}, floor = floors[doc.lead.public];
   if (teamRevRefused(floor, r.epoch, rev)) {
@@ -5199,18 +5159,9 @@ function heedTeam() {
       teamRoster[r.team] = Object.assign({ epoch: r.epoch, desks: ids, entries: ents }, sharingOff ? { sharing: "off" } : {});
       changed = true;
     }
-    const pinned = teamPins[r.team];
-    const isPinnedLead = !!(pinned && pinned.public === doc.lead.public && pinned.keyId === doc.lead.keyId);
-    const heldFloor = (teamRevSeen[r.team] || {})[doc.lead.public];
-    const heldRev = (heldFloor && heldFloor.epoch === r.epoch) ? (heldFloor.rev || 0) : 0;
-    const revAbove = rev > heldRev;
-    const currentCh = teamChannel[r.team];
-    const wasOnRelay = !!(currentCh && currentCh.kind === "relay" && currentCh.rt && relayFollowed(r.team) && root === relayMirrorOf(currentCh.rt));
-    const isFolderMove = wasOnRelay && channel.kind === "folder" && revAbove && isPinnedLead;
-
     const was = JSON.stringify(teamChannel[r.team] || null);
     if (channel.kind === "relay") teamChannel[r.team] = channel;
-    else if (!isFolderMove) delete teamChannel[r.team];
+    else delete teamChannel[r.team];
     if (JSON.stringify(teamChannel[r.team] || null) !== was) { changed = true; relaySoon(); }
     teamRingAt = { root: root, relay: channel.kind === "relay", ring: (channel.kind === "relay" || doc.ring) ? teamRingIn(doc) : null };
     if (channel.kind === "relay" && relayFollowed(r.team) && root !== relayMirrorOf(channel.rt)) {
@@ -5242,16 +5193,6 @@ function heedTeam() {
       }
       tryHeldBranches();
       catalogFolderChanged(); /* plant:follow-folder-changed */
-    }
-    if (isFolderMove) {
-      const mirrorDir = (currentCh && currentCh.rt) ? relayMirrorOf(currentCh.rt) : root;
-        stopRelayChannel(r.team); /* plant:folder-stop-relay */
-      const matchingFolder = findMatchingFolderInKnownRoots(r.team, doc.lead.public, rev, root, doc);
-      if (matchingFolder) {
-        switchToFolderTeam(matchingFolder, r.team, mirrorDir); /* plant:folder-known-root */
-      } else {
-        setTeamNeedsFolder(r.team, doc, mirrorDir); /* plant:folder-not-found-offer */
-      }
     }
   }
   // The floor rises with a newer epoch or a higher rev at its own. A newer epoch with no rev raises a floor already kept to
@@ -5300,9 +5241,6 @@ function heedTeam() {
         }
       } catch {}
     }
-  }
-  if (j && j.invite && !j.refused) {
-    if (checkInviteRefusal()) changed = true;
   }
   if (changed) persistDeskEnvelope();
   /* A file above every one heeded before, naming this desk with a wrap it opened: never a roster read before the request. */
@@ -5480,15 +5418,6 @@ function memberProof(secret, commit) {
   if (!/^[0-9a-f]{32}$/.test(sec) || !/^[0-9a-f]{64}$/.test(com)) return "";
   return crypto.createHmac("sha256", Buffer.from(sec, "hex")).update(com, "utf8").digest("hex");
 }
-/* The check code the lead reads out and the agent types before yes, for a folder invitation: HMAC-SHA256 under the invitation's 128-bit secret
-   over the lead's 32-byte public key (the bytes, not their hex), its first six bytes read big-endian modulo 100000, as
-   five digits. "" where either is not the shape an invitation carries. Only the invitation that was issued gives it. */
-function inviteCode(secret, leadPublic) {
-  const sec = String(secret || ""), pub = String(leadPublic || "");
-  if (!/^[0-9a-f]{32}$/.test(sec) || !/^[0-9a-f]{64}$/.test(pub)) return "";
-  const mac = crypto.createHmac("sha256", Buffer.from(sec, "hex")).update(Buffer.from(pub, "hex")).digest();
-  return String(mac.readUIntBE(0, 6) % 100000).padStart(5, "0");
-}
 /* The first 16 hex of the secret's own SHA-256, which is all of it a request carries. */
 function inviteIdOf(secret) {
   const sec = String(secret || "");
@@ -5499,29 +5428,6 @@ function inviteIdOf(secret) {
    marks, the line and paragraph separators with the embeddings and overrides, the word joiner, the invisible operators
    and the isolates, and the byte-order mark. None is read in a name, a keyId or a folder a confirm shows. */
 const INVITE_HIDDEN_RE = /[\u061c\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]/;
-/* A folder as the system reaches it, or "" where its text is not that place. On Windows a drive path, or \\host\share
-   in backslashes alone, each segment a name: not "." or "..", not ending in a dot or a space, which Windows drops, and
-   with no device prefix or stream. Elsewhere an absolute path with no backslash. One trailing separator is dropped. */
-function inviteFolder(folder, posix) {
-  const s = typeof folder === "string" ? folder : "";
-  if (s.length < 3 || s.length > 1024 || s !== s.trim() || /[\u0000-\u001f\u007f]/.test(s) || INVITE_HIDDEN_RE.test(s)) return "";
-  const named = p => p.length > 0 && p !== "." && p !== "..";
-  if (posix) {
-    if (!/^\/[^/]/.test(s) || s.indexOf("\\") >= 0) return "";
-    const parts = s.slice(1).replace(/\/$/, "").split("/");
-    return parts.every(named) ? "/" + parts.join("/") : "";
-  }
-  const kept = p => named(p) && !/[*?"<>|:]/.test(p) && !/[. ]$/.test(p);
-  if (/^[A-Za-z]:[\\/]/.test(s)) {
-    const rest = s.slice(3).replace(/[\\/]$/, "");
-    if (rest === "") return s.slice(0, 2) + "\\";
-    const parts = rest.split(/[\\/]/);
-    return parts.every(kept) ? s.slice(0, 2) + "\\" + parts.join("\\") : "";
-  }
-  if (!/^\\\\[^\\/]/.test(s) || s.indexOf("/") >= 0) return "";
-  const parts = s.slice(2).replace(/\\$/, "").split("\\");
-  return parts.length >= 2 && parts.every(kept) ? "\\\\" + parts.join("\\") : "";
-}
 /* A FOLDER TEAM'S PLACE, beside the absolute path the writer saw (board 945, item 4). The kind and the path
    relative to a sync root come from the records Windows and the client keep, never from a folder's name: a
    directory that is merely called OneDrive is not a root. The reader resolves the kind against its own root.
@@ -5809,7 +5715,7 @@ function readSyncRecords(io) {
     return true;
   });
   /* DefaultMountPoint is a drive letter or a folder, and a folder may name environment variables; one naming a variable
-     this computer does not have names no root. Drive's other roots are those a look found (driveLook). */
+     this computer does not have names no root. Drive's other roots are those a look found. */
   const mount = function (value) {
     const s = String(value || "").trim().replace(/%([^%]+)%/g, function (all, name) {
       for (const k in env) if (k.toLowerCase() === name.toLowerCase() && typeof env[k] === "string" && env[k]) return env[k];
@@ -5998,25 +5904,11 @@ async function driveSeen(records, readdir, ms) {
   clearTimeout(timer);
   return found;
 }
-/* One look at a time, on Windows alone, kept on liveSyncIo for the readers that cannot wait for one; a later look
-   replaces it, so a Drive started after the desk is found at the next invitation. `io`, where given, is the read of the
-   records the caller plans from too, so one act reads them once. */
-function driveLook(io) {
-  if (driveLook.running) return driveLook.running;
-  let rec = null;
-  try { rec = readSyncRecords(Object.assign({}, io || liveSyncIo(), { drives: null })); } catch (e) { rec = null; }
-  const run = process.platform === "win32" && rec ? driveSeen(rec, d => fs.promises.readdir(d), FOLDER_ASK_MS) : Promise.resolve([]);
-  const looking = run.then(found => { liveSyncIo.drives = found; return found; }, () => liveSyncIo.drives || [])
-    .then(found => { driveLook.running = null; return found; });
-  driveLook.running = looking;
-  return looking;
-}
-/* The invitation a lead hands over: "etiuda-join:" and base64url of the team, the folder, the lead and a
-   128-bit secret, or the same base64url after Studio's relay invitation link, exactly https://etiuda.dev/join#, read as
-   the same invitation. Null where it is not that shape, and the folder as inviteFolder reaches it. Nothing is read from
-   the folder: a path on another computer answers a stat by connecting, and the confirm exists so that connection is
-   a choice. `posix` is true where the system is not Windows. */
-function inviteRead(text, posix) {
+/* The invitation a lead hands over: "etiuda-join:" and base64url of the team, the lead, a 128-bit secret and the relay it
+   goes through, or the same base64url after Studio's relay invitation link, exactly https://etiuda.dev/join#, read as the
+   same invitation. Null where it is not that shape, and null for an invitation that names a folder: a team is joined over
+   the relay alone, and the shared folder's invitation went with the folder (board 1017 and the removal). */
+function inviteRead(text) {
   let raw = String(text == null ? "" : text).trim();
   const page = "https://etiuda.dev/join#";
   if (raw.length <= 8192 && raw.slice(0, page.length) === page && /^[A-Za-z0-9_-]+$/.test(raw.slice(page.length))) raw = "etiuda-join:" + raw.slice(page.length); /* plant:paste-https */
@@ -6028,7 +5920,6 @@ function inviteRead(text, posix) {
   try { doc = JSON.parse(Buffer.from(b64, "base64").toString("utf8")); } catch (e) { return null; }
   if (!doc || typeof doc !== "object" || Array.isArray(doc)) return null;
   const lead = doc.lead;
-  const folder = inviteFolder(typeof doc.folder === "string" ? doc.folder : "", posix === true);
   const secret = String(doc.secret || "").toLowerCase();
   const pub = lead && typeof lead.public === "string" ? lead.public.toLowerCase() : "";
   const keyId = lead && typeof lead.keyId === "string" ? lead.keyId : "";
@@ -6039,26 +5930,20 @@ function inviteRead(text, posix) {
   /* On the relay the invitation names the relay team id, the relay's https address, the token whose sha256 the lead
      registered and the relay's id for the invitation, in place of the folder (the protocol's section 7). */
   const relay = doc.relay === undefined ? null : inviteRelay(doc.relay);
-  if (doc.relay !== undefined && (!relay || doc.folder !== undefined)) return null;
-  const pathOk = relay ? true : folder !== "";
+  if (!relay || doc.folder !== undefined) return null; /* plant:invite-relay-only */
   const shown = s => !/[\u0000-\u001f\u007f]/.test(s) && !INVITE_HIDDEN_RE.test(s);
   const nameOk = name !== null && name.length <= 120 && shown(name);
   const keyOk = keyId.length >= 1 && keyId.length <= 80 && shown(keyId);
-  if (!SEALED_TEAM_RE.test(String(doc.team)) || !pathOk || !/^[0-9a-f]{32}$/.test(secret) || !/^[0-9a-f]{64}$/.test(pub) || !keyOk || !nameOk) return null;
+  if (!SEALED_TEAM_RE.test(String(doc.team)) || !/^[0-9a-f]{32}$/.test(secret) || !/^[0-9a-f]{64}$/.test(pub) || !keyOk || !nameOk) return null;
   if (box !== "" && !/^[0-9a-f]{64}$/.test(box)) return null; /* plant:f6-box-shape */
-  const out = { team: String(doc.team), folder: folder, lead: { keyId: keyId, public: pub, name: name }, secret: secret };
+  const out = { team: String(doc.team), lead: { keyId: keyId, public: pub, name: name }, secret: secret, relay: relay };
   if (box) out.lead.box = box; /* plant:f6-box-read */
-  if (relay) out.relay = relay;
-  else {
-    const keptPlace = placeKept(doc.place);
-    if (keptPlace) out.place = keptPlace;
-  }
   return out;
 }
 /* Whether a relay invitation's lead key is the one its key id names, by any form the relay takes for a lead (relay/core.cjs
-   leadKeyMatches), so the key a yes pins is never a claim beside the id. A folder invitation's id is the share's to choose. */
+   leadKeyMatches), so the key a yes pins is never a claim beside the id. */
 function inviteKeyHolds(parsed) {
-  if (!parsed || !parsed.relay) return true;
+  if (!parsed || !parsed.relay) return false;
   const pub = String(parsed.lead && parsed.lead.public || ""), id = String(parsed.lead && parsed.lead.keyId || "");
   if (!/^[0-9a-f]{64}$/.test(pub)) return false;
   const print = crypto.createHash("sha256").update(Buffer.from(pub, "hex")).digest("hex").slice(0, 16);
@@ -6171,34 +6056,14 @@ function memberRequestDoc(j, reveal, me, invite) {
 function joinRequestDoc(j, reveal) {
   return memberRequestDoc(j, reveal, branchIdentity(false), j && j.invite);
 }
+/* Ask again, the one request a desk still makes of its own accord: a join the relay's withdrawal ended. A desk no longer asks to join
+   a team by a request of its own, whether in a shared folder or at the relay: a team is joined by a link or by an invitation to
+   the person's address (board 1017), so a sealed catalog this desk holds no key for makes none. */
 function askJoin(file, name) {
   if (deskKeys === undefined) deskKeys = readDesk();
   const w = teamJoin;
   relayProbeMs = RELAY_PROBE_FIRST;
   if (w && w.invite && w.invite.relay && (w.invite.relay.withdrawn === true || w.invite.relay.withdrawing === true)) return askAgain(w); /* plant:e4-ask-again-desk */
-  const me = branchIdentity(), root = catalogFolder(), at = path.join(root, path.basename(String(file || "")));
-  if (!me) return Object.assign({}, joinView(), { refused: "no-identity", askRefused: "no-identity", why: "no-identity", platform: process.platform }); /* plant:w2-no-identity */
-  if (!folderAnswers(root)) return Object.assign({}, joinView(), { sealed: file ? { file: path.basename(file) } : null, refused: "folder-not-answering", askRefused: "folder-not-answering", why: "folder-not-answering" }); /* plant:w2-folder-not-answering */
-  const out = sealedOutside();
-  let d = null;
-  try { d = catalogPayload(fs.readFileSync(at, "utf8")).data; } catch { return joinView(); }
-  if (!out || !d || d.kind !== SEALED_KIND || !SEALED_TEAM_RE.test(String(d.team)) || (teamKeys[d.team] && teamKeys[d.team][d.epoch]))
-    return joinView();
-  const nonce = crypto.randomBytes(32).toString("hex"), team = String(d.team);
-  const j = { team: team, file: path.basename(at), nonce: nonce, commit: joinCommit(team, me.key, me.box, nonce), asked: Date.now(),
-              held: newestEpoch(team), name: String(name || "").trim().slice(0, 120) };
-  try { writeJoin(joinRequestDoc(j, null)); }
-  catch (e) {
-    console.error("etiuda: the request to join could not be written - " + e.message);
-    const code = e && e.code;
-    const notWritable = code === "EACCES" || code === "EPERM" || code === "EROFS"; /* plant:w2-not-writable-codes */
-    const why = notWritable ? "folder-not-writable" : "folder-not-answering";
-    return Object.assign({}, joinView(), { refused: why, askRefused: why, why: why }); /* plant:w2-folder-not-writable */
-  }
-  teamJoin = j;
-  joinTold = false;
-  persistDeskEnvelope();
-  signinFlush();
   return joinView();
 }
 /* The relay has already accepted this invitation: it spent the token, or the invitation's wrap has given this desk a key.
@@ -6364,31 +6229,6 @@ function refusedWithdrawEnds(j) {
   endRefusedRelay(j); /* plant:refused-cancel-ends */
   return true;
 }
-function checkInviteRefusal() {
-  const j = teamJoin;
-  if (!j || !j.invite || (j.invite.relay && !j.invite.folder) || j.refused) return false;
-  const root = j.invite.folder || catalogFolder();
-  if (!folderAnswers(root)) return false;
-  const invId = j.invite.id;
-  if (!invId) return false;
-  const refFile = path.join(root, "invites", invId + ".refused.json");
-  let text = "";
-  try {
-    if (fs.statSync(refFile).size > 65536) return false;
-    text = fs.readFileSync(refFile, "utf8");
-  } catch { return false; }
-  let doc = null;
-  try { doc = JSON.parse(String(text).replace(/^\uFEFF/, "")); } catch { return false; }
-  if (!doc || doc.team !== j.team || doc.invitation !== invId) return false;
-  const lead = teamPins[j.team] || (j.invite && j.invite.lead);
-  if (!lead) return false;
-  const ok = RelayChannel().inviteRefusedGenuine(doc, lead);
-  if (!ok) return false;
-  forgetWrapped(j.team, j.invite); /* plant:refuse-forget */
-  j.refused = true;
-  persistDeskEnvelope();
-  return true;
-}
 function leadForPause(team, root) {
   if (teamPins[team]) return teamPins[team];
   if (teamJoin && teamJoin.team === team && teamJoin.invite && teamJoin.invite.lead
@@ -6451,7 +6291,6 @@ function joinView() {
   if (relayHere()) view.onRelay = true;
   if (!folderAnswers(root)) return view;
   heedTeam();
-  checkInviteRefusal();
   finishJoin();
   const j = teamJoin, me = branchIdentity(false);
   if (joinDone) {
@@ -6466,25 +6305,10 @@ function joinView() {
       const named = sealedOutside();
       if (named && named.team === j.team) { j.file = named.file; persistDeskEnvelope(); }
     }
-    /* The reveal answers only the first opening read (15l); a refusal of this commitment read after it still ends the request. */
-    let readJoins = false;
-    readJoins = !j.refused; /* plant:j14-refused-after-open */
-    if (readJoins) {
-      let joins = null;
-      try { joins = JSON.parse(fs.readFileSync(path.join(root, JOINS_NAME), "utf8")); } catch { /* none yet */ }
-      const got = joinOpening(joins, j.team, me.id, j.commit, joinTrustPubs(j.team, root));
-      if (got && got.refused) { j.refused = true; persistDeskEnvelope(); }
-      else if (got && !j.opened) {
-        try { writeJoin(joinRequestDoc(j, got)); j.opened = got; persistDeskEnvelope(); }
-        catch (e) { console.error("etiuda: the request to join could not be answered - " + e.message); }
-      }
-    }
-    /* The code is the lead's opening, whether or not the request came by invitation. The invite field names that lead. */
     let relayEnd = "waiting";
     if (j.invite && j.invite.relay && j.invite.relay.end) relayEnd = j.invite.relay.end; /* plant:h35-relay-state */
     view.join = { team: j.team, file: j.file, asked: j.asked, name: j.name,
-                  state: j.refused ? "refused" : j.opened ? "code" : relayEnd,
-                  code: j.opened ? joinCode(j.team, me.key, me.box, j.opened.lead.public, j.nonce, j.opened.nonce) : "" };
+                  state: j.refused ? "refused" : relayEnd };
     if (paused) view.join.paused = true;
     if (j.invite) view.join.invite = Object.assign({ lead: String(j.invite.lead && j.invite.lead.name || "") }, (j.invite.wrapped && j.invite.wrapped.length) ? { wrapped: true } : {});
     /* A relay join names its relay's host, so the page words it as one; the state is "used", "ended" or "removed" where the relay refused the token,
@@ -6492,7 +6316,6 @@ function joinView() {
     if (j.invite && j.invite.relay) { try { view.join.invite.relay = new URL(String(j.invite.relay.url)).host; } catch { view.join.invite.relay = ""; } }
     if (j.invite && j.invite.relay && j.invite.relay.door === true) view.join.invite.door = true;
     if (j.invite && j.invite.relay && relayCatalogNamed.has(j.team)) view.join.invite.open = true;
-    if (j.invite && !j.invite.relay && teamKeys[j.team] && Object.keys(teamKeys[j.team]).length) view.join.invite.open = true; /* plant:folder-join-open */
     const left = !!(j.invite && j.invite.relay && teamLeft[j.team] && !(teamKeys[j.team] && Object.keys(teamKeys[j.team]).length));
     const doubted = !!(j.invite && j.invite.relay && teamBarred.has(j.team) && !teamLeft[j.team]);
     if (j.invite && j.invite.relay) {
@@ -6621,28 +6444,6 @@ function inviteSettled(team, lead) {
 function inviteStranded(parsed) {
   return !!parsed.relay && inviteSettled(parsed.team, parsed.lead) === "pinned" && !!strandedShown(parsed.team); /* plant:stranded-invite */
 }
-/* "" where the folder an invitation names may take its request: it holds no team file, or one whole under the invited
-   lead and for the invited team. "unreadable" where its team file cannot be read, is larger than a team file, or is not
-   JSON; "foreign" for any other. */
-function inviteFolderTeam(parsed) {
-  const chosen = teamTextChosen(parsed.folder);
-  if (chosen.missing) return "";
-  const doc = chosen.doc;
-  if (!doc) return "unreadable";
-  return teamWhole(doc) && doc.id === parsed.team && doc.lead && doc.lead.keyId === parsed.lead.keyId && doc.lead.public === parsed.lead.public
-    ? "" : "foreign";
-}
-/* True only where `folder` holds this team's own team file, whole under the invited lead or under a lead handed over to from
-   it. A ring there is not asked: the invitation pins its own lead, and a file under any other key is never heeded after. */
-function inviteFolderBelongs(folder, parsed) {
-  if (!folder || !parsed || !parsed.team || !parsed.lead) return false;
-  const doc = teamTextChosen(folder).doc;
-  if (!doc || !teamWhole(doc) || doc.id !== parsed.team) return false;
-  if (doc.lead && doc.lead.keyId === parsed.lead.keyId && doc.lead.public === parsed.lead.public) return true;
-  let handed = false;
-  handed = handedTo(doc, parsed.lead); /* plant:j14-picked-lead */
-  return handed;
-}
 /* What an invitation says, and nothing written: the folder it names is not opened, stated or watched. */
 function readInvite(text, io) {
   const parsed = inviteParse(text);
@@ -6653,101 +6454,18 @@ function readInvite(text, io) {
   if (!inviteKeyHolds(parsed)) return Object.assign({}, view, { refused: "unread" }); /* plant:read-key */
   const settled = inviteSettled(parsed.team, parsed.lead);
   if (settled && !inviteStranded(parsed)) return Object.assign({}, view, { refused: settled });
-  /* A relay invitation is judged by what it is and not by how it arrived: the lead, the team and the relay's host, and no check
-     code and no folder, as the link's confirm offers it. */
-  if (parsed.relay) {
-    const offer = { lead: parsed.lead.name, team: parsed.team, relay: new URL(parsed.relay.url).host };
-    if (teamBarred.has(parsed.team) && teamLeft[parsed.team]) offer.left = teamLeft[parsed.team];
-    return Object.assign({}, view, { offer: offer }); /* plant:relay-offer */
-  }
-  /* A place is planned, not stated: a path on another computer answers a stat by connecting. how, why and kind are
-     set only where the invitation carries a place, so an old invitation's offer stays as it was. */
-  let shownFolder = parsed.folder;
-  let carried = null;
-  try { carried = parsed.place ? placeKept(parsed.place) : null; } catch (e) { carried = null; }
-  if (carried) {
-    const plan = invitePlacePlan(parsed, io);
-    if (plan && typeof plan.path === "string" && plan.path) shownFolder = plan.path;
-    carried = { how: plan && plan.how ? plan.how : "", why: plan && plan.why ? plan.why : "", kind: carried.kind };
-  }
-  const where = folderHost(shownFolder, process.env);
-  const offer = { folder: shownFolder, lead: parsed.lead.name, code: inviteCode(parsed.secret, parsed.lead.public),
-    host: where.host, cloud: where.cloud, local: where.local };
-  if (carried) { offer.how = carried.how; offer.why = carried.why; offer.kind = carried.kind; }
+  /* An invitation is judged by what it is and not by how it arrived: the lead, the team and the relay's host, as the link's confirm offers it. */
+  const offer = { lead: parsed.lead.name, team: parsed.team, relay: new URL(parsed.relay.url).host };
   if (teamBarred.has(parsed.team) && teamLeft[parsed.team]) offer.left = teamLeft[parsed.team];
-  return Object.assign({}, view, { offer: offer });
+  return Object.assign({}, view, { offer: offer }); /* plant:relay-offer */
 }
-/* A pasted invitation's confirm waits on a look at Drive's roots where its place is on Drive, so its plan names this
-   computer's own spelling of the folder. */
+/* The link's own entry to the same read, with no Drive look: a pasted invitation is no longer read from a box, so this serves the harness alone. */
 async function readInviteLooked(text) {
-  let kept = null;
-  try { const parsed = inviteParse(text); kept = parsed && !parsed.relay ? placeKept(parsed.place) : null; } catch (e) { kept = null; }
-  let io = null, pass = null;
-  if (kept && kept.kind === "gdrive") { io = liveSyncIo(); await driveLook(io); }
-  pass = io; /* plant:one-ask-paste */
-  return readInvite(text, pass);
+  return readInvite(text);
 }
-/* Where the invitation's place would land on this computer, with every candidate treated as there: the confirm shows
-   the plan and does not stat, because a path on another computer answers a stat by connecting. A record that cannot
-   be read leaves the absolute path. */
-function invitePlacePlan(parsed, io) {
-  if (!parsed || !parsed.place) return { path: parsed && parsed.folder ? parsed.folder : "", how: "absolute", why: "plain" };
-  let roots = [];
-  try { roots = syncRootsFrom(readSyncRecords(io || null)); }
-  catch (e) { roots = []; }
-  try { return placeResolve(parsed.folder, parsed.place, roots, function () { return true; }); }
-  catch (e) { return { path: parsed.folder, how: "absolute", why: "plain" }; }
-}
-/* A path whose first look leaves this computer: UNC (\\server\...), a device path (\\?\ or \\.\), or //.
-   A drive letter is not one. The invitation's own local folder is still asked, and a folder the person
-   picks in this shell's dialog is asked after they pick it. */
-function pageRemotePath(p) {
-  const s = typeof p === "string" ? p : "";
-  return s.length >= 2 && ((s.charAt(0) === "\\" && s.charAt(1) === "\\") || (s.charAt(0) === "/" && s.charAt(1) === "/"));
-}
-/* The folder yes will write into. A root candidate is asked first, then the absolute path the invitation carried, and
-   only then does the caller open the picker. An old invitation, with no place, is asked at its path as before.
-   A remote path is not asked: stating it would reach another computer. The picker is the person's choice. */
-async function askInviteFolder(dir, asks) {
-  if (pageRemotePath(dir)) return false; /* plant:invite-remote-folder */
-  const fn = asks || askFolder;
-  return !!(dir && await fn(dir));
-}
-async function chooseInviteFolder(parsed) {
-  let kept = null;
-  try { kept = placeKept(parsed && parsed.place); }
-  catch (e) { kept = null; }
-  if (!kept) {
-    if (await askInviteFolder(parsed.folder)) return { path: parsed.folder, ask: false };
-    return { ask: true };
-  }
-  let io = null, pass = null;
-  if (kept.kind === "gdrive") { io = liveSyncIo(); await driveLook(io); }
-  pass = io; /* plant:one-ask-choose */
-  let roots = [];
-  try { roots = syncRootsFrom(readSyncRecords(pass)); }
-  catch (e) { roots = []; }
-  if (kept.kind === "unc") {
-    const built = placeJoin(kept.root, kept.rel);
-    if (await askInviteFolder(built)) return { path: built, ask: false };
-    return { ask: true };
-  }
-  let candidates = [];
-  try { candidates = placeCandidates(parsed.folder, kept, roots); }
-  catch (e) { candidates = []; }
-  let asks = askFolder;
-  if (kept.kind === "gdrive") asks = askDirItself; /* plant:drive-itself */
-  for (let i = 0; i < candidates.length; i++) {
-    if (await askInviteFolder(candidates[i], asks)) return { path: candidates[i], ask: false };
-  }
-  if (await askInviteFolder(parsed.folder)) return { path: parsed.folder, ask: false };
-  return { ask: true };
-}
-/* The person's yes, with the check code they typed, which a folder invitation needs and a relay invitation does not,
-   whatever either came by. The folder is asked before anything is written, and one that
-   does not answer, or whose team file is not the invited team's, is put back as it was. A pin the invitation sets is
-   a key not yet shown; the request carries the proof, never the secret. */
-async function takeInvite(text, name, check) {
+/* The person's yes to a relay invitation, which asks for no code: the link, or the invitation to the person's address, is the lead's
+   word. A pin the invitation sets is a key not yet shown; the request carries the proof, never the secret. */
+async function takeInvite(text, name) {
   if (deskKeys === undefined) deskKeys = readDesk();
   const parsed = inviteParse(text);
   const shut = inviteDoor(parsed);
@@ -6757,17 +6475,12 @@ async function takeInvite(text, name, check) {
   const settled = inviteSettled(parsed.team, parsed.lead);
   const stranded = !!settled && inviteStranded(parsed);
   if (settled && !stranded) return Object.assign({}, joinView(), { refused: settled });
-  const code = inviteCode(parsed.secret, parsed.lead.public);
-  if (!parsed.relay) /* plant:relay-code */ /* plant:folder-code */
-  {
-    if (!code || String(check || "").replace(/\s+/g, "") !== code) return Object.assign({}, joinView(), { refused: "check" });
-  }
   const me = branchIdentity();
   if (!me) return Object.assign({}, joinView(), { refused: "unread" });
   let ask = null;
-  if (parsed.relay && !knownRelayAddress(parsed.relay.url))
+  if (!knownRelayAddress(parsed.relay.url))
     return Object.assign({}, joinView(), { refused: "unread" });
-  if (parsed.relay && stranded) {
+  if (stranded) {
     if (!branchSealable()) return Object.assign({}, joinView(), { refused: "unread" });
     /* The request is written before the old lead is let go, so a write that fails leaves this desk as it was: left behind, with
        its notice, and the page told nothing was written (the test architect, 2026-11-01 11:51). */
@@ -6785,125 +6498,7 @@ async function takeInvite(text, name, check) {
       return Object.assign({}, joinView(), { refused: now });
     }
   }
-  if (parsed.relay) return takeRelayInvite(parsed, name, me, ask);
-  const previous = catalogFolder();
-  const keptJoin = teamJoin;
-  /* The desk's own folder setting before any invitation still kept here moved it, for policyLetsInviteGo. */
-  const earlier = keptJoin && keptJoin.invite ? keptJoin.invite : null;
-  const ownBefore = typeof deskKeys[CATALOG_FOLDER_KEY] === "string" ? deskKeys[CATALOG_FOLDER_KEY] : "";
-  const was = earlier && typeof earlier.was === "string" && ownBefore === earlier.folder ? earlier.was : ownBefore;
-  const found = await chooseInviteFolder(parsed);
-  let chosen = "";
-  if (found.ask) {
-    const picked = await dialog.showOpenDialog({
-      properties: ["openDirectory"],
-      defaultPath: previous || defaultCatalogFolder(),
-      title: shellWords().pickTeamFolder,
-    });
-    chosen = (!picked || picked.canceled || !picked.filePaths || !picked.filePaths[0]) ? "" : picked.filePaths[0];
-    if (!chosen) {
-      if (catalogFolder() !== previous) deskSetOwn(CATALOG_FOLDER_KEY, previous);
-      return Object.assign({}, joinView(), { canceled: true });
-    }
-    const chosenAnswers = await askFolder(chosen);
-    if (!chosenAnswers || !inviteFolderBelongs(chosen, parsed)) {
-      if (catalogFolder() !== previous) deskSetOwn(CATALOG_FOLDER_KEY, previous);
-      return Object.assign({}, joinView(), { refused: "foreign" });
-    }
-    parsed.folder = chosen;
-    deskSetOwn(CATALOG_FOLDER_KEY, chosen);
-  } else {
-    parsed.folder = found.path;
-    if (previous !== parsed.folder) deskSetOwn(CATALOG_FOLDER_KEY, parsed.folder);
-  }
-  settleFolder(parsed.folder, true);
-  const late = (chosen ? "" : inviteFolderTeam(parsed)) || inviteSettled(parsed.team, parsed.lead);
-  if (late) {
-    if (catalogFolder() !== previous) deskSetOwn(CATALOG_FOLDER_KEY, previous);
-    return Object.assign({}, joinView(), { refused: late });
-  }
-  const nonce = crypto.randomBytes(32).toString("hex");
-  const commit = joinCommit(parsed.team, me.key, me.box, nonce);
-  const proof = memberProof(parsed.secret, commit);
-  const incomingId = inviteIdOf(parsed.secret);
-  if (!proof || !incomingId) {
-    if (catalogFolder() !== previous) deskSetOwn(CATALOG_FOLDER_KEY, previous);
-    return Object.assign({}, joinView(), { refused: "unread" });
-  }
-  const seen = sealedOutside();
-  const file = seen && seen.team === parsed.team ? seen.file : "";
-  const pinned = !teamPins[parsed.team] || (!!earlier && keptJoin.team === parsed.team && earlier.pinned === true);
-  const before = inviteBeforeFor(parsed.team, keptJoin); /* plant:c8-before */
-  const j = { team: parsed.team, file: file, nonce: nonce, commit: commit, asked: Date.now(), held: newestEpoch(parsed.team),
-    name: String(name || "").trim().slice(0, 120),
-    invite: { id: incomingId, proof: proof, lead: { keyId: parsed.lead.keyId, public: parsed.lead.public, name: parsed.lead.name },
-      folder: parsed.folder, was: was, pinned: pinned, before: before } };
-  const gave = keptJoin && keptJoin.team === parsed.team && keptJoin.invite && (keptJoin.invite.wrapped || (keptJoin.invite.relay && keptJoin.invite.relay.wrapped));
-  if (gave && gave.length) j.invite.wrapped = gave.slice();
-  let wrapKey = null;
-  if (branchSealable()) {
-    try {
-      wrapKey = RelayChannel().inviteWrapKey(parsed.secret);
-      if (wrapKey) j.invite.wrap = safeStorage.encryptString(wrapKey.toString("base64")).toString("base64");
-    } catch {}
-  }
-  /* Read straight from the invitation's folder, not a mirror: no team is joined yet, so no syncer keeps one, and the folder
-     has just answered askFolder above. */
-  const wrapPath = path.join(parsed.folder, "invites", incomingId + ".wrap.json");
-  let wrapDoc = null;
-  try {
-    if (fs.statSync(wrapPath).size <= 65536) wrapDoc = JSON.parse(fs.readFileSync(wrapPath, "utf8"));
-  } catch { wrapDoc = null; }
-  let wrapEpochOpened = null;
-  let hadKeyBefore = false;
-  if (wrapDoc && wrapKey && branchSealable()) {
-    const wrapTeamDoc = teamTextChosen(parsed.folder).doc;
-    if (wrapTeamDoc && teamWhole(wrapTeamDoc) && wrapTeamDoc.id === parsed.team && wrapTeamDoc.lead && wrapTeamDoc.lead.keyId === parsed.lead.keyId && wrapTeamDoc.lead.public === parsed.lead.public) {
-      const opened = RelayChannel().openInviteWrap(wrapKey, { wrap: wrapDoc, teamDoc: wrapTeamDoc, teamId: parsed.team, relayTeamId: "folder", invitationId: incomingId });
-      if (opened.ok) {
-        wrapEpochOpened = opened.epoch;
-        const kept = teamKeys[parsed.team] || {};
-        hadKeyBefore = !!kept[opened.epoch];
-        kept[opened.epoch] = safeStorage.encryptString(opened.key.toString("base64")).toString("base64");
-        teamKeys[parsed.team] = kept;
-        if (!hadKeyBefore) j.invite.wrapped = (j.invite.wrapped || []).concat(opened.epoch);
-        ecFactsRead.clear();
-      }
-    }
-  }
-  try { writeJoin(memberRequestDoc(j, null, me, { id: incomingId, proof: proof })); }
-  catch (e) {
-    console.error("etiuda: the request to join could not be written - " + e.message);
-    if (wrapEpochOpened !== null && !hadKeyBefore && teamKeys[parsed.team]) {
-      delete teamKeys[parsed.team][wrapEpochOpened];
-      if (Object.keys(teamKeys[parsed.team]).length === 0) delete teamKeys[parsed.team];
-      ecFactsRead.clear();
-    }
-    deskSetOwn(CATALOG_FOLDER_KEY, ownBefore || undefined);
-    settleFolder(previous, true);
-    const code = e && e.code;
-    const notWritable = code === "EACCES" || code === "EPERM" || code === "EROFS";
-    return Object.assign({}, joinView(), { refused: notWritable ? "folder-not-writable" : "silent" }); /* plant:invite-folder-not-writable */
-  }
-  if (keptJoin && previous !== parsed.folder && deskBranch && folderAnswers(previous)) {
-    try { fs.unlinkSync(path.join(previous, "desks", branchIdOf(deskBranch.sign.pub), "join.json")); } catch (e) { /* already gone */ }
-  }
-  teamJoin = j;
-  joinTold = false;
-  if (teamLeft[parsed.team]) { delete teamLeft[parsed.team]; teamBarred.delete(parsed.team); }
-  delete teamRelayGone[parsed.team];
-  if (!teamPins[parsed.team]) {
-    teamPins[parsed.team] = { keyId: parsed.lead.keyId, public: parsed.lead.public };
-    teamSeen.delete(parsed.team);
-  }
-  teamShown[parsed.team] = Object.assign({ folder: parsed.folder }, shownName(parsed.lead.name) ? { lead: parsed.lead.name } : {});
-  teamStamp = "";
-  persistDeskEnvelope();
-  relayCatalogNamed.delete(parsed.team);
-  const view = joinView();
-  catalogFolderChanged(); /* plant:invite-folder-changed */
-  if (theWindow && !theWindow.isDestroyed()) catalogChanged(theWindow);
-  return view;
+  return takeRelayInvite(parsed, name, me, ask);
 }
 /* Everything a yes to a relay invitation makes before it changes anything, so whatever can fail fails first: the request's nonce,
    commitment and proof, the time it is dated, the token and the two keys sealed by safeStorage, the invitation's mirror made, and
@@ -6987,7 +6582,7 @@ function takeRelayInvite(parsed, name, me, ahead) {
   joinTold = false;
   persistDeskEnvelope();
   relayRun();
-  catalogFolderChanged();
+  catalogFolderChanged(); /* plant:invite-folder-changed */
   return joinView();
 }
 /* The lead key as Studio's Settings show it, the 16 hex after "studio-" (sign.mjs keyIdFor), made from the public half and
@@ -7226,7 +6821,7 @@ function policyHoldsTeam(t, named) {
    said on the row (folderOwed), with the folder it stays in (folderCopy). */
 function folderHeld(t) {
   const shown = teamShown[t];
-  if (!shown || !shown.folder || shown.relay || teamRelayGone[t] === true || teamNeedsFolder[t]) return false;
+  if (!shown || !shown.folder || shown.relay || teamRelayGone[t] === true) return false;
   if (teamChannel[t] && teamChannel[t].kind === "relay") return false;
   return path.resolve(shown.folder).indexOf(path.resolve(app.getPath("userData"), "relay") + path.sep) !== 0;
 }
@@ -7276,11 +6871,6 @@ function leadsView() {
     const keptApart = keptApartShown(t);
     if (keptApart) row.keptApart = keptApart.names; /* plant:kept-apart-row */
     if (keptApart && keptApart.more) row.keptApartMore = keptApart.more; /* plant:kept-apart-more-row */
-    if (teamNeedsFolder[t]) {
-      row.needsFolder = true;
-      row.openFolder = shellWords().openFolder;
-      row.meetsInFolder = shellWords().teamMeetsInFolder;
-    }
     if (folderHeld(t)) {
       row.folderHeld = true; /* plant:folder-held-row */
       if (folderOutboxOwes(t)) { row.folderOwed = true; row.folderCopy = folderMirrorOf(t); } /* plant:folder-owed-row */
@@ -7330,7 +6920,6 @@ function forgetLead(team, left) {
   delete teamShown[team];
   delete teamChannel[team];
   delete teamPinFrom[team];
-  delete teamNeedsFolder[team];
   teamRingAt = null;
   teamSeen.delete(team);
   delete teamLapseSeen[team];
@@ -7450,153 +7039,6 @@ function teamPinStands(team) {
 }
 function relayMirrorOf(rt) { return path.join(app.getPath("userData"), "relay", rt); }
 
-function stopRelayChannel(teamId) {
-  delete teamChannel[teamId];
-  if (relayChannel) {
-    const old = relayChannel;
-    relayChannel = null;
-    relayAt = "";
-    old.stop().catch(() => {});
-  }
-  persistDeskEnvelope();
-}
-
-/* A file the folder refuses is put in the team's mirror and owed, so the outbox tries it at each scan and the team's row says a
-   refusal for a read-only file or folder there. */
-function copyDeskFilesToFolder(mirrorDir, targetFolder, teamId) {
-  const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "";
-  if (!me || !mirrorDir) return;
-  const srcDir = path.join(mirrorDir, "desks", me);
-  const dstDir = path.join(targetFolder, "desks", me);
-  let names = [];
-  try { names = fs.existsSync(srcDir) ? fs.readdirSync(srcDir).filter(f => /\.ec$/i.test(f)) : []; } catch { names = []; }
-  let made = true;
-  if (names.length) { try { fs.mkdirSync(dstDir, { recursive: true }); } catch { made = false; } }
-  for (const f of names) {
-    try {
-      if (!made) throw new Error("the folder took no desks/" + me);
-      FolderSyncer().copyClear(path.join(srcDir, f), path.join(dstDir, f));
-    } catch (e) {
-      console.error("etiuda: " + f + " could not be copied to the team's folder - " + e.message);
-      if (!teamId) continue;
-      try {
-        const held = path.join(folderMirrorOf(teamId), "desks", me, f);
-        fs.mkdirSync(path.dirname(held), { recursive: true });
-        FolderSyncer().copyClear(path.join(srcDir, f), held);
-        FolderSyncer().noteOwed(folderMirrorOf(teamId), "desks/" + me + "/" + f); /* plant:move-owes */
-      } catch (e2) { console.error("etiuda: " + f + " could not be kept for the team's folder - " + e2.message); }
-    }
-  }
-}
-
-function checkMatchingFolder(dir, teamId, leadPub, minRev) {
-  if (!dir || typeof dir !== "string") {
-    return { ok: false, error: "wrong-team", said: shellWords().folderRefusedWrongTeam };
-  }
-  const file = path.join(dir, TEAM_NAME);
-  let text = "";
-  try {
-    text = fs.readFileSync(file, "utf8");
-  } catch {
-    return { ok: false, error: "wrong-team", said: shellWords().folderRefusedWrongTeam };
-  }
-  let doc = null;
-  try {
-    doc = JSON.parse(text);
-  } catch {
-    return { ok: false, error: "wrong-team", said: shellWords().folderRefusedWrongTeam };
-  }
-  if (!doc || typeof doc !== "object" || !teamWhole(doc)) {
-    return { ok: false, error: "wrong-team", said: shellWords().folderRefusedWrongTeam };
-  }
-  if (doc.id !== teamId) {
-    return { ok: false, error: "wrong-team", said: shellWords().folderRefusedWrongTeam };
-  }
-  if (!doc.lead || doc.lead.public !== leadPub) {
-    return { ok: false, error: "wrong-lead", said: shellWords().folderRefusedWrongLead };
-  }
-  const rev = teamRevOf(doc);
-  if (typeof minRev === "number" && (rev === null || rev < minRev)) {
-    return { ok: false, error: "lower-rev", said: shellWords().folderRefusedLowerRev };
-  }
-  return { ok: true, doc };
-}
-
-function findMatchingFolderInKnownRoots(teamId, leadPub, minRev, currentRoot, doc) {
-  const candidates = new Set();
-  if (deskKeys && typeof deskKeys[CATALOG_FOLDER_KEY] === "string" && deskKeys[CATALOG_FOLDER_KEY].trim()) {
-    candidates.add(deskKeys[CATALOG_FOLDER_KEY].trim());
-  }
-  if (teamJoin) {
-    if (teamJoin.invite && typeof teamJoin.invite.folder === "string") candidates.add(teamJoin.invite.folder);
-    if (typeof teamJoin.was === "string") candidates.add(teamJoin.was);
-    if (typeof teamJoin.folder === "string") candidates.add(teamJoin.folder);
-  }
-  if (doc) {
-    if (typeof doc.folder === "string" && doc.folder) candidates.add(doc.folder);
-    if (doc.place) {
-      let roots = [];
-      try { roots = syncRootsFrom(readSyncRecords(null)); } catch { roots = []; }
-      try {
-        const res = placeResolve(doc.folder || "", doc.place, roots, d => folderAnswers(d));
-        if (res && res.path) candidates.add(res.path);
-      } catch {}
-      try {
-        const pCands = placeCandidates(doc.folder || "", doc.place, roots);
-        for (const c of pCands) if (c) candidates.add(c);
-      } catch {}
-    }
-  }
-  for (const c of candidates) {
-    if (!c || (currentRoot && path.resolve(c) === path.resolve(currentRoot))) continue;
-    const match = checkMatchingFolder(c, teamId, leadPub, minRev);
-    if (match.ok) return c;
-  }
-  return null;
-}
-
-function switchToFolderTeam(targetFolder, teamId, mirrorDir) {
-  deskSetOwn(CATALOG_FOLDER_KEY, targetFolder);
-  persistDeskEnvelope();
-  copyDeskFilesToFolder(mirrorDir, targetFolder, teamId);
-  tryHeldBranches();
-  if (teamId) {
-    delete teamNeedsFolder[teamId];
-    teamShown[teamId] = Object.assign({}, teamShown[teamId], { folder: targetFolder });
-    delete teamShown[teamId].relay;
-  }
-  folderSyncerRun(theWindow);
-  catalogFolderChanged();
-  sendJoin(theWindow);
-  teamStamp = "";
-  heedTeam();
-}
-
-function setTeamNeedsFolder(teamId, doc, mirrorDir) {
-  const had = teamNeedsFolder[teamId];
-  teamNeedsFolder[teamId] = {
-    rev: doc.rev,
-    lead: { keyId: doc.lead.keyId, public: doc.lead.public },
-    mirror: mirrorDir,
-  };
-  if (!had) {
-    teamSay(shellWords().teamMeetsInFolder);
-  }
-  sendJoin(theWindow);
-}
-
-/* The page may name only the folder this shell's picker returned for it. Anything else is not read. */
-function pickMovedFolder(teamId, pickedFolder, senderId) {
-  if (!offeredFolder(senderId, pickedFolder)) return { ok: false, error: "unpicked" }; /* plant:moved-folder-offered */
-  const need = teamNeedsFolder[teamId];
-  const pinned = teamPins[teamId];
-  const minRev = need ? need.rev : 0;
-  const leadPub = pinned ? pinned.public : (need && need.lead ? need.lead.public : "");
-  const check = checkMatchingFolder(pickedFolder, teamId, leadPub, minRev);
-  if (!check.ok) { teamSay(check.said); return { ok: false, error: check.error }; } /* plant:folder-picked-validate */
-  switchToFolderTeam(pickedFolder, teamId, need ? need.mirror : ""); /* plant:folder-picked-match */
-  return { ok: true };
-}
 function relayOpened(sealed) {
   try { return safeStorage.decryptString(Buffer.from(String(sealed), "base64")); } catch { return null; }
 }
@@ -8370,10 +7812,6 @@ function readDesk() {
       if (!SEALED_TEAM_RE.test(t) || !table(v)) return;
       const said = Array.isArray(v.said) ? v.said.filter(k => typeof k === "string" && FORK_KEY_RE.test(k)).slice(-FORK_SAID_MAX) : [];
       teamForks[t] = { said: said, last: forkKept(v.last), seen: typeof v.seen === "string" && FORK_KEY_RE.test(v.seen) ? v.seen : "" };
-    });
-    if (doc && table(doc.teamNeedsFolder)) Object.keys(doc.teamNeedsFolder).forEach(t => {
-      const v = doc.teamNeedsFolder[t];
-      if (SEALED_TEAM_RE.test(t) && table(v) && Number.isSafeInteger(v.rev)) teamNeedsFolder[t] = v;
     });
     [["teamSeen", teamSeen], ["teamBarred", teamBarred], ["teamHeldOut", teamHeldOut]].forEach(([k, set]) => {
       if (doc && Array.isArray(doc[k])) doc[k].forEach(t => { if (SEALED_TEAM_RE.test(String(t))) set.add(String(t)); });
@@ -9803,9 +9241,9 @@ async function shareDrop(blobId) {
   return relayChannel.dropTo(blobId);
 }
 // "content" answers whether this desk was told for its team and the private marks, "content-said" names the team told, "private" a catalog id and "on" or "off".
-ipcMain.handle("etiuda:team-join", (e, op, file, name, check) => (!fromEngine(e) ? null
+ipcMain.handle("etiuda:team-join", (e, op, file, name, note) => (!fromEngine(e) ? null
   : op === "leads" ? { leads: leadsView() }
-  : op === "share-to" ? shareToCard(file, name, check)
+  : op === "share-to" ? shareToCard(file, name, note)
   : op === "share-inbox" ? shareInbox()
   : op === "share-keep" ? shareKeep(file, name)
   : op === "share-kept" ? shareKeptReceipt(file, name)
@@ -9813,8 +9251,7 @@ ipcMain.handle("etiuda:team-join", (e, op, file, name, check) => (!fromEngine(e)
   : op === "content" ? contentView() : op === "content-said" ? contentSaid(file) : op === "private" ? markPrivate(file, name === "on")
   : op === "ask" ? askJoin(file, name) : op === "cancel" ? cancelJoin() : op === "seen" ? leadSeen(file)
   : op === "lapse-seen" ? lapseSeen(file, name) : op === "fork-seen" ? forkDismissed(file) : op === "stranded-seen" ? strandedDismissed(file)
-  : op === "forget" ? forgetLead(file) : op === "leave" ? forgetLead(file, true) : op === "read" ? readInviteLooked(file) : op === "invite" ? takeInvite(file, name, check)
-  : op === "pick-moved-folder" ? pickMovedFolder(file, name, e.sender.id)
+  : op === "forget" ? forgetLead(file) : op === "leave" ? forgetLead(file, true) : op === "read" ? readInviteLooked(file) : op === "invite" ? takeInvite(file, name)
   : op === "held" ? heldLinkAnswer() : op === "link" ? takeHeldLink(name) : op === "link-no" ? declineHeldLink() : joinView())); /* plant:link-no */
 
 /* The engine calls no OS API, so the folder picker is the shell's. The CAPTION comes from the
@@ -11777,11 +11214,10 @@ function signinSign(bytes) {
   const key = deskBranch ? openPrivate(deskBranch.sign.priv) : null;
   return key ? crypto.sign(null, bytes, key).toString("hex") : "";
 }
-/* Whether this desk has a team folder to write its seat into: a team whose lead it pinned, or a team it asks to join, so the
-   lead's watch can read the seat beside the request. */
+/* Whether this desk has a team folder to write its seat into: a team whose lead it pinned. A request to join is made over the relay and
+   carries no seat beside it. */
 function signinTeamHere() {
-  if (pinnedLead()) return true;
-  return !!teamJoin && !(teamJoin.invite && teamJoin.invite.relay); /* plant:flush-asking */
+  return pinnedLead();
 }
 /* The kept certificate written into this desk's own folder of its team's, once per certificate and folder, and again where the
    file is gone; nothing where the desk has no team folder or it does not answer. */
@@ -13302,12 +12738,12 @@ function storeSyncOf() {
   });
   return storeSyncing;
 }
-/* The person's own catalog folder, or "" while the catalog folder is a team's (a relay team's mirror, a moving team's, or the
+/* The person's own catalog folder, or "" while the catalog folder is a team's (a relay team's mirror, or the
    folder of a team held from before, folderHeld): a team's catalogs never enter the person's store and the person's never reach
    the team, the catalog files waiting meanwhile. */
 function storeSyncFolder() {
   if (deskKeys === undefined) deskKeys = readDesk();
-  if (relayHere() || Object.keys(teamNeedsFolder).length) return ""; /* plant:sync-team-folder */
+  if (relayHere()) return ""; /* plant:sync-team-folder */
   const root = catalogFolder();
   if (Object.keys(teamShown).some(t => folderHeld(t) && path.resolve(teamShown[t].folder) === path.resolve(root))) return ""; /* plant:sync-held-folder */
   if (Object.keys(teamShown).some(t => folderHeld(t) && path.resolve(folderMirrorOf(t)) === path.resolve(root))) return ""; /* plant:sync-held-copy */
@@ -13813,14 +13249,8 @@ const SHELL_WORDS = {
   en: { lang: "en", undo: "Undo", cut: "Cut", copy: "Copy", paste: "Paste", selectAll: "Select all",
         addWord: "Add to dictionary", gone: "Etiuda stopped unexpectedly.", hung: "Etiuda is not responding.",
         restart: "Restart", close: "Close Etiuda", wait: "Wait",
-        teamMeetsInFolder: "This team now works from a shared folder. The team's lead can say which one; once it is open here with Open a folder, everything carries on as before.",
-        openFolder: "Open a folder",
-        folderRefusedWrongTeam: "That folder holds no files of this team, so nothing was changed. The team's lead can say which folder it is.",
-        folderRefusedWrongLead: "The team file in that folder is not signed by this team's lead, so nothing was changed. Tell the team's lead about it.",
-        folderRefusedLowerRev: "The team file in that folder is older than the one this desk holds, so nothing was changed. The team's lead can say which folder is the current one.",
         relayElsewhere: "The team file of {TEAM} names a relay this Etiuda does not use, so this desk does not follow it: it keeps its team, its catalog and its connection as they were, and sends nothing there. If the team moves back, nothing is needed; otherwise a new invitation from the team's lead is.",
         teamOfLead: "{LEAD}'s team", teamUnnamed: "Team",
-        pickTeamFolder: "Choose the team's shared folder",
         stillReading: "Etiuda is still reading the team's shared folder, so the catalog is not open yet. Once that is done, Etiuda offers the catalog in a window of its own, and loading it from there opens it.",
         trayOpen: "Open Etiuda",
         trayReplies: "Quick replies",
@@ -13842,14 +13272,8 @@ const SHELL_WORDS = {
   pl: { lang: "pl", undo: "Cofnij", cut: "Wytnij", copy: "Kopiuj", paste: "Wklej", selectAll: "Zaznacz wszystko",
         addWord: "Dodaj do słownika", gone: "Etiuda niespodziewanie się zatrzymała.",
         hung: "Etiuda nie odpowiada.", restart: "Uruchom ponownie", close: "Zamknij Etiudę", wait: "Czekaj",
-        teamMeetsInFolder: "Ten zespół pracuje teraz ze wspólnego folderu. Lider zespołu może wskazać, z którego; gdy zostanie on otwarty tutaj przez Otwórz folder, wszystko będzie działać jak dotąd.",
-        openFolder: "Otwórz folder",
-        folderRefusedWrongTeam: "W tym folderze nie ma plików tego zespołu, więc nic nie zmieniono. Lider zespołu może wskazać właściwy folder.",
-        folderRefusedWrongLead: "Plik zespołu w tym folderze nie jest podpisany przez lidera tego zespołu, więc nic nie zmieniono. Proszę powiedzieć o tym liderowi zespołu.",
-        folderRefusedLowerRev: "Plik zespołu w tym folderze jest starszy niż ten, który ma to stanowisko, więc nic nie zmieniono. Lider zespołu może wskazać aktualny folder.",
         relayElsewhere: "{TEAM} wskazuje w swoim pliku przekaźnik, z którego ta Etiuda nie korzysta, więc to stanowisko za nim nie podąża: zachowuje zespół, katalog i połączenie bez zmian i niczego tam nie wysyła. Jeśli zespół wróci na poprzedni przekaźnik, nic nie trzeba robić; w przeciwnym razie potrzebne jest nowe zaproszenie od lidera zespołu.",
         teamOfLead: "Zespół osoby {LEAD}", teamUnnamed: "Zespół",
-        pickTeamFolder: "Wybierz wspólny folder zespołu",
         stillReading: "Etiuda jeszcze wczytuje wspólny folder zespołu, więc katalog nie jest na razie otwarty. Gdy wczytywanie dobiegnie końca, Etiuda zaproponuje katalog w osobnym oknie; wystarczy go stamtąd wczytać, aby się otworzył.",
         trayOpen: "Otwórz Etiudę",
         trayReplies: "Szybkie odpowiedzi",

@@ -1120,7 +1120,7 @@ try {
           sealed: showSealed ? { file: "north.ec", team: "t-0123456789abcdef" } : null, join: null, leads: [] });
         return Promise.resolve({});
       },
-      onTeamJoin: noop,
+      onTeamJoin: fn => { globalThis.window.__took = fn; },
       onCatalogCopy: fn => { globalThis.window.__copy = fn; },
       catalogMtime: 0,
       openedWith: false,
@@ -1226,11 +1226,9 @@ try {
     const TJ = await import(MOD("team-join.js"));
     TJ.wireTeamJoin();
     await new Promise(r => setTimeout(r, 20));
-    TJ.openJoinPaste();
-    const paste = TJ.teamJoinEmptyHtml();
-    const readBtn = { hasAttribute: a => a === "data-join", getAttribute: a => (a === "data-join" ? "read" : null) };
-    TJ.wireTeamJoinEmpty({ querySelectorAll: () => [readBtn] });
-    await Promise.resolve(readBtn.onclick && readBtn.onclick());
+    /* P2: no paste box; the confirm is the link's, handed to the page as the shell hands it. */
+    const linkOffer = { offer: { link: true, lead: "North lead", team: "t-0123456789abcdef", relay: "relay.example" } };
+    globalThis.window.__took(linkOffer);
     const confirm = TJ.teamJoinEmptyHtml();
     const backBtn = { hasAttribute: a => a === "data-join", getAttribute: a => (a === "data-join" ? "back" : null) };
     TJ.wireTeamJoinEmpty({ querySelectorAll: () => [backBtn] });
@@ -1241,12 +1239,13 @@ try {
     const sealed = TJ.teamJoinEmptyHtml();
     /* The page escapes an apostrophe as &#39; before it paints. The words are the sentence. */
     const shown = s => String(s).replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
-    check(shown(paste).indexOf(JOIN_EN) >= 0 && shown(confirm).indexOf(JOIN_EN) >= 0 && shown(sealed).indexOf(JOIN_EN) >= 0
-        && shown(sealed).indexOf("Once the team's lead lets this desk in") >= 0,
-      "890x the joining sentence is on the paste, the confirm and the sealed ask, and the ask's own sentence stays");
+    /* P2: 890x held "the joining sentence is on the paste, the confirm and the sealed ask, and the ask's own sentence stays"; the paste and the ask are gone, so it holds the link's confirm, and the sealed screen says the lead invites. */
+    check(shown(confirm).indexOf(JOIN_EN) >= 0 && shown(sealed).indexOf(JOIN_EN) < 0
+        && shown(sealed).indexOf("Once the team's lead has invited this desk and it has joined") >= 0,
+      "890x the joining sentence is on the link's confirm, and the sealed screen names the lead's invitation and asks nothing");
 
     mem.eUiLang = "pl";
-    TJ.openJoinPaste();
+    globalThis.window.__took(linkOffer);
     const pastePl = TJ.teamJoinEmptyHtml();
     check(pastePl.indexOf(JOIN_PL) >= 0 && pastePl.indexOf(JOIN_EN) < 0,
       "890y the joining sentence is the Polish one when the desk's language is Polish");
@@ -1284,19 +1283,16 @@ try {
     globalThis.window.E_HOST.teamJoin = (op, a, b, c) => {
       calls1014.push([op, a, b, c]);
       if (op === "read") return Promise.resolve(nextReadOffer);
-      if (op === "invite") return Promise.resolve({ sealed: null, join: { file: "", state: "waiting", team: "t-join1014", invite: { lead: "North lead", relay: "relay.example" } }, leads: [] });
+      if (op === "invite" || op === "link") return Promise.resolve({ sealed: null, join: { file: "", state: "waiting", team: "t-join1014", invite: { lead: "North lead", relay: "relay.example" } }, leads: [] });
       if (op === "content") return Promise.resolve({ team: "t-join1014", told: true, private: [], listed: [] });
       if (op === "content-said") return Promise.resolve({ team: "t-join1014", told: true, private: [], listed: [] });
       return Promise.resolve({ sealed: null, join: null, leads: [] });
     };
     mem.eUiLang = "en";
     showSealed = false;
-    TJ.openJoinPaste();
-    const readBtn1014 = { hasAttribute: a => a === "data-join", getAttribute: a => (a === "data-join" ? "read" : null) };
-    TJ.wireTeamJoinEmpty({ querySelectorAll: () => [readBtn1014] });
-    await Promise.resolve(readBtn1014.onclick && readBtn1014.onclick());
+    globalThis.window.__took({ offer: { link: true, lead: "North lead", team: "t-join1014", relay: "relay.example" } });
     const confirm1014 = TJ.teamJoinEmptyHtml();
-    const invBtn1014 = { hasAttribute: a => a === "data-join", getAttribute: a => (a === "data-join" ? "invite" : null) };
+    const invBtn1014 = { hasAttribute: a => a === "data-join", getAttribute: a => (a === "data-join" ? "invite" : null) }; /* the confirm's press; for a link it sends "link" */
     TJ.wireTeamJoinEmpty({ querySelectorAll: () => [invBtn1014] });
     await Promise.resolve(invBtn1014.onclick && invBtn1014.onclick());
     await new Promise(r => setTimeout(r, 20));
@@ -1436,13 +1432,11 @@ try {
           globalThis.window.E_HOST.teamJoin = (op, a) => {
             pCalls.push([op, a]);
             if (op === "read") return Promise.resolve(nextReadOffer);
-            if (op === "invite") return Promise.resolve({ sealed: null, join: { file: "", state: "waiting", team: "t-join1014", invite: { lead: "North lead", relay: "relay.example" } }, leads: [] });
+            if (op === "invite" || op === "link") return Promise.resolve({ sealed: null, join: { file: "", state: "waiting", team: "t-join1014", invite: { lead: "North lead", relay: "relay.example" } }, leads: [] });
             return Promise.resolve({ sealed: null, join: null, leads: [] });
           };
-          TJp.openJoinPaste();
-          const rb = { hasAttribute: a => a === "data-join", getAttribute: a => (a === "data-join" ? "read" : null) };
-          TJp.wireTeamJoinEmpty({ querySelectorAll: () => [rb] });
-          await Promise.resolve(rb.onclick && rb.onclick());
+          TJp.wireTeamJoin();
+          globalThis.window.__took({ offer: { link: true, lead: "North lead", team: "t-join1014", relay: "relay.example" } });
           const ib = { hasAttribute: a => a === "data-join", getAttribute: a => (a === "data-join" ? "invite" : null) };
           TJp.wireTeamJoinEmpty({ querySelectorAll: () => [ib] });
           await Promise.resolve(ib.onclick && ib.onclick());

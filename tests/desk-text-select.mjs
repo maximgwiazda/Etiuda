@@ -45,7 +45,6 @@ const ALLOWED_LIST = [
   { sel: "code", exclude: ".swap code, .card code, .txt code", why: "file names, folder paths (code.open-folder), sign-in codes and relay/proxy prints (Studio: code). A code inside a card or a reply stays with the card: those chips and tokens are not copied by dragging." },
   { sel: "pre", why: "preformatted technical text such as Quick facts #facts (Studio: pre)" },
   { sel: ".ec-fp", why: "catalog twin/edition fingerprint for verification (Studio kin: .fp)" },
-  { sel: ".e-join-code", why: "team pairing check code (Studio kin: check/join code)" },
   { sel: ".e-join-key, .e-lead-key, .e-ksig", why: "team signing key print for verification (Studio kin: signing print)" },
   { sel: ".e-notice-err", why: "error detail in a notice bubble for bug/support copying" },
   { sel: ".mt-row .v", why: "diagnostic reading value set in the mono face in Maintenance (Studio kin: readings in mono)" },
@@ -605,7 +604,6 @@ try {
       + '<p class="e-notice-err" id="tsErrDetail">ENOENT: test error detail</p>'
       + '<div class="mono" id="tsMonoProbe">mono-id-9876</div>'
       + '<span class="ec-fp" id="tsFpProbe">fp-abcd-1234</span>'
-      + '<div class="e-join-code" id="tsJoinCode"><span>123</span><span>456</span></div>'
       + '<div class="e-join-key" id="tsJoinKey"><span class="e-ksig"><span>ABCD EFGH 1234 5678</span></span></div>'
       + '<code id="tsCodeProbe">sample-file.ec</code>';
     document.body.appendChild(d);
@@ -617,7 +615,6 @@ try {
     ["#tsMonoProbe", ".mono"],
     ["#tsErrDetail", ".e-notice-err"],
     ["#tsFpProbe", ".ec-fp"],
-    ["#tsJoinCode", ".e-join-code"],
     ["#tsJoinKey .e-ksig", ".e-ksig"],
     ["#tsCodeProbe", "code"],
   ]) {

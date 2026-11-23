@@ -1812,7 +1812,7 @@ try {
     heed(D2, revTeam(TEAM, 2, [member(2)], { rev: 3, channel: RELAY_T }));
     const e2 = JSON.stringify((D2.envelope().teamChannel || {})[TEAM] || null), e2r = rosterNow(D2, TEAM);
     /* 900e, moved: it also said "and a folder channel keeps none", a signed file naming a folder taking the desk's channel off it. A relay desk's team file that names a folder
-       is a move to a folder, which is not followed (tests/relay-desk-to-folder.mjs, retired with it), so the channel stays the relay's; this check says the relay's file
+       is a move to a folder, which is gone and read as unread (tests/folder-move-gone.mjs fmg1), so the channel stays the relay's; this check says the relay's file
        names it again and the roster moves. */
     check(e1 === JSON.stringify(RELAY_T) && e2 === JSON.stringify(RELAY_T) && e2r === ids(2),
       "900e the channel is kept with the team as its signed file names it, and a later file naming it again moves the roster: relay "

@@ -656,7 +656,7 @@ html{height:100%;overflow:hidden}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);
   display:flex;flex-direction:column;height:100%;overflow:hidden;
   user-select:none;-webkit-user-select:none}
-input,textarea,[contenteditable="true"],[contenteditable=""],.mono,code,pre,.ec-fp,.e-join-code,.e-join-key,.e-lead-key,.e-ksig,.e-notice-err,.mt-row .v{
+input,textarea,[contenteditable="true"],[contenteditable=""],.mono,code,pre,.ec-fp,.e-join-key,.e-lead-key,.e-ksig,.e-notice-err,.mt-row .v{
   user-select:text;-webkit-user-select:text}
 /* Reserve the scrollbar lane: filtering swings the list across one viewport many times a
    minute, and each crossing otherwise reflows the whole centred column sideways. */
@@ -2505,21 +2505,9 @@ code.open-folder:hover,code.open-folder:focus-visible{color:var(--accent);text-d
 .e-join-t{font-size:19px;font-weight:600;color:var(--ink);display:inline-flex;align-items:center;gap:8px}
 .e-join-t .ic{color:var(--accent)}
 .e-join p{margin:8px auto 0;max-width:620px}
-.e-join-code{font:600 34px var(--mono);color:var(--ink);margin:18px 0 6px;display:flex;justify-content:center;gap:.6em}
-.e-join-wait i{display:inline-block;width:.62em;height:3px;margin:0 .1em;vertical-align:middle;border-radius:2px;background:var(--dim);opacity:.6}
 .e-join-meta{font:12px var(--mono);color:color-mix(in srgb,var(--dim) 75%,var(--bg));margin-top:8px}
 .e-join-acts{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:16px}
-.e-join-paste{display:block;width:min(520px,100%);box-sizing:border-box;margin:14px auto 0;min-height:4.5em;padding:8px 10px;border:1px solid var(--line-strong);border-radius:8px;background:var(--bg);color:var(--ink);font:13px/1.45 var(--mono);resize:vertical}
-.e-join-bub .e-join-paste{width:100%;color:var(--bub-ink);background:transparent}
-.e-join-ask{margin:12px auto 0;max-width:520px}
-.e-join-why{margin:4px auto 0;max-width:520px;font-size:12px;color:color-mix(in srgb,var(--dim) 75%,var(--bg))}
-.e-join-check{display:block;width:6.5em;box-sizing:border-box;margin:8px auto 0;padding:6px 8px;border:1px solid var(--line-strong);border-radius:8px;background:var(--bg);color:var(--ink);font:600 18px var(--mono);letter-spacing:.2em;text-align:center}
 .e-join .btn:disabled,.e-join-bub .btn:disabled{opacity:.45}
-.e-join-bub .e-join-ask{margin:8px 0 0;color:var(--bub-ink)}
-.e-join-bub .e-join-why{margin:2px 0 0;color:var(--bub-dim)}
-.e-join-bub .e-join-check{margin:6px 0 0;color:var(--bub-ink);background:transparent}
-.e-join-bub .e-join-code{color:var(--bub-ink);font-size:28px;justify-content:flex-start;margin:8px 0 2px}
-.e-join-bub .e-join-wait i{background:var(--bub-dim)}
 .e-join-bub .e-join-meta{color:var(--bub-dim);margin:0 0 8px}
 .e-join-key{font:600 22px var(--mono);color:var(--ink);margin:16px 0 4px;white-space:nowrap}
 .e-join-bub .e-join-key{color:var(--bub-ink);font-size:19px;margin:8px 0 10px}
@@ -9446,18 +9434,12 @@ What is typed here stays in this browser.`;
     "{FILE} could not be put back on this desk. The version stays here, ready to try again.": "Nie udało się przywrócić pliku {FILE} na tym stanowisku. Ta wersja zostaje tutaj i można spróbować ponownie.",
     "The catalog file could not be loaded:": "Nie udało się wczytać pliku katalogu:",
     "{FILE} is sealed for its team": "{FILE} jest zapieczętowany dla swojego zespołu",
-    "Once the team's lead lets this desk in, the catalog opens here by itself.": "Gdy lider zespołu wpuści to stanowisko, katalog otworzy się tutaj sam.",
-    "Ask to join works once this computer's secure storage can keep this desk's own key, which it cannot just now; on Windows, signing in with a person's own account, not a service account or a temporary profile, usually does it. Then press Ask to join again.": "Prośba o dołączenie zadziała, gdy bezpieczny magazyn tego komputera będzie mógł przechować własny klucz stanowiska, czego teraz nie może; w systemie Windows zwykle pomaga zalogowanie się na własne konto, a nie na konto usługi ani profil tymczasowy. Potem wystarczy ponownie nacisnąć Poproś o dołączenie.",
-    "Ask to join works once this computer's secure storage can keep this desk's own key, which it cannot just now; on macOS, allowing Etiuda to use the Keychain when asked usually does it. Then press Ask to join again.": "Prośba o dołączenie zadziała, gdy bezpieczny magazyn tego komputera będzie mógł przechować własny klucz stanowiska, czego teraz nie może; w systemie macOS zwykle pomaga zezwolenie Etiudzie na dostęp do pęku kluczy, gdy system o to zapyta. Potem wystarczy ponownie nacisnąć Poproś o dołączenie.",
-    "Ask to join works once this computer's secure storage can keep this desk's own key, which it cannot just now; on Linux, unlocking the system keyring usually does it. Then press Ask to join again.": "Prośba o dołączenie zadziała, gdy bezpieczny magazyn tego komputera będzie mógł przechować własny klucz stanowiska, czego teraz nie może; w systemie Linux zwykle pomaga odblokowanie systemowego magazynu haseł. Potem wystarczy ponownie nacisnąć Poproś o dołączenie.",
-    "Ask to join again once the team's folder can be reached; just now it does not answer from this computer, so nothing was written.": "Wystarczy ponownie poprosić o dołączenie, gdy folder zespołu będzie osiągalny; teraz ten komputer nie może się z nim połączyć, więc nic nie zapisano.",
-    "Whoever manages the team's folder can let this computer write in it, which the request needs; until then nothing was written here. After that, press Ask to join again.": "Osoba zarządzająca folderem zespołu może pozwolić temu komputerowi na zapis, którego wymaga prośba; do tego czasu nic tu nie zapisano. Potem wystarczy ponownie nacisnąć Poproś o dołączenie.",
-    "Asks as {NAME}, the name in Settings.": "Prośba pójdzie jako {NAME}, pod nazwą z Ustawień.",
     "this desk": "to stanowisko",
+    "Waiting for the team's lead to let this desk in. Nothing more is needed here.": "Stanowisko czeka, aż lider zespołu je wpuści. Nic więcej nie trzeba tu robić.",
+    "This catalog belongs to a team. Once the team's lead has invited this desk and it has joined, the catalog opens here by itself.": "Ten katalog należy do zespołu. Gdy lider zespołu zaprosi to stanowisko i ono dołączy, katalog otworzy się tu sam.",
+    "This invitation names a team whose lead was forgotten on this desk. It was not used, and nothing changed. To join, the team's lead sends a new invitation.": "To zaproszenie wskazuje zespół, którego lider został na tym stanowisku zapomniany. Nie zostało użyte i nic się nie zmieniło. Aby dołączyć, lider zespołu wysyła nowe zaproszenie.",
     "Ask to join": "Poproś o dołączenie",
     "Join a team": "Dołącz do zespołu",
-    "Paste the invitation from the team's lead.": "Proszę wkleić zaproszenie od lidera zespołu.",
-    "Continue": "Dalej",
     "Join this team?": "Dołączyć do tego zespołu?",
     "Join this team": "Dołącz do tego zespołu",
     "Folder: {FOLDER}": "Folder: {FOLDER}",
@@ -9466,46 +9448,20 @@ What is typed here stays in this browser.`;
     "Team: {TEAM}": "Zespół: {TEAM}",
     "Relay: {HOST}": "Przekaźnik: {HOST}",
     "This invitation cannot be read, so nothing was changed.": "Tego zaproszenia nie da się odczytać, więc nic nie zostało zmienione.",
-    "This folder is on the computer {HOST}.": "Ten folder znajduje się na komputerze {HOST}.",
     "This folder could not be reached, so nothing was written.": "Ten folder jest teraz niedostępny, więc nic nie zapisano.",
-    "This computer can only read the team's folder, and joining needs permission to write there. Once that is granted, Join again; the invitation still works.": "Ten komputer może tylko czytać z folderu zespołu, a dołączenie wymaga uprawnień do zapisu. Po ich nadaniu wystarczy ponownie dołączyć; zaproszenie nadal działa.",
     "Etiuda could not make its own copy of the team's files on this computer, so nothing was written. Once the disk has room and Etiuda may write in its folder, Join again; the invitation still works.": "Etiuda nie mogła utworzyć na tym komputerze własnej kopii plików zespołu, więc nic nie zapisano. Gdy na dysku będzie miejsce, a Etiuda będzie mogła zapisywać w swoim folderze, wystarczy ponownie dołączyć; zaproszenie nadal działa.",
-    "Teammates on other computers read this folder only if it is shared with them.": "Członkowie zespołu na innych komputerach odczytają ten folder tylko wtedy, gdy zostanie im udostępniony.",
-    "OneDrive keeps this folder in sync.": "Ten folder jest synchronizowany przez OneDrive.",
-    "This folder is a SharePoint library that OneDrive keeps in sync.": "Ten folder to biblioteka SharePoint synchronizowana przez OneDrive.",
-    "Dropbox keeps this folder in sync.": "Ten folder jest synchronizowany przez Dropbox.",
-    "Google Drive keeps this folder in sync.": "Ten folder jest synchronizowany przez Dysk Google.",
-    "The team's folder is kept somewhere this computer does not have: {KIND}. The path below is the one from the lead's computer, so it may not open here. Once this computer has it too, starting Etiuda again and then opening the invitation finds the folder.": "Folder zespołu znajduje się w miejscu, którego nie ma na tym komputerze: {KIND}. Ścieżka poniżej pochodzi z komputera lidera zespołu, więc może się tu nie otworzyć. Gdy to miejsce pojawi się także na tym komputerze, po ponownym uruchomieniu Etiudy i otwarciu zaproszenia folder się odnajdzie.",
-    "OneDrive": "OneDrive",
-    "OneDrive for Business": "OneDrive dla firm",
-    "Dropbox": "Dropbox",
-    "Google Drive": "Dysk Google",
-    "a mapped network drive": "zmapowany dysk sieciowy",
-    "a shared network folder": "udostępniony folder sieciowy",
-    "Ask the team's lead for this invitation's check code, and type its five digits here.": "Proszę zapytać lidera zespołu o kod kontrolny tego zaproszenia i wpisać tu jego pięć cyfr.",
-    "Only the real invitation gives this code, so it confirms the invitation comes from the team's own lead.": "Taki kod daje tylko prawdziwe zaproszenie, więc potwierdza, że pochodzi ono od lidera tego zespołu.",
-    "Check": "Kod kontrolny",
-    "This code does not match this invitation. Ask the lead again before joining.": "Ten kod nie pasuje do tego zaproszenia. Proszę jeszcze raz zapytać lidera przed dołączeniem.",
     "This invitation names a team this desk already knows, but with a different lead's key. It was not used, and nothing changed. Tell the team's lead about it.": "To zaproszenie wskazuje zespół, który to stanowisko już zna, ale z innym kluczem lidera. Nie zostało użyte i nic się nie zmieniło. Proszę powiedzieć o tym liderowi zespołu.",
-    "This invitation names a team whose lead was forgotten on this desk. It was not used, and nothing changed. To join, ask from the team's catalog instead.": "To zaproszenie wskazuje zespół, którego lider został na tym stanowisku zapomniany. Nie zostało użyte i nic się nie zmieniło. Aby dołączyć, proszę poprosić o to z katalogu zespołu.",
-    "This folder holds another team, or the same team under a different lead's key, so nothing was written. Tell the team's lead about it.": "W tym folderze jest inny zespół albo ten sam zespół z innym kluczem lidera, więc nic nie zapisano. Proszę powiedzieć o tym liderowi zespołu.",
     "The organisation's IT sets this desk's team, so invitations are turned off.": "Zespół tego stanowiska ustawia dział IT organizacji, więc zaproszenia są wyłączone.",
-    "The team file in this folder could not be read, so this desk did not join and nothing was written. Let the team's lead know, so they can check the folder.": "Nie udało się odczytać pliku zespołu w tym folderze, więc stanowisko nie dołączyło i nic nie zapisano. Proszę dać znać liderowi zespołu: może sprawdzić ten folder.",
     "Load another catalog file": "Wczytaj inny plik katalogu",
-    "Waiting for the lead to open the request": "Prośba czeka, aż lider ją otworzy",
-    "The code to read to them appears here as soon as they do.": "Gdy to zrobi, pojawi się tu kod do podania.",
     "Joining {LEAD}'s team": "Dołączanie do zespołu osoby {LEAD}",
     "The team's lead cannot let anyone in for now, as the lead's licence is paused. Nothing needs doing here: once the licence is active again, this desk is let in by itself.": "Lider zespołu nie może na razie nikogo wpuszczać, bo jego licencja jest wstrzymana. Tutaj nic nie trzeba robić: gdy licencja znów będzie aktywna, stanowisko zostanie wpuszczone samo.",
     /* copywriter, 2026-10-30 00:20 */
-    "Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead.": "Stanowisko czeka, aż lider zespołu je wpuści. Zwykle dzieje się to samo; jeśli pojawi się tu kod, proszę odczytać go liderowi.",
     "Waiting for the team's lead to let this desk in. Nothing more is needed here, and the team's catalogs are already open to work with.": "Stanowisko czeka, aż lider zespołu je wpuści. Tutaj nic więcej nie trzeba robić, a katalogi zespołu są już dostępne do pracy.",
     "Waiting for the team's lead to let this desk in. Nothing more is needed here: the team's catalog opens here by itself once it is.": "Stanowisko czeka, aż lider zespołu je wpuści. Tutaj nic więcej nie trzeba robić: katalog zespołu otworzy się tu sam, gdy to nastąpi.",
     "This invitation has already been used. Ask your lead for a new one.": "To zaproszenie zostało już użyte. Nowe wystawi lider zespołu.",
     "This invitation has expired. Ask your lead for a new one.": "To zaproszenie wygasło. Nowe wystawi lider zespołu.",
     "Team": "Zespół",
     "the lead": "lidera",
-    "Read this code to the team's lead": "Podaj ten kod liderowi zespołu",
-    "They type it in Studio, and the catalog opens here once they let this desk in.": "Lider wpisze go w Studiu, a po wpuszczeniu stanowiska katalog otworzy się tutaj.",
     "{NAME}, asked at {TIME}": "{NAME}, prośba z {TIME}",
     "Cancel the request": "Wycofaj prośbę",
     "The lead turned the request down": "Lider zespołu odrzucił prośbę",
@@ -9820,12 +9776,6 @@ What is typed here stays in this browser.`;
     "This desk stays with the key it already follows, and the catalogs on it stay as they are. Tell the team's lead about it.": "Stanowisko zostaje przy kluczu, za którym już podąża, a katalogi na nim zostają bez zmian. Proszę powiedzieć o tym liderowi zespołu.",
     "While this desk was switched off, the team moved to a new key and its keys were secured anew, so this desk cannot open what comes next.": "Gdy to stanowisko było wyłączone, zespół przeszedł pod nowy klucz, a jego klucze zabezpieczono od nowa, więc stanowisko nie otworzy tego, co przychodzi teraz.",
     "It sends nothing new to the team, and everything on this computer stays as it is. To join, a new invitation from the team's lead is needed.": "Nie wysyła niczego nowego do zespołu, a wszystko na tym komputerze zostaje bez zmian. Aby dołączyć, potrzebne jest nowe zaproszenie od lidera zespołu.",
-    "This team now works from a shared folder. The team's lead can say which one; once it is open here with Open a folder, everything carries on as before.": "Ten zespół pracuje teraz ze wspólnego folderu. Lider zespołu może wskazać, z którego; gdy zostanie on otwarty tutaj przez Otwórz folder, wszystko będzie działać jak dotąd.",
-    "Open a folder": "Otwórz folder",
-    "That folder holds no files of this team, so nothing was changed. The team's lead can say which folder it is.": "W tym folderze nie ma plików tego zespołu, więc nic nie zmieniono. Lider zespołu może wskazać właściwy folder.",
-    "The team file in that folder is not signed by this team's lead, so nothing was changed. Tell the team's lead about it.": "Plik zespołu w tym folderze nie jest podpisany przez lidera tego zespołu, więc nic nie zmieniono. Proszę powiedzieć o tym liderowi zespołu.",
-    "The team file in that folder is older than the one this desk holds, so nothing was changed. The team's lead can say which folder is the current one.": "Plik zespołu w tym folderze jest starszy niż ten, który ma to stanowisko, więc nic nie zmieniono. Lider zespołu może wskazać aktualny folder.",
-    "Choose the team's shared folder": "Wybierz wspólny folder zespołu",
     "Studio's signing key": "Klucz podpisu Studia",
     "A desk's key": "Klucz stanowiska",
     "Catalog files in {FOLDER} appear here: load one from anywhere else, or put it in the folder.": "Tu pojawią się pliki katalogów z {FOLDER}: wystarczy wczytać plik z innego miejsca albo umieścić go w tym folderze.",
@@ -18321,10 +18271,8 @@ What is typed here stays in this browser.`;
     noteCatalogCopy: () => noteCatalogCopy,
     onContentChanged: () => onContentChanged,
     onJoinPainted: () => onJoinPainted,
-    openJoinPaste: () => openJoinPaste,
     openTeamBubble: () => openTeamBubble,
     paintJoin: () => paintJoin,
-    pickMovedFolder: () => pickMovedFolder,
     relayDesk: () => relayDesk,
     relayElsewhereNote: () => relayElsewhereNote,
     shareDropItem: () => shareDropItem,
@@ -18349,15 +18297,10 @@ What is typed here stays in this browser.`;
   var joinShut = "";
   var joinMode = "";
   var joinOffer = null;
-  var joinBlob = "";
   var joinRead = "";
-  var joinTyped = "";
   var joinDoubt = "";
   var joinWhy = "";
-  var askWhy = "";
-  var askPlatform = "";
   var joinLinkSaid = null;
-  var joinReads = 0;
   var lapseUp = "";
   var lapseDismissed = /* @__PURE__ */ new Set();
   var joinGate = null;
@@ -18387,8 +18330,6 @@ What is typed here stays in this browser.`;
     if (inv.kind === "link" && inv.offer) {
       joinOffer = Object.assign({}, inv.offer);
       joinRead = "link";
-      joinBlob = "";
-      joinTyped = "";
       joinWhy = "";
       joinLinkSaid = null;
       joinMode = "confirm";
@@ -18399,11 +18340,6 @@ What is typed here stays in this browser.`;
       joinWhy = "link";
       joinMode = "refused";
       paintJoin();
-    } else if (inv.kind === "paste" && inv.text) {
-      const sent = String(inv.text), n = ++joinReads;
-      joinMode = "paste";
-      joinBlob = sent;
-      joinAsk("read", sent, "", "", (v) => readTook(v, n, sent));
     }
   }
   var contentNow = null;
@@ -18485,16 +18421,11 @@ What is typed here stays in this browser.`;
     const h = eHost();
     return !!h && typeof h.teamJoin === "function";
   }
-  function deskPlatform() {
-    const h = eHost();
-    const p = h && h.platform || askPlatform || typeof process !== "undefined" && process.platform || "";
-    return String(p).toLowerCase();
-  }
-  function joinAsk(op, file, name, check, before) {
+  function joinAsk(op, file, name, before) {
     if (!eHasJoin()) return Promise.resolve(null);
     let asked;
     try {
-      asked = Promise.resolve(eHost().teamJoin(op, file || "", name || "", check || ""));
+      asked = Promise.resolve(eHost().teamJoin(op, file || "", name || ""));
     } catch (e) {
       asked = Promise.reject(e);
     }
@@ -18508,23 +18439,13 @@ What is typed here stays in this browser.`;
   function dropInvite() {
     joinMode = "";
     joinOffer = null;
-    joinBlob = "";
     joinRead = "";
-    joinTyped = "";
     joinWhy = "";
     joinLinkSaid = null;
     joinDoubt = "";
-    joinReads++;
-  }
-  function typedOk() {
-    const want = joinOffer ? joinOffer.code : "";
-    return /^[0-9]{5}$/.test(want) && joinTyped.replace(/\s+/g, "") === want;
-  }
-  function typedWrong() {
-    return joinTyped.replace(/\s+/g, "").length >= 5 && !typedOk();
   }
   function inviteHeld() {
-    return { mode: joinMode, draft: joinBlob, read: joinRead, typed: joinTyped, offer: joinOffer ? Object.assign({}, joinOffer) : null };
+    return { mode: joinMode, read: joinRead, offer: joinOffer ? Object.assign({}, joinOffer) : null };
   }
   function joinStands() {
     if (joinMode !== "") return true;
@@ -18585,39 +18506,6 @@ What is typed here stays in this browser.`;
     const fours = print ? leadKeyText(print) : "";
     return fours && String(tip).indexOf(fours) >= 0 ? String(tip).split(fours).map(esc).join(keySignHtml(kind, print)) : null;
   }
-  function readTook(v, n, sent) {
-    if (n !== joinReads || joinMode !== "paste") return false;
-    const o = v && typeof v === "object" ? v.offer : null;
-    if (o && typeof o.relay === "string" && o.relay) {
-      joinOffer = { lead: String(o.lead || ""), team: String(o.team || ""), relay: String(o.relay), code: "", left: String(o.left || "") };
-      joinRead = sent;
-      joinBlob = "";
-      joinTyped = "";
-      joinWhy = "";
-      joinMode = "confirm";
-    } else if (o && typeof o.folder === "string") {
-      joinOffer = {
-        folder: String(o.folder),
-        lead: String(o.lead || ""),
-        code: String(o.code || ""),
-        host: String(o.host || ""),
-        cloud: String(o.cloud || ""),
-        local: o.local === true,
-        left: String(o.left || ""),
-        relay: String(o.relay || ""),
-        team: String(o.team || ""),
-        how: String(o.how || ""),
-        why: String(o.why || ""),
-        kind: String(o.kind || "")
-      };
-      joinRead = sent;
-      joinBlob = "";
-      joinTyped = "";
-      joinWhy = "";
-      joinMode = "confirm";
-    } else refuseInvite(v);
-    return true;
-  }
   function yesTook(v, sent) {
     if (joinRead !== sent) return false;
     if (v && typeof v === "object" && v.canceled) return false;
@@ -18636,7 +18524,6 @@ What is typed here stays in this browser.`;
     const row2 = {
       file: String(j.file || ""),
       state: String(j.state || ""),
-      code: String(j.code || ""),
       asked: +j.asked || 0,
       name: String(j.name || ""),
       team: String(j.team || "")
@@ -18932,7 +18819,6 @@ What is typed here stays in this browser.`;
         const keptApart = Array.isArray(l.keptApart) ? l.keptApart.filter((f) => typeof f === "string" && f && f.length <= 200).map(String).slice(0, 3) : [];
         if (keptApart.length) row2.keptApart = keptApart;
         if (keptApart.length && Number.isSafeInteger(l.keptApartMore) && l.keptApartMore > 0) row2.keptApartMore = l.keptApartMore;
-        if (l.needsFolder === true) row2.needsFolder = true;
         if (l.awaitsEdition === true) row2.awaitsEdition = true;
         if (typeof l.reading === "string" && l.reading) row2.reading = String(l.reading);
         return row2;
@@ -18998,17 +18884,9 @@ What is typed here stays in this browser.`;
       }
       if (s.share.off === true) joinNow.share.off = true;
     }
-    const hadAskWhy = askWhy;
-    if (s.askRefused || s.refused === "no-identity" || s.refused === "folder-not-answering" || s.refused === "folder-not-writable") {
-      askWhy = s.askRefused || s.refused;
-      if (s.platform) askPlatform = String(s.platform);
-    } else if (s.join) {
-      askWhy = "";
-      askPlatform = "";
-    }
     const offer = s.offer;
     if (offer && offer.link === true && typeof offer.relay === "string" && offer.relay) {
-      const heldOffer = { lead: String(offer.lead || ""), team: String(offer.team || ""), relay: String(offer.relay), link: true, code: "", left: String(offer.left || "") };
+      const heldOffer = { lead: String(offer.lead || ""), team: String(offer.team || ""), relay: String(offer.relay), link: true, left: String(offer.left || "") };
       if (joinDoorHolds()) {
         pendingInvite = { kind: "link", offer: heldOffer };
         whenJoinDoorOpens(replayPendingInvite);
@@ -19017,15 +18895,13 @@ What is typed here stays in this browser.`;
       joinOffer = heldOffer;
       joinShut = "";
       joinRead = "link";
-      joinBlob = "";
-      joinTyped = "";
       joinWhy = "";
       joinLinkSaid = null;
       joinMode = "confirm";
       paintJoin();
       return joinNow;
     }
-    if (changed === true || JSON.stringify(joinNow) !== was || askWhy !== hadAskWhy) paintJoin();
+    if (changed === true || JSON.stringify(joinNow) !== was) paintJoin();
     if (JSON.stringify(joinNow) !== was || s.joined && s.joined.file) teamContent();
     return joinNow;
   }
@@ -19063,17 +18939,6 @@ What is typed here stays in this browser.`;
     const d = new Date(ms || Date.now());
     return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
   }
-  function joinCodeHtml(code) {
-    return code ? '<div class="e-join-code"><span>' + esc(code.slice(0, 3)) + "</span><span>" + esc(code.slice(3)) + "</span></div>" : '<div class="e-join-code e-join-wait" aria-hidden="true"><span><i></i><i></i><i></i></span><span><i></i><i></i><i></i></span></div>';
-  }
-  function pastedText() {
-    try {
-      const el = document.querySelector("[data-join-paste]");
-      if (el && typeof el.value === "string") return el.value;
-    } catch (e) {
-    }
-    return joinBlob;
-  }
   function repaintJoin() {
     if (wholeThingEmpty()) {
       closeJoinBubble();
@@ -19087,33 +18952,12 @@ What is typed here stays in this browser.`;
     dropInvite();
     repaintJoin();
   }
-  function openJoinPaste() {
-    if (!teamCanJoin() || joinDoorHolds()) return;
-    dropInvite();
-    joinMode = "paste";
-    repaintJoin();
-  }
   function joinDisclosure() {
     return '<div class="e-join-meta">' + esc(t("Once this desk joins, the team's lead can see the catalogs it uses, their content included, and this desk's changes to them. The lead's Studio can take a copy of any of them at any time, without asking here: of a team catalog, one the lead publishes to the team, sealed for the team; of a personal catalog, any other on this desk, sealed for the lead alone. A personal catalog can be marked Private in the Library, under Catalog & data; the lead then sees nothing of it, not even that it is used. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses unless that catalog is Private, and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, none of them from a Private catalog, and Studio shows them in the team's totals.")) + "</div>";
   }
-  function joinKindWord(kind) {
-    return kind === "onedrive" ? t("OneDrive") : kind === "onedrive-business" ? t("OneDrive for Business") : kind === "dropbox" ? t("Dropbox") : kind === "gdrive" ? t("Google Drive") : kind === "mapped" ? t("a mapped network drive") : t("a shared network folder");
-  }
-  function joinWhere(o) {
-    if (!o) return "";
-    const host = o.host ? t("This folder is on the computer {HOST}.").split("{HOST}").join(o.host) : "";
-    const cloud = o.cloud === "sharepoint" ? t("This folder is a SharePoint library that OneDrive keeps in sync.") : o.cloud === "onedrive" ? t("OneDrive keeps this folder in sync.") : o.cloud === "dropbox" ? t("Dropbox keeps this folder in sync.") : o.cloud === "gdrive" ? t("Google Drive keeps this folder in sync.") : o.local ? t("Teammates on other computers read this folder only if it is shared with them.") : "";
-    return [host, cloud].filter(Boolean).join(" ");
-  }
   function joinInviteParts() {
-    if (joinMode === "paste") return {
-      title: t("Join a team"),
-      line: t("Paste the invitation from the team's lead."),
-      body: '<textarea class="e-join-paste" data-join-paste spellcheck="false" autocomplete="off" aria-label="' + esc(t("Paste the invitation from the team's lead.")) + '">' + esc(joinBlob) + "</textarea>" + joinDisclosure(),
-      acts: [["read", t("Continue")], ["back", t("Cancel")]]
-    };
     if (joinMode === "confirm" && joinOffer) {
-      const o = joinOffer, ask2 = t("Ask the team's lead for this invitation's check code, and type its five digits here.");
+      const o = joinOffer;
       const title = o.left ? t("This desk left this team on {DATE}. Join it again?").split("{DATE}").join(leftDay(o.left)) : t("Join this team?");
       if (o.relay) {
         const line = t("{LEAD} invites this desk to join the team through {HOST}.").split("{LEAD}").join(o.lead).split("{HOST}").join(o.relay);
@@ -19126,14 +18970,6 @@ What is typed here stays in this browser.`;
           acts: [["invite", t("Join this team"), false], ["back", t("Cancel")]]
         };
       }
-      const absentSentence = t("The team's folder is kept somewhere this computer does not have: {KIND}. The path below is the one from the lead's computer, so it may not open here. Once this computer has it too, starting Etiuda again and then opening the invitation finds the folder.").split("{KIND}").join(joinKindWord(o.kind));
-      const absent = o.why === "absent" ? '<div class="e-join-meta">' + esc(absentSentence) + "</div>" : "";
-      return {
-        title,
-        line: joinWhere(o),
-        body: absent + '<div class="e-join-meta">' + esc(t("Folder: {FOLDER}").split("{FOLDER}").join(o.folder)) + '</div><div class="e-join-meta">' + esc(t("Lead: {NAME}").split("{NAME}").join(o.lead)) + '</div><div class="e-join-ask">' + esc(ask2) + '</div><div class="e-join-why">' + esc(t("Only the real invitation gives this code, so it confirms the invitation comes from the team's own lead.")) + '</div><input type="text" class="e-join-check" data-join-check maxlength="5" inputmode="numeric" spellcheck="false" autocomplete="off" aria-label="' + esc(t("Check")) + '" value="' + esc(joinTyped) + '"><div class="e-join-ask e-join-miss" data-join-miss' + (typedWrong() ? "" : " hidden") + ">" + esc(t("This code does not match this invitation. Ask the lead again before joining.")) + "</div>" + joinDisclosure(),
-        acts: [["invite", t("Join this team"), !typedOk()], ["back", t("Cancel")]]
-      };
     }
     if (joinMode === "refused" && joinWhy === "link" && joinLinkSaid) {
       const said = uiLang() === "pl" && joinLinkSaid.pl ? joinLinkSaid.pl : joinLinkSaid.en;
@@ -19141,7 +18977,7 @@ What is typed here stays in this browser.`;
     }
     if (joinMode === "refused") return {
       title: t("Join a team"),
-      line: joinWhy === "relay-mirror" ? t("Etiuda could not make its own copy of the team's files on this computer, so nothing was written. Once the disk has room and Etiuda may write in its folder, Join again; the invitation still works.") : joinWhy === "folder-not-writable" ? t("This computer can only read the team's folder, and joining needs permission to write there. Once that is granted, Join again; the invitation still works.") : joinWhy === "silent" ? t("This folder could not be reached, so nothing was written.") : joinWhy === "pinned" ? t("This invitation names a team this desk already knows, but with a different lead's key. It was not used, and nothing changed. Tell the team's lead about it.") : joinWhy === "barred" ? t("This invitation names a team whose lead was forgotten on this desk. It was not used, and nothing changed. To join, ask from the team's catalog instead.") : joinWhy === "foreign" ? t("This folder holds another team, or the same team under a different lead's key, so nothing was written. Tell the team's lead about it.") : joinWhy === "unreadable" ? t("The team file in this folder could not be read, so this desk did not join and nothing was written. Let the team's lead know, so they can check the folder.") : joinWhy === "check" ? t("This code does not match this invitation. Ask the lead again before joining.") : joinWhy === "policy" ? t("The organisation's IT sets this desk's team, so invitations are turned off.") : joinWhy === "waiting" ? t("This invitation waits until Etiuda can read what the organisation's IT set for this computer. Nothing is lost: it can be used again then.") : t("This invitation cannot be read, so nothing was changed."),
+      line: joinWhy === "relay-mirror" ? t("Etiuda could not make its own copy of the team's files on this computer, so nothing was written. Once the disk has room and Etiuda may write in its folder, Join again; the invitation still works.") : joinWhy === "silent" ? t("This folder could not be reached, so nothing was written.") : joinWhy === "pinned" ? t("This invitation names a team this desk already knows, but with a different lead's key. It was not used, and nothing changed. Tell the team's lead about it.") : joinWhy === "barred" ? t("This invitation names a team whose lead was forgotten on this desk. It was not used, and nothing changed. To join, the team's lead sends a new invitation.") : joinWhy === "policy" ? t("The organisation's IT sets this desk's team, so invitations are turned off.") : joinWhy === "waiting" ? t("This invitation waits until Etiuda can read what the organisation's IT set for this computer. Nothing is lost: it can be used again then.") : t("This invitation cannot be read, so nothing was changed."),
       body: "",
       acts: [["back", t("Cancel")]]
     };
@@ -19220,7 +19056,7 @@ What is typed here stays in this browser.`;
       if (j.invite.open !== true) relayWait = t("Waiting for the team's lead to let this desk in. Nothing more is needed here: the team's catalog opens here by itself once it is.");
       return {
         title: t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
-        line: j.paused ? t("The team's lead cannot let anyone in for now, as the lead's licence is paused. Nothing needs doing here: once the licence is active again, this desk is let in by itself.") : j.invite.relay || j.invite.wrapped ? relayWait : t("Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead."),
+        line: j.paused ? t("The team's lead cannot let anyone in for now, as the lead's licence is paused. Nothing needs doing here: once the licence is active again, this desk is let in by itself.") : j.invite.relay || j.invite.wrapped ? relayWait : t("Waiting for the team's lead to let this desk in. Nothing more is needed here."),
         body: meta,
         acts: [["cancel", t("Cancel the request")]]
       };
@@ -19244,12 +19080,6 @@ What is typed here stays in this browser.`;
       body: '<div class="e-join-meta">' + esc(t("Lead: {NAME}").split("{NAME}").join(String(j.invite.lead || "").trim() || t("the lead"))) + '</div><div class="e-join-meta">' + esc(t("Team: {TEAM}").split("{TEAM}").join(j.team)) + '</div><div class="e-join-meta">' + esc(t("Relay: {HOST}").split("{HOST}").join(j.invite.relay)) + "</div>",
       acts: [["cancel", t("Cancel the request")], ["load", t("Load another catalog file")]]
     };
-    if (j && j.state === "code") return {
-      title: t("Read this code to the team's lead"),
-      line: t("They type it in Studio, and the catalog opens here once they let this desk in."),
-      body: joinCodeHtml(j.code) + meta,
-      acts: [["cancel", t("Cancel the request")]]
-    };
     if (j && j.state === "refused") {
       if (j.invite) return { title: t("The lead turned the request down"), line: t("To join, a new invitation from the team's lead is needed."), body: meta, acts: [["cancel", t("Cancel the request")], ["load", t("Load another catalog file")]] };
       return {
@@ -19260,13 +19090,12 @@ What is typed here stays in this browser.`;
       };
     }
     if (j) return {
-      title: t("Waiting for the lead to open the request"),
-      line: j.paused ? t("The team's lead cannot let anyone in for now, as the lead's licence is paused. Nothing needs doing here: once the licence is active again, this desk is let in by itself.") : t("The code to read to them appears here as soon as they do."),
-      body: joinCodeHtml("") + meta,
+      title: t("Join a team"),
+      line: j.paused ? t("The team's lead cannot let anyone in for now, as the lead's licence is paused. Nothing needs doing here: once the licence is active again, this desk is let in by itself.") : t("Waiting for the team's lead to let this desk in. Nothing more is needed here."),
+      body: meta,
       acts: [["cancel", t("Cancel the request")]]
     };
-    const ask2 = '<div class="e-join-meta">' + esc(t("Asks as {NAME}, the name in Settings.").split("{NAME}").join(who)) + "</div>" + joinDisclosure();
-    const acts = [["ask", t("Ask to join")], ["load", t("Load another catalog file")]];
+    const acts = [["load", t("Load another catalog file")]];
     const gone = s ? (joinNow && joinNow.leads || []).filter((x) => x.team === s.team && x.removed)[0] : null;
     if (gone) {
       const title = gone.lead ? t("{LEAD}'s team no longer includes this desk").split("{LEAD}").join(gone.lead) : t("The team no longer includes this desk");
@@ -19275,50 +19104,29 @@ What is typed here stays in this browser.`;
       if (hushLine) return {
         title,
         line: t("The relay says this desk is no longer on the team, so nothing new reaches it. The catalogs on it stay as they are. Once the team's lead lets this desk in again, the catalog opens here by itself."),
-        body: ask2,
+        body: "",
         acts
       };
-      return { title, line: t("Once the team's lead lets this desk in again, the catalog opens here by itself."), body: ask2, acts };
+      return { title, line: t("Once the team's lead lets this desk in again, the catalog opens here by itself."), body: "", acts };
     }
-    let line = t("Once the team's lead lets this desk in, the catalog opens here by itself.");
-    if (askWhy === "no-identity") {
-      const p = deskPlatform();
-      line = p === "win32" ? t("Ask to join works once this computer's secure storage can keep this desk's own key, which it cannot just now; on Windows, signing in with a person's own account, not a service account or a temporary profile, usually does it. Then press Ask to join again.") : p === "darwin" ? t("Ask to join works once this computer's secure storage can keep this desk's own key, which it cannot just now; on macOS, allowing Etiuda to use the Keychain when asked usually does it. Then press Ask to join again.") : t("Ask to join works once this computer's secure storage can keep this desk's own key, which it cannot just now; on Linux, unlocking the system keyring usually does it. Then press Ask to join again.");
-    } else if (askWhy === "folder-not-answering")
-      line = t("Ask to join again once the team's folder can be reached; just now it does not answer from this computer, so nothing was written.");
-    else if (askWhy === "folder-not-writable")
-      line = t("Whoever manages the team's folder can let this computer write in it, which the request needs; until then nothing was written here. After that, press Ask to join again.");
+    const line = t("This catalog belongs to a team. Once the team's lead has invited this desk and it has joined, the catalog opens here by itself.");
     return {
       title: t("{FILE} is sealed for its team").split("{FILE}").join(s ? s.file : ""),
       line,
-      body: ask2,
+      body: "",
       acts
     };
   }
   function joinAct(act) {
     const j = joinNow && joinNow.join, s = joinNow && joinNow.sealed;
-    if (joinDoorHolds() && (act === "invite" || act === "ask" || act === "join")) return Promise.resolve(null);
-    if (act === "join") return Promise.resolve(openJoinPaste());
+    if (joinDoorHolds() && (act === "invite" || act === "ask")) return Promise.resolve(null);
     if (act === "back") {
       if (joinOffer && joinOffer.link || joinMode === "refused" && joinWhy === "link")
-        return joinAsk("link-no", "", "", "", () => {
+        return joinAsk("link-no", "", "", () => {
           dropInvite();
           return true;
         });
       return Promise.resolve(clearJoinAsk());
-    }
-    if (act === "read") {
-      const sent = pastedText();
-      if (joinDoorHolds()) {
-        if (String(sent || "").trim()) {
-          pendingInvite = { kind: "paste", text: String(sent) };
-          whenJoinDoorOpens(replayPendingInvite);
-        }
-        return Promise.resolve(null);
-      }
-      const n = ++joinReads;
-      joinBlob = sent;
-      return joinAsk("read", sent, "", "", (v) => readTook(v, n, sent));
     }
     if (act === "invite") {
       if (joinMode !== "confirm" || !joinOffer) return Promise.resolve(null);
@@ -19332,10 +19140,8 @@ What is typed here stays in this browser.`;
         else teamContent();
         return v;
       };
-      if (joinOffer.link) return joinAsk("link", "", agentName(), "", (v) => yesTook(v, "link")).then(afterJoin);
-      if (!joinRead || !joinOffer.relay && !typedOk()) return Promise.resolve(null);
-      const sent = joinRead;
-      return joinAsk("invite", sent, agentName(), joinOffer.relay ? "" : joinTyped, (v) => yesTook(v, sent)).then(afterJoin);
+      if (joinOffer.link) return joinAsk("link", "", agentName(), (v) => yesTook(v, "link")).then(afterJoin);
+      return Promise.resolve(null);
     }
     if (act === "ask") {
       const askTeam = String(j && j.team || s && s.team || "");
@@ -19379,21 +19185,10 @@ What is typed here stays in this browser.`;
     const p = joinParts();
     return '<div class="empty e-join"><div class="e-join-t">' + ICON_LOCK + esc(p.title) + "</div><p>" + esc(p.line) + "</p>" + p.body + '<div class="e-join-acts">' + p.acts.map((a) => '<button type="button" class="btn' + (a[3] ? " " + a[3] : "") + '" data-join="' + a[0] + '"' + (a[2] ? " disabled" : "") + ">" + esc(a[1]) + "</button>").join("") + "</div></div>";
   }
-  function followCheck(root, el) {
-    joinTyped = String(el.value || "");
-    if (!root || typeof root.querySelector !== "function") return;
-    const yes = root.querySelector('[data-join="invite"]'), miss = root.querySelector("[data-join-miss]");
-    if (yes) yes.disabled = !typedOk();
-    if (miss) miss.hidden = !typedWrong();
-  }
   function wireTeamJoinEmpty(root) {
     if (!root) return;
-    root.querySelectorAll("[data-join], [data-join-paste], [data-join-check]").forEach((el) => {
-      if (el.hasAttribute && el.hasAttribute("data-join-paste")) el.oninput = () => {
-        joinBlob = String(el.value || "");
-      };
-      else if (el.hasAttribute && el.hasAttribute("data-join-check")) el.oninput = () => followCheck(root, el);
-      else if (el.getAttribute && el.getAttribute("data-join")) el.onclick = () => joinAct(el.getAttribute("data-join"));
+    root.querySelectorAll("[data-join]").forEach((el) => {
+      if (el.getAttribute && el.getAttribute("data-join")) el.onclick = () => joinAct(el.getAttribute("data-join"));
     });
   }
   var bubbleClosers = /* @__PURE__ */ new Map();
@@ -19492,17 +19287,7 @@ What is typed here stays in this browser.`;
       if (p.lead) joinAsk("seen", p.lead);
       if (link) joinAsk("link-no");
     };
-    wrap.querySelectorAll("[data-join], [data-join-paste], [data-join-check]").forEach((el) => {
-      if (el.hasAttribute("data-join-paste")) {
-        el.oninput = () => {
-          joinBlob = String(el.value || "");
-        };
-        return;
-      }
-      if (el.hasAttribute("data-join-check")) {
-        el.oninput = () => followCheck(wrap, el);
-        return;
-      }
+    wrap.querySelectorAll("[data-join]").forEach((el) => {
       const act = el.getAttribute("data-join");
       el.onclick = () => {
         if (act === "hide") return hide();
@@ -19566,23 +19351,6 @@ What is typed here stays in this browser.`;
       teamContent();
       if (typeof then === "function") then();
       return v;
-    });
-  }
-  function pickMovedFolder(team, then) {
-    team = String(team || "");
-    if (!team || !eHasJoin()) return Promise.resolve(null);
-    return ePickCatalogFolder(t("Choose the team's shared folder")).then((dir) => {
-      if (!dir) return null;
-      let asked;
-      try {
-        asked = Promise.resolve(eHost().teamJoin("pick-moved-folder", team, dir));
-      } catch (e) {
-        asked = Promise.reject(e);
-      }
-      return asked.then((r) => joinAsk("state").then(() => {
-        if (typeof then === "function") then();
-        return r;
-      }), () => null);
     });
   }
   function teamShareState() {
@@ -42400,9 +42168,8 @@ What is typed here stays in this browser.`;
     });
     if (l.relayElsewhere) notes.push(relayElsewhereNote(l));
     if (l.folderHeld) notes.push(folderHeldNote(l));
-    if (l.needsFolder) notes.push(t("This team now works from a shared folder. The team's lead can say which one; once it is open here with Open a folder, everything carries on as before."));
     if (l.reading) notes.push(l.reading);
-    return '<div class="set-row"><div class="set-label">' + esc(l.lead ? t("{LEAD}'s team").split("{LEAD}").join(l.lead) : t("Team")) + notes.filter(Boolean).map((n) => typeof n === "object" ? '<small title="' + esc(n.tip) + '">' + esc(n.text) + "</small>" : "<small>" + esc(n) + "</small>").join("") + '</div><div class="set-ctl"><span class="e-lead-key">' + keySignHtml("studio", l.print) + "</span>" + (l.needsFolder ? '<button type="button" class="btn" data-team-pick-folder="' + esc(l.team) + '">' + esc(t("Open a folder")) + "</button>" : "") + (l.policy || l.waiting ? "" : '<button type="button" class="btn danger" data-leave-team="' + esc(l.team) + '">' + esc(t("Leave this team")) + "</button>") + "</div></div>";
+    return '<div class="set-row"><div class="set-label">' + esc(l.lead ? t("{LEAD}'s team").split("{LEAD}").join(l.lead) : t("Team")) + notes.filter(Boolean).map((n) => typeof n === "object" ? '<small title="' + esc(n.tip) + '">' + esc(n.text) + "</small>" : "<small>" + esc(n) + "</small>").join("") + '</div><div class="set-ctl"><span class="e-lead-key">' + keySignHtml("studio", l.print) + "</span>" + (l.policy || l.waiting ? "" : '<button type="button" class="btn danger" data-leave-team="' + esc(l.team) + '">' + esc(t("Leave this team")) + "</button>") + "</div></div>";
   }
   var leaveHold = "";
   function leaveThisTeam(team, from) {
@@ -42427,11 +42194,6 @@ What is typed here stays in this browser.`;
   function wireTeamRows(box) {
     box.querySelectorAll("[data-leave-team]").forEach((b) => {
       b.onclick = () => leaveThisTeam(b.getAttribute("data-leave-team"), originOf(b));
-    });
-    box.querySelectorAll("[data-team-pick-folder]").forEach((b) => {
-      b.onclick = () => pickMovedFolder(b.getAttribute("data-team-pick-folder"), () => {
-        if (document.getElementById("setBody")) paintSettings();
-      });
     });
   }
   function seg2(name, opts, cur, fixed) {

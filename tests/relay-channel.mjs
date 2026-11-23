@@ -63,7 +63,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 578 - 18 + 3; /* fold 129: 533 at the merge base + 45 (fold 128's join link key, and the channel's no older replace, same and cross epoch) - 18 retired with the folder team + 3 asserted again on a relay team (P4's own count, its line in d8d8a5ae) */
+const EXPECTED = 578 - 18 + 3 - 2 + 1; /* fold 129: 533 at the merge base + 45 (fold 128's join link key, and the channel's no older replace, same and cross epoch) - 18 retired with the folder team + 3 asserted again on a relay team (P4's own count, its line in d8d8a5ae) - 2 retired with the check code and the folder invitation (P2: 964b, 923e) + 1 asserted again on a relay team (P1: 939f, the lead's folder-channel team file refused; 939g keeps its place) */
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -1721,7 +1721,7 @@ if (deskOn()) try {
   const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
   const EXPOSE = ["sealCatalog", "wrapTeamKey", "readCatalog", "catalogFolder", "relayRun", "relayHere", "heedTeam", "relayProbe", "relayProbeNext",
     "readSpanText", "spanDocument", "spanGenuine", "pinnedLead", "createWindow", "folderSyncerRun",
-    "signedSha", "catalogDocIn", "noteHanded", "writeInUse", "inUseCatalogId", "pickEdition", "catalogRead"];
+    "signedSha", "catalogDocIn", "noteHanded", "writeInUse", "inUseCatalogId", "pickEdition", "catalogRead", "acceptLink"];
   const noop = () => {};
   const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
   /* Chromium with no proxy configured answers DIRECT, so a desk's socket goes straight to the relay: proxy-net treats a lookup
@@ -1985,21 +1985,8 @@ if (deskOn()) try {
       + ", wrap " + (keptY && keptY.wrap ? "kept" : "absent") + ", secret " + (secretKept ? "kept" : "absent"));
 
   
-  const codePlant = await liftDesk("plant:relay-code", async text => {
-      const invP = await relayInviteOn(RT2, TEAM2);
-      const ud = path.join(LAB, "join-plant-" + hex(4));
-      fs.mkdirSync(ud, { recursive: true });
-      fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: path.join(LAB, "join-plant-share"), eUiLang: "en" } }), "utf8");
-      fs.mkdirSync(path.join(LAB, "join-plant-share"), { recursive: true });
-      const Dp = loadFrom(text, ud);
-      const refused = await Dp.ask("etiuda:team-join", "invite", invP.text, "Desk Nine", "");
-      return !!(refused && refused.refused === "check");
-    });
-
-  
-  check(codePlant.turned && codePlant.back,
-      "964b lifting plant:relay-code refuses a relay yes that carries no check code, and the product file is never written: "
-      + codePlant.detail + ", sha " + (codePlant.back ? "restored" : "differs"));
+  /* RETIRED, P2 (no check code is asked of a yes): 964b, "lifting plant:relay-code refuses a relay yes that carries no check code, and the product file is never written". The shell has no check code and names no refusal for one (tests/folder-join-gone.mjs fjg2), and the plant left with the line it lifted. 964a above holds that yes asks for none. */
+  retire(true, "964b lifting plant:relay-code refuses a relay yes that carries no check code, and the product file is never written");
 
 
   /* Slice 3, item 5: the wrap's team key reads a catalog before the lead admits this desk, on its own relay team so the
@@ -4555,7 +4542,8 @@ if (deskOn()) try {
         const nameBytes = sha(fs.readFileSync(mainFile));
         const liftedNamed = dropLine("plant:c6-named")(mainNow);
         const ln = liftedNamed === null ? null : await heldJoin(liftedNamed, "plant-held", false);
-        check(!!ln && ln.asked && !heldOk(ln) && sha(fs.readFileSync(mainFile)) === nameBytes,
+        /* RETIRED, P2: 923e lifted the plant of 923c and 923d, which hold a folder invitation taken through the share (retired above); no such invitation is taken, so the lift has nothing to redden. */
+        retire(!!ln && ln.asked && !heldOk(ln) && sha(fs.readFileSync(mainFile)) === nameBytes,
           "923e lifting plant:c6-named reddens 923c, and the product file is never written: " + (ln ? heldTold(ln) : "plant line absent"));
         const liftedFresh = swapText("plant:c6-fresh", "raised && ", "")(mainNow);
         const lf = liftedFresh === null ? null : await heldJoin(liftedFresh, "plant-named", true);
@@ -6840,11 +6828,12 @@ if (deskOn()) try {
       await s.stop();
     }
   }
-  /* 939f, finding 3 (1): the lead moves the team to a shared folder, filled with its team file at a higher rev naming a folder
-     channel, and puts the same file up to the relay. The desk's catalog folder before joining is that folder, so the move
-     finds it there. */
-  async function toFolder(tag, app, ceiling) {
-    const out = { synced: false, folder: "", shown: "", channel: "" };
+  /* 939f, finding 3 (1), as it stands with the move to a shared folder removed: the lead puts the team file up at a higher rev naming a folder
+     channel, and the same file in its own mirror and in the folder the desk's catalog folder was before joining. The relay's channel judges a
+     team file by its pin, and a file that does not name this relay is no file of this team (plant:team-own), so the desk refuses it at the door
+     and stays on the relay. What is read back is the desk's mirror, its catalog folder and its team channel after a few rounds of catching up. */
+  async function toFolder(tag, app) {
+    const out = { synced: false, folder: "", channel: "", mirrorRev: null, mirrorChannel: "" };
     const s = await relayDeskScene(tag, app);
     try {
       out.synced = !!s.synced;
@@ -6854,19 +6843,12 @@ if (deskOn()) try {
       put(s.share, "board.ec", read(s.sMirror, "board.ec"));
       put(s.sMirror, C.TEAM_NAME, moved);
       await s.studio.kick(); await s.studio.idle();
-      /* A folder team is read through the mirror its syncer keeps of the shared folder. */
-      const folderMirror = path.join(s.ud, "folder-mirror", s.team);
-      const look = () => {
-        const here = s.Dk.api.catalogFolder(), env = s.Dk.envelope();
-        out.folder = here === folderMirror ? "the folder team's mirror" : here === s.mirror ? "the relay's mirror" : String(here);
-        const shown = (env.teamShown || {})[s.team] || {};
-        out.shown = shown.folder === s.share && !shown.relay ? "the shared folder" : shown.relay ? "the relay" : String(shown.folder);
-        const ch = (env.teamChannel || {})[s.team];
-        out.channel = ch ? ch.kind : "none";
-        return out.folder === "the folder team's mirror" && out.shown === "the shared folder" && out.channel !== "relay";
-      };
-      await until(async () => { await s.pump(); return look(); }, ceiling || 30000);
-      out.ok = look();
+      for (let i = 0; i < 4; i++) await s.pump();
+      const here = s.Dk.api.catalogFolder(), env = s.Dk.envelope();
+      out.folder = here === s.mirror ? "the relay's mirror" : String(here);
+      const ch = (env.teamChannel || {})[s.team];
+      out.channel = ch ? ch.kind : "none";
+      try { const d = JSON.parse(read(s.mirror, C.TEAM_NAME)); out.mirrorRev = d.rev; out.mirrorChannel = (d.channel && d.channel.kind) || "none"; } catch { out.mirrorRev = null; }
       return out;
     } finally {
       await s.stop();
@@ -7347,13 +7329,13 @@ if (deskOn()) try {
         + " puts its files up under the old key and says nothing, and the product file is never written: " + zc.detail + ", sha "
         + (zc.back ? "restored" : "differs"));
       const f = await run(toFolder, "939f");
-      /* RETIRED, P1 (a relay team's move to a shared folder is removed): the check holds the move to a folder, which is no longer followed; retired with P4 and not left red. It said what its sentence below says. */
-      retire(!!f.x && f.x.ok === true,
-        "939f a relay desk receives its team's move to a shared folder through catchUp and takes the folder: "
-        + (f.x ? "synced " + f.x.synced + ", catalog folder " + f.x.folder + ", the team shown in " + f.x.shown + ", team channel " + f.x.channel : "")
+      check(!!f.x && f.x.synced && f.x.folder === "the relay's mirror" && f.x.channel === "relay" && f.x.mirrorRev === 2 && f.x.mirrorChannel === "relay",
+        "939f a relay desk whose lead puts up a team file at a higher rev naming a shared folder refuses it as wrong-team and stays on the relay: its mirror's team file stays at rev 2 and names"
+        + " the relay, its catalog folder stays the relay's mirror and its team channel stays the relay (it was: the desk takes the folder): "
+        + (f.x ? "synced " + f.x.synced + ", catalog folder " + f.x.folder + ", team channel " + f.x.channel + ", mirror team file rev " + f.x.mirrorRev + " channel " + f.x.mirrorChannel : "")
         + (f.err ? ", " + f.err : ""));
-      const g = await liftApp("plant:relay-to-folder", async app => { const x = await toFolder("939g", app, 8000); return x.synced && x.folder === "the relay's mirror" && x.channel === "relay"; });
-      check(g.turned && g.back, "939g lifting plant:relay-to-folder refuses the move as wrong-team, so the desk stays on the relay, and the product"
+      const g = await liftApp("plant:team-own", async app => { const x = await toFolder("939g", app); return x.synced && x.mirrorRev === 3 && x.mirrorChannel === "folder"; });
+      check(g.turned && g.back, "939g lifting plant:team-own lets the lead's folder-channel team file into the desk's mirror, where 939f refuses it, and the product"
         + " file is never written: " + g.detail + ", sha " + (g.back ? "restored" : "differs"));
       const h = await run(forkOnRelay, "939h");
       check(!!h.x && h.x.ok === true,
@@ -7491,16 +7473,16 @@ if (deskOn()) try {
       out.synced = !!s.synced;
       if (!out.synced) return out;
       const ops = [];
-      let pasted = { value: "" };
+      let took = () => {};
       document.documentElement = document.documentElement || {};
       document.body = document.body || { classList: { contains: () => false, toggle() {}, add() {}, remove() {} }, appendChild: el => el };
       document.querySelectorAll = () => [];
-      document.querySelector = sel => (sel === "[data-join-paste]" ? pasted : null);
+      document.querySelector = () => null;
       document.addEventListener = document.addEventListener || (() => {});
       document.removeEventListener = document.removeEventListener || (() => {});
       window.addEventListener = window.addEventListener || (() => {});
       window.removeEventListener = window.removeEventListener || (() => {});
-      window.E_HOST = { onTeamJoin: () => {}, teamJoin: (op, file, name, four) => { ops.push(op); return s.Dk.ask("etiuda:team-join", op, file, name, four); } };
+      window.E_HOST = { onTeamJoin: fn => { took = fn; }, teamJoin: (op, file, name, four) => { ops.push(op); return s.Dk.ask("etiuda:team-join", op, file, name, four); } };
       const ST = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
       const HK = await import(pathToFileURL(path.join(ROOT, "src", "modules", "hooks.js")).href);
       const AS = await import(pathToFileURL(path.join(ROOT, "src", "modules", "app-state.js")).href);
@@ -7541,15 +7523,16 @@ if (deskOn()) try {
         await wait(50);
         return { asked, first, sent: ops.slice(mark).filter(o => o === "leave" || o === "forget"), after: held() };
       };
-      /* The same team invites the desk again: pasted, read and taken on the page, and admitted by the lead over the relay. */
+      /* The same team invites the desk again: its link opened, confirmed on the page, and the desk admitted by the lead over the relay. */
       const invite = async () => {
         R.clock.now += 1;
         const inv = await relayInviteOn(s.rt, s.team);
         s.invs.push({ id: inv.inv, key: C.inviteSealKey(inv.secret) });
         await s.studio.kick(); await s.studio.idle();
-        M.openJoinPaste();
-        pasted = el({ "data-join-paste": "" }, inv.text);
-        await press("read");
+        /* P2: no paste box; the invitation arrives as the link the lead sends, which the shell offers and the page confirms. */
+        M.wireTeamJoin();
+        const got = s.Dk.api.acceptLink("etiuda:join#" + inv.text.slice("etiuda-join:".length));
+        if (got && got.offer) took({ offer: got.offer });
         const offer = M.inviteHeld();
         const confirm = shownText(M.teamJoinEmptyHtml());
         const r = { offered: !!(offer && offer.offer), again: confirm.indexOf("Join it again?") >= 0, joined: false, card: false };

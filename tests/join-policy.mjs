@@ -1660,13 +1660,12 @@ const PIN_KEEPERS = {
   deskEnvelopeBody: "writes the pins into desk.json", readDesk: "reads them out of it",
   heedTeam: "judges a team file and writes the pin, policy applied by memberHeedUnderPolicy",
   policyLetsInviteGo: "lets a join go at the policy's read", inviteBefore: "keeps what an invitation replaces", undoInvite: "puts it back",
-  takeInvite: "pins at an invitation's yes", takeRelayInvite: "pins at a relay invitation's yes", signinDoorJoin: "pins at a door's press",
+  takeRelayInvite: "pins at a relay invitation's yes", signinDoorJoin: "pins at a door's press",
   forgetLead: "forgets a pin", leadSeen: "marks a pin seen", leadsView: "lists the kept pins as Settings' team rows",
   policyHoldsTeam: "the policy's own hold on a kept pin", inviteSettled: "refuses an invitation against any kept pin",
   signinDoorsShown: "offers no door against any kept pin", teamPinStands: "any kept pin hides the doors",
-  checkInviteRefusal: "ends a join on a refusal its lead signed", leadForPause: "reads a pause, which only stops",
+  leadForPause: "reads a pause, which only stops",
   relayRingAt: "any kept pin on the relay believes no ring", forkChain: "says a fork, trusting nothing",
-  pickMovedFolder: "a moved team's folder",
   storeSetAside: "keeps the floors under kept pins",
 };
 /* Each lists the kept pins to choose among them, so it must take each through pinTrusted: deskRoster the rosters whose desks'
