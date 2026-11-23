@@ -5110,7 +5110,9 @@ function heedTeam() {
     teamSay(used + " names a rev or a channel this desk does not read, so nothing in it is used");
     return;
   }
-  if (channel.kind === "folder") { teamSay(used + " names a shared folder as the team's channel, which this desk does not read, so nothing in it is used"); return; } /* plant:folder-channel-unread */
+  /* A team followed through a relay does not leave it for a file that names a folder: nothing in the file is used. */
+  const onRelay = teamChannel[r.team || doc.id];
+  if (channel.kind === "folder" && onRelay && onRelay.kind === "relay") { teamSay(used + " names a folder as the channel of a team this desk follows on a relay, so nothing in it is used"); return; } /* plant:folder-channel-unread */
   if (teamElsewhere.delete(r.team || doc.id)) sendJoin(theWindow); /* plant:elsewhere-clear */
   const floors = teamRevSeen[r.team] || {}, floor = floors[doc.lead.public];
   if (teamRevRefused(floor, r.epoch, rev)) {
