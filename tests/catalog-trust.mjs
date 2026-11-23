@@ -242,6 +242,8 @@ try {
   let repainted = 0;
   const heldCopy = CAT.parseCatalogFile(JSON.stringify(signed));
   TR.recheckHeldTrust(CAT.parseCatalogFile(JSON.stringify(signed)), heldCopy, () => repainted++);
+  /* The recheck answers through the host's async calls: wait for the repaint (5 s at most), then 200 ms more for a second one. */
+  for (let i = 0; i < 100 && repainted === 0; i++) await new Promise(r => setTimeout(r, 50));
   await new Promise(r => setTimeout(r, 200));
   check(TR.heldCatalogTrust() === V2.V2_SIG_VALID && repainted === 1,
     "2e a ring placed after the catalog was loaded is read at the Library's next paint: "
@@ -382,19 +384,21 @@ try {
 
   /* Two teams on one desk, this folder's team file gone: only the lead pinned for this folder verifies here. A second shell
      with its own handlers, so the plant does not replace the handlers the legs above already hold. */
+  /* MOVED, P3 (no copy of a held team's folder is read): st1a and st1b put the two signed files in the desk's folder-mirror/<team>/,
+     which the shell read in place of the share (heldLocalCopy, gone). The subject is the setting folder's, so the files sit in CF, the
+     folder the setting names, and the held team is the one at that folder. Same ids, same EXPECTED. Old sentence of the fixture: "the
+     two catalogs are the held team's local copy under folder-mirror/<team>/"; new: they are in the catalog folder the desk setting names. */
   {
     const deskWas = fs.readFileSync(DESK, "utf8");
     const pubA = pubHex(pair.publicKey), pubB = pubHex(stranger.publicKey);
     const teamA = "t-" + crypto.randomBytes(8).toString("hex");
     const teamB = "t-" + crypto.randomBytes(8).toString("hex");
     const otherFolder = path.join(LAB, "other-team");
-    const mirror = path.join(UD, "folder-mirror", teamA);
     fs.mkdirSync(otherFolder, { recursive: true });
-    fs.mkdirSync(mirror, { recursive: true });
     const byA = sign(fixture, pair.privateKey);
     const byB = sign(fixture, stranger.privateKey, "other-lead");
-    fs.writeFileSync(path.join(mirror, "own-lead.ec"), JSON.stringify(byA), "utf8");
-    fs.writeFileSync(path.join(mirror, "other-lead.ec"), JSON.stringify(byB), "utf8");
+    fs.writeFileSync(path.join(CF, "own-lead.ec"), JSON.stringify(byA), "utf8");
+    fs.writeFileSync(path.join(CF, "other-lead.ec"), JSON.stringify(byB), "utf8");
     fs.writeFileSync(DESK, JSON.stringify({
       kind: "etiuda-desk", schema: 1,
       keys: { eCatalogFolder: CF, eUiLang: "en" },

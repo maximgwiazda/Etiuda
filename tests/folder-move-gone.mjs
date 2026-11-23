@@ -256,7 +256,6 @@ async function launch(plan) {
       if (n === "electron") return electron;
       if (n === "node:fs" || n === "fs") return watchedFs;
       if (typeof n === "string" && n.endsWith(path.join("relay", "channel.cjs"))) return mockRelay;
-      if (plan.syncerAt && typeof n === "string" && n.endsWith(path.join("folder", "syncer.cjs"))) return nodeRequire(plan.syncerAt);
       return nodeRequire(beside(n));
     },
     SHELL,
