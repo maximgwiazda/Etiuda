@@ -39,7 +39,7 @@ import { syncEmptyMark } from "./empty-mark.js";
 import { closeNotePane } from "./note-pane.js";
 import { cards, intentIdxs, setShown, shown, cats, setPendingScrollHit, putEntrySel, lang, entrySel, pendingScrollHit, semiKind, cardCounts, wholeThingEmpty } from "./app-state.js";
 import { hooks } from "./hooks.js";
-import { teamJoinShown, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, teamCanJoin } from "./team-join.js";
+import { teamJoinShown, teamJoinEmptyHtml, wireTeamJoinEmpty, teamCanJoin } from "./team-join.js";
 import { mixCards, scheduleSearchRank } from "./search-meaning.js";
 // The render pass: filter, order, group, and hand the list the items it should hold. Every
 // surface that changes what is shown ends here, and this is the only writer of `shown`.
@@ -145,8 +145,6 @@ function render(){
     const oneCat=(cats.length===1) ? cats[0] : null;
     list.innerHTML=terms.length
       ? searchMissHtml()
-      /* While the folder team's mirror has no listing yet, the empty desk says so, and not that there is no team. */
-      : (wholeThingEmpty() && teamReadingEmptyHtml()) ? teamReadingEmptyHtml()
       /* A sealed catalog this desk cannot open, or a request to join its team, is what the empty desk says first. */
       : (wholeThingEmpty() && teamJoinShown()) ? teamJoinEmptyHtml()
       : (wholeThingEmpty()

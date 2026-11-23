@@ -163,8 +163,6 @@ function mapListing(v){
                                            leadSigned:!!(f&&f.leadSigned===true), /* plant:listing-lead-mapped */
                                            // The hash of the file's bytes, by which a row's key is kept (catalog-offer.js ecFileTrust).
                                            bytesSha:String(f&&f.bytesSha||""),
-                                           // "taken-back" on this desk's own file where the team's folder has taken its writes back three times.
-                                           fault:String(f&&f.fault||""),
                                            // The copy Etiuda ships, rather than a folder's own file.
                                            builtIn:!!(f&&f.builtIn)}))
                                  .filter(f=>f.name):[];

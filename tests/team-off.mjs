@@ -79,6 +79,7 @@ async function settingsWith(leads, settingsText) {
 }
 
 try {
+  (await import(MOD("storage.js"))).lsSet("eUiLang", "en");
   const none = await settingsWith([]);
   const inTeam = await settingsWith([LEAD]);
 

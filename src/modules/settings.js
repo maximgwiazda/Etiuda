@@ -20,7 +20,7 @@ import { agentName, typeAgentName, agentNameNote, markAgentNameNoteSeen } from "
 import { eHost, E_AI_OFF_KEY, eAiOn, eAiModel, eTellAi, E_SEARCH_AI_OFF_KEY, eSearchOn, eTellSearch } from "./host.js";
 import { armSearch, clearSearchMeaning } from "./search-meaning.js";
 import { hooks } from "./hooks.js";
-import { lapseNote, shareRefusedNotes, keptApartNotes, relayElsewhereNote, folderHeldNote, teamLeads, teamPolicySaid, relayDesk, keySignHtml, forgetTeamLead, onJoinPainted } from "./team-join.js";
+import { lapseNote, keptApartNotes, relayElsewhereNote, folderHeldNote, teamLeads, teamPolicySaid, relayDesk, keySignHtml, forgetTeamLead, onJoinPainted } from "./team-join.js";
 import { pack } from "./pack.js";
 import { openScreenTab, registerScreen, screenOn, clearScreenOn } from "./screen-tabs.js";
 import { openAbout } from "./about.js";
@@ -198,14 +198,12 @@ function teamRowHtml(l,status,bar){
   if(l.head) notes.push(teamHeadNote(l.head)); /* plant:head-show */
   if(l.awaitsEdition) notes.push(t("This desk waits for the team's lead to publish a first edition."));
   if(l.lapse) notes.push(lapseNote(l.lapse)); /* plant:lapse-row */
-  notes.push(...shareRefusedNotes(l)); /* plant:share-refused-shown */
   notes.push(...keptApartNotes(l)); /* plant:kept-apart-shown */
   /* The shell's push socket is down on this network while its asks are answered. */
   if(l.asking) notes.push({text:t("On this network the team's updates arrive about once a minute, not live."),
     tip:t("This network does not let the live connection to the relay through, so Etiuda asks the relay about once a minute instead. Nothing is lost, and nothing needs doing.")});
   if(l.relayElsewhere) notes.push(relayElsewhereNote(l)); /* plant:elsewhere-row */
   if(l.folderHeld) notes.push(folderHeldNote(l)); /* plant:folder-held-note */
-  if(l.reading) notes.push(l.reading);
   return '<div class="set-row"><div class="set-label">'+esc(l.lead?t("{LEAD}'s team").split("{LEAD}").join(l.lead):t("Team"))
     +notes.filter(Boolean).map(n=>typeof n==="object"?'<small title="'+esc(n.tip)+'">'+esc(n.text)+'</small>':'<small>'+esc(n)+'</small>').join("")+'</div><div class="set-ctl">'
     +'<span class="e-lead-key">'+keySignHtml("studio",l.print)+'</span>'
@@ -243,15 +241,17 @@ function seg(name,opts,cur,fixed){
       (o.tip?' title="'+esc(o.tip)+'"':'')+(o.v===cur?' class="on"':'')+'>'+esc(o.t)+'</button>').join("")+
     '</div>';
 }
-function onoff(name,on,tipOn,tipOff){
-  return seg(name,[{v:"off",t:t("Off"),tip:tipOff},{v:"on",t:t("On"),tip:tipOn}],on?"on":"off");
+function onoff(name,on,tipOn,tipOff,fixed){
+  return seg(name,[{v:"off",t:t("Off"),tip:tipOff},{v:"on",t:t("On"),tip:tipOn}],on?"on":"off",fixed);
 }
 /* A row is {key, icon, title, hint, ctl}, or {key, html} where its markup is drawn elsewhere; the search
    reads a row's title and hint, or the words of its markup. */
-function row(key,icon,title,hint,ctl){ return {key, icon, title, hint:hint||"", ctl}; }
+/* `off` marks a row that only works on a team, drawn greyed and inert on a desk with none: the row keeps its box and its stored
+   value, and its title says why. */
+function row(key,icon,title,hint,ctl,off){ return {key, icon, title, hint:hint||"", ctl, off:!!off}; }
 function rowHtml(r){
   if(r.html!=null) return r.html;
-  return '<div class="set-row" data-row="'+esc(r.key)+'">'+sxIcon(r.icon)+'<div class="set-label">'
+  return '<div class="set-row'+(r.off?' team-off':'')+'" data-row="'+esc(r.key)+'"'+(r.off?teamOffTitle():'')+'>'+sxIcon(r.icon)+'<div class="set-label">'
     +(r.dot?'<span class="door-seat-dot" aria-hidden="true"></span>':'')+esc(r.title)
     +(r.hint?'<small>'+esc(r.hint)+'</small>':'')+'</div><div class="set-ctl">'+r.ctl+'</div></div>';
 }
@@ -585,6 +585,9 @@ function keysGroups(){
       +'<button type="button" class="btn" id="setResetKeys">'+esc(t("Reset shortcuts"))+'</button></div>', rows:[]}
   ].filter(Boolean);
 }
+/* Whether this desk is on a team now: a lead row that is not removed. What only works on a team is drawn greyed without one. */
+function deskInTeam(){ return teamLeads().some(l=>l && !l.removed); }
+function teamOffTitle(){ return ' title="'+esc(t("Needs a team"))+'"'; }
 function teamsGroups(){
   /* One row per team this desk trusts a lead for; what the lead sees is said once, on the first team that still lists it,
      and the way back after leaving once, on the first row that offers Leave. */
@@ -781,6 +784,7 @@ function aboutGroups(){
 }
 function notificationsGroups(){
   const h=eHost();
+  const noTeam=!deskInTeam(); /* plant:team-off-notes */
   let masterOn=true;
   if(h && typeof h.trayNotesState==="function"){
     try{ const s=h.trayNotesState(); masterOn=!(s && s.on===false); }catch(e){}
@@ -793,14 +797,15 @@ function notificationsGroups(){
     ]},
     {head:t("Tell me when"), rows:[
       row("noteedition","cards",t("The team's lead publishes a new edition"),"",
-        onoff("noteedition", lsGet("eNotifyEditionOff")!=="1", "", "")),
+        onoff("noteedition", lsGet("eNotifyEditionOff")!=="1", "", "", noTeam), noTeam),
       row("notecatalog","desks",t("A new catalog arrives from the team"),"",
-        onoff("notecatalog", lsGet("eNotifyCatalogOff")!=="1", "", ""))
+        onoff("notecatalog", lsGet("eNotifyCatalogOff")!=="1", "", "", noTeam), noTeam)
     ]}
   ];
 }
 /* Every section in its order, each with the groups it holds now; a section without a row is left out. */
 function settingsSections(){
+  const teamsG=teamsGroups();
   return [
     {id:"account", icon:"user", name:t("Account"), lede:t("Who is signed in on this computer, and your name."), groups:accountGroups()},
     {id:"general", icon:"general", name:t("General"), lede:t("The language, and how Etiuda starts and closes."), groups:generalGroups()},
@@ -808,11 +813,11 @@ function settingsSections(){
     {id:"layout", icon:"layout", name:t("Layout"), lede:t("How the screen is laid out."), groups:layoutGroups()},
     {id:"keys", icon:"keys", name:t("Keyboard shortcuts"), lede:t("Every shortcut, and how to change it."), groups:keysGroups()},
     {id:"notifications", icon:"notifications", name:t("Notifications"), lede:t("What the app tells you, also while its window is closed."), groups:notificationsGroups()},
-    {id:"teams", icon:"teams", name:t("Teams and keys"), lede:t("The team this desk is on, and how its changes reach the team."), groups:teamsGroups()},
+    {id:"teams", icon:"teams", name:t("Teams and keys"), lede:t("The team this desk is on, and how its changes reach the team."), groups:teamsG, off:!teamsG.some(g=>g.rows.length) /* plant:team-off-section */},
     {id:"data", icon:"data", name:t("Data and defaults"), lede:t("Putting settings back, and what the app keeps on this computer."), groups:dataGroups()},
     {id:"about", icon:"about", name:t("About"), lede:t("The version, the licence and the tour."), groups:aboutGroups()},
     {id:"ai", icon:"ai", name:t("AI"), lede:aiLede(), groups:aiGroups()}
-  ].filter(s=>s.groups.some(g=>g.rows.length));
+  ].filter(s=>s.off || s.groups.some(g=>g.rows.length));
 }
 function groupHtml(g){
   return '<div class="sx-group">'+(g.head?'<h3>'+esc(g.head)+'</h3>':'')
@@ -839,14 +844,17 @@ function navOn(){
   return (!sxOn || sxOn==="all") ? "all" : sxOn;
 }
 function settingsNavHtml(on){
-  const btn=(id,icon,name)=>{
+  const btn=(id,icon,name,off)=>{
     const onThis=id===on;
+    /* A section only a team fills stands greyed in the rail on a desk with none, and opens nothing: no data-sx to open it by, out of the tab order. */
+    if(off) return '<button type="button" class="sx-sec team-off" aria-disabled="true" tabindex="-1"'+teamOffTitle()+'>'+sxIcon(icon)+'<span>'+esc(name)+'</span></button>';
     return '<button type="button" class="sx-sec'+(onThis?" on":"")+'" data-sx="'+esc(id)+'"'
       +(onThis?' aria-current="page"':'')+'>'+sxIcon(icon)+'<span>'+esc(name)+'</span></button>';
   };
-  return btn("all","all",t("All settings"))+settingsSections().map(s=>btn(s.id, s.icon, s.name)).join("");
+  return btn("all","all",t("All settings"))+settingsSections().map(s=>btn(s.id, s.icon, s.name, s.off)).join("");
 }
 function sectionBlockHtml(s, link){
+  if(s.off) return '<section class="sx-block team-off" data-sec="'+esc(s.id)+'"><h3'+teamOffTitle()+'>'+esc(s.name)+'</h3></section>';
   const h=link
     ? '<h3><button type="button" data-open="'+esc(s.id)+'" title="'+esc(t("Opens this section alone"))+'">'+esc(s.name)+'</button></h3>'
     : '<h3>'+esc(s.name)+'</h3>';
@@ -900,6 +908,8 @@ function settingsPageHtml(on,query){
   }
   if(!on || on==="all") return onePageHtml();
   const secs=settingsSections(), s=secs.find(x=>x.id===on)||secs[0];
+  if(s.off) return '<a class="sx-crumb sx-back" href="#settings">'+esc(t("All settings"))+'</a><h2 class="team-off"'+teamOffTitle()+'>'+esc(s.name)+'</h2>'
+    +'<p class="lede team-off"'+teamOffTitle()+'>'+esc(s.lede)+'</p>';
   const rows=s.groups.map(groupHtml).join("");
   const body=(s.id==="appearance" || s.id==="layout")
     ? '<div class="sx-look"><div class="sx-lookrows">'+rows+'</div>'+deskLookHtml()+'</div>'

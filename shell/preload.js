@@ -229,10 +229,10 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   historyPut: (sha, file) => ipcRenderer.invoke("etiuda:history-put", String(sha || ""), String(file || "")),
   /* Asking to join the team a sealed catalog in the folder belongs to: "state", "ask" with the file's name and the
      agent's, or "cancel", each answered {sealed, join, joined}; and that answer again whenever it changes. "read" and
-     "invite" carry an invitation's text where the file's name goes, and "invite" the check code the agent typed.
+     "invite" carry an invitation's text where the file's name goes.
      "share-to", "share-inbox", "share-keep" and "share-drop" carry desk-to-desk card sharing on a sealed relay team. */
-  teamJoin: (op, file, name, check) => ipcRenderer.invoke("etiuda:team-join", String(op || ""), String(file || ""), String(name || ""),
-    String(check || "")),
+  teamJoin: (op, file, name, note) => ipcRenderer.invoke("etiuda:team-join", String(op || ""), String(file || ""), String(name || ""),
+    String(note || "")),
   onTeamJoin: (fn) => ipcRenderer.on("etiuda:team-join", (_e, v) => fn(v && typeof v === "object" ? v : {})),
   /* The shell has sent the lead a copy of the catalog in use. The page says so; nothing here asks the agent. */
   onCatalogCopy: (fn) => ipcRenderer.on("etiuda:catalog-copy", (_e, m) => { try { fn({ lead: !!(m && m.lead === true) }); } catch { /* the page has gone */ } }),

@@ -237,7 +237,7 @@ function rawCatalogFolder() {
   const set = deskKeys[CATALOG_FOLDER_KEY];
   return (typeof set === "string" && set.trim()) ? set.trim() : defaultCatalogFolder();
 }
-/* The folder team this desk holds at the folder `setting`, as {team}, or null. */
+/* The team this desk holds at the folder `setting`, as {team}, or null. */
 function heldTeamAt(setting) {
   const s = path.resolve(String(setting || ""));
   for (const t of Object.keys(teamShown)) if (folderHeld(t) && path.resolve(teamShown[t].folder) === s) return { team: t };
@@ -386,7 +386,7 @@ function ecFromArgv(argv) {
   return "";
 }
 /* AN etiuda: LINK IS NOT A FILE. The only argument that is an invitation is etiuda:join# and
-   base64url, handed to inviteRead as etiuda-join: and the same text. A folder invitation, a page
+   base64url, handed to inviteRead as etiuda-join: and the same text. A page
    address, a link wrapped twice and anything longer than 8192 characters are said and dropped,
    and a refusal reads nothing from disk. Nothing joins: the confirm is still the person's yes. */
 const LINK_FORM = "Etiuda cannot read this link, so nothing was opened or sent. The invitation can be pasted in Etiuda instead.";
@@ -1830,7 +1830,7 @@ function copyClear(from, to) {
 }
 /* Temp file then rename, so a failed write never leaves half a file under the name, and a
    refused one leaves no temp file behind it. The temp name is unique per write to prevent collisions
-   on shared folders, fsynced to disk before the rename, and unlinked on every failure path.
+   on network shares, fsynced to disk before the rename, and unlinked on every failure path.
    Throws what stopped it. */
 function writeReplacing(file, text) {
   const tmp = uniqueTempPath(file);
@@ -3752,7 +3752,7 @@ function hopShaOnDisk(id, root) {
   for (const { f: file, desk } of files) {
     let doc = null;
     try { if (fs.statSync(file).size <= BRANCH_TEXT_MAX) doc = catalogDocIn(catalogRead(fs.readFileSync(file, "utf8")).json); } catch { doc = null; }
-    /* The root is the team's shared folder on a folder team, writable by any teammate, so a root file counts only where this desk signed it. */
+    /* The root of a shared catalog folder is writable by anyone with it, so a root file counts only where this desk signed it. */
     if (doc && !deskFileGenuine(doc, desk || (me ? me.id : ""))) doc = null; /* plant:s5-hop-genuine */
     const g = doc && doc.id === id && doc.grew && typeof doc.grew === "object" ? doc.grew : null;
     if (g && String(g.id || "") === root && PIN_RE.test(String(g.sha || ""))) { catalogLineageSha[id] = String(g.sha); return String(g.sha); }
@@ -4410,7 +4410,7 @@ function joinPolicyFacts(text, unread) {
   const bad = [];
   let leadValue = "";
   /* The lead is taken as written whatever its type, so no variable a person sets becomes the key this desk trusts. A team works
-     over the relay only, so a TeamFolder set beside it is not read. */
+     over the relay only. */
   if (lead.set) {
     if ((lead.type === "REG_SZ" || lead.type === "REG_EXPAND_SZ") && policyLeadOk(lead.value)) leadValue = lead.value; /* plant:lead-as-written */
     else bad.push("lead");
@@ -4889,8 +4889,6 @@ function policyLetsInviteGo(named) {
     delete teamPinFrom[j.team];
     teamSeen.delete(j.team);
   }
-  if (typeof inv.folder === "string" && deskKeys[CATALOG_FOLDER_KEY] === inv.folder)
-    deskSetOwn(CATALOG_FOLDER_KEY, typeof inv.was === "string" && inv.was ? inv.was : undefined);
   teamStamp = "";
   persistDeskEnvelope();
   teamSay("the request to join team " + j.team + " made from an invitation is let go, since machine policy names this desk's team");
@@ -5177,28 +5175,6 @@ function heedTeam() {
       changed = true;
     } catch (e) { teamStamp = ""; teamSay("the team key for " + r.team + " could not be kept - " + e.message); }
   }
-  const j = teamJoin;
-  if (j && j.team === r.team && j.invite && !j.refused && j.invite.wrap && !j.invite.relay && doc && Number.isInteger(doc.epoch) && doc.epoch >= 1) {
-    const wrapPath = path.join(root, "invites", j.invite.id + ".wrap.json");
-    let wrapDoc = null;
-    try {
-      if (fs.statSync(wrapPath).size <= 65536) wrapDoc = JSON.parse(fs.readFileSync(wrapPath, "utf8"));
-    } catch {}
-    if (wrapDoc && wrapDoc.epoch === doc.epoch && branchSealable()) {
-      try {
-        const wrapKey = Buffer.from(safeStorage.decryptString(Buffer.from(j.invite.wrap, "base64")), "base64");
-        const opened = RelayChannel().openInviteWrap(wrapKey, { wrap: wrapDoc, teamDoc: doc, teamId: j.team, relayTeamId: "folder", invitationId: j.invite.id });
-        if (opened.ok) {
-          const kept = teamKeys[j.team] || {}, had = !!kept[opened.epoch];
-          kept[opened.epoch] = safeStorage.encryptString(opened.key.toString("base64")).toString("base64");
-          teamKeys[j.team] = kept;
-          if (!had) j.invite.wrapped = (j.invite.wrapped || []).concat(opened.epoch);
-          ecFactsRead.clear();
-          changed = true;
-        }
-      } catch {}
-    }
-  }
   if (changed) persistDeskEnvelope();
   /* A file above every one heeded before, naming this desk with a wrap it opened: never a roster read before the request. */
   const admitted = raised && r.key ? r.team : ""; /* plant:c6-fresh */
@@ -5279,7 +5255,6 @@ function joinedFile(j) {
 function relayOpens(j) {
   const inv = j && j.invite && j.invite.relay;
   let team = inv && inv.withdrawn !== true && inv.withdrawing !== true && j.refused !== true ? String(j.team) : relayCatalogOwed;
-  if (!team && j && j.invite && j.invite.folder && teamKeys[j.team] && Object.keys(teamKeys[j.team]).length && j.refused !== true) team = String(j.team); /* plant:folder-invite-opens */
   if (!team || !pinTrusted(team)) return null;
   if (relayCatalogNamed.has(team)) { if (relayCatalogOwed === team) relayCatalogOwed = ""; return null; }
   const file = relayOpenFile(team);
@@ -5344,7 +5319,7 @@ function sealedOutside() {
   }
   return null;
 }
-/* The request to join is written to the team's folder itself, never a mirror: it is made before this desk has joined. */
+/* The request to join is written in the catalog folder: it is made before this desk has joined. */
 function joinFile() {
   return path.join(catalogFolder(), "desks", branchIdOf(deskBranch.sign.pub), "join.json");
 }
@@ -5862,8 +5837,7 @@ async function driveSeen(records, readdir, ms) {
 }
 /* The invitation a lead hands over: "etiuda-join:" and base64url of the team, the lead, a 128-bit secret and the relay it
    goes through, or the same base64url after Studio's relay invitation link, exactly https://etiuda.dev/join#, read as the
-   same invitation. Null where it is not that shape, and null for an invitation that names a folder: a team is joined over
-   the relay alone, and the shared folder's invitation went with the folder (board 1017 and the removal). */
+   same invitation. Null where it is not that shape: a team is joined over the relay alone (board 1017). */
 function inviteRead(text) {
   let raw = String(text == null ? "" : text).trim();
   const page = "https://etiuda.dev/join#";
@@ -6013,8 +5987,8 @@ function joinRequestDoc(j, reveal) {
   return memberRequestDoc(j, reveal, branchIdentity(false), j && j.invite);
 }
 /* Ask again, the one request a desk still makes of its own accord: a join the relay's withdrawal ended. A desk no longer asks to join
-   a team by a request of its own, whether in a shared folder or at the relay: a team is joined by a link or by an invitation to
-   the person's address (board 1017), so a sealed catalog this desk holds no key for makes none. */
+   a team by a request of its own: a team is joined by a link or by an invitation to the person's address (board 1017), so a sealed
+   catalog this desk holds no key for makes none. */
 function askJoin(file, name) {
   if (deskKeys === undefined) deskKeys = readDesk();
   const w = teamJoin;
@@ -6023,7 +5997,7 @@ function askJoin(file, name) {
   return joinView();
 }
 /* The relay has already accepted this invitation: it spent the token, or the invitation's wrap has given this desk a key.
-   Cancel then withdraws the request at the relay and keeps both. A folder invitation has neither, and still undoes. */
+   Cancel then withdraws the request at the relay and keeps both. */
 function inviteAccepted(j) {
   const inv = j && j.invite && j.invite.relay;
   if (!inv || inv.end) return false;
@@ -6099,8 +6073,8 @@ function cancelJoin() {
   if (j && deskBranch) { try { unlinkOwn(joinFile()); } catch { /* gone already, or the share is away */ } }
   teamJoin = null;
   joinTold = false;
-  /* An invitation, by folder or by relay, changed this team's pin, where it came from, the folder it showed, the channel and the
-     leave record (and a folder invitation the desk's own folder setting), and kept what each was in `before`, with the newest
+  /* An invitation changed this team's pin, where it came from, the folder it showed, the channel and the
+     leave record, and kept what each was in `before`, with the newest
      key the desk held then (`epoch`). Cancelling puts each back as it was while the desk keeps no newer key than that mark: a
      desk that held none goes back off the team, and a member that held the key goes back to the folder and the shown team it
      had, with its pin and its key (921e). A key this invitation's own wrap opened before the lead admitted the desk (marked in
@@ -6148,8 +6122,7 @@ function forgetWrapped(team, inv) {
   ecFactsRead.clear();
 }
 /* An invitation let go before the lead admitted this desk puts back each thing it changed for `team`, deleting where the desk
-   held none, and the watch is told the folder changed. `b` is inviteBefore's, kept in the join, and `inv` the join's invitation:
-   a folder invitation moved the desk's own folder setting to its folder, and that goes back to what it was while it is still there. */
+   held none, and the watch is told the folder changed. `b` is inviteBefore's, kept in the join, and `inv` the join's invitation. */
 function undoInvite(team, b, inv) {
   forgetWrapped(team, inv); /* plant:e4-forget */
   if (b.pin) teamPins[team] = b.pin; else delete teamPins[team];
@@ -6159,7 +6132,6 @@ function undoInvite(team, b, inv) {
   if (kept && kept.kind === "relay") teamChannel[team] = kept; else delete teamChannel[team];
   if (b.left) teamLeft[team] = b.left; else delete teamLeft[team];
   if (b.barred) teamBarred.add(team); else teamBarred.delete(team);
-  if (typeof inv.folder === "string" && deskKeys[CATALOG_FOLDER_KEY] === inv.folder) deskSetOwn(CATALOG_FOLDER_KEY, typeof inv.was === "string" && inv.was ? inv.was : undefined); /* plant:c8-own */
   teamStamp = "";
   relaySoon();
   catalogFolderChanged();
@@ -6328,7 +6300,6 @@ function joinKept(j) {
     && !Object.prototype.hasOwnProperty.call(inv, "secret")
     && !!who && typeof who === "object" && typeof who.keyId === "string" && who.keyId.length > 0 && who.keyId.length <= 80
     && JOIN_HEX_RE.test(String(who.public)) && typeof who.name === "string" && who.name.length <= 120
-    && (inv.folder === undefined || typeof inv.folder === "string") && (inv.was === undefined || typeof inv.was === "string")
     && (inv.pinned === undefined || typeof inv.pinned === "boolean") && (inv.relay === undefined || relayKept(inv.relay))
     && (inv.before === undefined || beforeKept(inv.before)); /* plant:c7-kept */
   return inviteOk ? j : null;
@@ -8701,7 +8672,7 @@ function deskRowOf(file, folder) {
   }
   return { name: path.basename(file), mtime: x.mtime, cards: x.cards, edition: x.edition, macros: x.macros, intents: x.intents, cats: x.cats,
            awaiting: x.awaiting, sample: false, id: x.id, builtIn: false, rev: x.rev, grew: x.grew, sha: x.sha,
-           genuine: true, reached: reached, relay: !!relayHere(), fault: "", desk: { id: folder, name: x.deskName } };
+           genuine: true, reached: reached, relay: !!relayHere(), desk: { id: folder, name: x.deskName } };
 }
 function deskRows() {
   const root = catalogFolder();
@@ -8869,7 +8840,7 @@ let listingSent = "";
 function sendListing(win, force) {
   if (!win || win.isDestroyed() || !folderAnswers(catalogFolder())) return;
   const rows = listingRows();
-  const key = JSON.stringify(rows.map(r => [r.desk ? r.desk.id : r.builtIn ? "~" : "", r.name, r.id, r.rev, r.sha, r.fault || ""]).sort());
+  const key = JSON.stringify(rows.map(r => [r.desk ? r.desk.id : r.builtIn ? "~" : "", r.name, r.id, r.rev, r.sha]).sort());
   try { syncJumpList(); } catch { /* jump list optional */ }
   if (!force && key === listingSent) return;
   listingSent = key;
@@ -9040,7 +9011,7 @@ ipcMain.handle("etiuda:history-list", (e) => (fromEngine(e) ? historyView() : []
 ipcMain.handle("etiuda:history-read", (e, sha, file) => (fromEngine(e) ? historyOpen(sha, file) : null));
 ipcMain.handle("etiuda:history-put", (e, sha, file) => (fromEngine(e) ? historyPutBack(sha, file) : { ok: false }));
 // "seen", "forget", "leave", "lapse-seen", "fork-seen" and "stranded-seen" name a team, "lapse-seen" with the step its notice showed, "read" and "invite" carry an invitation's text, and the others name a file; "invite"
-// adds the check code the agent typed, which only a folder invitation needs, and "leads" answers the pinned leads alone. "held" is a link waiting here,
+// "leads" answers the pinned leads alone. "held" is a link waiting here,
 // "link" is the yes to that link and "link-no" lets it go. The link's text stays in this process.
 function shareActiveContext() {
   const here = relayHere();
@@ -13179,7 +13150,6 @@ const SHELL_WORDS = {
         restart: "Restart", close: "Close Etiuda", wait: "Wait",
         relayElsewhere: "The team file of {TEAM} names a relay this Etiuda does not use, so this desk does not follow it: it keeps its team, its catalog and its connection as they were, and sends nothing there. If the team moves back, nothing is needed; otherwise a new invitation from the team's lead is.",
         teamOfLead: "{LEAD}'s team", teamUnnamed: "Team",
-        stillReading: "Etiuda is still reading the team's shared folder, so the catalog is not open yet. Once that is done, Etiuda offers the catalog in a window of its own, and loading it from there opens it.",
         trayOpen: "Open Etiuda",
         trayReplies: "Quick replies",
         trayNotesOn: "Notifications: on",
@@ -13202,7 +13172,6 @@ const SHELL_WORDS = {
         hung: "Etiuda nie odpowiada.", restart: "Uruchom ponownie", close: "Zamknij Etiudę", wait: "Czekaj",
         relayElsewhere: "{TEAM} wskazuje w swoim pliku przekaźnik, z którego ta Etiuda nie korzysta, więc to stanowisko za nim nie podąża: zachowuje zespół, katalog i połączenie bez zmian i niczego tam nie wysyła. Jeśli zespół wróci na poprzedni przekaźnik, nic nie trzeba robić; w przeciwnym razie potrzebne jest nowe zaproszenie od lidera zespołu.",
         teamOfLead: "Zespół osoby {LEAD}", teamUnnamed: "Zespół",
-        stillReading: "Etiuda jeszcze wczytuje wspólny folder zespołu, więc katalog nie jest na razie otwarty. Gdy wczytywanie dobiegnie końca, Etiuda zaproponuje katalog w osobnym oknie; wystarczy go stamtąd wczytać, aby się otworzył.",
         trayOpen: "Otwórz Etiudę",
         trayReplies: "Szybkie odpowiedzi",
         trayNotesOn: "Powiadomienia: wł.",

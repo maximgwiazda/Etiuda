@@ -286,7 +286,7 @@ function v2RingRead(src){
   });
   return out;
 }
-/* THE TEAM FILE, one per shared folder beside the catalogs: written and signed by the lead's Studio, naming the catalogs it
+/* THE TEAM FILE, one per team beside the catalogs: written and signed by the lead's Studio, naming the catalogs it
    covers, the lead's key, whether the team's catalogs are sealed, the team key's epoch, and the roster of desks the lead has
    met, an admitted desk's carrying its wrap of the team key. `team` is null where the file is absent or unusable, with a line
    saying why; an unusable roster entry, wrap or recovery copy is dropped and said, and the rest stands. Fields this build

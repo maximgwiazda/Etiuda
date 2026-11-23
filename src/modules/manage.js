@@ -1029,7 +1029,7 @@ function mgIntentRow(i,catOf,linked,intentCardsMap){
 }
 /* The Library names the relay only while the catalog open is that relay team's own. The relay's folder is the mirror
    the shell shows for it. Where the relay names no folder, the open catalog is its own unless another team's folder
-   is the one open. A folder team's catalog, and a catalog of no team, keep the folder and Change folder. */
+   is the one open. A team held at a folder keeps the folder and Change folder, as a catalog of no team does. */
 function normCatalogFolder(p){
   return String(p||"").replace(/[\\/]+$/,"").toLowerCase()
 }

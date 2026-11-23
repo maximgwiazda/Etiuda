@@ -4457,10 +4457,6 @@ if (deskOn()) try {
       /* RETIRED, P2 (join by a shared folder is removed, the sizing's piece): the check holds a folder invitation taken, cancelled or finished through the share; no folder is read as a team, so it is retired with P4 and not left red. It said what its sentence below says. */
       retire(red(folderSnap, ["fresh", "ftwice", "fleft"]) && folderSnap.back,
         "921q lifting plant:c8-before, the snapshot a folder invitation takes, reddens 921j, 921k and 921l, and the product file is never written: " + redTold(folderSnap, ["fresh", "ftwice", "fleft"]) + ", sha " + (folderSnap.back ? "restored" : "differs"));
-      const ownSet = await planted(dropLine("plant:c8-own"), ["fresh"]);
-      /* RETIRED, P2 (join by a shared folder is removed, the sizing's piece): the check holds a folder invitation taken, cancelled or finished through the share; no folder is read as a team, so it is retired with P4 and not left red. It said what its sentence below says. */
-      retire(red(ownSet, ["fresh"]) && ownSet.back,
-        "921r lifting plant:c8-own, the folder setting put back, reddens 921j, and the product file is never written: " + redTold(ownSet, ["fresh"]) + ", sha " + (ownSet.back ? "restored" : "differs"));
       const kept = await planted(swapText("plant:c7-kept", "beforeKept(inv.before)", "false"), ["restart"]);
       check(red(kept, ["restart"]) && kept.back,
         "921s lifting plant:c7-kept, so the envelope refuses every snapshot, reddens 921m, and the product file is never written: " + redTold(kept, ["restart"]) + ", sha " + (kept.back ? "restored" : "differs"));

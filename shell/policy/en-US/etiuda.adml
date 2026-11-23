@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <policyDefinitionResources revision="1.0" schemaVersion="1.0" xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
   <displayName>Etiuda</displayName>
-  <description>Team folder, team lead's key, version checks, Etiuda Studio's AI service, and the accounts on a managed computer</description>
+  <description>Team lead's key, version checks, Etiuda Studio's AI service, and the accounts on a managed computer</description>
   <resources>
     <stringTable>
       <string id="SUPPORTED_Etiuda">Etiuda</string>

@@ -164,8 +164,8 @@ module.exports = sellerAddress.sellerConfig(testService.testServiceConfig({
     // because a tile suits a phone and this is a desktop icon. Copied in, never edited in place.
     icon: "shell/etiuda.ico",
     // THE GROUP POLICY TEMPLATE goes beside the program as it stands, resources/policy holding etiuda.admx and its
-    // en-US and pl-PL etiuda.adml, so an administrator who installs a desk has the template that pins its team folder
-    // and its lead's key (sense pass finding 17; tests/join-policy.mjs 19i). Windows only: no other system reads it.
+    // en-US and pl-PL etiuda.adml, so an administrator who installs a desk has the template that pins its lead's key
+    // (sense pass finding 17; tests/join-policy.mjs 19i). Windows only: no other system reads it.
     // The caret helper as a folder of one, not as the file: electron-builder signs what it copies out of a folder and
     // copies a lone file unsigned (tests/sign-all.mjs 1c).
     extraResources: [

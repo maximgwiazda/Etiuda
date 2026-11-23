@@ -1087,7 +1087,7 @@ function emptyDeskWordsTests() {
   /* one drawing of the block from `src`: [its text segments in order, its markup] */
   const drawn = (src, host, lang, canJoin) => {
     const own = { terms: [], list: { innerHTML: "" }, wholeThingEmpty: () => true, esc: s => String(s),
-      ICON_TEAM: "<svg></svg>", teamCanJoin: () => canJoin, teamJoinShown: () => false, teamReadingEmptyHtml: () => "",
+      ICON_TEAM: "<svg></svg>", teamCanJoin: () => canJoin, teamJoinShown: () => false,
       eCatalogFolder: () => host[0], eCatalogFolderShort: () => "X", eFolderHoldsCatalog: () => false, location: { protocol: host[1] },
       t: lang === "pl" ? x => (PL[x] == null ? x : PL[x]) : x => x };
     const scope = new Proxy({}, {
@@ -4290,16 +4290,11 @@ function launchFollowsTests() {
   eq("957c the tour's load step names Load catalog file and no logo, in both forms and both languages",
     got, [["desk", "en", true, true], ["desk", "pl", true, true], ["browser", "en", true, true], ["browser", "pl", true, true]]);
 
-  try {
-    const tj = read("team-join.js");
-    const fn = extractDecl(tj, "function teamReadingLine(") + "\n" + extractDecl(tj, "function teamReadingEmptyHtml(");
-    const sb = { joinNow: { leads: [{ reading: "Reading the team's folder" }] }, esc: s => String(s) };
-    vm.runInNewContext(fn + "\nglobalThis.__h = teamReadingEmptyHtml();", sb);
-    got = [/class="empty empty-desk"/.test(sb.__h), sb.__h.indexOf("Reading the team's folder") > 0, /e-fifth-spot/.test(sb.__h),
-      /\.empty\.empty-desk::before\{content:none\}/.test(tpl), /e-fifth-spot/.test(tpl)];
-  } catch (x) { got = "the lab threw: " + x.message; }
-  eq("957d the reading-folder state draws no .e-fifth-spot, and no rule is left for a spot nothing draws",
-    got, [true, true, false, true, false]);
+  /* MOVED (the folder team's reading line is gone with the folder team): 957d said "the reading-folder state draws no .e-fifth-spot, and no rule is
+     left for a spot nothing draws", over the page's block for that wait. The block is gone, so the sentence is the second half alone. */
+  got = [/\.empty\.empty-desk::before\{content:none\}/.test(tpl), /e-fifth-spot/.test(tpl)];
+  eq("957d no rule is left for a spot nothing draws (.e-fifth-spot), and the empty desk's own spot stays off",
+    got, [true, false]);
 
   try {
     const rules = [...tpl.matchAll(/(^|\n)([^\n{]*:root\.e-still body\.e-launch-out[^\n{]*)\{animation:none\}/g)].map(m => m[2]);
