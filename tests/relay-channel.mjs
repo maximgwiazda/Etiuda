@@ -63,7 +63,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 588;
+const EXPECTED = 591;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -8945,6 +8945,29 @@ async function rmoOnline(mod) {
   await a.ch.stop(); await b.ch.stop(); await dK.ch.stop(); await dX.ch.stop();
   return out;
 }
+/* The empty roster (Claude alpha's decision of 00:36, passed on by Claudius at 04:14): A takes off the last desk, so the new team file
+   names none and no desk is sent a copy; the lead seals it to its own box as one more copy, so B, holding only key 1, still reaches it. */
+async function rmoEmpty(mod) {
+  const w = await rmoTeam(mod, "e"), { K, k1 } = w;
+  const k2 = crypto.randomBytes(32);
+  const a = w.lead("rme-a", new Map([[1, k1]])), b = w.lead("rme-b", new Map([[1, k1]]));
+  put(a.mirror, C.TEAM_NAME, w.docAt(1, 1, k1, [K]));
+  a.ch.start(); await settle(a);
+  b.ch.start(); await settle(b);
+  const dK = w.desk(K, "rme-k");
+  dK.ch.start(); await settle(dK);
+  a.keys.set(2, k2);
+  put(a.mirror, C.TEAM_NAME, w.docAt(2, 2, k2, []));
+  await settle(a);
+  await settle(dK);
+  await settle(b);
+  const out = { bFile: w.teamOf(b.mirror), kFile: w.teamOf(dK.mirror), kKey2: !!dK.held.get(2) };
+  b.keys.set(2, k2);
+  await settle(b);
+  out.stepWithKey = w.inStep(b);
+  await a.ch.stop(); await b.ch.stop(); await dK.ch.stop();
+  return out;
+}
 /* The test architect's pWW, every interleaving that matters: A offline takes X off ("same": epoch 2; "higher": epochs 2 and 3), B
    online takes Y off (epoch 2, its own key), goes up and posts its device list. A reconnects. Its Studio is modelled as the ruling
    has it: a removal is kept as pending until the relay's current team file lacks the person; the key of an epoch this computer
@@ -9022,6 +9045,10 @@ if (partOn("pRmo")) {
     check(o.bPuts >= 1 && o.k && !o.x && o.relayEpoch === 2,
       "rmo1c the other computer then publishes at epoch 2: the relay takes it, the remaining desk reads it and the desk taken off does not: "
       + JSON.stringify({ uploads: o.bPuts, k: o.k, x: o.x, relayEpoch: o.relayEpoch, said: o.bRefused }));
+    const e = await rmoEmpty(C);
+    check(!!e.bFile && e.bFile.epoch === 2 && e.bFile.names === "" && e.stepWithKey === true && !e.kKey2 && !!e.kFile && e.kFile.epoch === 1,
+      "rmo4a the last desk taken off: the new team file names none, and the lead's other computer, holding only key 1, reaches it through the lead's own copy and is in step once it holds its key; the desk taken off takes nothing: "
+      + JSON.stringify(e));
     for (const v of ["same", "higher"]) {
       const x = await rmoDouble(C, v);
       const tag = v === "same" ? "rmo2" : "rmo3";
@@ -9035,6 +9062,13 @@ if (partOn("pRmo")) {
       check(!!x.final.a && x.final.a.names === "K" && x.final.relayEpoch === 3 && x.final.aStep === true && x.read.k && !x.read.x && !x.read.y,
         tag + "c (" + v + ") both removals survive: the first computer, in step, applies its pending removal on top as epoch 3, the relay's file names K alone, and only K reads the next edition: "
         + JSON.stringify({ final: x.final, read: x.read, aEnrol: x.aEnrol, b: x.bFile }));
+    }
+    if (PLANTS_OFF) { skip("rmo4b lifting plant:lead-own-copy sends no copy to the lead's own box"); skip("rmo4c lifting plant:lead-own-open opens no copy at the lead's own box"); }
+    else {
+      const q1 = await liftChannel("plant:lead-own-copy", async mod => { const y = await rmoEmpty(mod); return !!y.bFile && y.bFile.epoch === 1; });
+      check(q1.turned && q1.back, "rmo4b lifting plant:lead-own-copy sends no copy to the lead's own box, so the other computer stays at epoch 1, and the product file is never written: " + q1.detail + ", sha " + (q1.back ? "restored" : "differs"));
+      const q2 = await liftChannel("plant:lead-own-open", async mod => { const y = await rmoEmpty(mod); return !!y.bFile && y.bFile.epoch === 1; });
+      check(q2.turned && q2.back, "rmo4c lifting plant:lead-own-open opens no copy at the lead's own box, so the other computer stays at epoch 1, and the product file is never written: " + q2.detail + ", sha " + (q2.back ? "restored" : "differs"));
     }
     if (PLANTS_OFF) { skip("rmo1d lifting plant:lead-copies leaves the other computer at epoch 1"); skip("rmo2d lifting plant:copy-after-team sends the first computer's copies while its team file is refused"); skip("rmo2e lifting plant:team-fork lets the first computer's set-aside file stand"); }
     else {
