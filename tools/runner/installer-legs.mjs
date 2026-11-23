@@ -1,4 +1,4 @@
-/* THE FOUR INSTALLER LEGS FOR A HOSTED WINDOWS RUNNER, silent switches only, since no page can be clicked there.
+/* THE FOUR INSTALLER LEGS FOR A HOSTED WINDOWS RUNNER, silent switches, bar uninstall-data, which drives the uninstaller's Remove my data page by window messages.
  *
  *   node tools/runner/installer-legs.mjs --out <dir> [all-upgrade] [running-1618] [system-bare] [locked-1618]
  *                                           on a hosted Windows runner only (see THE WALL); no leg named runs all four
@@ -64,9 +64,9 @@ const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const NO_VERDICT = 78;
 const LEG_NAMES = ["all-upgrade", "running-1618", "system-bare", "locked-1618", "all-move", "all-space-d", "system-push", "ext-claimed", "ts-cycle", "ts-uninstall", "shipped-detect", "nonpersistent", "net-hosts",
-  "short-stage", "old-copy-kept", "pre-own-survives", "foreign-folder-refused", "per-user-at-sign-in", "pf-dotdot"];
+  "short-stage", "old-copy-kept", "pre-own-survives", "foreign-folder-refused", "per-user-at-sign-in", "pf-dotdot", "uninstall-data"];
 /* Run only where named: the installer mends' legs (below), kept out of a run that names no leg. */
-const NAMED_ONLY = ["short-stage", "old-copy-kept", "pre-own-survives", "foreign-folder-refused", "per-user-at-sign-in", "pf-dotdot"];
+const NAMED_ONLY = ["short-stage", "old-copy-kept", "pre-own-survives", "foreign-folder-refused", "per-user-at-sign-in", "pf-dotdot", "uninstall-data"];
 let OUT = "";
 const say = (l) => { process.stdout.write(l + "\n"); if (OUT) fs.appendFileSync(path.join(OUT, "legs.txt"), l + "\n"); };
 const refuse = (why) => { say("#legs refused: " + why); process.exit(NO_VERDICT); };
@@ -1690,6 +1690,92 @@ async function perUserAtSignIn(rec) {
 
 /* pf-dotdot (the Program Files D): interactive only. The writable-folder box belongs to the folder page, which a hosted runner cannot
    drive; tests/allusers-folder.mjs and the GetFullPathNameW check read it from the script. */
+/* uninstall-data, the desk's: the uninstaller's own Remove my data page, opened as a person opens it, with no /S, and driven by tools/runner/uninstaller-drive.ps1 -AfterNext
+   (the desk asks on a page of its own, after the welcome), twice over a fresh per-user install with a planted data folder. Ticked: the box is
+   found, Windows names it under its centre, a click ticks it and a second clears it, Tab then Space ticks it, Next is pressed and the uninstaller
+   runs to its end; every planted file of the folder goes, the licence included (the page's note says so; shell/installer.nsh defines
+   ETIUDA_REMOVE_LICENCE_WITH_DATA), and a catalog outside it is untouched. Unticked: the same, the box cleared by keyboard, and the folder reads
+   exactly as it did before. Until this leg nothing pressed the box in the real page: tests/desk-reset.mjs reads the script as text and replays the
+   removal function, and tests/reinstall.js runs the uninstaller silent, which skips the page. The data step names ${APP_PACKAGE_NAME}, the build's own folder (etiuda-qa for this test build); a shipped desk's folder (etiuda) is
+   planted beside it and must come through both passes byte for byte. The leg refuses where either folder already stands. The rectangles are read
+   at this runner's scaling. */
+const UD_PLANTED = ["settings.json", "conversations\\c1.json", "etiuda-license.js", "cards.json", "team\\team.json", "Local State", "Cache\\data_0"];
+async function uninstallData(rec) {
+  const wall = E.windowWallRefusal(WHO);
+  if (wall) throw new NoVerdict("the leg opens the uninstaller's window and the window wall refuses: " + wall[0]);
+  if (!process.env.APPDATA) throw new NoVerdict("APPDATA is not set, so the data folder cannot be named");
+  const data = path.join(process.env.APPDATA, T.packageName), shipped = path.join(process.env.APPDATA, "etiuda");
+  if (data.toLowerCase() === shipped.toLowerCase()) throw new NoVerdict("the test build names the shipped data folder, so no leg can tell the two apart");
+  for (const d of [data, shipped]) if (fs.existsSync(d)) throw new NoVerdict(d + " already stands on this machine; the leg plants there and will not touch a folder it did not make");
+  const catalog = path.join(LAB, "ud-documents", "My catalog.ec");
+  const plant = (rel, root) => { const f = path.join(root || data, rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, "planted " + rel); };
+  rec.after("uninstall", uninstallUser);
+  rec.after("data folders", async () => { let n = 0; for (const d of [data, shipped]) if (fs.existsSync(d)) { fs.rmSync(d, { recursive: true, force: true }); n++; } return n ? "removed what the leg planted: " + n : "none left"; });
+  const pass = async (final) => {
+    const tag = final;
+    const inst = await installUser(rec, NEWER, tag);
+    if (!inst.ok) throw new NoVerdict(tag + ": the test build did not install for this account (exit " + inst.code + ")");
+    const un = exeOf(valueOf(regKey(KU.uninstall), "UninstallString")) || path.join(inst.dir, UNINSTALLER);
+    if (!fs.existsSync(un)) throw new NoVerdict(tag + ": no uninstaller at " + un);
+    fs.rmSync(data, { recursive: true, force: true });
+    for (const d of [data, shipped]) fs.rmSync(d, { recursive: true, force: true });
+    for (const r of UD_PLANTED) { plant(r); plant(r, shipped); }
+    fs.mkdirSync(path.dirname(catalog), { recursive: true }); fs.writeFileSync(catalog, "a person's catalog");
+    const before = manifest(data), beforeShipped = manifest(shipped), catSha = E.sha256(catalog);
+    const jsonOut = path.join(LAB, "drive-" + tag + ".json");
+    const child = spawn(un, ["/currentuser"], { windowsHide: false, stdio: "ignore" });
+    const drove = spawnSync("powershell.exe", PS_HEAD.concat([path.join(ROOT, "tools", "runner", "uninstaller-drive.ps1"),
+      "-Product", PRODUCT, "-Final", final, "-Out", jsonOut, "-AfterNext"]), { encoding: "utf8", windowsHide: true, timeout: 330000 });
+    const gone = await goneWithin(inst.dir, 90);
+    for (const p of procsOf(un)) E.killTree(p.pid);
+    E.killTree(child.pid);
+    let d = {};
+    try { d = JSON.parse(fs.readFileSync(jsonOut, "utf8").replace(/^﻿/, "")); } catch (e) { throw new NoVerdict(tag + ": the driver wrote no readable record (" + oneLine(drove.stderr || drove.stdout) + ")"); }
+    fs.copyFileSync(jsonOut, path.join(OUT, "uninstall-page-" + tag + ".json"));
+    if (d.error) rec.f(tag + "-driver", d.error);
+    rec.f(tag + "-dpi", d.dpi); rec.f(tag + "-ended", d.ended);
+    const bad = [];
+    const px = (c) => c ? [c.left, c.top, c.right, c.bottom].join(",") : "none";
+    rec.f(tag + "-box", px(d.box)); rec.f(tag + "-note", px(d.note));
+    if (!d.box) bad.push("no Remove my data checkbox on the page after Next");
+    else {
+      if (!d.note) bad.push("no note under the box");
+      else if (d.note.right - d.note.left < 200 || d.note.right > d.main.right) bad.push("the note is cut: " + px(d.note) + " in a window ending at " + d.main.right);
+      if (!d.boxIsHit) bad.push("Windows names " + (d.underBoxCentre ? d.underBoxCentre.class + " \"" + String(d.underBoxCentre.text).slice(0, 20) + "\"" : "nothing") + " under the box's centre, not the box");
+      if (d.afterMouse1 !== 1) bad.push("a click on the box left it at " + d.afterMouse1 + ", not ticked");
+      if (d.afterMouse2 !== 0) bad.push("a second click left it at " + d.afterMouse2 + ", not cleared");
+      if (!d.boxHasFocus) bad.push("Tab did not reach the box in " + d.tabsToBox + " presses");
+      if (d.afterSpace1 !== 1) bad.push("Space on the box left it at " + d.afterSpace1 + ", not ticked");
+      if (d.stateAtNext !== (final === "ticked" ? 1 : 0)) bad.push("the box stood at " + d.stateAtNext + " at Next, not " + (final === "ticked" ? 1 : 0));
+    }
+    if (!(gone > 0)) bad.push("the install folder was still there 90 s after Next");
+    const after = manifest(data), diff = manifestDiff(before, after);
+    if (final === "ticked") {
+      const stillThere = UD_PLANTED.filter((r) => fs.existsSync(path.join(data, r)));
+      rec.f(tag + "-planted-left", stillThere.length ? few(stillThere) : 0);
+      if (stillThere.length) bad.push("the note says the desk's data goes and these are still there: " + few(stillThere));
+    } else {
+      rec.f(tag + "-changed", diff.changed.length + diff.gone.length + diff.added.length);
+      if (diff.changed.length || diff.gone.length || diff.added.length) bad.push("with the box cleared the folder still changed: gone " + few(diff.gone) + ", changed " + few(diff.changed) + ", added " + few(diff.added));
+    }
+    const sd = manifestDiff(beforeShipped, manifest(shipped));
+    rec.f(tag + "-shipped-changed", sd.changed.length + sd.gone.length + sd.added.length);
+    if (sd.changed.length || sd.gone.length || sd.added.length) bad.push("the shipped desk's folder beside it was touched: gone " + few(sd.gone) + ", changed " + few(sd.changed) + ", added " + few(sd.added));
+    if (!fs.existsSync(catalog) || E.sha256(catalog) !== catSha) bad.push("the catalog outside the folder was touched");
+    rec.f(tag + "-driver-exit", drove.status);
+    return bad;
+  };
+  const ticked = await pass("ticked");
+  rec.f("ticked-faults", ticked.length);
+  rec.f("between", oneLine(await uninstallUser()));
+  const unticked = await pass("unticked");
+  rec.f("unticked-faults", unticked.length);
+  rec.end(!ticked.length && !unticked.length,
+    !ticked.length && !unticked.length
+      ? "the desk's uninstaller page: the Remove my data box takes a mouse click and Tab with Space; ticked, the planted data and the licence are gone; cleared, nothing in the folder changed; a catalog outside is untouched"
+      : ["ticked: " + ticked.join("; "), "unticked: " + unticked.join("; ")].join(" | "));
+}
+
 async function pfDotdot() {
   throw new NoVerdict("the box for \"C:\\Program Files\\..\\Users\\Public\\Etiuda\" appears only on the folder page, which this runner cannot drive; unreached here");
 }
@@ -1706,7 +1792,7 @@ function record(name) {
 const LEGS = { "all-upgrade": allUpgrade, "running-1618": running1618, "system-bare": systemBare, "locked-1618": locked1618, "all-move": allMove, "all-space-d": allSpaceD,
   "system-push": systemPush, "ext-claimed": extClaimed, "ts-cycle": tsCycle, "ts-uninstall": tsUninstall, "shipped-detect": shippedDetect, "nonpersistent": nonPersistent, "net-hosts": netHosts,
   "short-stage": shortStage, "old-copy-kept": oldCopyKept, "pre-own-survives": preOwnSurvives, "foreign-folder-refused": foreignFolderRefused,
-  "per-user-at-sign-in": perUserAtSignIn, "pf-dotdot": pfDotdot };
+  "per-user-at-sign-in": perUserAtSignIn, "pf-dotdot": pfDotdot, "uninstall-data": uninstallData };
 
 /* The newer setup, built once from this tree under the test identity, as the marker builds it. */
 const early = legPreflight();
