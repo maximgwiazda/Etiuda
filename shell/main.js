@@ -250,6 +250,12 @@ function rawCatalogFolder() {
 /* The local copy of a team held through a shared folder, where the person's catalog folder setting is that team's share and the
    copy holds anything, else "". A folder team no longer syncs, so the copy is what the desk last had: it holds what the share
    does not (an owed file), and it opens with the share out of reach. Never a team's place: the copy is read as a plain folder. */
+/* The folder team this desk holds at the folder `setting`, as {team}, or null. */
+function heldTeamAt(setting) {
+  const s = path.resolve(String(setting || ""));
+  for (const t of Object.keys(teamShown)) if (folderHeld(t) && path.resolve(teamShown[t].folder) === s) return { team: t };
+  return null;
+}
 function heldLocalCopy(setting) {
   const s = path.resolve(String(setting || ""));
   for (const t of Object.keys(teamShown)) {
@@ -901,7 +907,8 @@ function folderLeadPublics() {
     if (pin && doc.lead && pin.keyId === doc.lead.keyId && pin.public === doc.lead.public) return [String(pin.public)];
     return [];
   }
-  const here = folderTeamHere();
+  /* The team this desk holds at this folder (P4: no folder is read as a team, so the team known here is the one held, folderHeld). */
+  const here = heldTeamAt(rawCatalogFolder());
   if (here) { const pin = pinTrusted(here.team); return (pin && typeof pin.public === "string") ? [String(pin.public)] : []; } /* plant:folder-publics-here */
   return all;
 }
