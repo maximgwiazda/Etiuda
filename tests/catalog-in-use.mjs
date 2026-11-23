@@ -631,7 +631,8 @@ try {
     const relayForget = async (name, src) => {
       const ud = path.join(LAB, name);
       fs.mkdirSync(ud, { recursive: true });
-      const RT = crypto.randomBytes(16).toString("hex"), TR = "t-" + crypto.randomBytes(8).toString("hex");
+      const TR = "t-" + crypto.randomBytes(8).toString("hex");
+      const RT = relayChannelOf(TR).rt; /* the token the harness puts a desk on (relayizeDesk replaces a desk.json's own), so the mirror this scene plants is the one the shell holds */
       fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
         keys: { eCatalogFolder: folder(name + "-own"), eUiLang: "en", eAgent: "North desk" },
         teamPins: { [TR]: LEAD }, teamPinFrom: { [TR]: "invite" }, teamShown: { [TR]: { lead: "North lead", relay: "etiuda.dev" } },
