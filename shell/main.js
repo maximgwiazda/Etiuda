@@ -8100,32 +8100,6 @@ function historyOpen(sha, file) {
     return out;
   }
 }
-/* Writes a kept version back over its file in the catalog folder, by the rule at historyFree and only after the bytes it
-   replaces are kept themselves: `replaced` names them, so the page can offer them back. The kept bytes are judged as they
-   are written, whatever the index says of them. A relay mirror is not written: a put-back there would stay on this desk. */
-function historyPutBack(sha, file) {
-  if (relayHere()) return { ok: false };
-  const v = historyFind(sha, file), root = path.resolve(catalogFolder());
-  if (!v || !historyFree(v) || !v.path || path.dirname(v.path) !== root || !/\.ec$/i.test(v.path) || !folderAnswers(catalogFolder())) return { ok: false };
-  try {
-    const text = historyText(v.sha);
-    if (!historyFree(historyFacts(text))) return { ok: false }; /* plant:put-back-bytes */
-    let was = "";
-    try { was = fs.readFileSync(v.path, "utf8"); } catch (e) { if (e.code !== "ENOENT") throw e; }
-    if (was && sha256Hex(Buffer.from(was, "utf8")) === v.sha) return { ok: true, unchanged: true };
-    if (was && !historyFree(historyFacts(was))) return { ok: false };
-    const before = historyKeepFile(v.path);
-    if (!before) return { ok: false };
-    writeReplacing(v.path, text);
-    historyKeep(v.path, text, true);
-    console.log("etiuda: " + v.path + " was put back as this desk kept it");
-    return { ok: true, replaced: before.entry ? before.entry.sha : "" };
-  } catch (e) {
-    console.error("etiuda: " + v.path + " could not be put back - " + e.message);
-    return { ok: false };
-  }
-}
-
 function deskFile() { return path.join(app.getPath("userData"), "desk.json"); }
 function deskBackup(n) { return path.join(app.getPath("userData"), "desk.bak" + n + ".json"); }
 
@@ -9665,7 +9639,6 @@ ipcMain.on("etiuda:branch-reach", (e) => {
    the file it was kept for, and only a pair the history holds is answered. */
 ipcMain.handle("etiuda:history-list", (e) => (fromEngine(e) ? historyView() : []));
 ipcMain.handle("etiuda:history-read", (e, sha, file) => (fromEngine(e) ? historyOpen(sha, file) : null));
-ipcMain.handle("etiuda:history-put", (e, sha, file) => (fromEngine(e) ? historyPutBack(sha, file) : { ok: false }));
 // "seen", "forget", "leave", "lapse-seen", "fork-seen" and "stranded-seen" name a team, "lapse-seen" with the step its notice showed, "read" and "invite" carry an invitation's text, and the others name a file; "invite"
 // adds the check code the agent typed, which only a folder invitation needs, and "leads" answers the pinned leads alone. "held" is a link waiting here,
 // "link" is the yes to that link and "link-no" lets it go. The link's text stays in this process.

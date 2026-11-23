@@ -182,8 +182,8 @@ function showSharedEditGone(){
   if(!had || document.getElementById("eSharedEditGone")) return;
   lsDel("eSharedEdit"); /* plant:shared-gone-once */
   eNotice("eSharedEditGone",
-    t("Changes no longer go into the shared catalog file."), /* words: placeholder */
-    t("Etiuda no longer edits a catalog file in a shared folder: this desk keeps its changes in its own file, and nothing in the shared file was changed or removed. To work with others, ask your team's lead for an invitation."));
+    t("This desk keeps its changes in its own file."),
+    t("The shared catalog file stays as it was: nothing in it was changed or removed, and this desk no longer writes into it. To work on a catalog with others, a team's lead sends an invitation."));
 }
 function showDeskNotices(){
   showDeskNewer();

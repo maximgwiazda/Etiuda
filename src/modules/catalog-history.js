@@ -1,12 +1,11 @@
 /* THE DESK'S EARLIER VERSIONS OF ITS CATALOGS, which the host keeps and this lists, one file at a time. Every version
-   opens on this desk through the offer every route ends in; one the host says may go back is put back in the catalog
-   folder, with an Undo. */
+   opens on this desk through the offer every route ends in; one the host says may go back is put back on this desk, as the
+   catalog in use, and never in the catalog folder: every edit after it goes to this desk's own file. */
 import { eHost, eCatalogFolderShort } from "./host.js";
-import { t, toastRefusal, offerUndo, fileStamp, catalogCountsLine } from "./ui-lang.js";
+import { t, toastRefusal, fileStamp, catalogCountsLine } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { hooks } from "./hooks.js";
-import { originOf } from "./dom.js";
-import { parseCatalogFile, eUnreadableLine, fileReadCode, fileReadLine, editionNameOf, editionLabel, E_CATALOG_KEY } from "./catalog.js";
+import { parseCatalogFile, eUnreadableLine, fileReadCode, fileReadLine, editionNameOf, editionLabel, eCatalogSignature, E_CATALOG_KEY } from "./catalog.js";
 import { activateCatalog } from "./catalog-file.js";
 import { eOfferCatalogDialog, toastIfSameCatalog } from "./catalog-offer.js";
 import { lsSet } from "./storage.js";
@@ -16,7 +15,7 @@ import { markCutText } from "./cut-text.js";
 
 function historyHost(){
   const h=eHost();
-  return h && typeof h.historyList==="function" && typeof h.historyRead==="function" && typeof h.historyPut==="function" ? h : null;
+  return h && typeof h.historyList==="function" && typeof h.historyRead==="function" ? h : null;
 }
 /* The Library's door to this view, which only a host has: a browser keeps no history. */
 function eHasHistory(){ return !!historyHost(); }
@@ -57,7 +56,7 @@ function historyRowHtml(v,key){
     +(v.current?'<span class="ec-tag">'+esc(t("Current"))+'</span>':'')
     +(v.wrote && v.place!=="own"?'<span class="ec-tag">'+esc(t("Saved on this desk"))+'</span>':'')
     +(acts.indexOf("put")>-1?'<button type="button" class="btn" data-eh-put="'+key+'" title="'
-      +esc(t("Put this version back in the catalog folder, in place of the file there now"))+'">'+esc(t("Put back"))+'</button>':'')
+      +esc(t("Use this version on this desk, in place of the catalog in use")) /* words: placeholder */ +'">'+esc(t("Put back"))+'</button>':'')
     +'<button type="button" class="btn icbtn ec-act" data-eh-open="'+key+'" title="'+esc(open)+'" aria-label="'+esc(open)+'">'
       +ICON_LOAD+'</button>'
     +'</div>';
@@ -87,16 +86,15 @@ function historyOpen(v){
     if(!shown) toastIfSameCatalog(c);
   }).catch(()=>{});
 }
-function historyPutBack(v, from){
+function historyPutBack(v){
   const h=historyHost(); if(!h) return;
-  const refuse=()=>toastRefusal(t("{FILE} could not be put back in the catalog folder. The version stays here, ready to try again.").split("{FILE}").join(String(v.name||"")));
-  Promise.resolve(h.historyPut(v.sha,v.path)).then(r=>{
-    if(!r || !r.ok){ refuse(); return; }
-    if(document.getElementById("ehView")) openHistory();
-    if(r.replaced) offerUndo("Version put back",()=>Promise.resolve(h.historyPut(r.replaced,v.path)).then(u=>{
-      if(!u || !u.ok) refuse();
-      else if(document.getElementById("ehView")) openHistory();
-    }), null, from);
+  const refuse=()=>toastRefusal(t("{FILE} could not be put back on this desk. The version stays here, ready to try again.").split("{FILE}").join(String(v.name||""))); /* words: placeholder */
+  Promise.resolve(h.historyRead(v.sha,v.path)).then(got=>{
+    let c=null;
+    try{ c=parseCatalogFile(String(got&&got.text||"")); }catch(e){ refuse(); return; }
+    hooks.openManage(true);
+    lsSet(E_CATALOG_KEY,eCatalogSignature(c));
+    if(activateCatalog(c,{from:String(got.name||v.name||"")})===false) refuse();
   }).catch(refuse);
 }
 /* EARLIER VERSIONS IS A PAGE OF THE LIBRARY'S TAB, painted into the tab's host, and Back returns to the Library's list.
@@ -121,7 +119,7 @@ function openHistory(host){
     if(ehView){
       markCutText(ehView);
       ehView.querySelectorAll("[data-eh-open]").forEach(b=>{ b.onclick=()=>historyOpen(flat[+b.getAttribute("data-eh-open")]); });
-      ehView.querySelectorAll("[data-eh-put]").forEach(b=>{ b.onclick=()=>historyPutBack(flat[+b.getAttribute("data-eh-put")], originOf(b)); });
+      ehView.querySelectorAll("[data-eh-put]").forEach(b=>{ b.onclick=()=>historyPutBack(flat[+b.getAttribute("data-eh-put")]); });
     }
     const back=document.getElementById("ehClose");
     if(back) back.onclick=()=>hooks.openManage();

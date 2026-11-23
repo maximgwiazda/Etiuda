@@ -9442,17 +9442,16 @@ What is typed here stays in this browser.`;
     "Saved copies": "Zapisane kopie",
     "Each catalog file this desk opens or saves leaves a copy here, kept for 30 days.": "Każdy plik katalogu, który to stanowisko otwiera lub zapisuje, zostawia tu kopię, przechowywaną przez 30 dni.",
     "This desk's own file": "Własny plik tego stanowiska",
-    /* words: placeholder */
-    "Changes no longer go into the shared catalog file.": "Zmiany nie trafiają już do wspólnego pliku katalogu.",
-    "Etiuda no longer edits a catalog file in a shared folder: this desk keeps its changes in its own file, and nothing in the shared file was changed or removed. To work with others, ask your team's lead for an invitation.": "Etiuda nie zmienia już plików katalogu we wspólnym folderze: to stanowisko zachowuje zmiany we własnym pliku, a wspólny plik nie został zmieniony ani usunięty. Aby pracować z innymi, wystarczy poprosić lidera zespołu o zaproszenie.",
+    "This desk keeps its changes in its own file.": "To stanowisko zapisuje zmiany we własnym pliku.",
+    "The shared catalog file stays as it was: nothing in it was changed or removed, and this desk no longer writes into it. To work on a catalog with others, a team's lead sends an invitation.": "Wspólny plik katalogu pozostaje taki, jaki był: niczego w nim nie zmieniono ani nie usunięto, a to stanowisko już do niego nie zapisuje. Do wspólnej pracy nad katalogiem potrzebne jest zaproszenie od lidera zespołu.",
     "Current": "Aktualna",
     "Saved on this desk": "Zapisana na tym stanowisku",
     "Open this copy": "Otwórz tę kopię",
     "Put back": "Przywróć",
-    "Put this version back in the catalog folder, in place of the file there now": "Przywraca tę wersję do folderu z plikami katalogów w miejsce obecnego pliku",
+    /* words: placeholder */
+    "Use this version on this desk, in place of the catalog in use": "Używa tej wersji na tym stanowisku, w miejsce katalogu w użyciu",
     "{FILE} as it was on {WHEN}, kept on this desk.": "{FILE} w stanie z {WHEN}, zachowany na tym stanowisku.",
-    "{FILE} could not be put back in the catalog folder. The version stays here, ready to try again.": "Nie udało się przywrócić pliku {FILE} do folderu katalogów. Ta wersja zostaje tutaj i można spróbować ponownie.",
-    "Version put back": "Przywrócono wersję",
+    "{FILE} could not be put back on this desk. The version stays here, ready to try again.": "Nie udało się przywrócić pliku {FILE} na tym stanowisku. Ta wersja zostaje tutaj i można spróbować ponownie.",
     "The catalog file could not be loaded:": "Nie udało się wczytać pliku katalogu:",
     "{FILE} is sealed for its team": "{FILE} jest zapieczętowany dla swojego zespołu",
     "Once the team's lead lets this desk in, the catalog opens here by itself.": "Gdy lider zespołu wpuści to stanowisko, katalog otworzy się tutaj sam.",
@@ -11081,9 +11080,8 @@ What is typed here stays in this browser.`;
     lsDel("eSharedEdit");
     eNotice(
       "eSharedEditGone",
-      t("Changes no longer go into the shared catalog file."),
-      /* words: placeholder */
-      t("Etiuda no longer edits a catalog file in a shared folder: this desk keeps its changes in its own file, and nothing in the shared file was changed or removed. To work with others, ask your team's lead for an invitation.")
+      t("This desk keeps its changes in its own file."),
+      t("The shared catalog file stays as it was: nothing in it was changed or removed, and this desk no longer writes into it. To work on a catalog with others, a team's lead sends an invitation.")
     );
   }
   function showDeskNotices() {
@@ -40333,7 +40331,7 @@ What is typed here stays in this browser.`;
   });
   function historyHost() {
     const h = eHost();
-    return h && typeof h.historyList === "function" && typeof h.historyRead === "function" && typeof h.historyPut === "function" ? h : null;
+    return h && typeof h.historyList === "function" && typeof h.historyRead === "function" ? h : null;
   }
   function eHasHistory() {
     return !!historyHost();
@@ -40369,7 +40367,7 @@ What is typed here stays in this browser.`;
       +v.cards >= 0 ? catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}", +v.cards, +v.macros, +v.intents, +v.cats) : ""
     ].filter(Boolean).map(esc).join(" · ");
     const acts = historyActs(v), open = t("Open this copy");
-    return '<div class="ec-row' + (v.current ? " is-current" : "") + '"><span class="ec-name"><b>' + esc(fileStamp(v.first)) + "</b>" + (meta ? '<small class="ec-meta">' + meta + "</small>" : "") + "</span>" + (v.current ? '<span class="ec-tag">' + esc(t("Current")) + "</span>" : "") + (v.wrote && v.place !== "own" ? '<span class="ec-tag">' + esc(t("Saved on this desk")) + "</span>" : "") + (acts.indexOf("put") > -1 ? '<button type="button" class="btn" data-eh-put="' + key + '" title="' + esc(t("Put this version back in the catalog folder, in place of the file there now")) + '">' + esc(t("Put back")) + "</button>" : "") + '<button type="button" class="btn icbtn ec-act" data-eh-open="' + key + '" title="' + esc(open) + '" aria-label="' + esc(open) + '">' + ICON_LOAD + "</button></div>";
+    return '<div class="ec-row' + (v.current ? " is-current" : "") + '"><span class="ec-name"><b>' + esc(fileStamp(v.first)) + "</b>" + (meta ? '<small class="ec-meta">' + meta + "</small>" : "") + "</span>" + (v.current ? '<span class="ec-tag">' + esc(t("Current")) + "</span>" : "") + (v.wrote && v.place !== "own" ? '<span class="ec-tag">' + esc(t("Saved on this desk")) + "</span>" : "") + (acts.indexOf("put") > -1 ? '<button type="button" class="btn" data-eh-put="' + key + '" title="' + esc(t("Use this version on this desk, in place of the catalog in use")) + '">' + esc(t("Put back")) + "</button>" : "") + '<button type="button" class="btn icbtn ec-act" data-eh-open="' + key + '" title="' + esc(open) + '" aria-label="' + esc(open) + '">' + ICON_LOAD + "</button></div>";
   }
   function historyBodyHtml(groups) {
     if (!groups.length)
@@ -40411,20 +40409,21 @@ What is typed here stays in this browser.`;
     }).catch(() => {
     });
   }
-  function historyPutBack(v, from) {
+  function historyPutBack(v) {
     const h = historyHost();
     if (!h) return;
-    const refuse = () => toastRefusal(t("{FILE} could not be put back in the catalog folder. The version stays here, ready to try again.").split("{FILE}").join(String(v.name || "")));
-    Promise.resolve(h.historyPut(v.sha, v.path)).then((r) => {
-      if (!r || !r.ok) {
+    const refuse = () => toastRefusal(t("{FILE} could not be put back on this desk. The version stays here, ready to try again.").split("{FILE}").join(String(v.name || "")));
+    Promise.resolve(h.historyRead(v.sha, v.path)).then((got) => {
+      let c = null;
+      try {
+        c = parseCatalogFile(String(got && got.text || ""));
+      } catch (e) {
         refuse();
         return;
       }
-      if (document.getElementById("ehView")) openHistory();
-      if (r.replaced) offerUndo("Version put back", () => Promise.resolve(h.historyPut(r.replaced, v.path)).then((u) => {
-        if (!u || !u.ok) refuse();
-        else if (document.getElementById("ehView")) openHistory();
-      }), null, from);
+      hooks.openManage(true);
+      lsSet(E_CATALOG_KEY, eCatalogSignature(c));
+      if (activateCatalog(c, { from: String(got.name || v.name || "") }) === false) refuse();
     }).catch(refuse);
   }
   function openHistory(host) {
@@ -40448,7 +40447,7 @@ What is typed here stays in this browser.`;
           b.onclick = () => historyOpen(flat[+b.getAttribute("data-eh-open")]);
         });
         ehView.querySelectorAll("[data-eh-put]").forEach((b) => {
-          b.onclick = () => historyPutBack(flat[+b.getAttribute("data-eh-put")], originOf(b));
+          b.onclick = () => historyPutBack(flat[+b.getAttribute("data-eh-put")]);
         });
       }
       const back = document.getElementById("ehClose");

@@ -2,8 +2,8 @@
  * and a documents folder of its own in the system's temp, and every catalog invented here. What it holds: a catalog
  * the desk reads or writes is kept once per content, beside desk.json and never in the catalog folder; a colleague's
  * file is not kept; a version stays 30 days after it was last seen, the newest of each file longer, and the cap takes
- * the longest unseen first; the list, the open and the putting back, which a signed or sealed catalog never gets and
- * which never writes over one; and an index that will not read loses nothing. The page's half is the grouping and the
+ * the longest unseen first; the list and the open, and which rows offer a putting back, which a signed or sealed catalog
+ * never gets; the shell writes nothing back into the catalog folder; and an index that will not read loses nothing. The page's half is the grouping and the
  * acts each row offers, imported from src/modules/catalog-history.js.
  *
  *   node tests/catalog-history.mjs      exit code is the number of failed checks, capped at 63
@@ -24,7 +24,7 @@ const nodeRequire = createRequire(import.meta.url);
    for machine policy (tests/reg-stand.cjs; review 09, finding 4). */
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 32 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 3);
+const EXPECTED = 28 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 2);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -265,34 +265,27 @@ try {
   check(!!opened && opened.name === "shop.ec" && opened.text === shop1.trim() && stranger === null,
     "2c an earlier version opens as its own catalog text, and a hash the history never kept for that file answers nothing");
 
-  const put = await A.ask("etiuda:history-put", old ? old.sha : "", SHOP);
-  await tick(5);
-  check(!!put && put.ok === true && fs.readFileSync(SHOP, "utf8") === shop1 && put.replaced === sha(Buffer.from(shop2)) && unzip(put.replaced).length > 0,
-    "2d putting back writes the earlier version over the file byte for byte, and names the bytes it replaced, which are kept");
-  const undo = await A.ask("etiuda:history-put", put ? put.replaced : "", SHOP);
-  check(!!undo && undo.ok === true && fs.readFileSync(SHOP, "utf8") === shop2,
-    "2e and those bytes go back the same way, which is the Undo");
+  /* 2d and 2e RETIRED (a put-back on a plain shared folder leaves the shared file byte for byte; tests/shared-file-gone.mjs nsfe3): 2d said putting back writes
+     the earlier version over the file byte for byte and names the bytes it replaced, 2e that those bytes go back the same way, which was the Undo. A version is
+     put back on this desk by the page now, as the catalog in use, and the shell writes nothing into the catalog folder. */
 
   const SIGNEDF = path.join(FOLDER, "signed.ec"), s1 = catalog("signed", 1, "Lead", SIGNED), s2 = catalog("signed", 2, "Lead again", SIGNED);
   write(SIGNEDF, s1, Date.now() - 50000); await A.ask("etiuda:catalog-files"); await tick(5);
   write(SIGNEDF, s2, Date.now() - 40000); await A.ask("etiuda:catalog-files"); await tick(5);
   const sRows = ((await A.ask("etiuda:history-list")) || []).filter(v => v.path === SIGNEDF);
-  const sPut = await A.ask("etiuda:history-put", sha(Buffer.from(s1)), SIGNEDF);
-  check(sRows.length === 2 && sRows.every(v => v.signed && !v.put) && !!sPut && sPut.ok === false && fs.readFileSync(SIGNEDF, "utf8") === s2,
-    "2f THE CONTROL: a signed catalog's earlier edition opens but never goes back, and asked anyway the file keeps its bytes ("
+  check(sRows.length === 2 && sRows.every(v => v.signed && !v.put) && fs.readFileSync(SIGNEDF, "utf8") === s2,
+    "2f THE CONTROL: a signed catalog's earlier edition opens but is never offered back, and the file keeps its bytes ("
     + sRows.length + " versions)");
 
   const PLAIN = path.join(FOLDER, "plain.ec"), p1 = catalog("plain", 1, "Plain"), p2 = catalog("plain", 2, "Now signed", SIGNED);
   write(PLAIN, p1, Date.now() - 30000); await A.ask("etiuda:catalog-files"); await tick(5);
   write(PLAIN, p2, Date.now() - 20000); await A.ask("etiuda:catalog-files"); await tick(5);
   const pRow = ((await A.ask("etiuda:history-list")) || []).find(v => v.path === PLAIN && v.sha === sha(Buffer.from(p1)));
-  const pPut = await A.ask("etiuda:history-put", sha(Buffer.from(p1)), PLAIN);
-  check(!!pRow && pRow.put === false && !!pPut && pPut.ok === false && fs.readFileSync(PLAIN, "utf8") === p2,
-    "2g an unsigned version is not put back over a file a lead has since signed: the list offers nothing and the file keeps its bytes");
+  check(!!pRow && pRow.put === false && fs.readFileSync(PLAIN, "utf8") === p2,
+    "2g an unsigned version is not offered back for a file a lead has since signed: the list offers nothing and the file keeps its bytes");
 
-  const oPut = await A.ask("etiuda:history-put", sha(Buffer.from(before)), OUT);
-  check(!!oPut && oPut.ok === false && fs.readFileSync(OUT, "utf8") === exported,
-    "2h a version of a file outside the catalog folder is refused, however it is asked: the file there keeps its bytes");
+  /* 2h RETIRED with the shell's put-back: it said a version of a file outside the catalog folder is refused, however it is asked. No shell write is asked now; 2b
+     holds that such a file's rows offer nothing. */
 
   /* ---- sealed: kept as sealed, opened only by a desk holding the key ---------------------------------------------- */
   const TEAM = "t-00112233aabbccdd", key = crypto.randomBytes(32);
@@ -394,46 +387,14 @@ try {
     const before = fs.readFileSync(file, "utf8");
     const list = (await R.ask("etiuda:history-list")) || [];
     const older = list.find(v => v.path === path.resolve(file) && v.sha === sha(Buffer.from(first)));
-    const put = await R.ask("etiuda:history-put", sha(Buffer.from(first)), file);
-    const afterPut = fs.readFileSync(file, "utf8");
-    check(!!here && before === second && !!older && older.put === false && put && put.ok === false && afterPut === second,
-      "15ib a relay desk does not put an earlier version back over a catalog in its mirror, and does not offer one (was 15ib, which held the shared write refused there too, retired with it): "
-      + JSON.stringify({ here: !!here, held: before === second, offered: !!(older && older.put), put: put && put.ok, restored: afterPut === second }));
+    check(!!here && before === second && !!older && older.put === false,
+      "15ib a relay desk does not offer an earlier version back for a catalog in its mirror (was 15ib, which held the shared write and the shell's put-back refused there too, retired with them): "
+      + JSON.stringify({ here: !!here, held: before === second, offered: !!(older && older.put) }));
   }
 
-  /* 2q23 (Grok's review 23, finding 2's second question; its first, the lock a put-back took, retired with the lock, and nsfe3 and nsfe4 of
-     tests/shared-file-gone.mjs hold that a put-back takes none): an index this run did not build, saying a signed copy is free, puts nothing
-     back: the bytes are judged as they are about to be written. */
-  {
-    const B = boot();
-    const older = catalog("shop", 5, "Older one"), current = catalog("shop", 6, "Current one");
-    B.test.keepHist(SHOP, older);
-    write(SHOP, current, Date.now() + 6000);
-    B.test.keepHist(SHOP, current);
-    const signedOld = catalog("shop", 7, "Signed", SIGNED);
-    B.test.keepHist(SHOP, signedOld);
-    const doc = JSON.parse(fs.readFileSync(path.join(HIST, "index.json"), "utf8"));
-    doc.versions.forEach(v => { if (v.sha === sha(Buffer.from(signedOld))) v.signed = ""; });
-    fs.writeFileSync(path.join(HIST, "index.json"), JSON.stringify(doc));
-    const C = boot(), cur = fs.readFileSync(SHOP, "utf8");
-    const forged = await C.ask("etiuda:history-put", sha(Buffer.from(signedOld)), SHOP);
-    check(!!forged && forged.ok === false && fs.readFileSync(SHOP, "utf8") === cur,
-      "2q23 an index row saying a signed copy is free puts nothing back: the stored bytes are judged before they are written: " + JSON.stringify(forged));
-    if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP 2r23 lifting plant:put-back-bytes (ETIUDA_PLANTS=off)");
-    else {
-      const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8").split("\n");
-      const lifted = (tag, line) => { const at = MAIN.map((l, i) => (l.indexOf(tag) >= 0 ? i : -1)).filter(i => i >= 0); if (at.length !== 1) return null; const c = MAIN.slice(); c[at[0]] = line; return c.join("\n"); };
-      const noBytes = lifted("plant:put-back-bytes", "");
-      let turned = null;
-      if (noBytes) {
-        const Bt = boot(noBytes), before = fs.readFileSync(SHOP, "utf8");
-        const r2 = await Bt.ask("etiuda:history-put", sha(Buffer.from(signedOld)), SHOP);
-        turned = { signedWritten: !!r2 && r2.ok === true && fs.readFileSync(SHOP, "utf8") !== before };
-      }
-      check(!!turned && turned.signedWritten,
-        "2r23 lifting plant:put-back-bytes puts the signed copy back: " + JSON.stringify(turned));
-    }
-  }
+  /* 2q23 and 2r23 RETIRED with the shell's put-back (Grok's review 23, finding 2): 2q23 held that an index row saying a signed copy is free puts nothing back,
+     the stored bytes judged as they are about to be written, and 2r23 lifted plant:put-back-bytes to show it. The shell writes no version back now; the page
+     puts back only a version the list offers, and the list's rule is held by 2f and 2g. */
 
   /* ---- the page's half ------------------------------------------------------------------------------------------------ */
   globalThis.window = globalThis.window || {};

@@ -397,7 +397,7 @@ Dom.grabDom();
 const SAVED = [{ path: "C:/lab/invented.ec", sha: "aa11", name: "invented.ec", place: "other", dir: "C:/lab",
   first: 1767225600000, rev: 3, cards: 2, macros: 2, intents: 1, cats: 1, put: false, current: true }];
 const SEATED = seatedView(); /* the desk gate: a desk without a seat does not work, so this host holds a seat */
-window.E_HOST = { historyList: () => SAVED, historyRead: () => null, historyPut: () => ({ ok: false }), catalogFolder: "C:/lab/catalogs", signinState: () => SEATED };
+window.E_HOST = { historyList: () => SAVED, historyRead: () => null, catalogFolder: "C:/lab/catalogs", signinState: () => SEATED };
 
 const $ = s => doc.querySelector(s);
 const host = () => $("#screenHost");

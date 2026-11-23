@@ -1,6 +1,6 @@
 /* No desk writes into a catalog file on a share, in bare node: shell/main.js under a stubbed electron over a catalog folder,
  * and shell/preload.js over a stub of the bridge. A desk reads the catalog folder, works from its own copy, and holds no lock
- * beside a catalog, no shared read or write for the page, and no setting to turn either on. The page's half (the Settings row,
+ * beside a catalog, no shared read, write or put-back for the page, and no setting to turn them on. The page's half (the Settings row,
  * the one notice a desk that had the setting on is given) is held in tests/module-calls.mjs and tests/desk-growth.mjs.
  *
  *   node tests/shared-file-gone.mjs      exit code is the number of failed checks, capped at 63
@@ -127,7 +127,7 @@ try {
   check(main.indexOf("etiuda-lock") < 0 && main.indexOf('file + ".lock"') < 0 && main.indexOf("sharedLock") < 0,
     "nsfe5 shell/main.js names no lock kept beside a catalog and takes none");
 
-  /* nsfe6: the one write into the catalog folder left, the put-back, is the history's own and not the page's shared write. */
+  /* nsfe6: no channel of the shell writes a catalog into the catalog folder on the page's asking. */
   const preload = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
   check(preload.indexOf("etiuda:shared-") < 0 && main.indexOf("etiuda:shared-") < 0 && preload.indexOf("etiuda:history-put") < 0 && main.indexOf("etiuda:history-put") < 0,
     "nsfe6 neither shell file names a shared-read, shared-write or history-put channel");

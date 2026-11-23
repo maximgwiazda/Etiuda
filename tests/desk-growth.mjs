@@ -396,10 +396,10 @@ try {
     S.lsDel("eSharedEdit");
     P.showDeskNotices();
     const sgNever = textOf(byId.eSharedEditGone);
-    check(sgEn.text.indexOf("no longer go into the shared catalog file") >= 0 && sgEn.text.indexOf("Dismiss") >= 0 && sgEn.kept == null,
-      "15sga a desk that had the setting on is told, in English, that changes no longer go into the shared catalog file, and the setting's key is let go: " + sgEn.text.slice(0, 120));
+    check(sgEn.text.indexOf("This desk keeps its changes in its own file.") >= 0 && sgEn.text.indexOf("this desk no longer writes into it") >= 0 && sgEn.text.indexOf("Dismiss") >= 0 && sgEn.kept == null,
+      "15sga a desk that had the setting on is told, in English, that it keeps its changes in its own file and no longer writes into the shared one, and the setting's key is let go: " + sgEn.text.slice(0, 120));
     check(sgEn.text !== "" && sgOnce === "", "15sgb the notice is shown, and the next boot says nothing: it is said once (" + sgOnce.slice(0, 60) + ")");
-    check(sgPl.text.indexOf("Zmiany nie trafiają już do wspólnego pliku katalogu") >= 0 && sgPl.text.indexOf("Zamknij") >= 0 && sgPl.text.indexOf("no longer go") < 0,
+    check(sgPl.text.indexOf("To stanowisko zapisuje zmiany we własnym pliku.") >= 0 && sgPl.text.indexOf("już do niego nie zapisuje") >= 0 && sgPl.text.indexOf("Zamknij") >= 0 && sgPl.text.indexOf("no longer writes") < 0,
       "15sgc the same notice in Polish for a Polish desk, and none of the English: " + sgPl.text.slice(0, 120));
     check(sgNever === "", "15sgd THE CONTROL: a desk that never had the setting is told nothing (" + sgNever.slice(0, 60) + ")");
     S.lsSet("eUiLang", "en");
