@@ -435,6 +435,8 @@ export function appendChainLine(record, chainsPath = CHAINS_PATH) {
   /* A release run that inherited a base's other legs (the test architect's C3): the base's git tree. */
   if (record.inherits) line.inherits = record.inherits;
   if (Array.isArray(record.carried) && record.carried.length) line.carried = record.carried;
+  /* A shard's gate red at its first run and green at its one rerun: named here, never among the reds, and holding nothing. */
+  if (Array.isArray(record.flakes) && record.flakes.length) line.flakes = record.flakes.map(f => ({ gate: f.gate, cmd: f.cmd, exit: f.exit, rerunExit: f.rerunExit }));
   /* An area run's mark of what its floor, hygiene and argument gates read from outside the tree (outsideMark). */
   if (record.gate === "area" && typeof record.outside === "string") line.outside = record.outside;
   /* A local area records where it stopped, or null where it ran to its end past its reds (THE LOCAL AREA GOES ON PAST A RED);
@@ -485,7 +487,7 @@ export function chainLineOfRecord(rec, chainsPath = CHAINS_PATH) {
   const t = Date.parse(rec.time || "");
   const hits = lines.filter(c => c.head === (rec.commit || "no commit")
     && (rec.run ? c.start === rec.run : (Number.isFinite(t) && Date.parse(c.start) <= t && t <= Date.parse(c.end)))
-    && Array.isArray(c.reds) && c.reds.some(r => r.gate === rec.gate));
+    && ((Array.isArray(c.reds) && c.reds.some(r => r.gate === rec.gate)) || (Array.isArray(c.flakes) && c.flakes.some(r => r.gate === rec.gate))));
   if (hits.length === 1) return { line: hits[0], why: "" };
   return { line: null, why: hits.length ? hits.length + " runs in chains.jsonl could hold this red" : "no run in chains.jsonl holds this red" };
 }
@@ -2057,7 +2059,8 @@ async function main() {
           /* An area run inherits green only from a covering run: area, whole-chain, release or nightly, never a file run;
              completed with no reds, covering every gate this area would run (the test architect's criterion, 2026-11-08). */
           const isCoveringMode = (rec.gate === "area" || rec.gate === "test" || rec.gate === "whole-chain" || rec.gate === "release" || rec.gate === "nightly") && !rec.gate.startsWith("file");
-          const isGreen = rec.counts && rec.counts.exitCode === 0 && Array.isArray(rec.reds) && rec.reds.length === 0 && !rec.holds;
+          const isGreen = rec.counts && rec.counts.exitCode === 0 && Array.isArray(rec.reds) && rec.reds.length === 0 && !rec.holds
+            && !(Array.isArray(rec.flakes) && rec.flakes.length);
           const coversAll = Array.isArray(rec.ran) && areaFiles.every(f => rec.ran.includes(f));
           if (!isCoveringMode || !coversAll) continue; /* plant:area-coverage */
           if (isGreen) {
@@ -2072,6 +2075,7 @@ async function main() {
 
   const totalCounts = { ok: 0, fail: 0, lines: 0 };
   const redsList = [];
+  const flakesList = [];
   const gatesList = [];
   const ranFiles = [];
 
@@ -2235,7 +2239,15 @@ async function main() {
     if (res.exit !== 0 && shard && res.exit !== NO_VERDICT) {
       console.log("  gate-run: shard " + shard + " reruns " + line.gate + " once, alone (red, exit " + res.exit + ")");
       const again = await runStep(step, customEnv);
-      if (again.exit === 0) { console.log("  gate-run: FLAKE " + line.gate + ": red (exit " + res.exit + ") then green at its one rerun; named, not counted"); continue; }
+      if (again.exit === 0) {
+        console.log("  gate-run: FLAKE " + line.gate + ": red (exit " + res.exit + ") then green at its one rerun; named, not counted");
+        /* A flake holds nothing: its red moves from the reds to the flakes, and its gate entry keeps the first exit, so no resume
+           lends it as a green. */
+        const at = redsList.length - 1;
+        if (at >= 0 && redsList[at].gate === line.gate) redsList.splice(at, 1);
+        flakesList.push({ gate: line.gate, cmd: step.cmd, exit: res.exit, rerunExit: again.exit });
+        continue;
+      }
       console.log("  gate-run: " + line.gate + " is red again at its rerun (exit " + again.exit + ")");
     }
     if (res.exit !== 0 && shard) { if (!worst) { worst = res.exit; if (refused) refusedAt = line; } console.log("  gate-run: shard " + shard + " goes on after " + line.gate + " exiting " + res.exit); continue; }
@@ -2319,6 +2331,7 @@ async function main() {
     end: runEnd,
     counts: totalCounts,
     reds: redsList,
+    flakes: flakesList,
     staleTakenOver: lockRes ? lockRes.staleTakenOver : false,
     gates: gatesList,
     walled,
@@ -2382,7 +2395,9 @@ async function main() {
                  : worst === NO_VERDICT ? ", stopped at a gate exiting " + worst + ", its own NO VERDICT: it"
                    + " refused, did not finish, or left a leg not run"
                  : worst ? ", stopped at a gate exiting " + worst
-                 : warns.length ? ", " + warns.length + (allHygiene ? " HYGIENE warn(s)" : " warn(s)") + ", nothing held" : ", all green"));
+                 : warns.length ? ", " + warns.length + (allHygiene ? " HYGIENE warn(s)" : " warn(s)") + ", nothing held" : ", all green")
+              + (flakesList.length ? "; " + flakesList.map(f => "FLAKE " + f.gate + " (exit " + f.exit + ", green at its one rerun)").join(", ")
+                + ", named and not counted" : ""));
 
   for (const w of warns) {
     if (w.cause && w.cause.startsWith("the real profile changed")) {

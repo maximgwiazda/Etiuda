@@ -35,7 +35,7 @@ const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const E = createRequire(import.meta.url)("./engine.js");
 
 /* The floor: every leg below runs or is skipped by name, or the tally says so rather than reading as a short green. */
-const EXPECTED = 34;  /* +6 the local area going on past a red (18a to 18f); 14, +2 each step's own scratch (15a, 15b), +2 a customer's roots (15c, 15d), +4 the gate wall and the area lane (16a to 16d), +1 a walled gate's node arm (16e), +1 a zombie read as gone (16f), +4 which AppData the run sees (17a to 17d) */
+const EXPECTED = 35;  /* +1 a shard whose only red is a flake (18g); +6 the local area going on past a red (18a to 18f); 14, +2 each step's own scratch (15a, 15b), +2 a customer's roots (15c, 15d), +4 the gate wall and the area lane (16a to 16d), +1 a walled gate's node arm (16e), +1 a zombie read as gone (16f), +4 which AppData the run sees (17a to 17d) */
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
   asserted++;
@@ -160,7 +160,9 @@ function cleanLab(lab) {
    stops after it, names the stop, and runs nothing after. 18c the test-only fix of 18a's red, resumed: only the red reruns, the
    greens carry. 18d a gate that refused goes on. 18e a green gate that touched the stand-in real profile: the run stops at once
    after it, exit 78. 18f a line that stopped after a green gate lends every green but that one; a line with no stop (written
-   before) keeps the old rule, the last gate of a run that did not complete not lent. */
+   before) keeps the old rule, the last gate of a run that did not complete not lent. 18g a shard (ETIUDA_AREA_SHARD) whose only red
+   is a gate red once and green at its one rerun: the run exits 0, the flake is named in the output, the summary and the chain line,
+   no red holds, and the gate's own entry keeps its first exit so no resume lends it as a green. */
 function pastRedLegs() {
   const RED = 'console.log("  FAIL leg 0");\nprocess.exit(1);\n', OK = 'console.log("  ok   leg 0");\nprocess.exit(0);\n';
   const made = [];
@@ -244,6 +246,24 @@ function pastRedLegs() {
       && JSON.stringify(old.carried) === '["tests-g2"]',
       "18f a run that went on past its red lends every green, its last included; one that stopped lends all but the gate it stopped after;"
       + " a line with no stop keeps the old rule: " + JSON.stringify(ranOn.carried) + ", " + JSON.stringify(stopped.carried) + ", " + JSON.stringify(old.carried));
+
+    /* A gate that is red at its first run and green after: the marker sits outside the lab's tree, so writing it moves no tree. */
+    const gRoot = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-gate-run-flake-"));
+    made.push(gRoot);
+    const marker = path.join(gRoot, "ran-once");
+    const FLAKY = 'import fs from "node:fs";\nconst m = ' + JSON.stringify(marker) + ';\nif (!fs.existsSync(m)) { fs.writeFileSync(m, "1"); '
+      + 'console.log("  FAIL leg 0"); process.exit(1); }\nconsole.log("  ok   leg 0");\nprocess.exit(0);\n';
+    const g = lab(["g1", "g2"], { "tests/g1.mjs": FLAKY, "tests/g2.mjs": OK });
+    const rg = runTool(g, ["area", "HEAD~1"], Object.assign({ ETIUDA_AREA_SHARD: "1/1" }, g.env)), cg = lastChain(g);
+    const gHolds = cg && Array.isArray(cg.reds) ? cg.reds.filter(r => r.class !== "warn").map(r => r.gate) : null;
+    const gFlakes = cg && Array.isArray(cg.flakes) ? cg.flakes.map(r => r.gate + ":" + r.exit) : null;
+    const gEntry = cg && Array.isArray(cg.gates) ? cg.gates.find(x => x.gate === "tests-g1") : null;
+    check(rg.exit === 0 && /gate-run: FLAKE tests-g1: red \(exit 1\) then green at its one rerun/.test(rg.out)
+      && /FLAKE tests-g1/.test(summary(rg)) && !!cg && cg.holds === false && !!gHolds && gHolds.length === 0
+      && JSON.stringify(gFlakes) === '["tests-g1:1"]' && !!gEntry && gEntry.exit === 1,
+      "18g a shard whose only red is a flake exits 0, names the flake and holds nothing: exit " + rg.exit + ", " + summary(rg) + ", holds "
+      + JSON.stringify(cg && cg.holds) + ", hold reds " + JSON.stringify(gHolds) + ", flakes " + JSON.stringify(gFlakes) + ", its gate entry "
+      + JSON.stringify(gEntry));
   } finally {
     for (const r of made) { try { fs.rmSync(r, { recursive: true, force: true }); } catch {} }
   }
