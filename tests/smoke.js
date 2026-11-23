@@ -2816,16 +2816,16 @@ const t0 = Date.now();
     const b = c && c.querySelector('[data-act="fold"]'), cs = [...document.querySelectorAll("#list .card")];
     return { present: !!c, folded: !!(c && c.classList.contains("is-folded")), expanded: b && b.getAttribute("aria-expanded"), hideBtn: !!(c && c.querySelector('[data-act="hide"]')),
       blocks: c ? c.querySelectorAll(".txt").length : -1, title: c ? (c.querySelector(".ctitle") || {}).textContent : null, idx: c ? cs.indexOf(c) : -1, n: cs.length }; }, id);
-  const f0 = await readFold(pick.id);
+  const fold0 = await readFold(pick.id);
   await press(pick.id, "fold"); await sleep(1200);
-  const f1 = await readFold(pick.id);
+  const fold1 = await readFold(pick.id);
   await press(pick.id, "fold"); await sleep(1200);
-  const f2 = await readFold(pick.id);
-  check(f0.expanded === "true" && f0.blocks > 0 && !f0.hideBtn && f1.folded && f1.expanded === "false" && f1.blocks === 0 && f1.title === f0.title
-      && !f2.folded && f2.expanded === "true" && f2.blocks === f0.blocks,
-    "1123cf a card's fold leaves its title alone and a second press restores its blocks exactly (" + f0.blocks + " to " + f1.blocks + " to " + f2.blocks + ")");
-  check(f1.idx === f0.idx && f2.idx === f0.idx && f1.n === f0.n && f2.n === f0.n,
-    "1123cf and the card keeps its place and the list its length through the fold (" + f0.idx + " to " + f1.idx + " to " + f2.idx + " of " + f0.n + ")");
+  const fold2 = await readFold(pick.id);
+  check(fold0.expanded === "true" && fold0.blocks > 0 && !fold0.hideBtn && fold1.folded && fold1.expanded === "false" && fold1.blocks === 0 && fold1.title === fold0.title
+      && !fold2.folded && fold2.expanded === "true" && fold2.blocks === fold0.blocks,
+    "1123cf a card's fold leaves its title alone and a second press restores its blocks exactly (" + fold0.blocks + " to " + fold1.blocks + " to " + fold2.blocks + ")");
+  check(fold1.idx === fold0.idx && fold2.idx === fold0.idx && fold1.n === fold0.n && fold2.n === fold0.n,
+    "1123cf and the card keeps its place and the list its length through the fold (" + fold0.idx + " to " + fold1.idx + " to " + fold2.idx + " of " + fold0.n + ")");
   const h0 = await readStar(pick.id);
   await pressHide(pick.id); await sleep(1200);
   const h1 = await readStar(pick.id);
