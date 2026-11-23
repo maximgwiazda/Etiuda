@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Etiuda - a single-file macro bank for live-chat support agents.
+<!-- Etiuda - a macro bank for live-chat support agents.
      Copyright (c) 2026 Maxim Gwiazda · Etiuda Source-Available Licence 1.0 (notice below).
      No version here: E_VERSION is the one source of truth.
      The charset declaration must sit within the first 1024 bytes of the document, so this
@@ -15,10 +15,9 @@
   release stays MIT, under v1/ of this repository and by v1/LICENSE.
 
   This file is the engine only. It ships with no content: cards, intents, categories
-  and quick facts come from a catalog file named etiuda-catalog.js placed beside it,
-  or from one imported through Manage. The installed edition reads any .ec catalog
-  from a folder of its own instead, which Settings names. With no catalog present
-  Etiuda starts empty.
+  and quick facts come from a catalog, which the desk reads from a folder of its own,
+  the one Settings names, or which is loaded through the Library. With no catalog
+  present Etiuda starts empty.
   A catalog is data and carries its own licence; the grant above covers the engine.
 -->
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -5420,13 +5419,6 @@ body.e-host .row .win-btn:focus-visible{outline-offset:-2px}
   </div>
 </div>
 
-<!-- Optional catalog sitting beside this file. Absent = Etiuda starts as a clean slate.
-     A .js global rather than .json: a page opened from file:// cannot fetch() a sibling,
-     but it can load one as a script. -->
-<!-- ONE filename, fixed and generic: written into the engine, so it cannot carry a
-     customer's name - any other file comes in via Import. A configurable name must be
-     discovered first; one fixed name is what makes the sibling work with no configuration. -->
-<script src="etiuda-catalog.js"></script>
 <script>
 (() => {
   var __defProp = Object.defineProperty;
@@ -8130,8 +8122,6 @@ What is typed here stays in this browser.`;
     "maintenance␟folder": "folder",
     "maintenance␟id": "identyfikator",
     "maintenance␟signature": "podpis",
-    "maintenance␟beside this page": "obok tej strony",
-    "maintenance␟imported into this browser": "wczytany do tej przeglądarki",
     "maintenance␟the chosen catalog folder's": "z folderu z plikami katalogów wybranego w Ustawieniach",
     "maintenance␟the program's own": "dołączona do programu",
     "maintenance␟found beside the program": "znaleziona obok programu",
@@ -12542,7 +12532,6 @@ What is typed here stays in this browser.`;
   __export(host_exports, {
     E_AI_OFF_KEY: () => E_AI_OFF_KEY,
     E_CATALOG_FOLDER_KEY: () => E_CATALOG_FOLDER_KEY,
-    E_CATALOG_SCRIPT: () => E_CATALOG_SCRIPT,
     E_SEARCH_AI_OFF_KEY: () => E_SEARCH_AI_OFF_KEY,
     TEST_BAND_EN: () => TEST_BAND_EN,
     dispatchTabChord: () => dispatchTabChord,
@@ -12996,7 +12985,7 @@ What is typed here stays in this browser.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-11-22";
+  var E_BUILT = "2026-11-23";
 
   // src/modules/affinity.js
   var affinity_exports = {};
@@ -16656,8 +16645,8 @@ What is typed here stays in this browser.`;
   // src/modules/catalog.js
   var E_CATALOG_KEY = nsKey("CatalogOk");
   var E_CATALOG_STORE = nsKey("Catalog");
-  var E_SIBLING = null;
-  var E_SIBLING_READ = false;
+  var E_GIVEN = null;
+  var E_GIVEN_READ = false;
   var E_HANDED = null;
   var E_REFUSED = [];
   function eRefuseCatalogFile(name) {
@@ -16677,17 +16666,17 @@ What is typed here stays in this browser.`;
     return E_REFUSED.slice();
   }
   function eCatalog() {
-    if (E_SIBLING_READ) return E_SIBLING;
-    E_SIBLING_READ = true;
+    if (E_GIVEN_READ) return E_GIVEN;
+    E_GIVEN_READ = true;
     let c = typeof window !== "undefined" ? window.E_CATALOG : null;
     let file = typeof window !== "undefined" && window.E_HOST ? String(window.E_HOST.catalogFile || "") : "";
     for (let tries = 0; tries < 32; tries++) {
       try {
-        E_SIBLING = isV2(c) ? normaliseCatalog(catalogFromV2(c)) : null;
-        catalogDocKeep(E_SIBLING, c);
-        return E_SIBLING;
+        E_GIVEN = isV2(c) ? normaliseCatalog(catalogFromV2(c)) : null;
+        catalogDocKeep(E_GIVEN, c);
+        return E_GIVEN;
       } catch (e) {
-        E_SIBLING = null;
+        E_GIVEN = null;
       }
       if (file) E_REFUSED.push(file);
       const next = file ? eRefuseCatalogFile(file) : null;
@@ -17121,7 +17110,6 @@ What is typed here stays in this browser.`;
     }
   }
   var E_CATALOG_FOLDER_KEY = "eCatalogFolder";
-  var E_CATALOG_SCRIPT = "etiuda-catalog.js";
   function eCatalogFolder() {
     const h = eHost();
     if (!h) return "";
@@ -36418,11 +36406,6 @@ What is typed here stays in this browser.`;
     try {
       if (!catalogLoaded() && !storedCatalog()) return none;
       const home = eDeskHome(), inFolder = String(nsGet("CatalogFile") || "");
-      if (!eHost()) return {
-        file: S(() => nsGet("CatalogFrom") || (eCatalogAccepted(eCatalog()) ? E_CATALOG_SCRIPT : "")),
-        copy: eCatalogAccepted(eCatalog()) ? "beside this page" : "imported into this browser",
-        folder: "-"
-      };
       if (inFolder) return {
         file: inFolder,
         copy: lsGet(E_CATALOG_FOLDER_KEY) ? "the chosen catalog folder's" : "Documents\\Etiuda",
@@ -39320,7 +39303,7 @@ What is typed here stays in this browser.`;
 
   // src/modules/catalog-offer.js
   function eFoundHtml(name, where, builtIn) {
-    const shown2 = String(name || "") || E_CATALOG_SCRIPT;
+    const shown2 = String(name || "");
     if (builtIn) return t("{FILE} comes with Etiuda.").split("{FILE}").join("<code>" + esc(shown2) + "</code>");
     const dir = String(where || ""), home = !!dir && dir === eCatalogFolder();
     return t(where ? "Located as {FILE} in {FOLDER}." : "Located as {FILE}.").split("{FILE}").join("<code>" + esc(shown2) + "</code>").split("{FOLDER}").join("<code" + (home ? ' class="open-folder" data-ec-open="1" role="button" tabindex="0"' : "") + ' title="' + esc(dir) + '">' + esc(eCatalogFolderShort(dir)) + "</code>");
@@ -39347,7 +39330,7 @@ What is typed here stays in this browser.`;
         lsSet(E_CATALOG_KEY, sig);
         return activateCatalog(c, {
           file: mine ? file : "",
-          from: file || (eHost() ? "" : E_CATALOG_SCRIPT),
+          from: file,
           fileAt: mine && !given ? eCatalogMtime() : 0
         });
       }
@@ -39832,7 +39815,7 @@ What is typed here stays in this browser.`;
        another taken up, which the question asks and no sentence beneath it can improve on. The
        two editions of ONE catalog keep their sentence: what is at stake there is what happens to
        this desk's own work, which the screen cannot show. */
-    '<h3 id="ecTitle">' + esc(t(olderSure || older ? "Older catalog file found" : updating && !plain ? "Updated catalog file found" : replacing ? "Replace catalog?" : "Load catalog file?")) + "</h3>" + (olderSure ? '<p class="ec-warn">' + esc(t("This edition is older than the one in use on this desk, so some of its replies may be out of date.")) + "</p>" : olderSaid ? '<p class="ec-warn">' + esc(t("By its own edition number, this file is older than the catalog in use on this desk.")) + "</p>" : "") + (updating && !olderSure && !plain ? '<p class="ec-sub">' + esc(t(older ? "This file is an earlier edition than the one loaded now." : "This catalog has changed since it was loaded.")) + "</p>" : "") + '<div class="ec-what"><b>' + esc(catalogNameOfFile(String(src.file || "") || E_CATALOG_SCRIPT)) + "</b>" + offerEditionHtml(editionNameOf(c)) + (updating && editionLabel(editionNameOf(active)) && editionLabel(editionNameOf(active)) !== editionLabel(editionNameOf(c)) ? '<div class="ec-counts">' + esc(editionSaid(editionNameOf(active), t("You have rev {R}."), t("You have {E}."))) + "</div>" : "") + (changeHtml ? "" : '<div class="ec-counts">' + catalogCountsLine(
+    '<h3 id="ecTitle">' + esc(t(olderSure || older ? "Older catalog file found" : updating && !plain ? "Updated catalog file found" : replacing ? "Replace catalog?" : "Load catalog file?")) + "</h3>" + (olderSure ? '<p class="ec-warn">' + esc(t("This edition is older than the one in use on this desk, so some of its replies may be out of date.")) + "</p>" : olderSaid ? '<p class="ec-warn">' + esc(t("By its own edition number, this file is older than the catalog in use on this desk.")) + "</p>" : "") + (updating && !olderSure && !plain ? '<p class="ec-sub">' + esc(t(older ? "This file is an earlier edition than the one loaded now." : "This catalog has changed since it was loaded.")) + "</p>" : "") + '<div class="ec-what"><b>' + esc(catalogNameOfFile(String(src.file || "")) || t("Catalog")) + "</b>" + offerEditionHtml(editionNameOf(c)) + (updating && editionLabel(editionNameOf(active)) && editionLabel(editionNameOf(active)) !== editionLabel(editionNameOf(c)) ? '<div class="ec-counts">' + esc(editionSaid(editionNameOf(active), t("You have rev {R}."), t("You have {E}."))) + "</div>" : "") + (changeHtml ? "" : '<div class="ec-counts">' + catalogCountsLine(
       "{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
       n,
       catalogMacroCount(c),
@@ -39859,7 +39842,7 @@ What is typed here stays in this browser.`;
             const print = trustPrint(c);
             const matchLead = tLeads.find((l) => l && l.print === print);
             const leadName = matchLead && matchLead.lead || tLeads[0] && tLeads[0].lead || "";
-            const catName = catalogNameOfFile(String(src && src.file || "") || E_CATALOG_SCRIPT) || t("Catalog");
+            const catName = catalogNameOfFile(String(src && src.file || "")) || t("Catalog");
             const ed2 = editionNameOf(c);
             const edStr = c.edition != null && c.edition !== "" ? String(c.edition) : String(ed2.e || "");
             const title = leadName ? t("{LEAD} published a new edition").split("{LEAD}").join(leadName) : t("The team's lead published a new edition");
@@ -39956,7 +39939,7 @@ What is typed here stays in this browser.`;
         held: active,
         changes,
         ed: editionNameOf(c),
-        name: catalogNameOfFile(String(src.file || "") || E_CATALOG_SCRIPT),
+        name: catalogNameOfFile(String(src.file || "")) || t("Catalog"),
         keep: answer("#ecNo"),
         load: answer("#ecYes"),
         taken: () => repaintEditionRows(wrap, c, active, changes),

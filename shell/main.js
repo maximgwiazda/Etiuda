@@ -229,11 +229,6 @@ if (KEYRING_SWITCH) {
 
 const ENGINE = path.join(__dirname, "..", "engine", "etiuda.html");
 
-/* The container is not the format: `.ec` is the catalog document, and the `.js` beside it is
-   that same JSON behind a `window.E_CATALOG =` line, which is what a page on file:// can load
-   as a sibling script. The document is found by its EXTENSION and the script by its one fixed
-   name, because a browser's script tag has to name its sibling and an installed desk does not. */
-const CATALOG_SCRIPT = "etiuda-catalog.js";
 const CATALOG_FOLDER_KEY = "eCatalogFolder";
 
 /* THE CATALOG FOLDER: one folder of the desk's own, where a deployment drops an edition and the
@@ -432,14 +427,13 @@ function ecFilesIn(dir) {
 }
 /* Nearest first: the catalog folder, then the user-data folder, which a packaged copy can write
    to, then the folder the app was installed into, which is where a catalog sits while 2.x is
-   being built. The documents before the script in each, so a folder holding both boots from the
-   one a person edited. */
+   being built. */
 function catalogFolders() {
   return [catalogFolder(), app.getPath("userData"), path.join(__dirname, "..")];
 }
 function catalogPlaces() {
   return (openedWith ? [openedWith] : []).concat(sampleLast(catalogFolders().filter(folderAnswers).reduce((out, dir) =>
-    out.concat(ecFilesIn(dir), [path.join(dir, CATALOG_SCRIPT)]), []).concat(builtInFiles())));
+    out.concat(ecFilesIn(dir)), []).concat(builtInFiles())));
 }
 
 /* A .ec OPENED FROM THE DESKTOP: the installer registers the extension, so Windows starts Etiuda
@@ -703,7 +697,7 @@ function conflictSiblingName(canonical, name) {
 function isCatalogName(name) {
   const n = path.basename(String(name || ""));
   /* The head is named with the files the watch already hears, so a landing reaches Settings. */
-  return /\.ec$/i.test(n) || n === CATALOG_SCRIPT || n === SPAN_NAME || n === TEAM_NAME || n === JOINS_NAME
+  return /\.ec$/i.test(n) || n === SPAN_NAME || n === TEAM_NAME || n === JOINS_NAME
     || n === PAUSE_NAME || n === "etiuda-head.json" || conflictSiblingName(TEAM_NAME, n);
 }
 
@@ -10472,9 +10466,8 @@ ipcMain.handle("etiuda:pick-catalog-folder", async (e, title) => {
 
 /* IMPORT CATALOG'S OWN DIALOG, the shell's for the same reason the folder picker above is: the
    engine calls no OS API. The file is READ HERE and handed over as text, so the page is given
-   what it is given and never a path of its own; the browser build keeps its File System Access
-   picker, which is the route that yields a watchable handle and has no meaning here, because
-   this shell already watches the folder. `.js` and `.json` are in the filter beside `.ec` since
+   what it is given and never a path of its own, and no watchable handle is wanted, because this
+   shell already watches the folder. `.js` and `.json` are in the filter beside `.ec` since
    the engine's reader takes all three, and a filter narrower than the reader hides files it
    would have accepted. Null where the person closed the dialog, which is not a failure. */
 ipcMain.handle("etiuda:pick-catalog-file", async (e, title, label) => {
@@ -10708,10 +10701,9 @@ function readPin() {
   return { why: why };
 }
 
-/* No 'self' in script-src, and that is the point: in a browser the engine loads its catalog as
-   a sibling script, and here the same file arrives as data through the preload. So the shell
-   can refuse every script that is not one of the two the build hashed, and a catalog stays
-   data. style-src is 'unsafe-inline' rather than hashed because the rescue banner builds its
+/* No 'self' in script-src, and that is the point: a catalog arrives as data through the preload,
+   so the shell can refuse every script that is not one of the two the build hashed, and a catalog
+   stays data. style-src is 'unsafe-inline' rather than hashed because the rescue banner builds its
    own styles inline, on purpose, so that it works when the stylesheet does not. */
 function policyFor(hashes) {
   return [
@@ -16626,24 +16618,10 @@ function startDocument() {
   return "";
 }
 
-/* THE SIBLING TAG IS NOT SERVED HERE. In a browser it is how a catalog beside the engine arrives;
-   under this shell the policy refuses it by design, since a catalog comes through the host, and the
-   refusal was a console error on every boot, so a healthy desk never had a clean console (bug hunt
-   3, item 21). Cut from the served copy only, as the policy is put into it: engine/etiuda.html
-   keeps it for the browser. It must match exactly once, like the anchor: none means the template
-   moved and the strip is stale, two means the literal has turned up somewhere it must not be cut.
-   tests/csp.js proves the policy still refuses a sibling with one of its own planting. */
-const SIBLING_TAGS = ['<script src="etiuda-catalog.js"></script>'];
-
 function withPolicy(html) {
   if (pageNeedsBuild()) return missingBuildDoc();
   const pin = readPin();
   if (pin.why) return refusalDoc(pin.why);
-  for (const tag of SIBLING_TAGS) {
-    const found = html.split(tag).length - 1;
-    if (found !== 1) throw new Error(tag + " matched " + found + " times in the engine, expected 1");
-    html = html.split(tag).join("");
-  }
   const hits = html.split(CSP_ANCHOR).length - 1;
   if (hits !== 1) throw new Error(CSP_ANCHOR + " matched " + hits + " times in the engine, expected 1");
   /* split/join rather than replace, the build script's precedent: the engine's own text holds

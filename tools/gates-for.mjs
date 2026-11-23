@@ -274,7 +274,7 @@ export function isSharedCode(file) {
 
 export function isProductFile(file) {
   const f = file.replace(/\\/g, "/");
-  return f.startsWith("src/") || f.startsWith("shell/") || f.startsWith("relay/") || f.startsWith("engine/") || f === "Etiuda.html" || f === "etiuda-catalog.js";
+  return f.startsWith("src/") || f.startsWith("shell/") || f.startsWith("relay/") || f.startsWith("engine/") || f === "Etiuda.html";
 }
 
 export function relOf(root, abs) {

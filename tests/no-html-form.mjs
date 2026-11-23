@@ -40,7 +40,7 @@ const CHECKS = [
     (f) => !SCRIPT_BY_ADDRESS.test(f.template) && !SCRIPT_BY_ADDRESS.test(f.built)],
   ["nh2", "the shell names no neighbouring catalog script and strips no sibling tag from the page it serves",
     (f) => !f.shell.includes(SIBLING_FILE) && !/SIBLING_TAGS|CATALOG_SCRIPT/.test(f.shell)],
-  ["nh3", "a desk reset owns no etiuda-catalog.js, since no desk ever read or wrote one",
+  ["nh3", "a desk reset owns no etiuda-catalog.js, since the desk reads none",
     (f) => !f.reset.includes(SIBLING_FILE)],
   ["nh4", "no module names the neighbouring file or the constant that carried its name, and the built page carries neither",
     (f) => !f.modules.includes(SIBLING_FILE) && !f.modules.includes("E_CATALOG_SCRIPT") && !f.built.includes(SIBLING_FILE) && !f.built.includes("E_CATALOG_SCRIPT")],

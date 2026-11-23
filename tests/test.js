@@ -1044,7 +1044,7 @@ function emptyDeskTests() {
   const langSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "ui-lang.js"), "utf8");
   const plAt = langSrc.indexOf("UI_STRINGS.pl={"), plEnd = langSrc.indexOf("\n};", plAt);
   const PL = new Function("const UI_STRINGS={};\n" + langSrc.slice(plAt, plEnd + 3) + "\nreturn UI_STRINGS.pl;")();
-  const own = { terms: [], list: { innerHTML: "" }, wholeThingEmpty: () => true, esc: s => String(s), E_CATALOG_SCRIPT: "etiuda-catalog.js" };
+  const own = { terms: [], list: { innerHTML: "" }, wholeThingEmpty: () => true, esc: s => String(s) };
   const scope = new Proxy({}, {
     has: (o, k) => typeof k === "string",
     get: (o, k) => k === Symbol.unscopables ? undefined : k in own ? own[k] : k in globalThis ? globalThis[k] : () => undefined,
@@ -1055,7 +1055,7 @@ function emptyDeskTests() {
     draw = new Function("scope", "with(scope){\n"
       + extractDecl(src, "list.innerHTML=terms.length") + "\nreturn list.innerHTML;\n}");
   } catch (e) { eq("render.js carries the empty desk's markup", e.message, "sliced"); return; }
-  const hosts = { desk: ["C:/X", "https:"], disk: ["", "file:"], link: ["", "https:"] };
+  const hosts = { desk: ["C:/X", "https:"] };
   const wrong = [];
   Object.keys(hosts).forEach(h => ["en", "pl"].forEach(lang => {
     Object.assign(own, { eCatalogFolder: () => hosts[h][0], eCatalogFolderShort: () => "X", location: { protocol: hosts[h][1] },
@@ -1064,7 +1064,7 @@ function emptyDeskTests() {
     try { p = draw(scope); } catch (e) { p = "threw " + e.message; }
     if (!/id="emptyLoad"/.test(p) || /emptySample|sample|przyk/i.test(p)) wrong.push(h + " " + lang);
   }));
-  eq("the empty desk offers Load and no sample button on the desk, from a disk and over a link, in English and in Polish",
+  eq("the empty desk offers Load and no sample button on the desk, in English and in Polish",
     wrong, []);
 }
 
@@ -1086,7 +1086,7 @@ function emptyDeskWordsTests() {
   const PL = new Function("const UI_STRINGS={};\n" + langSrc.slice(plAt, plEnd + 3) + "\nreturn UI_STRINGS.pl;")();
   /* one drawing of the block from `src`: [its text segments in order, its markup] */
   const drawn = (src, host, lang, canJoin) => {
-    const own = { terms: [], list: { innerHTML: "" }, wholeThingEmpty: () => true, esc: s => String(s), E_CATALOG_SCRIPT: "etiuda-catalog.js",
+    const own = { terms: [], list: { innerHTML: "" }, wholeThingEmpty: () => true, esc: s => String(s),
       ICON_TEAM: "<svg></svg>", teamCanJoin: () => canJoin, teamJoinShown: () => false, teamReadingEmptyHtml: () => "",
       eCatalogFolder: () => host[0], eCatalogFolderShort: () => "X", eFolderHoldsCatalog: () => false, location: { protocol: host[1] },
       t: lang === "pl" ? x => (PL[x] == null ? x : PL[x]) : x => x };
@@ -1098,7 +1098,7 @@ function emptyDeskWordsTests() {
     const html = new Function("scope", "with(scope){\n" + extractDecl(src, "list.innerHTML=terms.length") + "\nreturn list.innerHTML;\n}")(scope);
     return [html.replace(/<[^>]*>/g, "\u0001").split("\u0001").map(x => x.trim()).filter(Boolean), html];
   };
-  const hosts = { desk: ["C:/X", "https:"], disk: ["", "file:"], link: ["", "https:"] };
+  const hosts = { desk: ["C:/X", "https:"] };
   const run = src => {
     const wrong = [];
     Object.keys(hosts).forEach(h => ["en", "pl"].forEach(lang => {
@@ -3147,8 +3147,8 @@ function shippedFileTests() {
   const offer = fs.readFileSync(path.join(E.ROOT, "src", "modules", "catalog-offer.js"), "utf8");
   let found = null;
   try {
-    found = new Function("t", "esc", "E_CATALOG_SCRIPT", "eCatalogFolder", "eCatalogFolderShort",
-      extractDecl(offer, "function eFoundHtml(") + "\nreturn eFoundHtml;")(s => s, s => s, "etiuda-catalog.js", () => own, s => s);
+    found = new Function("t", "esc", "eCatalogFolder", "eCatalogFolderShort",
+      extractDecl(offer, "function eFoundHtml(") + "\nreturn eFoundHtml;")(s => s, s => s, () => own, s => s);
   } catch (e) { found = null; }
   const said = found ? found("sample-catalog.ec", inAsar, true) : "";
   eq("the offer says a shipped file comes with Etiuda and names no folder, even one it is handed",
@@ -5359,8 +5359,8 @@ function shippedFlagTests() {
   const offers = (given, builtInHost, inHost, file, where, builtIn) => {
     const seen = {};
     try {
-      const found = new Function("t", "esc", "E_CATALOG_SCRIPT", "eCatalogFolder", "eCatalogFolderShort",
-        extractDecl(offer, "function eFoundHtml(") + "\nreturn eFoundHtml;")(s => s, s => s, "etiuda-catalog.js", () => own, s => s);
+      const found = new Function("t", "esc", "eCatalogFolder", "eCatalogFolderShort",
+        extractDecl(offer, "function eFoundHtml(") + "\nreturn eFoundHtml;")(s => s, s => s, () => own, s => s);
       new Function("eCatalog", "storedCatalog", "eCatalogAccepted", "eCatalogFile", "eCatalogBuiltIn", "eHost",
         "eCatalogIn", "eCatalogFolder", "eOfferCatalogDialog", "eFoundHtml", "lsSet", "E_CATALOG_KEY", "activateCatalog",
         "eCatalogMtime", "eCatalogSignature", "toast",
@@ -6220,7 +6220,7 @@ function policyTests() {
   eq("default-src is none", has("default-src 'none'"), true);
   eq("script-src names the pinned hashes and nothing else",
     policy.split("; ").filter(p => p.indexOf("script-src") === 0).join(""), "script-src " + mine.join(" "));
-  eq("no 'self' in the policy, so a sibling catalog script cannot run", /'self'/.test(policy), false);
+  eq("no 'self' in the policy, so no script beside the page can run", /'self'/.test(policy), false);
   eq("no 'unsafe-eval' and no 'unsafe-inline' outside style-src",
     policy.replace(/style-src [^;]*/, "").indexOf("unsafe-"), -1);
   eq("the six directives are all there",
@@ -6609,10 +6609,10 @@ function checkCatalogRoundTrip() {
    The PB_ to E_ pass of 2026-09-13 moved 158 names and deliberately did not move three, each
    for a different reason and each invisible to every other instrument here:
 
-   THE GLOBAL THAT ARRIVES FROM OUTSIDE. A catalog file on disk declares window.E_CATALOG,
-   written by files this engine does not own - by the converter in tools/catalog-v2, or by a
-   desk - so renaming either end silently stops a catalog loading. The export wrapper and the importer's search
-   for it are the same contract read the other way. They were PB_ until 2026-09-14; the clean
+   THE GLOBAL THAT ARRIVES FROM OUTSIDE. The desk's preload sets window.E_CATALOG before the
+   engine's first script, and a file may carry the same JSON behind it, so renaming either end
+   silently stops a catalog loading. The importer's search for the wrapper is the same contract
+   read the other way. They were PB_ until 2026-09-14; the clean
    break on the format took the old names with it, since nothing here reads format 1 at all.
 
    THE STORAGE PREFIX. E_NS answers "e" since D4, and the boot script's Reset filter matches
@@ -6659,7 +6659,7 @@ function checkFrozenContracts() {
       problems.push(marker + " no longer holds " + JSON.stringify(needle) + " - " + why);
   };
   holds("function eCatalog(", "window.E_CATALOG",
-        "a catalog file declares window.E_CATALOG and this is where the engine reads it");
+        "the desk's preload sets window.E_CATALOG and this is where the engine reads it");
   holds("function exportCatalog(", "JSON.stringify(catalogToV2(",
         "an export is the .ec document itself, which every reader of a format 2 catalog parses as it stands");
   holds("function parseCatalogFile(", '"E_CATALOG"',
@@ -7454,29 +7454,27 @@ function libraryRowsTests() {
   const place = w => {
     try {
       return new Function("catalogLoaded", "storedCatalog", "eDeskHome", "nsGet", "eHost", "eCatalogAccepted", "eCatalog",
-        "E_CATALOG_SCRIPT", "lsGet", "E_CATALOG_FOLDER_KEY", "eCatalogFolder", "eCatalogFile", "eCatalogBuiltIn", "eCatalogIn",
+        "lsGet", "E_CATALOG_FOLDER_KEY", "eCatalogFolder", "eCatalogFile", "eCatalogBuiltIn", "eCatalogIn",
         [extractDecl(mt, "function mtSafe("), extractDecl(store, "function eHomeless("), extractDecl(mt, "function mtCatalogPlace(")].join("\n")
         + "\nreturn mtCatalogPlace;")(
         () => !!w.loaded, () => (w.held ? {} : null), () => HOME, k => (w.ns || {})[k], () => (w.host ? {} : null), () => !!w.accepted, () => ({}),
-        "etiuda-catalog.js", k => (k === "eCatalogFolder" ? w.chosen || null : null), "eCatalogFolder", () => w.folder || DOCS,
+        k => (k === "eCatalogFolder" ? w.chosen || null : null), "eCatalogFolder", () => w.folder || DOCS,
         () => w.file || "", () => !!w.builtIn, () => w.in || "")();
     } catch (e) { return "mtCatalogPlace did not run: " + e.message; }
   };
   const P = o => (typeof o === "string" ? o : [o.file, o.copy, o.folder].join(" | "));
-  eq("the Maintenance panel names where the catalog in use lies, which copy it is and its folder, on a desk and in a browser", [
+  eq("the Maintenance panel names where the catalog in use lies, which copy it is and its folder, on a desk", [
     P(place({ host: true, loaded: true, ns: { CatalogFile: "team.ec" } })),
     P(place({ host: true, loaded: true, ns: { CatalogFile: "team.ec" }, chosen: "D:" + B + "shared", folder: "D:" + B + "shared" })),
     P(place({ host: true, loaded: true, ns: { CatalogFile: "" }, accepted: true, builtIn: true, file: "sample-catalog.ec" })),
     P(place({ host: true, loaded: true, ns: { CatalogFile: "" }, accepted: true, file: "team.ec", in: HOME + B + "Desktop" })),
     P(place({ host: true, loaded: true, ns: { CatalogFile: "", CatalogFrom: "mine.ec" } })),
-    P(place({ loaded: true, accepted: true })), P(place({ loaded: true, held: true, ns: { CatalogFrom: "mine.ec" } })),
     P(place({ host: true }))], [
     "team.ec | Documents" + B + "Etiuda | %USERPROFILE%" + B + "Documents" + B + "Etiuda",
     "team.ec | the chosen catalog folder's | D:" + B + "shared",
     "sample-catalog.ec | the program's own | inside the program",
     "team.ec | found beside the program | %USERPROFILE%" + B + "Desktop",
     "mine.ec | a file opened by hand | -",
-    "etiuda-catalog.js | beside this page | -", "mine.ec | imported into this browser | -",
     "- | (none loaded) | -"]);
   let report;
   try {

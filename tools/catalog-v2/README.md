@@ -6,7 +6,7 @@ nothing. The engine has no reader for format 1 and is not going to grow one: a b
 exists is a boundary somebody maintains, and the files that need crossing are countable.
 
     node tools/catalog-v2/convert.mjs <in.js|in.json> --out <name.ec>
-          [--js <name.js> [--global E_SAMPLE]] [--eval]
+          [--eval]
           [--id x] [--rev 2] [--date 2026-09-14]
     node tools/catalog-v2/selftest.mjs
 
@@ -15,17 +15,11 @@ catalog is a JavaScript object literal with bare keys, which no JSON parser will
 opt-in and it evaluates, which the engine itself may never do; this tool is run once,
 offline, by the owner of the file, and the alternative is retyping a catalog by hand.
 
-## The two containers, and why there are two
+## The container
 
 **The catalog is JSON.** `.ec`, for etiuda catalog, is that JSON on its own: it is what a desk
-exchanges, what Import reads, and what a file-backed build opens.
-
-**A page opened from `file://` cannot fetch a sibling, but it can run one as a script.** So the
-catalog that loads by itself beside the engine is the same JSON behind one assignment,
-`window.E_CATALOG = {...};`, in a file the browser will treat as a script. `--js` writes it.
-
-One format, two containers, one reader: the engine strips the assignment when it is there and
-parses what is left. Nothing downstream can tell which container it came from.
+exchanges and what Import reads. The engine's reader also strips a `window.E_CATALOG = ` assignment
+where a file carries one, and parses what is left.
 
 ## What changed from format 1, and why
 

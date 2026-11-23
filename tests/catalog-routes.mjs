@@ -4,13 +4,13 @@
  *
  * WHY A SECOND FILE. tests/test.js reads the engine AS TEXT, so what it can prove about the
  * importer is that a field named in the exporter is named in the whitelist too. It cannot say
- * which catalogs actually reach that whitelist, and one did not: the sibling file at boot went
- * through catalogFromV2 alone, so the same catalog kept a reserved category key and a retired
- * hue by sitting beside Etiuda and lost them by being imported. A parity claim needs both
+ * which catalogs actually reach that whitelist, and one did not: the catalog handed over at boot
+ * went through catalogFromV2 alone, so the same catalog kept a reserved category key and a retired
+ * hue by being handed over and lost them by being imported. A parity claim needs both
  * routes run over one payload and the answers compared.
  *
  * HOW IT RUNS. The modules load through node's own loader, unbundled, the way the cycle gate's
- * bite test loads them - no DOM, no browser. eCatalog() reads the sibling once and remembers,
+ * bite test loads them - no DOM, no browser. eCatalog() reads the handed catalog once and remembers,
  * which is the point of it, so each payload gets a module graph of its own through a query
  * string on the import specifier.
  *
@@ -70,8 +70,8 @@ function payload() {
   };
 }
 
-/* A module graph of its own per payload, because the sibling is read once and remembered.
-   window must exist before the first call, since that is the global a catalog file writes. */
+/* A module graph of its own per payload, because the handed catalog is read once and remembered.
+   window must exist before the first call, since that is the global the host sets. */
 let probes = 0;
 async function bootRoute(data) {
   globalThis.window = { E_CATALOG: data };
@@ -113,7 +113,7 @@ function diffPaths(a, b, path, out) {
 const boot = await bootRoute(payload());
 const file = await fileRoute(payload());
 
-console.log("catalog routes: the sibling at boot against a picked file, one invented payload");
+console.log("catalog routes: the handed catalog at boot against a picked file, one invented payload");
 
 check("1 the boot route hands back a catalog, every card of it",
   !!boot.cat && (boot.cat.cards || []).length === payload().cards.length,
@@ -152,7 +152,7 @@ const bent = await fileRoute(bentData);
 const dd = diffPaths(boot.cat, bent.cat, "", []);
 check("8 canary: a shelf label changed on one side is named as a path",
   dd.some(p => p === "categories.t-op"), dd.slice(0, 6).join(" ") || "nothing named");
-check("9 canary: and the signature parts too, or an edited sibling is never offered",
+check("9 canary: and the signature parts too, or an edited file is never offered",
   boot.sig !== bent.sig, boot.sig === bent.sig ? "equal" : "differ");
 
 /* Identity, which is the second thing a route decides. A format 2 card always arrives with an

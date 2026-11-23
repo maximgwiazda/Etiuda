@@ -46,12 +46,14 @@ const PAGE = fs.readFileSync(E.ENGINE_PATH, "utf8");
 const SAMPLE = JSON.parse(fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8"));
 const STATS_SRC = fs.readFileSync(path.join(E.ROOT, "src", "modules", "desk-stats.js"), "utf8");
 
-/* A lab folder: the page (or a planted copy) beside a catalog the page offers at boot. */
+/* A lab folder: the page (or a planted copy), and the catalog the page offers at boot, which reaches it the desk's way, the
+   preload's, through E.seedCatalog: nothing is written beside the page. */
+const LAB_CATALOG = new Map();
 function labWith(name, catalog) {
   const dir = path.join(lab, name);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "etiuda.html"), PAGE);
-  fs.writeFileSync(path.join(dir, "etiuda-catalog.js"), "window.E_CATALOG = " + JSON.stringify(catalog) + ";\n");
+  LAB_CATALOG.set(dir, catalog);
   return dir;
 }
 const urlOf = (dir, file) => "file:///" + path.join(dir, file).replace(/\\/g, "/");
@@ -78,6 +80,7 @@ async function scene(dir, file, run) {
       };
     });
     await seatPage(page);
+    await E.seedCatalog(page, LAB_CATALOG.get(dir));
     await page.goto(urlOf(dir, file), { waitUntil: "load", timeout: 60000 });
     await page.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
     if (await page.$("#ecYes")) {

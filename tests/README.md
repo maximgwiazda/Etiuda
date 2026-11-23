@@ -997,7 +997,7 @@ bytes. The `sample-*` files still in the fixtures folder serve branches older th
 **A catalog reaches a browser leg's page one way: `E.seedCatalog(page, catalog)`.** It is the
 desk's own way, the preload's: the catalog's JSON is parsed into `window.E_CATALOG` before the
 engine's first script runs (puppeteer's `evaluateOnNewDocument`). No leg writes a catalog beside
-the page, so no leg leans on the browser form's sibling script tag. A run folder holds the
+the page, because the page loads none from there. A run folder holds the
 catalog key's text as `catalog` and hands it over with `seed(page)`; a non-catalog key, such as
 `sampleV2`, is still written beside the engine under its `SIBLING_AS` name.
 

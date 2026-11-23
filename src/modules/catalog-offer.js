@@ -1,4 +1,4 @@
-/* The catalog sitting beside Etiuda, offered rather than loaded, the watched file that
+/* The catalog the host found, offered rather than loaded, the watched file that
    offers the same way, and the dialog all three channels end in. */
 import { activateCatalog, catalogEdited, catalogEditionOlder, catalogMacroCount,
   catalogIntentCount, exportCatalog, isCatalogUpdate, catalogFileName, catalogNameOfFile, pinStoredFrom,
@@ -9,7 +9,7 @@ import { E_CATALOG_KEY, E_CATALOG_VERSION, E_CATALOG_REV, catalogStamp, editionN
   eCatalog, eCatalogAccepted, eCatalogSignature, storedCatalog, eWatchSupported, eWatchGet,
   eWatchClear, parseCatalogFile, catalogDocOf, eWatchName, eCatalogRefusedNames, eRefuseCatalogFile, eNeedsNewerLine,
   eUnreadableLine, fileReadCode, fileReadLine } from "./catalog.js";
-import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalogFolderShort,
+import { eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalogFolderShort,
   eCatalogIn, eCatalogBuiltIn, eCatalogMtime, eCatalogRing, eCatalogLeads, eHost, eLoadedCatalogFile, wireFolderLink, eOpenedWith,
   eOpenedRefused, eReadCatalogFile, eOnCatalogListing, eBranchIdentity, eNotify, noteCatalogFolderHold, eCatalogAdopted } from "./host.js";
 import { ejectCatalog } from "./local-memory.js";
@@ -41,18 +41,15 @@ import { hooks } from "./hooks.js";
 import { catalogTrust, whenTrusted, heldCatalogTrust, heldCatalogSigner, recheckHeldTrust, trustKeyHtml, trustOfferLine,
   trustSettled, trustPrint, keyPrintOf, heldCatalogPrint, settleHeldTrust, settleHeldTrustWithin } from "./catalog-trust.js";
 
-/* A catalog sitting beside Etiuda is offered, never forced. Asked once per signature:
+/* A catalog found in the catalog folder is offered, never forced. Asked once per signature:
    accept it and it loads silently from then on, change it and you are asked again, so what
    you are running is always something you agreed to. Declining is remembered too, so the
    bar does not nag on every launch. */
-/* WHERE THIS COPY FOUND IT, and the line says what this BUILD accepts rather than what one of
-   them does: a host takes any .ec from its catalog folder, so the folder is half the answer and
-   a bare filename leaves a person hunting for it; a browser takes the one sibling script its own
-   tag names. The folder is the one the file came out of, which is not always the setting - a
-   catalog beside the installation still loads. */
+/* WHERE THIS COPY FOUND IT: a host takes any .ec from its catalog folder, so the folder is half
+   the answer and a bare filename leaves a person hunting for it. The folder is the one the file
+   came out of, which is not always the setting - a catalog beside the installation still loads. */
 function eFoundHtml(name,where,builtIn){
-  // Empty in a browser, where the fixed sibling name is the whole answer.
-  const shown=String(name||"")||E_CATALOG_SCRIPT;
+  const shown=String(name||"");
   if(builtIn) return t("{FILE} comes with Etiuda.").split("{FILE}").join('<code>'+esc(shown)+'</code>');
   /* A PLACEHOLDER KEY, not two halves round a <code>: every other language puts the folder
      somewhere else in the sentence, and a fragment cannot be reordered. split/join rather than
@@ -88,7 +85,7 @@ function eOfferCatalog(given,name,where,force,asked,builtIn,offTeam){
        with no note keeps the direct the caller omitted, so a folder watch does not load at once. */
     ...(offTeam ? { direct:false, offTeam:true } : {}),
     accept:sig=>{ lsSet(E_CATALOG_KEY,sig);
-      return activateCatalog(c,{file:mine?file:"", from:file||(eHost()?"":E_CATALOG_SCRIPT),
+      return activateCatalog(c,{file:mine?file:"", from:file,
                                 fileAt:(mine&&!given)?eCatalogMtime():0}); }
   });
   if(asked && !shown) toastIfSameCatalog(c);
@@ -614,8 +611,8 @@ const listingNotified = new Set();
    and a click anywhere else leaves it standing until it is answered. */
 function eOfferCatalogDialog(c,src){
   const sig=eCatalogSignature(c);
-  /* Silent when the sibling is already what is loaded. Offered when nothing is loaded, and
-     also when something different is loaded - editing the sibling file, or importing another
+  /* Silent when the file is already what is loaded. Offered when nothing is loaded, and
+     also when something different is loaded - editing the file, or importing another
      catalog, both surface here rather than being applied behind the user's back. */
   const active=storedCatalog();
   if(active && eCatalogSignature(active)===sig) return false;
@@ -705,7 +702,7 @@ function eOfferCatalogDialog(c,src){
             : "This catalog has changed since it was loaded."))+'</p>'
         : '')
     // Name and edition on one line, counts on the next: WHICH catalog, then how big it is.
-    +'<div class="ec-what"><b>'+esc(catalogNameOfFile(String(src.file||"")||E_CATALOG_SCRIPT))+'</b>'
+    +'<div class="ec-what"><b>'+esc(catalogNameOfFile(String(src.file||""))||t("Catalog"))+'</b>'
     +offerEditionHtml(editionNameOf(c))
     +(updating && editionLabel(editionNameOf(active)) && editionLabel(editionNameOf(active))!==editionLabel(editionNameOf(c))
         ? '<div class="ec-counts">'+esc(editionSaid(editionNameOf(active),t("You have rev {R}."),t("You have {E}.")))+'</div>'
@@ -746,7 +743,7 @@ function eOfferCatalogDialog(c,src){
           const print=trustPrint(c);
           const matchLead=tLeads.find(l=>l&&l.print===print);
           const leadName=(matchLead&&matchLead.lead)||(tLeads[0]&&tLeads[0].lead)||"";
-          const catName=catalogNameOfFile(String((src&&src.file)||"")||E_CATALOG_SCRIPT)||t("Catalog");
+          const catName=catalogNameOfFile(String((src&&src.file)||""))||t("Catalog");
           const ed=editionNameOf(c);
           const edStr=(c.edition!=null&&c.edition!=="")?String(c.edition):String(ed.e||"");
           /* No name for the lead: the copywriter's nameless title, never a stand-in name inside the named one. */
@@ -842,7 +839,7 @@ function eOfferCatalogDialog(c,src){
     const answer=id=>()=>{ closeModal(); if(library && id==="#ecNo") hooks.openManage(); wrap.hidden=false; wrap.querySelector(id).click(); };
     wrap.hidden=true;
     openEditionPanel({c:c, held:active, changes:changes,
-      ed:editionNameOf(c), name:catalogNameOfFile(String(src.file||"")||E_CATALOG_SCRIPT),
+      ed:editionNameOf(c), name:catalogNameOfFile(String(src.file||""))||t("Catalog"),
       keep:answer("#ecNo"), load:answer("#ecYes"),
       taken:()=>repaintEditionRows(wrap,c,active,changes),
       back:()=>{ closeModal(); if(library) hooks.openManage(); wrap.hidden=false; place(); diff.focus(); }});

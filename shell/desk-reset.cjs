@@ -14,7 +14,7 @@ const MARKER_NAME = "reset-pending.json";
 /* The single-instance lock's own names in this folder. Windows writes the first.
    Linux writes the other three, each a link. None of them is the desk's. */
 const LOCK_FILES = ["lockfile", "SingletonLock", "SingletonCookie", "SingletonSocket"];
-const OWNED = ["etiuda-ring.json", "etiuda-team.json", "etiuda-catalog.js"];
+const OWNED = ["etiuda-ring.json", "etiuda-team.json"];
 const BUSY = { EPERM: 1, EBUSY: 1, EACCES: 1 };
 const PAUSE = new Int32Array(new SharedArrayBuffer(4));
 
