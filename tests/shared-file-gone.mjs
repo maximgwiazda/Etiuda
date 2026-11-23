@@ -1,6 +1,6 @@
 /* No desk writes into a catalog file on a share, in bare node: shell/main.js under a stubbed electron over a catalog folder,
  * and shell/preload.js over a stub of the bridge. A desk reads the catalog folder, works from its own copy, and holds no lock
- * beside a catalog, no shared read, write or put-back for the page, and no setting to turn them on. The page's half (the Settings row) is held in
+ * beside a catalog, no shared read or write for the page, a put-back only over a file it wrote, and no setting to turn any of them on. The page's half (the Settings row) is held in
  * tests/module-calls.mjs, and the desk's own file under a setting left on from an older build in tests/card-flag.mjs (nsfe7).
  *
  *   node tests/shared-file-gone.mjs      exit code is the number of failed checks, capped at 63
@@ -18,9 +18,10 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 9;
+const EXPECTED = 10;
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
-let asserted = 0, failed = 0;
+let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
   asserted++;
   if (ok) console.log("  ok   " + line);
@@ -40,7 +41,7 @@ const safeStorage = {
   encryptString: s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)),
   decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
 };
-function boot() {
+function boot(src) {
   const on = {}, handle = {}, test = {};
   const electron = {
     app: { getPath: n => (n === "documents" ? DOCS : UD), setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop,
@@ -51,7 +52,7 @@ function boot() {
   };
   process.env.XDG_CURRENT_DESKTOP = "GNOME"; /* so the shell's Linux keyring switch (tests/shell-office.mjs 14) stays out, on any machine */
   new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
-    fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8")
+    (src || fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8"))
     + "\n__test.keepHist = function(file, text, wrote) { return historyKeep(file, text, !!wrote); };")(
     n => (n === "electron" ? electron : nodeRequire(n)), path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"),
     { exports: {} }, {}, quiet, test);
@@ -138,6 +139,26 @@ try {
   check(!!undo && undo.ok === true && fs.readFileSync(SHOP, "utf8") === current && listing(FOLDER).join() === "shop.ec",
     "nsfe3c and those bytes go back the same way, which is the Undo, and nothing is left beside the catalog (" + JSON.stringify({ undo: undo, folder: listing(FOLDER) }) + ")");
 
+  /* nsfe3p: lifting plant:put-back-own, in a scratch copy of shell/main.js, lets the put-back write over a file this desk only read. */
+  if (PLANTS_OFF) { skipped++; console.log("  SKIP  nsfe3p lifting plant:put-back-own turns nsfe3 red (ETIUDA_PLANTS=off)"); }
+  else {
+    const lines = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8").split("\n");
+    const hit = lines.map((l, i) => (l.indexOf("plant:put-back-own") >= 0 ? i : -1)).filter(i => i >= 0);
+    let turned = null;
+    if (hit.length === 1) {
+      lines[hit[0]] = "";
+      const PL = path.join(FOLDER, "planted.ec"), p1 = catalog("planted", 1, "Before"), p2 = catalog("planted", 2, "After");
+      fs.writeFileSync(PL, p2);
+      const P = boot(lines.join("\n"));
+      P.test.keepHist(PL, p1);
+      P.test.keepHist(PL, p2);
+      const r = await P.ask("etiuda:history-put", sha(Buffer.from(p1)), PL);
+      turned = { wrote: !!r && r.ok === true && fs.readFileSync(PL, "utf8") === p1 };
+      fs.unlinkSync(PL);
+    }
+    check(!!turned && turned.wrote === true, "nsfe3p lifting plant:put-back-own turns nsfe3 red: a file this desk only read is written over (" + JSON.stringify(turned) + ")");
+  }
+
   /* nsfe5: no source of the shell takes a lock beside a catalog, by the name the lock was kept under. */
   const main = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
   check(main.indexOf("etiuda-lock") < 0 && main.indexOf('file + ".lock"') < 0 && main.indexOf("sharedLock") < 0,
@@ -152,7 +173,7 @@ try {
   console.log("  FAIL the run stopped: " + (e && e.stack || e));
 }
 
-const complete = asserted >= EXPECTED;
+const complete = asserted + skipped >= EXPECTED;
 if (!complete) console.log("  FAIL only " + asserted + " of " + EXPECTED + " legs ran");
 console.log("#counts legs=" + asserted + " expected=" + EXPECTED);
 console.log((failed || !complete ? "FAIL" : "ok") + " shared file gone: " + (asserted - failed) + " of " + asserted + " legs green");

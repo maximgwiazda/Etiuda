@@ -1,9 +1,11 @@
 /* THE DESK'S EARLIER VERSIONS OF ITS CATALOGS, which the host keeps and this lists, one file at a time. Every version
-   opens on this desk through the offer every route ends in; one the host says may go back is put back on this desk, as the
-   catalog in use, and never in the catalog folder: every edit after it goes to this desk's own file. */
+   opens on this desk through the offer every route ends in; one the host says may go back is put back in the catalog folder,
+   in place with an Undo, where the file is this desk's own, and otherwise on this desk as the catalog in use, never over a
+   file this desk did not write. */
 import { eHost, eCatalogFolderShort } from "./host.js";
-import { t, toastRefusal, fileStamp, catalogCountsLine } from "./ui-lang.js";
+import { t, toastRefusal, offerUndo, fileStamp, catalogCountsLine } from "./ui-lang.js";
 import { esc } from "./esc.js";
+import { originOf } from "./dom.js";
 import { hooks } from "./hooks.js";
 import { parseCatalogFile, eUnreadableLine, fileReadCode, fileReadLine, editionNameOf, editionLabel, eCatalogSignature, E_CATALOG_KEY } from "./catalog.js";
 import { activateCatalog } from "./catalog-file.js";
@@ -33,6 +35,10 @@ function historyGroups(list){
 }
 /* What a row offers: every version opens, and only one the host may put back, never the one its file holds now. */
 function historyActs(v){ return v && v.put===true && !v.current ? ["open","put"] : ["open"]; }
+/* Which way a Put back goes: in place, with an Undo, only for a row the shell marks mine (the bytes in the folder's file are ones this
+   desk wrote) under a host that offers the verb; a file this desk only read is no place for it to write, so the version is taken on this
+   desk as the catalog in use. */
+function historyPutRoute(v,h){ return v && v.mine===true && h && typeof h.historyPut==="function" ? "place" : "desk"; }
 /* This desk's own file is named for the catalog it grew from, without the id's tail the file name carries. */
 function historyFileName(g){
   const v=g[0], name=String(v.name||"");
@@ -56,7 +62,8 @@ function historyRowHtml(v,key){
     +(v.current?'<span class="ec-tag">'+esc(t("Current"))+'</span>':'')
     +(v.wrote && v.place!=="own"?'<span class="ec-tag">'+esc(t("Saved on this desk"))+'</span>':'')
     +(acts.indexOf("put")>-1?'<button type="button" class="btn" data-eh-put="'+key+'" title="'
-      +esc(t("Use this version on this desk, in place of the catalog in use")) /* words: placeholder */ +'">'+esc(t("Put back"))+'</button>':'')
+      +(historyPutRoute(v,eHost())==="place" ? esc(t("Put this version back in the catalog folder, in place of the file there now"))
+        : esc(t("Use this version on this desk, in place of the catalog in use")) /* words: placeholder */)+'">'+esc(t("Put back"))+'</button>':'')
     +'<button type="button" class="btn icbtn ec-act" data-eh-open="'+key+'" title="'+esc(open)+'" aria-label="'+esc(open)+'">'
       +ICON_LOAD+'</button>'
     +'</div>';
@@ -86,8 +93,20 @@ function historyOpen(v){
     if(!shown) toastIfSameCatalog(c);
   }).catch(()=>{});
 }
-function historyPutBack(v){
+function historyPutBack(v, from){
   const h=historyHost(); if(!h) return;
+  if(historyPutRoute(v,h)==="place"){
+    const refuse=()=>toastRefusal(t("{FILE} could not be put back in the catalog folder. The version stays here, ready to try again.").split("{FILE}").join(String(v.name||"")));
+    Promise.resolve(h.historyPut(v.sha,v.path)).then(r=>{
+      if(!r || !r.ok){ refuse(); return; }
+      if(document.getElementById("ehView")) openHistory();
+      if(r.replaced) offerUndo("Version put back",()=>Promise.resolve(h.historyPut(r.replaced,v.path)).then(u=>{
+        if(!u || !u.ok) refuse();
+        else if(document.getElementById("ehView")) openHistory();
+      }), null, from);
+    }).catch(refuse);
+    return;
+  }
   const refuse=()=>toastRefusal(t("{FILE} could not be put back on this desk. The version stays here, ready to try again.").split("{FILE}").join(String(v.name||""))); /* words: placeholder */
   Promise.resolve(h.historyRead(v.sha,v.path)).then(got=>{
     let c=null;
@@ -119,7 +138,7 @@ function openHistory(host){
     if(ehView){
       markCutText(ehView);
       ehView.querySelectorAll("[data-eh-open]").forEach(b=>{ b.onclick=()=>historyOpen(flat[+b.getAttribute("data-eh-open")]); });
-      ehView.querySelectorAll("[data-eh-put]").forEach(b=>{ b.onclick=()=>historyPutBack(flat[+b.getAttribute("data-eh-put")]); });
+      ehView.querySelectorAll("[data-eh-put]").forEach(b=>{ b.onclick=()=>historyPutBack(flat[+b.getAttribute("data-eh-put")], originOf(b)); });
     }
     const back=document.getElementById("ehClose");
     if(back) back.onclick=()=>hooks.openManage();
@@ -131,5 +150,6 @@ export {
   eHasHistory,
   historyGroups,
   historyActs,
+  historyPutRoute,
   openHistory
 };

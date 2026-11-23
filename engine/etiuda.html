@@ -9446,9 +9446,13 @@ What is typed here stays in this browser.`;
     "Saved on this desk": "Zapisana na tym stanowisku",
     "Open this copy": "Otwórz tę kopię",
     "Put back": "Przywróć",
+    "Put this version back in the catalog folder, in place of the file there now": "Przywraca tę wersję do folderu z plikami katalogów w miejsce obecnego pliku",
     /* words: placeholder */
     "Use this version on this desk, in place of the catalog in use": "Używa tej wersji na tym stanowisku, w miejsce katalogu w użyciu",
     "{FILE} as it was on {WHEN}, kept on this desk.": "{FILE} w stanie z {WHEN}, zachowany na tym stanowisku.",
+    "{FILE} could not be put back in the catalog folder. The version stays here, ready to try again.": "Nie udało się przywrócić pliku {FILE} do folderu katalogów. Ta wersja zostaje tutaj i można spróbować ponownie.",
+    "Version put back": "Przywrócono wersję",
+    /* words: placeholder */
     "{FILE} could not be put back on this desk. The version stays here, ready to try again.": "Nie udało się przywrócić pliku {FILE} na tym stanowisku. Ta wersja zostaje tutaj i można spróbować ponownie.",
     "The catalog file could not be loaded:": "Nie udało się wczytać pliku katalogu:",
     "{FILE} is sealed for its team": "{FILE} jest zapieczętowany dla swojego zespołu",
@@ -40313,6 +40317,7 @@ What is typed here stays in this browser.`;
     eHasHistory: () => eHasHistory,
     historyActs: () => historyActs,
     historyGroups: () => historyGroups,
+    historyPutRoute: () => historyPutRoute,
     openHistory: () => openHistory
   });
   function historyHost() {
@@ -40336,6 +40341,9 @@ What is typed here stays in this browser.`;
   function historyActs(v) {
     return v && v.put === true && !v.current ? ["open", "put"] : ["open"];
   }
+  function historyPutRoute(v, h) {
+    return v && v.mine === true && h && typeof h.historyPut === "function" ? "place" : "desk";
+  }
   function historyFileName(g) {
     const v = g[0], name = String(v.name || "");
     if (!name) return t("Unnamed catalog");
@@ -40353,7 +40361,7 @@ What is typed here stays in this browser.`;
       +v.cards >= 0 ? catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}", +v.cards, +v.macros, +v.intents, +v.cats) : ""
     ].filter(Boolean).map(esc).join(" · ");
     const acts = historyActs(v), open = t("Open this copy");
-    return '<div class="ec-row' + (v.current ? " is-current" : "") + '"><span class="ec-name"><b>' + esc(fileStamp(v.first)) + "</b>" + (meta ? '<small class="ec-meta">' + meta + "</small>" : "") + "</span>" + (v.current ? '<span class="ec-tag">' + esc(t("Current")) + "</span>" : "") + (v.wrote && v.place !== "own" ? '<span class="ec-tag">' + esc(t("Saved on this desk")) + "</span>" : "") + (acts.indexOf("put") > -1 ? '<button type="button" class="btn" data-eh-put="' + key + '" title="' + esc(t("Use this version on this desk, in place of the catalog in use")) + '">' + esc(t("Put back")) + "</button>" : "") + '<button type="button" class="btn icbtn ec-act" data-eh-open="' + key + '" title="' + esc(open) + '" aria-label="' + esc(open) + '">' + ICON_LOAD + "</button></div>";
+    return '<div class="ec-row' + (v.current ? " is-current" : "") + '"><span class="ec-name"><b>' + esc(fileStamp(v.first)) + "</b>" + (meta ? '<small class="ec-meta">' + meta + "</small>" : "") + "</span>" + (v.current ? '<span class="ec-tag">' + esc(t("Current")) + "</span>" : "") + (v.wrote && v.place !== "own" ? '<span class="ec-tag">' + esc(t("Saved on this desk")) + "</span>" : "") + (acts.indexOf("put") > -1 ? '<button type="button" class="btn" data-eh-put="' + key + '" title="' + (historyPutRoute(v, eHost()) === "place" ? esc(t("Put this version back in the catalog folder, in place of the file there now")) : esc(t("Use this version on this desk, in place of the catalog in use"))) + '">' + esc(t("Put back")) + "</button>" : "") + '<button type="button" class="btn icbtn ec-act" data-eh-open="' + key + '" title="' + esc(open) + '" aria-label="' + esc(open) + '">' + ICON_LOAD + "</button></div>";
   }
   function historyBodyHtml(groups) {
     if (!groups.length)
@@ -40395,9 +40403,24 @@ What is typed here stays in this browser.`;
     }).catch(() => {
     });
   }
-  function historyPutBack(v) {
+  function historyPutBack(v, from) {
     const h = historyHost();
     if (!h) return;
+    if (historyPutRoute(v, h) === "place") {
+      const refuse2 = () => toastRefusal(t("{FILE} could not be put back in the catalog folder. The version stays here, ready to try again.").split("{FILE}").join(String(v.name || "")));
+      Promise.resolve(h.historyPut(v.sha, v.path)).then((r) => {
+        if (!r || !r.ok) {
+          refuse2();
+          return;
+        }
+        if (document.getElementById("ehView")) openHistory();
+        if (r.replaced) offerUndo("Version put back", () => Promise.resolve(h.historyPut(r.replaced, v.path)).then((u) => {
+          if (!u || !u.ok) refuse2();
+          else if (document.getElementById("ehView")) openHistory();
+        }), null, from);
+      }).catch(refuse2);
+      return;
+    }
     const refuse = () => toastRefusal(t("{FILE} could not be put back on this desk. The version stays here, ready to try again.").split("{FILE}").join(String(v.name || "")));
     Promise.resolve(h.historyRead(v.sha, v.path)).then((got) => {
       let c = null;
@@ -40433,7 +40456,7 @@ What is typed here stays in this browser.`;
           b.onclick = () => historyOpen(flat[+b.getAttribute("data-eh-open")]);
         });
         ehView.querySelectorAll("[data-eh-put]").forEach((b) => {
-          b.onclick = () => historyPutBack(flat[+b.getAttribute("data-eh-put")]);
+          b.onclick = () => historyPutBack(flat[+b.getAttribute("data-eh-put")], originOf(b));
         });
       }
       const back = document.getElementById("ehClose");

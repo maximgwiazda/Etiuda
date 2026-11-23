@@ -1371,9 +1371,13 @@ UI_STRINGS.pl={
   "Saved on this desk":"Zapisana na tym stanowisku",
   "Open this copy":"Otwórz tę kopię",
   "Put back":"Przywróć",
+  "Put this version back in the catalog folder, in place of the file there now":"Przywraca tę wersję do folderu z plikami katalogów w miejsce obecnego pliku",
   /* words: placeholder */
   "Use this version on this desk, in place of the catalog in use":"Używa tej wersji na tym stanowisku, w miejsce katalogu w użyciu",
   "{FILE} as it was on {WHEN}, kept on this desk.":"{FILE} w stanie z {WHEN}, zachowany na tym stanowisku.",
+  "{FILE} could not be put back in the catalog folder. The version stays here, ready to try again.":"Nie udało się przywrócić pliku {FILE} do folderu katalogów. Ta wersja zostaje tutaj i można spróbować ponownie.",
+  "Version put back":"Przywrócono wersję",
+  /* words: placeholder */
   "{FILE} could not be put back on this desk. The version stays here, ready to try again.":"Nie udało się przywrócić pliku {FILE} na tym stanowisku. Ta wersja zostaje tutaj i można spróbować ponownie.",
   "The catalog file could not be loaded:":"Nie udało się wczytać pliku katalogu:",
   "{FILE} is sealed for its team":"{FILE} jest zapieczętowany dla swojego zespołu",
