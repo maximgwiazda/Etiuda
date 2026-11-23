@@ -52,9 +52,9 @@ function eOpenCatalogFolder(){
   const h=eHost();
   if(!h || typeof h.openCatalogFolder!=="function") return Promise.resolve(false);
   const say=why=>{
-    if(why==="not-answering") toastRefusal(t("The team's folder does not answer from this computer just now, so it was not opened. Open it again once it can be reached: with the network drive connected, or the program that syncs it running."));
-    else if(why==="not-a-folder") toastRefusal(t("Settings names a file where the team's folder should be, so nothing was opened. The folder can be chosen again from the Library."));
-    else if(why==="could-not-open") toastRefusal(t("This computer did not open the team's folder just now. Clicking the link again tries again."));
+    if(why==="not-answering") toastRefusal(t("The catalog folder does not answer from this computer just now, so it was not opened. Open it again once it can be reached: with the network drive connected, or the program that syncs it running."));
+    else if(why==="not-a-folder") toastRefusal(t("Settings names a file where the catalog folder should be, so nothing was opened. The folder can be chosen again from the Library."));
+    else if(why==="could-not-open") toastRefusal(t("This computer did not open the catalog folder just now. Clicking the link again tries again."));
   };
   try{
     return Promise.resolve(h.openCatalogFolder()).then(v=>{
