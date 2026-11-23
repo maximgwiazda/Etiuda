@@ -9018,9 +9018,11 @@ async function rmoRace(mod) {
   put(b.mirror, C.TEAM_NAME, w.docAt(2, 2, k2b, [K, X]));
   const ED = "{\"note\":\"B after its move\"}\n";
   put(b.mirror, "lane.ec", ED);
-  between = async () => { await settle(a); };
+  let seqAfterA = 0;
+  between = async () => { await settle(a); seqAfterA = w.seqNow(); };
   await once(b);
-  const out = { aFirst: w.teamOf(a.mirror), relayAfterRace: w.relayEpoch() };
+  /* The copies B sent of its own refused file, in the pass its team file was refused: none may go. */
+  const out = { aFirst: w.teamOf(a.mirror), relayAfterRace: w.relayEpoch(), bCopies: w.copiesAfter(seqAfterA) };
   await settle(b); await settle(dK, dY);
   out.bFile = w.teamOf(b.mirror);
   /* B's Studio: the key minted here for epoch 2 set aside for A's, what went under it owed again, then its removal of Y on top. */
@@ -9133,7 +9135,7 @@ if (partOn("pRmo")) {
       "rmo5a a profile of the lead's key restored after the move, holding no team file and key 1 alone, reaches the epoch-2 file through the lead's own copy by the box it holds, and is in step once it holds its key: "
       + JSON.stringify(f));
     const rr = await rmoRace(C);
-    check(!!rr.bFile && rr.bFile.names === "KY" && rr.edAtK && !!rr.final.b && rr.final.b.names === "K" && rr.final.relayEpoch === 3,
+    check(rr.bCopies === 0 && !!rr.bFile && rr.bFile.names === "KY" && rr.edAtK && !!rr.final.b && rr.final.b.names === "K" && rr.final.relayEpoch === 3,
       "rmo7a the race: A's file stands; the edition B published after its own move, sealed under the key it set aside, goes again under the key that stands and the remaining desk reads it; B's removal is then applied on top as epoch 3: "
       + JSON.stringify(rr));
     for (const v of ["same", "higher"]) {
@@ -9176,8 +9178,10 @@ if (partOn("pRmo")) {
     else {
       const p1 = await liftChannel("plant:lead-copies", async mod => { const y = await rmoOnline(mod); return !!y.bFile && y.bFile.epoch === 1; });
       check(p1.turned && p1.back, "rmo1d lifting plant:lead-copies leaves the other computer at epoch 1, and the product file is never written: " + p1.detail + ", sha " + (p1.back ? "restored" : "differs"));
-      const p2 = await liftChannel("plant:copy-after-team", async mod => { const y = await rmoDouble(mod, "higher"); return y.afterReconnect.aPuts > 0; });
-      check(p2.turned && p2.back, "rmo2d lifting plant:copy-after-team sends the first computer's desk copies while its own team file is refused, and the product file is never written: " + p2.detail + ", sha " + (p2.back ? "restored" : "differs"));
+      /* Moved: in the pWW orders the computer behind now sends nothing at all (plant:behind-hold); the copies' own guard is the race's,
+         where B's team file is refused in the very pass its copies would follow. */
+      const p2 = await liftChannel("plant:copy-after-team", async mod => { const y = await rmoRace(mod); return y.bCopies > 0; });
+      check(p2.turned && p2.back, "rmo2d lifting plant:copy-after-team sends the desks' copies of B's own file in the race, in the pass its team file is refused, and the product file is never written: " + p2.detail + ", sha " + (p2.back ? "restored" : "differs"));
       const p3 = await liftChannel("plant:team-fork", async mod => { const y = await rmoDouble(mod, "higher"); return !!y.afterReconnect.a && y.afterReconnect.a.names !== "KX"; });
       check(p3.turned && p3.back, "rmo2e lifting plant:team-fork lets the first computer's own file for an epoch the relay already holds stand over the relay's, and the product file is never written: " + p3.detail + ", sha " + (p3.back ? "restored" : "differs"));
     }
