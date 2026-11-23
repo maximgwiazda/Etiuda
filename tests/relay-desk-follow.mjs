@@ -336,7 +336,8 @@ async function launch(plan) {
   const rowFirst = await rowsNow();
   let rowLater = null;
   if (plan.teamLater) {
-    fs.writeFileSync(path.join(SHARED, "etiuda-team.json"), plan.teamLater);
+    if (plan.relayStart) fs.mkdirSync(MIRROR, { recursive: true });
+    fs.writeFileSync(path.join(plan.relayStart ? MIRROR : SHARED, "etiuda-team.json"), plan.teamLater);
     await new Promise(r => setTimeout(r, 1500));
     rowLater = await rowsNow();
   }
@@ -476,8 +477,12 @@ function makeScenario(kind, extra = {}) {
     teamPins: {
       [teamId]: { keyId: lead.keyId, public: lead.public },
     },
-    ...(extra.pinFrom ? { teamPinFrom: { [teamId]: extra.pinFrom } } : {}),
-    ...(extra.keptChannel ? { teamChannel: { [teamId]: { kind: "relay", rt, url: extra.keptChannel } } } : {}),
+    ...(extra.pinFrom || extra.relayStart ? { teamPinFrom: { [teamId]: extra.pinFrom || "invite" } } : {}),
+    /* A relay start (the known-address scenes below): the desk is on the team over the relay, as a desk joined by invitation is: its channel
+       kept at the built-in relay unless a scene says otherwise, the team shown with its mirror as the folder, and the team file arriving in
+       that mirror. It was a desk reading a team file in a shared folder, which followed it to the relay. */
+    ...(extra.keptChannel || extra.relayStart ? { teamChannel: { [teamId]: { kind: "relay", rt, url: extra.keptChannel || BUILTIN_RELAY } } } : {}),
+    ...(extra.relayStart ? { teamShown: { [teamId]: { lead: "Lamp lead", folder: path.join(ud, "relay", rt), relay: new URL(extra.keptChannel || BUILTIN_RELAY).host } } } : {}),
     teamKeys: {
       [teamId]: { 1: safeStorage.encryptString(teamKey.toString("base64")).toString("base64") },
     },
@@ -538,6 +543,7 @@ function makeScenario(kind, extra = {}) {
     ownDeskId: ownDesk.keyId,
     lead,
     movedTeamDoc,
+    relayStart: !!extra.relayStart,
     triggerTeamMove: true,
     holdBranch: extra.holdBranch !== undefined ? extra.holdBranch : { stem: heldStem, text: JSON.stringify(heldDoc) },
     mirrorTeamAfterHold: extra.memberMirror ? JSON.stringify(signTeamDoc(movedTeamDoc, lead), null, 2) : undefined,
@@ -575,6 +581,12 @@ function check(cond, line) {
   if (cond) process.stdout.write("  ok   " + line + "\n");
   else { failed++; process.stdout.write("  FAIL " + line + "\n"); }
 }
+/* A check that held a folder desk following its team to the relay, retired with it: said and not asked, and not counted among the asserted. */
+let retired = 0;
+function retire(cond, line) {
+  retired++;
+  process.stdout.write("  RETIRED " + line + "\n");
+}
 function skip(line) {
   skipped++;
   process.stdout.write("  SKIP " + line + "\n");
@@ -603,25 +615,29 @@ async function main() {
   );
   const r1 = runScenario(s1);
 
-  check(
+  /* RETIRED, P4 (a desk holding a folder team no longer follows it to the relay: no folder is read as a team, and a held team says it no longer syncs and a new invitation brings it back): the check holds a folder desk following its team to the relay or declining to, or a plant on that following, and there is no following to hold. It said what its sentence below says. */
+  retire(
     r1.channelCreated && r1.channelStarted && r1.openedDir === s1.mirrorFolder,
     "945s1 a rostered desk that pinned the lead from the folder follows: "
     + JSON.stringify({ created: r1.channelCreated, started: r1.channelStarted, opened: r1.openedDir })
   );
 
-  check(
+  /* RETIRED, P4 (a desk holding a folder team no longer follows it to the relay: no folder is read as a team, and a held team says it no longer syncs and a new invitation brings it back): the check holds a folder desk following its team to the relay or declining to, or a plant on that following, and there is no following to hold. It said what its sentence below says. */
+  retire(
     !r1.sharedWatched && r1.mirrorWatched && r1.openedDir === s1.mirrorFolder,
     "945s4 on following the folder is no longer watched and catalogFolder() is the mirror: "
     + JSON.stringify({ sharedWatched: r1.sharedWatched, mirrorWatched: r1.mirrorWatched, opened: r1.openedDir })
   );
 
-  check(
+  /* RETIRED, P4 (a desk holding a folder team no longer follows it to the relay: no folder is read as a team, and a held team says it no longer syncs and a new invitation brings it back): the check holds a folder desk following its team to the relay or declining to, or a plant on that following, and there is no following to hold. It said what its sentence below says. */
+  retire(
     r1.branchReachable && r1.inUseReachable && !r1.heldBranchReached,
     "945s5 the own branch and in-use reach the mirror, and a held working copy of a catalog the team does not list stays held, since the desk is no sealed member at the relay's mirror (board 974, C5): "
     + JSON.stringify(r1.mirrorFiles)
   );
 
-  check(
+  /* RETIRED, P4 (a desk holding a folder team no longer follows it to the relay: no folder is read as a team, and a held team says it no longer syncs and a new invitation brings it back): the check holds a folder desk following its team to the relay or declining to, or a plant on that following, and there is no following to hold. It said what its sentence below says. */
+  retire(
     r1.answerSurvived,
     "945s6 an ask's answer survives the change: answerSurvived=" + r1.answerSurvived
   );
@@ -634,7 +650,8 @@ async function main() {
   );
   const r2 = runScenario(s2);
 
-  check(
+  /* RETIRED, P4 (a desk holding a folder team no longer follows it to the relay: no folder is read as a team, and a held team says it no longer syncs and a new invitation brings it back): the check holds a folder desk following its team to the relay or declining to, or a plant on that following, and there is no following to hold. It said what its sentence below says. */
+  retire(
     !r2.channelCreated && r2.openedDir === s2.sharedFolder,
     "945s2 a desk not on the roster does not follow: "
     + JSON.stringify({ created: r2.channelCreated, opened: r2.openedDir })
@@ -653,7 +670,8 @@ async function main() {
     const r3 = runScenario(s3);
     try { fs.rmSync(policyFolder, { recursive: true, force: true }); } catch {}
 
-    check(
+    /* RETIRED, P4 (a desk holding a folder team no longer follows it to the relay: no folder is read as a team, and a held team says it no longer syncs and a new invitation brings it back): the check holds a folder desk following its team to the relay or declining to, or a plant on that following, and there is no following to hold. It said what its sentence below says. */
+    retire(
       !r3.channelCreated && r3.openedDir === policyFolder,
       "945s3 a policy naming a folder does not follow: "
       + JSON.stringify({ created: r3.channelCreated, opened: r3.openedDir })
@@ -668,7 +686,8 @@ async function main() {
   );
   const r4 = runScenario(s4);
 
-  check(
+  /* RETIRED, P4 (a desk holding a folder team no longer follows it to the relay: no folder is read as a team, and a held team says it no longer syncs and a new invitation brings it back): the check holds a folder desk following its team to the relay or declining to, or a plant on that following, and there is no following to hold. It said what its sentence below says. */
+  retire(
     !r4.channelCreated && r4.openedDir === s4.sharedFolder,
     "945s7 a url other than the built-in relay is not followed: "
     + JSON.stringify({ created: r4.channelCreated, opened: r4.openedDir })
@@ -702,7 +721,8 @@ async function main() {
       lines[at] = "  /* plant:follow-roster */";
     });
     const turned = p.found && (!p.res.channelCreated || p.res.openedDir !== p.plan.mirrorFolder);
-    check(
+    /* RETIRED, P4 (a desk holding a folder team no longer follows it to the relay: no folder is read as a team, and a held team says it no longer syncs and a new invitation brings it back): the check holds a folder desk following its team to the relay or declining to, or a plant on that following, and there is no following to hold. It said what its sentence below says. */
+    retire(
       turned && p.shaSame,
       "945s8 lifting plant:follow-roster turns 945s1 red: turned=" + turned + ", shaSame=" + p.shaSame
     );
@@ -714,7 +734,8 @@ async function main() {
       lines[at] = "  /* plant:follow-copy */";
     });
     const turned = p.found && (!p.res.branchReachable || !p.res.inUseReachable);
-    check(
+    /* RETIRED, P4 (a desk holding a folder team no longer follows it to the relay: no folder is read as a team, and a held team says it no longer syncs and a new invitation brings it back): the check holds a folder desk following its team to the relay or declining to, or a plant on that following, and there is no following to hold. It said what its sentence below says. */
+    retire(
       turned && p.shaSame,
       "945s9 lifting plant:follow-copy turns 945s5 red: turned=" + turned + ", shaSame=" + p.shaSame
     );
@@ -726,7 +747,8 @@ async function main() {
       lines[at] = "  /* plant:follow-folder-changed */";
     });
     const turned = p.found && (p.res.sharedWatched || !p.res.mirrorWatched || p.res.openedDir !== p.plan.mirrorFolder);
-    check(
+    /* RETIRED, P4 (a desk holding a folder team no longer follows it to the relay: no folder is read as a team, and a held team says it no longer syncs and a new invitation brings it back): the check holds a folder desk following its team to the relay or declining to, or a plant on that following, and there is no following to hold. It said what its sentence below says. */
+    retire(
       turned && p.shaSame,
       "945s10 lifting plant:follow-folder-changed turns 945s4 red: turned=" + turned + ", shaSame=" + p.shaSame
     );
@@ -738,7 +760,8 @@ async function main() {
       lines[at] = "    removeAnswer(); /* plant:follow-ask-keep */";
     });
     const turned = p.found && !p.res.answerSurvived;
-    check(
+    /* RETIRED, P4 (a desk holding a folder team no longer follows it to the relay: no folder is read as a team, and a held team says it no longer syncs and a new invitation brings it back): the check holds a folder desk following its team to the relay or declining to, or a plant on that following, and there is no following to hold. It said what its sentence below says. */
+    retire(
       turned && p.shaSame,
       "945s11 lifting plant:follow-ask-keep turns 945s6 red: turned=" + turned + ", shaSame=" + p.shaSame
     );
@@ -754,7 +777,8 @@ async function main() {
       return p;
     })());
     const turned = p.found && (p.res.channelCreated || p.res.openedDir !== p.plan.sharedFolder);
-    check(
+    /* RETIRED, P4 (a desk holding a folder team no longer follows it to the relay: no folder is read as a team, and a held team says it no longer syncs and a new invitation brings it back): the check holds a folder desk following its team to the relay or declining to, or a plant on that following, and there is no following to hold. It said what its sentence below says. */
+    retire(
       turned && p.shaSame,
       "945s12 lifting plant:follow-builtin-url turns 945s7 red: turned=" + turned + ", shaSame=" + p.shaSame
     );
@@ -779,14 +803,16 @@ async function main() {
   const s6 = heldPlan();
   const r6 = runScenario(s6);
 
-  check(
+  /* RETIRED, P4 (a desk holding a folder team no longer follows it to the relay: no folder is read as a team, and a held team says it no longer syncs and a new invitation brings it back): the check holds a folder desk following its team to the relay or declining to, or a plant on that following, and there is no following to hold. It said what its sentence below says. */
+  retire(
     r6.channelCreated && r6.mirrorMarks["branch-lamp.ec"] && r6.mirrorMarks["branch-lamp.ec"].rev === 5
       && r6.mirrorMarks["branch-lamp.ec"].from === "mirror" && r6.mirrorMarks["norev.ec"] && r6.mirrorMarks["norev.ec"].from === "mirror",
     "945s13 a file the mirror already holds at a higher rev, or at none to compare, is not overwritten by the folder's: "
     + JSON.stringify(r6.mirrorMarks)
   );
 
-  check(
+  /* RETIRED, P4 (a desk holding a folder team no longer follows it to the relay: no folder is read as a team, and a held team says it no longer syncs and a new invitation brings it back): the check holds a folder desk following its team to the relay or declining to, or a plant on that following, and there is no following to hold. It said what its sentence below says. */
+  retire(
     r6.mirrorMarks["fresh.ec"] && r6.mirrorMarks["fresh.ec"].rev === 3 && r6.mirrorMarks["fresh.ec"].from === "folder"
       && r6.branchReachable && r6.inUseReachable,
     "945s14 a folder file at a higher rev than the mirror's replaces it, and a name the mirror lacks is still copied: "
@@ -800,15 +826,18 @@ async function main() {
     }, heldPlan());
     const turned = p.found && !(p.res.mirrorMarks["branch-lamp.ec"] && p.res.mirrorMarks["branch-lamp.ec"].rev === 5
       && p.res.mirrorMarks["norev.ec"] && p.res.mirrorMarks["norev.ec"].from === "mirror");
-    check(
+    /* RETIRED, P4 (a desk holding a folder team no longer follows it to the relay: no folder is read as a team, and a held team says it no longer syncs and a new invitation brings it back): the check holds a folder desk following its team to the relay or declining to, or a plant on that following, and there is no following to hold. It said what its sentence below says. */
+    retire(
       turned && p.shaSame,
       "945s15 lifting plant:follow-keep-rev turns 945s13 red: turned=" + turned + ", shaSame=" + p.shaSame
     );
   }
 
   /* Scenario 7: the desk is told and it applies on a relay team (board 1014) */
-  const s7 = makeScenario("rostered-follow");
-  fs.writeFileSync(path.join(s7.sharedFolder, "etiuda-team.json"), JSON.stringify(signTeamDoc(s7.movedTeamDoc, s7.lead), null, 2));
+  /* 945s16 to 945s18 are rebased on a relay start: the desk is on the team over the relay (it started from a folder it followed to the relay). */
+  const s7 = makeScenario("rostered-follow", { relayStart: true });
+  fs.mkdirSync(s7.mirrorFolder, { recursive: true });
+  fs.writeFileSync(path.join(s7.mirrorFolder, "etiuda-team.json"), JSON.stringify(signTeamDoc(s7.movedTeamDoc, s7.lead), null, 2));
   const switched = Object.assign(JSON.parse(JSON.stringify(s7.movedTeamDoc)), { rev: (s7.movedTeamDoc.rev || 0) + 1 });
   const r7 = runScenario(Object.assign({}, s7, { contentSwitch: { text: JSON.stringify(signTeamDoc(switched, s7.lead), null, 2), team: s7.movedTeamDoc.id } }));
   const cv = r7.contentViews || {};
@@ -819,8 +848,7 @@ async function main() {
 
   /* Scenario 8 (board 974, C5): the desk follows at boot, as in scenario 1, and its copy grown from a listed edition is held at the
      relay's mirror until the team file arrives there; then it is written. */
-  const s8 = makeScenario("member-follow", { memberMirror: true });
-  fs.writeFileSync(path.join(s8.sharedFolder, "etiuda-team.json"), JSON.stringify(signTeamDoc(s8.movedTeamDoc, s8.lead), null, 2));
+  const s8 = makeScenario("member-follow", { memberMirror: true, relayStart: true });
   const r8 = runScenario(s8);
   check(r8.openedDir === s8.mirrorFolder && r8.preHeld && r8.heldBranchReached,
     "945s17 a desk that followed its team to the relay holds its working copy of a listed catalog at the relay's mirror until the team file arrives there, and then writes it: "
@@ -829,8 +857,7 @@ async function main() {
     const p = testPlant("plant:changed-held", (lines, at) => {
       lines[at] = "  /* plant:changed-held */";
     }, (() => {
-      const q = makeScenario("member-follow-plant", { memberMirror: true });
-      fs.writeFileSync(path.join(q.sharedFolder, "etiuda-team.json"), JSON.stringify(signTeamDoc(q.movedTeamDoc, q.lead), null, 2));
+      const q = makeScenario("member-follow-plant", { memberMirror: true, relayStart: true });
       return q;
     })());
     const turned = p.found && p.res.preHeld && !p.res.heldBranchReached;
@@ -847,7 +874,8 @@ async function main() {
   const r9 = runScenario(s9);
   const s9Desk = path.join(s9.sharedFolder, "desks", s9.ownDeskId);
   const shareKept = ["fresh.ec", "branch-lamp.ec"].every(n => { try { return (fs.statSync(path.join(s9Desk, n)).mode & 0o200) === 0; } catch { return false; } });
-  check(r9.channelCreated && r9.mirrorMarks["fresh.ec"] && r9.mirrorMarks["fresh.ec"].rev === 3 && r9.mirrorMarks["fresh.ec"].from === "folder"
+  /* RETIRED, P4 (a folder desk no longer follows its team to the relay): the check holds the folder's read-only files copied writable into the relay's mirror on that following, which does not happen now. It said what its sentence below says. */
+  retire(r9.channelCreated && r9.mirrorMarks["fresh.ec"] && r9.mirrorMarks["fresh.ec"].rev === 3 && r9.mirrorMarks["fresh.ec"].from === "folder"
       && r9.mirrorWritable["fresh.ec"] === true && r9.branchReachable && r9.mirrorWritable["branch-lamp.ec"] === true && shareKept,
     "998g a desk following its team to the relay copies the folder's files marked read-only into the mirror writable, over a copy"
     + " the mirror held marked, and the folder's files keep their marks: " + JSON.stringify({ marks: r9.mirrorMarks, writable: r9.mirrorWritable, shareKept }));
@@ -857,27 +885,33 @@ async function main() {
      an ordinary desk does not, and the test service desk follows no other address (945s19 to 945s24). */
   const movedPlan = (kind, extra) => {
     const p = makeScenario(kind, extra);
-    fs.writeFileSync(path.join(p.sharedFolder, "etiuda-team.json"), JSON.stringify(signTeamDoc(p.movedTeamDoc, p.lead), null, 2));
+    const where = p.relayStart ? p.mirrorFolder : p.sharedFolder;
+    fs.mkdirSync(where, { recursive: true });
+    fs.writeFileSync(path.join(where, "etiuda-team.json"), JSON.stringify(signTeamDoc(p.movedTeamDoc, p.lead), null, 2));
     return p;
   };
   const s10 = movedPlan("ts-staging", { testService: true, url: STAGING_RELAY });
   const r10 = runScenario(s10);
-  check(r10.testService === true && r10.channelCreated && r10.channelStarted && r10.openedDir === s10.mirrorFolder && r10.mirrorWatched && !r10.sharedWatched,
+  /* RETIRED, P4 (a folder desk no longer follows its team to the relay): the check holds a rostered folder desk following to staging's relay, declining another host, or following the live relay, or a plant on that following; the same rules are held for a desk on the relay by ks1 to ks7 and 945s32 to 945s36, which start there. It said what its sentence below says. */
+  retire(r10.testService === true && r10.channelCreated && r10.channelStarted && r10.openedDir === s10.mirrorFolder && r10.mirrorWatched && !r10.sharedWatched,
     "945s19 a test service desk, rostered, that pinned the lead from the folder follows its team to staging's relay: "
     + JSON.stringify({ testService: r10.testService, created: r10.channelCreated, started: r10.channelStarted, opened: r10.openedDir === s10.mirrorFolder }));
   const s11 = movedPlan("plain-staging", { url: STAGING_RELAY });
   const r11 = runScenario(s11);
-  check(r11.testService === false && !r11.channelCreated && r11.openedDir === s11.sharedFolder,
+  /* RETIRED, P4 (a folder desk no longer follows its team to the relay): the check holds a rostered folder desk following to staging's relay, declining another host, or following the live relay, or a plant on that following; the same rules are held for a desk on the relay by ks1 to ks7 and 945s32 to 945s36, which start there. It said what its sentence below says. */
+  retire(r11.testService === false && !r11.channelCreated && r11.openedDir === s11.sharedFolder,
     "945s20 the same desk in the ordinary build does not follow its team to staging's relay: "
     + JSON.stringify({ testService: r11.testService, created: r11.channelCreated, opened: r11.openedDir === s11.sharedFolder }));
   const s12 = movedPlan("ts-other", { testService: true, url: "https://other.test/relay-staging/v1" });
   const r12 = runScenario(s12);
-  check(r12.testService === true && !r12.channelCreated && r12.openedDir === s12.sharedFolder,
+  /* RETIRED, P4 (a folder desk no longer follows its team to the relay): the check holds a rostered folder desk following to staging's relay, declining another host, or following the live relay, or a plant on that following; the same rules are held for a desk on the relay by ks1 to ks7 and 945s32 to 945s36, which start there. It said what its sentence below says. */
+  retire(r12.testService === true && !r12.channelCreated && r12.openedDir === s12.sharedFolder,
     "945s21 a test service desk follows no address but the two relays: "
     + JSON.stringify({ testService: r12.testService, created: r12.channelCreated, opened: r12.openedDir === s12.sharedFolder }));
   const s13 = movedPlan("ts-live", { testService: true });
   const r13 = runScenario(s13);
-  check(r13.testService === true && r13.channelCreated && r13.openedDir === s13.mirrorFolder,
+  /* RETIRED, P4 (a folder desk no longer follows its team to the relay): the check holds a rostered folder desk following to staging's relay, declining another host, or following the live relay, or a plant on that following; the same rules are held for a desk on the relay by ks1 to ks7 and 945s32 to 945s36, which start there. It said what its sentence below says. */
+  retire(r13.testService === true && r13.channelCreated && r13.openedDir === s13.mirrorFolder,
     "945s22 a test service desk still follows its team to the live relay: "
     + JSON.stringify({ testService: r13.testService, created: r13.channelCreated, opened: r13.openedDir === s13.mirrorFolder }));
   {
@@ -885,14 +919,16 @@ async function main() {
       lines[at] = "  /* plant:follow-staging */";
     }, movedPlan("ts-staging-plant", { testService: true, url: STAGING_RELAY }));
     const turned = p.found && p.res.testService === true && !p.res.channelCreated && p.res.openedDir === p.plan.sharedFolder;
-    check(turned && p.shaSame, "945s23 lifting plant:follow-staging turns 945s19 red: turned=" + turned + ", shaSame=" + p.shaSame);
+    /* RETIRED, P4 (a folder desk no longer follows its team to the relay): the check holds a rostered folder desk following to staging's relay, declining another host, or following the live relay, or a plant on that following; the same rules are held for a desk on the relay by ks1 to ks7 and 945s32 to 945s36, which start there. It said what its sentence below says. */
+    retire(turned && p.shaSame, "945s23 lifting plant:follow-staging turns 945s19 red: turned=" + turned + ", shaSame=" + p.shaSame);
   }
   {
     const p = testPlant("plant:follow-staging", (lines, at) => {
       lines[at] = lines[at].replace("testServiceOn && ", "");
     }, movedPlan("plain-staging-plant", { url: STAGING_RELAY }));
     const turned = p.found && p.res.testService === false && p.res.channelCreated && p.res.openedDir === p.plan.mirrorFolder;
-    check(turned && p.shaSame, "945s24 staging's relay followed without the switch turns 945s20 red: turned=" + turned + ", shaSame=" + p.shaSame);
+    /* RETIRED, P4 (a folder desk no longer follows its team to the relay): the check holds a rostered folder desk following to staging's relay, declining another host, or following the live relay, or a plant on that following; the same rules are held for a desk on the relay by ks1 to ks7 and 945s32 to 945s36, which start there. It said what its sentence below says. */
+    retire(turned && p.shaSame, "945s24 staging's relay followed without the switch turns 945s20 red: turned=" + turned + ", shaSame=" + p.shaSame);
   }
 
   /* Scenario 11: a team file's relay address is heeded only where it is a known relay address, the rule an invitation keeps
@@ -901,12 +937,15 @@ async function main() {
      stand-in (ks1 to ks16). */
   const ELSEWHERE = "https://elsewhere.example/relay/v1", ELSEWHERE_HOST = "elsewhere.example", STAND_IN = "https://stand-in.test/relay/v1";
   const SAID_ELSEWHERE = "names a relay this Etiuda does not use";
-  const knownPlan = (kind, extra, customer) => Object.assign(movedPlan(kind, extra), customer ? { customer: true, recordNet: true } : { recordNet: true });
-  /* Not followed: no channel, nothing fetched from the host, the host said nowhere, the folder kept, and the reason said once. */
-  const heldBack = r => !r.channelCreated && r.openedDir !== "" && !r.channelUrl.includes(ELSEWHERE_HOST)
+  /* The known-address scenes start a desk already on the team over the relay (movedPlan's relayStart), its team file in the relay's mirror. */
+  const knownPlan = (kind, extra, customer) => Object.assign(movedPlan(kind, Object.assign({ relayStart: true }, extra)), customer ? { customer: true, recordNet: true } : { recordNet: true });
+  /* Not followed: the file's channel is not heeded, so the desk's own channel stays where its invitation put it (the built-in relay, started or
+     not), nothing is fetched from the host, the host said nowhere, the mirror kept, and the reason said once. It said, on a folder desk that
+     would have followed to the relay: no channel opened at all. */
+  const heldBack = r => r.openedDir !== "" && !r.channelUrl.includes(ELSEWHERE_HOST)
     && !r.fetched.some(u => u.includes(ELSEWHERE_HOST)) && !r.said.some(l => l.includes(ELSEWHERE_HOST))
-    && r.said.filter(l => l.includes(SAID_ELSEWHERE)).length === 1 && r.said.some(l => l.includes("The team file of Team " + SAID_ELSEWHERE));
-  const heldBrief = (r, p) => JSON.stringify({ created: r.channelCreated, url: r.channelUrl, folderKept: r.openedDir === p.sharedFolder,
+    && r.said.filter(l => l.includes(SAID_ELSEWHERE)).length === 1 && r.said.some(l => l.includes("The team file of Lamp lead's team " + SAID_ELSEWHERE));
+  const heldBrief = (r, p) => JSON.stringify({ created: r.channelCreated, url: r.channelUrl, folderKept: r.openedDir === p.mirrorFolder,
     fetchedThere: r.fetched.filter(u => u.includes(ELSEWHERE_HOST)).length, saidHost: r.said.some(l => l.includes(ELSEWHERE_HOST)),
     saidWhy: r.said.filter(l => l.includes(SAID_ELSEWHERE)).length });
   const followed = (r, url) => r.channelCreated && r.channelStarted && r.channelUrl === url;
@@ -915,7 +954,7 @@ async function main() {
     const p = knownPlan("known-" + from, { url: ELSEWHERE, pinFrom: from }, true);
     const r = runScenario(p);
     known[from] = { p, r };
-    check(heldBack(r) && r.openedDir === p.sharedFolder,
+    check(heldBack(r) && r.openedDir === p.mirrorFolder,
       (from === "invite" ? "ks1" : from === "policy" ? "ks2" : "ks3") + " a desk whose lead was pinned by "
       + (from === "invite" ? "an invitation" : from === "policy" ? "machine policy" : "an answered request")
       + ", its lead's signed team file naming another https host, on a customer's start: the file's channel is not heeded, no"
@@ -956,7 +995,7 @@ async function main() {
   knownLift("ks12", "plant:relay-known", toComment("plant:relay-known"), knownPlan("known-lift-harness", { url: ELSEWHERE, pinFrom: "invite" }, true),
     r => r.channelCreated && r.channelUrl === ELSEWHERE, "lifting the harness exception's guard (plant:relay-known) turns ks1 red: a customer's start follows any https host");
   knownLift("ks13", "plant:relay-known", (lines, at) => { lines[at] = "  return false; /* plant:relay-known */"; }, knownPlan("known-lift-stand-in", { url: STAND_IN, pinFrom: "invite" }, false),
-    r => !r.channelCreated, "the harness exception taken away turns ks5 red: a harness start no longer follows the stand-in");
+    r => !(r.channelCreated && r.channelUrl === STAND_IN), "the harness exception taken away turns ks5 red: a harness start no longer follows the stand-in");
   knownLift("ks14", "plant:builtin-relay-known", toComment("plant:builtin-relay-known"), knownPlan("known-lift-builtin", { pinFrom: "invite" }, true),
     r => !r.channelCreated, "lifting plant:builtin-relay-known turns ks4 red: the built-in relay is not followed");
   knownLift("ks15", "plant:builtin-relay-known", toComment("plant:builtin-relay-known"), knownPlan("known-lift-staging", { testService: true, url: STAGING_RELAY, pinFrom: "invite" }, true),
@@ -1191,11 +1230,11 @@ async function main() {
      https host before. */
   const kps = knownPlan("known-plain-staging", { url: STAGING_RELAY, pinFrom: "invite" }, true);
   const rps = runScenario(kps);
-  const stagingHeld = (r, p) => r.testService === false && !r.channelCreated && r.openedDir === p.sharedFolder && !r.channelUrl.includes("relay-staging")
+  const stagingHeld = (r, p) => r.testService === false && r.openedDir === p.mirrorFolder && !r.channelUrl.includes("relay-staging")
     && !r.fetched.some(u => u.includes("relay-staging")) && r.said.filter(l => l.includes(SAID_ELSEWHERE)).length === 1;
   check(stagingHeld(rps, kps), "945s32 an ordinary build, on a customer's start, whose pinned lead's signed team file names staging's relay does not heed it:"
-    + " no channel, nothing fetched there, the folder kept, and the desk says once that the file names a relay this Etiuda does not use: "
-    + JSON.stringify({ testService: rps.testService, created: rps.channelCreated, url: rps.channelUrl, folderKept: rps.openedDir === kps.sharedFolder,
+    + " its channel stays where its invitation put it (it said: no channel on a folder desk), nothing fetched there, the mirror kept, and the desk says once that the file names a relay this Etiuda does not use: "
+    + JSON.stringify({ testService: rps.testService, created: rps.channelCreated, url: rps.channelUrl, folderKept: rps.openedDir === kps.mirrorFolder,
       fetchedThere: rps.fetched.filter(u => u.includes("relay-staging")).length, saidWhy: rps.said.filter(l => l.includes(SAID_ELSEWHERE)).length }));
   knownLift("945s33", "plant:staging-known", toComment("plant:staging-known"), knownPlan("known-lift-plain-staging", { url: STAGING_RELAY, pinFrom: "invite" }, true),
     r => r.channelCreated && r.channelUrl === STAGING_RELAY, "lifting plant:staging-known turns 945s32 red: an ordinary build follows its team to staging's relay");
@@ -1235,7 +1274,7 @@ async function main() {
     try { fs.rmSync(s.lab, { recursive: true, force: true }); } catch {}
   });
 
-  process.stdout.write("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + "\n");
+  process.stdout.write("#counts checks=" + asserted + " skipped=" + skipped + " retired=" + retired + " failed=" + failed + "\n");
   if (failed > 0) process.exit(Math.min(failed, 63));
 }
 

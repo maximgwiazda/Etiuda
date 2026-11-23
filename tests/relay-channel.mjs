@@ -63,7 +63,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 578; /* fold 129: 540 at the merge base + 2 (fold 128: the join link key) + 36 (no older replace, same and cross epoch) */
+const EXPECTED = 578 - 18 + 3; /* fold 129: 533 at the merge base + 45 (fold 128's join link key, and the channel's no older replace, same and cross epoch) - 18 retired with the folder team + 3 asserted again on a relay team (P4's own count, its line in d8d8a5ae) */
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -75,6 +75,13 @@ function check(ok, line) {
 function skip(line) {
   skipped++;
   console.log("  SKIP  " + line);
+}
+/* A check that held what a folder team did, retired with it: its fixtures still run, its answer is not asked, and EXPECTED is without it.
+   Each is named in the comment above it, with why. */
+let retired = 0;
+function retire(ok, line) {
+  retired++;
+  console.log("  RETIRED " + line);
 }
 function markPart(id) {
   if (globalThis.__rcPart) console.log("#part " + globalThis.__rcPart.id + " " + (Date.now() - globalThis.__rcPart.t));
@@ -3238,7 +3245,8 @@ if (deskOn()) try {
       const hleads = hv && Array.isArray(hv.leads) ? hv.leads : [];
       const hpage = await pageHtml(hleads);
       const noKey = hleads.length > 0 && hleads.every(l => !Object.prototype.hasOwnProperty.call(l, "head"));
-      check(relayHeadShown && noKey && hpage.en.indexOf("Newest edition") < 0 && H.api.catalogFolder() === shareH,
+      /* RETIRED, P4 (no folder is read as a team): a folder team's head, ring and epoch were read off its team file in the share; a held folder team shows its row and nothing newer, and the relay desk's head checks hold what a team shows. It said what its sentence below says. */
+      retire(relayHeadShown && noKey && hpage.en.indexOf("Newest edition") < 0 && H.api.catalogFolder() === shareH,
         "948f a folder team shows nothing new, while the relay desk showed the head: leads " + hleads.length
         + ", head " + (noKey ? "absent" : "present") + ", sentence " + (hpage.en.indexOf("Newest edition") < 0 ? "absent" : "shown")
         + ", relay sentence " + relayHeadShown + ", folder " + (H.api.catalogFolder() === shareH ? "the share" : H.api.catalogFolder()));
@@ -3277,15 +3285,49 @@ if (deskOn()) try {
       check(false, "948 the team's news: " + (e && e.stack ? e.stack : e));
     }
   }
+  /* A desk that follows one relay team and holds the team file and the head in the team's relay mirror, read through the desk's own shell:
+     the row `etiuda:team-join leads` gives for the team, its head. The desk is offline (every fetch to the relay fails), so nothing lands in
+     the mirror but what this puts there; the head is read from the mirror by the channel's headNews and judged by the shell's headView.
+     `o`: tag, team (id), teamText, rt, channel, head, files ([name, text]), revs ({catalog: rev} the desk has loaded), src (a planted shell). */
+  let relayRowN = 0;
+  const relayHeadRow = async o => {
+    const ud = path.join(LAB, o.tag + "-" + (++relayRowN) + "-" + hex(3)), mir = path.join(ud, "relay", o.rt), elsewhere = path.join(ud, "share");
+    fs.mkdirSync(mir, { recursive: true }); fs.mkdirSync(elsewhere, { recursive: true });
+    fs.writeFileSync(path.join(mir, C.TEAM_NAME), o.teamText);
+    for (const [n, t] of o.files || []) fs.writeFileSync(path.join(mir, n), t);
+    if (o.head) fs.writeFileSync(path.join(mir, HEAD_FILE), o.head);
+    const revs = {};
+    for (const id of Object.keys(o.revs || {})) revs[id] = { [LEAD.pub]: o.revs[id] };
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: elsewhere, eUiLang: "en" },
+      teamPins: { [o.team]: { keyId: LEAD.keyId, public: LEAD.pub } }, teamPinFrom: { [o.team]: "invite" }, teamChannel: { [o.team]: o.channel },
+      teamShown: { [o.team]: { folder: mir, relay: "relay.test" } }, catalogRevs: revs }), "utf8");
+    const FD = await loadDesk(ud, { source: o.src || SRC, fetch: () => Promise.reject(new Error("offline")) });
+    await FD.ask("etiuda:branch-identity", true);
+    const run = FD.api.relayRun();
+    try {
+      const v = await FD.ask("etiuda:team-join", "leads");
+      const row = (v && Array.isArray(v.leads) ? v.leads : []).filter(l => l && l.team === o.team)[0];
+      return row && row.head ? row.head : null;
+    } finally {
+      if (run) await run.stop();
+    }
+  };
   if (partOn("p962s5")) {
   markPart("p962s5");
 
-  /* ---- 962 stage 5 (the design's 3.2 and 3.3) on a folder team's row, through the desk's own shell: the head per catalog ---- */
-  
+  /* ---- 962 stage 5 (the design's 3.2 and 3.3) on a relay team's row, through the desk's own shell: the head per catalog ----
+     MOVED, P4 (no folder is read as a team). These scenes ran on a folder team: its team file and head in the desk's folder-mirror, the row read off
+     that folder. headView's rules (a head's entries kept per catalog, an unlisted catalog dropped, an entry below the rev the desk has seen dropped,
+     `newer` only above what the desk has loaded) now serve relay teams alone, so the same checks run on a desk that follows the team over the
+     relay, relayHeadRow above. Each keeps its id and its sentence, "a folder team" now "a relay team"; the old sentence stands in the comment
+     at its place. Their plant lifts (head-listed, folder-head-older, head-loaded) are lifted on these scenes. 962s5r2f and 962s5t4, and the plants
+     folder-head-ahead and folder-head-epoch, are retired: the folder's time and epoch floors left the shell, and the relay's own are 962s5r and 962s5t
+     in the channel's part below. */
+
   try {
-      const TMF = "t-" + hex(8);
-      const folderTeamS5 = JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: TMF, catalogs: ["pebble-board", "quay-board"],
-        lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev: 1, roster: [] }, LEAD), null, 1) + "\n";
+      const TMF = "t-" + hex(8), RTS = hex(16), CHS = { kind: "relay", rt: RTS, url: URLV1 };
+      const teamS5 = JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: TMF, catalogs: ["pebble-board", "quay-board"],
+        lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev: 1, channel: CHS, ring: RING, roster: [] }, LEAD), null, 1) + "\n";
       const catOf = (id, rev) => {
         const o = { format: 2, kind: "etiuda-catalog", id, rev, name: "Board " + id, date: "2026-03-0" + Math.min(rev, 9),
           langs: [{ code: "en", label: "EN" }], tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers" } }],
@@ -3296,105 +3338,72 @@ if (deskOn()) try {
       };
       const pe = (rev, ed) => ({ catalog: "pebble-board", rev, edition: ed || "Pebble " + rev, published: rev + " March 2026" });
       const qe = (rev, ed) => ({ catalog: "quay-board", rev, edition: ed || "Quay " + rev, published: rev + " April 2026" });
-      let n5 = 0;
-      /* A desk pinned to the folder team, its mirror holding the team file, the head and any `files`; `revs` its handed revs. */
-      const rowOf = async (head, o) => {
-        const opt = o || {};
-        const ud = path.join(LAB, "s5-head-" + (++n5) + "-" + hex(3)), mir = path.join(ud, "folder-mirror", TMF), elsewhere = path.join(ud, "share");
-        fs.mkdirSync(mir, { recursive: true }); fs.mkdirSync(elsewhere, { recursive: true });
-        fs.writeFileSync(path.join(mir, C.TEAM_NAME), opt.team || folderTeamS5);
-        for (const [n, t] of opt.files || []) fs.writeFileSync(path.join(mir, n), t);
-        if (head) fs.writeFileSync(path.join(mir, HEAD_FILE), head);
-        const revs = {};
-        for (const id of Object.keys(opt.revs || {})) revs[id] = { [LEAD.pub]: opt.revs[id] };
-        fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: elsewhere, eUiLang: "en" },
-          teamPins: { [TMF]: { keyId: LEAD.keyId, public: LEAD.pub } }, catalogRevs: revs }), "utf8");
-        const FD = await loadDesk(ud, opt.src);
-        await FD.ask("etiuda:branch-identity", true);
-        const look = async () => {
-          const v = await FD.ask("etiuda:team-join", "leads");
-          const row = (v && Array.isArray(v.leads) ? v.leads : []).filter(l => l && l.team === TMF)[0];
-          return row && row.head ? row.head : null;
-        };
-        const first = await look();
-        return { head: first, again: async next => { fs.writeFileSync(path.join(mir, HEAD_FILE), next); return look(); } };
-      };
+      /* A desk pinned to the relay team, its mirror holding the team file, the head and any `files`; `revs` its handed revs. */
+      const rowOf = (head, o) => relayHeadRow(Object.assign({ tag: "s5-head", team: TMF, teamText: teamS5, rt: RTS, channel: CHS, head }, o || {}));
       const shownS5 = h => !h ? "none" : (h.edition || "-") + " [" + (Array.isArray(h.editions) ? h.editions.map(e => e.catalog + "@" + e.rev + (e.newer ? "+" : "")).join(",") : "no list") + "]";
       const entryOf = (h, id) => h && Array.isArray(h.editions) ? h.editions.filter(e => e.catalog === id)[0] || null : null;
       const now = Date.now();
 
-      /* 962s5d: both catalogs' entries kept, the second's newer edition beside the first's higher rev. */
-      const d = (await rowOf(signHead({ v: 1, team: TMF, epoch: 1, rev: 1, editions: [pe(5, "Pebble five"), qe(2, "Quay two")], t: now }))).head;
+      /* 962s5d: both catalogs' entries kept, the second's newer edition beside the first's higher rev. Old sentence: "a folder team's head naming two
+         catalogs keeps both entries, the second's newer edition beside the first's higher rev". */
+      const d = await rowOf(signHead({ v: 1, team: TMF, epoch: 1, rev: 1, editions: [pe(5, "Pebble five"), qe(2, "Quay two")], t: now }));
       check(!!d && d.edition === "Pebble five" && (d.editions || []).length === 2 && !!entryOf(d, "quay-board") && entryOf(d, "quay-board").newer === true
         && entryOf(d, "pebble-board").newer === true,
-        "962s5d a folder team's head naming two catalogs keeps both entries, the second's newer edition beside the first's higher rev: " + shownS5(d));
-      /* 962s5f: an entry for a catalog the team file does not list is dropped. */
-      const fScene = async src => (await rowOf(signHead({ v: 1, team: TMF, epoch: 1, rev: 1, editions: [pe(5), { catalog: "stone-board", rev: 9, edition: "Stone nine", published: "9 May 2026" }], t: now }), { src })).head;
+        "962s5d a relay team's head naming two catalogs keeps both entries, the second's newer edition beside the first's higher rev: " + shownS5(d));
+      /* 962s5f: an entry for a catalog the team file does not list is dropped. Old sentence: "an entry for a catalog the team file does not list is
+         dropped from the row" (on a folder team). */
+      const fScene = src => rowOf(signHead({ v: 1, team: TMF, epoch: 1, rev: 1, editions: [pe(5), { catalog: "stone-board", rev: 9, edition: "Stone nine", published: "9 May 2026" }], t: now }), { src });
       const f = await fScene();
       check(!!f && (f.editions || []).length === 1 && !entryOf(f, "stone-board") && f.edition === "Pebble 5",
-        "962s5f an entry for a catalog the team file does not list is dropped from the row: " + shownS5(f));
-      /* 962s5g, the folder: an entry below the rev this desk has seen of that catalog is dropped; a higher one is kept. */
-      const gScene = async src => (await rowOf(signHead({ v: 1, team: TMF, epoch: 1, rev: 1, editions: [pe(5), qe(2)], t: now }), { revs: { "quay-board": 3 }, src })).head;
+        "962s5f on a relay team, an entry for a catalog the team file does not list is dropped from the row: " + shownS5(f));
+      /* 962s5g: an entry below the rev this desk has seen of that catalog is dropped; a higher one is kept. Old sentence: "on a folder team, an entry
+         below the rev this desk has of that catalog is dropped and a higher one kept". */
+      const gScene = src => rowOf(signHead({ v: 1, team: TMF, epoch: 1, rev: 1, editions: [pe(5), qe(2)], t: now }), { revs: { "quay-board": 3 }, src });
       const g = await gScene();
-      const gUp = (await rowOf(signHead({ v: 1, team: TMF, epoch: 1, rev: 1, editions: [pe(5), qe(4)], t: now }), { revs: { "quay-board": 3 } })).head;
+      const gUp = await rowOf(signHead({ v: 1, team: TMF, epoch: 1, rev: 1, editions: [pe(5), qe(4)], t: now }), { revs: { "quay-board": 3 } });
       check(!!g && !entryOf(g, "quay-board") && !!entryOf(g, "pebble-board") && !!gUp && !!entryOf(gUp, "quay-board") && entryOf(gUp, "quay-board").newer === true,
-        "962s5g on a folder team, an entry below the rev this desk has of that catalog is dropped and a higher one kept: below " + shownS5(g) + ", above " + shownS5(gUp));
-      /* 962s5p: newer is false for a rev the desk has loaded and true above it; a file sitting unread in the mirror is not loaded. */
-      const pScene = async src => (await rowOf(signHead({ v: 1, team: TMF, epoch: 1, rev: 1, editions: [pe(5), qe(3)], t: now }),
-        { revs: { "pebble-board": 5 }, files: [["quay.ec", catOf("quay-board", 3)]], src })).head;
+        "962s5g on a relay team, an entry below the rev this desk has of that catalog is dropped and a higher one kept: below " + shownS5(g) + ", above " + shownS5(gUp));
+      /* 962s5p: newer is false for a rev the desk has loaded and true above it; a file sitting unread in the mirror is not loaded. Old sentence: "an entry
+         the desk has loaded is not newer, one above it is, and a file unread in the mirror does not count as loaded" (on a folder team). */
+      const pScene = src => rowOf(signHead({ v: 1, team: TMF, epoch: 1, rev: 1, editions: [pe(5), qe(3)], t: now }),
+        { revs: { "pebble-board": 5 }, files: [["quay.ec", catOf("quay-board", 3)]], src });
       const p = await pScene();
       check(!!p && !!entryOf(p, "pebble-board") && entryOf(p, "pebble-board").newer === false && !!entryOf(p, "quay-board") && entryOf(p, "quay-board").newer === true,
-        "962s5p an entry the desk has loaded is not newer, one above it is, and a file unread in the mirror does not count as loaded: " + shownS5(p));
-      /* 962s5r, the folder: a head dated beyond now plus ten minutes is not shown and raises no floor, so a genuine head then shows. */
-      const rFScene = async src => {
-        const desk = await rowOf(signHead({ v: 1, team: TMF, epoch: 1, rev: 1, editions: [pe(6, "Pebble from ahead")], t: now + 11 * 60 * 1000 }), { src });
-        const next = await desk.again(signHead({ v: 1, team: TMF, epoch: 1, rev: 1, editions: [pe(5, "Pebble now")], t: now }));
-        return { ahead: desk.head, next };
-      };
-      const rF = await rFScene();
-      check(!rF.ahead && !!rF.next && rF.next.edition === "Pebble now",
-        "962s5r2f on a folder team, a head dated beyond now plus ten minutes is not shown and leaves the floor, so the genuine head after it shows: ahead "
-        + shownS5(rF.ahead) + ", then " + shownS5(rF.next));
-      /* 962s5t4: the folder's epoch floor, as the relay's: a head below the epoch of the team file the mirror holds is left out. */
-      const teamAt2 = JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: TMF, catalogs: ["pebble-board", "quay-board"],
-        lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 2, rev: 1, roster: [] }, LEAD), null, 1) + "\n";
-      const t4Scene = async src => {
-        const desk = await rowOf(signHead({ v: 1, team: TMF, epoch: 1, rev: 1, editions: [pe(5, "Pebble at epoch one")], t: now }), { team: teamAt2, src });
-        const at2 = await desk.again(signHead({ v: 1, team: TMF, epoch: 2, rev: 1, editions: [pe(5, "Pebble at epoch two")], t: now + 1 }));
-        return { low: desk.head, at2 };
-      };
-      const t4 = await t4Scene();
-      check(!t4.low && !!t4.at2 && t4.at2.edition === "Pebble at epoch two",
-        "962s5t4 on a folder team, a head below the epoch of the team file the mirror holds is left out, and one at it shows: below " + shownS5(t4.low) + ", at " + shownS5(t4.at2));
+        "962s5p on a relay team, an entry the desk has loaded is not newer, one above it is, and a file unread in the mirror does not count as loaded: " + shownS5(p));
+      /* RETIRED, P4 (no folder is read as a team): 962s5r2f, "on a folder team, a head dated beyond now plus ten minutes is not shown and leaves the floor, so
+         the genuine head after it shows", and 962s5t4, "on a folder team, a head below the epoch of the team file the mirror holds is left out, and one at it
+         shows", with their plants folder-head-ahead (962s5r4) and folder-head-epoch (962s5t5), whose lines left shell/main.js. The relay's own time and epoch
+         floors are held by 962s5r and 962s5t in the channel's part. */
+      retire(true, "962s5r2f on a folder team, a head dated beyond now plus ten minutes is not shown and leaves the floor, so the genuine head after it shows");
+      retire(true, "962s5t4 on a folder team, a head below the epoch of the team file the mirror holds is left out, and one at it shows");
+      retire(true, "962s5r4 lifting plant:folder-head-ahead shows the head from ahead and refuses the genuine one (FAIL 962s5r2f)");
+      retire(true, "962s5t5 lifting plant:folder-head-epoch shows the head below the team file's epoch (FAIL 962s5t4)");
       if (PLANTS_OFF) {
-        skip("962s5t5 lifting plant:folder-head-epoch shows the head below the team file's epoch");
         skip("962s5f2 lifting plant:head-listed keeps the unlisted catalog's entry");
         skip("962s5g2 lifting plant:folder-head-older keeps the entry below the desk's rev");
         skip("962s5p2 lifting plant:head-loaded calls the loaded rev newer");
-        skip("962s5r4 lifting plant:folder-head-ahead shows the head from ahead and refuses the genuine one");
       } else {
         const lifted = tag => { const lines = SRC.split(/\n/), at = lines.findIndex(l => l.indexOf(tag) >= 0); if (at < 0) return null; lines.splice(at, 1); return lines.join("\n"); };
-        const s5 = lifted("plant:folder-head-epoch"), t5 = s5 ? await t4Scene(s5) : null;
-        check(!!t5 && !!t5.low, "962s5t5 lifting plant:folder-head-epoch shows the head below the team file's epoch (FAIL 962s5t4): " + (s5 ? shownS5(t5 && t5.low) : "plant line absent"));
-        const s1 = lifted("plant:head-listed"), s2 = lifted("plant:folder-head-older"), s3 = lifted("plant:head-loaded"), s4 = lifted("plant:folder-head-ahead");
-        const f2 = s1 ? await fScene(s1) : null, g2 = s2 ? await gScene(s2) : null, p2 = s3 ? await pScene(s3) : null, r2 = s4 ? await rFScene(s4) : null;
+        const s1 = lifted("plant:head-listed"), s2 = lifted("plant:folder-head-older"), s3 = lifted("plant:head-loaded");
+        const f2 = s1 ? await fScene(s1) : null, g2 = s2 ? await gScene(s2) : null, p2 = s3 ? await pScene(s3) : null;
         check(!!f2 && !!entryOf(f2, "stone-board"), "962s5f2 lifting plant:head-listed keeps the unlisted catalog's entry (FAIL 962s5f): " + (s1 ? shownS5(f2) : "plant line absent"));
         check(!!g2 && !!entryOf(g2, "quay-board"), "962s5g2 lifting plant:folder-head-older keeps the entry below the desk's rev (FAIL 962s5g): " + (s2 ? shownS5(g2) : "plant line absent"));
         check(!!p2 && !!entryOf(p2, "pebble-board") && entryOf(p2, "pebble-board").newer === true, "962s5p2 lifting plant:head-loaded calls the loaded rev newer (FAIL 962s5p): "
           + (s3 ? shownS5(p2) : "plant line absent"));
-        check(!!r2 && !!r2.ahead && r2.ahead.edition === "Pebble from ahead" && !r2.next, "962s5r4 lifting plant:folder-head-ahead shows the head from ahead and refuses the genuine one (FAIL 962s5r2f): "
-          + (s4 ? shownS5(r2 && r2.ahead) + ", then " + shownS5(r2 && r2.next) : "plant line absent"));
       }
     } catch (e) {
-      check(false, "962 stage 5 on a folder team's row: " + (e && e.stack ? e.stack : e));
+      check(false, "962 stage 5 on a relay team's row: " + (e && e.stack ? e.stack : e));
     }
   }
   if (partOn("p962s6")) {
   markPart("p962s6");
 
   /* ---- 962 stage 6 (E6): a catalog leaves the team. The desk keeps it loaded, withdraws its team-key working copies of it at
-     the team file's landing, and shows no head entry for it. ---- */
-  
+     the team file's landing, and shows no head entry for it. ----
+     MOVED, P4 (no folder is read as a team): each scene ran by folder and by relay; the folder halves are retired and the relay halves, which passed
+     unasserted in the retired lines, are asserted here with their plant lifts on the relay scenes. 962s6e6b3 (the restart variant) was only ever run by
+     folder; it is run by relay now. */
+
   try {
       const catOf = (id, rev) => {
         const o = { format: 2, kind: "etiuda-catalog", id, rev, name: "Board " + id, date: "2026-03-0" + Math.min(rev, 9),
@@ -3415,48 +3424,34 @@ if (deskOn()) try {
         roster: me ? [{ desk: { id: me.id, key: me.key, box: me.box }, wrap: D.api.wrapTeamKey(key, me.box, id, 1, me.id) }] : [] },
         channel ? { channel } : {}), LEAD), null, 1) + "\n";
 
-      /* E6c: a head still naming B after B leaves names nothing on the row. */
-      const TME6 = "t-" + hex(8);
-      let n6 = 0;
-      const rowOf = async (head, team, src) => {
-        const ud = path.join(LAB, "s6-head-" + (++n6) + "-" + hex(3)), mir = path.join(ud, "folder-mirror", TME6), elsewhere = path.join(ud, "share");
-        fs.mkdirSync(mir, { recursive: true }); fs.mkdirSync(elsewhere, { recursive: true });
-        fs.writeFileSync(path.join(mir, C.TEAM_NAME), team);
-        if (head) fs.writeFileSync(path.join(mir, HEAD_FILE), head);
-        fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: elsewhere, eUiLang: "en" },
-          teamPins: { [TME6]: { keyId: LEAD.keyId, public: LEAD.pub } } }), "utf8");
-        const FD = await loadDesk(ud, src);
-        await FD.ask("etiuda:branch-identity", true);
-        const v = await FD.ask("etiuda:team-join", "leads");
-        const row = (v && Array.isArray(v.leads) ? v.leads : []).filter(l => l && l.team === TME6)[0];
-        return row && row.head ? row.head : null;
-      };
+      /* E6c: a head still naming B after B leaves names nothing on the row. On a relay team (the old scene was a folder team's). */
+      const TME6 = "t-" + hex(8), RT6 = hex(16), CH6 = { kind: "relay", rt: RT6, url: URLV1 };
+      const rowOf = (head, team, src) => relayHeadRow({ tag: "s6-head", team: TME6, teamText: team, rt: RT6, channel: CH6, head, src });
       const e6cScene = async src => {
-        const after = teamE6(TME6, ["pebble-board"], 2), empty = teamE6(TME6, [], 3), now = Date.now();
+        const after = teamE6(TME6, ["pebble-board"], 2, null, null, null, CH6), empty = teamE6(TME6, [], 3, null, null, null, CH6), now = Date.now();
         const onlyB = signHead({ v: 1, team: TME6, epoch: 1, rev: 1, editions: [qe(2, "Quay two")], t: now });
         const both = signHead({ v: 1, team: TME6, epoch: 1, rev: 1, editions: [pe(5, "Pebble five"), qe(2, "Quay two")], t: now });
         return { onlyB: await rowOf(onlyB, after, src), both: await rowOf(both, after, src), empty: await rowOf(onlyB, empty, src) };
       };
       const c6 = await e6cScene();
       check(c6.onlyB == null && !!c6.both && !entryOf(c6.both, "quay-board") && c6.both.edition === "Pebble five" && c6.empty == null,
-        "962s6e6c a head still naming B after B leaves names nothing on the row: only B " + shownS6(c6.onlyB)
+        "962s6e6c on a relay team, a head still naming B after B leaves names nothing on the row: only B " + shownS6(c6.onlyB)
         + ", both " + shownS6(c6.both) + ", empty team " + shownS6(c6.empty));
 
-      /* A desk on a sealed team listing B (quay-board) and A (pebble-board), by folder or by relay, holding both editions as the
-         lead sealed them, working in B, with a working copy grown from each. */
+      /* A desk on a sealed relay team listing B (quay-board) and A (pebble-board), holding both editions as the lead sealed them, working
+         in B, with a working copy grown from each. (It was by folder or by relay: `kind` stays, and only "relay" is run.) */
       const e6Desk = async (kind, src) => {
         const ud = path.join(LAB, "e6-" + kind + "-" + hex(3)), share = path.join(LAB, "e6-" + kind + "-share-" + hex(3));
         const team = "t-" + hex(8), rt = hex(16), key = crypto.randomBytes(32);
-        const channel = kind === "relay" ? { kind: "relay", rt, url: URLV1 } : null;
-        const mir = kind === "relay" ? path.join(ud, "relay", rt) : path.join(ud, "folder-mirror", team);
+        const channel = { kind: "relay", rt, url: URLV1 };
+        const mir = path.join(ud, "relay", rt);
         fs.mkdirSync(share, { recursive: true }); fs.mkdirSync(mir, { recursive: true });
-        fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(Object.assign({ kind: "etiuda-desk", schema: 1,
+        fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
           keys: { eCatalogFolder: share, eUiLang: "en" }, teamPins: { [team]: { keyId: LEAD.keyId, public: LEAD.pub } },
-          teamKeys: { [team]: { 1: encE6(key.toString("base64")) } } },
-          channel ? { teamPinFrom: { [team]: "invite" }, teamChannel: { [team]: channel } } : { folderTeams: { [team]: { folder: share } } })), "utf8");
+          teamKeys: { [team]: { 1: encE6(key.toString("base64")) } }, teamPinFrom: { [team]: "invite" }, teamChannel: { [team]: channel } }), "utf8");
         const D = await loadDesk(ud, src);
         const me = await D.ask("etiuda:branch-identity", true);
-        const put6 = text => { if (!channel) fs.writeFileSync(path.join(share, C.TEAM_NAME), text); fs.writeFileSync(path.join(mir, C.TEAM_NAME), text); };
+        const put6 = text => { fs.writeFileSync(path.join(mir, C.TEAM_NAME), text); };
         const land = text => { put6(text); D.api.heedTeam(); };
         land(teamE6(team, ["quay-board", "pebble-board"], 1, me, D, key, channel));
         const texts = { "quay-board": catOf("quay-board", 1), "pebble-board": catOf("pebble-board", 1) };
@@ -3483,7 +3478,7 @@ if (deskOn()) try {
         return { D, me, team, key, channel, land, put6, copy, sealedThere, inUse: path.join(deskDir, "in-use.ec"), texts, opened, ud, mir };
       };
 
-      /* E6b: the landing of a team file that no longer lists B withdraws the desk's team-key working copy of B from the share, with
+      /* E6b: the landing of a team file that no longer lists B withdraws the desk's team-key working copy of B from the mirror, with
          no ask and no restart; the copy of A, still listed, and the in-use note stay. */
       /* restart: the lead drops B while the desk is closed, and the desk starts on the new file. */
       const e6bScene = async (kind, src, restart) => {
@@ -3501,15 +3496,18 @@ if (deskOn()) try {
         return { before, sameList, bGone: !fs.existsSync(b.file), aKept: fs.existsSync(a.file), inUseKept: fs.existsSync(d.inUse) };
       };
       const b6ok = r => r.before && r.sameList && r.bGone && r.aKept && r.inUseKept;
-      const b6f = await e6bScene("folder"), b6r = await e6bScene("relay");
-      check(b6ok(b6f) && b6ok(b6r),
-        "962s6e6b a team file that stops listing B withdraws the desk's team-key working copy of B at its landing, no ask and no restart; A's copy and the in-use note stay: folder "
-        + JSON.stringify(b6f) + ", relay " + JSON.stringify(b6r));
-      const b6s = await e6bScene("folder", undefined, true);
-      check(b6ok(b6s), "962s6e6b3 a desk started after the lead dropped B withdraws its team-key working copy of B at its first heed of the new file, no ask; A's copy and the in-use note stay: " + JSON.stringify(b6s));
+      const b6r = await e6bScene("relay");
+      /* 962s6e6b, the relay half, asserted. Old sentence (folder and relay together): "a team file that stops listing B withdraws the desk's team-key working
+         copy of B at its landing, no ask and no restart; A's copy and the in-use note stay". */
+      check(b6ok(b6r),
+        "962s6e6b on a relay team, a team file that stops listing B withdraws the desk's team-key working copy of B at its landing, no ask and no restart; A's copy and the in-use note stay: "
+        + JSON.stringify(b6r));
+      const b6s = await e6bScene("relay", undefined, true);
+      /* 962s6e6b3, new by relay (it was only ever run by folder, and retired): a desk started after the lead dropped B. */
+      check(b6ok(b6s), "962s6e6b3 on a relay team, a desk started after the lead dropped B withdraws its team-key working copy of B at its first heed of the new file, no ask; A's copy and the in-use note stay: " + JSON.stringify(b6s));
 
       /* E6a: working in B, the desk keeps B loaded when B leaves the team and B's file leaves the mirror, this run and across a
-         restart, by folder and by relay; a pick among the team's other catalogs then chooses none. */
+         restart; a pick among the team's other catalogs then chooses none. */
       const e6aScene = async (kind, src) => {
         const d = await e6Desk(kind, src);
         const kept = path.join(d.ud, "catalog-loaded.txt");
@@ -3525,10 +3523,12 @@ if (deskOn()) try {
         return { before, live, restart, pickNone: pick === null };
       };
       const a6ok = r => r.before && r.live && r.restart && r.pickNone;
-      const a6f = await e6aScene("folder"), a6r = await e6aScene("relay");
-      check(a6ok(a6f) && a6ok(a6r),
-        "962s6e6a a desk working in B keeps B loaded when B leaves its team and B's file leaves the mirror, this run and across a restart, and picks none of the rest: folder "
-        + JSON.stringify(a6f) + ", relay " + JSON.stringify(a6r));
+      const a6r = await e6aScene("relay");
+      /* 962s6e6a, the relay half, asserted. Old sentence (folder and relay together): "a desk working in B keeps B loaded when B leaves its team and B's file
+         leaves the mirror, this run and across a restart, and picks none of the rest". */
+      check(a6ok(a6r),
+        "962s6e6a on a relay team, a desk working in B keeps B loaded when B leaves its team and B's file leaves the mirror, this run and across a restart, and picks none of the rest: "
+        + JSON.stringify(a6r));
 
       /* cfu1: the lead's own desk opens the team's edition, never the copy the channel kept beside it. In the relay mirror a
          conflict-named copy of a catalog loses to the file it is a copy of whatever its rev (the copy is the computer's own
@@ -3628,20 +3628,20 @@ if (deskOn()) try {
 
       if (PLANTS_OFF) {
         skip("962s6e6c2 lifting plant:head-listed keeps naming B on the row");
-        skip("962s6e6b2 lifting plant:s6-withdraw-unlisted leaves B's working copy on the share");
-        skip("962s6e6b4 lifting plant:s6-withdraw-first leaves B's working copy on the share across the restart");
+        skip("962s6e6b2 lifting plant:s6-withdraw-unlisted leaves B's working copy in the mirror");
+        skip("962s6e6b4 lifting plant:s6-withdraw-first leaves B's working copy in the mirror across the restart");
         skip("962s6e6a2 lifting plant:pick-in-use-gone unloads B for the team's other catalog");
       } else {
         const sc = lifted6("plant:head-listed"), pc = sc ? await e6cScene(sc) : null;
         check(!!pc && (!!pc.onlyB || !!entryOf(pc.both, "quay-board")), "962s6e6c2 lifting plant:head-listed keeps naming B on the row (FAIL 962s6e6c): "
           + (sc ? "only B " + shownS6(pc.onlyB) + ", both " + shownS6(pc.both) : "plant line absent"));
-        const sb = lifted6("plant:s6-withdraw-unlisted"), pb = sb ? await e6bScene("folder", sb) : null;
-        check(!!pb && pb.before && !pb.bGone, "962s6e6b2 lifting plant:s6-withdraw-unlisted leaves B's working copy on the share (FAIL 962s6e6b): "
+        const sb = lifted6("plant:s6-withdraw-unlisted"), pb = sb ? await e6bScene("relay", sb) : null;
+        check(!!pb && pb.before && !pb.bGone, "962s6e6b2 lifting plant:s6-withdraw-unlisted leaves B's working copy in the mirror (FAIL 962s6e6b): "
           + (sb ? JSON.stringify(pb) : "plant line absent"));
-        const sf = lifted6("plant:s6-withdraw-first"), pf = sf ? await e6bScene("folder", sf, true) : null;
-        check(!!pf && pf.before && !pf.bGone, "962s6e6b4 lifting plant:s6-withdraw-first leaves B's working copy on the share across the restart (FAIL 962s6e6b3): "
+        const sf = lifted6("plant:s6-withdraw-first"), pf = sf ? await e6bScene("relay", sf, true) : null;
+        check(!!pf && pf.before && !pf.bGone, "962s6e6b4 lifting plant:s6-withdraw-first leaves B's working copy in the mirror across the restart (FAIL 962s6e6b3): "
           + (sf ? JSON.stringify(pf) : "plant line absent"));
-        const sa = lifted6("plant:pick-in-use-gone"), pa = sa ? await e6aScene("folder", sa) : null;
+        const sa = lifted6("plant:pick-in-use-gone"), pa = sa ? await e6aScene("relay", sa) : null;
         check(!!pa && pa.before && !pa.pickNone, "962s6e6a2 lifting plant:pick-in-use-gone unloads B for the team's other catalog (FAIL 962s6e6a): "
           + (sa ? JSON.stringify(pa) : "plant line absent"));
       }
@@ -3830,7 +3830,8 @@ if (deskOn()) try {
   await wait(300);
 
   
-  check(!ringPinned && wrapPinned && E.api.catalogFolder() === share && !runE && foreign.length === 0
+  /* RETIRED, P4 (no folder is read as a team): a folder team's head, ring and epoch were read off its team file in the share; a held folder team shows its row and nothing newer, and the relay desk's head checks hold what a team shows. It said what its sentence below says. */
+  retire(!ringPinned && wrapPinned && E.api.catalogFolder() === share && !runE && foreign.length === 0
       && E.said.some(l => l.indexOf("does not follow that address") >= 0),
       "942e board 907: a relay file's own ring pins nobody (900i inverted), and a lead pinned by a key it wrapped for this desk, as on a"
       + " folder, is never followed to the relay address it names: ring " + (ringPinned ? "pinned" : "no pin") + ", wrap " + (wrapPinned ? "pinned" : "no pin")
@@ -3904,7 +3905,9 @@ if (deskOn()) try {
       await wait(200);
       if (runP) await runP.stop();
       const relayLines = P.said.filter(l => l.indexOf("relay of team") >= 0).length;
-      check(folderP === shareP && !runP && relayLines === 0 && P.said.some(l => l.indexOf("machine policy names the team folder") >= 0),
+      /* RETIRED, P4 (no folder is read as a team): machine policy's TeamFolder is not read, so no policy names a folder that could win over a
+         followed relay. It said what its sentence below says. */
+      retire(folderP === shareP && !runP && relayLines === 0 && P.said.some(l => l.indexOf("machine policy names the team folder") >= 0),
         "942h machine policy names a folder while a followed relay exists: the folder wins, no channel starts, and the desk says so:"
         + " folder " + (folderP === shareP ? "the policy's" : folderP) + ", channel " + (runP ? "running" : "none") + ", the channel's lines " + relayLines);
     }
@@ -4372,12 +4375,15 @@ if (deskOn()) try {
       check(scenes.twice.pre && verdict.twice(scenes.twice),
         "921f a desk that takes the same relay invitation twice, and cancels after the relay has accepted, withdraws the request and stays on the relay: "
         + told(scenes.twice));
-      check(scenes.fresh.pre && verdict.fresh(scenes.fresh),
+      /* RETIRED, P2 (join by a shared folder is removed, the sizing's piece): the check holds a folder invitation taken, cancelled or finished through the share; no folder is read as a team, so it is retired with P4 and not left red. It said what its sentence below says. */
+      retire(scenes.fresh.pre && verdict.fresh(scenes.fresh),
         "921j a desk that takes a folder invitation and cancels it before the lead admits it is back as before: the pin, the shown team and the request on the"
         + " share gone, and its own folder setting again: " + toldFolder(scenes.fresh));
-      check(scenes.ftwice.pre && verdict.ftwice(scenes.ftwice),
+      /* RETIRED, P2 (join by a shared folder is removed, the sizing's piece): the check holds a folder invitation taken, cancelled or finished through the share; no folder is read as a team, so it is retired with P4 and not left red. It said what its sentence below says. */
+      retire(scenes.ftwice.pre && verdict.ftwice(scenes.ftwice),
         "921k a desk that takes the same folder invitation twice and cancels is back as it was before the first: " + toldFolder(scenes.ftwice));
-      check(scenes.fleft.pre && verdict.fleft(scenes.fleft),
+      /* RETIRED, P2 (join by a shared folder is removed, the sizing's piece): the check holds a folder invitation taken, cancelled or finished through the share; no folder is read as a team, so it is retired with P4 and not left red. It said what its sentence below says. */
+      retire(scenes.fleft.pre && verdict.fleft(scenes.fleft),
         "921l a desk that had left the team, and cancels a folder invitation before it is admitted, has its leave record and its bar again: " + toldFolder(scenes.fleft));
       check(scenes.restart.pre && verdict.restart(scenes.restart),
         "921m a desk stopped and loaded again from desk.json between a relay invitation and its Cancel, after the relay has accepted, withdraws the request and stays on the relay: "
@@ -4426,7 +4432,8 @@ if (deskOn()) try {
       const dropText = (mark, part) => swapText(mark, part, "");
       const liftedKeep = await planted(dropLine("plant:h35-keep"), ["pin", "left", "twice", "key"]);
       const liftedCancel = await planted(dropLine("plant:c7-cancel"), ["fresh"]);
-      check(red(liftedKeep, ["pin", "left", "twice", "key"]) && red(liftedCancel, ["fresh"]) && liftedKeep.back && liftedCancel.back,
+      /* RETIRED, P2 (join by a shared folder is removed, the sizing's piece): the check holds a folder invitation taken, cancelled or finished through the share; no folder is read as a team, so it is retired with P4 and not left red. It said what its sentence below says. */
+      retire(red(liftedKeep, ["pin", "left", "twice", "key"]) && red(liftedCancel, ["fresh"]) && liftedKeep.back && liftedCancel.back,
         "921g lifting plant:h35-keep reddens 921c, 921d, 921e and 921f, and lifting plant:c7-cancel reddens 921j, and the product file is never written: "
         + redTold(liftedKeep, ["pin", "left", "twice", "key"]) + "; " + redTold(liftedCancel, ["fresh"])
         + ", sha " + (liftedKeep.back && liftedCancel.back ? "restored" : "differs"));
@@ -4435,7 +4442,8 @@ if (deskOn()) try {
         "921h lifting plant:h35-keep reddens 921n, because a relay cancel after acceptance no longer reaches the epoch clause, and the product file is never written: "
         + redTold(clause, ["admit"]) + ", sha " + (clause.back ? "restored" : "differs"));
       const chain = await planted(dropText("plant:c7-chain", "kept || "), ["ftwice"]);
-      check(red(chain, ["ftwice"]) && chain.back,
+      /* RETIRED, P2 (join by a shared folder is removed, the sizing's piece): the check holds a folder invitation taken, cancelled or finished through the share; no folder is read as a team, so it is retired with P4 and not left red. It said what its sentence below says. */
+      retire(red(chain, ["ftwice"]) && chain.back,
         "921i lifting plant:c7-chain, the snapshot the first folder invitation took, reddens 921k; a relay cancel after acceptance does not consult it, and the product file is never written: "
         + redTold(chain, ["ftwice"]) + ", sha " + (chain.back ? "restored" : "differs"));
       const mark = await planted(dropLine("plant:h35-keep"), ["key"]);
@@ -4443,10 +4451,12 @@ if (deskOn()) try {
         "921p lifting plant:h35-keep reddens 921e: the key held at the invitation is no longer what holds a relay cancel after acceptance, and the product file is never written: "
         + redTold(mark, ["key"]) + ", sha " + (mark.back ? "restored" : "differs"));
       const folderSnap = await planted(swapText("plant:c8-before", "inviteBeforeFor(parsed.team, keptJoin)", "undefined"), ["fresh", "ftwice", "fleft"]);
-      check(red(folderSnap, ["fresh", "ftwice", "fleft"]) && folderSnap.back,
+      /* RETIRED, P2 (join by a shared folder is removed, the sizing's piece): the check holds a folder invitation taken, cancelled or finished through the share; no folder is read as a team, so it is retired with P4 and not left red. It said what its sentence below says. */
+      retire(red(folderSnap, ["fresh", "ftwice", "fleft"]) && folderSnap.back,
         "921q lifting plant:c8-before, the snapshot a folder invitation takes, reddens 921j, 921k and 921l, and the product file is never written: " + redTold(folderSnap, ["fresh", "ftwice", "fleft"]) + ", sha " + (folderSnap.back ? "restored" : "differs"));
       const ownSet = await planted(dropLine("plant:c8-own"), ["fresh"]);
-      check(red(ownSet, ["fresh"]) && ownSet.back,
+      /* RETIRED, P2 (join by a shared folder is removed, the sizing's piece): the check holds a folder invitation taken, cancelled or finished through the share; no folder is read as a team, so it is retired with P4 and not left red. It said what its sentence below says. */
+      retire(red(ownSet, ["fresh"]) && ownSet.back,
         "921r lifting plant:c8-own, the folder setting put back, reddens 921j, and the product file is never written: " + redTold(ownSet, ["fresh"]) + ", sha " + (ownSet.back ? "restored" : "differs"));
       const kept = await planted(swapText("plant:c7-kept", "beforeKept(inv.before)", "false"), ["restart"]);
       check(red(kept, ["restart"]) && kept.back,
@@ -4521,9 +4531,11 @@ if (deskOn()) try {
       try {
         const mainNow = fs.readFileSync(mainFile, "utf8");
         const h = await heldJoin(mainNow, "held", false);
-        check(heldOk(h), "923c a desk holding the key of the team's epoch takes an invitation, and the lead's next rev, written on the share and brought into the mirror by the folder syncer, names it with a wrap it opens: the join finishes: " + heldTold(h));
+        /* RETIRED, P2 (join by a shared folder is removed, the sizing's piece): the check holds a folder invitation taken, cancelled or finished through the share; no folder is read as a team, so it is retired with P4 and not left red. It said what its sentence below says. */
+        retire(heldOk(h), "923c a desk holding the key of the team's epoch takes an invitation, and the lead's next rev, written on the share and brought into the mirror by the folder syncer, names it with a wrap it opens: the join finishes: " + heldTold(h));
         const n = await heldJoin(mainNow, "named", true);
-        check(heldOk(n) && n.waited, "923d a roster heeded before the invitation that already names this desk does not finish the join, and the lead's rev 2, brought into the mirror by the folder syncer, does: " + heldTold(n));
+        /* RETIRED, P2 (join by a shared folder is removed, the sizing's piece): the check holds a folder invitation taken, cancelled or finished through the share; no folder is read as a team, so it is retired with P4 and not left red. It said what its sentence below says. */
+        retire(heldOk(n) && n.waited, "923d a roster heeded before the invitation that already names this desk does not finish the join, and the lead's rev 2, brought into the mirror by the folder syncer, does: " + heldTold(n));
         const nameBytes = sha(fs.readFileSync(mainFile));
         const liftedNamed = dropLine("plant:c6-named")(mainNow);
         const ln = liftedNamed === null ? null : await heldJoin(liftedNamed, "plant-held", false);
@@ -4531,7 +4543,8 @@ if (deskOn()) try {
           "923e lifting plant:c6-named reddens 923c, and the product file is never written: " + (ln ? heldTold(ln) : "plant line absent"));
         const liftedFresh = swapText("plant:c6-fresh", "raised && ", "")(mainNow);
         const lf = liftedFresh === null ? null : await heldJoin(liftedFresh, "plant-named", true);
-        check(!!lf && !lf.refused && !lf.waited && sha(fs.readFileSync(mainFile)) === nameBytes,
+        /* RETIRED, P2 (join by a shared folder is removed, the sizing's piece): the check holds a folder invitation taken, cancelled or finished through the share; no folder is read as a team, so it is retired with P4 and not left red. It said what its sentence below says. */
+        retire(!!lf && !lf.refused && !lf.waited && sha(fs.readFileSync(mainFile)) === nameBytes,
           "923f lifting plant:c6-fresh finishes the join on the roster heeded before the invitation, reddening 923d, and the product file is never written: " + (lf ? heldTold(lf) : "plant line absent"));
       } catch (e) {
         check(false, "harness (the legs 923c): " + (e && e.stack ? e.stack : e));
@@ -6876,6 +6889,15 @@ if (deskOn()) try {
       out.said = twoSaid();
       try { out.rev = JSON.parse(read(s.mirror, C.TEAM_NAME)).rev; } catch { out.rev = 0; }
       out.ok = out.thief === 200 && out.moved === 200 && out.pin === "K1" && out.channelPin === "K1" && out.fork === "two" && out.said >= 1 && out.rev === 2;
+      /* The team's row, which the shell composes from the channel's fork for the page's notice (it was held for a folder team by team-desk's
+         14bm, 14bq and 14cd, which a relay team's row is not read from): the fork it shows, and what the agent's dismissal keeps. */
+      const rowOf = async () => ((((await s.Dk.ask("etiuda:team-join", "leads")) || {}).leads) || []).find(l => l.team === s.team) || null;
+      const shownOf = r => (r && r.fork ? r.fork.kind + "/" + (r.fork.seen ? "seen" : "new") : "none");
+      out.row = shownOf(await rowOf());
+      await s.Dk.ask("etiuda:team-join", "fork-seen", s.team);
+      const after = await rowOf(), kept = (s.Dk.envelope().teamForks || {})[s.team];
+      out.dismissed = shownOf(after);
+      out.keptFork = !!kept && !!after && !!after.fork && kept.seen === after.fork.key;
       return out;
     } finally {
       await s.stop();
@@ -7309,7 +7331,8 @@ if (deskOn()) try {
         + " puts its files up under the old key and says nothing, and the product file is never written: " + zc.detail + ", sha "
         + (zc.back ? "restored" : "differs"));
       const f = await run(toFolder, "939f");
-      check(!!f.x && f.x.ok === true,
+      /* RETIRED, P1 (a relay team's move to a shared folder is removed): the check holds the move to a folder, which is no longer followed; retired with P4 and not left red. It said what its sentence below says. */
+      retire(!!f.x && f.x.ok === true,
         "939f a relay desk receives its team's move to a shared folder through catchUp and takes the folder: "
         + (f.x ? "synced " + f.x.synced + ", catalog folder " + f.x.folder + ", the team shown in " + f.x.shown + ", team channel " + f.x.channel : "")
         + (f.err ? ", " + f.err : ""));
@@ -7324,6 +7347,22 @@ if (deskOn()) try {
       const i = await liftApp("plant:fork-two", async app => { const x = await forkOnRelay("939i", app, 8000); return x.synced && x.thief === 200 && x.moved === 200 && x.channelPin !== "K1"; });
       check(i.turned && i.back, "939i lifting plant:fork-two on the same path follows one of K1's two successors, and the product file is never written: "
         + i.detail + ", sha " + (i.back ? "restored" : "differs"));
+      /* The row's fork for a relay team, end to end (team-desk's 14bm, 14bq and 14cd held it for a folder team's row, retired with the folder team). */
+      check(!!h.x && h.x.row === "two/new" && h.x.dismissed === "two/seen" && h.x.keptFork === true,
+        "939h2 the team's row carries the fork the relay channel saw, once and not yet dismissed, and the agent's dismissal marks that fork seen on the row and is kept"
+        + " in the desk's record for it: row " + (h.x ? h.x.row + ", after the dismissal " + h.x.dismissed + ", kept " + h.x.keptFork : "") + (h.err ? ", " + h.err : ""));
+      if (PLANTS_OFF) skip("939h3 lifting plant:fork-row in a scratch copy of shell/main.js keeps the fork from the team's row");
+      else {
+        const r3 = await liftDesk("plant:fork-row", async next => { const x = await forkOnRelay("939h3", { src: next }, 8000); return x.synced && x.row === "none"; });
+        check(r3.turned && r3.back, "939h3 lifting plant:fork-row in a scratch copy of shell/main.js keeps the fork from the team's row, so the notice never shows, and the product file is never written: "
+          + r3.detail + ", sha " + (r3.back ? "restored" : "differs"));
+      }
+      if (PLANTS_OFF) skip("939h4 lifting plant:fork-seen in a scratch copy of shell/main.js forgets the dismissal");
+      else {
+        const r4 = await liftDesk("plant:fork-seen", async next => { const x = await forkOnRelay("939h4", { src: next }, 8000); return x.synced && x.row === "two/new" && x.dismissed !== "two/seen"; });
+        check(r4.turned && r4.back, "939h4 lifting plant:fork-seen in a scratch copy of shell/main.js forgets the dismissal, so the notice shows again, and the product file is never written: "
+          + r4.detail + ", sha " + (r4.back ? "restored" : "differs"));
+      }
     }
 
   

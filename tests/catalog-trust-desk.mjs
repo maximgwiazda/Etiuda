@@ -38,6 +38,7 @@ import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { pathToFileURL, fileURLToPath } from "node:url";
+import { relayizeDesk, relayMirrorOf, relayMirrorProgram, relayChannelOf } from "./relay-mirror-desk.mjs";
 
 const SELF = fileURLToPath(import.meta.url);
 const ROOT = path.resolve(path.dirname(SELF), "..");
@@ -408,8 +409,9 @@ async function launch(plan) {
     const box = doc.getElementById("mgCatList");
     return box ? box.querySelectorAll(".ec-row").map(r => {
       const k = r.querySelector(".ec-key");
+      const w = r.querySelector(".ec-sigw");
       return { name: (r.querySelector(".ec-name b") || { textContent: "" }).textContent,
-               loaded: r.classList.contains("is-loaded"),
+               loaded: r.classList.contains("is-loaded"), sigw: w ? w.textContent : "",
                key: (k && k.getAttribute("data-trust")) ? { state: k.getAttribute("data-trust"), word: k.getAttribute("aria-label"),
                  gold: k.classList.contains("on"), tip: k.getAttribute("data-tip") || "" } : null };
     }) : [];
@@ -646,24 +648,12 @@ async function launch(plan) {
       const at = path.join(LAB, "catalogs", plan.drop.rel);
       fs.mkdirSync(path.dirname(at), { recursive: true });
       fs.writeFileSync(at, plan.drop.text, "utf8");
+      /* A desk on a relay team's mirror (a scene that put its desk there: 77c) is carried what landed, by the stand-in of
+         tests/relay-mirror-desk.mjs: `catalogs` stands for the relay's copy of the team. It was the folder syncer into the desk's folder-mirror. */
       try {
-        const teamFile = path.join(LAB, "catalogs", "etiuda-team.json");
-        if (fs.existsSync(teamFile)) {
-          const doc = JSON.parse(fs.readFileSync(teamFile, "utf8"));
-          if (doc && doc.id) {
-            const mirror = path.join(LAB, "userdata", "folder-mirror", doc.id);
-            const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
-            const prog = syncerMod.createFolderProgram({
-              team: doc.id,
-              folder: path.join(LAB, "catalogs"),
-              mirror: mirror,
-              pin: doc.lead,
-              keys: {},
-              checks: latestChecks
-            });
-            prog.syncOnce();
-            prog.syncOnce();
-          }
+        const relayRoot = path.join(LAB, "userdata", "relay");
+        for (const rt of fs.existsSync(relayRoot) ? fs.readdirSync(relayRoot) : []) {
+          relayMirrorProgram({ store: path.join(LAB, "catalogs"), mirror: path.join(relayRoot, rt) }).syncOnce();
         }
       } catch (e) {
         obs.errors.push("syncDrop: " + String(e && e.message || e));
@@ -726,7 +716,7 @@ if (process.argv[2] === "--launch") {
    ================================================================================================ */
 async function parent() {
   const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-  const EXPECTED = 144 + (PLANTS_OFF ? 0 : 6);
+  const EXPECTED = 144 + 4 + (PLANTS_OFF ? 0 : 7); /* r17a to r17d, and r17e (a plant) with plants on */
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -1455,7 +1445,7 @@ async function parent() {
     };
     if (PLANTS_OFF) console.log("  SKIP  1016w lifting each plant draws Work from this file again (ETIUDA_PLANTS=off)");
     else {
-      const pRow = plantedSrc(lab75, "catalog-offer.js", `ecActHtml("Eject",ICON_EJECT,' data-ec-eject="1"'):"")`,
+      const pRow = plantedSrc(lab75, "catalog-offer.js", `ecActHtml("Eject",ICON_EJECT,' data-ec-eject="1"'):'')`,
         `ecActHtml("Eject",ICON_EJECT,' data-ec-eject="1"'):ecActHtml("Work from this file",ICON_LOAD,' data-ec-work="'+o.at+'"'))`);
       const pr = pRow.ok ? run(lab75, ["desk", "rows"], true, { modRoot: pRow.copy }) : null;
       check(!!pr && (pr.rows[0] || []).some(r => r.works > 0 || r.acts.includes("Work from this file")),
@@ -2055,10 +2045,14 @@ async function parent() {
     /* The lead adds a desk at the epoch already accepted: the team file says so, under the pinned lead, and the roster kept
        at that epoch follows it. The file lands while the desk runs, after its boot has read the folder, so the listing
        itself heeds it. It lists desks only, with no key for anybody, so nothing is sealed or opened. */
-    const team77 = { format: 1, kind: "etiuda-team", id: TEAM77, catalogs: [ID], lead: LEAD77, sealed: false, exportsSealed: false, epoch: 1,
+    const team77 = { format: 1, kind: "etiuda-team", id: TEAM77, catalogs: [ID], lead: LEAD77, sealed: false, exportsSealed: false, epoch: 1, channel: relayChannelOf(TEAM77),
       roster: [ola77, cy77].map(d => ({ desk: { id: d.id, key: d.raw.toString("hex"), box: "ef".repeat(32) } })) };
     team77.sig = { alg: "Ed25519", keyId: LEAD77.keyId };
     team77.sig.value = crypto.sign(null, Buffer.from(V2.v2SignedBytes(team77)), lead77.privateKey).toString("hex");
+    /* 77c, moved: the desk is put on the team's relay mirror (the team file lands in the mirror, where a team file is read; a folder was read as
+       a team's before), what `catalogs` held carried to it first. */
+    relayizeDesk(path.join(lab77b, "userdata"));
+    relayMirrorProgram({ store: path.join(lab77b, "catalogs"), mirror: relayMirrorOf(path.join(lab77b, "userdata"), TEAM77) }).syncOnce();
     const r77c = run(lab77b, ["desk", "drop", "rows"], true, { drop: { rel: "etiuda-team.json", text: JSON.stringify(team77) } });
     const rows77c = r77c.rows[0] || [];
     check(same(rows77c.map(r => r.name).sort(), ["Cy, a teammate", "Ola, a teammate", "lamp.ec"]) && !(r77c.errors || []).length,
@@ -2186,6 +2180,75 @@ async function parent() {
       && !errs78(open78d).length,
       "78d a file naming the pinned lead's key that the lead's key does not verify, with no ring beside it, is offered as changed since it was signed: "
       + JSON.stringify({ shown: o78d.shown, trust: o78d.trust || null, signer: o78d.signer || null, errors: errs78(open78d) }));
+
+    /* R17 (r17a to r17e): ONE TEAM'S PINNED LEAD DOES NOT MAKE A CATALOG LEAD-SIGNED IN ANOTHER TEAM'S PLACE, on a desk pinned to two relay teams.
+       MOVED, P4. team-join's 15cd and 15cg held it for one folder a desk was pointed at in turn, team A's then team B's (a folder joined and read as a team), and were retired
+       with the folder join; the plant lifting folderLeadPublics' own-pin rule (plant:folder-publics-trusted) never had a lift. 15cd said "a catalog signed by team A's lead is not
+       chosen in team B's folder" and 15cg "with both leads pinned, team B's folder chooses the catalog B's lead signed and not A's higher rev". The same rule now serves a relay
+       mirror: this desk follows team B over the relay (its mirror holds B's whole team file), and has team A's lead pinned too; a file of team A's lead's lands in B's mirror
+       (the catalogs a team shares are a lead's to put there, and nothing keeps a copy of another team's out of it). With B's team file whole in the mirror only B's pin binds the
+       signature (r17a to r17c). The control, the same two files with no whole team file in the mirror, binds every pinned lead, so A's file counts (r17d): the scene bites on the
+       team file. 15cc, 15ce and 15cf (an unpinned key, a changed keyId, another keyId) are generic signature rules and are held by 78 and catalog-trust. */
+    const pairAR17 = crypto.generateKeyPairSync("ed25519"), pairBR17 = crypto.generateKeyPairSync("ed25519");
+    const LAR17 = { keyId: "lead-a", public: pubHex(pairAR17.publicKey) }, LBR17 = { keyId: "lead-b", public: pubHex(pairBR17.publicKey) };
+    const TAR17 = "t-" + "a1".repeat(8), TBR17 = "t-" + "b2".repeat(8);
+    const signByR17 = (doc, priv, kid) => { const o = JSON.parse(JSON.stringify(doc)); delete o.hash;
+      o.sig = { alg: V2.V2_SIG_ALG, keyId: kid }; o.sig.value = crypto.sign(null, Buffer.from(V2.v2SignedBytes(o)), priv).toString("hex"); return o; };
+    const atR17 = rev => Object.assign(payload("2026-09-0" + rev), { rev: rev });
+    const teamBR17 = signByR17({ format: 1, kind: "etiuda-team", id: TBR17, catalogs: [ID], lead: LBR17, sealed: false, exportsSealed: false, epoch: 1,
+      channel: relayChannelOf(TBR17), roster: [] }, pairBR17.privateKey, LBR17.keyId);
+    /* A desk pinned to both teams, following B over the relay: B's file (rev 1, by B's lead) and A's (rev 2, by A's lead) in B's mirror, B's team file with them unless `bare`. */
+    const twoTeamsR17 = (files, bare) => {
+      const lab = scenario(files.concat(bare ? [] : [["catalogs/etiuda-team.json", teamBR17]]));
+      const ud = path.join(lab, "userdata"), dj = path.join(ud, "desk.json"), d = JSON.parse(fs.readFileSync(dj, "utf8"));
+      d.teamPins = { [TBR17]: LBR17, [TAR17]: LAR17 };
+      fs.writeFileSync(dj, JSON.stringify(d));
+      relayizeDesk(ud);
+      relayMirrorProgram({ store: path.join(lab, "catalogs"), mirror: relayMirrorOf(ud, TBR17) }).syncOnce();
+      return lab;
+    };
+    const bothFilesR17 = [["catalogs/folder-lead.ec", signByR17(atR17(1), pairBR17.privateKey, LBR17.keyId)], ["catalogs/crossed.ec", signByR17(atR17(2), pairAR17.privateKey, LAR17.keyId)]];
+    const LEAD_WORD_R17 = "Signed by the lead";
+    /* The Library first, on a fresh desk (a desk that has taken a catalog marks the row it holds by its own state, whichever file it came from), then the boot. */
+    const libOf = lab => run(lab, ["library"]);
+    const labR17a = twoTeamsR17(bothFilesR17);
+    const libR17a = libOf(labR17a);
+    const bootR17a = run(labR17a, ["boot", "settle", "offer", "yes", "settle"]);
+    check(bootR17a.reloaded === true && bootR17a.heldRev === 1 && bootR17a.heldAtEnd === V2.V2_SIG_VALID && !errs78(bootR17a).length,
+      "r17a with both leads pinned, a desk on team B's relay mirror holds the catalog B's lead signed and not team A's higher rev, which is in the same mirror: "
+      + JSON.stringify({ started: bootR17a.reloaded, rev: bootR17a.heldRev, held: bootR17a.heldAtEnd, errors: errs78(bootR17a) }));
+    const leadRowR17 = row(libR17a, "folder-lead.ec"), crossRowR17 = row(libR17a, "crossed.ec");
+    check(!!leadRowR17 && leadRowR17.sigw === LEAD_WORD_R17 && !!crossRowR17 && crossRowR17.sigw === "" && !errs78(libR17a).length,
+      "r17b on that desk the Library says of the file team B's lead signed that the lead did, and says it of the one team A's lead signed, another team's, nowhere: "
+      + JSON.stringify({ b: leadRowR17 && leadRowR17.sigw, a: crossRowR17 && crossRowR17.sigw, keys: [said(leadRowR17), said(crossRowR17)], errors: errs78(libR17a) }));
+    const labR17c = twoTeamsR17([bothFilesR17[1]]);
+    const bootR17c = run(labR17c, ["boot", "settle", "offer"]);
+    check(!(bootR17c.offers[0] || {}).shown && !bootR17c.reloaded && !errs78(bootR17c).length,
+      "r17c a catalog signed by team A's lead alone, in team B's relay mirror, is not offered at boot: " + JSON.stringify({ shown: (bootR17c.offers[0] || {}).shown || false, errors: errs78(bootR17c) }));
+    const labR17d = twoTeamsR17(bothFilesR17, true);
+    const libR17d = libOf(labR17d);
+    const bootR17d = run(labR17d, ["boot", "settle", "offer", "yes", "settle"]);
+    const crossRowR17d = row(libR17d, "crossed.ec");
+    check(bootR17d.reloaded === true && bootR17d.heldRev === 2 && !!crossRowR17d && crossRowR17d.sigw === LEAD_WORD_R17 && !errs78(bootR17d, libR17d).length,
+      "r17d THE CONTROL: the same two files with no whole team file of B in the mirror bind every pinned lead, so team A's higher rev is held and the Library says its lead signed it: "
+      + JSON.stringify({ rev: bootR17d.heldRev, word: crossRowR17d && crossRowR17d.sigw, errors: errs78(bootR17d, libR17d) }));
+    if (PLANTS_OFF) console.log("  SKIP  r17e lifting plant:folder-publics-trusted binds the signature to every pinned lead in team B's mirror (ETIUDA_PLANTS=off)");
+    else {
+      const labR17e = twoTeamsR17(bothFilesR17);
+      fs.copyFileSync(path.join(ROOT, "shell", "main.js"), path.join(labR17e, "shell", "main.js"));
+      const mainLabR17 = path.join(labR17e, "shell", "main.js"), linesR17 = fs.readFileSync(mainLabR17, "utf8").split("\n");
+      const at = linesR17.findIndex(l => l.indexOf("plant:folder-publics-trusted") >= 0);
+      let bootR17e = null;
+      if (at >= 0) {
+        linesR17[at] = "  return all; /* plant:folder-publics-trusted */";
+        fs.writeFileSync(mainLabR17, linesR17.join("\n"), "utf8");
+        bootR17e = run(labR17e, ["boot", "settle", "offer", "yes", "settle"]);
+      }
+      /* The boot is what the line decides (the shell chooses by catalogLeadOk); the Library's word reads the page's own check, which this line does not reach. */
+      check(!!bootR17e && bootR17e.heldRev === 2,
+        "r17e lifting plant:folder-publics-trusted binds the signature to every pinned lead in team B's mirror, so team A's higher rev is held at boot (FAIL r17a): "
+        + (at >= 0 ? JSON.stringify({ rev: bootR17e && bootR17e.heldRev }) : "plant line absent"));
+    }
 
     /* 79: THE CATALOG IN USE ANSWERS TO THE PINNED LEAD TOO, and a gold key is named by the public that verified it (the
        test architect's legs 79c, 79d and 79f from his verdict on e408e76, and 79g). A desk outside any team that took a file

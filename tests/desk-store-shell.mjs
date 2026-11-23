@@ -228,7 +228,7 @@ const TAIL_NAMES = ["storeView", "storeRoom", "storeSetNow", "storeAnswerNow", "
   "signinOutNow", "storeLeaveNow", "storeSyncApply", "storeSyncSoon", "storeSyncLocal", "deskSyncedTell", "storeTokenFor", "catalogRevSlot", "persistDeskEnvelope"];
 const TAIL_STATE = ["storeNow", "storeAccess", "storeFlight", "storeLeaveFlight", "SIGNIN_SERVICE", "SIGNOUT_SERVICE", "STORE_RELAY", "SIGNIN_PROVIDERS", "storeSyncing", "storeConsentFlight", "storeSyncTimer", "storeSyncPristine", "storeAgainTimer", "catalogRevs", "teamPins", "storeOffAfter"];
 const TAIL = "\n__test.T = {" + TAIL_NAMES.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ")
-  + ", setJoin: v => { teamJoin = v; }, setPolicyText: v => { joinPolicyRead = joinPolicyFacts(String(v)); if (typeof joinPolicyReadAt !== \"undefined\") { joinPolicyReadAt = Date.now(); joinPolicyAskedAt = Date.now(); joinPolicyAsking = true; } }, setWindow: v => { theWindow = v; }, get: () => ({" + TAIL_STATE.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ") + "}) };";
+  + ", setJoin: v => { teamJoin = v; }, setShown: (t, v) => { teamShown[t] = v; }, setPolicyText: v => { joinPolicyRead = joinPolicyFacts(String(v)); if (typeof joinPolicyReadAt !== \"undefined\") { joinPolicyReadAt = Date.now(); joinPolicyAskedAt = Date.now(); joinPolicyAsking = true; } }, setWindow: v => { theWindow = v; }, get: () => ({" + TAIL_STATE.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ") + "}) };";
 function boot(src, o) {
   const opt = o || {};
   const UD = opt.ud || fs.mkdtempSync(path.join(WORK, "ud-"));
@@ -426,15 +426,15 @@ async function teamFolderScene(src) {
   fs.writeFileSync(path.join(own, "Own.ec"), JSON.stringify({ kind: "etiuda-catalog", format: 2, id: "own" }));
   if (sync) sync.merge();
   const before = sync ? Object.assign({}, sync.state().ledger["f:Own.ec"] || {}) : {};
-  T.setJoin({ team: "t-folder-team" });
-  const mirror = path.join(r.shell.UD, "folder-mirror", "t-folder-team");
-  fs.mkdirSync(mirror, { recursive: true });
-  fs.writeFileSync(path.join(mirror, "Team.ec"), JSON.stringify({ kind: "etiuda-catalog", format: 2, id: "team" }));
+  /* Was a folder team joined, its catalogs in its mirror. Now a team works over the relay only, and a team held from before through a
+     folder keeps that folder as the catalog folder: the store leaves it out as the team's (storeSyncFolder, folderHeld). */
+  T.setShown("t-folder-team", { folder: own });
+  fs.writeFileSync(path.join(own, "Team.ec"), JSON.stringify({ kind: "etiuda-catalog", format: 2, id: "team" }));
   if (sync) sync.merge();
   const ledger = sync ? sync.state().ledger : {};
   const failed = T.storeSyncApply({ "f:From the store.ec": "{}" }, []);
-  const inMirror = fs.readdirSync(mirror).sort();
-  const ok = !!sync && !!before.h && !ledger["f:Team.ec"] && !!ledger["f:Own.ec"] && ledger["f:Own.ec"].h === before.h && inMirror.join() === "Team.ec"
+  const inMirror = fs.readdirSync(own).sort();
+  const ok = !!sync && !!before.h && !ledger["f:Team.ec"] && !!ledger["f:Own.ec"] && ledger["f:Own.ec"].h === before.h && inMirror.join() === "Own.ec,Team.ec"
     && Array.isArray(failed) && failed.join() === "f:From the store.ec";
   return { ok, detail: brief({ ownTaken: !!before.h, teamTaken: !!ledger["f:Team.ec"], ownRemoved: !!ledger["f:Own.ec"] && ledger["f:Own.ec"].h === null, inMirror, failed }) };
 }
@@ -1412,11 +1412,12 @@ async function answerStartScene(src) {
   const relayLeak = w.relay.slice(relayFrom).some(buf => /Alice|ALPHA_CATALOG_BYTES|BETA_CATALOG_BYTES|Card A/.test(Buffer.from(buf).toString("utf8")));
   const ledgerLeak = !!(bLedger["f:alpha.ec"] || bLedger["f:beta.ec"] || bLedger["k:ePack"]) || (deskAfter.eAgent !== "Bob") || ("ePack" in deskAfter);
 
-  /* Team folder safety: when storeSyncFolder() is "" (team active), its .ec files are not moved. */
+  /* Team folder safety: when storeSyncFolder() is "" (team active), its .ec files are not moved. Was a folder join; now a relay
+     join, a withdrawal still owed, is the team active. */
   const teamDir = path.join(UD, "team-dir");
   fs.mkdirSync(teamDir, { recursive: true });
   fs.writeFileSync(path.join(teamDir, "team.ec"), "TEAM_CAT\n");
-  T.setJoin({ team: "t1", invite: { folder: teamDir } });
+  T.setJoin({ team: "t-0123456789abcdef", invite: { relay: { rt: "a1".repeat(16), url: "https://etiuda.dev/relay/v1", withdrawing: true } } });
   const teamIgnored = T.storeSyncFolder() === "";
   T.setJoin(null);
 
@@ -3005,7 +3006,7 @@ const LEGS = [
   ["g6h", heldUngivenScene, "policy holding sync on and the folder never allowed, the row says so and its button asks the provider only for the person's trusted click, once, then the look turns sync on, still held"],
   ["e7", anewScene, "turned off everywhere from another computer, policy holding sync on: a new store from what is on this computer, the row saying so; nothing on the desk lost, nothing asked of the ended store, its mirror as it was; with nothing holding the switch, off as before"],
   ["t12", offlineStartScene, "a desk starting with its certificate standing and neither the provider nor the service reached loads its sync with what it keeps, the row saying the folder is not reached and the look tried again by itself, which it is; the address back, the next try turns the store on and the sync runs"],
-  ["gt", teamFolderScene, "joined to a folder team, the store's sync takes no team catalog into the person's store, reads the person's own catalog as removed nowhere, and writes nothing from the store into the team's mirror"],
+  ["gt", teamFolderScene, "holding a team from before through its catalog folder, the store's sync takes no team catalog into the person's store, reads the person's own catalog as removed nowhere, and writes nothing from the store into that folder"],
   ["g1b", consentBusyScene, "while the switch's request for the folder waits on the browser the desk is busy to the page, and an answer after another account took the seat is neither taken for it nor looked with"],
   ["g2r", keepRefreshScene, "the switch's Google consent sign-in answered with no refresh token keeps the refresh token already sealed for the same account"],
   ["t1", outageScene, "the token address answering 503 or 429 to the look's refresh, or to a renewal's folder refresh, keeps no refusal for the folder: the look says offline and the store is on once it answers"],
@@ -3147,7 +3148,7 @@ const PLANTS = [
   ["e7", swap("  if (look.state === \"ended\" && pol.held === true && pol.on === true && ours()) { storeAnew = true; tellStore(); look = await L.storeLook(Object.assign({}, io, { fresh: true })); } /* plant:store-anew */\n", ""), "the ended mark followed under a held switch, so sync stops here in silence"],
   ["e7", swap("    anew: storeAnew, /* plant:store-view-anew */\n", ""), "the new store made but the row not told, so it says on"],
   ["t12", swap("  else if (s.held && s.held.cert && s.held.reached === false) storeTurn(); /* plant:store-renew-unreached */\n", ""), "a renewal that reached nothing makes no look, so the sync waits unloaded and nothing is tried again"],
-  ["gt", swap("if (sayJoinPolicy().folder || relayHere() || folderTeamHere() || Object.keys(teamNeedsFolder).length) return \"\"; /* plant:sync-team-folder */", "if (false) return \"\"; /* plant:sync-team-folder */"), "the store's sync lists and writes the team's mirror as the person's folder"],
+  ["gt", swap("if (Object.keys(teamShown).some(t => folderHeld(t) && path.resolve(teamShown[t].folder) === path.resolve(root))) return \"\"; /* plant:sync-held-folder */", "/* plant:sync-held-folder */"), "the store's sync lists and writes the held team's folder as the person's folder"],
   ["w1", swap("  if (s.keys || s.leave || storeLeaveHere) {", "  if (false) {"), "a sign-out leaves the store's keys in store.json"],
   ["w1d", text => { const x = swap("  if (s.who === who) return true; /* plant:store-mine */", "  if (true) { s.who = who; return true; } /* plant:store-mine */")(text);
     return x && swap("  held = !!last && (last !== who || s.ask === who); /* plant:store-held */", "  held = false; /* plant:store-held */")(x); }, "the keys kept for A are B's, the hold lifted"],

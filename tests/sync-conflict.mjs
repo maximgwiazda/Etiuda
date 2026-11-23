@@ -5,9 +5,10 @@
  * A copy a sync client makes of a file it could not reconcile stays listed under its own name,
  * beside the other edition of the same catalog. Nothing is merged and nothing in the folder is
  * renamed or deleted. A direct edit named as the conflict copy writes the canonical file, and the
- * read that supplies the compare is that same file. A conflict sibling of etiuda-team.json that
- * is a genuine team file at a higher epoch or rev is the team file the desk heeds, and the floor
- * still refuses an older one. The plant lines are removed only in a scratch copy of shell/main.js.
+ * read that supplies the compare is that same file. A conflict sibling of etiuda-team.json is no
+ * team file: a team file arrives over the relay, which makes none, so a desk on a relay team's
+ * mirror heeds the canonical file alone (it heeded a genuine sibling at a higher epoch or rev while
+ * a folder was read as a team). The plant lines are removed only in a scratch copy of shell/main.js.
  *
  * Invented catalogs, keys and teams only.
  */
@@ -23,9 +24,10 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 const V2 = await import(pathToFileURL(path.join(ROOT, "src", "modules", "catalog-v2.js")).href);
+import { relayizeDesk, relayMirrorOf, relayMirrorProgram, relayChannelOf } from "./relay-mirror-desk.mjs";
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 
-const EXPECTED = 24;
+const EXPECTED = 23;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -280,26 +282,17 @@ try {
   const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
   const teamId = "t-" + crypto.randomBytes(8).toString("hex");
   let conflictChecks = null;
+  /* The team's relay mirror is the desk's: what a desk holds of the team is carried there from `folder`, which stands for the relay's
+     copy, by the stand-in of tests/relay-mirror-desk.mjs (it was the folder syncer, and the desk's folder-mirror). */
   function syncMirror(ud, folder) {
-    if (!conflictChecks) {
-      conflictChecks = boot(ud).test.deskTrustChecks();
-    }
-    const mirror = path.join(ud, "folder-mirror", teamId);
-    const prog = syncerMod.createFolderProgram({
-      team: teamId,
-      folder: folder,
-      mirror: mirror,
-      pin: LEAD,
-      keys: {},
-      checks: conflictChecks
-    });
-    prog.syncOnce();
+    relayizeDesk(ud);
+    relayMirrorProgram({ store: folder, mirror: relayMirrorOf(ud, teamId) }).syncOnce();
   }
   function teamDoc(rev, epoch) {
     return sign({
       format: 1, kind: "etiuda-team", id: teamId, catalogs: ["lamp-board"],
       lead: { keyId: LEAD.keyId, public: LEAD.public }, sealed: false, exportsSealed: false,
-      epoch: epoch || 1, roster: [], rev
+      epoch: epoch || 1, roster: [], rev, channel: relayChannelOf(teamId)
     }, leadPair.privateKey, LEAD.keyId);
   }
   /* The desk holds the lead's pin, as a member desk has it: these checks are about siblings and the floor, and a ring pins
@@ -328,10 +321,13 @@ try {
     const floor = floorOf(ud);
     const doc = A.test.teamDoc();
     const after = [fileSha(canonAt), fileSha(sibAt)];
-    check(floor && floor.epoch === 1 && floor.rev === 4 && doc && doc.rev === 4
+    /* f3i, moved. It said: a higher genuine conflict sibling is the team file, and neither file is renamed or deleted (rev 4). A
+       sibling was what a folder sync client made of a team file it could not reconcile; a team file arrives over the relay, which
+       makes none, so no sibling is a team file: it now says the canonical file alone is heeded (rev 1), and neither file is touched. */
+    check(floor && floor.epoch === 1 && floor.rev === 1 && doc && doc.rev === 1
       && before[0] === after[0] && before[1] === after[1]
       && fs.existsSync(canonAt) && fs.existsSync(sibAt),
-      "f3i a higher genuine conflict sibling is the team file, and neither file is renamed or deleted (rev "
+      "f3i a higher genuine conflict sibling is not the team file: the canonical file alone is heeded, and neither file is renamed or deleted (rev "
       + (floor && floor.rev) + ", doc " + (doc && doc.rev) + ")");
     check(A.test.isCatalogName("etiuda-team (1).json") && A.test.isCatalogName("etiuda-team.json")
       && !A.test.isCatalogName("etiuda-team.json.tmp") && !A.test.isCatalogName("notes.json"),
@@ -378,13 +374,14 @@ try {
     const rose = floorOf(ud);
     put(folder, "etiuda-team.json", teamDoc(2, 1));
     put(folder, "etiuda-team (1).json", teamDoc(3, 1));
-    put(path.join(ud, "folder-mirror", teamId), "etiuda-team (1).json", teamDoc(3, 1));
+    put(relayMirrorOf(ud, teamId), "etiuda-team (1).json", teamDoc(3, 1));
     const B = boot(ud);
     B.test.heed();
     const held = floorOf(ud);
-    const said = B.said.join("\n");
-    check(rose && rose.rev === 6 && held && held.rev === 6 && /older file/.test(said),
-      "f3m the floor still refuses a conflict sibling below a rev already heeded (rose " + (rose && rose.rev)
+    /* f3m, moved. It said: the floor still refuses a conflict sibling below a rev already heeded (rose 6, held 6, "older file" said).
+       No sibling is heeded now, so the floor never rises on one: it stays at the canonical file's rev (2) through both runs. */
+    check(rose && rose.rev === 2 && held && held.rev === 2,
+      "f3m a conflict sibling never raises the floor: it stays at the canonical file's rev (rose " + (rose && rose.rev)
       + ", held " + (held && held.rev) + ")");
   }
   {
@@ -401,13 +398,15 @@ try {
     const floor = floorOf(ud);
     const doc = A.test.teamDoc();
     const after = [fileSha(canonAt), fileSha(confAt)];
-    const mirrorConf = path.join(ud, "folder-mirror", teamId, "etiuda-team_conf(1).json");
-    check(floor && floor.epoch === 1 && floor.rev === 4 && doc && doc.rev === 4
+    const mirrorConf = path.join(relayMirrorOf(ud, teamId), "etiuda-team_conf(1).json");
+    /* f4b, moved. It said: Drive etiuda-team_conf(1).json at a higher rev reaches the mirror and is heeded (rev 4). It now says it
+       reaches the mirror as any file does, and is not heeded (rev 1). */
+    check(floor && floor.epoch === 1 && floor.rev === 1 && doc && doc.rev === 1
       && fs.existsSync(mirrorConf)
       && before[0] === after[0] && before[1] === after[1]
       && fs.existsSync(canonAt) && fs.existsSync(confAt)
       && A.test.isCatalogName("etiuda-team_conf(1).json"),
-      "f4b Drive etiuda-team_conf(1).json at a higher rev reaches mirror and is heeded (rev "
+      "f4b Drive etiuda-team_conf(1).json at a higher rev reaches the mirror and is not heeded (rev "
       + (floor && floor.rev) + ", doc " + (doc && doc.rev) + ")");
   }
 
@@ -466,23 +465,9 @@ try {
     check(one.found && one.same && red && sha(fs.readFileSync(path.join(ROOT, "shell", "main.js"))) === one.digest,
       "f3n removing plant:f3-one-row in a scratch copy lists both files again, and the checkout is unchanged");
   }
-  {
-    const sib = scratchSource("f3-team-sibling");
-    let red = false;
-    if (sib.found) {
-      const { ud, folder } = fresh();
-      pinLead(ud);
-      put(folder, "etiuda-team.json", teamDoc(1, 1));
-      put(folder, "etiuda-team (1).json", teamDoc(4, 1));
-      syncMirror(ud, folder);
-      const A = boot(ud, fs.readFileSync(sib.scratch, "utf8"));
-      await A.ask("etiuda:catalog-files");
-      const floor = floorOf(ud);
-      red = !floor || floor.rev === 1;
-    }
-    check(sib.found && sib.same && red && sha(fs.readFileSync(path.join(ROOT, "shell", "main.js"))) === sib.digest,
-      "f3o removing plant:f3-team-sibling in a scratch copy heeds the canonical rev, and the checkout is unchanged");
-  }
+  /* f3o RETIRED. It said: removing plant:f3-team-sibling in a scratch copy heeds the canonical rev, and the checkout is unchanged. The
+     line is gone with the sibling reader (no folder is read as a team), so there is nothing to lift; f3i, f3m and f4b hold that a
+     sibling is not heeded. */
   {
     const conf = scratchSource("f3-conflict-only");
     let red = false;

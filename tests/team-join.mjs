@@ -23,6 +23,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { createRequire } from "node:module";
 import { pathToFileURL, fileURLToPath } from "node:url";
+import { relayizeDesk, carryDesks, relayMirrorOf, relayChannelOf } from "./relay-mirror-desk.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
@@ -41,7 +42,7 @@ const ASIDE = {
   "15ep": offWindows("15ep", "15em stands aside off Windows, so lifting plant:w2-folder-not-writable has no green leg there to turn"),
 };
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 225;
+const EXPECTED = 225 - 76; /* fold 129: 223 at the merge base + 2 (fold 128: the join link's hide scene, jlk5 and jlk6) - 76 retired with the folder join (FOLDER_JOIN_RETIRED, P4) */
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -78,116 +79,29 @@ function makeResponse(status, json, headers = {}) {
   };
 }
 const RelayChannel = () => nodeRequire(path.join(ROOT, "shell", "relay", "channel.cjs"));
-const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const knownTeamKeys = new Map();
-const deskProgs = new Map();
 
+/* A desk that pins a team when it loads is put on the team's relay mirror (tests/relay-mirror-desk.mjs): the folder a leg names stands for the relay's
+   copy of the team, carried to the desk's mirror and back by the stand-in. It was the desk's folder-mirror and the folder syncer. */
 function syncFolder(dir) {
   if (!dir) return;
-  const targetDir = path.resolve(dir);
-  let fileTeamDoc = null;
-  const teamFilePath = path.join(targetDir, "etiuda-team.json");
-  if (fs.existsSync(teamFilePath)) {
-    try { fileTeamDoc = JSON.parse(fs.readFileSync(teamFilePath, "utf8")); } catch {}
-  }
-  for (const D of DESKS) {
-    let env = null;
-    try { env = D.envelope(); } catch {}
-    if (!env) continue;
-    const folders = [];
-    if (env.keys && env.keys.eCatalogFolder) folders.push(path.resolve(env.keys.eCatalogFolder));
-    if (typeof D.api.rawCatalogFolder === "function") {
-      try { const rf = D.api.rawCatalogFolder(); if (rf) folders.push(path.resolve(rf)); } catch {}
-    }
-    if (env.teamShown) {
-      for (const s of Object.values(env.teamShown)) {
-        if (s && s.folder) folders.push(path.resolve(s.folder));
-      }
-    }
-    if (env.teamJoin && env.teamJoin.invite && env.teamJoin.invite.folder) {
-      folders.push(path.resolve(env.teamJoin.invite.folder));
-    }
-    const matches = folders.some(f => targetDir === f || targetDir.startsWith(f + path.sep) || f.startsWith(targetDir + path.sep));
-    if (!matches) continue;
-
-    let teamId = fileTeamDoc && fileTeamDoc.id;
-    let leadPin = null;
-    if (env.teamPins && env.teamPins[teamId]) {
-      leadPin = env.teamPins[teamId];
-    } else if (env.teamJoin && env.teamJoin.invite && env.teamJoin.invite.lead) {
-      leadPin = env.teamJoin.invite.lead;
-    }
-    if (!teamId && env.teamPins) {
-      for (const [t, p] of Object.entries(env.teamPins)) {
-        if (t) { teamId = t; leadPin = p; break; }
-      }
-    }
-    if (!teamId && env.teamJoin && env.teamJoin.team) {
-      teamId = env.teamJoin.team;
-      leadPin = env.teamJoin.invite && env.teamJoin.invite.lead;
-    }
-    if (!teamId) continue;
-
-    const mirror = syncerMod.folderMirrorOf(D.ud, teamId);
-    const cacheKey = D.ud + ":" + teamId;
-    let prog = deskProgs.get(cacheKey);
-    if (!prog || prog.folder !== targetDir) {
-      prog = syncerMod.createFolderProgram({
-        team: teamId,
-        folder: targetDir,
-        mirror: mirror,
-        pin: () => {
-          try {
-            const e = D.envelope();
-            if (e.teamPins && e.teamPins[teamId]) return e.teamPins[teamId];
-            if (e.teamJoin && e.teamJoin.invite && env.teamJoin.invite.lead) return e.teamJoin.invite.lead;
-          } catch {}
-          return leadPin || null;
-        },
-        floor: (t, leadPub) => {
-          try {
-            const e = D.envelope();
-            return (e.teamRevSeen && e.teamRevSeen[t] && e.teamRevSeen[t][leadPub]) || null;
-          } catch {
-            return null;
-          }
-        },
-        keyFor: (ep) => {
-          if (knownTeamKeys.has(teamId + ":" + ep)) return knownTeamKeys.get(teamId + ":" + ep);
-          if (knownTeamKeys.has(teamId + ":" + (+ep))) return knownTeamKeys.get(teamId + ":" + (+ep));
-          try {
-            const e = D.envelope();
-            if (e.teamKeys && e.teamKeys[teamId] && e.teamKeys[teamId][ep]) {
-              const ct = e.teamKeys[teamId][ep];
-              const dec = D.electron.safeStorage.decryptString(Buffer.from(ct, "base64"));
-              const k = Buffer.from(dec, "base64");
-              if (k.length === 32) return k;
-            }
-          } catch {}
-          return null;
-        },
-        authorizedKeys: () => {
-          try {
-            const e = D.envelope();
-            return Object.keys((e.teamRevSeen && e.teamRevSeen[teamId]) || {});
-          } catch {
-            return [];
-          }
-        },
-        logger: (msg) => { D.said.push(msg); },
-        checks: D.api.deskTrustChecks(),
-      });
-      prog.folder = targetDir;
-      deskProgs.set(cacheKey, prog);
-    }
-    prog.syncOnce();
-    prog.syncOnce();
-  }
+  carryDesks(DESKS, dir);
 }
 
 /* One desk over its own user-data folder, the shell evaluated afresh, from `src` where a leg gives one; the safeStorage
    stand-in is reversible. */
+/* A desk that pins a team is put on that team's relay mirror when it loads, except one that already names a relay for its team (a leg that built it so) or
+   that a leg asks to leave as it is (opts.relay false). */
+function onRelayMirror(ud, opts) {
+  if (opts && opts.relay === false) return false;
+  try {
+    const ch = JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8")).teamChannel;
+    if (ch && Object.values(ch).some(c => c && c.kind === "relay")) return false;
+  } catch { /* no desk.json yet: nothing pins a team */ }
+  return true;
+}
 function loadDesk(ud, src, opts) {
+  const relay = onRelayMirror(ud, opts) ? relayizeDesk(ud) : null;
   const said = [], invoke = {}, on = {};
   // Every way the shell can log is kept, so a leg can say what reached the log and what did not.
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: s => said.push("WARN " + String(s)),
@@ -281,8 +195,10 @@ function loadDesk(ud, src, opts) {
     } catch {}
     return origReadCatalog.apply(this, args);
   };
-  const desk = { api, ask, said, ud, envelope, win, sent, sync, electron, join: (op, file, name, check) => ask("etiuda:team-join", op, file, name, check) };
+  const desk = { api, ask, said, ud, envelope, win, sent, sync, electron, relay, join: (op, file, name, check) => ask("etiuda:team-join", op, file, name, check) };
   DESKS.push(desk);
+  /* What the store already holds reaches this desk's mirror before it reads, as the relay brings a team's files to a desk. */
+  carryDesks([desk]);
   return desk;
 }
 const DESKS = [], SECRETS = [];
@@ -330,8 +246,9 @@ try {
     if (key) knownTeamKeys.set(TEAM + ":" + (epoch || 1), key);
     return { desk: { id: who.id, key: who.key, box: who.box }, wrap: P.wrapTeamKey(key, who.box, TEAM, epoch, who.id) };
   };
+  /* A team file names the relay: a team works over the relay only, and a file naming none is a folder's. */
   const teamFile = (roster, o) => sign({ format: 1, kind: "etiuda-team", id: TEAM, catalogs: ["lamp-shop"],
-    lead: (o && o.lead) || LEAD, sealed: true, exportsSealed: false, epoch: 1, roster: roster },
+    lead: (o && o.lead) || LEAD, sealed: true, exportsSealed: false, epoch: 1, roster: roster, channel: relayChannelOf(TEAM) },
     (o && o.signer) || lead.privateKey, LEAD.keyId);
   const signJoins = (doc, key, keyId) => {
     const out = JSON.parse(JSON.stringify(doc));
@@ -366,6 +283,30 @@ try {
   /* ---- outside the team ---------------------------------------------------------------------------------------- */
   const me1 = await D1.ask("etiuda:branch-identity", true);
   const D2 = newDesk("two", SHARE), me2 = await D2.ask("etiuda:branch-identity", true);
+  /* ---- THE FOLDER JOIN, RETIRED with the folder team (P2: a desk outside a team asks to join through the shared folder; no folder is read as a team,
+     so no desk is outside one, and a team is joined over the relay by an invitation). Its checks 15d to 15z and j14a to j14f, 32 of them,
+     said what their sentences below say and are no longer asked; the code stays under the switch as the record of what each held. ---- */
+  /* ---- the pinned lead's key, shown once to compare, and forgotten where it is not the lead's ------------------- */
+  // Studio's Settings show its key as "studio-" and these 16 hex (src/sign.mjs keyIdFor): made here from the public half.
+  const printOf = pub => crypto.createHash("sha256").update(Buffer.from(pub, "hex")).digest("hex").slice(0, 16);
+  /* The key's four facts. The team's name, folder, removal and policy beside them are 15bn to 15bs's. */
+  const leadsOf = v => JSON.stringify((v && v.leads) ? v.leads.map(l => ({ team: l.team, print: l.print, admitted: l.admitted, seen: l.seen })) : null);
+  /* What the retired section handed to the checks after it: a request made with no invitation (none is made now), and a desk that is a member
+     of the team over the relay, which the section's last desk was by the folder join and is now by an invitation: its lead pinned, the team
+     file in its relay mirror listing it (15aa's, rebased). */
+  const r1 = null, bytes1 = "";
+  const D7a = newDesk("seven", folder("seven-own"));
+  const me7 = await D7a.ask("etiuda:branch-identity", true);
+  {
+    const file = path.join(D7a.ud, "desk.json"), doc = JSON.parse(fs.readFileSync(file, "utf8"));
+    doc.teamPins = { [TEAM]: { keyId: LEAD.keyId, public: LEAD.public } };
+    fs.writeFileSync(file, JSON.stringify(doc), "utf8");
+    relayizeDesk(D7a.ud);
+    fs.writeFileSync(path.join(relayMirrorOf(D7a.ud, TEAM), "etiuda-team.json"), JSON.stringify(teamFile([entry(me7, K1, 1)])), "utf8");
+  }
+  const fresh7 = loadDesk(D7a.ud);
+  const FOLDER_JOIN_RETIRED = true;
+  if (!FOLDER_JOIN_RETIRED) {
   put(SHARE, "etiuda-team.json", teamFile([entry(me2, K1, 1)]));
   put(SHARE, "lamps.ec", P.sealCatalog(K1, TEAM, 1, A1));
   put(SHARE, "plain.ec", A1);
@@ -655,11 +596,6 @@ try {
     "15v the lead's own admission read while the request stands refused waits too, and the cancel alone, the team file"
     + " unchanged since, has it read again and the catalog open");
 
-  /* ---- the pinned lead's key, shown once to compare, and forgotten where it is not the lead's ------------------- */
-  // Studio's Settings show its key as "studio-" and these 16 hex (src/sign.mjs keyIdFor): made here from the public half.
-  const printOf = pub => crypto.createHash("sha256").update(Buffer.from(pub, "hex")).digest("hex").slice(0, 16);
-  /* The key's four facts. The team's name, folder, removal and policy beside them are 15bn to 15bs's. */
-  const leadsOf = v => JSON.stringify((v && v.leads) ? v.leads.map(l => ({ team: l.team, print: l.print, admitted: l.admitted, seen: l.seen })) : null);
   const shown = await D1r.join("state");
   const seenNow = await D1r.join("seen", TEAM);
   const seenLater = await loadDesk(D1r.ud).join("state");
@@ -697,6 +633,7 @@ try {
     "15z THE CONTROL: after forgetting, a request answered by the real lead admits the desk, pins that lead, lifts the bar and"
     + " shows the new key once: " + leadsOf(rejoined));
 
+  }
   /* ---- an invitation: paste, confirm, and a request that proves the secret without carrying it ------------------- */
   const inviteBlob = (o) => "etiuda-join:" + Buffer.from(JSON.stringify(o)).toString("base64url");
   const filesUnder = (dir) => {
@@ -742,8 +679,11 @@ try {
     "15ac an invitation for a folder on another computer names that computer and the folder as Windows reaches it before anything"
     + " is opened, or is refused where that path is no place, and writes nothing: " + uncMs + "ms, "
     + (WIN ? "host " + (uncPreview && uncPreview.offer && uncPreview.offer.host) : "refused " + (uncPreview && uncPreview.refused)));
+  /* RETIRED, P4 (the folder join): 15ad, "a request made with no invitation is unchanged: no invite and no kind on the member", held what a desk's request through the shared folder carried; no such request is made now. */
+  if (!FOLDER_JOIN_RETIRED) {
   check(r1 && r1.invite === undefined && r1.desk.kind === undefined && bytes1.indexOf('"invite"') < 0 && bytes1.indexOf('"kind": "desk"') < 0,
     "15ad a request made with no invitation is unchanged: no invite and no kind on the member");
+  }
 
   const yard = folder("yard");
   const Dy = newDesk("yard", folder("yard-old"));
@@ -813,6 +753,8 @@ try {
     finally { untap.forEach(u => u()); }
     return touched;
   };
+  /* RETIRED, P4 (the folder join): j14b, "review 14.2 refuted: after Leave, a new invitation from the same lead, taken by the person's yes, makes the desk a member again by the roster that still names it, the leave lifted only by that yes", ran on a folder team's roster and a folder invitation; a relay team's leave and later invitation are tests/relay-channel.mjs 987. */
+  if (!FOLDER_JOIN_RETIRED) {
   /* ---- review 14, finding 2, refuted: Leave is this desk's own act and tells the lead nothing, so the lead's roster still names
      it, and the lead's Studio takes a desk with the same keys on its roster as admitted and lists no request for it. A new
      invitation from that lead, accepted by the person's yes, makes it a member again by that roster's key; held until a new
@@ -837,6 +779,7 @@ try {
       "j14b review 14.2 refuted: after Leave, a new invitation from the same lead, taken by the person's yes, makes the desk a member"
       + " again by the roster that still names it, the leave lifted only by that yes: member before " + inBefore + ", left " + leftNow
       + ", offered " + !!(offered && !offered.refused) + ", taken " + !!(took && !took.refused) + ", request ended " + !e.teamJoin);
+  }
   }
   const hostile = folder("hostile");
   const forgedLead = { keyId: FORGED.keyId, public: FORGED.public, name: "Lamp lead" };
@@ -905,6 +848,8 @@ try {
     + " nothing and ask or write nothing: " + (noFour && noFour.refused) + ", " + (wrongFour && wrongFour.refused)
     + ", then " + (rightFour && rightFour.join && rightFour.join.state));
 
+  /* RETIRED, P4 (the folder join, P2's folder invitations): 15am, "a folder whose team file is under another lead, for another team, not whole under its lead, or under the lead's key with another keyId takes no request, and the folder is put back as it was; THE CONTROL, a team file whole under the invited lead, takes it". No folder is read as a team, so no invitation is judged by the team file in the folder it names. */
+  if (!FOLDER_JOIN_RETIRED) {
   const Dr = await deskWith("files", folder("files-own"));
   const underForger = folder("files-forger"), otherTeam = folder("files-other"), broken = folder("files-broken"), genuineFolder = folder("files-real");
   put(underForger, "etiuda-team.json", teamFile([], { lead: FORGED, signer: forger.privateKey }));
@@ -932,6 +877,7 @@ try {
     "15am a folder whose team file is under another lead, for another team, not whole under its lead, or under the lead's key with"
     + " another keyId takes no request, and the"
     + " folder is put back as it was; THE CONTROL, a team file whole under the invited lead, takes it: " + JSON.stringify(foreign));
+  }
 
   /* A team file the desk cannot read is taken neither for no team file nor for another team's: a folder standing where the
      file would, and a file that is not JSON. The page's sentence for it is read with the page's legs, where 15be is. */
@@ -974,6 +920,8 @@ try {
     "15av at yes, a folder that does not answer is asked and nothing more: no call that could wait on it with the window behind it, the"
     + " desk's folder put back, nothing pinned or written: " + (tookV && (tookV.canceled ? "canceled" : tookV.refused)) + ", touched " + JSON.stringify(touchedV));
 
+  /* RETIRED, P4 (the folder join, P2's folder invitations): 15cl, "a chosen copy of the shared folder is accepted only where it holds that team's own team file under the invited lead, and refused otherwise, a ring there vouching for another key included (review 14.5)", and its plant j14e, "lifting plant:j14-picked-lead takes a chosen folder under another key". */
+  if (!FOLDER_JOIN_RETIRED) {
   const ringYard = folder("files-ring");
   put(ringYard, "etiuda-team.json", teamFile([], { lead: FORGED, signer: forger.privateKey }));
   put(ringYard, "etiuda-ring.json", { format: 1, kind: "etiuda-ring",
@@ -997,6 +945,7 @@ try {
     const Dp = SRC.indexOf("plant:j14-picked-lead") >= 0 ? loadDesk(folder("j14e-ud"), planted) : null;
     const took = Dp ? Dp.api.inviteFolderBelongs(ringYard, invented) : null;
     check(took === true, "j14e lifting plant:j14-picked-lead takes a chosen folder under another key (FAIL 15cl): " + JSON.stringify(took));
+  }
   }
 
   const Dk = await deskWith("kept", folder("kept-own"));
@@ -1171,6 +1120,8 @@ try {
   check(hostHtml.indexOf("<p>" + hostLine + "</p>") >= 0,
     "15at the confirm says which computer the folder is on, in the line under its title: " + hostLine);
 
+  /* RETIRED, P4 (the folder join, P2's folder invitations): 15ei, "cancelling the folder picker keeps the confirmation card with the invitation and the typed check code in place, and says nothing; pressing Join again with nothing re-typed takes the invitation"; the picker chooses a copy of the invited folder, which a relay invitation has none of. */
+  if (!FOLDER_JOIN_RETIRED) {
   let pickCount = 0;
   const cancelYard = folder("cancel-yard");
   put(cancelYard, "etiuda-team.json", teamFile([], { lead: lampLead, signer: lead.privateKey }));
@@ -1204,6 +1155,7 @@ try {
       && heldAfterSecondPress && heldAfterSecondPress.mode === ""
       && fs.existsSync(path.join(cancelYard, "desks")),
     "15ei cancelling the folder picker keeps the confirmation card with the invitation and the typed check code in place, and says nothing; pressing Join again with nothing re-typed takes the invitation");
+  }
 
   window.E_HOST = hostOver(fresh7);
   TJ.wireTeamJoin();
@@ -1334,6 +1286,10 @@ try {
       + ", yes " + (takeM && (takeM.refused || (takeM.join ? takeM.join.state : "nothing")))
       + ", requests " + inNamed);
   };
+  /* The page's refusal sentence below reads the control invitation (it is offered to a desk with no policy). */
+  const controlBlob = inviteBlob({ team: TEAM, folder: folder("policy-control-yard"), lead: lampLead, secret: newSecret() });
+  /* RETIRED, P4 (machine policy's TeamFolder is not read): 15ay, "while machine policy names the team's folder and lead, an invitation whose lead key matches the policy's lead is accepted at read and at yes, a folder differing only in case included; an invitation from another lead, or under folder policy alone, is refused at read and at yes with the policy's word, and nothing changes; THE CONTROL, a desk with no policy, is offered it". The lead-alone cases that follow stand. */
+  if (!FOLDER_JOIN_RETIRED) {
   const folderLead = f => [["TeamFolder", f], ["LeadKey", LEAD.public]];
   const byFolder = [
     await policyCase("folder and lead, invitation from another lead", folderLead, forgedLead, false),
@@ -1342,13 +1298,13 @@ try {
     await policyAcceptCase("folder and lead, a folder differing only in case", folderLead, lampLead, true, true),
   ];
   const Dnp = await deskWith("policy-control", folder("policy-control-own"));
-  const controlBlob = inviteBlob({ team: TEAM, folder: folder("policy-control-yard"), lead: lampLead, secret: newSecret() });
   const readNp = await Dnp.join("read", controlBlob);
   check(byFolder.every(x => / ok$/.test(x)) && readNp && !!readNp.offer && readNp.refused === undefined,
     "15ay while machine policy names the team's folder and lead, an invitation whose lead key matches the policy's lead is accepted"
     + " at read and at yes, a folder differing only in case included; an invitation from another lead, or under folder policy alone, is refused at read and at yes with the"
     + " policy's word, and nothing changes; THE CONTROL, a desk with no policy, is offered it; off Windows no machine policy is"
     + " read and the door stands as before: " + byFolder.join("; "));
+  }
 
   const leadAlone = () => [["LeadKey", LEAD.public]];
   const byLead = [
@@ -1367,6 +1323,8 @@ try {
     try { const D = loadDesk(ud); await D.join("state"); D.policyRead = regStand.calls.export > before; return D; }
     finally { REG.policy = null; }
   };
+  /* RETIRED, P4 (the folder join, P2's folder invitations): 15bf, "a join kept from an invitation is let go once machine policy arrives in a later run: the pin the invitation set and the folder it set go, the desk's own folder comes back, its request stays where it was written, and the invited lead's file is refused under the policy, and the desk says once that the request is let go, with no secret, proof or check code in that sentence, the rest of its log or its file, while a pin, a key and a key shown that the desk held before stay; THE CONTROL, the same desk restarted with no policy, keeps the join, the pin and the folder and says no let-go". It ran on invitations that set the desk's catalog folder (the invitation named a folder) and on a team file in that folder. Finding: no leg holds a relay invitation's let-go under a policy that arrives later (policyLetsInviteGo). Another, in the run that retired it: with a kept invitation and a policy newly arrived, a first etiuda:team-join state asks leadsView, whose readJoinPolicy lets the invitation's pin go inside its own map, and teamPins[t].public is then read of nothing (shell/main.js, leadsView). */
+  if (!FOLDER_JOIN_RETIRED) {
   const T2 = "t-" + crypto.randomBytes(8).toString("hex");
   const keptT2 = { [T2]: { "1": Buffer.from("kept").toString("base64") } };
   const letGoOutcome = [];
@@ -1422,7 +1380,10 @@ try {
     + " that sentence, the rest of its log or its file, while a pin, a key and a key shown that the desk held before stay; THE"
     + " CONTROL, the same desk restarted with no policy, keeps the join, the pin and the folder and says no let-go; off Windows no"
     + " machine policy is read and all of it stays: " + letGoOutcome.join("; "));
+  }
 
+  /* RETIRED, P4 (the folder join): 15bg, "a join made from the folder's own request, with no invitation, is kept when machine policy arrives in a later run, under a policy naming the folder and the lead, the folder alone or the lead alone: the request in the desk's file and on the share, its six-digit code, the folder and what the desk held before all stay, and no let-go is said, while in that same run an invitation is refused with the policy's word". The request was the folder join's own. */
+  if (!FOLDER_JOIN_RETIRED) {
   /* A join made from the folder's own request, with no invitation, is not policy's to let go: restarted under each policy, the
      request, its code and what the desk held before stay, and no let-go is said. In the same run an invitation is refused with
      the policy's word, so the policy was in force. */
@@ -1462,6 +1423,7 @@ try {
     + " its six-digit code, the folder and what the desk held before all stay, and no let-go is said, while in that same run an"
     + " invitation is refused with the policy's word; THE CONTROL, a restart with no policy, keeps it too and the invitation is"
     + " offered; off Windows no machine policy is read and all of it stays: " + codeG.split(" ")[0] + "; " + plainKept.join("; "));
+  }
 
   /* ---- the confirm's host line comes only from a folder the reader returned ----------------------------------- */
   /* The shell evaluated with folderHost wrapped, so every folder it is asked of is kept here. */
@@ -1523,6 +1485,8 @@ try {
   check(pageSaid("en") === escHtml(POLICY_LINE.en) && pageSaid("pl") === escHtml(POLICY_LINE.pl) && policyPage.en.indexOf(secretOf(controlBlob)) < 0,
     "15ba the policy's refusal reaches the page as its own sentence, in English and in Polish: " + pageSaid("en") + " / " + pageSaid("pl"));
 
+  /* RETIRED, P4 (the folder join, P2's folder invitations): 15be, "a folder whose team file cannot be read, a folder standing where the file would or a file that is not JSON, takes no request and puts the desk's folder back, refused with a word of its own that the page says in its own sentence, in English and in Polish". */
+  if (!FOLDER_JOIN_RETIRED) {
   const UNREADABLE_LINE = { en: "The team file in this folder could not be read, so this desk did not join and nothing was written. Let the team's lead know, so they can check the folder.",
     pl: "Nie udało się odczytać pliku zespołu w tym folderze, więc stanowisko nie dołączyło i nic nie zapisano. Proszę dać znać liderowi zespołu: może sprawdzić ten folder." };
   window.E_HOST = { onTeamJoin: noop, teamJoin: op => Promise.resolve(op === "read" || op === "invite"
@@ -1544,7 +1508,10 @@ try {
     "15be a folder whose team file cannot be read, a folder standing where the file would or a file that is not JSON, takes no"
     + " request and puts the desk's folder back, refused with a word of its own that the page says in its own sentence, in"
     + " English and in Polish: " + JSON.stringify(tookE) + ", " + unreadableSaid.en);
+  }
 
+  /* RETIRED, P4 (the folder join, P2's folder invitations): 15bh, "a team file one byte larger than 1 MiB, whole under the invited lead otherwise, is one the desk cannot read: refused at yes as unreadable, nothing written or pinned and the desk's folder put back, and the page over this desk's shell says the team file could not be read, in English and in Polish; THE CONTROL, the same file at exactly 1 MiB, is read and taken". */
+  if (!FOLDER_JOIN_RETIRED) {
   /* A team file larger than the shell reads (TEAM_MAX in shell/main.js, 1 MiB) is one it cannot read, however whole: refused
      at yes with that word, and the page over this desk's own shell says that sentence. THE CONTROL is the same file at
      exactly 1 MiB, read and taken. */
@@ -1584,6 +1551,7 @@ try {
     + " team file could not be read, in English and in Polish; THE CONTROL, the same file at exactly 1 MiB, is read and taken: "
     + sizes.join(" and ") + " bytes, " + (overWord && (overWord.refused || (overWord.join ? overWord.join.state : "nothing"))) + ", then "
     + (atWord && (atWord.refused || (atWord.join ? atWord.join.state : "nothing"))) + "; " + overSaid.en);
+  }
 
   /* A read the page has let go is answered to nobody: one left by Cancel, and one landing while another paste box is open. */
   const Dst = await deskWith("stale", folder("stale-own"));
@@ -1746,6 +1714,8 @@ try {
       + ", tree " + (same ? "untouched" : "changed"));
   }
 
+  /* RETIRED, P4 (the folder join): 15bi, "a desk that took an invitation, opened afterwards, reveals with that invitation and its kind intact, and its view names the lead and shows its code, while a request with no invitation reveals with only the opening added and shows its code", on the request file in the shared folder. */
+  if (!FOLDER_JOIN_RETIRED) {
   /* A lead may open an invitation's request for the six-digit code. The reveal rewrites the file. The bytes written
      at yes stay, and only the reveal and the opening are added. A request that never carried an invitation gains the
      same two fields and nothing else, which is the file this desk has always written on a reveal. */
@@ -1807,6 +1777,7 @@ try {
     "15bi a desk that took an invitation, opened afterwards, reveals with that invitation and its kind intact, and its view names the lead and shows its code,"
     + " while a request with no invitation reveals with only the opening added and shows its code: invite " + (invOk ? "kept" : "dropped")
     + ", plain " + (plainOk ? "unchanged" : "moved"));
+  }
 
   /* An invitation's wait names the lead and never draws a code. A request still does, empty places and then the digits. */
   let tookFn = null;
@@ -2197,7 +2168,7 @@ try {
     teamPins: { [relayTeam]: { keyId: LEAD.keyId, public: LEAD.public } },
     teamPinFrom: { [relayTeam]: "answer" },
     teamShown: { [relayTeam]: { lead: "Lamp lead", folder: hushYard } },
-    teamRelayGone: { [relayTeam]: true } });
+    teamRelayGone: { [relayTeam]: true } }, undefined, { relay: false });
   const hushHtml = await bothLang(hushDesk);
   const hushSaid = cardSaid(hushHtml, HUSH_EN, HUSH_PL) && hushHtml.en.indexOf("The relay says this desk is no longer on the team") >= 0;
   const rosterOnly = hushHtml.en.indexOf(escPage(HUSH_EN)) >= 0;
@@ -3647,7 +3618,18 @@ try {
     catch (e) { check(false, id + " threw: " + (e && e.stack ? e.stack.split("\n").slice(0, 3).join(" | ") : e)); }
   };
   const teamAt = (epoch, roster) => sign({ format: 1, kind: "etiuda-team", id: TEAM, catalogs: ["lamp-shop"], lead: LEAD,
-    sealed: true, exportsSealed: false, epoch: epoch, roster: roster }, lead.privateKey, LEAD.keyId);
+    sealed: true, exportsSealed: false, epoch: epoch, roster: roster, channel: relayChannelOf(TEAM) }, lead.privateKey, LEAD.keyId);
+  /* A desk an invitation joined to the team over the relay, as this section's desks were joined by a folder invitation: its lead pinned and
+     named as the invitation gave it, its mirror the team's place, `yard` standing for the relay's copy of the team (tests/relay-mirror-desk.mjs). */
+  const relayJoined = async (name, yard) => {
+    const D0 = newDesk(name, yard);
+    const me = await D0.ask("etiuda:branch-identity", true);
+    const file = path.join(D0.ud, "desk.json"), doc = JSON.parse(fs.readFileSync(file, "utf8"));
+    doc.teamPins = { [TEAM]: { keyId: LEAD.keyId, public: LEAD.public } };
+    doc.teamShown = { [TEAM]: { lead: "Lamp lead" } };
+    fs.writeFileSync(file, JSON.stringify(doc), "utf8");
+    return { D: loadDesk(D0.ud), me };
+  };
   const leadIn = v => ((v && v.leads) || []).filter(l => l.team === TEAM)[0] || null;
   /* Every call that writes, renames or removes under `dir` while `run` runs, by name.
      The path is what counts, after resolve, and only where path.relative stays inside:
@@ -3707,10 +3689,10 @@ try {
   try { await press("back"); } catch { /* nothing held */ }
 
   const leaveYard = folder("leave-yard");
-  const Dl = await deskWith("leave", folder("leave-own"));
-  const meL = await Dl.ask("etiuda:branch-identity", true);
-  const leaveBlob = inviteBlob({ team: TEAM, folder: leaveYard, lead: lampLead, secret: newSecret() });
-  const tookL = await Dl.join("invite", leaveBlob, "Nia", codeFor(leaveBlob));
+  /* MOVED, P4: Dl was joined by a folder invitation to the team's folder, and is joined over the relay by an invitation (its lead pinned and named
+     as the invitation gave it, its mirror the team's place). */
+  const { D: Dl, me: meL } = await relayJoined("leave", leaveYard);
+  const tookL = { join: { state: "waiting" } };
   const KL1 = crypto.randomBytes(32), KL2 = crypto.randomBytes(32), KL3 = crypto.randomBytes(32);
   put(leaveYard, "etiuda-team.json", teamAt(1, [entry(me2, KL1, 1), entry(meL, KL1, 1)]));
   put(leaveYard, "lamps.ec", P.sealCatalog(KL1, TEAM, 1, A1));
@@ -3721,10 +3703,12 @@ try {
   await legTry("15bn", async () => {
     const l = leadIn(inL), again = leadIn(await loadDesk(Dl.ud).join("state"));
     const want = JSON.stringify({ team: TEAM, print: printOf(LEAD.public), admitted: true, seen: false, lead: "Lamp lead",
-      folder: leaveYard, removed: false, policy: false });
-    check(!!tookL && !!tookL.join && !!inL.joined && JSON.stringify(l) === want && JSON.stringify(again) === want,
-      "15bn a desk let in by an invitation names its team by the lead's name the invitation gave and the folder the team's file"
-      + " is read in, on the roster and not removed, in a fresh run too: " + JSON.stringify(l));
+      folder: relayMirrorOf(Dl.ud, TEAM), removed: false, policy: false, relay: "etiuda.dev" });
+    /* 15bn, moved: it also asked `inL.joined`, the finish of the folder join the desk made (the view's one-time notice); the desk is joined by an invitation. */
+    check(!!tookL && !!tookL.join && JSON.stringify(l) === want && JSON.stringify(again) === want,
+      /* 15bn, moved: it said "the folder the team's file is read in" (the invited folder); a relay team's is the mirror, and the row names the relay too. */
+      "15bn a desk let in by an invitation names its team by the lead's name the invitation gave and the place the team's file"
+      + " is read in (the relay's mirror, and the relay), on the roster and not removed, in a fresh run too: " + JSON.stringify(l));
   });
 
   /* Epoch 2 leaves this desk off, and the newest edition is sealed again under the new key. */
@@ -3768,12 +3752,13 @@ try {
   await legTry("15bq", async () => {
     const en = await settingsAt(Dl, "en"), pl = await settingsAt(Dl, "pl");
     const groups = printOf(LEAD.public).replace(/(.{4})(?=.)/g, "$1 ");
-    const f = { name: en.indexOf("Lamp lead&#39;s team") >= 0, folder: en.indexOf("Folder: " + escHtml(leaveYard)) >= 0,
+    const f = { name: en.indexOf("Lamp lead&#39;s team") >= 0, relay: en.indexOf("Relay: etiuda.dev") >= 0 && en.indexOf("Folder:") < 0,
       key: en.indexOf(groups) >= 0, leave: new RegExp('data-leave-team="' + TEAM + '"[^>]*>Leave this team<').test(en),
       noForget: en.indexOf("Forget this lead") < 0 && en.indexOf("data-forget-lead") < 0 && en.indexOf("Team lead&#39;s key") < 0,
       polish: pl.indexOf("Zespół osoby Lamp lead") >= 0 && />Opuść ten zespół</.test(pl) && pl.indexOf("Leave this team") < 0 };
     check(Object.keys(f).every(k => f[k]),
-      "15bq Settings shows the team by the lead's name and the folder, the key beside them, with Leave this team and no Forget"
+      /* 15bq, moved: "and the folder" (Folder: <the invited folder>); a relay team's row shows Relay: {HOST} and never the folder (15dp). */
+      "15bq Settings shows the team by the lead's name and the relay, the key beside them, with Leave this team and no Forget"
       + " this lead, in English and in Polish: " + JSON.stringify(f));
   });
 
@@ -3800,21 +3785,13 @@ try {
     const relayHasHost = relayLibEn.indexOf("Relay: relay.test") >= 0 && relayLibPl.indexOf("Przekaźnik: relay.test") >= 0;
     const relayNoChange = relayLibEn.indexOf('id="mgCatFolder"') < 0 && relayLibEn.indexOf("Change folder") < 0;
     const relayNoMirror = relayLibEn.indexOf(relayHex.h32) < 0 && relayLibEn.indexOf("open-folder") < 0;
-    const folderLibEn = await libraryAt(Dl, "en");
-    const folderLibUnchanged = folderLibEn.indexOf('id="mgCatFolder"') >= 0 && folderLibEn.indexOf("open-folder") >= 0 && folderLibEn.indexOf("Relay:") < 0;
+    /* MOVED, P4 (no folder is read as a team): the check also said "while a folder team stays unchanged" (the Library of Dl, then a folder team's desk, showing its
+       folder and Change folder with no relay) and "a relay desk that opens a folder team's catalog ... sees that folder and Change folder" (a desk pinning a folder team beside a
+       relay team). A folder team is held now, which its notice and row say (tests/folder-team-held.mjs); Dl is a relay desk. The relay halves and the desk of no team stay. */
     const folderOpen = folder("lib-folder-open"), relayPlace = folder("lib-relay-place");
     const noneOpen = folder("lib-none-open"), relayOther = folder("lib-relay-other");
     const pinBoth = { keyId: LEAD.keyId, public: LEAD.public };
     const relayCh = { [relayTeam]: { kind: "relay", rt: relayHex.h32, url: "https://relay.test/relay/v1" } };
-    const folderTeamDesk = await deskWith("h35-lib-folder", folderOpen, {
-      teamPins: { [TEAM]: pinBoth, [relayTeam]: pinBoth },
-      teamPinFrom: { [TEAM]: "answer", [relayTeam]: "invite" },
-      teamShown: {
-        [TEAM]: { lead: "Lamp lead", folder: folderOpen },
-        [relayTeam]: { lead: "Lamp lead", folder: relayPlace, relay: "relay.test" }
-      },
-      teamChannel: relayCh
-    });
     const noneDesk = await deskWith("h35-lib-none", noneOpen, {
       teamPins: { [relayTeam]: pinBoth },
       teamPinFrom: { [relayTeam]: "invite" },
@@ -3823,9 +3800,7 @@ try {
     });
     const seesFolder = (html, open) => html.indexOf('id="mgCatFolder"') >= 0 && html.indexOf(open) >= 0
       && html.indexOf("Change folder") >= 0 && html.indexOf("Relay:") < 0;
-    const folderTeamHtml = await libraryAt(folderTeamDesk, "en");
     const noneHtml = await libraryAt(noneDesk, "en");
-    const folderTeamSees = seesFolder(folderTeamHtml, folderOpen);
     const noneSees = seesFolder(noneHtml, noneOpen);
     const relayTeam2 = "t-" + crypto.randomBytes(8).toString("hex"), relayPlace2 = folder("lib-relay-two");
     const twoRelayDesk = await deskWith("h35-lib-two-relay", relayPlace2, {
@@ -3846,10 +3821,10 @@ try {
     const twoRelayNoChange = twoRelayLibEn.indexOf('id="mgCatFolder"') < 0 && twoRelayLibEn.indexOf("Change folder") < 0;
     const twoRelayNoMirror = twoRelayLibEn.indexOf("open-folder") < 0;
     const twoRelaySees = twoRelayHasHost && twoRelayNoChange && twoRelayNoMirror;
-    check(relayHasHost && relayNoChange && relayNoMirror && folderLibUnchanged && folderTeamSees && noneSees && twoRelaySees,
-      "15du the Library shows the relay host and offers no Change folder on a relay team, in English and in Polish, while a folder team stays unchanged, and a relay desk that opens a folder team's catalog or a catalog of no team sees that folder and Change folder, and a two-relay-team desk opening the second sees that relay host: host "
-      + relayHasHost + ", no change " + relayNoChange + ", no mirror " + relayNoMirror + ", folder " + folderLibUnchanged
-      + ", folder team " + folderTeamSees + ", none " + noneSees + ", second relay " + twoRelaySees);
+    check(relayHasHost && relayNoChange && relayNoMirror && noneSees && twoRelaySees,
+      "15du the Library shows the relay host and offers no Change folder on a relay team, in English and in Polish, and a relay desk that opens a catalog of no team sees that folder and Change folder, and a two-relay-team desk opening the second sees that relay host: host "
+      + relayHasHost + ", no change " + relayNoChange + ", no mirror " + relayNoMirror
+      + ", none " + noneSees + ", second relay " + twoRelaySees);
   });
 
   // 15dv: lifting plant:library-relay-host shows mirror folder and Change folder on a relay team's Library
@@ -3949,10 +3924,7 @@ try {
   /* A desk of its own, so taking the leave back here leaves Dl's leave for 15br. */
   await legTry("15ch", async () => {
     const undoYard = folder("undo-yard");
-    const Du2 = await deskWith("undo-leave", folder("undo-own"));
-    const meU = await Du2.ask("etiuda:branch-identity", true);
-    const undoBlob = inviteBlob({ team: TEAM, folder: undoYard, lead: lampLead, secret: newSecret() });
-    await Du2.join("invite", undoBlob, "Nia", codeFor(undoBlob));
+    const { D: Du2, me: meU } = await relayJoined("undo-leave", undoYard);
     const KU = crypto.randomBytes(32);
     put(undoYard, "etiuda-team.json", teamAt(1, [entry(me2, KU, 1), entry(meU, KU, 1)]));
     put(undoYard, "lamps.ec", P.sealCatalog(KU, TEAM, 1, A1));
@@ -4014,9 +3986,9 @@ try {
     Dl.sync("etiuda:catalog-taken", bootPin);
     /* The note lands in the team's mirror and its outbox carries it to the folder at the next listing. */
     syncFolder(leaveYard);
-    const note = path.join("desks", meL.id, "in-use.ec"), noteKept = fs.existsSync(path.join(leaveYard, note));
-    const folderBefore = snapshot(leaveYard), keysBefore = JSON.stringify(Dl.envelope().keys);
-    const withoutNote = folderBefore.split("|").filter(x => x.indexOf(note + "=") !== 0).join("|");
+    const mirrorL = relayMirrorOf(Dl.ud, TEAM);
+    const note = path.join("desks", meL.id, "in-use.ec"), noteKept = fs.existsSync(path.join(mirrorL, note));
+    const keysBefore = JSON.stringify(Dl.envelope().keys);
     barBefore.en = await settingsAt(Dl, "en");
     barBefore.pl = await settingsAt(Dl, "pl");
     const CAT = await import(MOD("catalog.js")), SET = await import(MOD("settings.js"));
@@ -4030,7 +4002,7 @@ try {
     const beforeLeave = snapOf(Dl.envelope(), TEAM);
     let wired = false, held = false, lapsed = false, hits = [];
     try {
-      hits = await writesUnder(leaveYard, async () => {
+      hits = await writesUnder(mirrorL, async () => {
         const btn = pressLeave(SET, drawn);
         wired = typeof btn.onclick === "function";
         leftWindow.from = Date.now();
@@ -4051,15 +4023,16 @@ try {
       page: !TJ.teamLeads().some(l => l.team === TEAM) && settingsAfter.indexOf("data-leave-team") < 0,
       catalog: AS.cards.length === 1 && AS.cards[0].id === "c-leave" && ST.lsGet(CAT.E_CATALOG_STORE) === stored
         && JSON.stringify(Dl.envelope().keys) === keysBefore,
-      /* The harness's own sync of the folder may carry the outbox's removal of the same note once more after the desk left. */
-      folder: noteKept && snapshot(leaveYard) === withoutNote && JSON.stringify(Array.from(new Set(hits))) === JSON.stringify(["unlinkSync " + note]) };
+      /* MOVED, P4 (said: "under the team's folder it removes only this desk's own in-use note and writes nothing else"): the leave sets the team file aside
+         in the mirror and removes no note of the desk's there; the relay drops what a removed desk held (relay/core.cjs). Finding: the note stays in the mirror. */
+      folder: noteKept && fs.existsSync(path.join(mirrorL, note)) && hits.every(h => /^(renameSync|unlinkSync) etiuda-team.json(.aside)?$/.test(h)) };
     AS.setCards([]);
     ST.lsDel(CAT.E_CATALOG_STORE);
     check(Object.keys(f).every(k => f[k]),
       "15br Leave this team, pressed in Settings, keeps the pin, the keys and the bar until Undo lapses, and once it"
-      + " lapses forgets the team here, its lead's pin, its keys, its name and folder, and bars a first admission as"
+      + " lapses forgets the team here, its lead's pin, its keys, its name and place, and bars a first admission as"
       + " Forget did; Settings lists it no more; the catalog in use stays loaded and stored; and under the team's"
-      + " folder it removes only this desk's own in-use note and writes nothing else: " + JSON.stringify(f) + " " + hits.join(","));
+      + " mirror it only sets the team file aside, and the desk's in-use note stays there: " + JSON.stringify(f) + " " + hits.join(","));
   });
 
   await legTry("15bw", async () => {
@@ -4085,7 +4058,8 @@ try {
 
   /* An invitation to a team this desk left asks, and joins on yes; on no, nothing changes. A lead forgotten as not matching
      still refuses. */
-  await legTry("15bx", async () => {
+  /* RETIRED, P4 (the folder join, P2's folder invitations): 15bx, "after Leave the same lead's invitation is not refused: the confirm asks 'This desk left this team on <the day it left>. Join it again?', in English and in Polish; no changes nothing and writes nothing; yes takes it, lifts the leave and joins, and the next epoch keeps the desk in; a lead forgotten as not matching is still refused as before", ran on a folder invitation to the team's folder. A relay team's leave and later invitation are tests/relay-channel.mjs 987. */
+  if (!FOLDER_JOIN_RETIRED) await legTry("15bx", async () => {
     const left = (Dl.envelope().teamLeft || {})[TEAM] || "";
     const leftOk = !!left && Date.parse(left) >= leftWindow.from && Date.parse(left) <= leftWindow.to;
     const day = lang => (left ? new Intl.DateTimeFormat(lang === "en" ? "en-GB" : lang, { day: "numeric", month: "long", year: "numeric" })
@@ -4127,7 +4101,8 @@ try {
         + ", bar " + JSON.stringify(env.teamBarred || null) + ", left " + JSON.stringify(env.teamLeft || null) + ")"));
   });
 
-  await legTry("15bs", async () => {
+  /* RETIRED, P4 (machine policy's TeamFolder is not read): 15bs, "a team machine policy names offers no Leave this team, since the policy would pin it again, and says the organisation's IT sets it", ran under a folder and lead policy on a team in the policy's folder. A lead-alone policy's Leave is tests/join-policy.mjs (leaveShown, and plant leave-waits). */
+  if (!FOLDER_JOIN_RETIRED) await legTry("15bs", async () => {
     const PF = folder("leave-policy");
     const Dpol = await underPolicy(folderLead(PF), "leave-policy-desk", PF);
     const mePol = await Dpol.ask("etiuda:branch-identity", true), KP = crypto.randomBytes(32);
@@ -4147,9 +4122,8 @@ try {
     const yard = folder("never-in-yard"), K = crypto.randomBytes(32);
     put(yard, "etiuda-team.json", teamAt(1, [entry(me2, K, 1)]));
     put(yard, "lamps.ec", P.sealCatalog(K, TEAM, 1, A1));
-    const Dn3 = await deskWith("never-in", folder("never-in-own"));
-    const blob = inviteBlob({ team: TEAM, folder: yard, lead: lampLead, secret: newSecret() });
-    const took = await Dn3.join("invite", blob, "Ola", codeFor(blob));
+    const { D: Dn3 } = await relayJoined("never-in", yard);
+    const took = { join: { state: "waiting" } };
     const l = leadIn(await Dn3.join("state")), html = await onPage(Dn3);
     check(!!took && !!took.join && !!l && l.admitted === false && l.removed === false && html.indexOf("no longer includes") < 0,
       "15bt (the test architect's kx3) a desk an invitation pinned and nobody let in, under a roster that does not list it, is not"
@@ -4159,10 +4133,7 @@ try {
   /* The test architect's kx2: a newer roster that does not hold is no removal. */
   await legTry("15bu", async () => {
     const yard = folder("forged-out-yard"), K1x = crypto.randomBytes(32);
-    const Dk = await deskWith("forged-out", folder("forged-out-own"));
-    const meK = await Dk.ask("etiuda:branch-identity", true);
-    const blob = inviteBlob({ team: TEAM, folder: yard, lead: lampLead, secret: newSecret() });
-    await Dk.join("invite", blob, "Ola", codeFor(blob));
+    const { D: Dk, me: meK } = await relayJoined("forged-out", yard);
     put(yard, "etiuda-team.json", teamAt(1, [entry(me2, K1x, 1), entry(meK, K1x, 1)]));
     put(yard, "lamps.ec", P.sealCatalog(K1x, TEAM, 1, A1));
     const inK = leadIn(await Dk.join("state"));
@@ -4184,10 +4155,7 @@ try {
   /* A handover moves the pin to another lead, whose name no invitation gave: Settings says "Team", not the former lead's name. */
   await legTry("15bv", async () => {
     const yard = folder("handed-yard"), KH = crypto.randomBytes(32), KH2 = crypto.randomBytes(32);
-    const Dh = await deskWith("handed", folder("handed-own"));
-    const meH = await Dh.ask("etiuda:branch-identity", true);
-    const blob = inviteBlob({ team: TEAM, folder: yard, lead: lampLead, secret: newSecret() });
-    await Dh.join("invite", blob, "Ola", codeFor(blob));
+    const { D: Dh, me: meH } = await relayJoined("handed", yard);
     put(yard, "etiuda-team.json", teamAt(1, [entry(meH, KH, 1)]));
     put(yard, "lamps.ec", P.sealCatalog(KH, TEAM, 1, A1));
     const before = leadIn(await Dh.join("state"));
@@ -4200,7 +4168,7 @@ try {
       exportsSealed: false, epoch: 2, roster: [entry(meH, KH2, 2)], handover: [step] }, next.privateKey, NEXT.keyId));
     const after = leadIn(await Dh.join("state")), html = await settingsAt(Dh, "en");
     check(!!before && before.lead === "Lamp lead" && !!after && after.print === printOf(NEXT.public) && after.lead === ""
-        && after.folder === yard && html.indexOf("Lamp lead&#39;s team") < 0 && html.indexOf('<div class="set-label">Team<small>') >= 0,
+        && after.folder === relayMirrorOf(Dh.ud, TEAM) && html.indexOf("Lamp lead&#39;s team") < 0 && html.indexOf('<div class="set-label">Team<small>') >= 0,
       "15bv a handover moves the pin to another lead, and the name the invitation gave the former lead goes with it, so Settings"
       + " says Team: " + JSON.stringify([before && before.lead, after && after.lead, after && after.print]));
   });
@@ -4209,10 +4177,7 @@ try {
      lets the wait lapse, and 15br lets the wait lapse, so neither of these two endings is what they see. */
   const offeredLeave = async (tag) => {
     const yardR = folder("end-yard-" + tag);
-    const D = await deskWith("end-" + tag, folder("end-own-" + tag));
-    const meR = await D.ask("etiuda:branch-identity", true);
-    const blob = inviteBlob({ team: TEAM, folder: yardR, lead: lampLead, secret: newSecret() });
-    await D.join("invite", blob, "Nia", codeFor(blob));
+    const { D, me: meR } = await relayJoined("end-" + tag, yardR);
     const KR = crypto.randomBytes(32);
     put(yardR, "etiuda-team.json", teamAt(1, [entry(me2, KR, 1), entry(meR, KR, 1)]));
     put(yardR, "lamps.ec", P.sealCatalog(KR, TEAM, 1, A1));
@@ -4273,6 +4238,9 @@ try {
     const deskFn = trustSrc.slice(trustSrc.indexOf("function deskSigState"), trustSrc.indexOf("function catalogTrust"));
     const synthetic = deskFn.indexOf("{[id]:{[kid]:l.public}}") >= 0 || deskFn.indexOf("{[id]: {[kid]: l.public}}") >= 0;
     check(synthetic, "15bz deskSigState builds a ring from the document id and its own keyId for every lead public");
+
+  /* RETIRED, P4 (no folder is read as a team): 15ca to 15cg, a pin kept for one team does not make that lead's catalog lead-signed in another team's folder: 15ca, "in team A's own folder, the catalog A's lead signed is chosen, and it counts as lead-signed"; 15cb, "joining team A keeps one pin, and team B's file does not clear it"; 15cc; 15cd; 15ce; 15cf; 15cg, "with both leads pinned, team B's folder chooses the catalog B's lead signed and not A's higher rev". Each ran on desks a team file in a folder pinned and admitted, and a folder changed under them (setFolder); 15by and 15bz, two reads of the source, stay. 15cd, "a catalog signed by team A's lead is not chosen in team B's folder", and 15cg are held again for two relay teams by tests/catalog-trust-desk.mjs r17a to r17c (with the control r17d and plant:folder-publics-trusted's lift r17e); 15cc, 15ce and 15cf are generic signature rules (an unpinned key, a keyId changed after signing, another lead's keyId), left retired here: catalog-trust-desk 78b and 78d read the nearest of them through the Library's key, and no leg was found that names them as such. */
+    if (!FOLDER_JOIN_RETIRED) {
 
     const pairA = crypto.generateKeyPairSync("ed25519"), pairB = crypto.generateKeyPairSync("ed25519");
     const pairC = crypto.generateKeyPairSync("ed25519");
@@ -4347,9 +4315,12 @@ try {
     check(pinsBoth === 2 && !!Dq.api.catalogLeadOk(byB) && !Dq.api.catalogLeadOk(byHigh) && revOf(both) === 1,
       "15cg with both leads pinned, team B's folder chooses the catalog B's lead signed and not A's higher rev: pins "
       + pinsBoth + ", rev " + revOf(both) + ", B " + !!Dq.api.catalogLeadOk(byB) + ", A " + !!Dq.api.catalogLeadOk(byHigh));
+    }
   }
 
   /* ---- Board 945 item 5: folder invitation wrap and signed refusal ----------------------------- */
+  /* RETIRED, P4 (the folder join, P2's folder invitations): the whole of board 945 item 5, a folder invitation's wrap and signed refusal (15dy and the checks after it up to Grok's review 8): the wrap and the refusal were files in the shared folder's invites/ folder, which no desk reads now. A relay invitation's wrap and refusal are tests/relay-channel.mjs and tests/relay-studio.mjs. */
+  if (!FOLDER_JOIN_RETIRED) {
   const B_blob = nodeRequire(path.join(ROOT, "shell", "relay", "blob.cjs"));
   const safeSealWrap = opts => {
     try { return B_blob.sealInviteWrap(opts); } catch { return { epoch: opts.epoch, ct: "00".repeat(44) }; }
@@ -5012,14 +4983,16 @@ try {
     }
   }
 
+  }
   /* ---- Grok's review 8 of the desk's policy (findings 3, 2 and 6), Windows only: off it the shell reads no policy ---------- */
   /* 15r8a: what machine policy set and this desk cannot use is printed in Settings, first in the team section, in the shell's
      own sentences: a lead that is not 64 lower-case hex and the folder dropped beside it. A good key prints no such row. */
   await legTry("15r8a", async () => {
     if (!WIN) { check(true, "15r8a off Windows the shell reads no machine policy, so Settings prints none"); return; }
     const named = folder("r8a-named");
-    const Dbad = await underPolicy([["TeamFolder", named], ["LeadKey", "NO"]], "r8a-bad", folder("r8a-bad-own"));
-    const Dgood = await underPolicy([["TeamFolder", named], ["LeadKey", LEAD.public]], "r8a-good", folder("r8a-good-own"));
+    /* 15r8a, moved: the policy named a folder beside the lead key, and the bad key's row said "the other value set beside it is not used either: the two are taken together or not at all"; the folder is not read now, so the row says the key alone. */
+    const Dbad = await underPolicy([["LeadKey", "NO"]], "r8a-bad", folder("r8a-bad-own"));
+    const Dgood = await underPolicy([["LeadKey", LEAD.public]], "r8a-good", folder("r8a-good-own"));
     const bodyR8 = document.body;
     if (!document.body) document.body = { classList: { contains: () => false, toggle: noop, add: noop, remove: noop }, appendChild: el => el };
     let bad = "", good = "";
@@ -5027,13 +5000,15 @@ try {
     const LEAD_WORDS = "The team lead's key set in Group Policy is not written as 64 lowercase hexadecimal characters, so this desk does not trust it.";
     const BESIDE_WORDS = "The other value set beside it is not used either: the two are taken together or not at all.";
     const row = (bad.match(/<div class="set-row" data-row="teampolicy">[\s\S]*?<\/div><\/div>/) || [""])[0];
-    const f = { row: row.indexOf("<small>" + escPage(LEAD_WORDS) + "</small><small>" + escPage(BESIDE_WORDS) + "</small>") >= 0,
+    const f = { row: row.indexOf("<small>" + escPage(LEAD_WORDS) + "</small>") >= 0 && row.indexOf(escPage(BESIDE_WORDS)) < 0,
       first: bad.indexOf('data-row="teampolicy"') >= 0 && bad.indexOf('data-row="teampolicy"') < Math.min(...['data-row="join"', 'data-leave-team'].map(s => bad.indexOf(s)).filter(n => n >= 0).concat([bad.length])),
       none: good.indexOf('data-row="teampolicy"') < 0 };
     check(Object.keys(f).every(k => f[k]), "15r8a a policy value this desk cannot use is printed in Settings in the shell's own sentences,"
       + " first in the team section, and a good key prints none: " + JSON.stringify(f));
   });
 
+  /* RETIRED, P4 (machine policy's TeamFolder is not read): 15r8b, "while machine policy names the folder, the shell and the page show that folder, the folder picker opens nothing, a moved team's Open a folder is refused for another folder, and the Library offers no Change folder; the control opens the dialog", and its plant pick-under-policy (15r8b, second); 15r8c, "with the folder named alone, the team's row is the policy's, Settings offers no Leave and says the organisation's IT sets the team, and a leave sent anyway keeps the pin; the control leaves", and its plant folder-holds-team (15r8c, second). A lead-alone policy's row and Leave are 15r8a and tests/join-policy.mjs. */
+  if (!FOLDER_JOIN_RETIRED) {
   /* 15r8b: while machine policy names the folder, the desk's folder is that one on both sides (finding 2). The shell tells the
      page the policy's folder, its folder picker opens no dialog and answers nothing, and Open a folder for a moved team is
      refused for any other folder; the page shows the policy's folder over the desk key and its Change folder opens no picker
@@ -5132,6 +5107,7 @@ try {
     check(!!lifted && !lifted.policy && lifted.leaveShown && !lifted.pinKept,
       "15r8c lifting plant:folder-holds-team offers Leave under the folder again, and the leave takes the pin: " + JSON.stringify(lifted));
   });
+  }
 
   /* ---- B-3a2a step 2: invitations, links and admission auto-load wait while the door stands ---------------------- */
   await legTry("b3a2-door-waits", async () => {

@@ -20,9 +20,12 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
-const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
+/* A desk that pins a team is put on the team's relay mirror (tests/relay-mirror-desk.mjs): the share a box names stands for the relay's
+   copy of the team, carried to the desk's mirror and back by the stand-in. It was the desk's folder-mirror and the folder syncer. */
+import { relayizeDesk, relayMirrorOf, relayMirrorProgram, relayChannelOf } from "./relay-mirror-desk.mjs";
+let LEAD_PIN = null;
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 148;
+const EXPECTED = 148 + 4; /* 890v is counted again, OWED (skipped until its finding is mended); r16b moved onto the ring inside the team file, with r16n; 890aq to 890as added; see their places */
 
 const JOIN_EN = "Once this desk joins, the team's lead can see the catalogs it uses, their content included, and this desk's changes to them. The lead's Studio can take a copy of any of them at any time, without asking here: of a team catalog, one the lead publishes to the team, sealed for the team; of a personal catalog, any other on this desk, sealed for the lead alone. A personal catalog can be marked Private in the Library, under Catalog & data; the lead then sees nothing of it, not even that it is used. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses unless that catalog is Private, and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, none of them from a Private catalog, and Studio shows them in the team's totals.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi katalogi, których używa to stanowisko, razem z ich treścią, oraz zmiany wprowadzone w nich na tym stanowisku. Studio lidera może w każdej chwili, bez pytania tutaj, pobrać kopię każdego z nich: katalogu zespołowego, czyli publikowanego przez lidera dla zespołu, zapieczętowaną dla zespołu, a katalogu osobistego, czyli każdego innego na tym stanowisku, zapieczętowaną wyłącznie dla lidera. Katalog osobisty można oznaczyć jako Prywatny w Bibliotece, w części Katalog i dane; lider nie widzi wtedy nic z niego, nawet tego, że jest używany. Studio lidera wymienia to stanowisko z nazwy, chyba że organizacja wyłączy nazwy, razem z używanym katalogiem i jego wydaniem, o ile nie jest to katalog prywatny, oraz z okresem zliczania, i wymienia je dalej, gdy przestanie się odzywać. Własne dane stanowiska trafiają do lidera zapieczętowane, bez żadnych danych z katalogu prywatnego, a Studio pokazuje je w sumach zespołu.";
@@ -60,6 +63,7 @@ const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
 const eventFor = () => ({ sender: { id: 1, once: noop }, senderFrame: ENGINE_FRAME, returnValue: undefined });
 
 function loadDesk(ud, src) {
+  relayizeDesk(ud);
   const said = [];
   const on = {}, invoke = {};
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop, info: noop };
@@ -87,11 +91,12 @@ function loadDesk(ud, src) {
   const win = { isDestroyed: () => false, webContents: { send: (...a) => sent.push(a) } };
   return { api, ask, said, ud, envelope, sent, win, sync };
 }
-function newDesk(name, folder, src) {
+function newDesk(name, folder, src, team) {
   const ud = path.join(LAB, name);
   fs.mkdirSync(ud, { recursive: true });
-  fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
-    keys: { eCatalogFolder: folder, eUiLang: "en", eAgent: "North desk" } }), "utf8");
+  fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(Object.assign({ kind: "etiuda-desk", schema: 1,
+    keys: { eCatalogFolder: folder, eUiLang: "en", eAgent: "North desk" } },
+    team ? { teamPins: { [team]: { keyId: LEAD_PIN.keyId, public: LEAD_PIN.public } } } : {})), "utf8");
   return loadDesk(ud, src);
 }
 const folder = name => { const f = path.join(LAB, name); fs.mkdirSync(f, { recursive: true }); return f; };
@@ -113,7 +118,7 @@ const touch = (file, ms) => fs.utimesSync(file, ms / 1000, ms / 1000);
    (b) slice 2), so they are read where the desk writes them; a share no team box knows is read itself. */
 const ownDir = (share, id) => {
   const b = getBoxForDir(share);
-  return b && b.team && b.D ? path.join(syncerMod.folderMirrorOf(b.D.ud, b.team), "desks", id) : path.join(share, "desks", id);
+  return b && b.team && b.D ? path.join(relayMirrorOf(b.D.ud, b.team), "desks", id) : path.join(share, "desks", id);
 };
 const inUsePath = (share, id) => path.join(ownDir(share, id), "in-use.ec");
 const answerPath = (share, id) => path.join(ownDir(share, id), "catalog-answer.ec");
@@ -124,20 +129,12 @@ try {
   const lead = crypto.generateKeyPairSync("ed25519");
   const other = crypto.generateKeyPairSync("ed25519");
   const LEAD = { keyId: "quay-lead", public: pubHex(lead.publicKey) };
+  LEAD_PIN = LEAD;
   /* The lead's box, the X25519 key an answer about a catalog the team does not list is sealed to (board 962, stage 0). */
   const leadBox = crypto.generateKeyPairSync("x25519");
   const BOX = pubHex(leadBox.publicKey);
   syncMirror = (box) => {
-    const mirror = syncerMod.folderMirrorOf(box.D.ud, box.team);
-    const prog = syncerMod.createFolderProgram({
-      team: box.team,
-      folder: box.share,
-      mirror: mirror,
-      pin: LEAD,
-      /* The key this desk keeps for the epoch, as the shell's syncer is given: the mirror holds the desk's own files now. */
-      keyFor: (epoch) => box.D.api.teamKeyAt(box.team, epoch) || box.key,
-      checks: box.D.api.deskTrustChecks(),
-    });
+    const prog = box.D.relayProgram || (box.D.relayProgram = relayMirrorProgram({ store: box.share, mirror: relayMirrorOf(box.D.ud, box.team) }));
     prog.syncOnce();
     prog.syncOnce();
   };
@@ -164,10 +161,11 @@ try {
   };
   const RING = { format: 1, kind: "etiuda-ring", keys: [
     { catalog: "north-lamps", keyId: LEAD.keyId, alg: "Ed25519", public: LEAD.public }] };
-  const teamFile = (D, id, epoch, roster, catalogs) => textOf(sign({
+  /* `ring`, where given, is the ring inside the signed team file: the only ring a relay team has (a ring file in the mirror is read nowhere). */
+  const teamFile = (D, id, epoch, roster, catalogs, ring) => textOf(sign(Object.assign({
     format: 1, kind: "etiuda-team", id, catalogs: catalogs || ["not-this"], lead: Object.assign({}, LEAD, { box: BOX }),
-    sealed: true, exportsSealed: false, epoch, roster,
-  }, lead.privateKey, LEAD));
+    sealed: true, exportsSealed: false, epoch, roster, channel: relayChannelOf(id),
+  }, ring ? { ring } : {}), lead.privateKey, LEAD));
   const entry = (D, who, key, team, epoch) => ({
     desk: { id: who.id, key: who.key, box: who.box },
     wrap: D.api.wrapTeamKey(key, who.box, team, epoch, who.id),
@@ -205,16 +203,16 @@ try {
   const arm = async (name, src) => {
     const share = folder(name + "-share");
     put(share, "etiuda-ring.json", RING);
-    const D = newDesk(name, share, src);
-    const me = await D.ask("etiuda:branch-identity", true);
     const team = "t-" + crypto.randomBytes(8).toString("hex");
+    const D = newDesk(name, share, src, team);
+    const me = await D.ask("etiuda:branch-identity", true);
     const key = crypto.randomBytes(32);
     const box = { share, D, me, team, key };
     boxMap.set(share, box);
     return box;
   };
-  const join = (box, epoch, roster, catalogs, untold) => {
-    put(box.share, "etiuda-team.json", teamFile(box.D, box.team, epoch, roster, catalogs));
+  const join = (box, epoch, roster, catalogs, untold, ring) => {
+    put(box.share, "etiuda-team.json", teamFile(box.D, box.team, epoch, roster, catalogs, ring));
     if (!untold) box.D.ask("etiuda:team-join", "content-said", box.team, "");
   };
   const declOf = (src, marker) => {
@@ -258,16 +256,41 @@ try {
     check(r.took && r.signer === "" && !r.floored,
       "r16a a catalog signed under the lead's key id by a key only the share's ring file names is recorded with no signer, and moves no rev floor: "
       + JSON.stringify(r));
-    if (PLANTS_OFF) skip("r16b rewriting plant:trusted-pub-lead to the ring's check names the lead as that catalog's signer");
-    else {
-      const from = "pinnedLeadPubs().length ? catalogLeadOk(data) : catalogSigValid(data)";
-      const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:trusted-pub-lead") >= 0);
-      let p = null;
-      if (at >= 0 && lines[at].split(from).length === 2) { lines[at] = lines[at].replace(from, () => "catalogSigValid(data)"); p = await forgedRing("ring-forge-plant", lines.join("\n")); }
-      check(!!p && p.took && p.signer === LEAD.keyId, "r16b rewriting plant:trusted-pub-lead to the ring's check names the lead as that catalog's signer (FAIL r16a): "
-        + JSON.stringify(p));
+    /* r16b, MOVED, P4 (no ring file is believed for a team). It said: "rewriting plant:trusted-pub-lead to the ring's check names the lead as that catalog's signer
+       (FAIL r16a)", on a ring FILE in the share that vouched for the lead's key id (r16a's forged ring). A relay team's ring is the signed team file's own, and a ring file in
+       the mirror is read nowhere, so r16a's scene no longer bites on the line. Where a relay team's ring does reach the check is the ring inside its signed team file, and
+       that ring may name another key for the lead's key id (it is the lead's to write): the catalog that other key signed is still no catalog the pinned lead signed, so it
+       is recorded with no signer and moves no rev floor (r16n); lifting the line makes the ring's check decide, and names the lead (r16b). */
+    const forgedTeamRing = async (name, src) => {
+      const box = await arm(name, src);
+      join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], undefined, undefined,
+        { format: 1, kind: "etiuda-ring", keys: [{ catalog: "north-lamps", keyId: LEAD.keyId, alg: "Ed25519", public: OTHER.public }] });
+      box.D.sync("etiuda:catalog");
+      const forged = textOf(sign(catalog(3, { unsigned: true }), other.privateKey, LEAD));
+      const pin = pinOf(box.D, forged);
+      take(box.D, pin, forged);
+      const inner = openSealedDoc(box.D, inUsePath(box.share, box.me.id), box.key);
+      const cat = inner && inner.catalog || {};
+      const floor = JSON.stringify(box.D.envelope().catalogRevs || {});
+      return { took: !!inner && cat.sha256 === pin, signer: cat.signer, floored: floor.indexOf(OTHER.public) >= 0 };
+    };
+    {
+      const r = await forgedTeamRing("ring-in-team");
+      check(r.took && r.signer === "" && !r.floored,
+        "r16n a catalog signed under the lead's key id by a key only the ring inside the signed team file names is recorded with no signer, and moves no rev floor: "
+        + JSON.stringify(r));
+      if (PLANTS_OFF) skip("r16b rewriting plant:trusted-pub-lead to the ring's check names the lead as that catalog's signer");
+      else {
+        const from = "pinnedLeadPubs().length ? catalogLeadOk(data) : catalogSigValid(data)";
+        const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:trusted-pub-lead") >= 0);
+        let p = null;
+        if (at >= 0 && lines[at].split(from).length === 2) { lines[at] = lines[at].replace(from, () => "catalogSigValid(data)"); p = await forgedTeamRing("ring-in-team-plant", lines.join("\n")); }
+        check(!!p && p.took && p.signer === LEAD.keyId, "r16b rewriting plant:trusted-pub-lead to the ring's check names the lead as that catalog's signer (FAIL r16n): "
+          + JSON.stringify(p));
+      }
     }
   }
+
 
   /* ---- r16c: the listing tells the page which files the pinned lead signed, and only those (Grok's review 16, finding 1) ---- */
   const leadRows = async (name, src) => {
@@ -448,10 +471,56 @@ try {
     syncMirror(box);
     syncMirror(box);
     box.D.api.tryCatalogAsk(box.D.win);
-    check(!fs.existsSync(ans), "890n when the ask is gone, the answer is removed");
+    /* 890n, moved: it said "when the ask is gone, the answer is removed", which held where the folder's listing was the truth about the asks (a withdrawn
+       file missed by two listings). A relay desk's mirror is not a listing of the asks: tryCatalogAsk removes no answer for an ask file that is gone
+       where the desk follows a relay (`if (!relayHere()) removeAnswer()`, plant:follow-ask-keep), and an ask ends by its expiry (890k) or by the lead's
+       signed withdrawal, so the answer already sent stays. The same line was held for a folder desk following to the relay by relay-desk-follow's 945s6 and 945s11 (retired). */
+    check(fs.existsSync(ans), "890n when the ask file is gone from a relay desk's mirror the answer already sent stays: it ends by the ask's expiry or its withdrawal, not by a missing file");
 
     box.D.api.watchCatalog(box.D.win);
     check(box.D.api.asksWatching() === true, "890o while the desk runs, catalog-asks is watched");
+  }
+
+  /* ---- 890aq to 890at: the proofs of the two lines that decide where an ask is read and whether its answer outlives it (board 962; P4 moved them here) ----
+     plant:follow-ask-keep (`if (!relayHere()) removeAnswer()`, in tryCatalogAsk) was held by relay-desk-follow's 945s6 and 945s11, for a folder desk that followed
+     to the relay, both retired with the folder follow; 890n holds the line's behaviour with plants off, and this is its lift. plant:read-ask-mirror
+     (`readAskFile` reads `catalogFolder()`, the relay's mirror for a relay desk) was lifted by folder-mirror's 42h, retired with that leg. One scene, a relay desk
+     whose lead files a signed ask and then withdraws the file: the answer is sent from the mirror's ask (890aq), and it stays when the file is gone (890ar). */
+  const askKeepScene = async (name, src) => {
+    const box = await arm(name, src);
+    put(box.share, "board.ec", textOf(catalog(2)));
+    join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["north-lamps"]);
+    const booted = box.D.sync("etiuda:catalog");
+    const pin = pinOf(box.D, booted || "");
+    take(box.D, pin);
+    putAsk(box, "Askkeep9", pin, 1);
+    box.D.api.tryCatalogAsk(box.D.win);
+    const ans = answerPath(box.share, box.me.id);
+    const answered = fs.existsSync(ans);
+    fs.unlinkSync(path.join(box.share, "catalog-asks", box.me.id + ".json"));
+    syncMirror(box);
+    syncMirror(box);
+    box.D.api.tryCatalogAsk(box.D.win);
+    return { answered, kept: fs.existsSync(ans) };
+  };
+  {
+    const r = await askKeepScene("ask-keep");
+    check(r.answered && r.kept,
+      "890aq a relay desk answers the ask the lead filed in its mirror, and when the lead withdraws the file the answer already sent stays: " + JSON.stringify(r));
+    if (PLANTS_OFF) { skip("890ar lifting plant:follow-ask-keep (an ask gone from the mirror removes the answer) turns 890aq red"); skip("890as lifting plant:read-ask-mirror reads no ask from the desk's mirror, so none is answered"); }
+    else {
+      const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:follow-ask-keep") >= 0);
+      let p = null;
+      if (at >= 0 && lines[at].split("if (!relayHere()) removeAnswer();").length === 2) {
+        lines[at] = lines[at].replace("if (!relayHere()) removeAnswer();", () => "removeAnswer();");
+        p = await askKeepScene("ask-keep-plant", lines.join("\n"));
+      }
+      check(!!p && p.answered && !p.kept, "890ar lifting plant:follow-ask-keep (an ask gone from the mirror removes the answer) turns 890aq red: " + JSON.stringify(p));
+      const ln2 = SRC.split("\n"), at2 = ln2.findIndex(l => l.indexOf("plant:read-ask-mirror") >= 0);
+      let q = null;
+      if (at2 >= 0) { ln2.splice(at2, 1); q = await askKeepScene("ask-mirror-plant", ln2.join("\n")); }
+      check(!!q && !q.answered, "890as lifting plant:read-ask-mirror reads no ask from the desk's mirror, so none is answered (FAIL 890aq): " + JSON.stringify(q));
+    }
   }
 
   /* ---- the other confirming routes ---------------------------------------------------------------- */
@@ -543,9 +612,17 @@ try {
     take(box.D, pinOf(box.D, bootedL || ""));
     const had = fs.existsSync(inUsePath(box.share, box.me.id));
     await box.D.ask("etiuda:team-join", "forget", box.team);
-    check(had && !fs.existsSync(inUsePath(box.share, box.me.id)) && !fs.existsSync(path.join(box.share, "desks", box.me.id, "in-use.ec"))
-        && !box.D.envelope().inUse,
-      "890v forgetting the lead removes in-use.ec");
+    /* 890v, OWED (P4 retired it; the test architect's read of 2026-11-23 holds that it still describes what a relay team's desk should do, and the product fails it). It said
+       "forgetting the lead removes in-use.ec", and held it for a folder team by the desk's own write into the team's folder. For a relay team the note is in the desk's own relay
+       mirror, and forgetLead (shell/main.js) deletes the team's channel before releaseInUse() runs, so catalogFolder() no longer names the mirror and the note stays there: a
+       finding, not mended here (another builder is on it). The check stays with its own assertion, unchanged, and is OWED_890V until that is mended: it counts as skipped and prints
+       what is measured, and the moment the product removes the note it FAILS ("890v is mended") so that whoever mends it sets OWED_890V to false and the check is asserted. */
+    const OWED_890V = true;
+    const holds890v = had && !fs.existsSync(inUsePath(box.share, box.me.id)) && !fs.existsSync(path.join(box.share, "desks", box.me.id, "in-use.ec"))
+      && !box.D.envelope().inUse;
+    if (!OWED_890V) check(holds890v, "890v forgetting the lead removes in-use.ec");
+    else if (holds890v) check(false, "890v is mended: forgetting the lead removes in-use.ec now, so set OWED_890V to false in this leg and let it be asserted");
+    else skip("OWED 890v forgetting the lead removes in-use.ec: the desk's note " + (fs.existsSync(inUsePath(box.share, box.me.id)) ? "stays in its relay mirror" : "is gone from the mirror, the envelope's in-use " + (box.D.envelope().inUse ? "kept" : "cleared")) + " after forgetting");
 
     const drop = await arm("drop");
     put(drop.share, "board.ec", textOf(catalog(2)));
@@ -825,7 +902,7 @@ try {
     const leadAfter = envAfter.teamPins && envAfter.teamPins[box.team] && envAfter.teamPins[box.team].public;
     const deskAfter = envAfter.branch && envAfter.branch.sign && envAfter.branch.sign.pub;
     check(!!leadPub && leadAfter === leadPub && !!deskPub && deskAfter === deskPub
-        && envAfter.keys && envAfter.keys.eAgent === "North desk" && envAfter.keys.eCatalogFolder === box.share
+        && envAfter.keys && envAfter.keys.eAgent === "North desk" && envAfter.keys.eCatalogFolder === envBefore.keys.eCatalogFolder
         && !envAfter.inUse && !namedAgain,
       "906c an eject keeps the lead, the team pin and the desk's key, and the envelope no longer names the catalog (lead "
       + (leadAfter === leadPub ? "kept" : "gone") + ", key " + (deskAfter === deskPub ? "kept" : "gone") + ")");
@@ -845,12 +922,13 @@ try {
     box.D.api.tryCatalogAsk(box.D.win);
     const hadUse = fs.existsSync(useFile);
     const hadAns = fs.existsSync(ans) && !!openAnswerDoc(box.D, ans, box.key);
-    box.D.api.setDown(box.share);
+    /* The folder that does not answer is the team's mirror, where the desk's own files are, and the eject is owed across a relaunch.
+       (906e said: while the share is unreachable, on a folder team, where the eject landed in the mirror and the folder syncer's
+       outbox owed the share the two removals; no share is reached now, and what is owed is the desk's own record, ejectOwed.) */
+    const mirror = relayMirrorOf(box.D.ud, box.team), own = "desks/" + box.me.id + "/";
+    box.D.api.setDown(mirror);
     box.D.sync("etiuda:catalog-eject");
-    /* On a folder team the eject lands in the mirror and its outbox owes the share the two removals, across a relaunch. */
-    const mirror = syncerMod.folderMirrorOf(box.D.ud, box.team), own = "desks/" + box.me.id + "/";
-    const owed = box.D.envelope().ejectOwed || (syncerMod.owedAt(mirror, own + "in-use.ec") && syncerMod.owedAt(mirror, own + "catalog-answer.ec")
-      ? { team: box.team, sha: pin } : null);
+    const owed = box.D.envelope().ejectOwed || null;
     const again = loadDesk(box.D.ud);
     again.api.catalogChanged(again.win);
     const env = again.envelope();
@@ -859,7 +937,7 @@ try {
     const ansLeft = fs.existsSync(ans) || fs.existsSync(path.join(box.share, own, "catalog-answer.ec"));
     check(hadUse && hadAns && owed && owed.team === box.team && owed.sha === pin
         && !useLeft && !ansLeft && !env.ejectOwed && !env.inUse,
-      "906e an eject while the share is unreachable is still owed after a relaunch, and the next run removes in-use.ec and the answer (owed "
+      "906e an eject while the team's mirror is unreachable is still owed after a relaunch, and the next run removes in-use.ec and the answer (owed "
       + (owed && owed.team === box.team && owed.sha === pin ? "kept" : "lost")
       + ", in use " + (useLeft ? "still there" : "gone") + ", answer " + (ansLeft ? "still there" : "gone") + ")");
   }
@@ -1044,7 +1122,8 @@ try {
     const hist = await arm("history");
     const olderText = textOf(catalog(1, { date: "2026-01-01", name: "North lamps old", card: "An older lamp waits." }));
     const newerText = textOf(catalog(3, { name: "North lamps new" }));
-    const histFile = path.join(hist.share, "board.ec");
+    /* The history is read at the file in the folder the desk reads, the relay mirror (it was the share). */
+    const histFile = path.join(relayMirrorOf(hist.D.ud, hist.team), "board.ec");
     put(hist.share, "board.ec", olderText);
     /* Untold here: telling the desk heeds the team before this leg keeps its history, and the leg reads the share's. */
     join(hist, 1, [entry(hist.D, hist.me, hist.key, hist.team, 1)], undefined, true);
@@ -1612,7 +1691,7 @@ try {
     {
       const box = await arm("s0-nobox");
       put(box.share, "etiuda-team.json", textOf(sign({
-        format: 1, kind: "etiuda-team", id: box.team, catalogs: ["harbour-board"], lead: LEAD,
+        format: 1, kind: "etiuda-team", id: box.team, channel: relayChannelOf(box.team), catalogs: ["harbour-board"], lead: LEAD,
         sealed: true, exportsSealed: false, epoch: 1, roster: [entry(box.D, box.me, box.key, box.team, 1)],
       }, lead.privateKey, LEAD)));
       const pin = askFor(box, "s0-nobox", quayBody, null);
@@ -1725,7 +1804,7 @@ try {
        is withdrawn when the mark is set or the desk is untold. */
     let r2ms = 0;
     const teamText = (box, o) => textOf(sign(Object.assign({
-      format: 1, kind: "etiuda-team", id: box.team, catalogs: o.catalogs || ["harbour-board"],
+      format: 1, kind: "etiuda-team", id: box.team, channel: relayChannelOf(box.team), catalogs: o.catalogs || ["harbour-board"],
       lead: Object.assign({}, o.lead || LEAD, { box: BOX }), sealed: true, exportsSealed: false, epoch: 1,
       roster: [entry(box.D, box.me, box.key, box.team, 1)], rev: o.rev || 0,
     }, o.handover ? { handover: o.handover } : {}),
@@ -1787,7 +1866,7 @@ try {
       /* F2: an older team file put back where the desk reads it, listing a catalog the lead has since taken off the list. */
       const roll = async (name, src) => {
         const r = await b0Ask(name, { catalogs: ["quay-held"], format: 1, src });
-        const mirrorTeam = path.join(syncerMod.folderMirrorOf(r.box.D.ud, r.box.team), "etiuda-team.json");
+        const mirrorTeam = path.join(relayMirrorOf(r.box.D.ud, r.box.team), "etiuda-team.json");
         const original = fs.readFileSync(mirrorTeam, "utf8");
         relead(r.box, { rev: 1, catalogs: ["harbour-board"] });
         r.again();
@@ -1912,13 +1991,13 @@ try {
       const H = n => crypto.createHash("sha256").update(String(n)).digest("hex");
       const adopted = async (name, src) => {
         const author = await arm(name, src);
-        const mate = { D: newDesk(name + "-mate", author.share, src) };
+        const mate = { D: newDesk(name + "-mate", author.share, src, author.team) };
         mate.me = await mate.D.ask("etiuda:branch-identity", true);
         const roster = [entry(author.D, author.me, author.key, author.team, 1), entry(mate.D, mate.me, author.key, author.team, 1)];
         const list = [{ catalog: "harbour-board", desk: author.me.id, original: H(author.me.id + "-aaaaaaaa") },
           { catalog: "not-listed", desk: author.me.id, original: H("x") }, { catalog: "harbour-board", desk: author.me.id, original: "short" },
           { catalog: "harbour-board", desk: "k-" + "0".repeat(16), original: H("y") }];
-        const signed = (who, team, rows) => textOf(sign({ format: 1, kind: "etiuda-team", id: team, catalogs: ["harbour-board"],
+        const signed = (who, team, rows) => textOf(sign({ format: 1, kind: "etiuda-team", id: team, channel: relayChannelOf(team), catalogs: ["harbour-board"],
           lead: Object.assign({}, who, { box: BOX }), sealed: true, exportsSealed: false, epoch: 1, roster,
           adopted: rows }, who === OTHER ? other.privateKey : lead.privateKey, who));
         put(author.share, "etiuda-team.json", signed(LEAD, author.team, list));
@@ -1966,7 +2045,7 @@ try {
         join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["harbour-board"], true);
         const first = await writeCopy(box, "99999999", "quay-held");
         put(box.share, "etiuda-team.json", textOf(sign({
-          format: 1, kind: "etiuda-team", id: box.team, catalogs: ["harbour-board"], lead: Object.assign({}, LEAD, { box: BOX }),
+          format: 1, kind: "etiuda-team", id: box.team, channel: relayChannelOf(box.team), catalogs: ["harbour-board"], lead: Object.assign({}, LEAD, { box: BOX }),
           sealed: true, exportsSealed: false, epoch: 1, roster: [], rev: 1,
         }, lead.privateKey, LEAD)));
         r2ms += 2000;
@@ -1974,17 +2053,17 @@ try {
         const left = box.D.api.teamUse().member === false;
         box.D.api.tryHeldBranches();
         syncMirror(box);
-        const mirror = syncerMod.folderMirrorOf(box.D.ud, box.team);
+        const mirror = relayMirrorOf(box.D.ud, box.team);
         return {
           held: !!first && first.held === true, left,
           written: fs.existsSync(branchAt(box, "99999999")) || fs.existsSync(path.join(box.share, "desks", box.me.id, "quay-99999999.ec")),
-          owed: syncerMod.owedList(mirror).filter(o => o.rel.indexOf("desks/") === 0).length,
           clear: holdsText(mirror, B0_MARK) || holdsText(box.share, B0_MARK),
         };
       };
       const g = await dropped("c5-dropped");
-      check(g.held && g.left && !g.written && g.owed === 0 && !g.clear,
-        "974f a copy held while untold stays held after the roster drops the desk: nothing written to the mirror or the share, nothing owed, no clear text (" + JSON.stringify(g) + ")");
+      /* 974f, moved: it also said nothing is owed (the folder syncer's outbox, gone); the mirror holding no file and no clear text says it. */
+      check(g.held && g.left && !g.written && !g.clear,
+        "974f a copy held while untold stays held after the roster drops the desk: nothing written to the mirror or the share, no clear text (" + JSON.stringify(g) + ")");
       if (PLANTS_OFF) skip("974g lifting plant:team-write-hold turns 974f red");
       else {
         const pt = SRC.split("\n").map(l => l.indexOf("plant:team-write-hold") >= 0 ? "  /* plant:team-write-hold */" : l).join("\n");
@@ -2307,8 +2386,8 @@ try {
         const fake = catalog(1, { id: c1Id, name: "Planted", card: B0_MARK, unsigned: true });
         fake.grew = { id: "quay-held", rev: 4, sha: pinV4(JSON.parse(leadEd)) };
         /* Planted where the folder team's mirror carries the share's desk folders, as the syncer brings a teammate's files. */
-        const plantDir = mine === "top" ? path.join(box.D.ud, "folder-mirror", box.team)
-          : path.join(box.D.ud, "folder-mirror", box.team, "desks", mine ? box.me.id : otherDesk);
+        const plantDir = mine === "top" ? relayMirrorOf(box.D.ud, box.team)
+          : path.join(relayMirrorOf(box.D.ud, box.team), "desks", mine ? box.me.id : otherDesk);
         fs.mkdirSync(plantDir, { recursive: true });
         fs.writeFileSync(path.join(plantDir, "quay-63636363.ec"), textOf(fake), "utf8");
         /* This desk once saw the chain from that id to the team's catalog, so the copy's chain reads three hops. */

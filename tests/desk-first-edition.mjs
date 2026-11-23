@@ -85,13 +85,14 @@ const sign = (doc, key, keyId) => {
   return out;
 };
 const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
+const RT = crypto.randomBytes(16).toString("hex");
 const CATALOG = "wick-board";
 
 function teamFile() {
   return sign({
     format: 1, kind: "etiuda-team", id: TEAM, catalogs: [CATALOG],
     lead: { keyId: LEAD.keyId, public: LEAD.public },
-    sealed: true, epoch: 1, roster: []
+    sealed: true, epoch: 1, roster: [], channel: { kind: "relay", rt: RT, url: "https://etiuda.dev/relay/v1" }
   }, pair.privateKey, LEAD.keyId);
 }
 function edition() {
@@ -158,7 +159,9 @@ async function main() {
   const own = path.join(LAB, "own");
   fs.mkdirSync(ud, { recursive: true });
   fs.mkdirSync(own, { recursive: true });
-  const mirror = path.join(ud, "folder-mirror", TEAM);
+  /* Was a team held through a shared folder, its row read from the folder mirror. Now a team works over the relay only, so the
+     desk follows a relay team pinned by invitation and the row is read from that team's relay mirror. */
+  const mirror = path.join(ud, "relay", RT);
   fs.mkdirSync(mirror, { recursive: true });
   fs.writeFileSync(path.join(mirror, "etiuda-team.json"), JSON.stringify(teamFile()), "utf8");
   fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({
@@ -166,7 +169,9 @@ async function main() {
     keys: { eCatalogFolder: own, eUiLang: "en" },
     teamPins: { [TEAM]: LEAD },
     teamKeys: { [TEAM]: { "1": "kept" } },
-    teamShown: { [TEAM]: { lead: "Ada Quay", folder: "D:\\Teams\\Ada" } }
+    teamPinFrom: { [TEAM]: "invite" },
+    teamChannel: { [TEAM]: { kind: "relay", rt: RT, url: "https://etiuda.dev/relay/v1" } },
+    teamShown: { [TEAM]: { lead: "Ada Quay", folder: mirror, relay: "etiuda.dev" } }
   }), "utf8");
 
   let waiting = null, landed = null, en = "", pl = "", enAfter = "", plAfter = "", err = "";

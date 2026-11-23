@@ -409,7 +409,9 @@ try {
       + JSON.stringify([other, none]) + ")");
   }
 
-  /* ---- a sealed team: a shared write is sealed, or it is not written in the clear ---------------------- */
+  /* ---- a folder holding a sealed team's file: nothing is written there ------------------------------------------------------
+     Was: the desk heeded the team in its folder and a shared write was sealed, or not written in the clear. Now a team works over
+     the relay only: the folder's team file is heeded by no one, and a shared write into a folder holding one is refused. */
   {
     const lead = crypto.generateKeyPairSync("ed25519");
     const pubHex = k => k.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
@@ -436,7 +438,7 @@ try {
     })));
     A.test.heedTeam();
     const heldKey = Object.keys((A.test.teamKeys && A.test.teamKeys[team]) || {}).length === 1;
-    check(heldKey, "11a THE CONTROL: the desk heeded the sealed team and kept its key");
+    check(!heldKey, "11a the desk heeds no team from its plain folder, so it keeps no key for it");
 
     const MARK_LOOSE = "marker-loose-quay-7f3a";
     const gwen = desk(A, null);
@@ -449,7 +451,7 @@ try {
     try { looseKind = JSON.parse(looseRaw).kind || ""; } catch { looseKind = ""; }
     const clear = looseRaw.indexOf(MARK_LOOSE) >= 0 && looseKind !== "etiuda-sealed";
     check(!clear && rLoose.wrote !== true && rLoose.why === "sealed" && !fs.existsSync(loosePath),
-      "11b a catalog the team file does not name is not written in the clear, and the write is refused because the team seals ("
+      "11b a catalog the team file does not name is not written in the clear, and the write is refused as the team's catalogs are ("
       + (rLoose.why || "none") + ", " + (looseKind || "no file") + ")");
 
     const MARK_HUB = "marker-harbour-quay-2b60";
@@ -462,9 +464,9 @@ try {
     let hub = null;
     try { hub = JSON.parse(hubRaw); } catch { hub = null; }
     const inner = hub && hub.kind === "etiuda-sealed" ? A.test.openSealed(key, hub) : "";
-    check(rHub.wrote === true && !!inner && inner.indexOf(MARK_HUB) >= 0 && hubRaw.indexOf(MARK_HUB) < 0,
-      "11c THE CONTROL: a catalog the team file names lands sealed, and the share's bytes do not hold its text ("
-      + (hub && hub.kind || "none") + ")");
+    check(rHub.wrote !== true && rHub.why === "sealed" && !inner && !fs.existsSync(hubPath),
+      "11c a catalog the team file names is refused as well, and nothing is written in the folder ("
+      + (rHub.why || "none") + ", " + (hub && hub.kind || "no file") + ")");
 
     const EN = "This team's catalogs stay sealed, so this change stays in this desk's own file.";
     const PL = "Katalogi tego zespołu pozostają zapieczętowane, więc ta zmiana zostaje we własnym pliku stanowiska.";
