@@ -57,13 +57,14 @@ function historyRowHtml(v,key){
     +v.cards>=0 ? catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",+v.cards,+v.macros,+v.intents,+v.cats) : ""]
     .filter(Boolean).map(esc).join(" · ");
   const acts=historyActs(v), open=t("Open this copy");
+  let putTitle=t("Use this version on this desk, in place of the catalog in use"); /* words: placeholder */
+  if(historyPutRoute(v,eHost())==="place") putTitle=t("Put this version back in the catalog folder, in place of the file there now");
   return '<div class="ec-row'+(v.current?" is-current":"")+'">'
     +'<span class="ec-name"><b>'+esc(fileStamp(v.first))+'</b>'+(meta?'<small class="ec-meta">'+meta+'</small>':'')+'</span>'
     +(v.current?'<span class="ec-tag">'+esc(t("Current"))+'</span>':'')
     +(v.wrote && v.place!=="own"?'<span class="ec-tag">'+esc(t("Saved on this desk"))+'</span>':'')
     +(acts.indexOf("put")>-1?'<button type="button" class="btn" data-eh-put="'+key+'" title="'
-      +(historyPutRoute(v,eHost())==="place" ? esc(t("Put this version back in the catalog folder, in place of the file there now"))
-        : esc(t("Use this version on this desk, in place of the catalog in use")) /* words: placeholder */)+'">'+esc(t("Put back"))+'</button>':'')
+      +esc(putTitle)+'">'+esc(t("Put back"))+'</button>':'')
     +'<button type="button" class="btn icbtn ec-act" data-eh-open="'+key+'" title="'+esc(open)+'" aria-label="'+esc(open)+'">'
       +ICON_LOAD+'</button>'
     +'</div>';
