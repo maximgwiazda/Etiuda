@@ -378,6 +378,12 @@ try {
       check(turned && same, "15we lifting plant:pack-migrate-why turns 15wb red (a Polish desk sees the English lead): "
         + detail + ", sha " + (same ? "restored" : "differs"));
     }
+
+    /* 15sga to 15sgd, 15sgp and 15sgq RETIRED (until the first sale nothing is said for a desk that ran an older 2.0.0 build): they held that a desk that
+       had "Edit the shared catalog file directly" on is told once at boot, in its own language, "This desk keeps its changes in its own file." and
+       "The shared catalog file stays as it was: nothing in it was changed or removed, and this desk no longer writes into it. To work on a catalog with
+       others, a team's lead sends an invitation.", that the key that held the setting is let go as the notice shows, and that a desk that never had it
+       is told nothing; with plant:shared-gone-show and plant:shared-gone-once lifted. No notice is built; the key is left as it is, read by nothing. */
   }
 } catch (e) {
   failed++;

@@ -30,7 +30,7 @@ const MODS = path.join(ROOT, "src", "modules"), MOD_DIR = pathToFileURL(MODS).hr
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 30;
+const EXPECTED = 28;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -44,7 +44,7 @@ const LAB = createLab("etiuda-folder-team-held-");
 /* ETIUDA_SHELL_MAIN names another shell/main.js to judge, as tests/team-desk.mjs takes it: a tree before this one, for its reds. */
 const SRC = fs.readFileSync(process.env.ETIUDA_SHELL_MAIN || path.join(ROOT, "shell", "main.js"), "utf8");
 const EXPOSE = ["catalogFolder", "teamWriteHere", "heedTeam", "leadsView", "joinPolicyFacts", "armFolder", "teamRoster", "teamEpochSeen",
-  "pinnedLead", "sharedWrite", "unlinkOwn", "readCatalog", "catalogFileNamed", "storeSyncFolder", "sealCatalog", "writeBranch"];
+  "pinnedLead", "unlinkOwn", "readCatalog", "catalogFileNamed", "storeSyncFolder", "sealCatalog", "writeBranch"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -95,10 +95,6 @@ const edition = () => sign({ format: 2, kind: "etiuda-catalog", id: "wick-board"
   langs: [{ code: "en", label: "EN" }], tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers" } }],
   cards: [{ id: "c-wick", shelf: "t-op", bodyShape: "plain", title: { en: "Wick" }, body: { en: "A wick." } }] });
 
-/* A plain catalog, unsigned, as a shared write takes one. */
-const sharedText = () => JSON.stringify({ format: 2, kind: "etiuda-catalog", id: "loose-lamps", rev: 1, name: "Loose Lamps", date: "2026-04-01",
-  langs: [{ code: "en", label: "EN" }], tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers" } }],
-  cards: [{ id: "c-lamp", shelf: "t-op", bodyShape: "plain", title: { en: "Lamp" }, body: { en: "A lamp." } }] });
 /* Every file under `dir`, as relative path, size and digest, sorted. */
 function listing(dir) {
   const out = [];
@@ -309,18 +305,9 @@ try {
   try { lead = api.pinnedLead(); } catch (e) { lead = { threw: e.message }; }
   check(lead === null, "fth14 the held team's file in its folder names no lead this desk joined under, its pin kept: " + JSON.stringify(lead));
 
-  /* fth15: a shared write into a folder holding a team's file is refused and writes nothing there, a desk that pins no team
-     included (the held desk's own is listed by fth8). */
-  const C = makeDesk("pinless", false);
-  fs.writeFileSync(path.join(C.ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: C.share, eUiLang: "en" } }), "utf8");
-  let wrote = null, wroteHeld = null;
-  try {
-    wroteHeld = await api.sharedWrite("loose.ec", sharedText(), "", true);
-    wrote = await loadDesk(C.ud).api.sharedWrite("loose.ec", sharedText(), "", true);
-  } catch (e) { wrote = { threw: e.message }; }
-  check(!!wrote && wrote.ok === false && wrote.refused === true && !fs.existsSync(path.join(C.share, "loose.ec"))
-    && !!wroteHeld && wroteHeld.ok === false && !fs.existsSync(path.join(A.share, "loose.ec")),
-    "fth15 a shared write into a folder holding a team's file is refused and writes nothing there: " + JSON.stringify({ pinless: wrote, held: wroteHeld }));
+  /* fth15 and fth17 RETIRED with the shared write (no desk writes into a catalog file on a share; tests/shared-file-gone.mjs): fth15 said a shared
+     write into a folder holding a team's file is refused and writes nothing there, a desk that pins no team included, and fth17 lifted
+     plant:shared-team-folder to show it. No desk writes a catalog into a share now, so no folder is written for it. */
 
   /* fth18: this desk's own removal leaves a file in the held team's folder, and in its local copy, where it is (the copy added by the mend). */
   const ownNote = path.join(A.share, "desks", OTHER_DESK, "note.txt");
@@ -426,12 +413,7 @@ try {
     ["fth30", "open-catalog-shared", async (d, P) => {
       try { await d.ask("etiuda:open-catalog-folder"); } catch { /* the lifted line throws: nothing is opened */ }
       return d.opened.length === 0 || path.resolve(d.opened[0]) !== path.resolve(P.mirror);
-    }, "fth29"],
-    ["fth17", "shared-team-folder", async (d, P) => {
-      fs.writeFileSync(path.join(P.ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: P.share, eUiLang: "en" } }), "utf8");
-      const r = await loadDesk(P.ud, d.src).api.sharedWrite("loose.ec", sharedText(), "", true);
-      return !!r && r.ok === true && fs.existsSync(path.join(P.share, "loose.ec"));
-    }, "fth15"]];
+    }, "fth29"]];
   for (const [id, tag, judge, of] of shellPlants) {
     if (PLANTS_OFF) { skip(id + " lifting plant:" + tag + " turns " + of + " red"); continue; }
     let detail = "";

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Etiuda - a single-file macro bank for live-chat support agents.
+<!-- Etiuda - a macro bank for live-chat support agents.
      Copyright (c) 2026 Maxim Gwiazda · Etiuda Source-Available Licence 1.0 (notice below).
      No version here: E_VERSION is the one source of truth.
      The charset declaration must sit within the first 1024 bytes of the document, so this
@@ -15,10 +15,9 @@
   release stays MIT, under v1/ of this repository and by v1/LICENSE.
 
   This file is the engine only. It ships with no content: cards, intents, categories
-  and quick facts come from a catalog file named etiuda-catalog.js placed beside it,
-  or from one imported through Manage. The installed edition reads any .ec catalog
-  from a folder of its own instead, which Settings names. With no catalog present
-  Etiuda starts empty.
+  and quick facts come from a catalog, which the desk reads from a folder of its own,
+  the one Settings names, or which is loaded through the Library. With no catalog
+  present Etiuda starts empty.
   A catalog is data and carries its own licence; the grant above covers the engine.
 -->
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -5430,13 +5429,6 @@ body.e-host .row .win-btn:focus-visible{outline-offset:-2px}
   </div>
 </div>
 
-<!-- Optional catalog sitting beside this file. Absent = Etiuda starts as a clean slate.
-     A .js global rather than .json: a page opened from file:// cannot fetch() a sibling,
-     but it can load one as a script. -->
-<!-- ONE filename, fixed and generic: written into the engine, so it cannot carry a
-     customer's name - any other file comes in via Import. A configurable name must be
-     discovered first; one fixed name is what makes the sibling work with no configuration. -->
-<script src="etiuda-catalog.js"></script>
 <script>
 (() => {
   var __defProp = Object.defineProperty;
@@ -8142,8 +8134,6 @@ What is typed here stays in this browser.`;
     "maintenance␟folder": "folder",
     "maintenance␟id": "identyfikator",
     "maintenance␟signature": "podpis",
-    "maintenance␟beside this page": "obok tej strony",
-    "maintenance␟imported into this browser": "wczytany do tej przeglądarki",
     "maintenance␟the chosen catalog folder's": "z folderu z plikami katalogów wybranego w Ustawieniach",
     "maintenance␟the program's own": "dołączona do programu",
     "maintenance␟found beside the program": "znaleziona obok programu",
@@ -9454,23 +9444,18 @@ What is typed here stays in this browser.`;
     "Saved copies": "Zapisane kopie",
     "Each catalog file this desk opens or saves leaves a copy here, kept for 30 days.": "Każdy plik katalogu, który to stanowisko otwiera lub zapisuje, zostawia tu kopię, przechowywaną przez 30 dni.",
     "This desk's own file": "Własny plik tego stanowiska",
-    "Edit the shared catalog file directly": "Zapisuj zmiany wprost we wspólnym pliku katalogu",
-    "For a team that keeps its catalog without Studio: each change is written into the catalog file in the shared folder. A catalog file the team's lead signed is never touched.": "Dla zespołu, który prowadzi katalog bez Studia: każda zmiana trafia prosto do pliku katalogu we wspólnym folderze. Pliku katalogu podpisanego przez lidera zespołu nic tu nie zmienia.",
-    "Each change goes into the shared catalog file; where a teammate changed the same text first, theirs stays and yours waits in this desk's own file": "Każda zmiana trafia do wspólnego pliku katalogu; gdy ktoś z zespołu zmienił już ten sam tekst, zostaje tamta wersja, a własna czeka w pliku tego stanowiska",
-    "Each change stays in this desk's own file": "Każda zmiana zostaje we własnym pliku tego stanowiska",
-    "From now on, changes go into the shared catalog file": "Od teraz zmiany trafiają do wspólnego pliku katalogu",
-    "From now on, changes stay in this desk's own file": "Od teraz zmiany zostają we własnym pliku tego stanowiska",
-    "A teammate changed the same text first, so the shared catalog file keeps theirs and yours stays in this desk's own file.": "Ktoś z zespołu zmienił ten sam tekst wcześniej, więc we wspólnym pliku katalogu zostaje tamta wersja, a ta trafia do własnego pliku stanowiska.",
-    "The shared catalog file could not be written this time; this change is safe in this desk's own file.": "Wspólnego pliku katalogu nie udało się teraz zapisać; ta zmiana jest bezpieczna we własnym pliku stanowiska.",
-    "This team's catalogs stay sealed, so this change stays in this desk's own file.": "Katalogi tego zespołu pozostają zapieczętowane, więc ta zmiana zostaje we własnym pliku stanowiska.",
     "Current": "Aktualna",
     "Saved on this desk": "Zapisana na tym stanowisku",
     "Open this copy": "Otwórz tę kopię",
     "Put back": "Przywróć",
     "Put this version back in the catalog folder, in place of the file there now": "Przywraca tę wersję do folderu z plikami katalogów w miejsce obecnego pliku",
+    /* words: placeholder */
+    "Use this version on this desk, in place of the catalog in use": "Używa tej wersji na tym stanowisku, w miejsce katalogu w użyciu",
     "{FILE} as it was on {WHEN}, kept on this desk.": "{FILE} w stanie z {WHEN}, zachowany na tym stanowisku.",
     "{FILE} could not be put back in the catalog folder. The version stays here, ready to try again.": "Nie udało się przywrócić pliku {FILE} do folderu katalogów. Ta wersja zostaje tutaj i można spróbować ponownie.",
     "Version put back": "Przywrócono wersję",
+    /* words: placeholder */
+    "{FILE} could not be put back on this desk. The version stays here, ready to try again.": "Nie udało się przywrócić pliku {FILE} na tym stanowisku. Ta wersja zostaje tutaj i można spróbować ponownie.",
     "The catalog file could not be loaded:": "Nie udało się wczytać pliku katalogu:",
     "{FILE} is sealed for its team": "{FILE} jest zapieczętowany dla swojego zespołu",
     "Once the team's lead lets this desk in, the catalog opens here by itself.": "Gdy lider zespołu wpuści to stanowisko, katalog otworzy się tutaj sam.",
@@ -12559,7 +12544,6 @@ What is typed here stays in this browser.`;
   __export(host_exports, {
     E_AI_OFF_KEY: () => E_AI_OFF_KEY,
     E_CATALOG_FOLDER_KEY: () => E_CATALOG_FOLDER_KEY,
-    E_CATALOG_SCRIPT: () => E_CATALOG_SCRIPT,
     E_SEARCH_AI_OFF_KEY: () => E_SEARCH_AI_OFF_KEY,
     TEST_BAND_EN: () => TEST_BAND_EN,
     dispatchTabChord: () => dispatchTabChord,
@@ -12587,7 +12571,6 @@ What is typed here stays in this browser.`;
     eHasCatalogPicker: () => eHasCatalogPicker,
     eHasCatalogSaver: () => eHasCatalogSaver,
     eHasOwnSaver: () => eHasOwnSaver,
-    eHasShared: () => eHasShared,
     eHost: () => eHost,
     eHotkey: () => eHotkey,
     eHotkeyLabel: () => eHotkeyLabel,
@@ -12609,8 +12592,6 @@ What is typed here stays in this browser.`;
     eSearchOn: () => eSearchOn,
     eSetAccent: () => eSetAccent,
     eSetMaximized: () => eSetMaximized,
-    eSharedRead: () => eSharedRead,
-    eSharedWrite: () => eSharedWrite,
     eTellAi: () => eTellAi,
     eTellSearch: () => eTellSearch,
     eWriteBranch: () => eWriteBranch,
@@ -16673,8 +16654,8 @@ What is typed here stays in this browser.`;
   // src/modules/catalog.js
   var E_CATALOG_KEY = nsKey("CatalogOk");
   var E_CATALOG_STORE = nsKey("Catalog");
-  var E_SIBLING = null;
-  var E_SIBLING_READ = false;
+  var E_GIVEN = null;
+  var E_GIVEN_READ = false;
   var E_HANDED = null;
   var E_REFUSED = [];
   function eRefuseCatalogFile(name) {
@@ -16694,17 +16675,17 @@ What is typed here stays in this browser.`;
     return E_REFUSED.slice();
   }
   function eCatalog() {
-    if (E_SIBLING_READ) return E_SIBLING;
-    E_SIBLING_READ = true;
+    if (E_GIVEN_READ) return E_GIVEN;
+    E_GIVEN_READ = true;
     let c = typeof window !== "undefined" ? window.E_CATALOG : null;
     let file = typeof window !== "undefined" && window.E_HOST ? String(window.E_HOST.catalogFile || "") : "";
     for (let tries = 0; tries < 32; tries++) {
       try {
-        E_SIBLING = isV2(c) ? normaliseCatalog(catalogFromV2(c)) : null;
-        catalogDocKeep(E_SIBLING, c);
-        return E_SIBLING;
+        E_GIVEN = isV2(c) ? normaliseCatalog(catalogFromV2(c)) : null;
+        catalogDocKeep(E_GIVEN, c);
+        return E_GIVEN;
       } catch (e) {
-        E_SIBLING = null;
+        E_GIVEN = null;
       }
       if (file) E_REFUSED.push(file);
       const next = file ? eRefuseCatalogFile(file) : null;
@@ -17138,7 +17119,6 @@ What is typed here stays in this browser.`;
     }
   }
   var E_CATALOG_FOLDER_KEY = "eCatalogFolder";
-  var E_CATALOG_SCRIPT = "etiuda-catalog.js";
   function eCatalogFolder() {
     const h = eHost();
     if (!h) return "";
@@ -17524,26 +17504,6 @@ What is typed here stays in this browser.`;
     if (!eHasBranch()) return Promise.resolve({ ok: false });
     try {
       return Promise.resolve(eHost().writeBranch(String(stem || ""), String(text || ""))).then((v) => ({ ok: !!(v && v.ok) })).catch(() => ({ ok: false }));
-    } catch (e) {
-      return Promise.resolve({ ok: false });
-    }
-  }
-  function eHasShared() {
-    const h = eHost();
-    return !!h && typeof h.sharedRead === "function" && typeof h.sharedWrite === "function";
-  }
-  function eSharedRead(name, pin) {
-    if (!eHasShared()) return Promise.resolve(null);
-    try {
-      return Promise.resolve(eHost().sharedRead(String(name || ""), String(pin || ""))).then((v) => v && typeof v === "object" ? { text: String(v.text || ""), sha: String(v.sha || ""), free: v.free === true, base: String(v.base || "") } : null).catch(() => null);
-    } catch (e) {
-      return Promise.resolve(null);
-    }
-  }
-  function eSharedWrite(name, text, sha, create) {
-    if (!eHasShared()) return Promise.resolve({ ok: false });
-    try {
-      return Promise.resolve(eHost().sharedWrite(String(name || ""), String(text || ""), String(sha || ""), create === true)).then((v) => v && typeof v === "object" ? { ok: v.ok === true, changed: v.changed === true, busy: v.busy === true, taken: v.taken === true, refused: v.refused === true, sealed: v.sealed === true, private: v.private === true } : { ok: false }).catch(() => ({ ok: false }));
     } catch (e) {
       return Promise.resolve({ ok: false });
     }
@@ -34097,8 +34057,6 @@ What is typed here stays in this browser.`;
     scheduleDeskBranch: () => scheduleDeskBranch,
     setAsidePersonal: () => setAsidePersonal,
     sha256Hex: () => sha256Hex,
-    sharedOwnPin: () => sharedOwnPin,
-    sharedOwnWrite: () => sharedOwnWrite,
     switchToAdopted: () => switchToAdopted,
     syncSampleMark: () => syncSampleMark,
     tellTaken: () => tellTaken,
@@ -34106,270 +34064,6 @@ What is typed here stays in this browser.`;
     wireCatalogDrop: () => wireCatalogDrop,
     writeDeskBranch: () => writeDeskBranch
   });
-
-  // src/modules/catalog-merge.js
-  var catalog_merge_exports = {};
-  __export(catalog_merge_exports, {
-    directWrite: () => directWrite,
-    mergeShared: () => mergeShared,
-    sharedCanon: () => sharedCanon,
-    sharedDate: () => sharedDate,
-    sharedScope: () => sharedScope
-  });
-  function sharedCanon(v) {
-    if (v === void 0) return "";
-    if (v === null || typeof v !== "object") return JSON.stringify(v);
-    if (Array.isArray(v)) return "[" + v.map(sharedCanon).join(",") + "]";
-    return "{" + Object.keys(v).filter((k) => v[k] !== void 0).sort().map((k) => JSON.stringify(k) + ":" + sharedCanon(v[k])).join(",") + "}";
-  }
-  var SHARED_OWN_KEYS = ["format", "kind", "id", "rev", "date", "hash", "sig", "modified", "grew", "desk", "sample", "evaluation", "cards", "tags"];
-  var SHARED_SEP = "";
-  function sharedById(list2) {
-    const m = /* @__PURE__ */ new Map();
-    (Array.isArray(list2) ? list2 : []).forEach((x) => {
-      if (x && typeof x === "object" && x.id != null) m.set(String(x.id), x);
-    });
-    return m;
-  }
-  function sharedHas(o, k) {
-    return Object.prototype.hasOwnProperty.call(o, k);
-  }
-  function sharedCopy(v) {
-    return v === void 0 ? void 0 : JSON.parse(JSON.stringify(v));
-  }
-  function sharedScope(touched, M2, F, B, all) {
-    const cards2 = /* @__PURE__ */ new Map(), tags = /* @__PURE__ */ new Set(), head = /* @__PURE__ */ new Set();
-    const t2 = touched || {};
-    if (all) {
-      sharedById(M2.cards).forEach((x, id) => cards2.set(id, null));
-      sharedById(M2.tags).forEach((x, id) => tags.add(id));
-      Object.keys(M2).forEach((k) => {
-        if (SHARED_OWN_KEYS.indexOf(k) < 0) head.add(k);
-      });
-    }
-    (t2.cards || []).forEach((id) => cards2.set(String(id), null));
-    (t2.tags || []).forEach((id) => tags.add(String(id)));
-    (t2.head || []).forEach((k) => head.add(String(k)));
-    if (t2.requests) {
-      [M2, F, B].forEach((d) => {
-        sharedById(d.tags).forEach((x, id) => {
-          if (x.kind === "request") tags.add(id);
-        });
-        sharedById(d.cards).forEach((x, id) => {
-          if (!cards2.has(id)) cards2.set(id, ["requests"]);
-        });
-      });
-    }
-    return { cards: cards2, tags, head, order: !!(all || t2.order) };
-  }
-  function mergeShared(F, B, M2, touched, state, all) {
-    const st = state || {};
-    const fileSeen = Object.assign({}, st.file || {}), deskSeen = Object.assign({}, st.desk || {}), held = new Set(st.held || []), before = new Set(held);
-    const out = sharedCopy(F);
-    if (!Array.isArray(out.cards)) out.cards = [];
-    if (!Array.isArray(out.tags)) out.tags = [];
-    let wrote = false;
-    const refFile = (loc, bv) => sharedHas(fileSeen, loc) ? fileSeen[loc] : sharedCanon(bv);
-    const refDesk = (loc, bv) => sharedHas(deskSeen, loc) ? deskSeen[loc] : sharedCanon(bv);
-    const seen = (loc, f, m) => {
-      fileSeen[loc] = f;
-      deskSeen[loc] = m;
-    };
-    const forget = (loc) => {
-      delete fileSeen[loc];
-      delete deskSeen[loc];
-    };
-    const decide = (loc, mv, fv, bv, mark) => {
-      const m = sharedCanon(mv), f = sharedCanon(fv);
-      if (held.has(loc)) {
-        if (m === f) {
-          held.delete(loc);
-          seen(loc, f, m);
-        }
-        return "file";
-      }
-      if (m === f) {
-        if (mark) seen(loc, f, m);
-        else forget(loc);
-        return "file";
-      }
-      const deskMoved = m !== refDesk(loc, bv), fileMoved = f !== refFile(loc, bv);
-      if (fileMoved) {
-        if (deskMoved || m !== sharedCanon(bv)) {
-          held.add(loc);
-          seen(loc, f, m);
-        } else deskSeen[loc] = m;
-        return "file";
-      }
-      seen(loc, f, m);
-      if (!deskMoved) return "file";
-      fileSeen[loc] = m;
-      return "mine";
-    };
-    const scope = sharedScope(touched, M2, F, B, all);
-    const named2 = (pre) => Object.keys(fileSeen).concat(Array.from(held)).filter((l) => l.indexOf(pre) === 0).map((l) => l.slice(pre.length).split(SHARED_SEP)[0]);
-    const mergeList = (key, scoped, keysOf) => {
-      const fm = sharedById(F[key]), bm = sharedById(B[key]), mm = sharedById(M2[key]), mOrder = (Array.isArray(M2[key]) ? M2[key] : []).map((x) => String(x && x.id));
-      new Set(Array.from(scoped).concat(named2(key + SHARED_SEP))).forEach((id) => {
-        const at = key + SHARED_SEP + id, mc = mm.get(id), fc = fm.get(id), bc = bm.get(id), keys = keysOf(id), whole = scoped.has(id) && !keys;
-        const keyList = (...docs) => {
-          const s = /* @__PURE__ */ new Set();
-          docs.forEach((d) => {
-            if (d) Object.keys(d).forEach((k) => {
-              if (k !== "id" && (!keys || keys.indexOf(k) > -1)) s.add(k);
-            });
-          });
-          named2(at + SHARED_SEP).forEach((k) => s.add(k));
-          return Array.from(s);
-        };
-        const movedFile = (c, ks) => ks.some((k) => sharedCanon(c && c[k]) !== refFile(at + SHARED_SEP + k, bc && bc[k]));
-        const movedDesk = (c, ks) => ks.some((k) => sharedCanon(c && c[k]) !== refDesk(at + SHARED_SEP + k, bc && bc[k]));
-        const p = decide(at, mc ? 1 : void 0, fc ? 1 : void 0, bc ? 1 : void 0, whole);
-        if (p === "mine" && mc) {
-          const after = mOrder.slice(0, mOrder.indexOf(id)).reverse().find((x) => out[key].some((y) => String(y.id) === x));
-          out[key].splice(after == null ? 0 : out[key].findIndex((y) => String(y.id) === after) + 1, 0, sharedCopy(mc));
-          keyList(mc).forEach((k) => seen(at + SHARED_SEP + k, sharedCanon(mc[k]), sharedCanon(mc[k])));
-          wrote = true;
-          return;
-        }
-        if (p === "mine") {
-          if (movedFile(fc, keyList(fc, bc))) {
-            held.add(at);
-            fileSeen[at] = sharedCanon(1);
-            return;
-          }
-          out[key] = out[key].filter((y) => String(y.id) !== id);
-          Object.keys(fileSeen).forEach((l) => {
-            if (l.indexOf(at + SHARED_SEP) === 0) forget(l);
-          });
-          wrote = true;
-          return;
-        }
-        if (mc && !fc) {
-          if (bc && movedDesk(mc, keyList(mc, bc))) held.add(at);
-          return;
-        }
-        if (!mc || !fc) return;
-        const target = out[key].find((y) => String(y.id) === id);
-        keyList(mc, fc, bc).forEach((k) => {
-          if (decide(at + SHARED_SEP + k, mc[k], fc[k], bc && bc[k], scoped.has(id)) !== "mine") return;
-          if (mc[k] === void 0) delete target[k];
-          else target[k] = sharedCopy(mc[k]);
-          wrote = true;
-        });
-      });
-    };
-    mergeList("tags", scope.tags, () => null);
-    mergeList("cards", new Set(scope.cards.keys()), (id) => scope.cards.get(id) || null);
-    new Set(Array.from(scope.head).concat(named2("head" + SHARED_SEP))).forEach((k) => {
-      if (SHARED_OWN_KEYS.indexOf(k) > -1) return;
-      if (decide("head" + SHARED_SEP + k, M2[k], F[k], B[k], scope.head.has(k)) !== "mine") return;
-      if (M2[k] === void 0) delete out[k];
-      else out[k] = sharedCopy(M2[k]);
-      wrote = true;
-    });
-    const ORDER = "order" + SHARED_SEP + "cards";
-    if (scope.order || sharedHas(fileSeen, ORDER) || held.has(ORDER)) {
-      const ids = (d) => (Array.isArray(d.cards) ? d.cards : []).map((x) => String(x && x.id));
-      const inB = new Set(ids(B)), inM = new Set(ids(M2)), inOut = new Set(ids(out));
-      const common = (id) => (all || inB.has(id)) && inM.has(id) && inOut.has(id);
-      const only = (list2) => sharedCanon(list2.filter(common));
-      const was = (s) => sharedHas(s, ORDER) ? JSON.parse(s[ORDER]) : ids(B);
-      const m = only(ids(M2)), f = only(ids(out));
-      const keep = () => {
-        fileSeen[ORDER] = sharedCanon(ids(out));
-        deskSeen[ORDER] = sharedCanon(ids(M2));
-      };
-      if (held.has(ORDER)) {
-        if (m === f) {
-          held.delete(ORDER);
-          keep();
-        }
-      } else if (m === f) {
-        if (scope.order) keep();
-        else forget(ORDER);
-      } else {
-        const deskMoved = m !== only(was(deskSeen)), fileMoved = f !== only(was(fileSeen));
-        const hold = fileMoved && (deskMoved || m !== only(ids(B)));
-        if (hold) held.add(ORDER);
-        if (deskMoved && !fileMoved) {
-          const slots = [], at = sharedById(out.cards), mo = ids(M2).filter(common);
-          out.cards.forEach((x, i) => {
-            if (common(String(x.id))) slots.push(i);
-          });
-          mo.forEach((id, n) => {
-            out.cards[slots[n]] = at.get(id);
-          });
-          wrote = true;
-        }
-        if (fileMoved && !hold) deskSeen[ORDER] = sharedCanon(ids(M2));
-        else keep();
-      }
-    }
-    return {
-      doc: out,
-      wrote,
-      state: { file: fileSeen, desk: deskSeen, held: Array.from(held) },
-      fresh: Array.from(held).filter((l) => !before.has(l))
-    };
-  }
-  function sharedDate(was, today) {
-    const m = /^([0-9]{4}-[0-9]{2}-[0-9]{2})/.exec(String(was == null ? "" : was));
-    return m && m[1] >= today ? String(was) : today;
-  }
-  function sharedPayload(text) {
-    const raw = String(text || "").replace(/^﻿/, "").trim();
-    try {
-      return JSON.parse(raw);
-    } catch (e) {
-    }
-    const at = raw.indexOf("E_CATALOG"), eq = at > -1 ? raw.indexOf("=", at) : -1;
-    if (eq < 0) throw new Error("not a catalog");
-    return JSON.parse(raw.slice(eq + 1).trim().replace(/;\s*$/, ""));
-  }
-  function directWrite(io) {
-    const loose = !io.pin, quit = (why) => ({ route: "branch", why, state: io.state, fresh: [] });
-    const attempt = (n) => Promise.resolve(io.read()).then((r) => {
-      if (!r || !r.free) return quit(r ? "signed" : "read");
-      let F = null, B = null;
-      if (r.text) {
-        try {
-          F = sharedPayload(r.text);
-        } catch (e) {
-          return quit("read");
-        }
-        if (!F || typeof F !== "object" || String(F.id) !== String(io.mine.id)) return quit("other");
-      } else if (!loose) return quit("read");
-      if (loose) B = { cards: [], tags: [] };
-      else {
-        try {
-          B = r.base ? sharedPayload(r.base) : null;
-        } catch (e) {
-          B = null;
-        }
-        if (!B) return quit("base");
-      }
-      const Fdoc = F || { format: 2, kind: "etiuda-catalog", id: String(io.mine.id), rev: 0, cards: [], tags: [] };
-      const m = mergeShared(Fdoc, B, io.mine, io.touched, io.state, loose);
-      const route = m.state.held.length ? "branch" : "none";
-      if (!m.wrote) return { route, state: m.state, fresh: m.fresh };
-      const doc = m.doc;
-      doc.rev = (+Fdoc.rev || 0) + 1;
-      doc.date = sharedDate(Fdoc.date, io.today);
-      doc.modified = true;
-      delete doc.sig;
-      delete doc.hash;
-      if ((io.check(doc) || []).length) return quit("problems");
-      doc.hash = io.hash(doc);
-      const others = !!F && [io.pin, io.own].indexOf(io.pinOf(F)) < 0;
-      return Promise.resolve(io.write(JSON.stringify(doc, null, 1) + "\n", r.sha || "", !F)).then((w) => {
-        if (w && w.ok) return { route, state: m.state, fresh: m.fresh, pin: io.pinOf(doc), others, wrote: true };
-        if (w && w.changed && n < 1) return attempt(n + 1);
-        return quit(w && w.private ? "private" : w && w.busy ? "busy" : w && w.taken ? "taken" : w && w.changed ? "beaten" : w && w.sealed ? "sealed" : "refused");
-      });
-    });
-    return attempt(0);
-  }
 
   // src/modules/ids.js
   var ids_exports = {};
@@ -35193,102 +34887,6 @@ What is typed here stays in this browser.`;
     }
     return id ? { id, loose: true } : null;
   }
-  var SHARED_RETRY_MS = 5e3;
-  var SHARED_NAMES = 9;
-  var sharedSaid = false;
-  function sharedEditing() {
-    return lsGet("eSharedEdit") === "1" && eHasShared();
-  }
-  function sharedTouched() {
-    const p = pack || {}, keys = (o) => Object.keys(o && typeof o === "object" ? o : {}), list2 = (a) => Array.isArray(a) ? a.map(String) : [];
-    return {
-      cards: keys(p.overrides).concat((p.custom || []).map((m) => m && m.id).filter(Boolean).map(String), list2(p.removed)),
-      tags: ["catLabels", "catLabelsPl", "customCats", "catRoles", "catIcons", "catColors"].reduce((o, f) => o.concat(keys(p[f])), []).concat(list2(p.removedCats)),
-      head: (p.facts != null ? ["facts"] : []).concat(p.who != null ? ["role"] : []),
-      requests: ["intentOverrides", "intentCustom", "intentRemoved"].some((f) => Array.isArray(p[f]) ? p[f].length > 0 : keys(p[f]).length > 0),
-      order: !cardOrderIsBase()
-    };
-  }
-  function sharedState(name, pin) {
-    let s = null;
-    try {
-      s = JSON.parse(lyGet("Shared") || "null");
-    } catch (e) {
-      s = null;
-    }
-    const st = s && typeof s === "object" && s.file === name && s.state && typeof s.state === "object" ? s.state : {};
-    const held = Array.isArray(st.held) ? st.held : [];
-    return s && s.pin === pin ? { file: st.file || {}, desk: st.desk || {}, held } : { file: {}, desk: {}, held };
-  }
-  function sharedOwnPin() {
-    return String(lyGet("SharedOwn") || "");
-  }
-  function sharedOwnWrite(c) {
-    const own = sharedOwnPin();
-    return !!own && pinned(c).pin === own;
-  }
-  function sharedPrivateNow(loose, origin) {
-    const id = String(loose ? origin && origin.id || lyGet("LooseId") || "" : origin && origin.id || "");
-    const c = teamContentNow();
-    const list2 = c && Array.isArray(c.private) ? c.private : [];
-    let on = false;
-    on = !!id && list2.indexOf(id) >= 0;
-    return on;
-  }
-  function writeShared(loose, origin, holds, layer) {
-    if (!sharedEditing()) return null;
-    if (sharedPrivateNow(loose, origin)) return Promise.resolve({ route: "none" });
-    const pin = loose ? "" : String(origin.pin || "");
-    const at = loose ? String(lyGet("SharedFile") || "") : String(nsGet("CatalogFile") || "");
-    if (!loose && !at) return null;
-    const state = sharedState(at, pin);
-    if (!holds && !Object.keys(state.file).length && !state.held.length) return null;
-    const from = loose ? origin || looseOrigin(true) : origin;
-    if (!from) return null;
-    const mine = catalogToV2(Object.assign(currentCatalog({ asIs: true }), { id: String(from.id), rev: +from.rev || 0 }));
-    const stem = catalogFileStem(catalogNameOfFile(catalogFileName()));
-    const go = (n) => {
-      const name = at || stem + (n ? " " + (n + 1) : "") + ".ec";
-      const same = () => eLayer() === layer && catalogLoaded() === !loose;
-      return directWrite({
-        read: () => eSharedRead(name, pin),
-        write: (text, sha, create) => same() ? eSharedWrite(name, text, sha, create) : { ok: false, refused: true },
-        mine,
-        touched: sharedTouched(),
-        state,
-        pin,
-        own: sharedOwnPin(),
-        check: v2Problems,
-        hash: v2ContentHash,
-        pinOf: (d) => "sha256:" + sha256Hex(v2SignedBytes(d)),
-        today: todayEdition()
-      }).then((r) => {
-        if (!same()) return { route: "branch" };
-        if (r && r.why === "private") return { route: "none", why: "private", state: r.state, fresh: [] };
-        if (!at && (r.why === "taken" || r.why === "other") && n + 1 < SHARED_NAMES) return go(n + 1);
-        lySet("Shared", JSON.stringify({ file: name, pin, state: r.state }));
-        if (r.wrote) {
-          lySet("SharedOwn", r.others ? "" : r.pin);
-          if (loose) {
-            lySet("SharedFile", name);
-            lySet("Exported", looseMark());
-          }
-          sharedSaid = false;
-        }
-        if (r.fresh && r.fresh.length) toast(t("A teammate changed the same text first, so the shared catalog file keeps theirs and yours stays in this desk's own file."));
-        else if (r.why === "sealed" && !sharedSaid) {
-          sharedSaid = true;
-          toast(t("This team's catalogs stay sealed, so this change stays in this desk's own file."));
-        } else if (r.why && r.why !== "signed" && !sharedSaid) {
-          sharedSaid = true;
-          toast(t("The shared catalog file could not be written this time; this change is safe in this desk's own file."));
-          if (r.why === "busy") setTimeout(scheduleDeskBranch, SHARED_RETRY_MS);
-        }
-        return r;
-      });
-    };
-    return go(0);
-  }
   function writeDeskBranch() {
     if (!eHasBranch()) return Promise.resolve(false);
     if (branchBusy) {
@@ -35299,17 +34897,12 @@ What is typed here stays in this browser.`;
     let origin = loose ? looseOrigin(false) : storedCatalog();
     if (loose ? !origin && !holds : !origin || !origin.id || !/^sha256:[0-9a-f]{64}$/.test(String(origin.pin || ""))) return Promise.resolve(false);
     const stemOf = (o) => catalogFileStem(catalogNameOfFile(catalogFileName())) + "-" + branchHex(o);
-    const own = (keep) => keep && holds ? eBranchIdentity().then((who) => {
+    const own = () => holds ? eBranchIdentity().then((who) => {
       if (!who || eLayer() !== layer || loose && catalogLoaded()) return { ok: false };
       if (!origin) origin = looseOrigin(true);
       return origin ? eWriteBranch(stemOf(origin), JSON.stringify(undatedBranch(catalogToV2(branchCatalog(who, origin))))) : { ok: false };
     }) : eWriteBranch(origin ? stemOf(origin) : "", "");
-    const direct = writeShared(loose, origin, holds, layer);
-    const run = direct ? direct.catch(() => ({ route: "branch" })).then((r) => {
-      if (loose && !origin) origin = looseOrigin(false);
-      return own(r.route !== "none");
-    }) : own(true);
-    branchBusy = run.then((r) => !!(r && r.ok), () => false).then((ok) => {
+    branchBusy = own().then((r) => !!(r && r.ok), () => false).then((ok) => {
       branchBusy = null;
       if (branchAgain) {
         branchAgain = false;
@@ -36538,11 +36131,6 @@ What is typed here stays in this browser.`;
     try {
       if (!catalogLoaded() && !storedCatalog()) return none;
       const home = eDeskHome(), inFolder = String(nsGet("CatalogFile") || "");
-      if (!eHost()) return {
-        file: S(() => nsGet("CatalogFrom") || (eCatalogAccepted(eCatalog()) ? E_CATALOG_SCRIPT : "")),
-        copy: eCatalogAccepted(eCatalog()) ? "beside this page" : "imported into this browser",
-        folder: "-"
-      };
       if (inFolder) return {
         file: inFolder,
         copy: lsGet(E_CATALOG_FOLDER_KEY) ? "the chosen catalog folder's" : "Documents\\Etiuda",
@@ -39440,7 +39028,7 @@ What is typed here stays in this browser.`;
 
   // src/modules/catalog-offer.js
   function eFoundHtml(name, where, builtIn) {
-    const shown2 = String(name || "") || E_CATALOG_SCRIPT;
+    const shown2 = String(name || "");
     if (builtIn) return t("{FILE} comes with Etiuda.").split("{FILE}").join("<code>" + esc(shown2) + "</code>");
     const dir = String(where || ""), home = !!dir && dir === eCatalogFolder();
     return t(where ? "Located as {FILE} in {FOLDER}." : "Located as {FILE}.").split("{FILE}").join("<code>" + esc(shown2) + "</code>").split("{FOLDER}").join("<code" + (home ? ' class="open-folder" data-ec-open="1" role="button" tabindex="0"' : "") + ' title="' + esc(dir) + '">' + esc(eCatalogFolderShort(dir)) + "</code>");
@@ -39467,7 +39055,7 @@ What is typed here stays in this browser.`;
         lsSet(E_CATALOG_KEY, sig);
         return activateCatalog(c, {
           file: mine ? file : "",
-          from: file || (eHost() ? "" : E_CATALOG_SCRIPT),
+          from: file,
           fileAt: mine && !given ? eCatalogMtime() : 0
         });
       }
@@ -39908,7 +39496,6 @@ What is typed here stays in this browser.`;
     if (active && eCatalogSignature(active) === sig) return false;
     const revOlder = !!active && String(c && c.id || "") !== "" && String(c.id) === String(active.id || "") && +c.rev < (+active.rev || 0);
     if (revOlder && !src.asked && heldKeyCovers(c) && (heldCatalogTrust() === "" || heldCatalogTrust() === V2_SIG_VALID)) return false;
-    if (!src.asked && sharedOwnWrite(c)) return false;
     if (!src.force && src.refusedKey && nsGet(src.refusedKey) === sig) {
       leaveWaiting(c, src, active);
       return false;
@@ -39952,7 +39539,7 @@ What is typed here stays in this browser.`;
        another taken up, which the question asks and no sentence beneath it can improve on. The
        two editions of ONE catalog keep their sentence: what is at stake there is what happens to
        this desk's own work, which the screen cannot show. */
-    '<h3 id="ecTitle">' + esc(t(olderSure || older ? "Older catalog file found" : updating && !plain ? "Updated catalog file found" : replacing ? "Replace catalog?" : "Load catalog file?")) + "</h3>" + (olderSure ? '<p class="ec-warn">' + esc(t("This edition is older than the one in use on this desk, so some of its replies may be out of date.")) + "</p>" : olderSaid ? '<p class="ec-warn">' + esc(t("By its own edition number, this file is older than the catalog in use on this desk.")) + "</p>" : "") + (updating && !olderSure && !plain ? '<p class="ec-sub">' + esc(t(older ? "This file is an earlier edition than the one loaded now." : "This catalog has changed since it was loaded.")) + "</p>" : "") + '<div class="ec-what"><b>' + esc(catalogNameOfFile(String(src.file || "") || E_CATALOG_SCRIPT)) + "</b>" + offerEditionHtml(editionNameOf(c)) + (updating && editionLabel(editionNameOf(active)) && editionLabel(editionNameOf(active)) !== editionLabel(editionNameOf(c)) ? '<div class="ec-counts">' + esc(editionSaid(editionNameOf(active), t("You have rev {R}."), t("You have {E}."))) + "</div>" : "") + (changeHtml ? "" : '<div class="ec-counts">' + catalogCountsLine(
+    '<h3 id="ecTitle">' + esc(t(olderSure || older ? "Older catalog file found" : updating && !plain ? "Updated catalog file found" : replacing ? "Replace catalog?" : "Load catalog file?")) + "</h3>" + (olderSure ? '<p class="ec-warn">' + esc(t("This edition is older than the one in use on this desk, so some of its replies may be out of date.")) + "</p>" : olderSaid ? '<p class="ec-warn">' + esc(t("By its own edition number, this file is older than the catalog in use on this desk.")) + "</p>" : "") + (updating && !olderSure && !plain ? '<p class="ec-sub">' + esc(t(older ? "This file is an earlier edition than the one loaded now." : "This catalog has changed since it was loaded.")) + "</p>" : "") + '<div class="ec-what"><b>' + esc(catalogNameOfFile(String(src.file || "")) || t("Catalog")) + "</b>" + offerEditionHtml(editionNameOf(c)) + (updating && editionLabel(editionNameOf(active)) && editionLabel(editionNameOf(active)) !== editionLabel(editionNameOf(c)) ? '<div class="ec-counts">' + esc(editionSaid(editionNameOf(active), t("You have rev {R}."), t("You have {E}."))) + "</div>" : "") + (changeHtml ? "" : '<div class="ec-counts">' + catalogCountsLine(
       "{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
       n,
       catalogMacroCount(c),
@@ -39979,7 +39566,7 @@ What is typed here stays in this browser.`;
             const print = trustPrint(c);
             const matchLead = tLeads.find((l) => l && l.print === print);
             const leadName = matchLead && matchLead.lead || tLeads[0] && tLeads[0].lead || "";
-            const catName = catalogNameOfFile(String(src && src.file || "") || E_CATALOG_SCRIPT) || t("Catalog");
+            const catName = catalogNameOfFile(String(src && src.file || "")) || t("Catalog");
             const ed2 = editionNameOf(c);
             const edStr = c.edition != null && c.edition !== "" ? String(c.edition) : String(ed2.e || "");
             const title = leadName ? t("{LEAD} published a new edition").split("{LEAD}").join(leadName) : t("The team's lead published a new edition");
@@ -40076,7 +39663,7 @@ What is typed here stays in this browser.`;
         held: active,
         changes,
         ed: editionNameOf(c),
-        name: catalogNameOfFile(String(src.file || "") || E_CATALOG_SCRIPT),
+        name: catalogNameOfFile(String(src.file || "")) || t("Catalog"),
         keep: answer("#ecNo"),
         load: answer("#ecYes"),
         taken: () => repaintEditionRows(wrap, c, active, changes),
@@ -40672,8 +40259,7 @@ What is typed here stays in this browser.`;
     }).catch(() => false);
   }
   function offerFromListing(files, held, skip) {
-    const own = sharedOwnPin();
-    const higher = files.filter((f) => f.id === held.id && f.rev > (+held.rev || 0) && !(own && f.sha === own)).sort((a, b) => b.rev - a.rev || b.mtime - a.mtime)[0];
+    const higher = files.filter((f) => f.id === held.id && f.rev > (+held.rev || 0)).sort((a, b) => b.rev - a.rev || b.mtime - a.mtime)[0];
     if (higher) {
       offerListed(higher, false);
       return;
@@ -40681,8 +40267,8 @@ What is typed here stays in this browser.`;
     const grown = files.filter((f) => f.grew && f.id !== held.id);
     if (!grown.length) return;
     const mine = eBranchIdentity(false).then((who) => who ? branchFileId(who, held) : "");
-    Promise.all([mine, skip || /* @__PURE__ */ new Set()]).then(([own2, told]) => {
-      const ours = new Set([held.id].concat(own2 ? [own2] : []));
+    Promise.all([mine, skip || /* @__PURE__ */ new Set()]).then(([own, told]) => {
+      const ours = new Set([held.id].concat(own ? [own] : []));
       const next = grown.filter((f) => ours.has(f.grew.id) && !told.has(f.id)).sort((a, b) => b.mtime - a.mtime);
       return next.reduce((chain, f) => chain.then((done) => done || offerListed(f, true)), Promise.resolve(false));
     });
@@ -40785,11 +40371,12 @@ What is typed here stays in this browser.`;
     eHasHistory: () => eHasHistory,
     historyActs: () => historyActs,
     historyGroups: () => historyGroups,
+    historyPutRoute: () => historyPutRoute,
     openHistory: () => openHistory
   });
   function historyHost() {
     const h = eHost();
-    return h && typeof h.historyList === "function" && typeof h.historyRead === "function" && typeof h.historyPut === "function" ? h : null;
+    return h && typeof h.historyList === "function" && typeof h.historyRead === "function" ? h : null;
   }
   function eHasHistory() {
     return !!historyHost();
@@ -40808,6 +40395,9 @@ What is typed here stays in this browser.`;
   function historyActs(v) {
     return v && v.put === true && !v.current ? ["open", "put"] : ["open"];
   }
+  function historyPutRoute(v, h) {
+    return v && v.mine === true && h && typeof h.historyPut === "function" ? "place" : "desk";
+  }
   function historyFileName(g) {
     const v = g[0], name = String(v.name || "");
     if (!name) return t("Unnamed catalog");
@@ -40825,7 +40415,9 @@ What is typed here stays in this browser.`;
       +v.cards >= 0 ? catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}", +v.cards, +v.macros, +v.intents, +v.cats) : ""
     ].filter(Boolean).map(esc).join(" · ");
     const acts = historyActs(v), open = t("Open this copy");
-    return '<div class="ec-row' + (v.current ? " is-current" : "") + '"><span class="ec-name"><b>' + esc(fileStamp(v.first)) + "</b>" + (meta ? '<small class="ec-meta">' + meta + "</small>" : "") + "</span>" + (v.current ? '<span class="ec-tag">' + esc(t("Current")) + "</span>" : "") + (v.wrote && v.place !== "own" ? '<span class="ec-tag">' + esc(t("Saved on this desk")) + "</span>" : "") + (acts.indexOf("put") > -1 ? '<button type="button" class="btn" data-eh-put="' + key + '" title="' + esc(t("Put this version back in the catalog folder, in place of the file there now")) + '">' + esc(t("Put back")) + "</button>" : "") + '<button type="button" class="btn icbtn ec-act" data-eh-open="' + key + '" title="' + esc(open) + '" aria-label="' + esc(open) + '">' + ICON_LOAD + "</button></div>";
+    let putTitle = t("Use this version on this desk, in place of the catalog in use");
+    if (historyPutRoute(v, eHost()) === "place") putTitle = t("Put this version back in the catalog folder, in place of the file there now");
+    return '<div class="ec-row' + (v.current ? " is-current" : "") + '"><span class="ec-name"><b>' + esc(fileStamp(v.first)) + "</b>" + (meta ? '<small class="ec-meta">' + meta + "</small>" : "") + "</span>" + (v.current ? '<span class="ec-tag">' + esc(t("Current")) + "</span>" : "") + (v.wrote && v.place !== "own" ? '<span class="ec-tag">' + esc(t("Saved on this desk")) + "</span>" : "") + (acts.indexOf("put") > -1 ? '<button type="button" class="btn" data-eh-put="' + key + '" title="' + esc(putTitle) + '">' + esc(t("Put back")) + "</button>" : "") + '<button type="button" class="btn icbtn ec-act" data-eh-open="' + key + '" title="' + esc(open) + '" aria-label="' + esc(open) + '">' + ICON_LOAD + "</button></div>";
   }
   function historyBodyHtml(groups) {
     if (!groups.length)
@@ -40870,17 +40462,33 @@ What is typed here stays in this browser.`;
   function historyPutBack(v, from) {
     const h = historyHost();
     if (!h) return;
-    const refuse = () => toastRefusal(t("{FILE} could not be put back in the catalog folder. The version stays here, ready to try again.").split("{FILE}").join(String(v.name || "")));
-    Promise.resolve(h.historyPut(v.sha, v.path)).then((r) => {
-      if (!r || !r.ok) {
+    if (historyPutRoute(v, h) === "place") {
+      const refuse2 = () => toastRefusal(t("{FILE} could not be put back in the catalog folder. The version stays here, ready to try again.").split("{FILE}").join(String(v.name || "")));
+      Promise.resolve(h.historyPut(v.sha, v.path)).then((r) => {
+        if (!r || !r.ok) {
+          refuse2();
+          return;
+        }
+        if (document.getElementById("ehView")) openHistory();
+        if (r.replaced) offerUndo("Version put back", () => Promise.resolve(h.historyPut(r.replaced, v.path)).then((u) => {
+          if (!u || !u.ok) refuse2();
+          else if (document.getElementById("ehView")) openHistory();
+        }), null, from);
+      }).catch(refuse2);
+      return;
+    }
+    const refuse = () => toastRefusal(t("{FILE} could not be put back on this desk. The version stays here, ready to try again.").split("{FILE}").join(String(v.name || "")));
+    Promise.resolve(h.historyRead(v.sha, v.path)).then((got) => {
+      let c = null;
+      try {
+        c = parseCatalogFile(String(got && got.text || ""));
+      } catch (e) {
         refuse();
         return;
       }
-      if (document.getElementById("ehView")) openHistory();
-      if (r.replaced) offerUndo("Version put back", () => Promise.resolve(h.historyPut(r.replaced, v.path)).then((u) => {
-        if (!u || !u.ok) refuse();
-        else if (document.getElementById("ehView")) openHistory();
-      }), null, from);
+      hooks.openManage(true);
+      lsSet(E_CATALOG_KEY, eCatalogSignature(c));
+      if (activateCatalog(c, { from: String(got.name || v.name || "") }) === false) refuse();
     }).catch(refuse);
   }
   function openHistory(host) {
@@ -43356,18 +42964,6 @@ What is typed here stays in this browser.`;
     const rows = teamLeads().map((l, i, all) => ({ key: "team", html: teamRowHtml(l, i === all.findIndex((x) => !x.removed) ? t("The team's lead can see the catalogs this desk uses, their content included, and this desk's changes to them. The lead's Studio can take a copy of any of them at any time, without asking here: of a team catalog, one the lead publishes to the team, sealed for the team; of a personal catalog, any other on this desk, sealed for the lead alone. A personal catalog can be marked Private in the Library, under Catalog & data; the lead then sees nothing of it, not even that it is used. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses unless that catalog is Private, and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, none of them from a Private catalog, and Studio shows them in the team's totals.") : "", i === all.findIndex((x) => !x.policy)) }));
     const policySaid = teamPolicySaid();
     if (policySaid.length) rows.unshift({ key: "teampolicy", html: '<div class="set-row" data-row="teampolicy">' + sxIcon("desks") + '<div class="set-label">' + esc(t("Team")) + policySaid.map((l) => "<small>" + esc(l) + "</small>").join("") + "</div></div>" });
-    if (eHasShared() && !relayDesk()) rows.push(row(
-      "sharededit",
-      "teams",
-      t("Edit the shared catalog file directly"),
-      t("For a team that keeps its catalog without Studio: each change is written into the catalog file in the shared folder. A catalog file the team's lead signed is never touched."),
-      onoff(
-        "sharededit",
-        lsGet("eSharedEdit") === "1",
-        t("Each change goes into the shared catalog file; where a teammate changed the same text first, theirs stays and yours waits in this desk's own file"),
-        t("Each change stays in this desk's own file")
-      )
-    ));
     return rows.length ? [{ rows }] : [];
   }
   function aiWords(st, builtin, organisation) {
@@ -43997,11 +43593,6 @@ What is typed here stays in this browser.`;
             else lsSet("eDeckOff", "1");
             syncDeck();
             toast(on ? t("Replies stack behind the first") : t("Replies laid out one below the other"));
-          } else if (seg3 === "sharededit") {
-            if (on) lsSet("eSharedEdit", "1");
-            else lsDel("eSharedEdit");
-            hooks.syncSampleMark();
-            toast(on ? t("From now on, changes go into the shared catalog file") : t("From now on, changes stay in this desk's own file"));
           } else if (seg3 === "aisuggest") {
             if (on) lsDel(E_AI_OFF_KEY);
             else lsSet(E_AI_OFF_KEY, "1");
@@ -44154,7 +43745,6 @@ What is typed here stays in this browser.`;
       "eFactsH",
       "eEdPlace",
       "eCollapsed",
-      "eSharedEdit",
       E_HOTKEY_KEY,
       "eQuitOnClose",
       "eNotifyEditionOff",
@@ -47768,7 +47358,7 @@ What is typed here stays in this browser.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, card_flag_exports, card_flag_desk_exports, card_share_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_margin_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, launch_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_history_exports, catalog_merge_exports, team_join_exports, edition_changes_exports, edition_panel_exports, desk_look_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, variables_exports, gender_drum_exports, gender_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, card_reword_exports, deck_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, next_dock_exports, lanes_exports, edition_marks_exports, screen_tabs_exports, search_meaning_exports, org_model_exports, proxy_ask_exports);
+  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, card_flag_exports, card_flag_desk_exports, card_share_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_margin_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, launch_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_history_exports, team_join_exports, edition_changes_exports, edition_panel_exports, desk_look_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, variables_exports, gender_drum_exports, gender_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, card_reword_exports, deck_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, next_dock_exports, lanes_exports, edition_marks_exports, screen_tabs_exports, search_meaning_exports, org_model_exports, proxy_ask_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });

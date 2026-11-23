@@ -1,0 +1,210 @@
+/* No desk writes into a catalog file on a share, in bare node: shell/main.js under a stubbed electron over a catalog folder,
+ * and shell/preload.js over a stub of the bridge. A desk reads the catalog folder, works from its own copy, and holds no lock
+ * beside a catalog, no shared read or write for the page, a put-back only over a file it wrote, and no setting to turn any of them on. The page's half (the Settings row) is held in
+ * tests/module-calls.mjs, and the desk's own file under a setting left on from an older build in tests/card-flag.mjs (nsfe7).
+ *
+ *   node tests/shared-file-gone.mjs      exit code is the number of failed checks, capped at 63
+ */
+process.removeAllListeners("warning");
+process.on("warning", () => {});
+import crypto from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const nodeRequire = createRequire(import.meta.url);
+nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
+/* The floor: every leg below runs, or the file says it did not complete. */
+const EXPECTED = 12;
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
+
+let asserted = 0, failed = 0, skipped = 0;
+function check(ok, line) {
+  asserted++;
+  if (ok) console.log("  ok   " + line);
+  else { failed++; console.log("  FAIL " + line); }
+}
+const sha = buf => crypto.createHash("sha256").update(buf).digest("hex");
+
+const BASE = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-sharedgone-"));
+const UD = path.join(BASE, "user-data"), DOCS = path.join(BASE, "documents"), FOLDER = path.join(DOCS, "Etiuda");
+[UD, FOLDER].forEach(d => fs.mkdirSync(d, { recursive: true }));
+
+const quiet = { log: () => {}, error: () => {}, warn: () => {} };
+const noop = () => {};
+const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
+const safeStorage = {
+  isEncryptionAvailable: () => true,
+  encryptString: s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)),
+  decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
+};
+function boot(src) {
+  const on = {}, handle = {}, test = {};
+  const electron = {
+    app: { getPath: n => (n === "documents" ? DOCS : UD), setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop,
+           getVersion: () => "0.0.0", whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
+    ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { handle[ch] = fn; } },
+    BrowserWindow: inert, Menu: inert, dialog: inert, net: inert, protocol: inert, session: inert,
+    screen: inert, shell: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" }, safeStorage: safeStorage,
+  };
+  process.env.XDG_CURRENT_DESKTOP = "GNOME"; /* so the shell's Linux keyring switch (tests/shell-office.mjs 14) stays out, on any machine */
+  new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
+    (src || fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8"))
+    + "\n__test.keepHist = function(file, text, wrote) { return historyKeep(file, text, !!wrote); };")(
+    n => (n === "electron" ? electron : nodeRequire(n)), path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"),
+    { exports: {} }, {}, quiet, test);
+  const ev = { sender: { id: 1, once: noop }, senderFrame: { parent: null, url: "file:///C:/lab/engine/etiuda.html" } };
+  return {
+    test: test, handles: ch => typeof handle[ch] === "function",
+    ask: (ch, ...a) => (handle[ch] ? Promise.resolve(handle[ch](ev, ...a)) : Promise.resolve(undefined)),
+  };
+}
+function catalog(id, rev, word) {
+  return JSON.stringify({
+    format: 2, kind: "etiuda-catalog", id: id, rev: rev, date: "2026-10-0" + Math.min(rev, 9),
+    langs: [{ code: "en", label: "EN" }], tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers" } }],
+    cards: ["a", "b"].map(x => ({ id: "c-" + x, shelf: "t-op", bodyShape: "plain", title: { en: word + " " + x }, body: { en: "Body " + x + "." } }))
+  }, null, 1) + "\n";
+}
+const listing = dir => { try { return fs.readdirSync(dir).sort(); } catch { return []; } };
+
+try {
+  const SHOP = path.join(FOLDER, "shop.ec"), LOCK = SHOP + ".lock";
+  const older = catalog("shop", 5, "Older one"), current = catalog("shop", 6, "Current one");
+  fs.writeFileSync(SHOP, current);
+  const A = boot();
+
+  /* nsfe1 and nsfe2: the shell answers no shared read and no shared write, whoever asks and whatever the file. */
+  const read = await A.ask("etiuda:shared-read", "shop.ec", "");
+  const wrote = await A.ask("etiuda:shared-write", "shop.ec", catalog("shop", 7, "Edited"), sha(Buffer.from(current)), false);
+  check(!A.handles("etiuda:shared-read") && !A.handles("etiuda:shared-write") && read === undefined && wrote === undefined
+    && fs.readFileSync(SHOP, "utf8") === current && listing(FOLDER).join() === "shop.ec",
+    "nsfe1 the shell has no shared read and no shared write: neither channel is handled, the catalog's bytes are as they were and nothing sits beside it ("
+    + JSON.stringify({ read: read, wrote: wrote, folder: listing(FOLDER) }) + ")");
+
+  /* nsfe2: the page's bridge offers neither verb, so a page that still asked would find nothing to ask. */
+  const exposed = {};
+  const was = { window: globalThis.window, document: globalThis.document };
+  globalThis.window = { addEventListener: () => {}, removeEventListener: () => {} };
+  globalThis.document = { visibilityState: "visible", addEventListener: () => {}, removeEventListener: () => {} };
+  try {
+    const ipcRenderer = { sendSync: ch => (ch === "etiuda:host" ? { platform: "win32", backdrop: null } : null), send: noop, invoke: () => Promise.resolve(null), on: noop };
+    new Function("require", fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8"))(n => (n === "electron"
+      ? { contextBridge: { exposeInMainWorld: (k, v) => { exposed[k] = v; }, executeInMainWorld: noop }, ipcRenderer, webUtils: {} } : nodeRequire(n)));
+  } finally { globalThis.window = was.window; globalThis.document = was.document; }
+  const host = exposed.E_HOST || {};
+  check(typeof host.historyList === "function" && typeof host.historyRead === "function" && typeof host.historyPut === "function"
+    && typeof host.sharedRead === "undefined" && typeof host.sharedWrite === "undefined",
+    "nsfe2 the bridge offers the history's list, read and put-back, and no shared read and no shared write ("
+    + JSON.stringify({ list: typeof host.historyList, read: typeof host.historyRead, put: typeof host.historyPut, sharedRead: typeof host.sharedRead, sharedWrite: typeof host.sharedWrite }) + ")");
+
+  /* nsfe3: a put-back on a plain shared folder leaves the shared file byte for byte. The file holds bytes this desk only read, which
+     somebody else wrote, so the shell answers no and writes nothing, with another desk's lock file beside the catalog or none. */
+  A.test.keepHist(SHOP, older);
+  A.test.keepHist(SHOP, current);
+  const listed = ((await A.ask("etiuda:history-list")) || []).filter(v => v.path === path.resolve(SHOP));
+  const olderRow = listed.find(v => v.sha === sha(Buffer.from(older)));
+  const opened = olderRow ? await A.ask("etiuda:history-read", olderRow.sha, SHOP) : null;
+  const foreign = JSON.stringify({ kind: "etiuda-lock", token: "another-desk", at: Date.now() });
+  fs.writeFileSync(LOCK, foreign);
+  const beside = await A.ask("etiuda:history-put", sha(Buffer.from(older)), SHOP);
+  const left = fs.existsSync(LOCK) && fs.readFileSync(LOCK, "utf8") === foreign;
+  fs.unlinkSync(LOCK);
+  const free = await A.ask("etiuda:history-put", sha(Buffer.from(older)), SHOP);
+  check(!!beside && beside.ok === false && !!free && free.ok === false && left && fs.readFileSync(SHOP, "utf8") === current && listing(FOLDER).join() === "shop.ec",
+    "nsfe3 a put-back on a plain shared folder, over bytes this desk did not write, leaves the shared file byte for byte, with another desk's lock beside it or none, and leaves that lock as it was ("
+    + JSON.stringify({ beside: beside, free: free, lockLeft: left, folder: listing(FOLDER) }) + ")");
+
+  /* nsfe4: THE CONTROL: the history lists the older version, offers it, and opens it as its own catalog text; and the row says the file is not this desk's. */
+  check(!!olderRow && olderRow.put === true && !!opened && opened.text === older.trim(),
+    "nsfe4 THE CONTROL: the older version is listed, offered, and opens as its own catalog text (" + JSON.stringify({ rows: listed.length, put: olderRow && olderRow.put }) + ")");
+  check(!!olderRow && olderRow.mine === false,
+    "nsfe4b a file whose bytes this desk only read is not the desk's own: its rows say mine false (" + JSON.stringify(olderRow && olderRow.mine) + ")");
+
+  /* nsfe3b and nsfe3c: where the bytes in the file are ones this desk wrote (an export, its last put-back), the put-back is as it was: in place, the bytes it
+     replaces kept and named, no lock taken or waited for, and the same asked again with those bytes is the Undo. */
+  A.test.keepHist(SHOP, current, true);
+  const mineRow = ((await A.ask("etiuda:history-list")) || []).find(v => v.path === path.resolve(SHOP) && v.sha === sha(Buffer.from(older)));
+  fs.writeFileSync(LOCK, foreign);
+  const put = await A.ask("etiuda:history-put", sha(Buffer.from(older)), SHOP);
+  const lockHeld = fs.existsSync(LOCK) && fs.readFileSync(LOCK, "utf8") === foreign;
+  fs.unlinkSync(LOCK);
+  check(!!mineRow && mineRow.mine === true && !!put && put.ok === true && fs.readFileSync(SHOP, "utf8") === older && put.replaced === sha(Buffer.from(current)) && lockHeld,
+    "nsfe3b over bytes this desk wrote, the put-back goes in place, names the bytes it replaced, and neither takes nor waits for a lock ("
+    + JSON.stringify({ mine: mineRow && mineRow.mine, put: put, lockHeld: lockHeld }) + ")");
+  const undo = await A.ask("etiuda:history-put", put ? put.replaced : "", SHOP);
+  check(!!undo && undo.ok === true && fs.readFileSync(SHOP, "utf8") === current && listing(FOLDER).join() === "shop.ec",
+    "nsfe3c and those bytes go back the same way, which is the Undo, and nothing is left beside the catalog (" + JSON.stringify({ undo: undo, folder: listing(FOLDER) }) + ")");
+
+  /* nsfe3p: lifting plant:put-back-own, in a scratch copy of shell/main.js, lets the put-back write over a file this desk only read. */
+  if (PLANTS_OFF) { skipped++; console.log("  SKIP  nsfe3p lifting plant:put-back-own turns nsfe3 red (ETIUDA_PLANTS=off)"); }
+  else {
+    const lines = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8").split("\n");
+    const hit = lines.map((l, i) => (l.indexOf("plant:put-back-own") >= 0 ? i : -1)).filter(i => i >= 0);
+    let turned = null;
+    if (hit.length === 1) {
+      lines[hit[0]] = "";
+      const PL = path.join(FOLDER, "planted.ec"), p1 = catalog("planted", 1, "Before"), p2 = catalog("planted", 2, "After");
+      fs.writeFileSync(PL, p2);
+      const P = boot(lines.join("\n"));
+      P.test.keepHist(PL, p1);
+      P.test.keepHist(PL, p2);
+      const r = await P.ask("etiuda:history-put", sha(Buffer.from(p1)), PL);
+      turned = { wrote: !!r && r.ok === true && fs.readFileSync(PL, "utf8") === p1 };
+      fs.unlinkSync(PL);
+    }
+    check(!!turned && turned.wrote === true, "nsfe3p lifting plant:put-back-own turns nsfe3 red: a file this desk only read is written over (" + JSON.stringify(turned) + ")");
+  }
+
+  /* nsfe3d: a file this desk wrote and somebody else has since changed is no longer its own. The desk keeps A with wrote, B is written from outside, and a
+     put-back of an earlier version answers notOwn, leaves B byte for byte, and the list says mine false. The plant lifts the own check over that file too (nsfe3q). */
+  const CH = path.join(FOLDER, "changed.ec"), c0 = catalog("changed", 1, "First"), cA = catalog("changed", 2, "Mine"), cB = catalog("changed", 3, "Theirs");
+  const changedScene = async (desk, file) => {
+    fs.writeFileSync(file, cA);
+    desk.test.keepHist(file, c0);
+    desk.test.keepHist(file, cA, true);
+    fs.writeFileSync(file, cB);
+    const row = ((await desk.ask("etiuda:history-list")) || []).find(v => v.path === path.resolve(file) && v.sha === sha(Buffer.from(c0)));
+    const r = await desk.ask("etiuda:history-put", sha(Buffer.from(c0)), file);
+    return { row: row && row.mine, put: r, kept: fs.readFileSync(file, "utf8") === cB };
+  };
+  const chg = await changedScene(A, CH);
+  check(chg.row === false && !!chg.put && chg.put.ok === false && chg.put.notOwn === true && chg.kept,
+    "nsfe3d a file this desk wrote and somebody else has since changed is not its own: mine false, the put-back answers notOwn, and the other's bytes are intact (" + JSON.stringify(chg) + ")");
+  fs.unlinkSync(CH);
+  if (PLANTS_OFF) { skipped++; console.log("  SKIP  nsfe3q lifting plant:put-back-own turns nsfe3d red (ETIUDA_PLANTS=off)"); }
+  else {
+    const lines = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8").split("\n");
+    const hit = lines.map((l, i) => (l.indexOf("plant:put-back-own") >= 0 ? i : -1)).filter(i => i >= 0);
+    let red = null;
+    if (hit.length === 1) {
+      lines[hit[0]] = "";
+      red = await changedScene(boot(lines.join("\n")), CH);
+      fs.unlinkSync(CH);
+    }
+    check(!!red && !!red.put && red.put.ok === true && red.kept === false, "nsfe3q lifting plant:put-back-own turns nsfe3d red: the other's bytes are written over (" + JSON.stringify(red) + ")");
+  }
+
+  /* nsfe5: no source of the shell takes a lock beside a catalog, by the name the lock was kept under. */
+  const main = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
+  check(main.indexOf("etiuda-lock") < 0 && main.indexOf('file + ".lock"') < 0 && main.indexOf("sharedLock") < 0,
+    "nsfe5 shell/main.js names no lock kept beside a catalog and takes none");
+
+  /* nsfe6: no channel of the shell writes a catalog into the catalog folder on the page's asking. */
+  const preload = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
+  check(preload.indexOf("etiuda:shared-") < 0 && main.indexOf("etiuda:shared-") < 0 && preload.indexOf("etiuda:history-put") >= 0 && main.indexOf("etiuda:history-put") >= 0,
+    "nsfe6 neither shell file names a shared-read or shared-write channel, and both name the history's put-back");
+} catch (e) {
+  failed++;
+  console.log("  FAIL the run stopped: " + (e && e.stack || e));
+}
+
+const complete = asserted + skipped >= EXPECTED;
+if (!complete) console.log("  FAIL only " + asserted + " of " + EXPECTED + " legs ran");
+console.log("#counts legs=" + asserted + " expected=" + EXPECTED);
+console.log((failed || !complete ? "FAIL" : "ok") + " shared file gone: " + (asserted - failed) + " of " + asserted + " legs green");
+try { fs.rmSync(BASE, { recursive: true, force: true }); } catch { /* the temp folder goes with the system's own sweep */ }
+process.exit(Math.min(63, failed + (complete ? 0 : 1)));

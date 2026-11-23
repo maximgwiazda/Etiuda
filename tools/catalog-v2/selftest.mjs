@@ -316,18 +316,6 @@ const SHOP = () => ({
   check('39c and converts with it, since the tool is run offline over the owner is own file',
     evald.status === 0 && JSON.parse(readFileSync(join(dir, 'b2.ec'), 'utf8')).cards.length === 1,
     'exit ' + evald.status);
-  const js = join(dir, 'sibling.js');
-  const both = spawnSync(process.execPath, [cli, src, '--out', join(dir, 'two.ec'), '--js', js], { encoding: 'utf8' });
-  const wrapped = both.status === 0 && existsSync(js);
-  check('40 --js writes the same catalog behind window.E_CATALOG, for a page on file://',
-    wrapped && /window\.E_CATALOG = /.test(readFileSync(js, 'utf8')), 'exit ' + both.status);
-  const samp = join(dir, 'in-sample.js');
-  writeFileSync(samp, 'window.PB_SAMPLE = ' + JSON.stringify(SHOP()) + ';' + NL, 'utf8');
-  const sj = join(dir, 'sample.js');
-  const s = spawnSync(process.execPath, [cli, samp, '--out', join(dir, 'sample.ec'), '--js', sj,
-    '--global', 'E_SAMPLE'], { encoding: 'utf8' });
-  check('40b the sample arrived under its own global and leaves under its own global',
-    s.status === 0 && /window\.E_SAMPLE = /.test(readFileSync(sj, 'utf8')), 'exit ' + s.status);
   const rev = spawnSync(process.execPath, [cli, src, '--out', join(dir, 'r.ec'), '--rev', '4'], { encoding: 'utf8' });
   check('40c --rev is how a second edition stops claiming to be the first',
     rev.status === 0 && JSON.parse(readFileSync(join(dir, 'r.ec'), 'utf8')).rev === 4, 'exit ' + rev.status);
@@ -388,7 +376,7 @@ const SHOP = () => ({
 }
 
 // THE ORACLE, and the whole of board item 487: the format 1 sample this repository publishes,
-// through the command, to both the files it writes. It carries a provenance key on every card,
+// through the command, to the file it writes. It carries a provenance key on every card,
 // a greeting table and a comment language, and until those three were carried it came back with
 // 31 unexpected differences and the tool refused to write anything at all.
 {
@@ -396,15 +384,13 @@ const SHOP = () => ({
   const cli = join(HERE, 'convert.mjs');
   const v1 = join(HERE, '..', '..', 'v1', 'sample-catalog.js');
   const ec = join(dir, 'sample.ec');
-  const js = join(dir, 'sample.js');
-  const run = spawnSync(process.execPath, [cli, v1, '--eval', '--out', ec, '--js', js, '--global', 'E_SAMPLE'],
-    { encoding: 'utf8' });
-  const wrote = run.status === 0 && existsSync(ec) && existsSync(js);
+  const run = spawnSync(process.execPath, [cli, v1, '--eval', '--out', ec], { encoding: 'utf8' });
+  const wrote = run.status === 0 && existsSync(ec);
   const cat = wrote ? JSON.parse(readFileSync(ec, 'utf8')) : { cards: [] };
   const inCtx = { window: {} };
   runInNewContext(readFileSync(v1, 'utf8'), inCtx);
   const had = inCtx.window.PB_SAMPLE || { cards: [] };
-  check('47 the published format 1 sample converts with nothing unexpected at either door',
+  check('47 the published format 1 sample converts with nothing unexpected',
     wrote && /differs nowhere this converter did not choose/.test(run.stdout),
     'exit ' + run.status + ' ' + JSON.stringify((run.stdout + run.stderr).trim().split(NL).slice(-1)[0]));
   check('47b and everything it carries is in what was written: every card, a src wherever the file'

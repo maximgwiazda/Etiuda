@@ -219,11 +219,6 @@ if (KEYRING_SWITCH) {
 
 const ENGINE = path.join(__dirname, "..", "engine", "etiuda.html");
 
-/* The container is not the format: `.ec` is the catalog document, and the `.js` beside it is
-   that same JSON behind a `window.E_CATALOG =` line, which is what a page on file:// can load
-   as a sibling script. The document is found by its EXTENSION and the script by its one fixed
-   name, because a browser's script tag has to name its sibling and an installed desk does not. */
-const CATALOG_SCRIPT = "etiuda-catalog.js";
 const CATALOG_FOLDER_KEY = "eCatalogFolder";
 
 /* THE CATALOG FOLDER: one folder of the desk's own, where a deployment drops an edition and the
@@ -380,14 +375,13 @@ function ecFilesIn(dir) {
 }
 /* Nearest first: the catalog folder, then the user-data folder, which a packaged copy can write
    to, then the folder the app was installed into, which is where a catalog sits while 2.x is
-   being built. The documents before the script in each, so a folder holding both boots from the
-   one a person edited. */
+   being built. */
 function catalogFolders() {
   return [catalogFolder(), app.getPath("userData"), path.join(__dirname, "..")];
 }
 function catalogPlaces() {
   return (openedWith ? [openedWith] : []).concat(sampleLast(catalogFolders().filter(folderAnswers).reduce((out, dir) =>
-    out.concat(ecFilesIn(dir), [path.join(dir, CATALOG_SCRIPT)]), []).concat(builtInFiles())));
+    out.concat(ecFilesIn(dir)), []).concat(builtInFiles())));
 }
 
 /* A .ec OPENED FROM THE DESKTOP: the installer registers the extension, so Windows starts Etiuda
@@ -661,7 +655,7 @@ function keptCopyName(canonical, name) {
 function isCatalogName(name) {
   const n = path.basename(String(name || ""));
   /* The head is named with the files the watch already hears, so a landing reaches Settings. */
-  return /\.ec$/i.test(n) || n === CATALOG_SCRIPT || n === SPAN_NAME || n === TEAM_NAME || n === JOINS_NAME
+  return /\.ec$/i.test(n) || n === SPAN_NAME || n === TEAM_NAME || n === JOINS_NAME
     || n === PAUSE_NAME || n === "etiuda-head.json" || conflictSiblingName(TEAM_NAME, n);
 }
 
@@ -3132,8 +3126,7 @@ function envelopeTeam(file, pin) {
    pin under two teams; else null. Which envelope was read first does not decide it. An edition not opened in this run
    is looked for among the folder's catalogs first. A desk the covering file leaves off its roster is out, at any epoch.
    A covering file whose epoch is not the newest key this desk keeps, or a key older than an epoch already heeded, is out, so a move of the epoch cannot be sealed under the key it left behind.
-   A key already kept stays, and a seal made with it still opens. `plain` is the covering file's exportsSealed set false.
-   An empty pin is a shared write: the folder's team, where its file lists the catalog and seals what it exports. */
+   A key already kept stays, and a seal made with it still opens. `plain` is the covering file's exportsSealed set false. */
 function sealFor(catalogId, pin, root) {
   heedTeam();
   const asked = String(pin || "");
@@ -3149,14 +3142,6 @@ function sealFor(catalogId, pin, root) {
   if (asked && cover && !pinsTorn(root, asked)) {
     const held = editionTeams.get(asked);
     if (held && held.has(String(cover.id))) team = String(cover.id);
-  }
-  /* An empty pin asks for the folder's team, and only where that file lists the catalog and seals its exports. */
-  if (!asked) {
-    const folderTeam = teamCovering(root, catalogId);
-    if (folderTeam && folderTeam.sealed === true && folderTeam.exportsSealed !== false) {
-      cover = folderTeam;
-      team = String(folderTeam.id);
-    }
   }
   if (!cover || cover.id !== team) return null;
   const kept = teamKeys[team] || {};
@@ -8065,8 +8050,15 @@ function historyFind(sha, file) {
 /* What may be put back, and what may be put back over: a catalog with no signature and no seal. The desk never writes a
    catalog somebody signed, nor writes over one. */
 function historyFree(v) { return !!v && !v.signed && !v.sealed && v.cards >= 0; }
+/* Whether the file at `at` is this desk's own: the bytes it holds now (`sha`, "" where there is no file) are a version this desk wrote there,
+   kept with `wrote`, which is set only by a write of this desk's and never by a read; a file nobody of this desk wrote, or changed since by
+   somebody else, is not. A missing file is the desk's own where the desk wrote one there before. */
+function historyOwns(versions, at, sha) {
+  const wrote = versions.filter(x => x.path === at && x.wrote);
+  return sha ? wrote.some(x => x.sha === sha) : wrote.length > 0;
+}
 /* Every version, for the page: where it sits (the catalog folder, this desk's own folder, or elsewhere), whether the file
-   there holds it now, and whether it may be put back there. */
+   there holds it now, whether it may be put back there, and whether that file is this desk's own (mine). */
 function historyView() {
   // Resolved as the history resolves each file it keeps, so a folder setting with another spelling still matches.
   const root = path.resolve(catalogFolder()), up = folderAnswers(catalogFolder());
@@ -8081,7 +8073,8 @@ function historyView() {
     }
     return now.get(file);
   };
-  return historyRead().versions.map(v => {
+  const kept = historyRead().versions;
+  return kept.map(v => {
     const dir = v.path ? path.dirname(v.path) : "";
     const place = !v.path ? "" : dir === root ? "folder" : own && dir === own ? "own" : "other";
     const held = (place === "folder" || place === "own") && up ? there(v.path) : null;
@@ -8089,7 +8082,8 @@ function historyView() {
     return { sha: v.sha, path: v.path, name: v.path ? path.basename(v.path) : "", dir: dir, place: place, first: v.first, last: v.last,
       wrote: !!v.wrote, id: v.id || "", rev: +v.rev || 0, date: v.date || "", cards: +v.cards, macros: +v.macros, intents: +v.intents,
       cats: +v.cats, signed: !!v.signed, sealed: !!v.sealed, current: current,
-      put: place === "folder" && !relayHere() && !current && !!held && held.free && historyFree(v) && /\.ec$/i.test(v.path) };
+      put: place === "folder" && !relayHere() && !current && !!held && held.free && historyFree(v) && /\.ec$/i.test(v.path),
+      mine: place === "folder" && !!held && historyOwns(kept, v.path, held.sha) };
   });
 }
 /* A kept version's catalog for the page, opened where it is sealed and this desk holds the key; "" where it is not. */
@@ -8112,26 +8106,22 @@ function historyOpen(sha, file) {
 }
 /* Writes a kept version back over its file in the catalog folder, by the rule at historyFree and only after the bytes it
    replaces are kept themselves: `replaced` names them, so the page can offer them back. The kept bytes are judged as they
-   are written, whatever the index says of them, and the write is sharedWrite's: under the lock beside the file, {busy}
-   while another desk holds it. */
+   are written, whatever the index says of them. Only over a file that is this desk's own (historyOwns): a file somebody else
+   wrote or changed is no place for this desk to write, and no lock is taken. A relay mirror is not written either. */
 function historyPutBack(sha, file) {
-  if (relayHere()) return { ok: false }; /* See sharedWrite. */
+  if (relayHere()) return { ok: false };
   const v = historyFind(sha, file), root = path.resolve(catalogFolder());
   if (!v || !historyFree(v) || !v.path || path.dirname(v.path) !== root || !/\.ec$/i.test(v.path) || !folderAnswers(catalogFolder())) return { ok: false };
-  let held = null;
-  try { held = sharedLock(v.path); }
-  catch (e) { console.error("etiuda: the lock beside " + v.path + " could not be taken - " + e.message); return { ok: false, busy: true }; }
-  if (!held) return { ok: false, busy: true };
   try {
     const text = historyText(v.sha);
     if (!historyFree(historyFacts(text))) return { ok: false }; /* plant:put-back-bytes */
     let was = "";
     try { was = fs.readFileSync(v.path, "utf8"); } catch (e) { if (e.code !== "ENOENT") throw e; }
+    if (!historyOwns(historyRead().versions, path.resolve(v.path), was ? sha256Hex(Buffer.from(was, "utf8")) : "")) return { ok: false, notOwn: true }; /* plant:put-back-own */
     if (was && sha256Hex(Buffer.from(was, "utf8")) === v.sha) return { ok: true, unchanged: true };
     if (was && !historyFree(historyFacts(was))) return { ok: false };
     const before = historyKeepFile(v.path);
     if (!before) return { ok: false };
-    if (held && !sharedHolds(held)) return { ok: false, busy: true };
     writeReplacing(v.path, text);
     historyKeep(v.path, text, true);
     console.log("etiuda: " + v.path + " was put back as this desk kept it");
@@ -8139,158 +8129,6 @@ function historyPutBack(sha, file) {
   } catch (e) {
     console.error("etiuda: " + v.path + " could not be put back - " + e.message);
     return { ok: false };
-  } finally {
-    if (held && sharedHolds(held)) { try { fs.unlinkSync(held.lock); } catch { /* stale in SHARED_LOCK_MS */ } }
-  }
-}
-
-/* ---- editing the shared catalog directly: the host's half -----------------------------------------------------------
-   The page merges (src/modules/catalog-merge.js) and this reads and writes, so a desk's write is a compare and swap: the
-   file is read with the SHA-256 of its bytes and written only while it still holds those bytes, under a lock file beside
-   it taken by exclusive create. Only a catalog with no signature and no seal is read for this. A write into a sealed
-   team's share is sealed, or refused; any other write is unsigned and unsealed. The bytes a write replaces are kept
-   in the history first. */
-// A lock this old is a desk that stopped mid-write, and is taken over.
-const SHARED_LOCK_MS = 30 * 1000;
-function sharedFile(name) {
-  const base = String(name || ""), root = catalogFolder();
-  if (!base || base !== path.basename(base) || !/\.ec$/i.test(base) || !folderAnswers(root)) return "";
-  return path.resolve(root, base);
-}
-/* The canonical file a conflict copy was made from, when that file is in the same folder.
-   The longest stem wins, so a shorter name cannot claim a tail that is not its own. "" where
-   the name is not a conflict copy, or no canonical file sits beside it, and that only copy can still be written. */
-function canonicalEditionName(name) {
-  const base = path.basename(String(name || ""));
-  if (!base || !isConflictName(base)) return "";
-  const root = catalogFolder();
-  if (!root || !folderAnswers(root)) return "";
-  let names = [];
-  try { names = fs.readdirSync(root); } catch { return ""; }
-  let best = "";
-  for (let i = 0; i < names.length; i++) {
-    const n = names[i];
-    if (n === base || isConflictName(n)) continue;
-    if (!conflictSiblingName(n, base)) continue;
-    if (n.length > best.length) best = n;
-  }
-  return best;
-}
-/* A direct edit named as a conflict copy reads and writes the canonical file, so the compare
-   hash and the bytes are the same file. Without the plant the name is used as it was given. */
-function editionWriteName(name) {
-  const base = path.basename(String(name || ""));
-  let chosen = base;
-  chosen = canonicalEditionName(base) || chosen; /* plant:direct-canon-name */
-  return chosen || base;
-}
-/* The edition the layer grew from, as the file held it: the file itself while it is that edition, else the copy the
-   history kept, seen again as it is used so the history does not let it go while a desk still merges against it. */
-function sharedBase(file, text, pin) {
-  if (!pin) return "";
-  let id = "";
-  try { const d = catalogPayload(text).data; if (signedSha(d) === pin) return text; id = String(d.id); } catch { /* none there */ }
-  const versions = historyRead().versions.filter(v => !v.sealed && (v.path === file || (!!id && v.id === id)))
-    .sort((a, b) => (b.path === file) - (a.path === file) || b.last - a.last);
-  for (const v of versions) {
-    try {
-      const kept = historyText(v.sha);
-      if (signedSha(catalogPayload(kept).data) !== pin) continue;
-      historyKeep(v.path, kept, false);
-      return kept;
-    } catch { /* a copy that does not open */ }
-  }
-  return "";
-}
-/* {text, sha, free, base}, text and sha "" where there is no file yet; null where the folder does not answer or the
-   file will not read. `free` is false for a signed or sealed file or edition, and nothing of either is handed then. */
-function sharedRead(name, pin) {
-  if (relayHere()) return null; /* See sharedWrite. */
-  const file = sharedFile(editionWriteName(name));
-  if (!file) return null;
-  let text = "";
-  try { text = fs.readFileSync(file, "utf8"); }
-  catch (e) { if (e.code !== "ENOENT") return null; }
-  return sharedReadOf(file, text, pin);
-}
-function sharedReadOf(file, text, pin) {
-  const base = sharedBase(file, text, String(pin || ""));
-  const free = (!text || historyFree(historyFacts(text))) && (!base || historyFree(historyFacts(base)));
-  return { text: free ? text : "", sha: text ? sha256Hex(Buffer.from(text, "utf8")) : "", free: free, base: free ? base : "" };
-}
-/* {lock, token} once this desk holds the lock, else null. A stale lock is moved aside before it is taken, so of two
-   desks taking over one only one succeeds; a share that lies about either is caught by the compare before the write. */
-function sharedLock(file) {
-  const lock = file + ".lock", token = crypto.randomBytes(16).toString("hex");
-  const take = () => {
-    const fd = fs.openSync(lock, "wx");
-    try { fs.writeSync(fd, JSON.stringify({ kind: "etiuda-lock", token: token, at: Date.now() })); } finally { fs.closeSync(fd); }
-  };
-  try { take(); return { lock: lock, token: token }; }
-  catch (e) { if (e.code !== "EEXIST") throw e; }
-  let st = null;
-  try { st = fs.statSync(lock); } catch { /* let go meanwhile */ }
-  if (st && Date.now() - st.mtimeMs <= SHARED_LOCK_MS) return null;
-  if (st) {
-    const aside = lock + "." + token + ".stale";
-    try { renamePatiently(lock, aside); } catch { return null; }
-    try { fs.unlinkSync(aside); } catch { /* left beside it */ }
-  }
-  try { take(); return { lock: lock, token: token }; }
-  catch (e) { if (e.code === "EEXIST") return null; throw e; }
-}
-function sharedHolds(held) {
-  try { return JSON.parse(fs.readFileSync(held.lock, "utf8")).token === held.token; } catch { return false; }
-}
-/* The folder's team file, whole under the lead this desk pinned, says its catalogs stay sealed. */
-/* The catalog in these bytes is private here, as the statistics and the working copy judge it. */
-function sharedCatalogPrivate(data) {
-  if (!data || typeof data !== "object") return false;
-  const use = teamUse();
-  return use.member && use.seal ? privateHere(data, use) : catalogMarkedPrivate(data);
-}
-/* Writes the page's merged catalog over the file it read, answered {ok, rev}, or {changed} where the file is no longer
-   the one read, {busy} where another desk holds the lock, {taken} where a file to be created is already there, and
-   {refused} for a signed or sealed catalog on either side. A relay mirror is refused outright, since a write there would stay on
-   this desk, and so is a folder holding a team's file: no team works through a folder, so the change stays in the desk's own file. */
-function sharedWrite(name, text, sha, create) {
-  if (relayHere()) return { ok: false, refused: true };
-  const file = sharedFile(editionWriteName(name));
-  text = String(text || "");
-  if (!file || !text || text.length > BRANCH_TEXT_MAX) return { ok: false };
-  let data = null;
-  try { data = catalogPayload(text).data; } catch { return { ok: false }; }
-  if (!isV2(data) || !historyFree(historyFacts(text))) return { ok: false, refused: true };
-  /* A catalog marked private is not written into the shared file: the lead and every teammate can open it. */
-  if (sharedCatalogPrivate(data)) return { ok: false, refused: true, private: true }; /* plant:pcm-shared-private */
-  const root = catalogFolder();
-  if (fs.existsSync(path.join(root, TEAM_NAME))) return { ok: false, refused: true, sealed: true }; /* plant:shared-team-folder */
-  const seal = sealFor(String(data.id || ""), "", root);
-  if (seal && !seal.plain) {
-    try { text = JSON.stringify(sealCatalog(seal.key, seal.team, seal.epoch, text), null, 1) + "\n"; }
-    catch { return { ok: false, refused: true, sealed: true }; }
-  }
-  let held = null;
-  try { held = sharedLock(file); }
-  catch (e) { console.error("etiuda: the lock beside " + file + " could not be taken - " + e.message); }
-  if (!held) return { ok: false, busy: true };
-  try {
-    let now = "";
-    try { now = fs.readFileSync(file, "utf8"); } catch (e) { if (e.code !== "ENOENT") throw e; }
-    if (create && now) return { ok: false, taken: true };
-    if (!create && (!now || sha256Hex(Buffer.from(now, "utf8")) !== String(sha || ""))) return { ok: false, changed: true };
-    if (now && !historyFree(historyFacts(now))) return { ok: false, refused: true };
-    if (now && !historyKeepFile(file)) return { ok: false, busy: true };
-    if (!sharedHolds(held)) return { ok: false, changed: true };
-    writeReplacing(file, text);
-    historyKeep(file, text, true);
-    console.log("etiuda: " + file + " now holds this desk's changes, rev " + (+data.rev || 0));
-    return { ok: true, rev: +data.rev || 0 };
-  } catch (e) {
-    console.error("etiuda: " + file + " could not be written - " + e.message);
-    return { ok: false, busy: true };
-  } finally {
-    if (sharedHolds(held)) { try { fs.unlinkSync(held.lock); } catch { /* stale in SHARED_LOCK_MS */ } }
   }
 }
 
@@ -9834,9 +9672,6 @@ ipcMain.on("etiuda:branch-reach", (e) => {
 ipcMain.handle("etiuda:history-list", (e) => (fromEngine(e) ? historyView() : []));
 ipcMain.handle("etiuda:history-read", (e, sha, file) => (fromEngine(e) ? historyOpen(sha, file) : null));
 ipcMain.handle("etiuda:history-put", (e, sha, file) => (fromEngine(e) ? historyPutBack(sha, file) : { ok: false }));
-ipcMain.handle("etiuda:shared-read", (e, name, pin) => (fromEngine(e) ? sharedRead(name, pin) : null));
-ipcMain.handle("etiuda:shared-write", (e, name, text, sha, create) =>
-  (fromEngine(e) ? sharedWrite(name, text, sha, create === true) : { ok: false }));
 // "seen", "forget", "leave", "lapse-seen", "fork-seen" and "stranded-seen" name a team, "lapse-seen" with the step its notice showed, "read" and "invite" carry an invitation's text, and the others name a file; "invite"
 // adds the check code the agent typed, which only a folder invitation needs, and "leads" answers the pinned leads alone. "held" is a link waiting here,
 // "link" is the yes to that link and "link-no" lets it go. The link's text stays in this process.
@@ -10002,9 +9837,8 @@ ipcMain.handle("etiuda:pick-catalog-folder", async (e, title) => {
 
 /* IMPORT CATALOG'S OWN DIALOG, the shell's for the same reason the folder picker above is: the
    engine calls no OS API. The file is READ HERE and handed over as text, so the page is given
-   what it is given and never a path of its own; the browser build keeps its File System Access
-   picker, which is the route that yields a watchable handle and has no meaning here, because
-   this shell already watches the folder. `.js` and `.json` are in the filter beside `.ec` since
+   what it is given and never a path of its own, and no watchable handle is wanted, because this
+   shell already watches the folder. `.js` and `.json` are in the filter beside `.ec` since
    the engine's reader takes all three, and a filter narrower than the reader hides files it
    would have accepted. Null where the person closed the dialog, which is not a failure. */
 ipcMain.handle("etiuda:pick-catalog-file", async (e, title, label) => {
@@ -10238,10 +10072,9 @@ function readPin() {
   return { why: why };
 }
 
-/* No 'self' in script-src, and that is the point: in a browser the engine loads its catalog as
-   a sibling script, and here the same file arrives as data through the preload. So the shell
-   can refuse every script that is not one of the two the build hashed, and a catalog stays
-   data. style-src is 'unsafe-inline' rather than hashed because the rescue banner builds its
+/* No 'self' in script-src, and that is the point: a catalog arrives as data through the preload,
+   so the shell can refuse every script that is not one of the two the build hashed, and a catalog
+   stays data. style-src is 'unsafe-inline' rather than hashed because the rescue banner builds its
    own styles inline, on purpose, so that it works when the stylesheet does not. */
 function policyFor(hashes) {
   return [
@@ -16160,24 +15993,10 @@ function startDocument() {
   return "";
 }
 
-/* THE SIBLING TAG IS NOT SERVED HERE. In a browser it is how a catalog beside the engine arrives;
-   under this shell the policy refuses it by design, since a catalog comes through the host, and the
-   refusal was a console error on every boot, so a healthy desk never had a clean console (bug hunt
-   3, item 21). Cut from the served copy only, as the policy is put into it: engine/etiuda.html
-   keeps it for the browser. It must match exactly once, like the anchor: none means the template
-   moved and the strip is stale, two means the literal has turned up somewhere it must not be cut.
-   tests/csp.js proves the policy still refuses a sibling with one of its own planting. */
-const SIBLING_TAGS = ['<script src="etiuda-catalog.js"></script>'];
-
 function withPolicy(html) {
   if (pageNeedsBuild()) return missingBuildDoc();
   const pin = readPin();
   if (pin.why) return refusalDoc(pin.why);
-  for (const tag of SIBLING_TAGS) {
-    const found = html.split(tag).length - 1;
-    if (found !== 1) throw new Error(tag + " matched " + found + " times in the engine, expected 1");
-    html = html.split(tag).join("");
-  }
   const hits = html.split(CSP_ANCHOR).length - 1;
   if (hits !== 1) throw new Error(CSP_ANCHOR + " matched " + hits + " times in the engine, expected 1");
   /* split/join rather than replace, the build script's precedent: the engine's own text holds

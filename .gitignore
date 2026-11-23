@@ -29,8 +29,8 @@
 # message whose it is, which for a demo is nobody's.
 #
 # UNANCHORED ON PURPOSE, unlike every other pattern in this file. A leading slash would hold
-# only for the root, and the engine sources sit in a subfolder that a browser will want a
-# catalog beside. A catalog is a catalog at whatever depth it lands.
+# only for the root, and a catalog may land in any subfolder. A catalog is a catalog at whatever
+# depth it lands.
 *-catalog.js
 *-catalog.json
 etiuda-catalog.js

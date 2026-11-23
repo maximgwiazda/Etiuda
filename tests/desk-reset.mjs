@@ -355,7 +355,6 @@ function shellLeg(mod) {
     write(path.join(docs, "shop.ec"), "catalog");
     write(path.join(docs, "etiuda-ring.json"), "ring");
     write(path.join(docs, "etiuda-team.json"), "team");
-    write(path.join(docs, "etiuda-catalog.js"), "script");
     write(path.join(docs, "notes.txt"), "leave me");
     write(path.join(docs, "keep", "photo.txt"), "leave me too");
     write(path.join(chosen, "shop.ec"), "not ours");
@@ -376,7 +375,7 @@ function shellLeg(mod) {
       && mod.wouldStartNew(user) === true,
       "4d4 the stand-in loses the desk, the tabs and the window, keeps both licence files byte for byte, and would start as a first run");
     check(gone(path.join(docs, "shop.ec")) && gone(path.join(docs, "etiuda-team.json")) && gone(path.join(docs, "etiuda-ring.json"))
-      && gone(path.join(docs, "etiuda-catalog.js")) && fs.readFileSync(path.join(docs, "notes.txt"), "utf8") === "leave me"
+      && fs.readFileSync(path.join(docs, "notes.txt"), "utf8") === "leave me"
       && fs.readFileSync(path.join(docs, "keep", "photo.txt"), "utf8") === "leave me too",
       "4d5 the desk's own catalog folder loses only its desk files");
     const again = fs.mkdtempSync(path.join(lab, "user-chosen-"));

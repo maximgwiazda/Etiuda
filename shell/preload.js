@@ -227,11 +227,6 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   historyList: () => ipcRenderer.invoke("etiuda:history-list"),
   historyRead: (sha, file) => ipcRenderer.invoke("etiuda:history-read", String(sha || ""), String(file || "")),
   historyPut: (sha, file) => ipcRenderer.invoke("etiuda:history-put", String(sha || ""), String(file || "")),
-  /* The shared catalog this desk edits directly, by its name in the catalog folder: {text, sha, free, base} for the
-     file and the edition `pin` names, and a write answered only while the file still holds the bytes `sha` names. */
-  sharedRead: (name, pin) => ipcRenderer.invoke("etiuda:shared-read", String(name || ""), String(pin || "")),
-  sharedWrite: (name, text, sha, create) => ipcRenderer.invoke("etiuda:shared-write", String(name || ""), String(text || ""),
-    String(sha || ""), create === true),
   /* Asking to join the team a sealed catalog in the folder belongs to: "state", "ask" with the file's name and the
      agent's, or "cancel", each answered {sealed, join, joined}; and that answer again whenever it changes. "read" and
      "invite" carry an invitation's text where the file's name goes, and "invite" the check code the agent typed.
