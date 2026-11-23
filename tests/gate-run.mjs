@@ -35,7 +35,7 @@ const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const E = createRequire(import.meta.url)("./engine.js");
 
 /* The floor: every leg below runs or is skipped by name, or the tally says so rather than reading as a short green. */
-const EXPECTED = 28;  /* 14, +2 each step's own scratch (15a, 15b), +2 a customer's roots (15c, 15d), +4 the gate wall and the area lane (16a to 16d), +1 a walled gate's node arm (16e), +1 a zombie read as gone (16f), +4 which AppData the run sees (17a to 17d) */
+const EXPECTED = 35;  /* +1 a shard whose only red is a flake (18g); +6 the local area going on past a red (18a to 18f); 14, +2 each step's own scratch (15a, 15b), +2 a customer's roots (15c, 15d), +4 the gate wall and the area lane (16a to 16d), +1 a walled gate's node arm (16e), +1 a zombie read as gone (16f), +4 which AppData the run sees (17a to 17d) */
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
   asserted++;
@@ -152,6 +152,121 @@ function setupLab() {
 
 function cleanLab(lab) {
   try { fs.rmSync(lab.root, { recursive: true, force: true }); } catch {}
+}
+
+/* 18 (a to f). THE LOCAL AREA GOES ON PAST A RED. A lab repository whose second commit touches the
+   chain's tests, so the area plans them. 18a the first red, the third green: all three run, the exit is the first red's, and the
+   summary and the chain line name the red, with no stop. 18b the build gate (tests/build-fresh.mjs, in BUILD_GATES) red: the run
+   stops after it, names the stop, and runs nothing after. 18c the test-only fix of 18a's red, resumed: only the red reruns, the
+   greens carry. 18d a gate that refused goes on. 18e a green gate that touched the stand-in real profile: the run stops at once
+   after it, exit 78. 18f a line that stopped after a green gate lends every green but that one; a line with no stop (written
+   before) keeps the old rule, the last gate of a run that did not complete not lent. 18g a shard (ETIUDA_AREA_SHARD) whose only red
+   is a gate red once and green at its one rerun: the run exits 0, the flake is named in the output, the summary and the chain line,
+   no red holds, and the gate's own entry keeps its first exit so no resume lends it as a green. */
+function pastRedLegs() {
+  const RED = 'console.log("  FAIL leg 0");\nprocess.exit(1);\n', OK = 'console.log("  ok   leg 0");\nprocess.exit(0);\n';
+  const made = [];
+  const gitIn = (dir, args) => spawnSync("git", ["-c", "user.name=lab", "-c", "user.email=lab@example.invalid"].concat(args), { cwd: dir, encoding: "utf8", timeout: 30000 });
+  const lab = (chain, files) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-gate-run-past-red-"));
+    made.push(root);
+    const l = { root, lab: path.join(root, "lab"), runs: path.join(root, "runs"), chainsPath: path.join(root, "chains.jsonl") };
+    fs.mkdirSync(path.join(l.lab, "tools"), { recursive: true });
+    fs.mkdirSync(path.join(l.lab, "tests"), { recursive: true });
+    fs.mkdirSync(l.runs, { recursive: true });
+    for (const t of ["gate-run.mjs", "machine-lock.mjs", "gates-for.mjs"]) fs.copyFileSync(path.join(ROOT, "tools", t), path.join(l.lab, "tools", t));
+    fs.writeFileSync(path.join(l.lab, "package.json"), JSON.stringify({ name: "etiuda", private: true, version: "0.0.0",
+      scripts: { test: chain.map(n => "node tests/" + n + ".mjs").join(" && ") } }, null, 2) + "\n");
+    for (const rel of Object.keys(files)) fs.writeFileSync(path.join(l.lab, rel), files[rel]);
+    l.g = args => gitIn(l.lab, args);
+    l.g(["init", "-q", "-b", "main"]); l.g(["add", "."]); l.g(["commit", "-q", "-m", "base"]);
+    for (const n of chain) fs.appendFileSync(path.join(l.lab, "tests", n + ".mjs"), "// touched\n");
+    l.g(["add", "."]); l.g(["commit", "-q", "-m", "touch"]);
+    l.standIn = path.join(root, "stand-in-profile");
+    fs.mkdirSync(path.join(l.standIn, "etiuda"), { recursive: true });
+    l.env = { ETIUDA_REAL_PROFILE_OVERRIDE: l.standIn, ETIUDA_INSTALLED_APP_RUNNING: "0" };
+    return l;
+  };
+  const records = l => fs.readdirSync(l.runs).filter(f => f.endsWith(".json")).map(f => f.replace(/-\d{8}T.*$/, ""));
+  const lastChain = l => { try { return JSON.parse(fs.readFileSync(l.chainsPath, "utf8").trim().split(/\r?\n/).pop()); } catch { return null; } };
+  const summary = r => (String(r.out).split(/\r?\n/).filter(x => /^gate-run: \d+ of \d+ gate/.test(x)).pop() || "no summary");
+  try {
+    const a = lab(["g1", "g2", "g3"], { "tests/g1.mjs": RED, "tests/g2.mjs": OK, "tests/g3.mjs": OK });
+    const ra = runTool(a, ["area", "HEAD~1"], a.env), ca = lastChain(a), na = records(a);
+    check(ra.exit === 1 && ["tests-g1", "tests-g2", "tests-g3"].every(g => na.includes(g)) && /tests-g1 \(exit 1\)/.test(summary(ra))
+      && !!ca && ca.stop === null && Array.isArray(ca.reds) && ca.reds.length === 1 && ca.reds[0].gate === "tests-g1" && ca.reds[0].exit === 1,
+      "18a the local area goes on past a red: the first red and the third green all run, the exit is the first red's, the summary and the"
+      + " chain line name the red and no stop: exit " + ra.exit + ", ran [" + na.join(",") + "], " + summary(ra) + ", stop " + JSON.stringify(ca && ca.stop));
+
+    const b = lab(["build-fresh", "g2", "g3"], { "tests/build-fresh.mjs": RED, "tests/g2.mjs": OK, "tests/g3.mjs": OK });
+    const rb = runTool(b, ["area", "HEAD~1"], b.env), cb = lastChain(b), nb = records(b);
+    check(rb.exit === 1 && nb.includes("tests-build-fresh") && !nb.includes("tests-g2") && !nb.includes("tests-g3")
+      && /STOPPED after tests-build-fresh: a build gate red/.test(summary(rb)) && !!cb && !!cb.stop && cb.stop.gate === "tests-build-fresh",
+      "18b a build gate red stops the area after it, every later leg reading a stale build: exit " + rb.exit + ", ran [" + nb.join(",") + "], "
+      + summary(rb) + ", stop " + JSON.stringify(cb && cb.stop));
+
+    fs.writeFileSync(path.join(a.lab, "tests", "g1.mjs"), OK + "// fixed\n");
+    a.g(["add", "."]); a.g(["commit", "-q", "-m", "g1 fixed"]);
+    for (const f of fs.readdirSync(a.runs)) fs.unlinkSync(path.join(a.runs, f));
+    const rc = runTool(a, ["area", "HEAD~2"], Object.assign({ ETIUDA_AREA_RESUME: "on" }, a.env)), cc = lastChain(a), nc = records(a);
+    check(rc.exit === 0 && nc.includes("tests-g1") && !nc.includes("tests-g2") && !nc.includes("tests-g3")
+      && !!cc && Array.isArray(cc.carried) && cc.carried.includes("tests-g2") && cc.carried.includes("tests-g3"),
+      "18c the resume after a run that went past its red reruns only the red, its greens carried: exit " + rc.exit + ", ran [" + nc.join(",")
+      + "], carried " + JSON.stringify(cc && cc.carried));
+
+    const d = lab(["g1", "g2"], { "tests/g1.mjs": 'console.log("#refused lab-guard");\nprocess.exit(78);\n', "tests/g2.mjs": OK });
+    const rd = runTool(d, ["area", "HEAD~1"], d.env), nd = records(d);
+    check(rd.exit === 78 && nd.includes("tests-g1") && nd.includes("tests-g2") && /tests-g1 \(exit 78/.test(summary(rd)),
+      "18d a gate that refused (no verdict) is named and the area goes on: exit " + rd.exit + ", ran [" + nd.join(",") + "], " + summary(rd));
+
+    const e = lab(["g1", "g2"], { "tests/g2.mjs": OK, "tests/g1.mjs": ['import fs from "node:fs";', 'import path from "node:path";',
+      'fs.writeFileSync(path.join(process.env.ETIUDA_REAL_PROFILE_OVERRIDE, "etiuda", "window.json"), "touched\\n");', OK].join("\n") });
+    const re = runTool(e, ["area", "HEAD~1"], e.env), ce = lastChain(e), ne = records(e);
+    check(re.exit === 78 && ne.includes("tests-g1") && !ne.includes("tests-g2") && /STOPPED after tests-g1: the real profile changed/.test(summary(re))
+      && !!ce && !!ce.stop && ce.stop.gate === "tests-g1",
+      "18e a gate that touched the real profile stops the area at once, a floor breach: exit " + re.exit + ", ran [" + ne.join(",") + "], " + summary(re));
+
+    const f = lab(["g1", "g2", "g3"], { "tests/g1.mjs": OK, "tests/g2.mjs": OK, "tests/g3.mjs": OK });
+    const head = f.g(["rev-parse", "--short", "HEAD"]).stdout.trim(), tree = f.g(["rev-parse", "HEAD^{tree}"]).stdout.trim();
+    const STEPS = ["g1", "g2", "g3"].map(n => ({ file: "tests/" + n + ".mjs", cmd: "node tests/" + n + ".mjs", args: [] }));
+    const gates = [{ gate: "tests-g1", exit: 1 }, { gate: "tests-g2", exit: 0 }, { gate: "tests-g3", exit: 0 }];
+    const ask = extra => {
+      fs.writeFileSync(f.chainsPath, JSON.stringify(Object.assign({ gate: "area", tree: f.lab, head, gitTree: tree, counts: { exitCode: 1 }, gates }, extra)) + "\n");
+      const driver = path.join(f.root, "ask.mjs");
+      fs.writeFileSync(driver, "import { pathToFileURL } from 'node:url';\n"
+        + "const m = await import(pathToFileURL(" + JSON.stringify(path.join(f.lab, "tools", "gate-run.mjs")) + ").href);\n"
+        + "const r = m.planAreaResume(" + JSON.stringify(f.lab) + ", " + JSON.stringify(STEPS) + ", process.argv[2], " + JSON.stringify(f.chainsPath) + ");\n"
+        + "console.log(JSON.stringify({ reason: r.reason || '', carried: r.carried || null }));\n");
+      const r = spawnSync(process.execPath, [driver, tree], { cwd: f.lab, encoding: "utf8", timeout: 30000,
+        env: Object.assign({}, process.env, { ETIUDA_RUNS: f.runs, ETIUDA_CHAINS_PATH: f.chainsPath }) });
+      try { return JSON.parse(String(r.stdout).trim().split(/\r?\n/).pop()); } catch { return { reason: "no answer: " + String(r.stderr).slice(-200), carried: null }; }
+    };
+    const ranOn = ask({ stop: null }), stopped = ask({ stop: { gate: "tests-g3", why: "the real profile changed" } }), old = ask({});
+    check(JSON.stringify(ranOn.carried) === '["tests-g2","tests-g3"]' && JSON.stringify(stopped.carried) === '["tests-g2"]'
+      && JSON.stringify(old.carried) === '["tests-g2"]',
+      "18f a run that went on past its red lends every green, its last included; one that stopped lends all but the gate it stopped after;"
+      + " a line with no stop keeps the old rule: " + JSON.stringify(ranOn.carried) + ", " + JSON.stringify(stopped.carried) + ", " + JSON.stringify(old.carried));
+
+    /* A gate that is red at its first run and green after: the marker sits outside the lab's tree, so writing it moves no tree. */
+    const gRoot = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-gate-run-flake-"));
+    made.push(gRoot);
+    const marker = path.join(gRoot, "ran-once");
+    const FLAKY = 'import fs from "node:fs";\nconst m = ' + JSON.stringify(marker) + ';\nif (!fs.existsSync(m)) { fs.writeFileSync(m, "1"); '
+      + 'console.log("  FAIL leg 0"); process.exit(1); }\nconsole.log("  ok   leg 0");\nprocess.exit(0);\n';
+    const g = lab(["g1", "g2"], { "tests/g1.mjs": FLAKY, "tests/g2.mjs": OK });
+    const rg = runTool(g, ["area", "HEAD~1"], Object.assign({ ETIUDA_AREA_SHARD: "1/1" }, g.env)), cg = lastChain(g);
+    const gHolds = cg && Array.isArray(cg.reds) ? cg.reds.filter(r => r.class !== "warn").map(r => r.gate) : null;
+    const gFlakes = cg && Array.isArray(cg.flakes) ? cg.flakes.map(r => r.gate + ":" + r.exit) : null;
+    const gEntry = cg && Array.isArray(cg.gates) ? cg.gates.find(x => x.gate === "tests-g1") : null;
+    check(rg.exit === 0 && /gate-run: FLAKE tests-g1: red \(exit 1\) then green at its one rerun/.test(rg.out)
+      && /FLAKE tests-g1/.test(summary(rg)) && !!cg && cg.holds === false && !!gHolds && gHolds.length === 0
+      && JSON.stringify(gFlakes) === '["tests-g1:1"]' && !!gEntry && gEntry.exit === 1,
+      "18g a shard whose only red is a flake exits 0, names the flake and holds nothing: exit " + rg.exit + ", " + summary(rg) + ", holds "
+      + JSON.stringify(cg && cg.holds) + ", hold reds " + JSON.stringify(gHolds) + ", flakes " + JSON.stringify(gFlakes) + ", its gate entry "
+      + JSON.stringify(gEntry));
+  } finally {
+    for (const r of made) { try { fs.rmSync(r, { recursive: true, force: true }); } catch {} }
+  }
 }
 
 function main() {
@@ -686,6 +801,9 @@ function main() {
   } finally {
     cleanLab(lab);
   }
+
+  /* 18. THE LOCAL AREA GOES ON PAST A RED (see pastRedLegs) */
+  pastRedLegs();
 
   process.stdout.write("#counts checks=" + asserted + " skipped=" + skipped + " failures=" + failed + " expected=" + EXPECTED + "\n");
   if (asserted + skipped !== EXPECTED) {

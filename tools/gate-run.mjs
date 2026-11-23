@@ -3,7 +3,7 @@
  *   node tools/gate-run.mjs test split-guard        the two fast chains
  *   node tools/gate-run.mjs shell-smoke             one gate, one line
  *   node tools/gate-run.mjs file <path...>          one or more test files by path
- *   node tools/gate-run.mjs area [base]             area run with plant-hold bracket
+ *   node tools/gate-run.mjs area [base]             area run with plant-hold bracket; goes on past a red (THE LOCAL AREA GOES ON PAST A RED)
  *   node tools/gate-run.mjs nightly                 nightly profile outside %TEMP%
  *   node tools/gate-run.mjs wait-lock               wait for machine lock
  *   node tools/gate-run.mjs mark-cause <rec> <cause> <escaped|not-escaped>   mark one red of one run (rule 10)
@@ -125,8 +125,8 @@ export function isInstalledAppRunning() {
   }
 }
 
-export function takeRealProfileSnapshot() {
-  const roots = getRealProfileSnapshotFolders();
+export function takeRealProfileSnapshot(given) {
+  const roots = given || getRealProfileSnapshotFolders();
   const snap = {};
   for (const root of roots) {
     if (!fs.existsSync(root)) {
@@ -266,6 +266,14 @@ export const FLOOR = [
   { step: "team-join 15by-15bz", file: "tests/team-join.mjs", cmd: "node tests/team-join.mjs", args: [] },
   { step: "test checkCatalogRoundTrip", file: "tests/test.js", cmd: "node tests/test.js", args: [] },
 ];
+
+/* THE BUILD GATES. The local area goes on past a red, but not past a red on one of these: each
+   proves that what every later leg reads is this tree's build, so after its red every later leg would test a stale build and its
+   green would say nothing. The engine's is tests/build-fresh.mjs: the outputs on disk (engine/etiuda.html and its CSP) are this
+   source's build by the build's record, and two builds of one source are the same bytes. gate-run builds once before the gates
+   (builtBeforeGates), and this gate's red says that judgement does not hold. */
+export const BUILD_GATES = ["tests/build-fresh.mjs"];
+const BUILD_GATE_SET = new Set(BUILD_GATES);
 
 /* THE HYGIENE LEGS (the test architect's C2, 2026-10-30). A leg belongs here only when its failure cannot change what a user's
    build does: it checks the suite's own bookkeeping (leg ids, chain splits, a tool's selftest), or the wording rules of source
@@ -410,6 +418,7 @@ export function appendChainLine(record, chainsPath = CHAINS_PATH) {
       cause: r.cause || "unread",
       /* "warn" for a HYGIENE leg red in a release or nightly run, "hold" for every other red (the test architect's C2). */
       class: r.class === "warn" ? "warn" : "hold",
+      refused: r.refused || undefined,
     })),
     /* True if any red is class hold: only then does a release-profile run hold what builds from it (and exit non-zero). */
     holds: (record.reds || []).some(r => r.class !== "warn"),
@@ -426,8 +435,13 @@ export function appendChainLine(record, chainsPath = CHAINS_PATH) {
   /* A release run that inherited a base's other legs (the test architect's C3): the base's git tree. */
   if (record.inherits) line.inherits = record.inherits;
   if (Array.isArray(record.carried) && record.carried.length) line.carried = record.carried;
+  /* A shard's gate red at its first run and green at its one rerun: named here, never among the reds, and holding nothing. */
+  if (Array.isArray(record.flakes) && record.flakes.length) line.flakes = record.flakes.map(f => ({ gate: f.gate, cmd: f.cmd, exit: f.exit, rerunExit: f.rerunExit }));
   /* An area run's mark of what its floor, hygiene and argument gates read from outside the tree (outsideMark). */
   if (record.gate === "area" && typeof record.outside === "string") line.outside = record.outside;
+  /* A local area records where it stopped, or null where it ran to its end past its reds (THE LOCAL AREA GOES ON PAST A RED);
+     planAreaResume reads it. A shard, and every other run, records none. */
+  if (record.gate === "area" && record.stop !== undefined) line.stop = record.stop;
   /* An area run's gates whose last run listed nothing under tests/ (tools/listed-preload.mjs): its own, and those it carried
      from a base that said so. */
   if (record.gate === "area" && Array.isArray(record.quiet)) line.quiet = record.quiet;
@@ -473,7 +487,7 @@ export function chainLineOfRecord(rec, chainsPath = CHAINS_PATH) {
   const t = Date.parse(rec.time || "");
   const hits = lines.filter(c => c.head === (rec.commit || "no commit")
     && (rec.run ? c.start === rec.run : (Number.isFinite(t) && Date.parse(c.start) <= t && t <= Date.parse(c.end)))
-    && Array.isArray(c.reds) && c.reds.some(r => r.gate === rec.gate));
+    && ((Array.isArray(c.reds) && c.reds.some(r => r.gate === rec.gate)) || (Array.isArray(c.flakes) && c.flakes.some(r => r.gate === rec.gate))));
   if (hits.length === 1) return { line: hits[0], why: "" };
   return { line: null, why: hits.length ? hits.length + " runs in chains.jsonl could hold this red" : "no run in chains.jsonl holds this red" };
 }
@@ -685,7 +699,11 @@ export function planTestOnly(root, steps, tree, chainsPath = CHAINS_PATH) {
    file that file imports, is untouched since that commit is carried, and only the rest runs. Never carried, whatever the base
    says: a step with arguments or its own environment (its name does not say which run it was), the floor, the hygiene legs, any
    step that reads the tree as data (its source, or a file it imports, lists a folder or the index), and the gate that ended a run
-   that did not complete. A change outside tests/ carries nothing. Carried gates carry on: a resumed run's own carried list is
+   that did not complete. A run that went on past its reds (every local area now) records `stop`: null where it ran to
+   its end, so every green gate it ran is lent and only its reds run again; else the gate it stopped after, whose green is not lent
+   (a profile changed after it, a build gate red, a tree that moved), the gates after it never having run. A line with no `stop`
+   (written before, or a shard's) keeps the older reading: the last gate of a run that did not complete ended it. A change outside
+   tests/ carries nothing. Carried gates carry on: a resumed run's own carried list is
    lent again, since the product is the same tree throughout. The chain line says "inherits" the base's git tree and "carried"
    the gates it did not run. ETIUDA_AREA_RESUME=off runs the whole plan. */
 const WALKS_TREE = /\breaddir(Sync)?\b|\bopendir(Sync)?\b|\bglob(Sync)?\b|\bls-files\b|\bls-tree\b|["']grep["']|["']diff["']/;
@@ -745,7 +763,10 @@ export function planAreaResume(root, steps, tree, chainsPath = CHAINS_PATH, outs
   if (outside.length) return { reason: outside.length + " changed file(s) outside tests/ since " + base.head + ", the first " + outside[0] };
   const same = changed.length === 0;
   const done = !!base.counts && base.counts.exitCode === 0;
-  const earned = (done ? base.gates : base.gates.slice(0, -1)).filter(g => g && g.exit === 0).map(g => g.gate);
+  const wentOn = Object.prototype.hasOwnProperty.call(base, "stop");
+  const ended = wentOn ? (base.stop && base.stop.gate) || "" : "";
+  const kept = wentOn ? base.gates.filter(g => !(ended && g && g.gate === ended)) : (done ? base.gates : base.gates.slice(0, -1));
+  const earned = kept.filter(g => g && g.exit === 0).map(g => g.gate);
   const green = new Set(earned.concat(Array.isArray(base.carried) ? base.carried : []));
   const scan = new Set(listTestSources(root));
   for (const st of steps) scan.add(stepFile(st));
@@ -1927,9 +1948,11 @@ async function main() {
   const checkRealProfile = (mode === "area") || inProfile;
   let realProfileSnapBefore = null;
   let appRunningBefore = false;
+  let profileRoots = null;
   if (checkRealProfile) {
     appRunningBefore = isInstalledAppRunning();
-    realProfileSnapBefore = takeRealProfileSnapshot();
+    profileRoots = getRealProfileSnapshotFolders();
+    realProfileSnapBefore = takeRealProfileSnapshot(profileRoots);
     console.log(appDataViewLine(appDataView(), getRealProfileSnapshotFolders())); /* plant:view-said */
   }
 
@@ -2013,6 +2036,16 @@ async function main() {
   const runStart = new Date().toISOString();
   const ordered = deferAlone(steps);
   let worst = 0, written = 0, treeMoved = false, refusedAt = null, gitFailedAt = null;
+  /* THE LOCAL AREA GOES ON PAST A RED. A series of merges used to find its reds one at a time across as many
+     resumes, since the area stopped at the first. Now a local area (not a shard, which has its own rule below) runs every gate of
+     its plan and names every red in one pass; its exit is the first red's, as a shard's is. Three things still stop it, recorded as
+     `stop` on its chain line: the tree moved under a gate, or git did not answer (no verdict: what later gates read is not one
+     tree); the real profile changed after a gate (a floor breach, stopped at once, never attributed to a later gate); a build gate
+     red (BUILD_GATES: every later leg would test a stale build). A refusal and a red go on. A red is not rerun here, unlike a
+     shard's: a flake is rerun only where it blocks a merge, and then only that one gate, after whoever merges has read it and
+     named its cause (mark-cause); a rerun here would spend the machine to hide a first red. */
+  const pastRed = mode === "area" && !shard;
+  let stop = null;
 
   if (mode === "area" && fs.existsSync(CHAINS_PATH)) {
     try {
@@ -2026,7 +2059,8 @@ async function main() {
           /* An area run inherits green only from a covering run: area, whole-chain, release or nightly, never a file run;
              completed with no reds, covering every gate this area would run (the test architect's criterion, 2026-11-08). */
           const isCoveringMode = (rec.gate === "area" || rec.gate === "test" || rec.gate === "whole-chain" || rec.gate === "release" || rec.gate === "nightly") && !rec.gate.startsWith("file");
-          const isGreen = rec.counts && rec.counts.exitCode === 0 && Array.isArray(rec.reds) && rec.reds.length === 0 && !rec.holds;
+          const isGreen = rec.counts && rec.counts.exitCode === 0 && Array.isArray(rec.reds) && rec.reds.length === 0 && !rec.holds
+            && !(Array.isArray(rec.flakes) && rec.flakes.length);
           const coversAll = Array.isArray(rec.ran) && areaFiles.every(f => rec.ran.includes(f));
           if (!isCoveringMode || !coversAll) continue; /* plant:area-coverage */
           if (isGreen) {
@@ -2041,6 +2075,7 @@ async function main() {
 
   const totalCounts = { ok: 0, fail: 0, lines: 0 };
   const redsList = [];
+  const flakesList = [];
   const gatesList = [];
   const ranFiles = [];
 
@@ -2051,7 +2086,8 @@ async function main() {
       console.log("       " + MODULES_HOW);
       console.log("  gate-run: refused, the run has no verdict");
       redsList.push({ gate: gateName(step.file), cmd: step.cmd, exit: NO_VERDICT, cause: goneNow, class: "hold" });
-      worst = NO_VERDICT;
+      if (!pastRed || !worst) worst = NO_VERDICT;
+      stop = { gate: gateName(step.file), why: "node_modules is gone, no verdict" };
       break;
     }
     const now = new Date();
@@ -2064,7 +2100,8 @@ async function main() {
     const gitNoAnswer = before.gitOk && !after.gitOk;
     if (gitNoAnswer) {
       console.log("  FAIL git did not answer while " + gateName(step.file) + " ran");
-      worst = NO_VERDICT;
+      if (!pastRed || !worst) worst = NO_VERDICT;
+      stop = { gate: gateName(step.file), why: "git did not answer while it ran, no verdict" };
       const { counts, from, clashed } = countsOf(res.out, NO_VERDICT);
       const line = {
         gate: gateName(step.file),
@@ -2134,6 +2171,7 @@ async function main() {
         exit: verdict,
         cause: "unread",
         class: isWarn ? "warn" : "hold",
+        refused: refused || undefined,
       });
     }
 
@@ -2187,7 +2225,8 @@ async function main() {
       console.log("       a mutation control belongs in a copy of the tree, and a baseline belongs"
                   + " in a file before any mutation begins");
       console.log("  SUITE DID NOT COMPLETE");
-      worst = NO_VERDICT;
+      if (!pastRed || !worst) worst = NO_VERDICT;
+      stop = { gate: line.gate, why: "the tree moved under it, no verdict" };
       treeMoved = true;
       break;
     }
@@ -2200,11 +2239,35 @@ async function main() {
     if (res.exit !== 0 && shard && res.exit !== NO_VERDICT) {
       console.log("  gate-run: shard " + shard + " reruns " + line.gate + " once, alone (red, exit " + res.exit + ")");
       const again = await runStep(step, customEnv);
-      if (again.exit === 0) { console.log("  gate-run: FLAKE " + line.gate + ": red (exit " + res.exit + ") then green at its one rerun; named, not counted"); continue; }
+      if (again.exit === 0) {
+        console.log("  gate-run: FLAKE " + line.gate + ": red (exit " + res.exit + ") then green at its one rerun; named, not counted");
+        /* A flake holds nothing: its red moves from the reds to the flakes, and its gate entry keeps the first exit, so no resume
+           lends it as a green. */
+        const at = redsList.length - 1;
+        if (at >= 0 && redsList[at].gate === line.gate) redsList.splice(at, 1);
+        flakesList.push({ gate: line.gate, cmd: step.cmd, exit: res.exit, rerunExit: again.exit });
+        continue;
+      }
       console.log("  gate-run: " + line.gate + " is red again at its rerun (exit " + again.exit + ")");
     }
     if (res.exit !== 0 && shard) { if (!worst) { worst = res.exit; if (refused) refusedAt = line; } console.log("  gate-run: shard " + shard + " goes on after " + line.gate + " exiting " + res.exit); continue; }
-    if (res.exit !== 0) { worst = res.exit; if (refused) refusedAt = line; break; }
+    if (res.exit !== 0 && !pastRed) { worst = res.exit; if (refused) refusedAt = line; break; }
+    /* THE LOCAL AREA GOES ON PAST A RED (above): the first red sets the exit; a floor breach or a build gate red stops it here. */
+    if (res.exit !== 0 && !worst) { worst = res.exit; if (refused) refusedAt = line; }
+    if (pastRed && realProfileSnapBefore) {
+      const touched = compareRealProfileSnapshots(realProfileSnapBefore, takeRealProfileSnapshot(profileRoots));
+      if (touched.length && !(appRunningBefore || isInstalledAppRunning())) {
+        console.log("  FAIL the real profile changed after " + line.gate + ": " + touched.join(", ") + "; a floor breach, so the area stops here");
+        stop = { gate: line.gate, why: "the real profile changed" };
+        break;
+      }
+    }
+    if (res.exit !== 0 && BUILD_GATE_SET.has(stepFile(step))) {
+      console.log("  gate-run: " + line.gate + " is a BUILD gate and red (exit " + res.exit + "), so the area stops here: every later leg would test a stale build");
+      stop = { gate: line.gate, why: "a build gate red" };
+      break;
+    }
+    if (res.exit !== 0) console.log("  gate-run: the area goes on after " + line.gate + " exiting " + res.exit + (refused ? ", REFUSED by the " + refused : ""));
   }
 
   if (checkRealProfile && realProfileSnapBefore) {
@@ -2268,6 +2331,7 @@ async function main() {
     end: runEnd,
     counts: totalCounts,
     reds: redsList,
+    flakes: flakesList,
     staleTakenOver: lockRes ? lockRes.staleTakenOver : false,
     gates: gatesList,
     walled,
@@ -2277,6 +2341,7 @@ async function main() {
     repo,
     plan: areaPlan,
     outside: gateLabel === "area" ? outsideMark() : undefined,
+    stop: pastRed ? stop : undefined,
     quiet: gateLabel === "area" ? gatesList.filter(g => g.reads === "none").map(g => g.gate).concat(carriedQuiet) : undefined,
   }, CHAINS_PATH);
 
@@ -2314,17 +2379,25 @@ async function main() {
   if (isHeavy) releaseLock();
 
   const allHygiene = warns.every(w => !w.cause || !w.cause.startsWith("the real profile changed"));
+  /* The local area's summary names every red (gate, exit) and the stop if one fired (THE LOCAL AREA GOES ON PAST A RED). */
+  const holdReds = redsList.filter(r => r.class !== "warn");
+  const pastSaid = !pastRed ? "" : (stop ? ", STOPPED after " + stop.gate + ": " + stop.why : ", ran to its end")
+    + (holdReds.length ? "; " + holdReds.length + " red(s), the exit the first's: "
+        + holdReds.map(r => r.gate + " (exit " + r.exit + (r.refused ? ", REFUSED by the " + r.refused : "") + ")").join(", ")
+      : warns.length ? "; " + warns.length + " warn(s), nothing held" : stop ? "" : ", all green");
   console.log("\ngate-run: " + written + " of " + steps.length + " gate(s) run from "
               + asked.length + " npm script(s), " + written + " line(s) in " + RUNS
               + ", tree " + before.hash + ", git tree " + tree
-              + (treeMoved ? ", NO VERDICT: the tree moved under a gate"
+              + (pastSaid ? pastSaid : treeMoved ? ", NO VERDICT: the tree moved under a gate"
                  : gitFailedAt ? ", NO VERDICT: " + gitFailedAt.reason
                  : refusedAt ? ", stopped at " + refusedAt.gate + ", REFUSED by the " + refusedAt.refused
                    + " and not failed: nothing was opened or measured, and its own lines above say what lets it run"
                  : worst === NO_VERDICT ? ", stopped at a gate exiting " + worst + ", its own NO VERDICT: it"
                    + " refused, did not finish, or left a leg not run"
                  : worst ? ", stopped at a gate exiting " + worst
-                 : warns.length ? ", " + warns.length + (allHygiene ? " HYGIENE warn(s)" : " warn(s)") + ", nothing held" : ", all green"));
+                 : warns.length ? ", " + warns.length + (allHygiene ? " HYGIENE warn(s)" : " warn(s)") + ", nothing held" : ", all green")
+              + (flakesList.length ? "; " + flakesList.map(f => "FLAKE " + f.gate + " (exit " + f.exit + ", green at its one rerun)").join(", ")
+                + ", named and not counted" : ""));
 
   for (const w of warns) {
     if (w.cause && w.cause.startsWith("the real profile changed")) {
