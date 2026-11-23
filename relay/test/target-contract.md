@@ -42,7 +42,7 @@ The harness strips `path`, `body` and `plainLength` before `upload`, `acceptBlob
 - `loadTeamFile(doc)` accepts a team file signed by the pinned lead, or refuses. A file whose `id` is not the pinned team id, or whose `channel.relay` is not the pinned relay team id, is `wrong-team`. A lower or equal `rev` at the same epoch is `replay-rev`. Another epoch may start at `rev` 1.
 - `showFreshness({ head, now })` returns `{ shown, blocked, time, epoch, rev, ageMs }`. While nothing is pinned, every head comes back with `shown` false and `blocked` false. Once pinned, the head must verify, and its key and relay must be the pin. `time` is the head's signed time. `ageMs` is `now` minus that time. A head the desk holds is shown and `blocked` is false. The rev shown is the head's rev, including when the desk has loaded an older team file and a newer one was never delivered.
 - `syncMirror({ relayTeamId, session, teamKey, teamDoc, box, deskId })` leaves a mirror file the relay omitted where it is. It asks `fetch` under this session for each listed blob this program does not yet hold, opens that returned envelope under `teamKey` and `teamDoc`, and writes the inner body into the mirror. It does not read the relay's stored map. A blob the lead uploaded after the accept is brought in that way. Where `box` and `deskId` are given, the program is that desk, and it also opens its own copy of a newer team file, as An epoch move says.
-- `sealTeam({ relayTeamId, teamId, epoch, teamKey, writer, leadBox, teamDoc, files })` returns `{ ok: true, blobs }`: what the lead owes for that team file, sealed and signed by `writer`, the lead. The team file is `etiuda-team.json` at the root, and each of `files` (path to body) at the root, all under `teamKey` at `epoch`; then one copy of the team file for each desk its roster names, as An epoch move says, and for no other desk. The harness uploads each blob.
+- `sealTeam({ relayTeamId, teamId, epoch, teamKey, writer, leadBox, teamDoc, files })` returns `{ ok: true, blobs }`: what the lead owes for that team file, sealed and signed by `writer`, the lead. The team file is `etiuda-team.json` at the root, and each of `files` (path to body) at the root, all under `teamKey` at `epoch`; then one copy of the team file for each desk its roster names, as An epoch move says, and for no other desk, and one more for the lead's own box, as The lead's own copy says. The harness uploads each blob.
 - `considerOutgoing({ path })` returns `{ send: false, reason, said }` for a `.tmp`. A path this program has accepted is an echo, reason `echo`, while the clock is less than 60 minutes (`ECHO_MS`, 60 * 60 * 1000) past that accept. The echo ends at that mark: `considerOutgoing` of the same path then returns `{ send: true }`, which is the later local change of a received file. Any other path returns `{ send: true }`. The download is one this program accepted, not a flag.
 - `readRing({ teamDoc, looseRing })` returns `{ source, ring }`. In relay mode `source` is `team` when the team file is signed by the pinned lead and carries a ring, otherwise `none`. It is never `loose`.
 - `verifyUploadSignature({ publicKey, payload, signature })` and `verifyDeskSignature({ publicKey, body, signature })` return `{ ok }`. Each accepts a genuine signature of its own prefix and rejects the other prefix and another key.
@@ -98,6 +98,16 @@ etiuda-relay-desk-copy
 <lead box>
 <desk id>
 <desk box>
+```
+
+The lead's own copy of the team file is sealed the same way under the agreement of the lead's box with itself, which only a holder of that box's private half can make: the lead's other computers. HKDF-SHA256 of it, with an empty salt, over the info below gives 48 bytes, the first 32 the key and the last 16 as hex the copy's id, at place `invite:<id>`. The lead's program seals every team file it sends there too, and opens it there, so its other computer reaches a newer epoch's team file with no desk left on the roster. A desk cannot make that agreement. An all-zero agreement makes no copy.
+
+```
+etiuda-relay-lead-copy
+<relay team id>
+<team id>
+<lead key id>
+<lead box>
 ```
 
 A wrap is `{ epoch, enc, ct }`: `enc` the public half of a fresh box, and `ct` as hex the 12 byte nonce, then AES-256-GCM of the team key, then the 16 byte tag, under the 32 bytes HKDF-SHA256 gives from the agreement of that fresh box and the desk's box, with an empty salt, over the UTF-8 `etiuda-relay-wrap\n<team id>\n<epoch>\n<desk id>\n`.
