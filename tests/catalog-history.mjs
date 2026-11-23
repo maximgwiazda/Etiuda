@@ -24,7 +24,7 @@ const nodeRequire = createRequire(import.meta.url);
    for machine policy (tests/reg-stand.cjs; review 09, finding 4). */
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 31 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 3);
+const EXPECTED = 32 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 3);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -451,6 +451,11 @@ try {
   delete window.E_HOST;
   check(bare === false && hosted === true,
     "6c the Library's door is there only under a host that keeps a history; a browser has none (" + bare + ", " + hosted + ")");
+  /* nsfe9: the door needs no put-back verb of the host: a version is put back on this desk by the page, so a host with a list and a read has it. */
+  window.E_HOST = { historyList: noop, historyRead: noop };
+  const noPutVerb = H.eHasHistory();
+  delete window.E_HOST;
+  check(noPutVerb === true, "nsfe9 the Library's door is there under a host that lists and reads versions and offers no put-back verb (" + noPutVerb + ")");
 } catch (e) {
   failed++;
   console.log("  FAIL the run stopped: " + (e && e.stack || e));

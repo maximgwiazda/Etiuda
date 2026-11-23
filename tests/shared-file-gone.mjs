@@ -95,28 +95,32 @@ try {
       ? { contextBridge: { exposeInMainWorld: (k, v) => { exposed[k] = v; }, executeInMainWorld: noop }, ipcRenderer, webUtils: {} } : nodeRequire(n)));
   } finally { globalThis.window = was.window; globalThis.document = was.document; }
   const host = exposed.E_HOST || {};
-  check(typeof host.historyPut === "function" && typeof host.sharedRead === "undefined" && typeof host.sharedWrite === "undefined",
-    "nsfe2 THE CONTROL beside it: the bridge still offers the history's put-back, and offers no shared read and no shared write ("
-    + JSON.stringify({ put: typeof host.historyPut, read: typeof host.sharedRead, write: typeof host.sharedWrite }) + ")");
+  check(typeof host.historyList === "function" && typeof host.historyRead === "function" && typeof host.historyPut === "undefined"
+    && typeof host.sharedRead === "undefined" && typeof host.sharedWrite === "undefined",
+    "nsfe2 the bridge offers the history's list and read, and no put-back, no shared read and no shared write ("
+    + JSON.stringify({ list: typeof host.historyList, read: typeof host.historyRead, put: typeof host.historyPut, sharedRead: typeof host.sharedRead, sharedWrite: typeof host.sharedWrite }) + ")");
 
-  /* nsfe3: a put-back takes no lock. Another desk's lock file beside the catalog is left as it is and does not stop it. */
+  /* nsfe3: a put-back on a plain shared folder leaves the shared file byte for byte: the shell has no channel that writes a kept version back,
+     whoever asks, with another desk's lock file beside the catalog or none. */
   A.test.keepHist(SHOP, older);
   A.test.keepHist(SHOP, current);
+  const listed = ((await A.ask("etiuda:history-list")) || []).filter(v => v.path === path.resolve(SHOP));
+  const olderRow = listed.find(v => v.sha === sha(Buffer.from(older)));
+  const opened = olderRow ? await A.ask("etiuda:history-read", olderRow.sha, SHOP) : null;
   const foreign = JSON.stringify({ kind: "etiuda-lock", token: "another-desk", at: Date.now() });
   fs.writeFileSync(LOCK, foreign);
   const beside = await A.ask("etiuda:history-put", sha(Buffer.from(older)), SHOP);
   const left = fs.existsSync(LOCK) && fs.readFileSync(LOCK, "utf8") === foreign;
-  check(!!beside && beside.ok === true && fs.readFileSync(SHOP, "utf8") === older && left,
-    "nsfe3 a put-back waits for nobody: with another desk's lock file beside the catalog it puts back, and that file is left as it was ("
-    + JSON.stringify({ put: beside, back: fs.readFileSync(SHOP, "utf8") === older, lockLeft: left }) + ")");
-
-  /* nsfe4: with no lock file there, the put-back is the same act and leaves nothing beside the catalog. */
   fs.unlinkSync(LOCK);
-  fs.writeFileSync(SHOP, current);
   const free = await A.ask("etiuda:history-put", sha(Buffer.from(older)), SHOP);
-  check(!!free && free.ok === true && fs.readFileSync(SHOP, "utf8") === older && listing(FOLDER).join() === "shop.ec",
-    "nsfe4 THE CONTROL: with no lock beside it the put-back puts back, and the folder holds the catalog and nothing else ("
-    + JSON.stringify({ put: free, folder: listing(FOLDER) }) + ")");
+  check(!A.handles("etiuda:history-put") && beside === undefined && free === undefined && left && fs.readFileSync(SHOP, "utf8") === current
+    && listing(FOLDER).join() === "shop.ec",
+    "nsfe3 a put-back on a plain shared folder leaves the shared file byte for byte, with another desk's lock beside it or none, and leaves that lock as it was ("
+    + JSON.stringify({ beside: beside, free: free, lockLeft: left, folder: listing(FOLDER) }) + ")");
+
+  /* nsfe4: THE CONTROL: the history still lists the older version, offers it, and opens it as its own catalog text. */
+  check(!!olderRow && olderRow.put === true && !!opened && opened.text === older.trim(),
+    "nsfe4 THE CONTROL: the older version is still listed, still offered, and opens as its own catalog text (" + JSON.stringify({ rows: listed.length, put: olderRow && olderRow.put }) + ")");
 
   /* nsfe5: no source of the shell takes a lock beside a catalog, by the name the lock was kept under. */
   const main = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
@@ -125,8 +129,8 @@ try {
 
   /* nsfe6: the one write into the catalog folder left, the put-back, is the history's own and not the page's shared write. */
   const preload = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
-  check(preload.indexOf("etiuda:shared-") < 0 && main.indexOf("etiuda:shared-") < 0,
-    "nsfe6 neither shell file names a shared-read or shared-write channel");
+  check(preload.indexOf("etiuda:shared-") < 0 && main.indexOf("etiuda:shared-") < 0 && preload.indexOf("etiuda:history-put") < 0 && main.indexOf("etiuda:history-put") < 0,
+    "nsfe6 neither shell file names a shared-read, shared-write or history-put channel");
 } catch (e) {
   failed++;
   console.log("  FAIL the run stopped: " + (e && e.stack || e));
