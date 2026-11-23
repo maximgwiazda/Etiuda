@@ -2184,8 +2184,13 @@ if (deskOn()) try {
     const LINK_KEY_EN = "This invitation link does not match its team's lead: it may be damaged or altered, or the team may have a new lead since it was sent. Nothing was used or sent. A new link from the team's lead, or an invitation to this account's email address, works.";
     const LINK_KEY_PL = "Ten link z zaproszeniem nie zgadza się z liderem zespołu: mógł zostać uszkodzony albo zmieniony, albo zespół ma już innego lidera niż w chwili wysłania. Niczego nie użyto ani nie wysłano. Zadziała nowy link od lidera zespołu albo zaproszenie na adres e-mail tego konta.";
     let leadRuns = 0;
+    /* Its own team on the relay, so its runs (and the five plant runs of jlk4, each making and spending an invitation) leave the second
+       team, and the main desk's join that pDesk goes on to, exactly as they found them. */
+    const RTL = hex(16), TEAML = "t-" + hex(8);
+    const madeL = await admin("POST", "/relay/v1/teams", createBody(RTL, R.clock.now));
+    if (madeL.status !== 200) throw new Error("the lead-key team was not made");
     async function leadKeyRun(source) {
-      const genuine = await relayInviteOn(RT2, TEAM2);
+      const genuine = await relayInviteOn(RTL, TEAML);
       const fake = keyPair(false);
       const doc = JSON.parse(Buffer.from(genuine.text.slice("etiuda-join:".length), "base64url").toString("utf8"));
       doc.lead = { keyId: "studio-" + sha(Buffer.from(fake.pub, "hex")).slice(0, 16), public: fake.pub, name: "Ada Quay" };
@@ -2194,19 +2199,19 @@ if (deskOn()) try {
       const share = path.join(LAB, "lead-key-share-" + n);
       fs.mkdirSync(share, { recursive: true });
       const Dl = await newDesk("lead-key-" + n, share, source ? { source } : undefined);
-      const row = () => R.stores.get(RT2).get("inv:" + genuine.inv);
+      const row = () => R.stores.get(RTL).get("inv:" + genuine.inv);
       const drive = async () => { const ch = Dl.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); } };
       const craftedTaken = await Dl.ask("etiuda:team-join", "invite", crafted, "Desk Eleven", "");
-      const pinnedFake = !!(Dl.envelope().teamPins && Dl.envelope().teamPins[TEAM2] && Dl.envelope().teamPins[TEAM2].public === fake.pub);
-      const letGo = await until(async () => { await drive(); const env = Dl.envelope(); return !env.teamJoin && !(env.teamPins && env.teamPins[TEAM2]); }, 8000);
+      const pinnedFake = !!(Dl.envelope().teamPins && Dl.envelope().teamPins[TEAML] && Dl.envelope().teamPins[TEAML].public === fake.pub);
+      const letGo = await until(async () => { await drive(); const env = Dl.envelope(); return !env.teamJoin && !(env.teamPins && env.teamPins[TEAML]); }, 8000);
       const r1 = row();
       const unspent = !!r1 && !r1.spent;
       const said = Dl.said.some(l => l.indexOf(LINK_KEY_EN) >= 0 && l.indexOf(LINK_KEY_PL) >= 0);
       const genuineTaken = await Dl.ask("etiuda:team-join", "invite", genuine.text, "Desk Eleven", "");
       const spent = await until(async () => { await drive(); const r = row(); return !!r && r.spent === true; }, 8000);
       const env2 = Dl.envelope();
-      const pin2 = env2.teamPins && env2.teamPins[TEAM2];
-      const joined = !!(env2.teamJoin && env2.teamJoin.team === TEAM2) && !!pin2 && pin2.public === LEAD.pub && !(env2.teamJoin.invite.relay.end);
+      const pin2 = env2.teamPins && env2.teamPins[TEAML];
+      const joined = !!(env2.teamJoin && env2.teamJoin.team === TEAML) && !!pin2 && pin2.public === LEAD.pub && !(env2.teamJoin.invite.relay.end);
       const ok = !!craftedTaken && !craftedTaken.refused && pinnedFake && letGo && unspent && said
         && !!genuineTaken && !genuineTaken.refused && spent && joined;
       const note = "crafted " + (craftedTaken && craftedTaken.refused ? "refused " + craftedTaken.refused : "taken")
