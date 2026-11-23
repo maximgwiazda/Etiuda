@@ -897,9 +897,8 @@ ladder, and every Electron reading this harness had taken before that date was t
 And `@electron/asar` caches an archive's header by path, so a read-back after a repack answers
 with the previous archive's offsets unless `uncacheAll()` is called.
 
-**A healthy boot of the packaged app logs two console errors**, the sibling catalog scripts the
-engine asks for at boot and the policy refuses by design. A leg counting console errors over the
-shell has to expect exactly those two.
+**A healthy boot of the packaged app logs no console error.** The page asks for no script by
+address, so a leg counting console errors over the shell expects none.
 
 **What a run leaves behind is a check, not a hope.** `tests/csp.js` and `tests/desk.js` both
 ended in `try { fs.rmSync(lab, ...) } catch {}` and both left their throwaway Chromium profile in
