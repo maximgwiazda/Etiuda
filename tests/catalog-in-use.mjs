@@ -22,7 +22,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 148;
+const EXPECTED = 150;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see the catalogs it uses, their content included, and this desk's changes to them. The lead's Studio can take a copy of any of them at any time, without asking here: of a team catalog, one the lead publishes to the team, sealed for the team; of a personal catalog, any other on this desk, sealed for the lead alone. A personal catalog can be marked Private in the Library, under Catalog & data; the lead then sees nothing of it, not even that it is used. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses unless that catalog is Private, and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, none of them from a Private catalog, and Studio shows them in the team's totals.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi katalogi, których używa to stanowisko, razem z ich treścią, oraz zmiany wprowadzone w nich na tym stanowisku. Studio lidera może w każdej chwili, bez pytania tutaj, pobrać kopię każdego z nich: katalogu zespołowego, czyli publikowanego przez lidera dla zespołu, zapieczętowaną dla zespołu, a katalogu osobistego, czyli każdego innego na tym stanowisku, zapieczętowaną wyłącznie dla lidera. Katalog osobisty można oznaczyć jako Prywatny w Bibliotece, w części Katalog i dane; lider nie widzi wtedy nic z niego, nawet tego, że jest używany. Studio lidera wymienia to stanowisko z nazwy, chyba że organizacja wyłączy nazwy, razem z używanym katalogiem i jego wydaniem, o ile nie jest to katalog prywatny, oraz z okresem zliczania, i wymienia je dalej, gdy przestanie się odzywać. Własne dane stanowiska trafiają do lidera zapieczętowane, bez żadnych danych z katalogu prywatnego, a Studio pokazuje je w sumach zespołu.";
@@ -546,6 +546,42 @@ try {
     check(had && !fs.existsSync(inUsePath(box.share, box.me.id)) && !fs.existsSync(path.join(box.share, "desks", box.me.id, "in-use.ec"))
         && !box.D.envelope().inUse,
       "890v forgetting the lead removes in-use.ec");
+
+    /* 890v2: the same on a relay team. The desk's note sits in the team's relay mirror (userData/relay/<rt>), not under a folder team's
+       mirror, and forgetLead took the note out of the folder one only and then released it after the team's channel was gone, so a
+       forgotten lead left what this desk had said about the team in the mirror a later invitation would send from. Only this desk's
+       own note goes: another desk's note and this desk's other files in the mirror stay. */
+    const relayForget = async (name, src) => {
+      const ud = path.join(LAB, name);
+      fs.mkdirSync(ud, { recursive: true });
+      const RT = crypto.randomBytes(16).toString("hex"), TR = "t-" + crypto.randomBytes(8).toString("hex");
+      fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
+        keys: { eCatalogFolder: folder(name + "-own"), eUiLang: "en", eAgent: "North desk" },
+        teamPins: { [TR]: LEAD }, teamPinFrom: { [TR]: "invite" }, teamShown: { [TR]: { lead: "North lead", relay: "etiuda.dev" } },
+        teamChannel: { [TR]: { kind: "relay", rt: RT, url: "https://etiuda.dev/relay/v1" } } }), "utf8");
+      const R = loadDesk(ud, src);
+      const meR = await R.ask("etiuda:branch-identity", true);
+      const mine = path.join(ud, "relay", RT, "desks", meR.id), others = path.join(ud, "relay", RT, "desks", "b".repeat(16));
+      fs.mkdirSync(mine, { recursive: true });
+      fs.mkdirSync(others, { recursive: true });
+      for (const f of [path.join(mine, "in-use.ec"), path.join(mine, "catalog-answer.ec"), path.join(others, "in-use.ec")]) fs.writeFileSync(f, "{}\n", "utf8");
+      const kept = () => ["in-use.ec", "catalog-answer.ec"].map(n => fs.existsSync(path.join(mine, n))).concat(fs.existsSync(path.join(others, "in-use.ec"))).join(",");
+      const before = kept();
+      await R.ask("etiuda:team-join", "forget", TR);
+      return { before: before, after: kept(), pin: !!(R.envelope().teamPins || {})[TR] };
+    };
+    {
+      const r = await relayForget("relay-forget");
+      check(r.before === "true,true,true" && r.after === "false,true,true" && !r.pin,
+        "890v2 forgetting the lead of a relay team removes this desk's in-use note from the relay mirror and nothing else there: before " + r.before + ", after " + r.after);
+      if (PLANTS_OFF) skip("890v3 lifting plant:forget-note-relay leaves the note in the relay mirror (FAIL 890v2)");
+      else {
+        const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:forget-note-relay") >= 0);
+        let p = null;
+        if (at >= 0) { lines[at] = "  const mirrorOfTeam = folderMirrorOf(team);"; p = await relayForget("relay-forget-plant", lines.join("\n")); }
+        check(!!p && p.after === "true,true,true", "890v3 lifting plant:forget-note-relay leaves the note in the relay mirror (FAIL 890v2): " + JSON.stringify(p));
+      }
+    }
 
     const drop = await arm("drop");
     put(drop.share, "board.ec", textOf(catalog(2)));
