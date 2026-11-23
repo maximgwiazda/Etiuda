@@ -112,13 +112,14 @@ function replyRows(id, target, o){
       act:()=>{ setEntrySel(id, vi); copyCardPart(id, vi, anchor, true); } });
   }
   const btn=a=>card ? card.querySelector('.cacts [data-act="'+a+'"]') : null;
-  const note=btn("note"), edit=btn("edit"), fav=btn("fav"), hide=btn("hide");
+  const note=btn("note"), edit=btn("edit"), fav=btn("fav"), fold=btn("fold");
   rows.push("-");
   rows.push({ label:label(edit, t("Edit this card")), act:pressOr(edit, null, ()=>hooks.openCardEditor(id)), key:"F2" });
   if(shareOfferedNow() && cardIsShareable(m)) rows.push({ label:t("Share with…"), act:()=>sharePressed(id, o.anchor || anchor) });
   rows.push({ label:label(fav, t(isFavourite(id) ? "Remove from Favourites" : "Add to Favourites")), act:pressOr(fav, null, ()=>toggleFavourite(id)) });
   if(note && o.note!==false) rows.push({ label:t("Show the note"), act:()=>press(note) });
-  rows.push({ label:t(m._hidden ? "Show this card again" : "Put this card away"), act:pressOr(hide, null, ()=>hooks.hideCard(id)) });
+  if(fold) rows.push({ label:t(fold.getAttribute("aria-expanded")==="false" ? "Show this card" : "Fold this card away"), act:()=>press(fold) });
+  if(m._hidden) rows.push({ label:t("Show this card again"), act:()=>hooks.hideCard(id) });
   return rows;
 }
 

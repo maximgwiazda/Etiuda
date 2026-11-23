@@ -35,6 +35,18 @@ function groupKeyOf(m){
   if(favBlockOn() && isFavourite(m&&m.id)) return COLLAPSE_FAV;
   return String((m&&m.c)||"");
 }
+/* A card's own fold shares the groups' storage under a key of its own: the prefix starts with a colon, as the two
+   sentinels do, so no category key can equal one. It is drawn only where a group's fold is, which render() says:
+   a search draws no groups, and a hit is never hidden behind a fold. */
+const COLLAPSE_CARD=":card:";
+let cardsFoldable=false;
+function setCardsFoldable(on){ cardsFoldable=!!on; }
+function cardFoldKey(id){ return COLLAPSE_CARD+String(id); }
+function cardFoldOffered(id){ return cardsFoldable && !!id; }
+function isCardFolded(id){ return cardsFoldable && !!id && isCollapsed(cardFoldKey(id)); }
+function toggleCardFold(id){ if(id) toggleCollapsed(cardFoldKey(id)); }
+/** "n" where no fold is drawn, else "f" or "o": part of a card's signature, so a fold rebuilds that card alone. */
+function cardFoldSig(id){ return !cardsFoldable ? "n" : (isCardFolded(id) ? "f" : "o"); }
 /** The chevron and the count that every separator carries. */
 function collapseCtrlHtml(key,count){
   const shut=isCollapsed(key);
@@ -50,6 +62,12 @@ export {
   toggleCollapsed,
   groupKeyOf,
   collapseCtrlHtml,
+  setCardsFoldable,
+  cardFoldOffered,
+  cardFoldKey,
+  isCardFolded,
+  toggleCardFold,
+  cardFoldSig,
   COLLAPSE_BAND,
   COLLAPSE_FAV
 };

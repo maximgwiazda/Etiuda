@@ -2007,6 +2007,8 @@ main{max-width:none;margin:16px 0 0;padding:0}
    Firefox has supported this since 125, Chrome since 85; where it is unsupported the property
    is ignored and the list behaves exactly as it did. */
 #list .card{content-visibility:auto;contain-intrinsic-size:auto 220px}
+/* A folded card is its caption alone, so the estimate a card off the screen holds is the caption's height and not a whole card's. */
+#list .card.is-folded{contain-intrinsic-size:auto 32px}
 /* A card at rest is contained, so its last slab's bottom margin stays inside it. A card forced
    visible loses the containment: flow-root keeps the margin in, or the card snaps 10px shorter. */
 #list .card{display:flow-root}
@@ -2378,7 +2380,7 @@ body.shift-held:not(.ctrl-held) .rail-item.slot-hot .rail-fav.rail-hide{display:
 /* Stays dimmed on hover: the dimming is the state, not a hover effect. No strikethrough
    either - grey reads as "put away", a line through it reads as "deleted". */
 .card.is-hidden:hover{opacity:.55}
-.card.is-hidden .cacts{opacity:1}
+.card.is-hidden .cacts,.card.is-folded .cacts{opacity:1}
 /* ADD AFFORDANCES WEAR THE DASH: the "+" pill after the last category, "+ Intent" at the foot
    of the panel, and the corner button that starts a card. The two standing IN a list are
    unfilled as well, so they read as the outline of a thing and are never taken for a real one;
@@ -2710,7 +2712,7 @@ html.raildrag #intentRailList{margin-top:0}
   /* While a bubble from a card's button stands (the flag's, Reword's menu, its waiting line, its refusal) the card keeps its buttons out, with the
      pointer or the keyboard anywhere, so the bubble points at a visible button; closed, they go back to waiting. While they wait they take no width, so the title runs the whole row and recedes when they
      come. The cut pass reads their width from here (cut-text.js, cut-rh). */
-  body:not(.tour-cacts) .card:not(:hover,:focus-within,.is-hidden):not(:has([data-act=flag][aria-expanded=true])):not(:has([data-act=share][aria-expanded=true])):not(:has([data-act=reword][aria-expanded=true]))>.chead .cacts{
+  body:not(.tour-cacts) .card:not(:hover,:focus-within,.is-hidden,.is-folded):not(:has([data-act=flag][aria-expanded=true])):not(:has([data-act=share][aria-expanded=true])):not(:has([data-act=reword][aria-expanded=true]))>.chead .cacts{
     width:0;overflow:hidden;margin-left:calc(-1*var(--chead-gap))}
 }
 /* A tour has no pointer, so a step showcasing the star, the eye or the pencil was pointing at
@@ -2914,6 +2916,14 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
 .cacts button:focus-visible{box-shadow:inset 0 0 0 1px var(--accent)}
 .cacts button.danger:focus-visible{box-shadow:inset 0 0 0 1px #c44}
 .cacts button.star-btn:focus-visible{box-shadow:inset 0 0 0 1px var(--fav)}
+/* THE CARD'S FOLD is the group's own chevron at the caption's size, turning as the group's does (down open, right shut) with the same
+   animations (see .list-sep .sep-fold). Folding loses nothing, so it takes no danger colour; aria-expanded stays true on an open card
+   and the popover rule above would colour it, so the fold keeps its resting ink and takes the accent on hover and focus. */
+.chead .cacts button.card-fold svg{width:15px;height:15px;transform:rotate(90deg);transition:transform var(--m-move) var(--m-ease)}
+.chead .cacts button.card-fold.shut svg{transform:rotate(0deg)}
+.chead .cacts button.card-fold.e-turn-shut svg{animation:e-fold-turn-shut var(--m-move) var(--m-ease)}
+.chead .cacts button.card-fold.e-turn-open svg{animation:e-fold-turn-open var(--m-move) var(--m-ease)}
+.chead .cacts button.card-fold[aria-expanded=true]:not(:hover):not(:focus-visible){color:var(--dim)}
 /* THE FLAG, lit amber while it is with the lead or its answer waits; outranks every resting ground (the product designer's
    sheet of the flag, point 7). */
 .chead .cacts button.flag-btn.on{color:var(--flag-ink);background:color-mix(in srgb,var(--flag) 20%,var(--panel));box-shadow:inset 0 0 0 1px var(--flag)}
@@ -8024,7 +8034,7 @@ What is typed here stays in this browser.`;
     let end = row2.getBoundingClientRect().right - parseFloat(rs.borderRightWidth) - parseFloat(rs.paddingRight);
     for (let n = el.nextElementSibling; n && n !== acts; n = n.nextElementSibling) end -= n.getBoundingClientRect().width + gap;
     const card = el.closest(".card");
-    const folds = matchMedia("(hover:hover)").matches && !document.body.classList.contains("tour-cacts") && !(card && card.classList.contains("is-hidden")) && !acts.querySelector('[data-act="flag"][aria-expanded="true"]');
+    const folds = matchMedia("(hover:hover)").matches && !document.body.classList.contains("tour-cacts") && !(card && (card.classList.contains("is-hidden") || card.classList.contains("is-folded"))) && !acts.querySelector('[data-act="flag"][aria-expanded="true"]');
     const receded = end - acts.scrollWidth - gap;
     const b = el.getBoundingClientRect(), boxL = b.left + parseFloat(cs.borderLeftWidth) + parseFloat(cs.paddingLeft);
     return { l: boxL - ink.left > CUT_EPS, r: ink.right - (folds ? end : receded) > CUT_EPS, rh: ink.right - receded > CUT_EPS };
@@ -8108,6 +8118,8 @@ What is typed here stays in this browser.`;
     "The card keeps this language whatever the EN|PL toggle says, tokens included": "Karta i jej tokeny zostają w tym języku niezależnie od przełącznika EN|PL",
     "Fold this group away": "Zwiń tę grupę",
     "Show these cards": "Pokaż te karty",
+    "Fold this card away": "Zwiń tę kartę",
+    "Show this card": "Pokaż tę kartę",
     "Matching your intent": "Pasujące do intencji",
     "Settings reset": "Przywrócono ustawienia domyślne",
     "Put every setting on this screen back to what it ships with. Cards and edits are not affected.": "Przywraca domyślne wartości wszystkich ustawień na tym ekranie. Karty i zmiany w nich zostają nienaruszone.",
@@ -9414,7 +9426,7 @@ What is typed here stays in this browser.`;
     'A click on a category shows only its cards, and <kbd>Ctrl</kbd>+click keeps several. A <b class="t-go">green</b> ring marks one holding a card for the chosen intent, and a <b class="t-acc">blue</b> one a supporting category, useful for any question.': 'Kliknięcie kategorii zostawia tylko jej karty, a <kbd>Ctrl</kbd>+kliknięcie pozwala wybrać kilka. <b class="t-go">Zielona</b> obwódka oznacza kategorię z kartą dla wybranej intencji, a <b class="t-acc">niebieska</b> kategorię wspierającą, przydatną przy każdym pytaniu.',
     "Each customer on the chat gets a tab of their own here, with their name, intent and language, so a reply never carries the wrong name. <b>+</b> or {NEW} opens another conversation, {KEY} moves to the next and {PREV} to the one before.": "Każdy klient na czacie ma tu osobną rozmowę, z własnym imieniem, intencją i językiem, więc żadna odpowiedź nie pójdzie z cudzym imieniem. Kolejną rozmowę otwiera <b>+</b> albo skrót {NEW}, {KEY} przechodzi do następnej, a {PREV} do poprzedniej.",
     "Replies in this conversation follow the language chosen here, so each customer is answered in their own. {KEY} switches it from anywhere.": "Odpowiedzi w tej rozmowie idą w języku wybranym tutaj, więc każdy klient dostaje odpowiedź w swoim. {KEY} przełącza język z dowolnego miejsca.",
-    'The star lifts a card to the top of its category, and under <span class="t-pill"><span data-icon="all"></span>All</span> into <b class="t-fav"><span data-icon="star"></span>Favourites</b>.<br>The eye puts it away, greyed at the foot of its category, and brings it back from there.<br>The pencil opens it for editing, and <b>Reset</b> in the editor brings back the catalog\'s own words.<br>Click the pencil on this card.': 'Gwiazdka przenosi kartę na początek jej kategorii, a w widoku <span class="t-pill"><span data-icon="all"></span>Wszystkie</span> do <b class="t-fav"><span data-icon="star"></span>Ulubionych</b>.<br>Oko odkłada ją na bok, szarą, na dół kategorii, i stamtąd też ją przywraca.<br>Ołówek otwiera ją do poprawek, a <b>Przywróć</b> w edytorze wraca do treści z katalogu.<br>Proszę kliknąć ołówek na tej karcie.',
+    'The star lifts a card to the top of its category, and under <span class="t-pill"><span data-icon="all"></span>All</span> into <b class="t-fav"><span data-icon="star"></span>Favourites</b>.<br>The chevron folds it to its title, and opens it again.<br>The pencil opens it for editing, and <b>Reset</b> in the editor brings back the catalog\'s own words.<br>Click the pencil on this card.': 'Gwiazdka przenosi kartę na początek jej kategorii, a w widoku <span class="t-pill"><span data-icon="all"></span>Wszystkie</span> do <b class="t-fav"><span data-icon="star"></span>Ulubionych</b>.<br>Strzałka zwija ją do samego tytułu i rozwija ponownie.<br>Ołówek otwiera ją do poprawek, a <b>Przywróć</b> w edytorze wraca do treści z katalogu.<br>Proszę kliknąć ołówek na tej karcie.',
     '<span class="t-sec">Content</span> holds the text in both languages and the internal note; the folds below hold the keywords, the category, the linked intents, the next replies and the advanced settings. <b>Cancel</b> leaves everything as it was.': '<span class="t-sec">Treść</span> to tekst w obu językach i notatka wewnętrzna; w zwiniętych sekcjach poniżej są słowa kluczowe, kategoria, powiązane intencje, kolejne odpowiedzi i ustawienia zaawansowane. <b>Anuluj</b> zostawia wszystko bez zmian.',
     "Click <b>+</b> to write a card of your own, in the category open now or in any other chosen in the editor.": "Proszę kliknąć <b>+</b>, żeby napisać własną kartę: trafi do otwartej teraz kategorii albo do innej, wybranej w edytorze.",
     "A new card": "Nowa karta",
@@ -13001,7 +13013,7 @@ What is typed here stays in this browser.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-11-22";
+  var E_BUILT = "2026-11-23";
 
   // src/modules/affinity.js
   var affinity_exports = {};
@@ -24021,8 +24033,84 @@ What is typed here stays in this browser.`;
   var card_body_exports = {};
   __export(card_body_exports, {
     cardBodyHtml: () => cardBodyHtml,
+    setCardHideButton: () => setCardHideButton,
     swapStripHtml: () => swapStripHtml
   });
+
+  // src/modules/collapse.js
+  var collapse_exports = {};
+  __export(collapse_exports, {
+    COLLAPSE_BAND: () => COLLAPSE_BAND,
+    COLLAPSE_FAV: () => COLLAPSE_FAV,
+    cardFoldKey: () => cardFoldKey,
+    cardFoldOffered: () => cardFoldOffered,
+    cardFoldSig: () => cardFoldSig,
+    collapseCtrlHtml: () => collapseCtrlHtml,
+    groupKeyOf: () => groupKeyOf,
+    isCardFolded: () => isCardFolded,
+    isCollapsed: () => isCollapsed,
+    rereadCollapsed: () => rereadCollapsed,
+    setCardsFoldable: () => setCardsFoldable,
+    toggleCardFold: () => toggleCardFold,
+    toggleCollapsed: () => toggleCollapsed
+  });
+  var COLLAPSE_BAND = ":band";
+  var COLLAPSE_FAV = ":fav";
+  var eCollapsed = null;
+  function collapsedSet() {
+    if (eCollapsed) return eCollapsed;
+    eCollapsed = /* @__PURE__ */ new Set();
+    try {
+      const raw = lsGet("eCollapsed");
+      if (raw) JSON.parse(raw).forEach((k) => eCollapsed.add(String(k)));
+    } catch (e) {
+    }
+    return eCollapsed;
+  }
+  function isCollapsed(key) {
+    return !!key && collapsedSet().has(String(key));
+  }
+  function toggleCollapsed(key) {
+    const set = collapsedSet();
+    if (set.has(key)) set.delete(key);
+    else set.add(key);
+    try {
+      lsSet("eCollapsed", JSON.stringify(Array.from(set)));
+    } catch (e) {
+    }
+  }
+  function rereadCollapsed() {
+    eCollapsed = null;
+  }
+  function groupKeyOf(m) {
+    if (inIntentBand(m)) return COLLAPSE_BAND;
+    if (favBlockOn() && isFavourite(m && m.id)) return COLLAPSE_FAV;
+    return String(m && m.c || "");
+  }
+  var COLLAPSE_CARD = ":card:";
+  var cardsFoldable = false;
+  function setCardsFoldable(on) {
+    cardsFoldable = !!on;
+  }
+  function cardFoldKey(id) {
+    return COLLAPSE_CARD + String(id);
+  }
+  function cardFoldOffered(id) {
+    return cardsFoldable && !!id;
+  }
+  function isCardFolded(id) {
+    return cardsFoldable && !!id && isCollapsed(cardFoldKey(id));
+  }
+  function toggleCardFold(id) {
+    if (id) toggleCollapsed(cardFoldKey(id));
+  }
+  function cardFoldSig(id) {
+    return !cardsFoldable ? "n" : isCardFolded(id) ? "f" : "o";
+  }
+  function collapseCtrlHtml(key, count) {
+    const shut = isCollapsed(key);
+    return '<span class="sep-n">' + count + '</span><button type="button" class="sep-fold' + (shut ? " shut" : "") + '" data-fold-key="' + esc(key) + '" title="' + esc(t(shut ? "Show these cards" : "Fold this group away")) + '" aria-expanded="' + (shut ? "false" : "true") + '">' + ICON_CHEVRON_R + "</button>";
+  }
 
   // src/modules/card-chain.js
   var card_chain_exports = {};
@@ -24433,55 +24521,6 @@ What is typed here stays in this browser.`;
     manualToastMsg: () => manualToastMsg,
     wireListPointer: () => wireListPointer
   });
-
-  // src/modules/collapse.js
-  var collapse_exports = {};
-  __export(collapse_exports, {
-    COLLAPSE_BAND: () => COLLAPSE_BAND,
-    COLLAPSE_FAV: () => COLLAPSE_FAV,
-    collapseCtrlHtml: () => collapseCtrlHtml,
-    groupKeyOf: () => groupKeyOf,
-    isCollapsed: () => isCollapsed,
-    rereadCollapsed: () => rereadCollapsed,
-    toggleCollapsed: () => toggleCollapsed
-  });
-  var COLLAPSE_BAND = ":band";
-  var COLLAPSE_FAV = ":fav";
-  var eCollapsed = null;
-  function collapsedSet() {
-    if (eCollapsed) return eCollapsed;
-    eCollapsed = /* @__PURE__ */ new Set();
-    try {
-      const raw = lsGet("eCollapsed");
-      if (raw) JSON.parse(raw).forEach((k) => eCollapsed.add(String(k)));
-    } catch (e) {
-    }
-    return eCollapsed;
-  }
-  function isCollapsed(key) {
-    return !!key && collapsedSet().has(String(key));
-  }
-  function toggleCollapsed(key) {
-    const set = collapsedSet();
-    if (set.has(key)) set.delete(key);
-    else set.add(key);
-    try {
-      lsSet("eCollapsed", JSON.stringify(Array.from(set)));
-    } catch (e) {
-    }
-  }
-  function rereadCollapsed() {
-    eCollapsed = null;
-  }
-  function groupKeyOf(m) {
-    if (inIntentBand(m)) return COLLAPSE_BAND;
-    if (favBlockOn() && isFavourite(m && m.id)) return COLLAPSE_FAV;
-    return String(m && m.c || "");
-  }
-  function collapseCtrlHtml(key, count) {
-    const shut = isCollapsed(key);
-    return '<span class="sep-n">' + count + '</span><button type="button" class="sep-fold' + (shut ? " shut" : "") + '" data-fold-key="' + esc(key) + '" title="' + esc(t(shut ? "Show these cards" : "Fold this group away")) + '" aria-expanded="' + (shut ? "false" : "true") + '">' + ICON_CHEVRON_R + "</button>";
-  }
 
   // src/modules/favourites.js
   var favourites_exports = {};
@@ -27807,6 +27846,25 @@ What is typed here stays in this browser.`;
     fresh.forEach((el) => el.classList.add("e-unfolding"));
     setTimeout(() => fresh.forEach((el) => el.classList.remove("e-unfolding")), 260);
   }
+  function animateCardFold(id) {
+    const willShut = !isCardFolded(id), held = !!(document.activeElement && document.activeElement.closest && document.activeElement.closest(".card-fold"));
+    flipCardsAround(() => {
+      toggleCardFold(id);
+      hooks.render();
+    }, { clampTravel: 180 });
+    const card = list && list.querySelector('.card[data-id="' + cssEsc(id) + '"]');
+    const fold = card && card.querySelector(".card-fold");
+    if (!fold) return;
+    if (held) fold.focus({ preventScroll: true });
+    if (mgReduceMotion()) return;
+    const turn = willShut ? "e-turn-shut" : "e-turn-open";
+    fold.classList.add(turn);
+    setTimeout(() => fold.classList.remove(turn), 220);
+    if (!willShut) {
+      card.classList.add("e-unfolding");
+      setTimeout(() => card.classList.remove("e-unfolding"), 260);
+    }
+  }
   function animateFoldAll(shut) {
     const keys = list ? Array.prototype.map.call(list.querySelectorAll(".sep-fold[data-fold-key]"), (b) => b.getAttribute("data-fold-key")) : [];
     const flip = keys.filter((k) => isCollapsed(k) !== !!shut);
@@ -28076,7 +28134,9 @@ What is typed here stays in this browser.`;
         } else if (act === "share") {
           if (id) sharePressed(id, actBtn);
         } else if (act === "reword") openRewordMenu(actBtn, id);
-        else if (act === "hide") flipCardsAround(() => hooks.hideCard(id), card2.classList.contains("is-hidden") ? null : { leave: id });
+        else if (act === "fold") {
+          if (id) animateCardFold(id);
+        } else if (act === "hide") flipCardsAround(() => hooks.hideCard(id), card2.classList.contains("is-hidden") ? null : { leave: id });
         return;
       }
       const code = e.target.closest(".swap code");
@@ -28134,11 +28194,16 @@ What is typed here stays in this browser.`;
   }
 
   // src/modules/card-body.js
+  var cardHideButton = false;
+  function setCardHideButton(on) {
+    cardHideButton = !!on;
+  }
   function cardBodyHtml(m, i, ctx) {
     const hit = ctx.hit, catHit = ctx.catHit, fav = ctx.fav, band = ctx.band, other = ctx.other, dragTip = ctx.dragTip;
     let cardH = "";
-    const rw = rewordShown(m);
-    cardH += '<div class="card' + (m._hidden ? " is-hidden" : "") + (rw ? " rw-on" : "") + (hit ? " intent-hit" : "") + (catHit ? " cat-hit" : "") + (cardDrag && cardDrag.moved && cardDrag.key === m.id ? " dragging" : "") + '" data-i="' + i + '" data-id="' + esc(m.id || "") + '" data-rank="' + esc(band) + '"' + (catSlot(m.c) >= 0 ? ' data-ec="' + catSlot(m.c) + '"' : "") + ' title="' + esc(dragTip) + '">';
+    const foldOn = cardFoldOffered(m.id), folded = foldOn && isCardFolded(m.id);
+    const rw = folded ? null : rewordShown(m);
+    cardH += '<div class="card' + (m._hidden ? " is-hidden" : "") + (folded ? " is-folded" : "") + (rw ? " rw-on" : "") + (hit ? " intent-hit" : "") + (catHit ? " cat-hit" : "") + (cardDrag && cardDrag.moved && cardDrag.key === m.id ? " dragging" : "") + '" data-i="' + i + '" data-id="' + esc(m.id || "") + '" data-rank="' + esc(band) + '"' + (catSlot(m.c) >= 0 ? ' data-ec="' + catSlot(m.c) + '"' : "") + ' title="' + esc(dragTip) + '">';
     cardH += '<div class="chead">';
     cardH += catMarkHtml(m.c) + '<span class="ctitle" data-i18n-skip>' + esc(cardTitle(m)) + "</span>" + (cardCommits(m) ? stampHtml("cstamp") : "") + flagMarkHtml(String(m.id || ""));
     const hitBadge = '<span class="cbadge hit" title="' + esc(t("Linked to the selected intent")) + '">' + esc(t("Linked")) + "</span>";
@@ -28153,8 +28218,12 @@ What is typed here stays in this browser.`;
     if (edMark) cardH += '<span class="cbadge edn" title="' + esc(edMark.k === "new" ? editionSaid(edMark, t("New in rev {R}"), t("New in edition {E}")) : editionSaid(edMark, t("Changed in rev {R}"), t("Changed in edition {E}"))) + '">' + esc(edMark.k === "new" ? t("new") : t("changed")) + "</span>";
     const favTip = t(fav ? "Remove from Favourites" : "Add to Favourites");
     const hideTip = t(m._hidden ? "Show this card again" : fav ? "Put this card away: it greys out at the foot of this category and loses its star" : "Put this card away: it greys out at the foot of this category");
+    const foldTip = t(folded ? "Show this card" : "Fold this card away");
+    const foldBtn = foldOn ? '<button type="button" class="card-fold' + (folded ? " shut" : "") + '" data-act="fold" title="' + esc(foldTip) + '" aria-label="' + esc(foldTip) + '" aria-expanded="' + (folded ? "false" : "true") + '">' + ICON_CHEVRON_R + "</button>" : "";
+    const hideBtn = cardHideButton ? '<button type="button" class="' + (m._hidden ? "" : "danger") + '" data-act="hide" title="' + esc(hideTip) + '" aria-label="' + esc(hideTip) + '">' + (m._hidden ? ICON_EYE_SHUT : ICON_EYE_OPEN) + "</button>" : "";
     const _note = noteFor(m);
-    cardH += '<span class="cacts">' + rewordButtonHtml() + (_note ? '<button type="button" data-act="note" title="' + esc(t("Internal note")) + '" aria-label="' + esc(t("Internal note")) + '" aria-expanded="false">' + _svg("ic", _NOTE) + "</button>" : "") + '<button type="button" data-act="edit" title="' + esc(t("Edit this card")) + '" aria-label="' + esc(t("Edit this card")) + '">' + ICON_EDIT + "</button>" + shareButtonHtml(m) + flagButtonHtml(String(m.id || "")) + '<button type="button" class="' + (m._hidden ? "" : "danger") + '" data-act="hide" title="' + esc(hideTip) + '" aria-label="' + esc(hideTip) + '">' + (m._hidden ? ICON_EYE_SHUT : ICON_EYE_OPEN) + '</button><button type="button" class="star-btn' + (fav ? " on" : "") + '" data-act="fav" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + "</button></span></div>";
+    cardH += '<span class="cacts">' + (folded ? "" : rewordButtonHtml()) + (_note ? '<button type="button" data-act="note" title="' + esc(t("Internal note")) + '" aria-label="' + esc(t("Internal note")) + '" aria-expanded="false">' + _svg("ic", _NOTE) + "</button>" : "") + '<button type="button" data-act="edit" title="' + esc(t("Edit this card")) + '" aria-label="' + esc(t("Edit this card")) + '">' + ICON_EDIT + "</button>" + shareButtonHtml(m) + flagButtonHtml(String(m.id || "")) + hideBtn + foldBtn + '<button type="button" class="star-btn' + (fav ? " on" : "") + '" data-act="fav" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + "</button></span></div>";
+    if (folded) return { cardH: cardH + "</div>", hitBadge, catBadge };
     const _L = cardLang(m);
     const ps = parts(m, _L), cls = _L === CONTENT_LANGS[0] ? "" : " plx", edDiff = editionDiffParts(m, _L, ps);
     if (rw) cardH += rewordChipHtml(rw);
@@ -28226,7 +28295,7 @@ What is typed here stays in this browser.`;
     cardPool = /* @__PURE__ */ new Map();
   }
   function patchCard(el, it) {
-    el.className = "card" + (it.hidden ? " is-hidden" : "") + (it.rw ? " rw-on" : "") + (it.hit ? " intent-hit" : "") + (it.catHit ? " cat-hit" : "") + (it.dragging ? " dragging" : "") + deckCarry(el);
+    el.className = "card" + (it.hidden ? " is-hidden" : "") + (it.folded ? " is-folded" : "") + (it.rw ? " rw-on" : "") + (it.hit ? " intent-hit" : "") + (it.catHit ? " cat-hit" : "") + (it.dragging ? " dragging" : "") + deckCarry(el);
     el.setAttribute("title", it.dragTip);
     el.setAttribute("data-i", it.i);
     el.setAttribute("data-rank", it.band);
@@ -28287,7 +28356,7 @@ What is typed here stays in this browser.`;
     );
     const fresh = parseCardHtml(b.cardH);
     if (!fresh) return;
-    fresh.__sig = ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1) + "|" + editionMarkSig(m.id) + "|" + flagSig(String(m.id || "")) + "|" + rewordSig(m.id) + "|" + shareSig(m);
+    fresh.__sig = ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1) + "|" + editionMarkSig(m.id) + "|" + flagSig(String(m.id || "")) + "|" + rewordSig(m.id) + "|" + shareSig(m) + "|" + cardFoldSig(m.id);
     const ord = el.getAttribute("data-ord");
     if (ord != null) fresh.setAttribute("data-ord", ord);
     deckUnobserve(el);
@@ -30001,6 +30070,7 @@ What is typed here stays in this browser.`;
     const sepLabel = t(sepByBand ? "not linked to your intent" : "also mentions your search");
     const dragTip = terms.length ? t("A search ranks the cards by relevance; clear it to order them yourself") : t(intentIdxs.length ? "Drag header to reorder within the same highlight group" : "Drag header to reorder within the same highlight group; same category only");
     const groupList = !terms.length;
+    setCardsFoldable(groupList);
     const spellNote = eSpellFix && eSpellFix.length ? '<div class="e-spellfix">' + esc(t("Searched for")) + " " + eSpellFix.map((f) => "<b>" + esc(f.to) + "</b>").join(" " + esc(t("and")) + " ") + " · " + esc(t("you typed")) + " " + eSpellFix.map((f) => esc(f.from)).join(" " + esc(t("and")) + " ") + "</div>" : "";
     const groupN = {};
     if (groupList) shown.forEach((m) => {
@@ -30044,11 +30114,12 @@ What is typed here stays in this browser.`;
         sepH,
         body,
         id: m.id,
-        sig: ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1) + "|" + editionMarkSig(m.id) + "|" + flagSig(String(m.id || "")) + "|" + rewordSig(m.id) + "|" + shareSig(m),
+        sig: ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1) + "|" + editionMarkSig(m.id) + "|" + flagSig(String(m.id || "")) + "|" + rewordSig(m.id) + "|" + shareSig(m) + "|" + cardFoldSig(m.id),
         hit,
         catHit,
         hidden: !!m._hidden,
-        rw: !!rewordShown(m),
+        folded: isCardFolded(m.id),
+        rw: !isCardFolded(m.id) && !!rewordShown(m),
         i,
         band,
         dragging: !!(cardDrag && cardDrag.moved && cardDrag.key === m.id),
@@ -33110,7 +33181,7 @@ What is typed here stays in this browser.`;
       tab: "chat",
       prep: tourRevealCardActions,
       title: "A card's buttons",
-      body: `The star lifts a card to the top of its category, and under <span class="t-pill"><span data-icon="all"></span>All</span> into <b class="t-fav"><span data-icon="star"></span>Favourites</b>.<br>The eye puts it away, greyed at the foot of its category, and brings it back from there.<br>The pencil opens it for editing, and <b>Reset</b> in the editor brings back the catalog's own words.<br>Click the pencil on this card.`,
+      body: `The star lifts a card to the top of its category, and under <span class="t-pill"><span data-icon="all"></span>All</span> into <b class="t-fav"><span data-icon="star"></span>Favourites</b>.<br>The chevron folds it to its title, and opens it again.<br>The pencil opens it for editing, and <b>Reset</b> in the editor brings back the catalog's own words.<br>Click the pencil on this card.`,
       opens: "editor",
       open: () => tourPress(cardBtn('[data-act="edit"]'), '[data-act="edit"]'),
       pad: 8
@@ -44742,13 +44813,14 @@ What is typed here stays in this browser.`;
       });
     }
     const btn = (a) => card ? card.querySelector('.cacts [data-act="' + a + '"]') : null;
-    const note = btn("note"), edit = btn("edit"), fav = btn("fav"), hide = btn("hide");
+    const note = btn("note"), edit = btn("edit"), fav = btn("fav"), fold = btn("fold");
     rows.push("-");
     rows.push({ label: label(edit, t("Edit this card")), act: pressOr(edit, null, () => hooks.openCardEditor(id)), key: "F2" });
     if (shareOfferedNow() && cardIsShareable(m)) rows.push({ label: t("Share with…"), act: () => sharePressed(id, o.anchor || anchor) });
     rows.push({ label: label(fav, t(isFavourite(id) ? "Remove from Favourites" : "Add to Favourites")), act: pressOr(fav, null, () => toggleFavourite(id)) });
     if (note && o.note !== false) rows.push({ label: t("Show the note"), act: () => press(note) });
-    rows.push({ label: t(m._hidden ? "Show this card again" : "Put this card away"), act: pressOr(hide, null, () => hooks.hideCard(id)) });
+    if (fold) rows.push({ label: t(fold.getAttribute("aria-expanded") === "false" ? "Show this card" : "Fold this card away"), act: () => press(fold) });
+    if (m._hidden) rows.push({ label: t("Show this card again"), act: () => hooks.hideCard(id) });
     return rows;
   }
   function headingRows(sep) {

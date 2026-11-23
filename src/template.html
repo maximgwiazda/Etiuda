@@ -2007,6 +2007,8 @@ main{max-width:none;margin:16px 0 0;padding:0}
    Firefox has supported this since 125, Chrome since 85; where it is unsupported the property
    is ignored and the list behaves exactly as it did. */
 #list .card{content-visibility:auto;contain-intrinsic-size:auto 220px}
+/* A folded card is its caption alone, so the estimate a card off the screen holds is the caption's height and not a whole card's. */
+#list .card.is-folded{contain-intrinsic-size:auto 32px}
 /* A card at rest is contained, so its last slab's bottom margin stays inside it. A card forced
    visible loses the containment: flow-root keeps the margin in, or the card snaps 10px shorter. */
 #list .card{display:flow-root}
@@ -2378,7 +2380,7 @@ body.shift-held:not(.ctrl-held) .rail-item.slot-hot .rail-fav.rail-hide{display:
 /* Stays dimmed on hover: the dimming is the state, not a hover effect. No strikethrough
    either - grey reads as "put away", a line through it reads as "deleted". */
 .card.is-hidden:hover{opacity:.55}
-.card.is-hidden .cacts{opacity:1}
+.card.is-hidden .cacts,.card.is-folded .cacts{opacity:1}
 /* ADD AFFORDANCES WEAR THE DASH: the "+" pill after the last category, "+ Intent" at the foot
    of the panel, and the corner button that starts a card. The two standing IN a list are
    unfilled as well, so they read as the outline of a thing and are never taken for a real one;
@@ -2710,7 +2712,7 @@ html.raildrag #intentRailList{margin-top:0}
   /* While a bubble from a card's button stands (the flag's, Reword's menu, its waiting line, its refusal) the card keeps its buttons out, with the
      pointer or the keyboard anywhere, so the bubble points at a visible button; closed, they go back to waiting. While they wait they take no width, so the title runs the whole row and recedes when they
      come. The cut pass reads their width from here (cut-text.js, cut-rh). */
-  body:not(.tour-cacts) .card:not(:hover,:focus-within,.is-hidden):not(:has([data-act=flag][aria-expanded=true])):not(:has([data-act=share][aria-expanded=true])):not(:has([data-act=reword][aria-expanded=true]))>.chead .cacts{
+  body:not(.tour-cacts) .card:not(:hover,:focus-within,.is-hidden,.is-folded):not(:has([data-act=flag][aria-expanded=true])):not(:has([data-act=share][aria-expanded=true])):not(:has([data-act=reword][aria-expanded=true]))>.chead .cacts{
     width:0;overflow:hidden;margin-left:calc(-1*var(--chead-gap))}
 }
 /* A tour has no pointer, so a step showcasing the star, the eye or the pencil was pointing at
@@ -2914,6 +2916,14 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
 .cacts button:focus-visible{box-shadow:inset 0 0 0 1px var(--accent)}
 .cacts button.danger:focus-visible{box-shadow:inset 0 0 0 1px #c44}
 .cacts button.star-btn:focus-visible{box-shadow:inset 0 0 0 1px var(--fav)}
+/* THE CARD'S FOLD is the group's own chevron at the caption's size, turning as the group's does (down open, right shut) with the same
+   animations (see .list-sep .sep-fold). Folding loses nothing, so it takes no danger colour; aria-expanded stays true on an open card
+   and the popover rule above would colour it, so the fold keeps its resting ink and takes the accent on hover and focus. */
+.chead .cacts button.card-fold svg{width:15px;height:15px;transform:rotate(90deg);transition:transform var(--m-move) var(--m-ease)}
+.chead .cacts button.card-fold.shut svg{transform:rotate(0deg)}
+.chead .cacts button.card-fold.e-turn-shut svg{animation:e-fold-turn-shut var(--m-move) var(--m-ease)}
+.chead .cacts button.card-fold.e-turn-open svg{animation:e-fold-turn-open var(--m-move) var(--m-ease)}
+.chead .cacts button.card-fold[aria-expanded=true]:not(:hover):not(:focus-visible){color:var(--dim)}
 /* THE FLAG, lit amber while it is with the lead or its answer waits; outranks every resting ground (the product designer's
    sheet of the flag, point 7). */
 .chead .cacts button.flag-btn.on{color:var(--flag-ink);background:color-mix(in srgb,var(--flag) 20%,var(--panel));box-shadow:inset 0 0 0 1px var(--flag)}

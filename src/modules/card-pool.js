@@ -10,6 +10,7 @@ import { cardFillKey } from "./rail-list.js";
 import { editionMarkSig } from "./edition-marks.js";
 import { flagSig } from "./card-flag-desk.js";
 import { shareSig } from "./card-share.js";
+import { cardFoldSig } from "./collapse.js";
 import { t, uiLang } from "./ui-lang.js";
 import { list, cardTpl } from "./dom.js";
 import { cards, lang, intentIdxs, entrySel } from "./app-state.js";
@@ -24,7 +25,7 @@ function dropCardPool(){ cardPool=new Map(); }
 function patchCard(el,it){
   // className is assigned WHOLE: a class put on a card from outside the render dies at the next pick,
   // all but the deck's own, which the same render reads again: see deckCarry.
-  el.className="card"+(it.hidden?" is-hidden":"")+(it.rw?" rw-on":"")+(it.hit?" intent-hit":"")
+  el.className="card"+(it.hidden?" is-hidden":"")+(it.folded?" is-folded":"")+(it.rw?" rw-on":"")+(it.hit?" intent-hit":"")
     +(it.catHit?" cat-hit":"")+(it.dragging?" dragging":"")+deckCarry(el);
   el.setAttribute("title",it.dragTip);
   el.setAttribute("data-i",it.i);
@@ -81,7 +82,7 @@ function rebuildCardInPlace(id,near){
   const fresh=parseCardHtml(b.cardH);
   if(!fresh) return;
   fresh.__sig=ePackEpoch+"|"+renderKey+"|"+cardFillKey(m)
-    +"|"+(entrySel&&entrySel.id===m.id?entrySel.vi:-1)+"|"+editionMarkSig(m.id)+"|"+flagSig(String(m.id||""))+"|"+rewordSig(m.id)+"|"+shareSig(m);
+    +"|"+(entrySel&&entrySel.id===m.id?entrySel.vi:-1)+"|"+editionMarkSig(m.id)+"|"+flagSig(String(m.id||""))+"|"+rewordSig(m.id)+"|"+shareSig(m)+"|"+cardFoldSig(m.id);
   const ord=el.getAttribute("data-ord");
   if(ord!=null) fresh.setAttribute("data-ord",ord);
   deckUnobserve(el);

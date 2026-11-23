@@ -1,7 +1,7 @@
 import { animateTxtReorder } from "./card-blocks.js";
 import { cardCommits, cardLang, cardTitle, findCard, parts } from "./card-model.js";
 import { moveCardOrder } from "./card-order.js";
-import { isCollapsed, toggleCollapsed } from "./collapse.js";
+import { isCollapsed, toggleCollapsed, isCardFolded, toggleCardFold } from "./collapse.js";
 import { intentPickedLine, fill } from "./intent-text.js";
 import { mgReduceMotion, E_EASE, CARD_MOVE_MAX, M_MS } from "./motion.js";
 import { pack, savePack, saveStats } from "./pack.js";
@@ -173,6 +173,25 @@ function animateFoldToggle(key){
   if(!fresh.length) return;
   fresh.forEach(el=>el.classList.add("e-unfolding"));
   setTimeout(()=>fresh.forEach(el=>el.classList.remove("e-unfolding")),260);
+}
+/* One card, in the glide a group's fold makes: the card is rebuilt under its id, so the cards below it close up or make
+   room, its chevron is handed the turn from where it stood, and a chevron that held the focus is given it back. An
+   unfold lets the card's own text rise in. */
+function animateCardFold(id){
+  const willShut=!isCardFolded(id), held=!!(document.activeElement && document.activeElement.closest && document.activeElement.closest(".card-fold"));
+  flipCardsAround(()=>{ toggleCardFold(id); hooks.render(); },{clampTravel:180});
+  const card=list && list.querySelector('.card[data-id="'+cssEsc(id)+'"]');
+  const fold=card && card.querySelector(".card-fold");
+  if(!fold) return;
+  if(held) fold.focus({preventScroll:true});
+  if(mgReduceMotion()) return;
+  const turn=willShut?"e-turn-shut":"e-turn-open";
+  fold.classList.add(turn);
+  setTimeout(()=>fold.classList.remove(turn),220);
+  if(!willShut){
+    card.classList.add("e-unfolding");
+    setTimeout(()=>card.classList.remove("e-unfolding"),260);
+  }
 }
 /* Every group at once, from a heading's menu (context-menu.js): the groups the list shows that are not already as asked,
    in the one glide a single fold makes. */
@@ -432,6 +451,7 @@ function wireListPointer(){
       else if(act==="flag"){ if(id) flagPressed(id); }
       else if(act==="share"){ if(id) sharePressed(id, actBtn); }
       else if(act==="reword") openRewordMenu(actBtn, id);
+      else if(act==="fold"){ if(id) animateCardFold(id); }
       else if(act==="hide") flipCardsAround(()=>hooks.hideCard(id), card.classList.contains("is-hidden") ? null : {leave:id});
       return;
     }
