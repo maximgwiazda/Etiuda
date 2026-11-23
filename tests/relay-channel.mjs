@@ -63,7 +63,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 591;
+const EXPECTED = 593;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -8871,7 +8871,8 @@ async function rmoTeam(mod, tag0) {
     lead: { keyId: LEAD.keyId, public: LEAD.pub, box: LBX.pub }, sealed: true, exportsSealed: false, epoch, rev,
     channel: { kind: "relay", rt: tm.rt, url: URLV1 }, roster: ds.map(d => row(d, epoch, key)) }, LEAD), null, 1) + "\n";
   const lead = (name, keys) => Object.assign(opened(mod, name + "-" + tag, tm, LEAD, "root", { keyFor: e => keys.get(e) || null,
-    sealEpoch: () => Math.max(...keys.keys()), agree: agreeWith(LBX) }), { keys });
+    sealEpoch: () => Math.max(...keys.keys()), agree: agreeWith(LBX),
+    me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root", box: LBX.pub }) }), { keys });
   const desk = (D, name) => {
     const held = new Map([[1, k1]]), nm = name + "-" + tag;
     const p = opened(mod, nm, tm, D.k, "desk:" + D.k.keyId, {
@@ -8968,6 +8969,26 @@ async function rmoEmpty(mod) {
   await a.ch.stop(); await b.ch.stop(); await dK.ch.stop();
   return out;
 }
+/* A profile of the lead's key restored after the move (an empty mirror and record, key 1 alone from its backup, and the lead's box
+   its key file carries): it holds no team file to read a box from, so it opens the lead's own copy by the box it holds itself. */
+async function rmoFresh(mod) {
+  const w = await rmoTeam(mod, "f"), { K, k1 } = w;
+  const k2 = crypto.randomBytes(32);
+  const a = w.lead("rmf-a", new Map([[1, k1]]));
+  put(a.mirror, C.TEAM_NAME, w.docAt(1, 1, k1, [K]));
+  a.ch.start(); await settle(a);
+  a.keys.set(2, k2);
+  put(a.mirror, C.TEAM_NAME, w.docAt(2, 2, k2, []));
+  await settle(a);
+  const b = w.lead("rmf-b", new Map([[1, k1]]));
+  b.ch.start(); await settle(b);
+  const out = { bFile: w.teamOf(b.mirror), stepNoKey: w.inStep(b) };
+  b.keys.set(2, k2);
+  await settle(b);
+  out.stepWithKey = w.inStep(b);
+  await a.ch.stop(); await b.ch.stop();
+  return out;
+}
 /* The test architect's pWW, every interleaving that matters: A offline takes X off ("same": epoch 2; "higher": epochs 2 and 3), B
    online takes Y off (epoch 2, its own key), goes up and posts its device list. A reconnects. Its Studio is modelled as the ruling
    has it: a removal is kept as pending until the relay's current team file lacks the person; the key of an epoch this computer
@@ -9049,6 +9070,10 @@ if (partOn("pRmo")) {
     check(!!e.bFile && e.bFile.epoch === 2 && e.bFile.names === "" && e.stepWithKey === true && !e.kKey2 && !!e.kFile && e.kFile.epoch === 1,
       "rmo4a the last desk taken off: the new team file names none, and the lead's other computer, holding only key 1, reaches it through the lead's own copy and is in step once it holds its key; the desk taken off takes nothing: "
       + JSON.stringify(e));
+    const f = await rmoFresh(C);
+    check(!!f.bFile && f.bFile.epoch === 2 && f.bFile.names === "" && f.stepNoKey === false && f.stepWithKey === true,
+      "rmo5a a profile of the lead's key restored after the move, holding no team file and key 1 alone, reaches the epoch-2 file through the lead's own copy by the box it holds, and is in step once it holds its key: "
+      + JSON.stringify(f));
     for (const v of ["same", "higher"]) {
       const x = await rmoDouble(C, v);
       const tag = v === "same" ? "rmo2" : "rmo3";
@@ -9062,6 +9087,11 @@ if (partOn("pRmo")) {
       check(!!x.final.a && x.final.a.names === "K" && x.final.relayEpoch === 3 && x.final.aStep === true && x.read.k && !x.read.x && !x.read.y,
         tag + "c (" + v + ") both removals survive: the first computer, in step, applies its pending removal on top as epoch 3, the relay's file names K alone, and only K reads the next edition: "
         + JSON.stringify({ final: x.final, read: x.read, aEnrol: x.aEnrol, b: x.bFile }));
+    }
+    if (PLANTS_OFF) skip("rmo5b lifting plant:lead-own-fresh leaves a restored profile with no team file");
+    else {
+      const q3 = await liftChannel("plant:lead-own-fresh", async mod => { const y = await rmoFresh(mod); return !y.bFile; });
+      check(q3.turned && q3.back, "rmo5b lifting plant:lead-own-fresh leaves a restored profile with no team file, and the product file is never written: " + q3.detail + ", sha " + (q3.back ? "restored" : "differs"));
     }
     if (PLANTS_OFF) { skip("rmo4b lifting plant:lead-own-copy sends no copy to the lead's own box"); skip("rmo4c lifting plant:lead-own-open opens no copy at the lead's own box"); }
     else {
