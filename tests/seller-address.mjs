@@ -44,7 +44,7 @@ function check(ok, line) {
 /* ---- the stand-ins ---------------------------------------------------------------------------------------------------- */
 const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-seller-address-"));
 /* Invented, of an address's shape; no real address is read or written anywhere in this file. */
-const EN = "12 Invented Street, 00-000 Nowhere", PL = "ul. Wymyślona 12, 00-000 Nigdzie";
+const EN = "12 Invented Way, 00-000 Nowhere", PL = "os. Wymyślone 12, 00-000 Nigdzie";
 const fileOf = (name, body) => { const f = path.join(LAB, name); fs.writeFileSync(f, typeof body === "string" ? body : JSON.stringify(body), "utf8"); return f; };
 const GOOD = fileOf("address.json", { format: 1, en: EN, pl: PL });
 const sha = f => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
