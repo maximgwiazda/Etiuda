@@ -42,7 +42,7 @@ const ASIDE = {
   "15ep": offWindows("15ep", "15em stands aside off Windows, so lifting plant:w2-folder-not-writable has no green leg there to turn"),
 };
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 225 - 76; /* fold 129: 223 at the merge base + 2 (fold 128: the join link's hide scene, jlk5 and jlk6) - 76 retired with the folder join (FOLDER_JOIN_RETIRED, P4) */
+const EXPECTED = 225 - 76 - 2; /* fold 129: 223 at the merge base + 2 (fold 128: the join link's hide scene, jlk5 and jlk6) - 76 retired with the folder join (FOLDER_JOIN_RETIRED, P4) */
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -59,9 +59,9 @@ const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-team-join-"));
 const APP = path.join(LAB, "app");
 fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
-const EXPOSE = ["sealCatalog", "wrapTeamKey", "joinCommit", "joinCode", "joinGenuine", "joinOpening", "joinsSignedBytes", "joinSignedBytes",
+const EXPOSE = ["sealCatalog", "wrapTeamKey", "joinCommit", "joinGenuine", "joinOpening", "joinsSignedBytes", "joinSignedBytes",
   "branchSignedBytes", "deskFileGenuine", "readCatalog", "catalogLeadOk", "catalogChanged", "isCatalogName", "JOINS_NAME",
-  "memberProof", "inviteCode", "inviteIdOf", "inviteRead", "folderHost", "signedSha", "inviteFolderBelongs", "relayRun", "acceptLink", "askSignedBytes", "rawCatalogFolder", "deskTrustChecks",
+  "memberProof", "inviteIdOf", "inviteRead", "folderHost", "signedSha", "relayRun", "acceptLink", "askSignedBytes", "rawCatalogFolder", "deskTrustChecks",
   "sealCardTo", "openCardFrom", "relayChannel", "relayMirrorOf"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
@@ -266,14 +266,7 @@ try {
 
   /* ---- the pure half: the code, the commitment, the request's signature, the opening ------------------------- */
   const h = () => nonce(), base = [TEAM, h(), h(), h(), h(), h()];
-  const c0 = P.joinCode(...base);
-  const moved = base.map((_, i) => P.joinCode(...base.map((v, j) => (j !== i ? v : i === 0 ? "t-" + crypto.randomBytes(8).toString("hex") : h()))));
-  check(/^[0-9]{6}$/.test(c0) && P.joinCode(...base) === c0 && moved.every(c => /^[0-9]{6}$/.test(c) && c !== c0),
-    "15a the code is six digits, the same from the same parts, and another for each of the six parts changed alone"
-    + " (team, key, box, lead, the desk's nonce, the lead's): " + moved.filter(c => c !== c0).length + " of 6 differ");
-  check(P.joinCode("t-xyz", ...base.slice(1)) === "" && P.joinCode(TEAM, "ab", ...base.slice(2)) === ""
-    && P.joinCode(TEAM, ...base.slice(1, 5), "") === "",
-    "15b a malformed team, key or nonce gives no code at all");
+  /* RETIRED, P2 (the six-digit code is gone with the folder join): 15a, "the code is six digits, the same from the same parts, and another for each of the six parts changed alone (team, key, box, lead, the desk's nonce, the lead's)", and 15b, "a malformed team, key or nonce gives no code at all". The shell makes no code now; tests/folder-join-gone.mjs fjg1 holds that no function of the sort is declared. */
   const [n1, n2] = [h(), h()];
   check(P.joinCommit(TEAM, base[1], base[2], n1) === P.joinCommit(TEAM, base[1], base[2], n1)
     && P.joinCommit(TEAM, base[1], base[2], n1) !== P.joinCommit(TEAM, base[1], base[2], n2)

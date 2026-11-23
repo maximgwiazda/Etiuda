@@ -6106,7 +6106,7 @@ function askJoin(file, name) {
   const w = teamJoin;
   relayProbeMs = RELAY_PROBE_FIRST;
   if (w && w.invite && w.invite.relay && (w.invite.relay.withdrawn === true || w.invite.relay.withdrawing === true)) return askAgain(w); /* plant:e4-ask-again-desk */
-  return joinView(); /* plant:ask-makes-no-request */
+  return joinView();
 }
 /* The relay has already accepted this invitation: it spent the token, or the invitation's wrap has given this desk a key.
    Cancel then withdraws the request at the relay and keeps both. A folder invitation has neither, and still undoes. */

@@ -1721,7 +1721,7 @@ if (deskOn()) try {
   const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
   const EXPOSE = ["sealCatalog", "wrapTeamKey", "readCatalog", "catalogFolder", "relayRun", "relayHere", "heedTeam", "relayProbe", "relayProbeNext",
     "readSpanText", "spanDocument", "spanGenuine", "pinnedLead", "createWindow", "folderSyncerRun",
-    "signedSha", "catalogDocIn", "noteHanded", "writeInUse", "inUseCatalogId", "pickEdition", "catalogRead"];
+    "signedSha", "catalogDocIn", "noteHanded", "writeInUse", "inUseCatalogId", "pickEdition", "catalogRead", "acceptLink"];
   const noop = () => {};
   const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
   /* Chromium with no proxy configured answers DIRECT, so a desk's socket goes straight to the relay: proxy-net treats a lookup
@@ -7475,16 +7475,16 @@ if (deskOn()) try {
       out.synced = !!s.synced;
       if (!out.synced) return out;
       const ops = [];
-      let pasted = { value: "" };
+      let took = () => {};
       document.documentElement = document.documentElement || {};
       document.body = document.body || { classList: { contains: () => false, toggle() {}, add() {}, remove() {} }, appendChild: el => el };
       document.querySelectorAll = () => [];
-      document.querySelector = sel => (sel === "[data-join-paste]" ? pasted : null);
+      document.querySelector = () => null;
       document.addEventListener = document.addEventListener || (() => {});
       document.removeEventListener = document.removeEventListener || (() => {});
       window.addEventListener = window.addEventListener || (() => {});
       window.removeEventListener = window.removeEventListener || (() => {});
-      window.E_HOST = { onTeamJoin: () => {}, teamJoin: (op, file, name, four) => { ops.push(op); return s.Dk.ask("etiuda:team-join", op, file, name, four); } };
+      window.E_HOST = { onTeamJoin: fn => { took = fn; }, teamJoin: (op, file, name, four) => { ops.push(op); return s.Dk.ask("etiuda:team-join", op, file, name, four); } };
       const ST = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
       const HK = await import(pathToFileURL(path.join(ROOT, "src", "modules", "hooks.js")).href);
       const AS = await import(pathToFileURL(path.join(ROOT, "src", "modules", "app-state.js")).href);
@@ -7525,15 +7525,16 @@ if (deskOn()) try {
         await wait(50);
         return { asked, first, sent: ops.slice(mark).filter(o => o === "leave" || o === "forget"), after: held() };
       };
-      /* The same team invites the desk again: pasted, read and taken on the page, and admitted by the lead over the relay. */
+      /* The same team invites the desk again: its link opened, confirmed on the page, and the desk admitted by the lead over the relay. */
       const invite = async () => {
         R.clock.now += 1;
         const inv = await relayInviteOn(s.rt, s.team);
         s.invs.push({ id: inv.inv, key: C.inviteSealKey(inv.secret) });
         await s.studio.kick(); await s.studio.idle();
-        M.openJoinPaste();
-        pasted = el({ "data-join-paste": "" }, inv.text);
-        await press("read");
+        /* P2: no paste box; the invitation arrives as the link the lead sends, which the shell offers and the page confirms. */
+        M.wireTeamJoin();
+        const got = s.Dk.api.acceptLink("etiuda:join#" + inv.text.slice("etiuda-join:".length));
+        if (got && got.offer) took({ offer: got.offer });
         const offer = M.inviteHeld();
         const confirm = shownText(M.teamJoinEmptyHtml());
         const r = { offered: !!(offer && offer.offer), again: confirm.indexOf("Join it again?") >= 0, joined: false, card: false };
