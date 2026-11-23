@@ -54,6 +54,10 @@ function skip(line) {
   skipped++;
   console.log("  SKIP  " + line);
 }
+/* A plant line inside a block that FOLDER_JOIN_RETIRED switches off is never reached, so tests/result-line.mjs 17d, which counts
+   skip calls with a string argument in this file, must not count it. Same behaviour as skip: if the block is ever revived the line is reached and
+   17d goes red until it is counted again, so a revival cannot pass unnoticed. */
+const retiredSkip = skip;
 
 const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-team-join-"));
 const APP = path.join(LAB, "app");
@@ -458,7 +462,7 @@ try {
   check(!ro14.pinned && ro14.leads === 0,
     "j14f the ruled ways in: a desk with no pin, no invitation and no admission, beside a swapped team file and an unsigned ring that lists"
     + " its key, heeds nothing and pins nothing: " + JSON.stringify(ro14));
-  if (PLANTS_OFF) skip("j14f2 lifting plant:j14-no-ring heeds that file and pins its key (ETIUDA_PLANTS=off)");
+  if (PLANTS_OFF) retiredSkip("j14f2 lifting plant:j14-no-ring heeds that file and pins its key (ETIUDA_PLANTS=off)");
   else {
     const planted = SRC.split("\n").map(l => (l.indexOf("plant:j14-no-ring") >= 0 ? "  heeded = true;" : l)).join("\n");
     const pr = SRC.indexOf("plant:j14-no-ring") >= 0 ? await ringOnly("j14f-plant", planted) : null;
@@ -492,7 +496,7 @@ try {
   check(ro.coded === "code" && ro.after === "refused" && ro.reopened === "refused" && ro.reveal,
     "j14d review 14.4: a refusal of this commitment read after the opening the desk revealed against ends the request as refused, and a"
     + " later opening neither lifts it nor moves the reveal (commit then reveal holds): " + JSON.stringify(ro));
-  if (PLANTS_OFF) skip("j14d2 lifting plant:j14-refused-after-open leaves the opened request saying its code after the refusal (ETIUDA_PLANTS=off)");
+  if (PLANTS_OFF) retiredSkip("j14d2 lifting plant:j14-refused-after-open leaves the opened request saying its code after the refusal (ETIUDA_PLANTS=off)");
   else {
     const planted = SRC.split("\n").map(l => (l.indexOf("plant:j14-refused-after-open") >= 0 ? "    readJoins = !j.opened && !j.refused;" : l)).join("\n");
     const pr = SRC.indexOf("plant:j14-refused-after-open") >= 0 ? await refusedAfterOpen("j14d-plant", planted) : null;
@@ -538,7 +542,7 @@ try {
     check(two.joined && !two.file && !two.opens,
       "962s5i admitted by its folder to a team whose catalogs here are two, the desk names none for the page to open: joined " + two.joined
       + ", file " + JSON.stringify(two.file) + ", opens " + JSON.stringify(two.opens));
-    if (PLANTS_OFF) skip("962s5i2 lifting plant:joined-many-none names one of the two catalogs at admission");
+    if (PLANTS_OFF) retiredSkip("962s5i2 lifting plant:joined-many-none names one of the two catalogs at admission");
     else {
       const lines = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8").split(/\n/);
       const at = lines.findIndex(l => l.indexOf("plant:joined-many-none") >= 0);
@@ -939,7 +943,7 @@ try {
       && belongChecks[2] === false && belongChecks[3] === false
       && belongChecks[4] === false && belongChecks[5] === false,
     "15cl a chosen copy of the shared folder is accepted only where it holds that team's own team file under the invited lead, and refused otherwise, a ring there vouching for another key included (review 14.5): " + JSON.stringify(belongChecks));
-  if (PLANTS_OFF) skip("j14e lifting plant:j14-picked-lead takes a chosen folder under another key (ETIUDA_PLANTS=off)");
+  if (PLANTS_OFF) retiredSkip("j14e lifting plant:j14-picked-lead takes a chosen folder under another key (ETIUDA_PLANTS=off)");
   else {
     const planted = SRC.split("\n").map(l => (l.indexOf("plant:j14-picked-lead") >= 0 ? "  handed = true;" : l)).join("\n");
     const Dp = SRC.indexOf("plant:j14-picked-lead") >= 0 ? loadDesk(folder("j14e-ud"), planted) : null;
@@ -4478,7 +4482,7 @@ try {
   // 15eg: lifting plant:folder-wrap-aad turns 15dy red
   {
     if (PLANTS_OFF) {
-      skip("15eg lifting plant:folder-wrap-aad turns 15dy red");
+      retiredSkip("15eg lifting plant:folder-wrap-aad turns 15dy red");
     } else {
       const blobPath = path.join(ROOT, "shell", "relay", "blob.cjs");
       const before = fs.readFileSync(blobPath);
@@ -4507,7 +4511,7 @@ try {
   // 15eh: lifting plant:refuse-forget turns 15ef red
   {
     if (PLANTS_OFF) {
-      skip("15eh lifting plant:refuse-forget turns 15ef red");
+      retiredSkip("15eh lifting plant:refuse-forget turns 15ef red");
     } else {
       const mainPath = path.join(ROOT, "shell", "main.js");
       const before = fs.readFileSync(mainPath);
@@ -4535,7 +4539,7 @@ try {
   // 15ej: lifting plant:picker-cancel drops the invitation on picker cancel
   {
     if (PLANTS_OFF) {
-      skip("15ej lifting plant:picker-cancel drops the invitation on picker cancel");
+      retiredSkip("15ej lifting plant:picker-cancel drops the invitation on picker cancel");
     } else {
       const joinPath = path.join(ROOT, "src", "modules", "team-join.js");
       const before = fs.readFileSync(joinPath);
@@ -4673,7 +4677,7 @@ try {
   // 15en: lifting plant:w2-no-identity turns 15ek red
   {
     if (PLANTS_OFF) {
-      skip("15en lifting plant:w2-no-identity turns 15ek red");
+      retiredSkip("15en lifting plant:w2-no-identity turns 15ek red");
     } else {
       const mainPath = path.join(ROOT, "shell", "main.js");
       const before = fs.readFileSync(mainPath);
@@ -4699,7 +4703,7 @@ try {
   // 15eo: lifting plant:w2-folder-not-answering turns 15el red
   {
     if (PLANTS_OFF) {
-      skip("15eo lifting plant:w2-folder-not-answering turns 15el red");
+      retiredSkip("15eo lifting plant:w2-folder-not-answering turns 15el red");
     } else {
       const mainPath = path.join(ROOT, "shell", "main.js");
       const before = fs.readFileSync(mainPath);
@@ -4726,7 +4730,7 @@ try {
   // 15ep: lifting plant:w2-folder-not-writable turns 15em red
   {
     if (PLANTS_OFF) {
-      skip("15ep lifting plant:w2-folder-not-writable turns 15em red");
+      retiredSkip("15ep lifting plant:w2-folder-not-writable turns 15em red");
     } else if (ASIDE["15ep"]) {
       skip(ASIDE["15ep"]);
     } else {
@@ -4775,7 +4779,7 @@ try {
   // 15et: lifting plant:w2-not-writable-codes turns 15es red
   {
     if (PLANTS_OFF) {
-      skip("15et lifting plant:w2-not-writable-codes turns 15es red");
+      retiredSkip("15et lifting plant:w2-not-writable-codes turns 15es red");
     } else {
       const mainPath = path.join(ROOT, "shell", "main.js");
       const before = fs.readFileSync(mainPath);
@@ -4850,7 +4854,7 @@ try {
       + (card.en.indexOf(EN_MIRROR) >= 0 ? "" : " en-card " + card.en.slice(0, 220)));
 
     if (PLANTS_OFF) {
-      skip("15wd lifting plant:relay-mirror-why turns 15w9 red");
+      retiredSkip("15wd lifting plant:relay-mirror-why turns 15w9 red");
     } else {
       const mainPath = path.join(ROOT, "shell", "main.js");
       const before = fs.readFileSync(mainPath);
@@ -4965,7 +4969,7 @@ try {
     }
 
     if (PLANTS_OFF) {
-      skip("15ev lifting plant:invite-folder-not-writable turns 15eu red");
+      retiredSkip("15ev lifting plant:invite-folder-not-writable turns 15eu red");
     } else {
       const mainPath = path.join(ROOT, "shell", "main.js");
       const before = fs.readFileSync(mainPath);
@@ -5056,7 +5060,7 @@ try {
     check(Object.keys(f).every(k => f[k]), "15r8b while machine policy names the folder, the shell and the page show that folder, the folder"
       + " picker opens nothing, a moved team's Open a folder is refused for another folder, and the Library offers no Change folder;"
       + " the control opens the dialog: " + JSON.stringify(f) + " " + JSON.stringify({ under: under, plain: plain, page: page }));
-    if (PLANTS_OFF) { skip("15r8b lifting plant:pick-under-policy opens the folder dialog under the policy (ETIUDA_PLANTS=off)"); return; }
+    if (PLANTS_OFF) { retiredSkip("15r8b lifting plant:pick-under-policy opens the folder dialog under the policy (ETIUDA_PLANTS=off)"); return; }
     const lines = SRC.split("\n"), at = lines.map((l, i) => (l.includes("/* plant:pick-under-policy */") ? i : -1)).filter(i => i >= 0);
     let liftedPick = null;
     if (at.length === 1) {
@@ -5102,7 +5106,7 @@ try {
       control: !plain.policy && plain.leaveShown && !plain.itSays && !plain.pinKept && plain.barred };
     check(f.under && f.control, "15r8c with the folder named alone, the team's row is the policy's, Settings offers no Leave and says"
       + " the organisation's IT sets the team, and a leave sent anyway keeps the pin; the control leaves: " + JSON.stringify({ under: under, plain: plain }));
-    if (PLANTS_OFF) { skip("15r8c lifting plant:folder-holds-team offers Leave under the folder again (ETIUDA_PLANTS=off)"); return; }
+    if (PLANTS_OFF) { retiredSkip("15r8c lifting plant:folder-holds-team offers Leave under the folder again (ETIUDA_PLANTS=off)"); return; }
     const lines = SRC.split("\n"), at = lines.map((l, i) => (l.includes("/* plant:folder-holds-team */") ? i : -1)).filter(i => i >= 0);
     let lifted = null;
     if (at.length === 1) { lines[at[0]] = "  return false;"; lifted = await caseOf([["TeamFolder", named]], "r8c-lifted", lines.join("\n")); }
