@@ -565,6 +565,8 @@ function stateOf(x, now) {
         const key = pathKey(k);
         const rec = { id: v.id, epoch: v.epoch, counter: v.counter, sha: typeof v.sha === "string" ? v.sha : null, size: v.size, del: v.del === true };
         if (v.owe === true) rec.owe = true;
+        if (v.taken === true) rec.taken = true;
+        if (Array.isArray(v.ids)) rec.ids = onlyIn(v.ids.filter(isDeskId), []).slice(0, DROPPED_MAX);
         if (!o[key] || later(rec, o[key])) o[key] = rec;
       }
     }
@@ -594,7 +596,8 @@ function stateOf(x, now) {
     const c = x.clash[k];
     if (table(c) && (c.kept === "here" || c.kept === "team") && Number.isFinite(c.at) && rootOrderOk(c.here) && rootOrderOk(c.team))
       s.clash[k] = Object.assign({ kept: c.kept, here: rootOrderOf(c.here), team: rootOrderOf(c.team), at: c.at },
-        Array.isArray(c.dropped) ? { dropped: onlyIn(c.dropped.filter(isDeskId), []).slice(0, DROPPED_MAX) } : {});
+        Array.isArray(c.dropped) ? { dropped: onlyIn(c.dropped.filter(isDeskId), []).slice(0, DROPPED_MAX) } : {},
+        Array.isArray(c.added) ? { added: onlyIn(c.added.filter(isDeskId), []).slice(0, DROPPED_MAX) } : {});
   }
   if (table(x.ahead)) {
     if (Array.isArray(x.ahead.held)) s.ahead.held = heldOf(x.ahead.held); /* plant:ahead-kept */
@@ -1121,6 +1124,12 @@ function createProgram(opts) {
   function rootClash(rel, orders, here, dropped, fork) {
     st.clash[rel] = { kept: here ? "here" : "team", here: orders.here, team: orders.team, at: clock() };
     if (Array.isArray(dropped)) st.clash[rel].dropped = dropped;
+    /* Of those, the ones the team file this computer last sent or took did not name: added since, on the passed-over side. The
+       rest were in both computers' file before and the standing side took them off. Kept only where that file's roster is known. */
+    const base = rel === TEAM_NAME && has(st.sent, pathKey(TEAM_NAME)) ? st.sent[pathKey(TEAM_NAME)] : null;
+    let added = null;
+    added = Array.isArray(dropped) && base && Array.isArray(base.ids) ? dropped.filter(d => base.ids.indexOf(d) < 0) : null; /* plant:clash-added */
+    if (added) st.clash[rel].added = added;
     persist();
     say(here
       ? rel + " changed on this computer and on another at once; this computer's (" + rootSaid(orders.here) + ") is the newer and replaces the team's ("
@@ -1180,10 +1189,19 @@ function createProgram(opts) {
     const was = has(st.sent, key) ? st.sent[key] : null;
     const rec = { id: r.id, epoch: r.epoch, counter: r.counter, sha: r.kind === "delete" ? null : sha256(Buffer.from(r.body, "utf8")),
       size: Number.isSafeInteger(r.size) && r.size >= 0 ? r.size : 0, del: r.kind === "delete" };
+    /* Taken from the relay, not sent from here: the desks' copies of it are the computer's that sent it (owed). */
+    rec.taken = true;
+    if (key === pathKey(TEAM_NAME) && r.kind !== "delete") rec.ids = rosterIdsOf(r.body);
     st.sent[key] = rec;
     st.bytes = Math.max(0, st.bytes - (was ? was.size : 0)) + rec.size;
     delete st.refused[key];
     noteOwn(r);
+  }
+  /* The desk ids a team file's roster names, from its text, or none where it does not read. */
+  function rosterIdsOf(text) {
+    let doc = null;
+    try { doc = JSON.parse(String(text || "").replace(/^\uFEFF/, "")); } catch { doc = null; }
+    return doc ? onlyIn(rosterOf(doc).map(d => d.deskId), []).slice(0, DROPPED_MAX) : [];
   }
 
   /* The blob ids this program's record shows it sent: the last upload of each path and of each invitation's or desk's copy. */
@@ -1404,6 +1422,21 @@ function createProgram(opts) {
     const held = heldTeam(), top = held ? held.epoch : 0;
     return !st.pending.some(p => isLeadKey(p.writer) && p.epoch > top);
   }
+  /* WHAT WENT UNDER A KEY SET ASIDE GOES AGAIN (Claude alpha's ruling of 2026-11-23 06:44): every file this computer last sent at
+     `epoch`, the team file aside, is owed once more, so the next cycle seals it under the key that stands for that epoch now and it
+     replaces the blob no desk can open. The count of files owed. */
+  function resendEpoch(epoch) {
+    let n = 0;
+    for (const k of Object.keys(st.sent)) {
+      const rec = st.sent[k];
+      if (k === pathKey(TEAM_NAME) || rec.del || rec.epoch !== epoch || rec.taken === true) continue;
+      st.sent[k] = Object.assign({}, rec, { owe: true }); /* plant:resend-aside */
+      n++;
+    }
+    if (n) persist();
+    return n;
+  }
+
   /* Whether this program is behind the relay's team file, and fetching what it needs: a lead blob at a newer epoch than the team file
      it holds waits for its key, or the mirror's team file came through a desk's copy and its own blob at the root has not opened. */
   function teamBehind() {
@@ -1899,7 +1932,13 @@ function createProgram(opts) {
       const held = bytes ? judgedBytes(bytes) : null;
       let self = [];
       self = held && agrees && ownLeadCopy(held.doc, ctx) ? [ownLeadCopy(held.doc, ctx)] : []; /* plant:lead-own-copy */
-      const copies = (Array.isArray(ctx.inviteKeys) ? ctx.inviteKeys : []).concat(held ? deskCopies(held.doc, ctx) : [], self);
+      /* A team file this computer took from the relay, sent by its other computer, has its desks' copies and the lead's own from
+         that computer: none go from here, and none of this computer's earlier copies are let go meanwhile. An invitation's copy
+         still goes, the invitation being this computer's. */
+      const tsent = has(st.sent, pathKey(TEAM_NAME)) ? st.sent[pathKey(TEAM_NAME)] : null;
+      let ours = true;
+      ours = !(bytes && tsent && tsent.taken === true && tsent.sha === sha256(bytes)); /* plant:copies-from-sender */
+      const copies = (Array.isArray(ctx.inviteKeys) ? ctx.inviteKeys : []).concat(held && ours ? deskCopies(held.doc, ctx) : [], ours ? self : []);
       const live = new Set();
       for (const k of copies) {
         live.add(k.id);
@@ -1912,7 +1951,7 @@ function createProgram(opts) {
       /* An invitation no longer live, its desk enrolled or the invitation dropped, or a desk the roster no longer names: its
          copy superseded by a deletion. Where desks have copies, never while the lead's own team file does not read, so no
          desk's copy is let go for want of it. */
-      if (!agrees || held) for (const id of Object.keys(st.sentInv)) {
+      if ((!agrees || held) && ours) for (const id of Object.keys(st.sentInv)) {
         const was = st.sentInv[id][TEAM_NAME];
         if (!live.has(id) && was && !was.del)
           ops.push({ rel: TEAM_NAME, kind: "delete", body: "", sha: null, invite: { id, key: null }, place: "invite:" + id }); /* plant:invite-drop */
@@ -1964,6 +2003,7 @@ function createProgram(opts) {
 
   function sentOut(op, blob) {
     const rec = { id: blob.id, epoch: blob.epoch, counter: blob.counter, sha: op.sha, size: blob.ciphertext.length, del: op.kind === "delete", at: clock() };
+    if (!op.invite && pathKey(op.rel) === pathKey(TEAM_NAME) && op.kind === "file") rec.ids = rosterIdsOf(op.body);
     const was = lastSent(op);
     const k = pathKey(op.rel);
     if (op.invite) {
@@ -2112,7 +2152,7 @@ function createProgram(opts) {
 
   const api = {
     setPin, pinned: () => pin, leads: () => chainLeads(), loadTeamFile, loadTeamFiles, holdTeam, acceptBlob, applyBatch, considerOutgoing, owed, sealOut, sentOut, refusedOut,
-    sentDeletion, unchain, wroteIds, allowUpload, showFreshness, headNews, readRing, readMirror, nextCounter, teamEpoch, teamInStep, teamBehind,
+    sentDeletion, unchain, wroteIds, allowUpload, showFreshness, headNews, readRing, readMirror, nextCounter, teamEpoch, teamInStep, teamBehind, resendEpoch,
     state: () => st,
     /* The latest fork this desk has seen, {kind, from, to} by key ids, or null. */
     fork: () => (st.fork ? { kind: st.fork.kind, from: st.fork.from, to: st.fork.to.slice() } : null),
@@ -3059,7 +3099,12 @@ function createChannel(opts) {
     if (!who || !who.privateKey) return { ok: true };
     const floor = prog.teamEpoch();
     let sawReplay = false;
+    /* The lead's computer behind the relay's team file (a fork's file standing, its key not yet held here) sends nothing: whatever
+       it sealed now would go under a key about to be set aside, or move the relay's epoch. It goes once this computer is in step. */
+    let behindNow = false;
+    behindNow = who.place === "root" && prog.teamBehind(); /* plant:behind-hold */
     for (const op of prog.owed(who, ctx())) {
+      if (behindNow) continue;
       /* A copy of the team file, a desk's or an invitation's, goes only once the team file at the root is the relay's, in this pass
          or before: never one the relay refused or has not taken (a fork, or behind), so a desk taken off on the lead's other computer
          is handed no key of it. */
