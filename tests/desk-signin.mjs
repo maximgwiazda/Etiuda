@@ -48,7 +48,7 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 343;
+const PLANTS = 342; /* 343 less dsp31, retired with the folder request (P2) */
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
@@ -276,7 +276,8 @@ CASES.offered = s => {
 };
 /* An invitation naming providers no longer carries a sign-in hint: the team's start is retired. */
 CASES.noHintStart = s => {
-  const doc = { team: TEAM, folder: "\\\\server\\share\\team", secret: "0".repeat(32), lead: { keyId: "studio-1", public: "a".repeat(64), name: "Lead" },
+  /* P2: the invitation names a relay (a folder invitation is no invitation, and reads as null). */
+  const doc = { team: TEAM, relay: { rt: "ab".repeat(16), url: "https://relay.test/relay/v1", token: "cd".repeat(32), inv: "ef".repeat(16) }, secret: "0".repeat(32), lead: { keyId: "studio-1", public: "a".repeat(64), name: "Lead" },
     signin: { providers: [{ id: "microsoft", clientId: MS_CLIENT }] } };
   const read = s.inviteRead("etiuda-join:" + b64url(JSON.stringify(doc)), false);
   return !!read && read.signin === undefined && s.signinOffered().length === 0;
@@ -689,15 +690,14 @@ function loadFlush(s, st, swap) {
     Date: { now: () => NOW } };
   return new Function(...FLUSH_STANDS, "let signinWrote = \"\";\n" + text + "\nreturn signinFlush;")(...FLUSH_STANDS.map(n => n === "teamJoin" ? st.join : vals[n]));
 }
-/* A desk signed in before it asked to join a folder team writes its seat beside the request at once, as it does where its lead is
-   pinned; a relay invitation's join and no team write nothing; the same certificate is written again where its file went or the
-   folder changed, and not otherwise. */
+/* A desk signed in first writes its seat where its lead is pinned, once, and again where its file went or the folder changed, and not
+   otherwise; a relay invitation's join, no team, and (P2) a request to join with no lead pinned write nothing: a request is made over the
+   relay and carries no seat beside it, where it once wrote one beside a folder team's request. */
 CASES.flushJoin = async (s, swap) => {
   const held = heldOf(), seatAt = root => path.join(root, "desks", DESK_ID, s.SEAT_NAME);
   const run = (o, steps) => { const st = Object.assign({ held, lead: null, join: null, root: "/share/a", files: new Set(), writes: [] }, o); const f = loadFlush(s, st, swap);
     return steps(st, f); };
-  const asking = run({ join: { team: TEAM } }, (st, f) => f() === true && st.writes.length === 1 && st.writes[0].p === seatAt("/share/a")
-    && JSON.parse(st.writes[0].t).certificate.sig.value === held.cert.sig.value);
+  const asking = run({ join: { team: TEAM } }, (st, f) => f() === false && st.writes.length === 0);
   const relay = run({ join: { team: TEAM, invite: { relay: { rt: "r" } } } }, (st, f) => f() === false && st.writes.length === 0);
   const none = run({}, (st, f) => f() === false && st.writes.length === 0);
   const pinned = run({ lead: { team: TEAM } }, (st, f) => {
@@ -716,15 +716,14 @@ CASES.flushOwnKey = async (s, swap) => {
   const other = run(heldOf({ cert: cert({ desk: OTHER_DESK_KEY }) })), own = run(heldOf());
   return other.r === false && other.n === 0 && own.r === true && own.n === 1;
 };
-/* The flush's callers outside the wiring: a request to join written, and any join taken or finished or folder changed, deferred. */
+/* The flush's callers outside the wiring: any join taken or finished or folder changed, deferred. (P2: a request to join written was one, and askJoin writes none.) */
 CASES.flushCallers = () => {
-  const ask = tryDeclText("function askJoin("), changed = tryDeclText("function catalogFolderChanged(");
-  return /teamJoin = j;\n\s*joinTold = false;\n\s*persistDeskEnvelope\(\);\n\s*signinFlush\(\);\n\s*return joinView\(\);/.test(ask)
-    && /if \(!theWindow \|\| theWindow\.isDestroyed\(\)\) return;\n[^\n]*\n\s*setImmediate\(\(\) => signinFlush\(\)\);\n\s*if \(catalogFolder\(\) === watchedFolder\) return;/.test(changed);
+  const changed = tryDeclText("function catalogFolderChanged(");
+  return /if \(!theWindow \|\| theWindow\.isDestroyed\(\)\) return;\n[^\n]*\n\s*setImmediate\(\(\) => signinFlush\(\)\);\n\s*if \(catalogFolder\(\) === watchedFolder\) return;/.test(changed);
 };
 function tryDeclText(s) { try { return decl(MAIN, s); } catch { return ""; } }
-/* The other two ways a desk signed in first comes to a team folder reach catalogFolderChanged, and so the flush: a folder invitation
-   taken (its join set, then the folder changed) and an admission heeded (finishJoin, its join cleared and the lead now pinned).
+/* The two ways a desk signed in first comes to a team folder reach catalogFolderChanged, and so the flush: an invitation taken (P2: a
+   relay one, in takeRelayInvite: its join set, then the folder changed) and an admission heeded (finishJoin, its join cleared and the lead now pinned).
    `swap` is put into the shell's text in memory, as a plant does. */
 CASES.flushJoinReach = (s, swap) => {
   let main = MAIN;
@@ -733,9 +732,9 @@ CASES.flushJoinReach = (s, swap) => {
     main = main.replace(swap[0], swap[1]);
   }
   const text = d => { try { return decl(main, d); } catch { return ""; } };
-  const invite = text("async function takeInvite("), finish = text("function finishJoin(");
+  const invite = text("function takeRelayInvite("), finish = text("function finishJoin(");
   const after = (body, set) => { const at = body.lastIndexOf(set); return at >= 0 && /\n\s*catalogFolderChanged\(\);/.test(body.slice(at)); };
-  return after(invite, "\n  teamJoin = j;\n") && /\n\s*return view;\n\}$/.test(invite)
+  return after(invite, "\n  teamJoin = j;\n") && /\n\s*catalogFolderChanged\(\);[^\n]*\n\s*return joinView\(\);\n\}$/.test(invite)
     && after(finish, "\n  teamJoin = null;\n") && /\n\s*catalogFolderChanged\(\);[^\n]*\n[^\n]*\n\s*return true;\n\}$/.test(finish);
 };
 
@@ -5677,10 +5676,10 @@ const LEGS = [
   ["ds9m", "signoutManaged", "Sign out forgets that the account's organisation holds its licence, signed in or not, so Buy is offered again"],
   ["ds9d", "signoutNone", "no signout/desk is sent where no client id is configured or the desk was never signed in; a sign-in in the browser is left alone"],
   ["ds9e", "signoutDoor", "the service's door carries signout/desk at its own address alone, no redirect, nothing cached, no cookie"],
-  ["ds10a", "flushJoin", "a desk signed in first writes its seat beside its request to join a folder team, and again where the file went or the folder changed"],
+  ["ds10a", "flushJoin", "a desk signed in first writes its seat where its lead is pinned, and again where the file went or the folder changed; a request to join with no lead pinned writes nothing (P2: it wrote one beside a folder team's request)"],
   ["ds10d", "flushOwnKey", "a certificate given to another desk key is never written as this desk's seat; this key's is"],
-  ["ds10b", "flushCallers", "the seat is written when a request to join is written, and after a join taken or finished or a folder changed"],
-  ["ds10c", "flushJoinReach", "a folder invitation taken and an admission heeded both reach the folder change, and so the seat's write"],
+  ["ds10b", "flushCallers", "the seat is written after a join taken or finished or a folder changed (P2: and no longer when a request to join is written, which none is by the desk)"],
+  ["ds10c", "flushJoinReach", "a relay invitation taken and an admission heeded both reach the folder change, and so the seat's write (P2: it named a folder invitation)"],
   ["ds11a", "doorRequest", "a request at the relay's door carries the seat as seat.json has it and the relay's id, and names no invitation"],
   ["ds11b", "doorInvite", "the channel knocks at the door with this desk's standing certificate and the lead's box, and with nothing else"],
   ["ds11e", "doorAsksSeat", "signed in with no certificate it may knock with (none yet, another desk key's, one run out, one its own revocation list covers), the door hands the channel a seatless request, marked a door (door false) with the lead's box, the request's id where the relay named one, and no certificate, and asks no renewal itself; signed out, or for another relay team, it hands nothing; a standing certificate knocks"],
@@ -6038,11 +6037,11 @@ function outsideNames(main) {
   return rest.match(/\b(?:signin(?:[A-Z]\w*)?|armSignin\w*|seat(?:Doc|Open|Genuine|Info|SignedBytes|FileText)|SEAT_\w+|SIGNIN_\w+)\b/g) || [];
 }
 const outside = outsideNames(MAIN);
-/* And to write the seat after a request to join and a folder change (ds10b), and to knock at a relay team's door with the
+/* And to write the seat after a folder change (ds10b; P2: it was also written after a request to join, and askJoin writes none), and to knock at a relay team's door with the
    certificate and write the request there (ds11d), and for Buy to carry the sign-in code to the order page (tests/desk-buy.mjs), none
    of which gates anything; and to hand a team's relay its seat on a licence that follows Entra, which the relay judges and nothing
    on the desk waits on (tests/relay-seats.mjs d1a to d3a), and for Buy to go to the portal of an account that already pays (tests/desk-buy.mjs b11). */
-const expectOutside = ["signinListen", "armSigninRenew", "signinFlush", "signinFlush", "signinDoorInvite", "signinDoorKept", "signinView", "signinWorksNow", "signinWorksNow",
+const expectOutside = ["signinListen", "armSigninRenew", "signinFlush", "signinDoorInvite", "signinDoorKept", "signinView", "signinWorksNow", "signinWorksNow",
   "signinRelaySeatIo", "signinRelaySeatIo", "signinPressNow", "signinPaysNow"];
 check(outside.slice().sort().join() === expectOutside.slice().sort().join(),
   "ds5a nothing local is gated: outside its section the shell names the sign-in only to require its loopback, to arm the renewal, to write the seat after a join and to press on Ask again: " + outside.join(" "));
@@ -6276,7 +6275,7 @@ if (!PLANTS_OFF) {
   await plantWire("dsp203", ["    if (got.ok && signinOutFlight) await signinOutFlight; /* plant:out-before-signin */", "    /* plant:out-before-signin */"], "outThenSignin");
   await plantWire("dsp156", ["  delete s.licenceManaged; /* plant:signout-managed */\n", ""], "signoutManaged");
   await plantWire("dsp30", ["    && signinOffered().length > 0; /* plant:signout-offered */", "    ; /* plant:signout-offered */"], "signoutNone");
-  await plantWire("dsp31", ["return !!teamJoin && !(teamJoin.invite && teamJoin.invite.relay); /* plant:flush-asking */", "return false;"], "flushJoin");
+  /* RETIRED, P2: dsp31, "plant return !!teamJoin && !(teamJoin.invite && teamJoin.invite.relay); /* plant:flush-asking *\/ turns flushJoin red"; the arm that wrote a seat beside a request with no invitation left the shell, and ds10a holds that such a request writes none. */
   await plantWire("dsp32", ["if (signinWrote === mark && fs.existsSync(file)) return false; /* plant:flush-mark */", "if (signinWrote === cert.sig.value) return false;"], "flushJoin");
   await plantWire("dsp33", ["  catalogFolderChanged(); /* plant:invite-folder-changed */\n", ""], "flushJoinReach");
   await plantWire("dsp34", ["  catalogFolderChanged(); /* plant:finish-join-watched */\n", ""], "flushJoinReach");

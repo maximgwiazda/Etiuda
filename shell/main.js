@@ -6621,7 +6621,7 @@ function takeRelayInvite(parsed, name, me, ahead) {
   joinTold = false;
   persistDeskEnvelope();
   relayRun();
-  catalogFolderChanged();
+  catalogFolderChanged(); /* plant:invite-folder-changed */
   return joinView();
 }
 /* The lead key as Studio's Settings show it, the 16 hex after "studio-" (sign.mjs keyIdFor), made from the public half and
