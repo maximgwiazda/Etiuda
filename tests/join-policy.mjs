@@ -1807,7 +1807,7 @@ function policyTemplateCoversShell(src, docs) {
 }
 
 /* 19w: SETTINGS' TEAM ROWS NEVER READ A PIN THE POLICY LET GO. leadsView lists the pins first and asks the policy after, and the first
-   ask that says the policy (folderTeamHere, pinTrusted) lets go a join kept from an invitation under a lead or a folder the policy now
+   ask that says the policy (leadsView itself, through sayJoinPolicy) lets go a join kept from an invitation under a lead or a folder the policy now
    names, with the pin that invitation set: the map then read `.public` of nothing, and the page's "leads" ask threw. Found by the folder
    P0 builder on 2026-11-22 (a first etiuda:team-join "leads" after a restart under a policy); a relay invitation reaches it alike. The
    first thing each desk below does is that ask, so no other read has said the policy before it. */
@@ -1845,7 +1845,10 @@ function leadsAfterLetGo(shell) {
      team's row stands and says the policy names another lead, and a second ask reads the same. */
   run("a relay invitation under a policy naming another lead", relayInvite, policy(leadB), gone);
   run("a folder invitation under a policy naming another lead", folderInvite, policy(leadB), gone);
-  run("a folder invitation under a policy naming a folder", folderInvite, { rows: [["TeamFolder", "REG_SZ", path.join(LAB, "w19-other")]] }, Object.assign({}, gone, { rows: T2 }));
+  /* MOVED, fold 129. Was: "a folder invitation under a policy naming a folder", let go with its pin (rows T2 alone, pins T2, no request). P4 removed the TeamFolder
+     value from what policy names (a team works over the relay only, so it is not read; 19a, 19b), so a policy naming a folder names no lead and lets nothing go: both teams
+     stand and the request is kept, as in the controls below. */
+  run("a folder invitation under a policy naming a folder, which is not read", folderInvite, { rows: [["TeamFolder", "REG_SZ", path.join(LAB, "w19-other")]] }, { rows: [T1, T2].sort().join(","), pins: [T1, T2].sort().join(","), join: true, again: 2 });
   /* The controls: no policy, and a policy naming the invitation's own lead, keep both teams as they were. */
   const both = { rows: [T1, T2].sort().join(","), pins: [T1, T2].sort().join(","), join: true, again: 2 };
   run("the control, a relay invitation and no policy", relayInvite, null, both);
