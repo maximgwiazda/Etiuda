@@ -4,7 +4,7 @@
    lead's key once, to compare with the lead's, and Settings lists every such team with a way to leave it. A team is
    joined over the relay, by a link or by an invitation to the person's address: no code is shown, typed or read out,
    and no invitation is pasted (board 1017; the shared folder's join went with it). */
-import { eHost, eOnCatalogCopy, ePickCatalogFolder } from "./host.js";
+import { eHost, eOnCatalogCopy } from "./host.js";
 import { t, toast, uiLang } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { wholeThingEmpty } from "./app-state.js";
@@ -468,7 +468,6 @@ function joinTook(v,changed){
              const keptApart=Array.isArray(l.keptApart)?l.keptApart.filter(f=>typeof f==="string"&&f&&f.length<=200).map(String).slice(0,3):[];
              if(keptApart.length) row.keptApart=keptApart; /* plant:kept-apart-kept */
              if(keptApart.length && Number.isSafeInteger(l.keptApartMore) && l.keptApartMore>0) row.keptApartMore=l.keptApartMore; /* plant:kept-apart-more-kept */
-             if(l.needsFolder===true) row.needsFolder=true; /* plant:needs-folder-kept */
              if(l.awaitsEdition===true) row.awaitsEdition=true;
              /* The shell's still-reading sentence, as text. The page prints it; it is not a translation of its own. */
              if(typeof l.reading==="string" && l.reading) row.reading=String(l.reading);
@@ -935,21 +934,6 @@ function syncToldNotice(){
 function forgetTeamLead(team,then){
   return joinAsk("leave",team).then(v=>{ teamContent(); if(typeof then==="function") then(); return v; });
 }
-/* Open a folder, for a team that moved to a shared folder this desk did not find: the shell's dialog, then the shell checks
-   the folder holds this team's file from its lead and follows it, or says why not. Its answer is no join view, so the view
-   is asked for again. */
-function pickMovedFolder(team,then){
-  team=String(team||"");
-  if(!team || !eHasJoin()) return Promise.resolve(null);
-  return ePickCatalogFolder(t("Choose the team's shared folder")).then(dir=>{
-    if(!dir) return null;
-    let asked;
-    try{ asked=Promise.resolve(eHost().teamJoin("pick-moved-folder",team,dir)); } /* plant:pick-moved-call */
-    catch(e){ asked=Promise.reject(e); }
-    return asked.then(r=>joinAsk("state").then(()=>{ if(typeof then==="function") then(); return r; }),()=>null);
-  });
-}
-
 function teamShareState(){
   return (joinNow && joinNow.share) ? joinNow.share : null;
 }
@@ -979,4 +963,4 @@ function shareDropItem(blobId){
   catch(e){ return Promise.resolve({ok:false}); }
 }
 
-export { lapseNote, shareRefusedNotes, keptApartNotes, relayElsewhereNote, folderHeldNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, teamPolicySaid, relayDesk, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, teamCanJoin, inviteHeld, noteCatalogCopy, joinTook, teamContent, teamContentNow, markCatalogPrivate, onContentChanged, openTeamBubble, closeTeamBubble, teamShareState, shareToTeammate, shareInboxList, shareKeepCard, shareKeptNote, shareDropItem };
+export { lapseNote, shareRefusedNotes, keptApartNotes, relayElsewhereNote, folderHeldNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, teamPolicySaid, relayDesk, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, paintJoin, teamCanJoin, inviteHeld, noteCatalogCopy, joinTook, teamContent, teamContentNow, markCatalogPrivate, onContentChanged, openTeamBubble, closeTeamBubble, teamShareState, shareToTeammate, shareInboxList, shareKeepCard, shareKeptNote, shareDropItem };

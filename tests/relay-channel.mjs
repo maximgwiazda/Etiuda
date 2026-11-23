@@ -63,7 +63,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 578 - 18 + 3 - 2; /* fold 129: 533 at the merge base + 45 (fold 128's join link key, and the channel's no older replace, same and cross epoch) - 18 retired with the folder team + 3 asserted again on a relay team (P4's own count, its line in d8d8a5ae) - 2 retired with the check code and the folder invitation (P2: 964b, 923e) */
+const EXPECTED = 578 - 18 + 3 - 2 + 1; /* fold 129: 533 at the merge base + 45 (fold 128's join link key, and the channel's no older replace, same and cross epoch) - 18 retired with the folder team + 3 asserted again on a relay team (P4's own count, its line in d8d8a5ae) - 2 retired with the check code and the folder invitation (P2: 964b, 923e) + 1 asserted again on a relay team (P1: 939f, the lead's folder-channel team file refused; 939g keeps its place) */
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -6822,11 +6822,12 @@ if (deskOn()) try {
       await s.stop();
     }
   }
-  /* 939f, finding 3 (1): the lead moves the team to a shared folder, filled with its team file at a higher rev naming a folder
-     channel, and puts the same file up to the relay. The desk's catalog folder before joining is that folder, so the move
-     finds it there. */
-  async function toFolder(tag, app, ceiling) {
-    const out = { synced: false, folder: "", shown: "", channel: "" };
+  /* 939f, finding 3 (1), as it stands with the move to a shared folder removed: the lead puts the team file up at a higher rev naming a folder
+     channel, and the same file in its own mirror and in the folder the desk's catalog folder was before joining. The relay's channel judges a
+     team file by its pin, and a file that does not name this relay is no file of this team (plant:team-own), so the desk refuses it at the door
+     and stays on the relay. What is read back is the desk's mirror, its catalog folder and its team channel after a few rounds of catching up. */
+  async function toFolder(tag, app) {
+    const out = { synced: false, folder: "", channel: "", mirrorRev: null, mirrorChannel: "" };
     const s = await relayDeskScene(tag, app);
     try {
       out.synced = !!s.synced;
@@ -6836,19 +6837,12 @@ if (deskOn()) try {
       put(s.share, "board.ec", read(s.sMirror, "board.ec"));
       put(s.sMirror, C.TEAM_NAME, moved);
       await s.studio.kick(); await s.studio.idle();
-      /* A folder team is read through the mirror its syncer keeps of the shared folder. */
-      const folderMirror = path.join(s.ud, "folder-mirror", s.team);
-      const look = () => {
-        const here = s.Dk.api.catalogFolder(), env = s.Dk.envelope();
-        out.folder = here === folderMirror ? "the folder team's mirror" : here === s.mirror ? "the relay's mirror" : String(here);
-        const shown = (env.teamShown || {})[s.team] || {};
-        out.shown = shown.folder === s.share && !shown.relay ? "the shared folder" : shown.relay ? "the relay" : String(shown.folder);
-        const ch = (env.teamChannel || {})[s.team];
-        out.channel = ch ? ch.kind : "none";
-        return out.folder === "the folder team's mirror" && out.shown === "the shared folder" && out.channel !== "relay";
-      };
-      await until(async () => { await s.pump(); return look(); }, ceiling || 30000);
-      out.ok = look();
+      for (let i = 0; i < 4; i++) await s.pump();
+      const here = s.Dk.api.catalogFolder(), env = s.Dk.envelope();
+      out.folder = here === s.mirror ? "the relay's mirror" : String(here);
+      const ch = (env.teamChannel || {})[s.team];
+      out.channel = ch ? ch.kind : "none";
+      try { const d = JSON.parse(read(s.mirror, C.TEAM_NAME)); out.mirrorRev = d.rev; out.mirrorChannel = (d.channel && d.channel.kind) || "none"; } catch { out.mirrorRev = null; }
       return out;
     } finally {
       await s.stop();
@@ -7329,13 +7323,13 @@ if (deskOn()) try {
         + " puts its files up under the old key and says nothing, and the product file is never written: " + zc.detail + ", sha "
         + (zc.back ? "restored" : "differs"));
       const f = await run(toFolder, "939f");
-      /* RETIRED, P1 (a relay team's move to a shared folder is removed): the check holds the move to a folder, which is no longer followed; retired with P4 and not left red. It said what its sentence below says. */
-      retire(!!f.x && f.x.ok === true,
-        "939f a relay desk receives its team's move to a shared folder through catchUp and takes the folder: "
-        + (f.x ? "synced " + f.x.synced + ", catalog folder " + f.x.folder + ", the team shown in " + f.x.shown + ", team channel " + f.x.channel : "")
+      check(!!f.x && f.x.synced && f.x.folder === "the relay's mirror" && f.x.channel === "relay" && f.x.mirrorRev === 2 && f.x.mirrorChannel === "relay",
+        "939f a relay desk whose lead puts up a team file at a higher rev naming a shared folder refuses it as wrong-team and stays on the relay: its mirror's team file stays at rev 2 and names"
+        + " the relay, its catalog folder stays the relay's mirror and its team channel stays the relay (it was: the desk takes the folder): "
+        + (f.x ? "synced " + f.x.synced + ", catalog folder " + f.x.folder + ", team channel " + f.x.channel + ", mirror team file rev " + f.x.mirrorRev + " channel " + f.x.mirrorChannel : "")
         + (f.err ? ", " + f.err : ""));
-      const g = await liftApp("plant:relay-to-folder", async app => { const x = await toFolder("939g", app, 8000); return x.synced && x.folder === "the relay's mirror" && x.channel === "relay"; });
-      check(g.turned && g.back, "939g lifting plant:relay-to-folder refuses the move as wrong-team, so the desk stays on the relay, and the product"
+      const g = await liftApp("plant:team-own", async app => { const x = await toFolder("939g", app); return x.synced && x.mirrorRev === 3 && x.mirrorChannel === "folder"; });
+      check(g.turned && g.back, "939g lifting plant:team-own lets the lead's folder-channel team file into the desk's mirror, where 939f refuses it, and the product"
         + " file is never written: " + g.detail + ", sha " + (g.back ? "restored" : "differs"));
       const h = await run(forkOnRelay, "939h");
       check(!!h.x && h.x.ok === true,

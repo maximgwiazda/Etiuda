@@ -776,9 +776,7 @@ function createProgram(opts) {
   }
 
   /* A team file judged under the pin or a genuine handover: signed by the pinned lead's key or a new lead the handover
-     proves; this team. A relay pin requires its own relay and a rev, or a folder channel, which is the team's move to a
-     shared folder, landed as any team file is (its rev above the floor) for the shell's move to take. A folder pin
-     refuses a file that names a relay. */
+     proves; this team. A relay pin requires its own relay and a rev. A folder pin refuses a file that names a relay. */
   function teamJudged(doc) {
     if (!pin) return R("wrong-team");
     if (!table(doc) || !table(doc.sig)) return R("bad-signature");
@@ -796,9 +794,7 @@ function createProgram(opts) {
     if (!B.verifySigned(signerPub, "", bytes, doc.sig.value)) return R("bad-signature"); /* plant:team-sig */
     const chain = B.genuineChain(doc, pin.lead) || (st && st.chain) || [{ keyId: pin.lead.keyId, public: pin.lead.public }];
     const folder = !pin.rt;
-    let moving = false;
-    moving = !folder && relayOf(doc) === null && table(doc.channel) && doc.channel.kind === "folder"; /* plant:relay-to-folder */
-    if (doc.kind !== "etiuda-team" || doc.id !== pin.teamId || (folder ? relayOf(doc) !== null : relayOf(doc) !== pin.rt && !moving)) return R("wrong-team"); /* plant:team-own */
+    if (doc.kind !== "etiuda-team" || doc.id !== pin.teamId || (folder ? relayOf(doc) !== null : relayOf(doc) !== pin.rt)) return R("wrong-team"); /* plant:team-own */
     if (!isCount(doc.epoch) || (folder ? (doc.rev !== undefined && (!Number.isSafeInteger(doc.rev) || doc.rev < 0)) : !isCount(doc.rev))) return R("replay-rev");
     return { ok: true, doc, epoch: doc.epoch, rev: doc.rev, handed: leadDiffers, chain };
   }
