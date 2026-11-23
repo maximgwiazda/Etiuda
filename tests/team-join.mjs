@@ -3881,7 +3881,7 @@ try {
     step.sig.value = crypto.sign(null, Buffer.concat([Buffer.from("etiuda-team-handover\n", "utf8"), Buffer.from(V2.v2SignedBytes(step))]),
       lead.privateKey).toString("hex");
     put(yard, "etiuda-team.json", sign({ format: 1, kind: "etiuda-team", id: TEAM, catalogs: ["lamp-shop"], lead: NEXT, sealed: true,
-      exportsSealed: false, epoch: 2, roster: [entry(meH, KH2, 2)], handover: [step] }, next.privateKey, NEXT.keyId));
+      exportsSealed: false, epoch: 2, roster: [entry(meH, KH2, 2)], handover: [step], channel: relayChannelOf(TEAM) }, next.privateKey, NEXT.keyId)); /* names its channel, as teamAt does: a relay desk ignores a team file without one (plant:folder-channel-unread) */
     const after = leadIn(await Dh.join("state")), html = await settingsAt(Dh, "en");
     check(!!before && before.lead === "Lamp lead" && !!after && after.print === printOf(NEXT.public) && after.lead === ""
         && after.folder === relayMirrorOf(Dh.ud, TEAM) && html.indexOf("Lamp lead&#39;s team") < 0 && html.indexOf('<div class="set-label">Team<small>') >= 0,
