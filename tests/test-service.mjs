@@ -22,7 +22,7 @@ const TEMPLATE = fs.readFileSync(path.join(ROOT, "src", "template.html"), "utf8"
 const HOST = fs.readFileSync(path.join(ROOT, "src", "modules", "host.js"), "utf8");
 const UILANG = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8");
 const PACKAGE = fs.readFileSync(path.join(ROOT, "tools", "package.mjs"), "utf8");
-const EXPECTED = 20;
+const EXPECTED = 21;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -59,6 +59,16 @@ try {
     JSON.stringify(Object.assign({}, LAB, { clientIds: { apple: "1234567890-x" } })),
   ].map(t => { try { TS.testServiceFields(t, read, SECRET); return "taken"; } catch (e) { return /refuses/.test(e.message) ? "refused" : e.message; } });
   check(refused.every(r => r === "refused"), "ts1b a lab file the desk's reader refuses stops the pack, five shapes: " + refused.join(","));
+  /* The hosted ts-cycle leg writes its own lab file (tools/runner/installer-legs.mjs TS_LAB); read from its text, it is the one held
+     here and one the reader takes, so a change to the reader cannot leave the runner's build refused while this file is mended. */
+  const LEGS = fs.readFileSync(path.join(ROOT, "tools", "runner", "installer-legs.mjs"), "utf8");
+  const tsLabText = (/\nconst TS_LAB = (\{[\s\S]*?\});\n/.exec(LEGS) || [])[1];
+  let tsLab = null;
+  try { tsLab = new Function("return (" + tsLabText + ");")(); } catch { tsLab = null; }
+  let tsLabTaken = "unread";
+  try { tsLabTaken = tsLab ? Object.keys(TS.testServiceFields(JSON.stringify(tsLab), read, SECRET)).sort().join(",") : "unread"; } catch (e) { tsLabTaken = e.message; }
+  check(!!tsLab && JSON.stringify(tsLab) === JSON.stringify(LAB) && tsLabTaken === "clientIds,order,service",
+    "ts1e the hosted ts-cycle leg's lab file is this one and the desk's reader takes it: " + tsLabTaken);
   const withSecret = JSON.stringify(Object.assign({}, LAB, { provider: { id: "lab", clientId: "lab-client-1", clientSecret: LAB_SECRET,
     issuer: "http://127.0.0.1:4567", authorize: "http://127.0.0.1:4567/authorize", token: "http://127.0.0.1:4567/token", scope: "openid" } }));
   /* A lab file's order is an origin (7aa73820), so the secret rides in its host name, where the reader still takes it. */

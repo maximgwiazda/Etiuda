@@ -753,7 +753,7 @@ async function extClaimed(rec) {
 const TS_SUFFIX = " Test Service";
 const TS_LAB = { service: "https://etiuda.dev/licence-staging/v1/",
   clientIds: { microsoft: "11111111-2222-3333-4444-555555555555", google: "1234567890-abcdefghij.apps.googleusercontent.com" },
-  order: "https://etiuda.dev/buy-staging/" };
+  order: "https://staging.etiuda.dev" };
 const userDir = () => valueOf(regKey(KU.install), "InstallLocation");
 const userLinks = (name) => [path.join(PLACES.desktop, name), path.join(PLACES.programs, name)];
 /* Every per-user uninstall entry whose display name names the test build, by key: the Apps list's rows for it. */
