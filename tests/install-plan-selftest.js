@@ -162,7 +162,7 @@ const updateFacts = {
   setupExit: 0, dir: PROG, exe: EXE, exeThere: true, installLocation: PROG,
   defaultDir: "C:\\lab\\home\\AppData\\Local\\Programs\\Etiuda", defaultDirExists: false,
   programOld: "a".repeat(64), programNew: "b".repeat(64), programTree: "b".repeat(64),
-  oldOnlyGone: true, besideClear: true, appKeys: 1, keyName: G, keyBefore: G, version: "2.0.1", wantVersion: "2.0.1",
+  plantKept: true, stagingClear: true, appKeys: 1, keyName: G, keyBefore: G, version: "2.0.1", wantVersion: "2.0.1",
   uninstallString: "\"" + PROG + "\\Uninstall Etiuda.exe\" /currentuser",
   shortcuts: { desktop: { count: 1, target: EXE, hotkey: "Ctrl+Alt+E" }, startMenu: { count: 1, target: EXE } },
   hotkeyWant: "Ctrl+Alt+E",
@@ -181,8 +181,8 @@ holdJudge("judgeUpdate", P.judgeUpdate, updateFacts, [
   /* The gate refuses this case at U0b before any update runs, so without this mutant the clause
      `programNew !== programOld` was redundant and a plant removing it stayed green (2026-09-28). */
   ["the older copy is this tree's program, U0b bypassed", f => { f.programOld = f.programTree; }, "U3"],
-  ["the old copy's own file survived", f => { f.oldOnlyGone = false; }, "U4"],
-  ["the older copy left aside beside the folder", f => { f.besideClear = false; }, "U4"],
+  ["the person's own file in the folder lost", f => { f.plantKept = false; }, "U4"],
+  ["a staged copy left beside the folder", f => { f.stagingClear = false; }, "U4"],
   ["two uninstall keys", f => { f.appKeys = 2; }, "U5"],
   ["a different key", f => { f.keyName = "other"; }, "U5"],
   ["the older version on the key", f => { f.version = "2.0.0"; }, "U5"],

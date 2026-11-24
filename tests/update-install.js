@@ -392,11 +392,14 @@ async function updateLeg(newer) {
   const keysBefore = deskKeys();
   check(accepted && land.cards === 12 && drove.glass === true && cardsInDesk() === 12 && keysBefore.eGlassOff === "1",
     "U0e the older copy took the catalog from Documents\\Etiuda and a setting through its menu: " + land.cards
-    + " cards on screen, " + cardsInDesk() + " in the desk, eGlassOff " + JSON.stringify(keysBefore.eGlassOff) + " (" + JSON.stringify(drove) + ")");
+    + " cards on screen, " + cardsInDesk() + " in the desk, eGlassOff " + JSON.stringify(keysBefore.eGlassOff) + " (" + JSON.stringify(drove) + ")"
+    + "; the offer pressed " + accepted + ", the page then " + JSON.stringify(land));
+  /* A red U0e leaves the desk without the catalog, so U10's 12 is a count the person never had: say so, and name where it stopped. */
+  if (!(accepted && land.cards === 12 && cardsInDesk() === 12)) note("U10 below follows from U0e: the desk the update keeps holds no catalog of 12 cards");
   const deskBefore = shaFile(deskFile());
   const catalogsBefore = catalogs();
 
-  phase("[3/5] two plants: a file only the older copy has, and the person's own shortcut hotkey");
+  phase("[3/5] two plants: a file of the person's in the install folder, which no list names, and the person's own shortcut hotkey");
   fs.writeFileSync(path.join(PROG, "left-by-the-older-copy.txt"), "planted by " + WHO + "\n", "utf8");
   const hotkeyWant = ask("hotkey", ["-File", path.join(H.places.Desktop, SHORTCUT), "-Keys", "CTRL+ALT+E"]);
   check(!!hotkeyWant, "U0f the Desktop shortcut takes a hotkey, read back as " + JSON.stringify(hotkeyWant));
@@ -412,8 +415,8 @@ async function updateLeg(newer) {
     programOld: oldEngine, programNew: (() => { const n = engineIn(PROG); note("installed engine after the update " + String(n || "unread").slice(0, 12)
       + ", app.asar " + (() => { try { return fs.statSync(path.join(PROG, "resources", "app.asar")).size + " bytes"; } catch (e) { return "unread"; } })()); return n; })(),
     programTree: treeEngine,
-    oldOnlyGone: !fs.existsSync(path.join(PROG, "left-by-the-older-copy.txt")),
-    besideClear: P.BESIDE.every(s => !fs.existsSync(PROG + s)),
+    plantKept: fs.existsSync(path.join(PROG, "left-by-the-older-copy.txt")),
+    stagingClear: !fs.existsSync(PROG + P.BESIDE[0]),
     appKeys: namedKeys(KU.uninstallParent), keyName: regExists(KU.uninstall) ? GUID : "", keyBefore: GUID,
     version: regValue(KU.uninstall, "DisplayVersion"), wantVersion: WANT_VERSION,
     uninstallString: regValue(KU.uninstall, "UninstallString"),

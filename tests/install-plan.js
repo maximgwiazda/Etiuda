@@ -22,7 +22,8 @@
  *     KeepShortcuts on the install key it adds --keep-shortcuts and the shortcuts are neither
  *     deleted nor recreated (installer.nsh). Since 2026-11-12 tools/patch-nsis.cjs (fix 7) stages
  *     the new files beside the folder and swaps the two, and that uninstaller runs only for a copy
- *     registered in another folder: the older copy's files go aside whole (BESIDE) and are removed;
+ *     registered in another folder: the older copy's files go aside whole (BESIDE[1]), what its list does not name comes back,
+ *     and the aside waits for the new copy's first start;
  *   - /D must be the last argument and unquoted, and /allusers or /currentuser choose the context
  *     outright; with neither, a per-machine copy already registered makes the context all users,
  *     which is the exit 199 measured on 2026-09-17 when no elevation was there to ask for.
@@ -172,9 +173,12 @@ function judgeUpdate(f) {
   row("U3", !!f.programNew && f.programNew === f.programTree && f.programNew !== f.programOld,
     "the program was replaced: the engine inside the installed asar is sha256 " + String(f.programNew).slice(0, 12)
     + ", the tree's is " + String(f.programTree).slice(0, 12) + " and the older copy's was " + String(f.programOld).slice(0, 12));
-  row("U4", f.oldOnlyGone === true && f.besideClear === true,
-    "a file only the older copy had, planted in its folder, is gone (" + f.oldOnlyGone + "): the older copy's folder was"
-    + " replaced, not written over; and nothing is left beside it (" + f.besideClear + ")");
+  /* An update keeps what the older copy's own list (etiuda-files.ini) does not name, and the copy aside waits for the new one's first
+     start (shell/installer.nsh, B1 and B5 of the update and install review): the old reading, the planted file gone and nothing beside,
+     was the contract before them. The aside's drop at first start is old-copy-kept's, a named leg of tools/runner/installer-legs.mjs. */
+  row("U4", f.plantKept === true && f.stagingClear === true,
+    "a file the person kept in the install folder, which no list names, is still there after the update (" + f.plantKept + ");"
+    + " and no staged copy is left beside the folder (" + f.stagingClear + ")");
   row("U5", f.appKeys === 1 && f.keyName === f.keyBefore && f.version === f.wantVersion
     && /\/currentuser/.test(String(f.uninstallString || "")),
     "one uninstall key for the product (" + f.appKeys + "), the same one as before (" + JSON.stringify(f.keyName)
