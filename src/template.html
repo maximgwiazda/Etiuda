@@ -3776,6 +3776,24 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
    slider, which only means anything while Columns is on Auto. */
 .set-row-off{opacity:.45}
 .set-row-off .set-ctl{pointer-events:none}
+/* WHAT ONLY WORKS ON A TEAM, on a desk with none: present, faded, inert, never missing. One fade for all of it (--off is .btn[disabled]'s and
+   .set-row-off's), and nothing changes size, so joining a team only lifts it. The element keeps pointer events, so its title can say why. */
+:root{--off:.45}
+/* A whole section: its rail entry, and on the page its heading and lede, which sit on the dotted ground behind their own patch, so they take
+   the faded colour and not an opacity, which would let the dots through the letters. */
+.sx-sec.team-off{opacity:var(--off);cursor:default}
+.sx-sec.team-off:hover,.sx-sec.team-off:focus-visible{background:transparent;outline:0}
+.sx-page h2.team-off,.sx:not(.lm) .sx-block.team-off>h3{color:color-mix(in srgb,var(--ink) 45%,var(--bg))}
+.sx-page .lede.team-off{color:color-mix(in srgb,var(--dim) 45%,var(--bg))}
+/* A Settings row with a switch: icon, label and control fade together, not the tile, which would let the dots through it. The stored value
+   stays, but the thumb loses the accent, as a disabled danger button loses its red: a blue On that cannot act would read as live. */
+.set-row.team-off>*{opacity:var(--off)}
+.set-row.team-off .set-ctl{pointer-events:none}
+.set-row.team-off .seg::before{background:var(--dim)}
+.set-row.team-off .seg button:disabled{cursor:default}
+/* The Library row's Private switch, switch and word together, off, in the same box. */
+.ec-priv.team-off{opacity:var(--off)}
+.ec-priv.team-off .ec-priv-sw{cursor:default}
 /* The language pin, under the Advanced flags. Dimmed rather than hidden while off, for the
    same reason the narrowest-column slider is. */
 .mf-pin{display:flex;align-items:center;gap:10px;margin-top:8px}

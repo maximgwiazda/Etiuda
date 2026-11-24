@@ -656,7 +656,7 @@ try {
       else {
         const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:forget-note-relay") >= 0);
         let p = null;
-        if (at >= 0) { lines[at] = "  const mirrorOfTeam = folderMirrorOf(team);"; p = await relayForget("relay-forget-plant", lines.join("\n")); }
+        if (at >= 0) { lines[at] = "  const mirrorOfTeam = \"\";"; p = await relayForget("relay-forget-plant", lines.join("\n")); }
         check(!!p && p.after === "true,true,true", "890v3 lifting plant:forget-note-relay leaves the note in the relay mirror (FAIL 890v2): " + JSON.stringify(p));
       }
     }

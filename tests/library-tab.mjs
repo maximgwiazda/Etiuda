@@ -1111,13 +1111,16 @@ await checkAsync("L22 Catalog & data shows Private toggle on personal rows only,
     await settle();
     const box = host().querySelector("#mgCatList");
     if (!box) return "no #mgCatList";
-    /* Off-team: no switch, no Team catalog label, no lock anywhere. */
-    const offSw = box.querySelectorAll("input[data-ec-private]").length;
+    /* Off-team: every row's Private switch stands greyed, disabled and unchecked (present, never hidden, on a desk with no team), and
+       there is no Team catalog label and no lock anywhere. WAS: "Off-team: no switch, no Team catalog label, no lock anywhere." */
+    const offSws = Array.from(box.querySelectorAll("input[data-ec-private]"));
+    const offSw = offSws.length;
+    const offGrey = offSws.filter((s) => s.disabled && !s.checked).length;
     const offTeamLbl = box.querySelectorAll(".ec-team").length;
     const offListLock = box.querySelectorAll(".ec-lock").length;
     const offBarLock = doc.querySelector("#catNow .cn-lock");
-    if (offSw || offTeamLbl || offListLock || offBarLock) {
-      return "off-team showed controls: " + JSON.stringify({ offSw, offTeamLbl, offListLock, offBarLock: !!offBarLock });
+    if (offSw !== FILES.length || offGrey !== offSw || offTeamLbl || offListLock || offBarLock) {
+      return "off-team controls not as ruled: " + JSON.stringify({ offSw, offGrey, offTeamLbl, offListLock, offBarLock: !!offBarLock });
     }
     /* On-team: team.ec and team-fork.ec have Team catalog and no switch; own.ec has unchecked switch; priv.ec has checked switch + lock; bar has lock.
        Board 1014, 2026-11-22: a row is the team's because the shell's teamCatalogPins names its pin (it was by its id or grew chain reaching a

@@ -3,7 +3,7 @@
    acts back. Joining leaves a catalog the desk already has loaded. Once admitted, the same place shows the pinned
    lead's key once, to compare with the lead's, and Settings lists every such team with a way to leave it. A team is
    joined over the relay, by a link or by an invitation to the person's address: no code is shown, typed or read out,
-   and no invitation is pasted (board 1017; the shared folder's join went with it). */
+   and no invitation is pasted (board 1017). */
 import { eHost, eOnCatalogCopy } from "./host.js";
 import { t, toast, uiLang } from "./ui-lang.js";
 import { esc } from "./esc.js";
@@ -218,7 +218,7 @@ function joinShown(j){
   if(j.paused===true) row.paused=true;
   return row;
 }
-/* The head the shell read, or nothing. A folder team sends no head, and a head that is not this shape is left off
+/* The head the shell read, or nothing. A team held at a folder sends no head, and a head that is not this shape is left off
    so the row stays as it was. */
 function headKept(h){
   if(!h || typeof h!=="object") return null;
@@ -283,7 +283,6 @@ function lapseWords(l){
 }
 /* The team's row in Settings says the title, for as long as the step lasts. */
 function lapseNote(l){ return lapseWords(l).title; }
-/* A write this desk owes the shared folder that the folder refuses as read-only, one sentence a file, until it lands. */
 /* A conflict copy the relay channel kept on this computer beside the team's edition, never sent: one sentence a copy, by its file name,
    for the three the shell names, then one sentence counting the rest. */
 function keptApartNotes(l){
@@ -292,12 +291,6 @@ function keptApartNotes(l){
   const more=l&&Number.isSafeInteger(l.keptApartMore)&&l.keptApartMore>0?l.keptApartMore:0;
   if(out.length&&more) out.push(t("More files kept the same way: {N}.").split("{N}").join(String(more))); /* plant:kept-apart-more-shown */
   return out;
-}
-function shareRefusedNotes(l){
-  return (Array.isArray(l&&l.shareRefused)?l.shareRefused:[]).filter(r=>r&&typeof r.file==="string"&&r.file).map(r=>(r.kind==="folder"
-    ? t("The team's shared folder is read-only where {FILE} goes, so this desk keeps the change and tries again at each check.")
-    : t("{FILE} is marked read-only in the team's shared folder, so this desk keeps the change and tries again at each check.")
-  ).split("{FILE}").join(r.file));
 }
 const lapseKey=l=>l.team+"|"+l.lapse.step+"|"+l.lapse.until;
 /* One notice per step of each team's lapse, up until the agent dismisses it; a sync at the same step adds nothing. */
@@ -401,13 +394,11 @@ function relayElsewhereWords(l){
 /* The team's row in Settings says both, for as long as the file names that relay. */
 function relayElsewhereNote(l){ const w=relayElsewhereWords(l); return w.lead+" "+w.body; }
 /* A team this desk holds through a shared folder, which Etiuda no longer follows: the copywriter's sentence, {TEAM} as the row names
-   the team, and where the folder's local copy still owes the share, that it stays here unsent, and in which folder. */
-function folderHeldWords(l){
+   the team. */
+function folderHeldNote(l){
   const team=l&&l.lead?t("{LEAD}'s team").split("{LEAD}").join(l.lead):t("Team");
-  return {lead:t("{TEAM} worked through a shared folder, which Etiuda no longer follows: its catalog stays on this computer as it is, and a new invitation from the team's lead brings the team back.").split("{TEAM}").join(team),
-    body:l&&l.folderOwed?t("What this desk had not yet sent to the shared folder stays on this computer, unsent, in the folder {FOLDER}.").split("{FOLDER}").join(String(l.folderCopy||"")) /* words: placeholder */:""};
+  return t("{TEAM} worked through a shared folder, which Etiuda no longer follows: its catalog stays on this computer as it is, and a new invitation from the team's lead brings the team back.").split("{TEAM}").join(team);
 }
-function folderHeldNote(l){ const w=folderHeldWords(l); return w.body?w.lead+" "+w.body:w.lead; }
 /* And a notice once a run, as the relay's below: Dismiss takes it down for that run; the row still says it. */
 let folderHeldUp="";
 const folderHeldDismissed=new Set();
@@ -419,8 +410,7 @@ function syncFolderHeld(){
   if(up) dropNotice(up);
   folderHeldUp=want;
   if(!l) return;
-  const w=folderHeldWords(l);
-  eNotice("eTeamFolderHeld", w.lead, w.body, ()=>{
+  eNotice("eTeamFolderHeld", folderHeldNote(l), "", ()=>{
       folderHeldDismissed.add(want);
       if(folderHeldUp===want) folderHeldUp="";
     });
@@ -447,7 +437,6 @@ function joinTook(v,changed){
   const was=JSON.stringify(joinNow);
   joinNow={sealed:s.sealed&&s.sealed.file?{file:String(s.sealed.file),team:String(s.sealed.team||"")}:null,
            join:joinShown(s.join),
-           askRefused:(s.askRefused || s.refused) || null,
            /* The shell's sentences for what machine policy set and this desk cannot use, as text in the desk's language. */
            policySaid:Array.isArray(s.policySaid)?s.policySaid.filter(x=>typeof x==="string"&&x).map(String):[],
            leads:Array.isArray(s.leads)?s.leads.filter(l=>l&&l.team).map(l=>{
@@ -460,7 +449,6 @@ function joinTook(v,changed){
              if(l.relayRemoved===true) row.relayRemoved=true;
              if(l.relayElsewhere===true) row.relayElsewhere=true; /* plant:elsewhere-kept */
              if(l.folderHeld===true) row.folderHeld=true;
-             if(l.folderOwed===true){ row.folderOwed=true; row.folderCopy=String(l.folderCopy||""); }
              const head=headKept(l.head);
              if(head) row.head=head;
              const lapse=lapseKept(l.lapse);
@@ -473,8 +461,6 @@ function joinTook(v,changed){
              if(keptApart.length) row.keptApart=keptApart; /* plant:kept-apart-kept */
              if(keptApart.length && Number.isSafeInteger(l.keptApartMore) && l.keptApartMore>0) row.keptApartMore=l.keptApartMore; /* plant:kept-apart-more-kept */
              if(l.awaitsEdition===true) row.awaitsEdition=true;
-             /* The shell's still-reading sentence, as text. The page prints it; it is not a translation of its own. */
-             if(typeof l.reading==="string" && l.reading) row.reading=String(l.reading);
              return row;
            }):[]};
   /* Admitted: an empty desk loads the catalog the invitation named. A desk that already has one keeps it. */
@@ -758,7 +744,7 @@ function joinAct(act){
   if(act==="ask"){
     const askTeam=String((j&&j.team)||(s&&s.team)||"");
     return joinAsk("ask",(j&&j.file)||(s&&s.file)||"",agentName()).then(v=>{
-      if(v && typeof v==="object" && !v.refused && !v.askRefused){
+      if(v && typeof v==="object" && !v.refused){
         const team=String((v.join&&v.join.team)||askTeam||"");
         if(team) sendContentSaid(team);
       }
@@ -773,17 +759,6 @@ function joinAct(act){
   if(act==="forget" && l){ joinDoubt=""; return forgetTeamLead(l.team); } /* plant:mismatch-leaves */
   if(act==="load") return Promise.resolve(hooks.importCatalogHere());
   return Promise.resolve(null);
-}
-/* The shell's sentence while this folder team's mirror has no listing yet, or "". */
-function teamReadingLine(){
-  const row=((joinNow&&joinNow.leads)||[]).filter(l=>typeof l.reading==="string" && l.reading)[0];
-  return row?String(row.reading):"";
-}
-/* The empty desk's block for that wait, or "" once the listing has landed. */
-function teamReadingEmptyHtml(){
-  const line=teamReadingLine();
-  if(!line) return "";
-  return '<div class="empty empty-desk">'+esc(line)+'</div>';
 }
 /* The empty desk's block, or "" where there is nothing sealed to say. */
 function teamJoinEmptyHtml(){
@@ -967,4 +942,4 @@ function shareDropItem(blobId){
   catch(e){ return Promise.resolve({ok:false}); }
 }
 
-export { lapseNote, shareRefusedNotes, keptApartNotes, relayElsewhereNote, folderHeldNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, teamPolicySaid, relayDesk, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, paintJoin, teamCanJoin, inviteHeld, noteCatalogCopy, joinTook, teamContent, teamContentNow, markCatalogPrivate, onContentChanged, openTeamBubble, closeTeamBubble, teamShareState, shareToTeammate, shareInboxList, shareKeepCard, shareKeptNote, shareDropItem };
+export { lapseNote, keptApartNotes, relayElsewhereNote, folderHeldNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, teamPolicySaid, relayDesk, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, paintJoin, teamCanJoin, inviteHeld, noteCatalogCopy, joinTook, teamContent, teamContentNow, markCatalogPrivate, onContentChanged, openTeamBubble, closeTeamBubble, teamShareState, shareToTeammate, shareInboxList, shareKeepCard, shareKeptNote, shareDropItem };

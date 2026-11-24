@@ -357,7 +357,7 @@ function mtHealthWatch(){
   const v=!eWatchSupported() ? "not supported here" : (eWatchName() ? "on" : "off");
   return {v:v};
 }
-/* Leads the page already holds. A folder team is not called a relay. No lead is a dash. */
+/* Leads the page already holds. A team held at a folder is not called a relay. No lead is a dash. */
 function mtTeamLine(leads){
   const list=(Array.isArray(leads)?leads:[]).filter(l=>l && !l.removed);
   if(!list.length) return {v:"-", warn:false, parts:null};

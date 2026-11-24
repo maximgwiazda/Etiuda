@@ -1,8 +1,8 @@
-/* THE LAB CLEANUP LEGS (relay-channel, desk-roster, folder-mirror).
+/* THE LAB CLEANUP LEGS (relay-channel, desk-roster).
  *
  *     node tests/relay-channel-clean.mjs
  *
- * Checks that tests/relay-channel.mjs, tests/desk-roster.mjs and tests/folder-mirror.mjs
+ * Checks that tests/relay-channel.mjs and tests/desk-roster.mjs
  * remove their own lab folder on every exit path (process.exit and uncaught throw),
  * and remove stale lab folders left by prior dead runs at start whilst preserving
  * live runs and folders without owner.json.
@@ -14,7 +14,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const EXPECTED = 9;
+const EXPECTED = 6;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -46,13 +46,6 @@ const TARGETS = [
     prefix: "etiuda-desk-roster-",
     stopVar: "ETIUDA_DESK_ROSTER_STOP",
     codePrefix: "drc",
-  },
-  {
-    name: "folder-mirror",
-    targetPath: path.join(ROOT, "tests", "folder-mirror.mjs"),
-    prefix: "etiuda-folder-mirror-",
-    stopVar: "ETIUDA_FOLDER_MIRROR_STOP",
-    codePrefix: "fmc",
   },
 ];
 

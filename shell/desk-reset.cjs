@@ -105,7 +105,7 @@ function refused(detail, userData, roots, keep) {
 }
 
 /* What the desk file says about the folders a reset may touch: the catalog folder setting, the team folders it names
-   (each folder team's, and an invitation's still asked), and this desk's own ids under desks/ (its key now and every
+   (each held team's), and this desk's own ids under desks/ (its key now and every
    key kept aside), read from desk.json or the newest backup that parses; empty where none does. */
 function deskFacts(user) {
   const names = ["desk.json"];
@@ -120,8 +120,6 @@ function deskFacts(user) {
     const shares = [];
     const shown = doc.teamShown && typeof doc.teamShown === "object" ? doc.teamShown : {};
     Object.keys(shown).forEach(t => { const s = shown[t]; if (s && typeof s.folder === "string" && s.folder) shares.push(s.folder); });
-    const inv = doc.teamJoin && typeof doc.teamJoin === "object" ? doc.teamJoin.invite : null;
-    if (inv && typeof inv.folder === "string" && inv.folder) shares.push(inv.folder);
     const ids = [];
     [doc.branch].concat(Array.isArray(doc.branchOld) ? doc.branchOld : []).forEach(b => {
       const pub = b && b.sign ? String(b.sign.pub) : "";

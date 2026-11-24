@@ -6315,11 +6315,14 @@ const CARD_B = {
         || "still there " + count(all, 'data-seg="sharededit"') + "/" + count(pages, 'data-seg="sharededit"');
     });
 
-    check("settings.js", "D3-4 no AI in the section list, and no section listed without a row", () => {
+    /* MOVED (what only works on a team stands greyed on a desk with none, tests/team-off.mjs): the sentence was "no AI in the section list, and no
+       section listed without a row"; it is now "no AI in the section list, and no section listed without a row but Teams and keys, which stands
+       greyed and opens nothing (no data-sx) while the desk has no team". */
+    check("settings.js", "D3-4 no AI in the section list, and no section listed without a row but Teams and keys, greyed and opening nothing", () => {
       const n = SET.settingsNavHtml("general");
       const ids = [...n.matchAll(/data-sx="([^"]+)"/g)].map(m => m[1]);
       const empty = SET.settingsSections().filter(s => !/class="sx-card"><div class="(set-row|sc-list)/.test(SET.settingsPageHtml(s.id, ""))).map(s => s.id);
-      return (ids.indexOf("ai") < 0 && !/>AI</.test(n) && !empty.length
+      return (ids.indexOf("ai") < 0 && !/>AI</.test(n) && empty.join(",") === "teams" && /class="sx-sec team-off"/.test(n)
         && ids.join(",") === "all,account,general,appearance,layout,keys,notifications,data,about") || ids.join(",") + " empty " + empty.join(",");
     });
 

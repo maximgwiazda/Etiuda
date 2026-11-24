@@ -1950,9 +1950,7 @@ try {
   check(writes.length === 2 && /clipboard\.writeText\(pickClipText\(v\.text,\s*process\.platform\)\)/.test(shellCode) && putSite
     && (shellBare.match(/clipboard\.writeText\(/g) || []).length === 2,
     "5b the shell writes the clipboard at two places, the desk's own text and the reword's result it kept: " + writes.length + " write site(s), the put's " + putSite);
-  /* Board 945 stage 3 (b) slice 1: background syncer worker in shell/folder/syncer.cjs and node:worker_threads */
   const MODS = ["electron", "node:child_process", "node:path", "node:fs", "node:os", "node:crypto", "node:zlib",
-    "node:worker_threads", "./folder/syncer.cjs",
     /* Board 989: node:tls, only to add the system's roots to Node's own; it reaches no window, screen, clipboard or key. */
     "node:tls",
     /* Board 980 stage 3: node:http, only for the sign-in's loopback on 127.0.0.1 while the person signs in (tests/desk-signin.mjs). */
@@ -2203,8 +2201,8 @@ try {
     "5g the caret helper's paste is started from two places: the copy, right after its clipboard write and before the picker hides, and Enter after a reword once the selection read again is the opening's: "
     + pasteNames + " mention(s) of caretPaste, " + (pasteAfterWrite ? "after the write" : "NOT after the write"));
 
-  /* THE PACKAGE HOLDS EVERY FILE THE SHELL LOADS (Argon's updates review of 2026-11-01, finding 1: the folder mirror's syncer
-     was required by the shell and missing from the builder's `files`, so a packaged desk on a folder team had no syncer). From
+  /* THE PACKAGE HOLDS EVERY FILE THE SHELL LOADS (Argon's updates review of 2026-11-01, finding 1: a file the shell required was
+     missing from the builder's `files`, so a packaged desk lacked it). From
      shell/main.js, every file reached by a relative require or named as a worker script, followed through the files it reaches,
      is in electron-builder.js's `files`; and the three hand-written allowlists (tools/release.mjs, tests/shell-smoke.js,
      tests/reinstall.js) state that same list, sorted. */
@@ -2233,12 +2231,8 @@ try {
   const joined = sortedFiles.join(",");
   const smokeOk = fs.readFileSync(path.join(ROOT, "tests", "shell-smoke.js"), "utf8").indexOf('"' + joined + '"') >= 0;
   const reinstallOk = fs.readFileSync(path.join(ROOT, "tests", "reinstall.js"), "utf8").indexOf('"' + joined + '"') >= 0;
-  /* The worker is started from its source text, which holds only while it reaches nothing by path: Node's own modules alone. */
-  const workerCode = fs.readFileSync(path.join(ROOT, "shell", "folder", "syncer-worker.cjs"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
-  const workerReach = [...workerCode.matchAll(/require\(\s*([^)]*)\)/g)].map(m => m[1].trim()).filter(r => !/^"node:[\w/]+"$/.test(r))
-    .concat((workerCode.match(/\b__dirname\b|\b__filename\b/g) || []));
-  check(reached.indexOf("shell/folder/syncer-worker.cjs") >= 0 && missing.length === 0
-    && J(releaseList) === J(sortedFiles) && smokeOk && reinstallOk && workerReach.length === 0,
+  check(reached.length > 1 && missing.length === 0
+    && J(releaseList) === J(sortedFiles) && smokeOk && reinstallOk,
     "5h the package holds every file the shell loads (" + reached.length + " reached from shell/main.js; missing from the builder's files: "
     + (missing.join(", ") || "none") + "), and release.mjs " + (J(releaseList) === J(sortedFiles) ? "states" : "does NOT state")
     + ", shell-smoke " + (smokeOk ? "states" : "does NOT state") + " and reinstall " + (reinstallOk ? "states" : "does NOT state")

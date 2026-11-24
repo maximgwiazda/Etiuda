@@ -44,7 +44,7 @@ const COPY = path.join(APP, "main.js");
 const EXPOSE = ["spanSignedBytes", "spanDocument", "spanPeriod", "setStatsClock", "statsPulse", "flushHeldStats",
   "openSealed", "sealCatalog", "openStatsSealed", "sealStatsLead", "statsAnswerSignedBytes", "statsAnswerGenuine",
   "signedBytesOf", "branchSign", "branchIdOf", "deskFileGenuine", "teamWhole", "wrapTeamKey", "signedSha",
-  "catalogChanged", "channelHash", "isCatalogName", "deskTrustChecks", "handoverSignedBytes", "teamUse"];
+  "catalogChanged", "channelHash", "isCatalogName", "handoverSignedBytes", "teamUse"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };

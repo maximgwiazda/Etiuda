@@ -65,7 +65,7 @@ fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true }
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
 const EXPOSE = ["sealCatalog", "wrapTeamKey", "joinCommit", "joinGenuine", "joinOpening", "joinsSignedBytes", "joinSignedBytes",
   "branchSignedBytes", "deskFileGenuine", "readCatalog", "catalogLeadOk", "catalogChanged", "isCatalogName", "JOINS_NAME",
-  "memberProof", "inviteIdOf", "inviteRead", "folderHost", "signedSha", "relayRun", "acceptLink", "askSignedBytes", "rawCatalogFolder", "deskTrustChecks",
+  "memberProof", "inviteIdOf", "inviteRead", "folderHost", "signedSha", "relayRun", "acceptLink", "askSignedBytes", "rawCatalogFolder",
   "sealCardTo", "openCardFrom", "relayChannel", "relayMirrorOf"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
@@ -5560,8 +5560,9 @@ check(regStand.held(), "rs1 every reg call was answered by the stand-in, the pol
 {
   const ROWS = [
     /* RETIRED, P2: the first row, "This computer can only read the team's folder, and joining needs permission to write there...", went with the folder join. */
-    ["src/modules/host.js", "Settings names a file where the team's folder should be, so nothing was opened. The folder can be chosen again from the Library.", "W Ustawieniach wskazano plik tam, gdzie powinien być folder zespołu, więc niczego nie otwarto. Folder można wybrać ponownie w Bibliotece."],
-    ["src/modules/host.js", "This computer did not open the team's folder just now. Clicking the link again tries again.", "Ten komputer nie otworzył teraz folderu zespołu. Można spróbować ponownie, klikając ten sam odnośnik."],
+    /* MOVED (the copywriter's words for the desk's own catalog folder, which is no team's): old EN "...where the team's folder should be..." and "...did not open the team's folder just now...", PL "folder zespołu" and "folderu zespołu"; new, "the catalog folder" / "folder z plikami katalogów". */
+    ["src/modules/host.js", "Settings names a file where the catalog folder should be, so nothing was opened. The folder can be chosen again from the Library.", "W Ustawieniach wskazano plik tam, gdzie powinien być folder z plikami katalogów, więc niczego nie otwarto. Folder można wybrać ponownie w Bibliotece."],
+    ["src/modules/host.js", "This computer did not open the catalog folder just now. Clicking the link again tries again.", "Ten komputer nie otworzył teraz folderu z plikami katalogów. Można spróbować ponownie, klikając ten sam odnośnik."],
     ["src/modules/manage.js", "These changes stay on this desk until Etiuda closes; when it opens again, the catalog is as delivered.", "Zmiany zostają na tym stanowisku do zamknięcia Etiudy; po ponownym uruchomieniu katalog jest taki, jak został dostarczony."]
   ];
   const table = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8");

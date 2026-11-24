@@ -52,7 +52,7 @@ const PLANTS = 342; /* 343 less dsp31, retired with the folder request (P2) */
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 220 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 219 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -6051,10 +6051,9 @@ check(readers.join() === "signin.js" && /function signinShown\(v\)\{ return !!\(
   && /if\(signinShown\(v\) \|\| signinManaged\(v\)\) groups\.push/.test(SETTINGS),
   "ds5b on the page only signin.js asks the shell, and with nothing offered and no wait for machine policy (tests/desk-managed.mjs mm-p8)"
   + " neither the door nor Account's card is drawn: " + readers.join(","));
-const require = createRequire(import.meta.url);
-const syncer = require(path.join(ROOT, "shell", "folder", "syncer.cjs"));
-check(syncer.isAllowedPath("desks/k-0123456789abcdef/seat.json") === true && syncer.isAllowedPath("desks/k-0123456789abcdef/seat.json.tmp") === false,
-  "ds5c a folder team's mirror carries desks/<id>/seat.json to the share");
+/* RETIRED, P3 (the folder syncer is gone): ds5c, "a folder team's mirror carries desks/<id>/seat.json to the share", which asked the syncer's
+   isAllowedPath for the seat file and refused its temp copy. Nothing carries a file to a share now, and the relay's own paths are held by
+   tests/relay-channel.mjs. */
 /* ACCOUNT: the agent's name moved there from General, Account first, and the team's sign-in row gone. */
 const acctAt = SETTINGS.indexOf('{id:"account", icon:"user", name:t("Account")'), genAt = SETTINGS.indexOf('{id:"general", icon:"general"');
 const general = (() => { const a = SETTINGS.indexOf("function generalGroups(){"); return a < 0 ? "" : SETTINGS.slice(a, SETTINGS.indexOf("\n}", a)); })();

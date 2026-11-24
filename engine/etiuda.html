@@ -3776,6 +3776,24 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
    slider, which only means anything while Columns is on Auto. */
 .set-row-off{opacity:.45}
 .set-row-off .set-ctl{pointer-events:none}
+/* WHAT ONLY WORKS ON A TEAM, on a desk with none: present, faded, inert, never missing. One fade for all of it (--off is .btn[disabled]'s and
+   .set-row-off's), and nothing changes size, so joining a team only lifts it. The element keeps pointer events, so its title can say why. */
+:root{--off:.45}
+/* A whole section: its rail entry, and on the page its heading and lede, which sit on the dotted ground behind their own patch, so they take
+   the faded colour and not an opacity, which would let the dots through the letters. */
+.sx-sec.team-off{opacity:var(--off);cursor:default}
+.sx-sec.team-off:hover,.sx-sec.team-off:focus-visible{background:transparent;outline:0}
+.sx-page h2.team-off,.sx:not(.lm) .sx-block.team-off>h3{color:color-mix(in srgb,var(--ink) 45%,var(--bg))}
+.sx-page .lede.team-off{color:color-mix(in srgb,var(--dim) 45%,var(--bg))}
+/* A Settings row with a switch: icon, label and control fade together, not the tile, which would let the dots through it. The stored value
+   stays, but the thumb loses the accent, as a disabled danger button loses its red: a blue On that cannot act would read as live. */
+.set-row.team-off>*{opacity:var(--off)}
+.set-row.team-off .set-ctl{pointer-events:none}
+.set-row.team-off .seg::before{background:var(--dim)}
+.set-row.team-off .seg button:disabled{cursor:default}
+/* The Library row's Private switch, switch and word together, off, in the same box. */
+.ec-priv.team-off{opacity:var(--off)}
+.ec-priv.team-off .ec-priv-sw{cursor:default}
 /* The language pin, under the Advanced flags. Dimmed rather than hidden while off, for the
    same reason the narrowest-column slider is. */
 .mf-pin{display:flex;align-items:center;gap:10px;margin-top:8px}
@@ -8264,9 +8282,9 @@ What is typed here stays in this browser.`;
     "Another program holds {FILE} open, so nothing was loaded. Once it is closed there, pick it again.": "Plik {FILE} jest otwarty w innym programie, więc nic nie wczytano. Po zamknięciu go tam wystarczy wybrać go ponownie.",
     "{FILE} is empty, so nothing was loaded.": "Plik {FILE} jest pusty, więc nic nie wczytano.",
     "{FILE} could not be read from the disk ({CODE}), so nothing was loaded. Try again once the disk answers, or pick a copy from elsewhere.": "Pliku {FILE} nie udało się odczytać z dysku ({CODE}), więc nic nie wczytano. Wystarczy spróbować ponownie, gdy dysk będzie dostępny, albo wybrać kopię z innego miejsca.",
-    "The team's folder does not answer from this computer just now, so it was not opened. Open it again once it can be reached: with the network drive connected, or the program that syncs it running.": "Folder zespołu nie odpowiada teraz z tego komputera, więc go nie otwarto. Wystarczy otworzyć go ponownie, gdy będzie osiągalny: po podłączeniu dysku sieciowego albo uruchomieniu programu, który go synchronizuje.",
-    "Settings names a file where the team's folder should be, so nothing was opened. The folder can be chosen again from the Library.": "W Ustawieniach wskazano plik tam, gdzie powinien być folder zespołu, więc niczego nie otwarto. Folder można wybrać ponownie w Bibliotece.",
-    "This computer did not open the team's folder just now. Clicking the link again tries again.": "Ten komputer nie otworzył teraz folderu zespołu. Można spróbować ponownie, klikając ten sam odnośnik.",
+    "The catalog folder does not answer from this computer just now, so it was not opened. Open it again once it can be reached: with the network drive connected, or the program that syncs it running.": "Folder z plikami katalogów nie odpowiada teraz z tego komputera, więc go nie otwarto. Wystarczy otworzyć go ponownie, gdy będzie osiągalny: po podłączeniu dysku sieciowego albo uruchomieniu programu, który go synchronizuje.",
+    "Settings names a file where the catalog folder should be, so nothing was opened. The folder can be chosen again from the Library.": "W Ustawieniach wskazano plik tam, gdzie powinien być folder z plikami katalogów, więc niczego nie otwarto. Folder można wybrać ponownie w Bibliotece.",
+    "This computer did not open the catalog folder just now. Clicking the link again tries again.": "Ten komputer nie otworzył teraz folderu z plikami katalogów. Można spróbować ponownie, klikając ten sam odnośnik.",
     "{FILE} could not be saved.": "Nie udało się zapisać pliku {FILE}.",
     "Add a card to {CAT}": "Dodaj kartę do kategorii {CAT}",
     "Clear search text": "Wyczyść tekst wyszukiwania",
@@ -9256,6 +9274,7 @@ What is typed here stays in this browser.`;
     "As the desk will look": "Tak będzie wyglądać stanowisko",
     "A drawing that follows these settings as they change. It is only for looking at.": "Rysunek zmienia się razem z tymi ustawieniami i służy tylko do podglądu.",
     "Opens this section alone": "Otwiera tylko tę sekcję",
+    "Needs a team": "Wymaga zespołu",
     "No setting matches this search.": "Żadne ustawienie nie pasuje do tego wyszukiwania.",
     "Open": "Otwórz",
     "Starting and closing": "Uruchamianie i zamykanie",
@@ -9754,7 +9773,6 @@ What is typed here stays in this browser.`;
     "The team file of {TEAM} names a relay this Etiuda does not use, so this desk does not follow it: it keeps its team, its catalog and its connection as they were, and sends nothing there.": "{TEAM} wskazuje w swoim pliku przekaźnik, z którego ta Etiuda nie korzysta, więc to stanowisko za nim nie podąża: zachowuje zespół, katalog i połączenie bez zmian i niczego tam nie wysyła.",
     "If the team moves back, nothing is needed; otherwise a new invitation from the team's lead is.": "Jeśli zespół wróci na poprzedni przekaźnik, nic nie trzeba robić; w przeciwnym razie potrzebne jest nowe zaproszenie od lidera zespołu.",
     "{TEAM} worked through a shared folder, which Etiuda no longer follows: its catalog stays on this computer as it is, and a new invitation from the team's lead brings the team back.": "{TEAM} korzysta ze wspólnego folderu, którego Etiuda już nie obsługuje: katalog tego zespołu zostaje na tym komputerze bez zmian, a nowe zaproszenie od lidera zespołu przywróci zespół.",
-    "What this desk had not yet sent to the shared folder stays on this computer, unsent, in the folder {FOLDER}.": "To, czego to stanowisko nie zdążyło wysłać do wspólnego folderu, zostaje na tym komputerze, niewysłane, w folderze {FOLDER}.",
     "Another catalog of the team has a newer edition.": "Inny katalog zespołu ma nowsze wydanie.",
     "Other catalogs of the team with a newer edition: {N}.": "Inne katalogi zespołu z nowszym wydaniem: {N}.",
     "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.": "Na prośbę Studia lidera zespołu przesłano zespołowi kopię katalogu używanego na tym stanowisku.",
@@ -9764,11 +9782,9 @@ What is typed here stays in this browser.`;
     "The team's relay is due for renewal": "Przekaźnik zespołu czeka na odnowienie",
     "It fell due on {DATE}. Everything works as before until {READONLY}; after that the catalogs on this desk stay as they are, but nothing new passes between this desk and the team until the relay is renewed. The team's lead renews it in Studio; nothing is needed here.": "Termin odnowienia minął dnia {DATE}. Do dnia {READONLY} wszystko działa jak dotąd; potem katalogi na tym stanowisku zostaną bez zmian, ale do czasu odnowienia nic nowego nie przejdzie już między stanowiskiem a zespołem. Przekaźnik odnawia lider zespołu w Studiu; tutaj nic nie trzeba robić.",
     "The team's relay is read-only until renewed": "Przekaźnik zespołu działa tylko do odczytu do czasu odnowienia",
-    "The team's shared folder is read-only where {FILE} goes, so this desk keeps the change and tries again at each check.": "Wspólny folder zespołu jest tylko do odczytu w miejscu, gdzie ma trafić {FILE}, więc to stanowisko zachowuje zmianę i próbuje ponownie przy każdym sprawdzeniu.",
     /* The copywriter's words: the copy the relay channel kept beside the team's edition. */
     "{FILE} was not sent to the team: the team's edition had changed in the meantime, from another computer or from an earlier send of this one. It is kept beside the catalog in the team's folder on this computer, and can be opened and published again if it is the edition wanted.": "Pliku {FILE} nie wysłano zespołowi: wydanie zespołu zmieniło się w międzyczasie, z innego komputera albo po wcześniejszym wysłaniu z tego. Plik zostaje obok katalogu w folderze zespołu na tym komputerze; można go otworzyć i opublikować ponownie, jeśli to właściwe wydanie.",
     "More files kept the same way: {N}.": "Więcej plików zachowanych w ten sam sposób: {N}.",
-    "{FILE} is marked read-only in the team's shared folder, so this desk keeps the change and tries again at each check.": "Plik {FILE} we wspólnym folderze zespołu jest oznaczony jako tylko do odczytu, więc to stanowisko zachowuje zmianę i próbuje ponownie przy każdym sprawdzeniu.",
     "The catalogs on this desk stay as they are and work as before; nothing new passes between this desk and the team.": "Katalogi na tym stanowisku zostają bez zmian i działają jak dotąd; nic nowego nie przechodzi już między stanowiskiem a zespołem.",
     "The relay keeps the team's copy until {DATE}.": "Przekaźnik przechowuje kopię zespołu do dnia {DATE}.",
     "The team's lead renews it in Studio.": "Odnowić go może lider zespołu w Studiu.",
@@ -9854,7 +9870,6 @@ What is typed here stays in this browser.`;
     "A catalog of its own": "Osobny katalog",
     "Your edits are with the team": "Własne zmiany są już u zespołu",
     "Your edits are kept on this computer and go to the team as soon as it can take them. To hand them over now, Export saves them in a catalog file for the team's lead.": "Własne zmiany są zachowane na tym komputerze i trafią do zespołu, gdy tylko będzie mógł je przyjąć. Aby przekazać je od razu, Eksportuj zapisze je w pliku katalogu dla lidera zespołu.",
-    "Updates from the team are paused on this computer, because Etiuda cannot read its own note of the edits not yet sent to the team. No edit made here is lost, and this usually passes by itself. If it does not, closing other programs or restarting the computer usually clears it.": "Aktualizacje od zespołu są na tym komputerze wstrzymane, bo Etiuda nie może odczytać własnego zapisu zmian jeszcze niewysłanych do zespołu. Żadna zmiana wprowadzona na tym komputerze nie ginie, a zwykle mija to samo. Jeśli nie minie, zwykle pomaga zamknięcie innych programów albo ponowne uruchomienie komputera.",
     "Your edits to it come back when it is loaded again": "Własne zmiany w tym katalogu wrócą po jego ponownym wczytaniu",
     "In the team's edition": "W wydaniu zespołu",
     "At {DESK}": "{DESK}",
@@ -17089,9 +17104,9 @@ What is typed here stays in this browser.`;
     const h = eHost();
     if (!h || typeof h.openCatalogFolder !== "function") return Promise.resolve(false);
     const say = (why) => {
-      if (why === "not-answering") toastRefusal(t("The team's folder does not answer from this computer just now, so it was not opened. Open it again once it can be reached: with the network drive connected, or the program that syncs it running."));
-      else if (why === "not-a-folder") toastRefusal(t("Settings names a file where the team's folder should be, so nothing was opened. The folder can be chosen again from the Library."));
-      else if (why === "could-not-open") toastRefusal(t("This computer did not open the team's folder just now. Clicking the link again tries again."));
+      if (why === "not-answering") toastRefusal(t("The catalog folder does not answer from this computer just now, so it was not opened. Open it again once it can be reached: with the network drive connected, or the program that syncs it running."));
+      else if (why === "not-a-folder") toastRefusal(t("Settings names a file where the catalog folder should be, so nothing was opened. The folder can be chosen again from the Library."));
+      else if (why === "could-not-open") toastRefusal(t("This computer did not open the catalog folder just now. Clicking the link again tries again."));
     };
     try {
       return Promise.resolve(h.openCatalogFolder()).then((v) => {
@@ -17221,8 +17236,6 @@ What is typed here stays in this browser.`;
       /* plant:listing-lead-mapped */
       // The hash of the file's bytes, by which a row's key is kept (catalog-offer.js ecFileTrust).
       bytesSha: String(f && f.bytesSha || ""),
-      // "taken-back" on this desk's own file where the team's folder has taken its writes back three times.
-      fault: String(f && f.fault || ""),
       // The copy Etiuda ships, rather than a folder's own file.
       builtIn: !!(f && f.builtIn)
     })).filter((f) => f.name) : [];
@@ -18291,7 +18304,6 @@ What is typed here stays in this browser.`;
     shareInboxList: () => shareInboxList,
     shareKeepCard: () => shareKeepCard,
     shareKeptNote: () => shareKeptNote,
-    shareRefusedNotes: () => shareRefusedNotes,
     shareToTeammate: () => shareToTeammate,
     teamCanJoin: () => teamCanJoin,
     teamContent: () => teamContent,
@@ -18300,7 +18312,6 @@ What is typed here stays in this browser.`;
     teamJoinShown: () => teamJoinShown,
     teamLeads: () => teamLeads,
     teamPolicySaid: () => teamPolicySaid,
-    teamReadingEmptyHtml: () => teamReadingEmptyHtml,
     teamShareState: () => teamShareState,
     wireTeamJoin: () => wireTeamJoin,
     wireTeamJoinEmpty: () => wireTeamJoinEmpty
@@ -18640,9 +18651,6 @@ What is typed here stays in this browser.`;
     if (out.length && more) out.push(t("More files kept the same way: {N}.").split("{N}").join(String(more)));
     return out;
   }
-  function shareRefusedNotes(l) {
-    return (Array.isArray(l && l.shareRefused) ? l.shareRefused : []).filter((r) => r && typeof r.file === "string" && r.file).map((r) => (r.kind === "folder" ? t("The team's shared folder is read-only where {FILE} goes, so this desk keeps the change and tries again at each check.") : t("{FILE} is marked read-only in the team's shared folder, so this desk keeps the change and tries again at each check.")).split("{FILE}").join(r.file));
-  }
   var lapseKey = (l) => l.team + "|" + l.lapse.step + "|" + l.lapse.until;
   function syncLapseNotice() {
     if (typeof document === "undefined" || typeof document.getElementById !== "function") return;
@@ -18747,16 +18755,9 @@ What is typed here stays in this browser.`;
     const w = relayElsewhereWords(l);
     return w.lead + " " + w.body;
   }
-  function folderHeldWords(l) {
-    const team = l && l.lead ? t("{LEAD}'s team").split("{LEAD}").join(l.lead) : t("Team");
-    return {
-      lead: t("{TEAM} worked through a shared folder, which Etiuda no longer follows: its catalog stays on this computer as it is, and a new invitation from the team's lead brings the team back.").split("{TEAM}").join(team),
-      body: l && l.folderOwed ? t("What this desk had not yet sent to the shared folder stays on this computer, unsent, in the folder {FOLDER}.").split("{FOLDER}").join(String(l.folderCopy || "")) : ""
-    };
-  }
   function folderHeldNote(l) {
-    const w = folderHeldWords(l);
-    return w.body ? w.lead + " " + w.body : w.lead;
+    const team = l && l.lead ? t("{LEAD}'s team").split("{LEAD}").join(l.lead) : t("Team");
+    return t("{TEAM} worked through a shared folder, which Etiuda no longer follows: its catalog stays on this computer as it is, and a new invitation from the team's lead brings the team back.").split("{TEAM}").join(team);
   }
   var folderHeldUp = "";
   var folderHeldDismissed = /* @__PURE__ */ new Set();
@@ -18768,8 +18769,7 @@ What is typed here stays in this browser.`;
     if (up) dropNotice(up);
     folderHeldUp = want;
     if (!l) return;
-    const w = folderHeldWords(l);
-    eNotice("eTeamFolderHeld", w.lead, w.body, () => {
+    eNotice("eTeamFolderHeld", folderHeldNote(l), "", () => {
       folderHeldDismissed.add(want);
       if (folderHeldUp === want) folderHeldUp = "";
     });
@@ -18796,7 +18796,6 @@ What is typed here stays in this browser.`;
     joinNow = {
       sealed: s.sealed && s.sealed.file ? { file: String(s.sealed.file), team: String(s.sealed.team || "") } : null,
       join: joinShown(s.join),
-      askRefused: s.askRefused || s.refused || null,
       /* The shell's sentences for what machine policy set and this desk cannot use, as text in the desk's language. */
       policySaid: Array.isArray(s.policySaid) ? s.policySaid.filter((x) => typeof x === "string" && x).map(String) : [],
       leads: Array.isArray(s.leads) ? s.leads.filter((l) => l && l.team).map((l) => {
@@ -18816,10 +18815,6 @@ What is typed here stays in this browser.`;
         if (l.relayRemoved === true) row2.relayRemoved = true;
         if (l.relayElsewhere === true) row2.relayElsewhere = true;
         if (l.folderHeld === true) row2.folderHeld = true;
-        if (l.folderOwed === true) {
-          row2.folderOwed = true;
-          row2.folderCopy = String(l.folderCopy || "");
-        }
         const head = headKept(l.head);
         if (head) row2.head = head;
         const lapse = lapseKept(l.lapse);
@@ -18832,7 +18827,6 @@ What is typed here stays in this browser.`;
         if (keptApart.length) row2.keptApart = keptApart;
         if (keptApart.length && Number.isSafeInteger(l.keptApartMore) && l.keptApartMore > 0) row2.keptApartMore = l.keptApartMore;
         if (l.awaitsEdition === true) row2.awaitsEdition = true;
-        if (typeof l.reading === "string" && l.reading) row2.reading = String(l.reading);
         return row2;
       }) : []
     };
@@ -19158,7 +19152,7 @@ What is typed here stays in this browser.`;
     if (act === "ask") {
       const askTeam = String(j && j.team || s && s.team || "");
       return joinAsk("ask", j && j.file || s && s.file || "", agentName()).then((v) => {
-        if (v && typeof v === "object" && !v.refused && !v.askRefused) {
+        if (v && typeof v === "object" && !v.refused) {
           const team = String(v.join && v.join.team || askTeam || "");
           if (team) sendContentSaid(team);
         }
@@ -19182,15 +19176,6 @@ What is typed here stays in this browser.`;
     }
     if (act === "load") return Promise.resolve(hooks.importCatalogHere());
     return Promise.resolve(null);
-  }
-  function teamReadingLine() {
-    const row2 = (joinNow && joinNow.leads || []).filter((l) => typeof l.reading === "string" && l.reading)[0];
-    return row2 ? String(row2.reading) : "";
-  }
-  function teamReadingEmptyHtml() {
-    const line = teamReadingLine();
-    if (!line) return "";
-    return '<div class="empty empty-desk">' + esc(line) + "</div>";
   }
   function teamJoinEmptyHtml() {
     if (!teamJoinShown()) return "";
@@ -29774,7 +29759,7 @@ What is typed here stays in this browser.`;
     setShown(mixed || ranked.hits);
     if (!shown.length) {
       const oneCat = cats.length === 1 ? cats[0] : null;
-      list.innerHTML = terms.length ? searchMissHtml() : wholeThingEmpty() && teamReadingEmptyHtml() ? teamReadingEmptyHtml() : wholeThingEmpty() && teamJoinShown() ? teamJoinEmptyHtml() : wholeThingEmpty() ? '<div class="empty empty-desk"><h2>' + esc(t("Etiuda is ready for its first replies.")) + "</h2>" + (teamCanJoin() ? '<p class="e-lede">' + esc(t("Most people answer from their team's catalog. Joining the team brings it to this desk, with every update after.")) + '</p><div class="e-joinp" id="emptyJoinPanel"><div class="e-join-t">' + ICON_TEAM + esc(t("Join your team")) + "</div><p>" + esc(t("The team's lead invites this account by its email address, and the invitation appears here with one Join; a link from the lead, opened on this computer, does the same.")) + '</p><div class="e-joinp-slot" id="emptyInvite"></div><div class="e-joinp-hint">' + esc(t("No invitation yet? The team's lead sends one.")) + '</div></div><div class="mid-or">' + esc(t("Working on your own?")) + ' <button type="button" class="btn" id="emptyLoad">' + esc(t("Load catalog file")) + "</button></div>" : '<button type="button" class="btn" id="emptyLoad">' + esc(t("Load catalog file")) + "</button>") + "</div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
+      list.innerHTML = terms.length ? searchMissHtml() : wholeThingEmpty() && teamJoinShown() ? teamJoinEmptyHtml() : wholeThingEmpty() ? '<div class="empty empty-desk"><h2>' + esc(t("Etiuda is ready for its first replies.")) + "</h2>" + (teamCanJoin() ? '<p class="e-lede">' + esc(t("Most people answer from their team's catalog. Joining the team brings it to this desk, with every update after.")) + '</p><div class="e-joinp" id="emptyJoinPanel"><div class="e-join-t">' + ICON_TEAM + esc(t("Join your team")) + "</div><p>" + esc(t("The team's lead invites this account by its email address, and the invitation appears here with one Join; a link from the lead, opened on this computer, does the same.")) + '</p><div class="e-joinp-slot" id="emptyInvite"></div><div class="e-joinp-hint">' + esc(t("No invitation yet? The team's lead sends one.")) + '</div></div><div class="mid-or">' + esc(t("Working on your own?")) + ' <button type="button" class="btn" id="emptyLoad">' + esc(t("Load catalog file")) + "</button></div>" : '<button type="button" class="btn" id="emptyLoad">' + esc(t("Load catalog file")) + "</button>") + "</div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
       wireTeamJoinEmpty(list.querySelector(".e-join"));
       const ei = $("#emptyLoad");
       if (ei) ei.onclick = hooks.importCatalogHere;
@@ -38228,6 +38213,7 @@ What is typed here stays in this browser.`;
     paintCatPrivate: () => paintCatPrivate,
     paintCatWaiting: () => paintCatWaiting,
     paintCatalogList: () => paintCatalogList,
+    rowShareParts: () => rowShareParts,
     toastIfSameCatalog: () => toastIfSameCatalog,
     wireHostCatalogWatch: () => wireHostCatalogWatch
   });
@@ -38914,8 +38900,8 @@ What is typed here stays in this browser.`;
     const tip = t("Signed by {DESK}, key {KEY}. Only that teammate can change this file; anyone with the folder can read it.").split("{DESK}").join(who).split("{KEY}").join(deskKey(f));
     return '<div class="ec-row ec-desk' + (o.nested ? "" : " ec-alone") + (o.loaded ? " is-loaded" : "") + '" data-ec-desk="' + o.at + '"><span class="ec-name"><span class="ec-title"><b>' + esc(who) + (o.twin ? '<span class="ec-fp">' + esc(o.twin) + "</span>" : "") + "</b>" + (o.loaded ? ecInUseHtml() : "") + "</span>" + (o.extra || "") + "</span>" + ecMetaHtml(o) + '<span class="ec-whose"><span class="ec-who" role="img" tabindex="0" aria-label="' + esc(who) + '" data-tip="' + esc(tip) + '" data-tip-key="' + esc(String(f.desk.id).slice(2)) + '" data-tip-kind="desk">' + ICON_DESK + '</span></span><span class="ec-acts">' + (o.loaded ? ecExportHtml() : "") + ecActHtml("See what changed", ICON_LOOK, ' data-ec-look="' + o.at + '"') + (o.loaded ? ecActHtml("Eject", ICON_EJECT, ' data-ec-eject="1"') : "") + "</span></div>";
   }
-  function ecMineHtml(line, glyph, fault) {
-    return '<small class="ec-mine"' + (fault ? ' data-ec-fault="' + esc(fault) + '"' : "") + ">" + (glyph ? ICON_DESK : "") + "<span>" + esc(line) + "</span></small>";
+  function ecMineHtml(line, glyph) {
+    return '<small class="ec-mine">' + (glyph ? ICON_DESK : "") + "<span>" + esc(line) + "</span></small>";
   }
   var ecTrustOf = /* @__PURE__ */ new Map();
   function ecFileTrust(f) {
@@ -39012,8 +38998,12 @@ What is typed here stays in this browser.`;
     team = !!pin && !!content && Array.isArray(content.teamCatalogPins) && content.teamCatalogPins.indexOf(String(pin)) >= 0;
     return team;
   }
+  function greyedPrivateHtml(id) {
+    return '<label class="ec-priv team-off" title="' + esc(t("Needs a team")) + '"><input type="checkbox" class="ec-priv-sw" role="switch" data-ec-private="' + esc(id) + '" disabled><span data-i18n-text="Private">' + esc(t("Private")) + "</span></label>";
+  }
   function rowShareParts(id, pin, content) {
-    if (!content || !content.team || !id) return { lockHtml: "", teamHtml: "" };
+    if (!id) return { lockHtml: "", teamHtml: "" };
+    if (!content || !content.team) return { lockHtml: "", teamHtml: greyedPrivateHtml(id) };
     if (isTeamCatalogPin(pin, content)) {
       return {
         team: true,
@@ -39068,13 +39058,8 @@ What is typed here stays in this browser.`;
       const ownEntry = ownOf(heldId);
       const ownReached = !!(ownEntry && ownEntry.reached);
       const holdsEdits = deskBranchHolds();
-      const ownFaults = all.filter((f) => f && f.desk && (me ? f.desk.id === me.id || f.desk.id === "self" : f.desk.id === "self"));
-      let outboxUnread = false;
-      outboxUnread = ownFaults.some((o) => o && o.fault === "outbox-unread");
-      const takenBack = own.some((o) => o && o.fault === "taken-back");
-      const unreadLine = t("Updates from the team are paused on this computer, because Etiuda cannot read its own note of the edits not yet sent to the team. No edit made here is lost, and this usually passes by itself. If it does not, closing other programs or restarting the computer usually clears it.");
       const keptLine = t("Your edits are kept on this computer and go to the team as soon as it can take them. To hand them over now, Export saves them in a catalog file for the team's lead.");
-      const mineLine = outboxUnread ? ecMineHtml(unreadLine, true, "outbox-unread") : takenBack ? ecMineHtml(keptLine, true, "taken-back") : ownEntry || holdsEdits ? ecMineHtml(ownReached ? t("Your edits are with the team") : keptLine, true) : "";
+      const mineLine = ownEntry || holdsEdits ? ecMineHtml(ownReached ? t("Your edits are with the team") : keptLine, true) : "";
       const extraFor = (id, on) => on ? mineLine : id && id !== heldId && ownOf(id) ? ecMineHtml(t("Your edits to it come back when it is loaded again"), false) : "";
       const lo = looseOrigin(false);
       const parts2 = adoptedListParts(adopted, me, held, lo ? lo.id : "", listPersonalAside(), all, shownCatalogName(catalogNameOfFile(catalogFileName())));
@@ -39143,7 +39128,6 @@ What is typed here stays in this browser.`;
       ecKeyBubClose();
       closeTeamBubble("ePrivateBubble");
       const rows = ecGroupedRows(tops, under, alone, parts2.asideRows, parts2.grouped || !!(content && content.team));
-      if ((outboxUnread || takenBack) && !rows.some((r) => r.indexOf("data-ec-fault") >= 0)) rows.unshift(mineLine);
       box.innerHTML = rows.length ? rows.join("") : ecEmptyHtml();
       markCutText(box);
       wireEcKeys(box);
@@ -42231,7 +42215,6 @@ What is typed here stays in this browser.`;
     if (l.head) notes.push(teamHeadNote(l.head));
     if (l.awaitsEdition) notes.push(t("This desk waits for the team's lead to publish a first edition."));
     if (l.lapse) notes.push(lapseNote(l.lapse));
-    notes.push(...shareRefusedNotes(l));
     notes.push(...keptApartNotes(l));
     if (l.asking) notes.push({
       text: t("On this network the team's updates arrive about once a minute, not live."),
@@ -42239,7 +42222,6 @@ What is typed here stays in this browser.`;
     });
     if (l.relayElsewhere) notes.push(relayElsewhereNote(l));
     if (l.folderHeld) notes.push(folderHeldNote(l));
-    if (l.reading) notes.push(l.reading);
     return '<div class="set-row"><div class="set-label">' + esc(l.lead ? t("{LEAD}'s team").split("{LEAD}").join(l.lead) : t("Team")) + notes.filter(Boolean).map((n) => typeof n === "object" ? '<small title="' + esc(n.tip) + '">' + esc(n.text) + "</small>" : "<small>" + esc(n) + "</small>").join("") + '</div><div class="set-ctl"><span class="e-lead-key">' + keySignHtml("studio", l.print) + "</span>" + (l.policy || l.waiting ? "" : '<button type="button" class="btn danger" data-leave-team="' + esc(l.team) + '">' + esc(t("Leave this team")) + "</button>") + "</div></div>";
   }
   var leaveHold = "";
@@ -42270,15 +42252,15 @@ What is typed here stays in this browser.`;
   function seg2(name, opts, cur, fixed) {
     return '<div class="seg set-seg" data-seg="' + name + '" data-n="' + opts.length + '">' + opts.map((o) => '<button type="button" data-val="' + esc(o.v) + '"' + (fixed ? " disabled" : "") + (o.tip ? ' title="' + esc(o.tip) + '"' : "") + (o.v === cur ? ' class="on"' : "") + ">" + esc(o.t) + "</button>").join("") + "</div>";
   }
-  function onoff(name, on, tipOn, tipOff) {
-    return seg2(name, [{ v: "off", t: t("Off"), tip: tipOff }, { v: "on", t: t("On"), tip: tipOn }], on ? "on" : "off");
+  function onoff(name, on, tipOn, tipOff, fixed) {
+    return seg2(name, [{ v: "off", t: t("Off"), tip: tipOff }, { v: "on", t: t("On"), tip: tipOn }], on ? "on" : "off", fixed);
   }
-  function row(key, icon, title, hint, ctl) {
-    return { key, icon, title, hint: hint || "", ctl };
+  function row(key, icon, title, hint, ctl, off) {
+    return { key, icon, title, hint: hint || "", ctl, off: !!off };
   }
   function rowHtml(r) {
     if (r.html != null) return r.html;
-    return '<div class="set-row" data-row="' + esc(r.key) + '">' + sxIcon(r.icon) + '<div class="set-label">' + (r.dot ? '<span class="door-seat-dot" aria-hidden="true"></span>' : "") + esc(r.title) + (r.hint ? "<small>" + esc(r.hint) + "</small>" : "") + '</div><div class="set-ctl">' + r.ctl + "</div></div>";
+    return '<div class="set-row' + (r.off ? " team-off" : "") + '" data-row="' + esc(r.key) + '"' + (r.off ? teamOffTitle() : "") + ">" + sxIcon(r.icon) + '<div class="set-label">' + (r.dot ? '<span class="door-seat-dot" aria-hidden="true"></span>' : "") + esc(r.title) + (r.hint ? "<small>" + esc(r.hint) + "</small>" : "") + '</div><div class="set-ctl">' + r.ctl + "</div></div>";
   }
   function rowWords(r) {
     if (r.html != null) return String(r.html).replace(/<[^>]*>/g, " ").replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
@@ -42722,6 +42704,12 @@ What is typed here stays in this browser.`;
       { after: '<div class="sx-note"><span>' + esc(t("A shortcut can be changed to an F key or a combination with Ctrl or Alt, since keys needed for typing stay with typing; the keys Etiuda itself needs are shown as fixed.")) + '</span><button type="button" class="btn" id="setResetKeys">' + esc(t("Reset shortcuts")) + "</button></div>", rows: [] }
     ].filter(Boolean);
   }
+  function deskInTeam() {
+    return teamLeads().some((l) => l && !l.removed);
+  }
+  function teamOffTitle() {
+    return ' title="' + esc(t("Needs a team")) + '"';
+  }
   function teamsGroups() {
     const rows = teamLeads().map((l, i, all) => ({ key: "team", html: teamRowHtml(l, i === all.findIndex((x) => !x.removed) ? t("The team's lead can see the catalogs this desk uses, their content included, and this desk's changes to them. The lead's Studio can take a copy of any of them at any time, without asking here: of a team catalog, one the lead publishes to the team, sealed for the team; of a personal catalog, any other on this desk, sealed for the lead alone. A personal catalog can be marked Private in the Library, under Catalog & data; the lead then sees nothing of it, not even that it is used. The lead's Studio lists this desk by name, unless the organisation turns names off, with the catalog and edition it uses unless that catalog is Private, and the period counted, and goes on listing it if it falls quiet. The desk's own counts go to the lead sealed, none of them from a Private catalog, and Studio shows them in the team's totals.") : "", i === all.findIndex((x) => !x.policy)) }));
     const policySaid = teamPolicySaid();
@@ -42930,6 +42918,7 @@ What is typed here stays in this browser.`;
   }
   function notificationsGroups() {
     const h = eHost();
+    const noTeam = !deskInTeam();
     let masterOn = true;
     if (h && typeof h.trayNotesState === "function") {
       try {
@@ -42954,19 +42943,22 @@ What is typed here stays in this browser.`;
           "cards",
           t("The team's lead publishes a new edition"),
           "",
-          onoff("noteedition", lsGet("eNotifyEditionOff") !== "1", "", "")
+          onoff("noteedition", lsGet("eNotifyEditionOff") !== "1", "", "", noTeam),
+          noTeam
         ),
         row(
           "notecatalog",
           "desks",
           t("A new catalog arrives from the team"),
           "",
-          onoff("notecatalog", lsGet("eNotifyCatalogOff") !== "1", "", "")
+          onoff("notecatalog", lsGet("eNotifyCatalogOff") !== "1", "", "", noTeam),
+          noTeam
         )
       ] }
     ];
   }
   function settingsSections() {
+    const teamsG = teamsGroups();
     return [
       { id: "account", icon: "user", name: t("Account"), lede: t("Who is signed in on this computer, and your name."), groups: accountGroups() },
       { id: "general", icon: "general", name: t("General"), lede: t("The language, and how Etiuda starts and closes."), groups: generalGroups() },
@@ -42974,11 +42966,19 @@ What is typed here stays in this browser.`;
       { id: "layout", icon: "layout", name: t("Layout"), lede: t("How the screen is laid out."), groups: layoutGroups() },
       { id: "keys", icon: "keys", name: t("Keyboard shortcuts"), lede: t("Every shortcut, and how to change it."), groups: keysGroups() },
       { id: "notifications", icon: "notifications", name: t("Notifications"), lede: t("What the app tells you, also while its window is closed."), groups: notificationsGroups() },
-      { id: "teams", icon: "teams", name: t("Teams and keys"), lede: t("The team this desk is on, and how its changes reach the team."), groups: teamsGroups() },
+      {
+        id: "teams",
+        icon: "teams",
+        name: t("Teams and keys"),
+        lede: t("The team this desk is on, and how its changes reach the team."),
+        groups: teamsG,
+        off: !teamsG.some((g) => g.rows.length)
+        /* plant:team-off-section */
+      },
       { id: "data", icon: "data", name: t("Data and defaults"), lede: t("Putting settings back, and what the app keeps on this computer."), groups: dataGroups() },
       { id: "about", icon: "about", name: t("About"), lede: t("The version, the licence and the tour."), groups: aboutGroups() },
       { id: "ai", icon: "ai", name: t("AI"), lede: aiLede(), groups: aiGroups() }
-    ].filter((s) => s.groups.some((g) => g.rows.length));
+    ].filter((s) => s.off || s.groups.some((g) => g.rows.length));
   }
   function groupHtml(g) {
     return '<div class="sx-group">' + (g.head ? "<h3>" + esc(g.head) + "</h3>" : "") + (g.rows.length ? '<div class="sx-card">' + g.rows.map(rowHtml).join("") + "</div>" : "") + (g.after || "") + "</div>";
@@ -42999,13 +42999,15 @@ What is typed here stays in this browser.`;
     return !sxOn || sxOn === "all" ? "all" : sxOn;
   }
   function settingsNavHtml(on) {
-    const btn = (id, icon, name) => {
+    const btn = (id, icon, name, off) => {
       const onThis = id === on;
+      if (off) return '<button type="button" class="sx-sec team-off" aria-disabled="true" tabindex="-1"' + teamOffTitle() + ">" + sxIcon(icon) + "<span>" + esc(name) + "</span></button>";
       return '<button type="button" class="sx-sec' + (onThis ? " on" : "") + '" data-sx="' + esc(id) + '"' + (onThis ? ' aria-current="page"' : "") + ">" + sxIcon(icon) + "<span>" + esc(name) + "</span></button>";
     };
-    return btn("all", "all", t("All settings")) + settingsSections().map((s) => btn(s.id, s.icon, s.name)).join("");
+    return btn("all", "all", t("All settings")) + settingsSections().map((s) => btn(s.id, s.icon, s.name, s.off)).join("");
   }
   function sectionBlockHtml(s, link) {
+    if (s.off) return '<section class="sx-block team-off" data-sec="' + esc(s.id) + '"><h3' + teamOffTitle() + ">" + esc(s.name) + "</h3></section>";
     const h = link ? '<h3><button type="button" data-open="' + esc(s.id) + '" title="' + esc(t("Opens this section alone")) + '">' + esc(s.name) + "</button></h3>" : "<h3>" + esc(s.name) + "</h3>";
     return '<section class="sx-block" data-sec="' + esc(s.id) + '">' + h + s.groups.map(groupHtml).join("") + "</section>";
   }
@@ -43048,6 +43050,7 @@ What is typed here stays in this browser.`;
     }
     if (!on || on === "all") return onePageHtml();
     const secs = settingsSections(), s = secs.find((x) => x.id === on) || secs[0];
+    if (s.off) return '<a class="sx-crumb sx-back" href="#settings">' + esc(t("All settings")) + '</a><h2 class="team-off"' + teamOffTitle() + ">" + esc(s.name) + '</h2><p class="lede team-off"' + teamOffTitle() + ">" + esc(s.lede) + "</p>";
     const rows = s.groups.map(groupHtml).join("");
     const body = s.id === "appearance" || s.id === "layout" ? '<div class="sx-look"><div class="sx-lookrows">' + rows + "</div>" + deskLookHtml() + "</div>" : '<div class="sx-tiles">' + rows + "</div>";
     return '<a class="sx-crumb sx-back" href="#settings">' + esc(t("All settings")) + "</a><h2>" + esc(s.name) + '</h2><p class="lede">' + esc(s.lede) + "</p>" + body;

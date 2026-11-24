@@ -224,8 +224,8 @@ function ecDeskRowHtml(f,o){
     +(o.loaded?ecActHtml("Eject",ICON_EJECT,' data-ec-eject="1"'):'')
     +'</span></div>';
 }
-function ecMineHtml(line,glyph,fault){
-  return '<small class="ec-mine"'+(fault?' data-ec-fault="'+esc(fault)+'"':'')+'>'+(glyph?ICON_DESK:'')+'<span>'+esc(line)+'</span></small>';
+function ecMineHtml(line,glyph){
+  return '<small class="ec-mine">'+(glyph?ICON_DESK:'')+'<span>'+esc(line)+'</span></small>';
 }
 /* A FOLDER FILE'S SIGNATURE, checked as a load would check it and kept per name, date and the hash of its bytes (the
    listing's bytesSha): the rows are files nobody has loaded, so each is read once to be told apart. */
@@ -354,8 +354,14 @@ function isTeamCatalogPin(pin, content){
   team=!!pin && !!content && Array.isArray(content.teamCatalogPins) && content.teamCatalogPins.indexOf(String(pin))>=0; /* plant:page-team-by-shell */
   return team;
 }
+/* The Private switch as a desk with no team sees it: in its place, faded, off and inert, the reason in its title. */
+function greyedPrivateHtml(id){
+  return '<label class="ec-priv team-off" title="'+esc(t("Needs a team"))+'"><input type="checkbox" class="ec-priv-sw" role="switch" data-ec-private="'+esc(id)+'" disabled>'
+    +'<span data-i18n-text="Private">'+esc(t("Private"))+'</span></label>';
+}
 function rowShareParts(id, pin, content){
-  if(!content || !content.team || !id) return {lockHtml:"", teamHtml:""};
+  if(!id) return {lockHtml:"", teamHtml:""};
+  if(!content || !content.team) return {lockHtml:"", teamHtml:greyedPrivateHtml(id)}; /* plant:team-off-private */
   if(isTeamCatalogPin(pin, content)){
     return {
       team:true,
@@ -427,20 +433,8 @@ function paintCatalogList(){
     const ownEntry=ownOf(heldId);
     const ownReached=!!(ownEntry && ownEntry.reached);
     const holdsEdits=deskBranchHolds();
-    const ownFaults=all.filter(f=>f && f.desk && (me ? f.desk.id===me.id || f.desk.id==="self" : f.desk.id==="self"));
-    let outboxUnread=false;
-    outboxUnread=ownFaults.some(o=>o && o.fault==="outbox-unread"); /* plant:outbox-unread-page */
-    /* The team's folder has taken this desk's own writes back three times: they are kept here and sent again, never "with the team". */
-    const takenBack=own.some(o=>o && o.fault==="taken-back");
-    /* One line for the relay and the folder alike: a folder team's outbox retries every few seconds too (board 945 stage 3 (b)
-       slice 2; the copywriter, 2026-11-01 02:08). */
-    const unreadLine=t("Updates from the team are paused on this computer, because Etiuda cannot read its own note of the edits not yet sent to the team. No edit made here is lost, and this usually passes by itself. If it does not, closing other programs or restarting the computer usually clears it.");
     const keptLine=t("Your edits are kept on this computer and go to the team as soon as it can take them. To hand them over now, Export saves them in a catalog file for the team's lead.");
-    const mineLine=outboxUnread
-      ? ecMineHtml(unreadLine,true,"outbox-unread")
-      : takenBack
-      ? ecMineHtml(keptLine,true,"taken-back")
-      : (ownEntry || holdsEdits)
+    const mineLine=(ownEntry || holdsEdits)
       ? ecMineHtml(ownReached
           ? t("Your edits are with the team")
           : keptLine, true)
@@ -485,8 +479,6 @@ function paintCatalogList(){
     ecKeyBubClose();
     closeTeamBubble("ePrivateBubble");
     const rows=ecGroupedRows(tops,under,alone,parts.asideRows,parts.grouped || !!(content && content.team)); /* the headings stand wherever the desk is on a team */
-    /* With no catalog in use the line has no row to stand under, and the fault is still said. */
-    if((outboxUnread || takenBack) && !rows.some(r=>r.indexOf("data-ec-fault")>=0)) rows.unshift(mineLine);
     box.innerHTML=rows.length?rows.join(""):ecEmptyHtml();
     markCutText(box);
     wireEcKeys(box);
@@ -1471,6 +1463,7 @@ export {
   paintCatNow,
   paintCatPrivate,
   paintCatWaiting,
+  rowShareParts,
   loadCatalogFromFolder,
   onCatalogListing,
   listingNoticeFiles,

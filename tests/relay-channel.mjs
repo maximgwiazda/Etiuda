@@ -1720,7 +1720,7 @@ if (deskOn()) try {
   fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
   const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
   const EXPOSE = ["sealCatalog", "wrapTeamKey", "readCatalog", "catalogFolder", "relayRun", "relayHere", "heedTeam", "relayProbe", "relayProbeNext",
-    "readSpanText", "spanDocument", "spanGenuine", "pinnedLead", "createWindow", "folderSyncerRun",
+    "readSpanText", "spanDocument", "spanGenuine", "pinnedLead", "createWindow",
     "signedSha", "catalogDocIn", "noteHanded", "writeInUse", "inUseCatalogId", "pickEdition", "catalogRead", "acceptLink"];
   const noop = () => {};
   const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
@@ -4457,10 +4457,6 @@ if (deskOn()) try {
       /* RETIRED, P2 (join by a shared folder is removed, the sizing's piece): the check holds a folder invitation taken, cancelled or finished through the share; no folder is read as a team, so it is retired with P4 and not left red. It said what its sentence below says. */
       retire(red(folderSnap, ["fresh", "ftwice", "fleft"]) && folderSnap.back,
         "921q lifting plant:c8-before, the snapshot a folder invitation takes, reddens 921j, 921k and 921l, and the product file is never written: " + redTold(folderSnap, ["fresh", "ftwice", "fleft"]) + ", sha " + (folderSnap.back ? "restored" : "differs"));
-      const ownSet = await planted(dropLine("plant:c8-own"), ["fresh"]);
-      /* RETIRED, P2 (join by a shared folder is removed, the sizing's piece): the check holds a folder invitation taken, cancelled or finished through the share; no folder is read as a team, so it is retired with P4 and not left red. It said what its sentence below says. */
-      retire(red(ownSet, ["fresh"]) && ownSet.back,
-        "921r lifting plant:c8-own, the folder setting put back, reddens 921j, and the product file is never written: " + redTold(ownSet, ["fresh"]) + ", sha " + (ownSet.back ? "restored" : "differs"));
       const kept = await planted(swapText("plant:c7-kept", "beforeKept(inv.before)", "false"), ["restart"]);
       check(red(kept, ["restart"]) && kept.back,
         "921s lifting plant:c7-kept, so the envelope refuses every snapshot, reddens 921m, and the product file is never written: " + redTold(kept, ["restart"]) + ", sha " + (kept.back ? "restored" : "differs"));
@@ -4523,7 +4519,6 @@ if (deskOn()) try {
         const view = await D.ask("etiuda:team-join", "view");
         const toldJoin = (D.sent || []).some(s => s.ch === "etiuda:team-join" && s.payload && s.payload.joined && s.payload.joined.team === team);
         const joined = !!(view && view.joined && view.joined.team === team) || toldJoin;
-        try { const s = D.api.folderSyncerRun(); if (s && s.stop) s.stop(); } catch { /* already stopped */ }
         return { asked, waited, refused: taken.refused, gone: !fs.existsSync(joinAt), join: D.envelope().teamJoin, joined: joined, brought: sawFirst && sawNext };
       }
       const heldTold = g => (g.asked ? "asked" : "not asked" + (g.refused ? " (refused " + g.refused + ")" : "")) + ", before rev 2 the request "
