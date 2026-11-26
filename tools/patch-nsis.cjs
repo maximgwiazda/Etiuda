@@ -250,7 +250,8 @@ const MACHINE_WIDE = [
     "      Push $R3",
     "      Push $R4",
     "      StrCpy $R4 \"0\"",
-    "      nsExec::Exec `\"$SYSDIR\\cmd.exe\" /C \"$SYSDIR\\whoami.exe\" /user /FO CSV /NH | \"$SYSDIR\\findstr.exe\" /C:\"\\\"S-1-5-18\\\"\"`",
+    /* Everything after /C in one more pair of quotes, which cmd.exe takes away (tests/installer-mends.mjs im10). */
+    "      nsExec::Exec `\"$SYSDIR\\cmd.exe\" /C \"\"$SYSDIR\\whoami.exe\" /user /FO CSV /NH | \"$SYSDIR\\findstr.exe\" /C:\"\\\"S-1-5-18\\\"\"\"`", /* plant:patch-whoami-runs */
     "      Pop $R2",
     "      ${If} $R2 == \"0\"",
     "        StrCpy $R4 \"1\"",
@@ -397,6 +398,19 @@ function verifyNsisPatches(rootDir) {
   };
 }
 
+/* 5's account test as first written, which cmd.exe could not parse: a template patched with it takes the current line in its
+   place, so the block is not written twice. */
+const WHOAMI_WAS = "nsExec::Exec `\"$SYSDIR\\cmd.exe\" /C \"$SYSDIR\\whoami.exe\" /user /FO CSV /NH | \"$SYSDIR\\findstr.exe\" /C:\"\\\"S-1-5-18\\\"\"`";
+function applyWhoamiWas(nsisDir) {
+  const p = path.join(nsisDir, "assistedInstaller.nsh");
+  if (!fs.existsSync(p)) return;
+  const lines = fs.readFileSync(p, "utf8").split("\n"), at = lines.findIndex(l => l.trim() === WHOAMI_WAS);
+  if (at < 0) return;
+  const now = MACHINE_WIDE[0][2].find(l => l.indexOf("whoami.exe") > -1).trim();
+  lines[at] = /^\s*/.exec(lines[at])[0] + now + (lines[at].endsWith("\r") ? "\r" : "");
+  fs.writeFileSync(p, lines.join("\n"), "utf8");
+}
+
 function applyNsisPatches(rootDir) {
   const { multiUserUi: uiPath, installSection: secPath } = getPaths(rootDir);
 
@@ -440,6 +454,7 @@ function applyNsisPatches(rootDir) {
 
   applySilentDefaults(path.dirname(uiPath));
   applyExitCodes(path.dirname(uiPath));
+  applyWhoamiWas(path.dirname(uiPath));
   applyExitCodes(path.dirname(uiPath), MACHINE_WIDE);
   applyRetryWindow(path.dirname(uiPath));
   applyWrapRows(path.dirname(uiPath));

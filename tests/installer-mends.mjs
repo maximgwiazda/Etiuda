@@ -26,8 +26,17 @@
  *       d  the desk's first start drops the copy aside by its list (setAsideDrop replayed over a folder in memory), and
  *          nothing in the installer removes it at the end of the install
  *   im7 THE ALL-USERS FOLDER WARNING resolves ".." before it trusts a Program Files prefix
+ *   im8 THE CLOSE STEP SEES THE PROGRAM: customCheckAppRunning's command lines, run through cmd.exe as nsExec passes them
+ *       (Windows alone, else not run)
+ *       a  each tasklist line finds a program that runs (this node, for this account) and finds nothing for an image that does not
+ *       b  the close line reaches taskkill itself
+ *   im10 THE ACCOUNT TEST OF tools/patch-nsis.cjs FIX 5 RUNS: its whoami | findstr line, through cmd.exe as nsExec passes it,
+ *       hands whoami's output to findstr (Windows alone, else not run)
+ *   im9 AN UNINSTALL THAT LEAVES ITS FOLDER NEVER ENDS AS A SUCCESS: a plain uninstall whose folder outlives the removal says so,
+ *       naming the folder, and stops with exit 2 before electron-builder's section removes the registration
  * Each check is followed by its controls: one deciding line changed in memory, which must read red alone.
  */
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -481,6 +490,92 @@ check(r7.ok && why, "im7a the all-users folder warning resolves the path as Wind
   + " prefix is trusted: " + JSON.stringify(given) + " resolves to " + JSON.stringify(resolved) + ", outside it", JSON.stringify(r7));
 check(!resolvesFirst(FOLDER.replace(/\n\s*System::Call 'kernel32::GetFullPathNameW[^\n]*/, "")).ok, "im7a control: the raw string's prefix trusted again reads red");
 
-console.log("\n#counts checks=" + asserted + " failed=" + failed + " notRun=0");
+/* ---- im8: the close step's command lines, run as nsExec runs them ----
+   nsExec hands the whole line to CreateProcess; cmd.exe then applies its own rule to what follows /C: a line opening with a quote
+   that is not one simple quoted command loses its first and its last quote, and the rest is parsed from there. */
+let notRun = 0;
+const SYS = path.join(process.env.SystemRoot || "C:\\Windows", "System32");
+const closeLines = text => code(macro(text, "customCheckAppRunning")).map(l => (/^nsExec::Exec(?: \/TIMEOUT=\d+)? `(.*)`/.exec(l) || [])[1])
+  .filter(l => l && l.indexOf("$SYSDIR\\cmd.exe") > -1);
+const runLine = (line, image, perUser) => {
+  const full = line.split("$SYSDIR").join(SYS).split("${APP_EXECUTABLE_FILENAME}").join(image)
+    .split("$R5").join(perUser ? "/FI \"USERNAME eq %USERNAME%\" " : "");
+  const exe = full.slice(1, full.indexOf("\"", 1)), rest = full.slice(full.indexOf("\"", 1) + 2);
+  const r = spawnSync(exe, [rest], { windowsVerbatimArguments: true, encoding: "utf8", windowsHide: true, timeout: 30000 });
+  return { exit: r.status, out: String(r.stdout || "") + String(r.stderr || "") };
+};
+const sees = text => {
+  const lines = closeLines(text), finds = lines.filter(l => l.indexOf("tasklist.exe") > -1), kills = lines.filter(l => l.indexOf("taskkill.exe") > -1);
+  const me = path.basename(process.execPath), none = "etiuda-im8-no-such-image.exe";
+  const found = finds.map(l => [runLine(l, me, true).exit, runLine(l, me, false).exit, runLine(l, none, true).exit]);
+  /* taskkill answers a name nothing runs under with its own message (128, or 0 with "No tasks" under a filter); cmd's "cannot find
+     the path" or "directory name is invalid" means taskkill never ran. */
+  const killed = kills.map(l => runLine(l, none, true)).map(r => !/cannot find the path|directory name is invalid|is not recognized/i.test(r.out) && (r.exit === 128 || r.exit === 0));
+  return { ok: finds.length === 2 && kills.length === 1 && found.every(f => f[0] === 0 && f[1] === 0 && f[2] === 1) && killed.every(Boolean),
+    finds: finds.length, kills: kills.length, found, killed };
+};
+if (process.platform !== "win32") { notRun += 2; console.log("  --   im8 not run: cmd.exe and tasklist are Windows's"); }
+else {
+  const s8 = sees(NSH);
+  check(s8.ok && s8.found.every(f => f[0] === 0 && f[1] === 0 && f[2] === 1), "im8a each tasklist line of customCheckAppRunning, run through cmd.exe"
+    + " as nsExec passes it, finds a program that runs (" + path.basename(process.execPath) + ", this account, per user and for all users)"
+    + " and finds nothing for an image that does not", JSON.stringify(s8));
+  check(s8.ok && s8.killed.every(Boolean) && s8.kills === 1, "im8b the close line reaches taskkill itself", JSON.stringify(s8));
+  const unwrapped = NSH.replace(/`"\$SYSDIR\\cmd\.exe" \/C ""(.*)""`/g, "`\"$SYSDIR\\cmd.exe\" /C \"$1\"`");
+  check(unwrapped !== NSH && !sees(unwrapped).ok, "im8 control: the lines without the outer pair of quotes cmd.exe takes away read red");
+}
+
+/* ---- im10: tools/patch-nsis.cjs fix 5's account test, run as nsExec runs it ----
+   The line findstr reads whoami's SID through: with this account's own SID in the system account's place it is found, and S-9-9-9
+   is not, which tells a whoami that ran from a line cmd.exe could not parse. */
+const PATCH = read("tools/patch-nsis.cjs");
+const whoamiOf = text => {
+  const src = String(text).split("\n").find(l => l.indexOf("whoami.exe") > -1 && /^\s*"/.test(l)) || "";
+  let s = ""; try { s = JSON.parse(src.trim().replace(/\s*\/\*[^*]*\*\/$/, "").replace(/,$/, "")); } catch (e) { s = ""; }
+  return (/^\s*nsExec::Exec `(.*)`$/.exec(s) || [])[1] || "";
+};
+const whoamiRuns = text => {
+  const line = whoamiOf(text);
+  if (!line || line.indexOf("S-1-5-18") < 0) return { ok: false, line };
+  const me = spawnSync(path.join(SYS, "whoami.exe"), ["/user", "/FO", "CSV", "/NH"], { encoding: "utf8", windowsHide: true });
+  const sid = (/"(S-1-[0-9-]+)"/.exec(String(me.stdout || "")) || [])[1] || "";
+  if (!sid) return { ok: false, why: "whoami gave no SID of its own" };
+  const any = runLine(line.split("S-1-5-18").join(sid), "", false), none = runLine(line.split("S-1-5-18").join("S-9-9-9"), "", false);
+  return { ok: any.exit === 0 && none.exit === 1, any: any.exit, none: none.exit, said: any.out.trim().slice(0, 80) };
+};
+if (process.platform !== "win32") { notRun += 1; console.log("  --   im10 not run: cmd.exe and whoami are Windows's"); }
+else {
+  const w10 = whoamiRuns(PATCH);
+  check(w10.ok, "im10a tools/patch-nsis.cjs fix 5's account test, run through cmd.exe as nsExec passes it, hands whoami's SID to findstr:"
+    + " this account's SID put in the system account's place is found, and one nobody holds is not", JSON.stringify(w10));
+  const bare = PATCH.replace(/(nsExec::Exec `\\"\$SYSDIR\\\\cmd\.exe\\" \/C )\\"(\\"\$SYSDIR\\\\whoami\.exe[^`]*)\\"`/, "$1$2`");
+  check(bare !== PATCH && !whoamiRuns(bare).ok, "im10 control: the line without the outer pair of quotes cmd.exe takes away reads red");
+}
+
+/* ---- im9: a folder the uninstall could not remove ---- */
+const leftRefused = (text, tplUn) => {
+  const m = code(macro(text, "customRemoveFiles")).map(l => l.replace(/\s+[#;] ?plant:\S+$/, ""));
+  const guard = m.indexOf("${IfNot} ${isUpdated}");
+  const removed = m.indexOf("Call un.etiudaRemoveTree"), test = m.findIndex((l, i) => i > removed && l === "${If} ${FileExists} \"$INSTDIR\"");
+  const box = m.findIndex((l, i) => i > test && /^MessageBox MB_OK\|MB_ICONSTOP "\$\(etiudaUninstallLeft\)" \/SD IDOK$/.test(l));
+  const level = m.findIndex((l, i) => i > box && l === "SetErrorLevel 2"), stop = m.findIndex((l, i) => i > level && l === "Abort");
+  const close = m.findIndex((l, i) => i > stop && l === "${EndIf}");
+  const named = (text.match(/LangString etiudaUninstallLeft \$\{ID\} "[^"]*\$INSTDIR[^"]*"/g) || []).length === 2;
+  /* electron-builder's section removes the files through this macro, then the shortcuts and the registration. */
+  const order = /!insertmacro customRemoveFiles[\s\S]*DeleteRegKey SHELL_CONTEXT "\$\{UNINSTALL_REGISTRY_KEY\}"/.test(tplUn);
+  return { ok: guard > -1 && removed > guard && test > removed && box > test && level > box && stop > level && close > stop && named && order,
+    guard, removed, test, box, level, stop, named, order };
+};
+const TPL_UN = tryOr(() => fs.readFileSync(path.join(ROOT, "node_modules", "app-builder-lib", "templates", "nsis", "uninstaller.nsh"), "utf8").replace(/\r\n/g, "\n"), "");
+if (!TPL_UN) { notRun += 1; console.log("  --   im9 not run: electron-builder's uninstaller template is not installed"); }
+else {
+  const r9 = leftRefused(NSH, TPL_UN);
+  check(r9.ok, "im9a a plain uninstall whose folder outlives the removal says so, naming the folder in both languages, and stops with"
+    + " exit 2 before electron-builder's section removes the shortcuts and the registration; an update's uninstall is left as it was", JSON.stringify(r9));
+  check(!leftRefused(NSH.replace(/\n(\s*)Abort # plant:uninstall-left-stops/, "\n$1Nop"), TPL_UN).ok, "im9 control: the run going on to a success reads red");
+  check(!leftRefused(NSH.replace("SetErrorLevel 2 # plant:uninstall-left-code", "SetErrorLevel 0"), TPL_UN).ok, "im9 control: the run ending 0 reads red");
+}
+
+console.log("\n#counts checks=" + asserted + " failed=" + failed + " notRun=" + notRun);
 console.log("installer-mends " + (failed ? failed + " failure(s)" : "passed " + asserted + " check(s)"));
 process.exit(Math.min(failed, 63));

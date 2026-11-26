@@ -626,7 +626,8 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     const b = m.slice(at, choice);
     return /^!ifndef BUILD_UNINSTALLER\s+\$\{If\} \$\{Silent\}\s+\$\{AndIf\} \$\{UAC_IsAdmin\}\s/.test(b)
       && /\$\{GetOptions\} \$R0 "\/allusers" \$R1\s+\$\{If\} \$\{Errors\}\s+\$\{GetOptions\} \$R0 "\/currentuser" \$R1\s+\$\{If\} \$\{Errors\}\s+Push \$R2\s+Push \$R3\s+Push \$R4\s+StrCpy \$R4 "0"/.test(b)
-      && /whoami\.exe" \/user \/FO CSV \/NH \| "\$SYSDIR\\findstr\.exe" \/C:"\\"S-1-5-18\\""`\s+Pop \$R2\s+\$\{If\} \$R2 == "0"\s+StrCpy \$R4 "1"/.test(b)
+      /* WAS: /C "$SYSDIR\whoami.exe" ..., which cmd.exe could not parse. NOW: the line after /C in one more pair (installer-mends im10). */
+      && /\/C ""\$SYSDIR\\whoami\.exe" \/user \/FO CSV \/NH \| "\$SYSDIR\\findstr\.exe" \/C:"\\"S-1-5-18\\"""`\s+Pop \$R2\s+\$\{If\} \$R2 == "0"\s+StrCpy \$R4 "1"/.test(b)
       && /GetCurrentProcessId\(\) i \.R2'\s+System::Call 'kernel32::ProcessIdToSessionId\(i R2, \*i \.R3\) i \.R2'\s+\$\{If\} \$R2 <> 0\s+\$\{AndIf\} \$R3 == "0"\s+StrCpy \$R4 "1"/.test(b)
       && /\$\{If\} \$R4 == "1"\s+StrCpy \$hasPerMachineInstallation "1"\s+StrCpy \$hasPerUserInstallation "0"\s+\$\{EndIf\}\s+Pop \$R4\s+Pop \$R3\s+Pop \$R2\s/.test(b)
       && (b.match(/\$hasPer\w+Installation/g) || []).length === 2 && /!endif\s*$/.test(b);
@@ -660,7 +661,9 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
      request only ever to the installing account's own. */
   const closeCheck = text => {
     const m = macro(text, "customCheckAppRunning");
-    const look = m.match(/nsExec::Exec `"\$SYSDIR\\cmd\.exe" \/C "\$SYSDIR\\tasklist\.exe" [^`]*`/g) || [];
+    /* WAS: /C "$SYSDIR\tasklist.exe" ..., which cmd.exe strips of its first and last quote and cannot then parse. NOW: the whole
+       line after /C in one more pair (installer-mends im8 runs it). */
+    const look = m.match(/nsExec::Exec `"\$SYSDIR\\cmd\.exe" \/C ""\$SYSDIR\\tasklist\.exe" [^`]*""`/g) || [];
     const scope = /StrCpy \$R5 `\/FI "USERNAME eq %USERNAME%" `\s+\$\{If\} \$installMode == "all"\s+StrCpy \$R5 ""\s+\$\{EndIf\}/.test(m);
     const sees = look.length === 2 && look[0].indexOf('"$SYSDIR\\tasklist.exe" $R5/FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}"') > -1
       && look[1].indexOf('"$SYSDIR\\tasklist.exe" /FI "USERNAME eq %USERNAME%" /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}"') > -1;
@@ -1142,7 +1145,8 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     const guarded = /\$\{If\} \$\{FileExists\} "\$etiudaBase\\\$\{APP_EXECUTABLE_FILENAME\}"\n\s*!insertmacro etiudaRenameRetry "\$etiudaBase" "\$etiudaAside"\n\s*\$\{If\} \$0 != "moved"\n[\s\S]*?!insertmacro etiudaStageAbort\n\s*SetErrorLevel 1618\n\s*Quit\n\s*\$\{EndIf\}\n\s*StrCpy \$etiudaAsideMade "1"/.test(m);
     const restore = /!insertmacro etiudaRenameRetry "\$etiudaStage" "\$etiudaBase"\n\s*\$\{If\} \$0 != "moved"\n\s*\$\{If\} \$etiudaAsideMade == "1"\n\s*!insertmacro etiudaRenameRetry "\$etiudaAside" "\$etiudaBase"\n\s*\$\{If\} \$0 != "moved"\n[\s\S]*?SetErrorLevel 2\n\s*Quit\n\s*\$\{EndIf\}\n\s*StrCpy \$etiudaAsideMade "0"\n\s*\$\{EndIf\}\n[\s\S]*?!insertmacro etiudaStageAbort\n\s*SetErrorLevel 1618\n\s*Quit\b/.test(m);
     const r = code(macro(nsh, "etiudaRenameRetry"));
-    const tries = /Rename "\$\{FROM\}" "\$\{TO\}"/.test(r) && /\$\{If\} \$0 < 30\n\s*Sleep 2000/.test(r)
+    /* WAS: the count kept in $0. NOW: in $etiudaRenameTries, which nothing else writes, so no other code can reset the wait. */
+    const tries = /Rename "\$\{FROM\}" "\$\{TO\}"/.test(r) && /\$\{If\} \$etiudaRenameTries < 30\n\s*Sleep 2000/.test(r)
       && /MessageBox MB_RETRYCANCEL\|MB_ICONEXCLAMATION "\$\(appCannotBeClosed\)" \/SD IDCANCEL IDRETRY/.test(r);
     return cwd > -1 && cwd < aside && aside < into && into < back && guarded && restore && tries;
   };
@@ -1656,7 +1660,8 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     const m = code(macro(nsh, "customCheckAppRunning"));
     const own = at(m, "/FI \"USERNAME eq %USERNAME%\" /FI \"IMAGENAME eq");
     const from = own < 0 ? -1 : m.indexOf("${If} ${FileExists} \"$INSTDIR\\${APP_EXECUTABLE_FILENAME}\"", own);
-    const to2 = m.indexOf("nsExec::Exec `\"$SYSDIR\\cmd.exe\" /C \"$SYSDIR\\taskkill.exe\"", from);
+    /* WAS: /C "$SYSDIR\taskkill.exe". NOW: /C ""$SYSDIR\taskkill.exe" ...", the pair cmd.exe takes away (installer-mends im8). */
+    const to2 = m.indexOf("nsExec::Exec `\"$SYSDIR\\cmd.exe\" /C \"\"$SYSDIR\\taskkill.exe\"", from);
     return from > -1 && to2 > from ? m.slice(from, to2) : "";
   };
   const closesThrough = nsh => {

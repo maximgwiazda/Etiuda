@@ -328,6 +328,11 @@
   FunctionEnd
 
   Function RecogniseExistingInstallation
+    # ONE QUESTION PER RUN, whatever calls this.
+    ${If} $RecogniseAsked == "1"
+      Return # plant:recognise-once
+    ${EndIf}
+    StrCpy $RecogniseAsked "1"
     Push $0
     Push $1
     Push $R1
@@ -542,8 +547,11 @@
     StrCpy $R5 ""
   ${EndIf}
   StrCpy $R7 0
+  # EACH cmd.exe LINE IS WRAPPED IN ONE MORE PAIR OF QUOTES: cmd.exe strips the first and the last quote of a line after /C that opens
+  # with one, and without the pair the rest does not parse: a running program read as closed and the close line never ran.
+  # tests/installer-mends.mjs im8 runs these lines as nsExec passes them.
   ${Do}
-    nsExec::Exec `"$SYSDIR\cmd.exe" /C "$SYSDIR\tasklist.exe" $R5/FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\""`
+    nsExec::Exec `"$SYSDIR\cmd.exe" /C ""$SYSDIR\tasklist.exe" $R5/FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\"""` ; plant:close-sees-program
     Pop $R8
     ${If} $R8 != 0
       ${ExitDo}
@@ -552,7 +560,7 @@
       DetailPrint "$R6"
       # Only this account's own copy is asked to close; another person's is never ended. With none of its own open there
       # is nothing to wait for, so the run goes straight to Retry, or to 1618 when silent.
-      nsExec::Exec `"$SYSDIR\cmd.exe" /C "$SYSDIR\tasklist.exe" /FI "USERNAME eq %USERNAME%" /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\""`
+      nsExec::Exec `"$SYSDIR\cmd.exe" /C ""$SYSDIR\tasklist.exe" /FI "USERNAME eq %USERNAME%" /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\"""`
       Pop $R8
       ${If} $R8 == 0
         ${If} ${FileExists} "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
@@ -572,7 +580,7 @@
             Pop $R8
           ${EndIf}
         !endif
-        nsExec::Exec `"$SYSDIR\cmd.exe" /C "$SYSDIR\taskkill.exe" /IM "${APP_EXECUTABLE_FILENAME}" /FI "USERNAME eq %USERNAME%"` ; plant:installer-asks-close
+        nsExec::Exec `"$SYSDIR\cmd.exe" /C ""$SYSDIR\taskkill.exe" /IM "${APP_EXECUTABLE_FILENAME}" /FI "USERNAME eq %USERNAME%""` ; plant:installer-asks-close
         Pop $R8
       ${Else}
         StrCpy $R7 20
@@ -612,6 +620,14 @@
     SetOutPath $TEMP
     Push $INSTDIR
     Call un.etiudaRemoveTree
+    # A FOLDER THE REMOVAL COULD NOT TAKE (a file in it held open) is named, and the uninstall stops with 2 before electron-builder's
+    # section removes the shortcuts and the registration, so the entry stays in Apps to be run again, never a success.
+    ${If} ${FileExists} "$INSTDIR"
+      DetailPrint `"$INSTDIR" is still there: a file in it is in use.`
+      MessageBox MB_OK|MB_ICONSTOP "$(etiudaUninstallLeft)" /SD IDOK
+      SetErrorLevel 2 # plant:uninstall-left-code
+      Abort # plant:uninstall-left-stops
+    ${EndIf}
     # The copy an update set aside beside the folder (etiudaSwap) goes with it, where it still holds the program.
     !ifdef ETIUDA_ASIDE_SUFFIX
       ${If} ${FileExists} "$INSTDIR${ETIUDA_ASIDE_SUFFIX}\${APP_EXECUTABLE_FILENAME}"
@@ -845,6 +861,7 @@ Var etiudaOldDir
 Var etiudaOldUserDir
 Var etiudaDropRoot
 Var etiudaDropList
+Var etiudaRenameTries
 # Every folder below is removed by the walk that never enters a link (customHeader's ${ETIUDA_REMOVE_TREE}, through
 # etiudaRemoveTree): beside a folder a non-administrator may write, or read from HKCU, each may hold one. This compiles the
 # walk into the installer as well.
@@ -1087,9 +1104,10 @@ Var etiudaDropList
   Pop $0
 !macroend
 
-# One folder renamed, tried 30 times 2 s apart as a locked extract is, then Retry or Cancel; $0 answers "moved" or not.
+# One folder renamed, tried 30 times 2 s apart as a locked extract is, then Retry or Cancel; $0 answers "moved" or not. The count
+# is a variable nothing else writes, so the wait ends at the box, about a minute in, whatever the run's registers hold.
 !macro etiudaRenameRetry FROM TO
-  StrCpy $0 0
+  StrCpy $etiudaRenameTries 0
   ${Do}
     ClearErrors
     Rename "${FROM}" "${TO}"
@@ -1097,11 +1115,11 @@ Var etiudaDropList
       StrCpy $0 "moved"
       ${ExitDo}
     ${EndIf}
-    IntOp $0 $0 + 1
-    ${If} $0 < 30
+    IntOp $etiudaRenameTries $etiudaRenameTries + 1 # plant:rename-own-count
+    ${If} $etiudaRenameTries < 30
       Sleep 2000
     ${ElseIf} ${Cmd} `MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)" /SD IDCANCEL IDRETRY`
-      StrCpy $0 0
+      StrCpy $etiudaRenameTries 0
     ${Else}
       StrCpy $0 "stuck"
       ${ExitDo}
@@ -1613,8 +1631,44 @@ FunctionEnd
 !endif
 !include "${BUILD_RESOURCES_DIR}\installer\turning.nsh"
 
+# ONE SETUP AT A TIME. electron-builder's guard (installer.nsi) refuses a second copy only on ERROR_ALREADY_EXISTS, and a mutex
+# an elevated copy holds answers an unelevated one ERROR_ACCESS_DENIED, which that guard lets through; this refuses on either, as
+# the guard does: the running copy brought forward, exit 1618. The inner, elevated half of a run is that run, and is let be.
+!macro etiudaOneSetup
+  ${IfNot} ${UAC_IsInnerInstance}
+    Push $0
+    Push $1
+    Push $2
+    System::Call 'kernel32::CreateMutex(p 0, i 0, t "${APP_GUID}.etiuda-setup") p .r1 ?e'
+    Pop $0
+    ${If} $0 = 183
+    ${OrIf} $0 = 5 # plant:one-setup-denied
+      StrLen $0 "$(^SetupCaption)"
+      IntOp $0 $0 + 1
+      StrCpy $1 ""
+      ${Do}
+        FindWindow $1 "#32770" "" "" $1
+        ${If} $1 == 0
+          ${ExitDo}
+        ${EndIf}
+        System::Call 'user32::GetWindowText(p r1, t .r2, i r0)'
+        ${If} $2 == "$(^SetupCaption)"
+          System::Call 'user32::SetForegroundWindow(p r1)'
+          ${ExitDo}
+        ${EndIf}
+      ${Loop}
+      SetErrorLevel 1618
+      Quit # plant:one-setup-quits
+    ${EndIf}
+    Pop $2
+    Pop $1
+    Pop $0
+  ${EndIf}
+!macroend
+
 !macro customInit
   StrCpy $etiudaFinishText "$(MUI_TEXT_FINISH_INFO_TEXT)"
+  !insertmacro etiudaOneSetup
   # "/D=C:\Apps\Etiuda\" keeps its backslash: GetDParameter (multiUser.nsh) copies it into $INSTDIR past NSIS's own trim, and
   # $appExe, the etiuda: command and InstallLocation would carry "\\", which the uninstaller's compare then misses. Trimmed
   # once here, in .onInit after initMultiUser has read /D, before any page and the install section, silent or not.
@@ -1666,6 +1720,7 @@ Var TurnReady
 !ifndef BUILD_UNINSTALLER
 Var InstalledVersion
 Var RecogniseMsg
+Var RecogniseAsked
 # THE FINISH PAGE'S TEXT, Modern UI's own unless etiudaOldUserCopy left a per-user copy to its next sign-in. With the Run box on
 # the page the label is 195 by 40 dialog units, about five lines, so the case's text replaces the whole of it rather than adding.
 Var etiudaFinishText
@@ -1696,6 +1751,34 @@ Var RemoveDataBox
     StrCpy $TurnKind ""
     StrCpy $TurnBmp 0
     ${If} ${FileExists} "$PLUGINSDIR\turn\sidebar-000.bmp"
+      Push $0
+      GetFunctionAddress $0 ${TURN_PFX}TurnTick
+      nsDialogs::CreateTimer $0 ${TURN_INTERVAL}
+      Pop $0
+    ${EndIf}
+  FunctionEnd
+
+  # NO TICK WHILE A SECTION RUNS: NSIS runs the sections on a second thread, and its script engine is not safe on two threads at
+  # once (one stack, one set of registers, one plug-in state). The files page stops the timer and shows the still before that
+  # thread starts, and the timer starts again only once the work is done (customPageAfterChangeDir, customUninstallPage, below).
+  Function ${TURN_PFX}TurnStill
+    Push $0
+    StrCpy $TurnReady "0"
+    GetFunctionAddress $0 ${TURN_PFX}TurnTick
+    nsDialogs::KillTimer $0 # plant:turn-still-kills
+    Pop $0
+    Call ${TURN_PFX}TurnPage
+    ${If} $TurnKind != ""
+      StrCpy $TurnKey $TurnNext
+      StrCpy $TurnFrame 0
+      Call ${TURN_PFX}TurnPaint
+    ${EndIf}
+  FunctionEnd
+
+  Function ${TURN_PFX}TurnResume
+    ${If} $TurnReady != "1"
+    ${AndIf} ${FileExists} "$PLUGINSDIR\turn\sidebar-000.bmp"
+      StrCpy $TurnReady "1"
       Push $0
       GetFunctionAddress $0 ${TURN_PFX}TurnTick
       nsDialogs::CreateTimer $0 ${TURN_INTERVAL}
@@ -1804,6 +1887,10 @@ Var RemoveDataBox
   FunctionEnd
 
   Function ${TURN_PFX}TurnTick
+    # A tick already queued when TurnStill ran does nothing.
+    ${If} $TurnReady != "1"
+      Return # plant:turn-tick-stopped
+    ${EndIf}
     Push $0
     Push $1
     Call ${TURN_PFX}TurnPage
@@ -1869,6 +1956,7 @@ Var RemoveDataBox
     !endif
     LangString etiudaSetupNotFinished ${ID} "Instalacja programu ${PRODUCT_NAME} nie została ukończona. Pomóc może ponowne uruchomienie instalatora; jeśli znów się zatrzyma, ten kod pomoże ustalić przyczynę: $2."
 
+    LangString etiudaUninstallLeft ${ID} "Część plików programu ${PRODUCT_NAME} jest wciąż w użyciu, więc folder $INSTDIR na razie zostaje. Po ponownym uruchomieniu komputera wystarczy jeszcze raz usunąć program ${PRODUCT_NAME} w Ustawieniach systemu Windows." ; placeholder: Claudette
     LangString RemoveDataBox ${ID} "Usuń także dane z tego komputera"
     LangString RemoveDataLine ${ID} "Usuwa również dane Etiudy z tego komputera: ustawienia, rozmowy, licencję, własne karty i gwiazdki oraz miejsce tego stanowiska w zespole, więc zapieczętowany katalog otworzy się dopiero po nowym zaproszeniu od lidera zespołu. Pliki katalogów zostają."
   !else
@@ -1888,6 +1976,7 @@ Var RemoveDataBox
     !endif
     LangString etiudaSetupNotFinished ${ID} "The installation of ${PRODUCT_NAME} did not finish. Running the installer again may help; if it stops again, this code helps find the cause: $2."
 
+    LangString etiudaUninstallLeft ${ID} "Some of ${PRODUCT_NAME}'s files are still in use, so the folder $INSTDIR stays for now. Once the computer has restarted, removing ${PRODUCT_NAME} again in Windows Settings finishes the job." ; placeholder: Claudette
     LangString RemoveDataBox ${ID} "Remove my data"
     LangString RemoveDataLine ${ID} "Also removes Etiuda's data on this computer: settings, conversations, the licence, own cards and stars, and this desk's place on its team, so a sealed catalog opens again only after a new invitation from the team's lead. The catalog files stay."
   !endif
@@ -1995,8 +2084,21 @@ Var RemoveDataBox
       StrCpy $RemoveMyData "0"
     ${EndIf}
     Pop $0
+    # The last page before the uninstall's files page, which the template's install-mode page (a custom page, no section) alone
+    # stands between: the turning stops here, as the installer's does on its files page.
+    Call un.TurnStill # plant:turn-unfiles-still
   FunctionEnd
   UninstPage custom un.RemoveDataCreate un.RemoveDataLeave
+!macroend
+
+# THE FILES PAGE RUNS WITH THE TURNING STILL (TurnStill, in TurnEmit). electron-builder inserts the first macro straight before
+# MUI_PAGE_INSTFILES and the second between MUI_UNPAGE_INSTFILES and MUI_UNPAGE_FINISH, so each define is that page's own.
+!macro customPageAfterChangeDir
+  !define MUI_PAGE_CUSTOMFUNCTION_SHOW TurnStill # plant:turn-files-still
+  !define MUI_PAGE_CUSTOMFUNCTION_LEAVE TurnResume # plant:turn-files-resume
+!macroend
+!macro customUninstallPage
+  !define MUI_PAGE_CUSTOMFUNCTION_SHOW un.TurnResume # plant:turn-unfinish-resume
 !macroend
 
 # The folder page's warning for an all-users install into a folder ordinary users can change: its macros only, which
