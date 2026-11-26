@@ -742,25 +742,29 @@ async function runSuite(browser, enginePath, opts = {}) {
         { valE, afterSegE, valS, afterSegS }
       );
 
-      // C3. Checkbox / switch in Settings (or Maintenance / Library) - also test #sxMaint button
-      const hitMtE = await tabTo(page, "#sxMaint", { scope: "#screenHost" });
+      // C3. Checkbox / switch in Settings (or Maintenance / Library) - also test #sxLibrary button
+      const hitMtE = await tabTo(page, "#sxLibrary", { scope: "#screenHost" });
       await page.keyboard.press("Enter");
       await sleep(80);
-      const afterMtE = await page.evaluate(() => !!document.querySelector("#screenHost #mtReset"));
+      const afterMtE = await page.evaluate(() => !!document.querySelector("#screenHost .lib-screen"));
       await page.evaluate(() => window.openScreenTab("settings"));
-      await page.waitForSelector("#screenHost:not([hidden]) #sxMaint", { timeout: 3000 });
+      await page.waitForSelector("#screenHost:not([hidden]) #sxLibrary", { timeout: 3000 });
       await sleep(80);
 
-      const hitMtS = await tabTo(page, "#sxMaint", { scope: "#screenHost" });
+      const hitMtS = await tabTo(page, "#sxLibrary", { scope: "#screenHost" });
       await page.keyboard.press("Space");
       await sleep(80);
-      const afterMtS = await page.evaluate(() => !!document.querySelector("#screenHost #mtReset"));
+      const afterMtS = await page.evaluate(() => !!document.querySelector("#screenHost .lib-screen"));
 
       rec(
         hitMtE && hitMtS && afterMtE && afterMtS,
-        "settings: #sxMaint Space opens Maintenance like Enter",
+        "settings: #sxLibrary Space opens the Library like Enter",
         { hitMtE, afterMtE, hitMtS, afterMtS }
       );
+      // Maintenance opens by its shortcut alone: the way into the section that follows
+      await page.evaluate(() => window.openMaintenance());
+      await page.waitForSelector("#screenHost #mtReset", { timeout: 3000 });
+      await sleep(80);
 
       // --- D. Maintenance & Bubble (#eResetAsk) ---
       // D0. Maintenance nav button ([data-mt="storage"]) so #mtReset becomes visible

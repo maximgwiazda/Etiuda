@@ -229,7 +229,7 @@ async function openMenuItem(page, dataAct) {
 
 async function closeScreenHost(page) {
   const closed = await page.evaluate(() => {
-    const btn = document.querySelector("#tabsBar .tab.on .tab-x, #screenHost .screen-actions button, #screenHost #mtClose, #screenHost #mgClose, #screenHost #setClose");
+    const btn = document.querySelector("#tabsBar .tab.on .tab-x, #screenHost .screen-actions button, #screenHost #mgClose, #screenHost #setClose");
     if (btn) { btn.click(); return true; }
     return false;
   });
@@ -436,8 +436,8 @@ try {
   recordWalk(await auditScreen(page, "Settings", ["#screenHost"]));
   await page.evaluate(() => { for (const k of ["aiState", "setAi", "setSearchAi", "setReword", "deskAiSettings", "deskAiSave", "deskAiTest", "onAiRanking"]) { if (k in window.__stub) window.E_HOST[k] = window.__stub[k]; else delete window.E_HOST[k]; } });
 
-  // 5. Maintenance (opened via #sxMaint from Settings; walk all 6 pages)
-  await page.click("#sxMaint");
+  // 5. Maintenance (opened as its shortcut opens it; walk all 6 pages)
+  await page.evaluate(() => window.openMaintenance());
   await page.waitForFunction(() => !!document.querySelector("#screenHost .sx.lm-mt"), { timeout: 10000 });
   const mtTabs = ["health", "engine", "catalog", "storage", "layout", "state"];
   let mtChecked = 0;

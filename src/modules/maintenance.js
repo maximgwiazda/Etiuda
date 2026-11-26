@@ -7,12 +7,11 @@ import { catalogMacroCount, sampleUntouched } from "./catalog-file.js";
 import { catalogLoaded } from "./catalog-boot.js";
 import { remPx, colMode, colFloor, colCount, COL_GAP } from "./columns.js";
 import { CATS, CONTENT_LANGS } from "./content-model.js";
-import { dismissModal, closeModal, edDirty, modalFront } from "./dialog.js";
+import { closeModal, edDirty, modalFront } from "./dialog.js";
 import { E_VERSION } from "./env.js";
 import { eHost, eCatalogFile, eCatalogIn, eCatalogBuiltIn, eCatalogFolder, E_CATALOG_FOLDER_KEY } from "./host.js";
 import { lsGet, lsKeys, nsGet, E_NS, E_LS_OK, E_SS_OK, eDeskFileShown, eSaveTrouble, eLastSaved, eHomeless, eDeskHome,
   eDeskRefused } from "./storage.js";
-import { ejectCatalog } from "./local-memory.js";
 import { tabs } from "./tabs.js";
 import { mgSystemStill, M_STILL_Q } from "./motion.js";
 import { tc, fileStamp, t, toast, hugDottedGround } from "./ui-lang.js";
@@ -510,11 +509,9 @@ function mtGridHtml(){
   return html;
 }
 
-function wireMaintenanceActions(root, closeFn){
+function wireMaintenanceActions(root){
   const $q = s => root ? root.querySelector(s) : $(s);
-  const ej = $q("#mtEject"); if(ej) ej.onclick=ejectCatalog;
-  const cp = $q("#mtCopy"); if(cp) cp.onclick=()=>copy(mtReportText(),"Report copied");
-  const cls = $q("#mtClose"); if(cls) cls.onclick=()=>{ if(closeFn) closeFn(); else dismissModal(); };
+  const cp = $q("#mtCopy"); if(cp) cp.onclick=()=>copy(mtReportText(),"Report copied");  /* plant:mt-copy-wired */
 }
 
 const MT_MOVED="Reset defaults is in Settings, under Data and defaults, and Clear local changes is in the Library, under Catalog & data.";
@@ -653,8 +650,8 @@ function mtShellHtml(){
     +'<div class="lm-split">'
     +'<nav class="sx-nav" aria-label="'+esc(t("Maintenance"))+'"><h1>'+esc(t("Maintenance"))+'</h1>'
     +'<div class="sx-secs" id="mtSecs">'+mtNavHtml()+'</div>'
-    +'<div class="sx-foot"><button type="button" class="sx-maint" id="mtSettings">'+lmIcon("general")
-    +esc(t("Settings"))+'</button></div></nav>'
+    +'<div class="sx-foot"><button type="button" class="sx-maint" id="mtCopy" title="'+esc(t("Copy the report: counts and environment only, never your content"))+'">'
+    +lmIcon("statistics")+esc(t("Copy report"))+'</button></div></nav>'
     +'<div class="sx-page" id="mtPage"><div class="sx-crumb">'+esc(t("Maintenance"))+'</div>'
     +'<h2 id="mtTitle" data-i18n-skip>'+esc(page.name)+'</h2>'
     +'<p class="lede" id="mtLede" data-i18n-skip>'+esc(page.key==="health"?"":(mtLede()[page.key]||""))+'</p>'
@@ -662,12 +659,7 @@ function mtShellHtml(){
     +mtResetRow()
     +'<p class="mt-moved sx-note" id="mtMoved">'+esc(t(MT_MOVED))
     +' <button type="button" class="btn" id="mtOpenData">'+esc(t("Open Data and defaults"))+'</button></p>'
-    +'</div></div>'
-    +'<div class="screen-actions"><div class="mf-left">'
-    +'<button type="button" class="btn danger" id="mtEject">'+esc(t("Eject catalog"))+'</button></div>'
-    +'<button type="button" class="btn" id="mtCopy" title="'+esc(t("Copy the report: counts and environment only, never your content"))+'">'+esc(t("Copy report"))+'</button>'
-    +'<button type="button" class="btn primary" id="mtClose">'+esc(t("Done"))+'</button>'
-    +'</div></div>';
+    +'</div></div></div>';
 }
 function wireMtShell(root){
   if(!root||typeof root.querySelectorAll!=="function") return;
@@ -689,8 +681,6 @@ function wireMtShell(root){
     hugDottedGround(root);
   };
   buttons.forEach(b=>{ b.onclick=()=>show(b.getAttribute("data-mt")); });
-  const gear=root.querySelector("#mtSettings");
-  if(gear) gear.onclick=()=>{ if(typeof hooks.openSettings==="function") hooks.openSettings(); };
   const data=root.querySelector("#mtOpenData");
   if(data) data.onclick=()=>{ if(typeof hooks.openSettings==="function") hooks.openSettings("data"); };
   const reset=root.querySelector("#mtReset");
@@ -700,7 +690,7 @@ registerScreen("maintenance", {
   title: () => t("Maintenance"),
   render: (host, closeFn) => {
     host.innerHTML = mtShellHtml();
-    wireMaintenanceActions(host, closeFn);
+    wireMaintenanceActions(host);
     wireMtShell(host.querySelector ? host.querySelector(".sx.lm-mt") : null);
     hugDottedGround(host);
   }

@@ -927,8 +927,7 @@ function settingsScreenHtml(){
     +'<label class="sx-search">'+sxIcon("search")+'<input type="search" id="sxSearch" autocomplete="off" spellcheck="false"'
     +' placeholder="'+esc(t("Search settings"))+'" aria-label="'+esc(t("Search settings"))+'" value="'+esc(sxQuery)+'"></label>'
     +'<div class="sx-secs" id="sxSecs">'+settingsNavHtml(navOn())+'</div>'
-    +'<div class="sx-foot"><button type="button" class="sx-maint" id="sxMaint">'+sxIcon("statistics")+esc(t("Maintenance"))+' <kbd>'
-    +esc(formatActionChord("maintenance"))+'</kbd></button></div></nav>'
+    +'<div class="sx-foot"><button type="button" class="sx-maint" id="sxLibrary">'+sxIcon("cards")+esc(t("Library"))+'</button></div></nav>'
     +'<div class="sx-page" id="setBody"></div></div>';
 }
 let sxEscWired=false;
@@ -971,8 +970,8 @@ function renderSettings(host){
       find.value=""; sxQuery=""; paintNav(); paintSettings();
     });
   }
-  const mt=host.querySelector("#sxMaint");
-  if(mt) mt.onclick=()=>openMaintenance();
+  const lib=host.querySelector("#sxLibrary");
+  if(lib) lib.onclick=()=>hooks.openManage();  /* plant:sx-library-open */
   paintSettings();
 }
 function paintNav(){

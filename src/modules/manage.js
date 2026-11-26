@@ -38,7 +38,7 @@ import { cards, catOrder, mgOpen, cardCounts } from "./app-state.js";
 import { teamLeads } from "./team-join.js";
 import { openScreenTab, registerScreen, screenOn } from "./screen-tabs.js";
 import { lmIcon } from "./lm-icon.js";
-import { openMaintenance } from "./maintenance.js";
+import { hooks } from "./hooks.js";
 import { formatActionChord } from "./shortcuts.js";
 import { foldAccents } from "./words.js";
 
@@ -1266,8 +1266,8 @@ function wireLibShell(page){
       paintLibrary();
     });
   }
-  const mt=page.querySelector("#libMaint");
-  if(mt) mt.onclick=()=>openMaintenance();
+  const st=page.querySelector("#libSettings");
+  if(st) st.onclick=()=>hooks.openSettings();  /* plant:lib-settings-open */
   const at=page.querySelector("#libPage");
   if(at && typeof at.addEventListener==="function"){
     at.addEventListener("scroll", ()=>{
@@ -1650,8 +1650,7 @@ function paintLibrary(host,body){
     +'<input type="search" id="libSearch" autocomplete="off" spellcheck="false"'
     +' placeholder="'+esc(libFind())+'" aria-label="'+esc(libFind())+'" value="'+esc(libQuery)+'"></label>'
     +'<div class="sx-secs" id="libSecs">'+libNavHtml()+'</div>'
-    +'<div class="sx-foot"><button type="button" class="sx-maint" id="libMaint">'+lmIcon("statistics")
-    +esc(t("Maintenance"))+' <kbd>'+esc(formatActionChord("maintenance"))+'</kbd></button></div></nav>'
+    +'<div class="sx-foot"><button type="button" class="sx-maint" id="libSettings">'+lmIcon("general")+esc(t("Settings"))+'</button></div></nav>'
     +(isHist
       ? '<div class="sx-page" id="libPage"><div class="sx-crumb">'+esc(t("Library"))
         +' · <span data-i18n-skip>'+esc(t("Saved copies"))+'</span></div>'

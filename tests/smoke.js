@@ -548,7 +548,7 @@ const t0 = Date.now();
       rows: vals.length,
       unavailable: vals.filter(v => v === word).length,
       blank: vals.filter(v => v === "-").length,
-      present: ["mtEject", "mtCopy", "mtClose"].filter(id => !!document.getElementById(id)),
+      present: ["mtCopy"].filter(id => !!document.getElementById(id)),
       gone: ["mtShortcuts", "mtClear"].filter(id => !!document.getElementById(id)),
       moved: !!document.getElementById("mtMoved") };
   });
@@ -559,8 +559,8 @@ const t0 = Date.now();
   /* The one that is the point. Zero, not a floor: mtSafe has exactly one way to print this. */
   check(mt.open && mt.unavailable === 0,
     "every maintenance reading answered: " + mt.unavailable + " unavailable, " + mt.blank + " blank");
-  check(mt.present.join(",") === "mtEject,mtCopy,mtClose" && mt.gone.length === 0 && mt.moved,
-    "the panel's rescues and copy are wired, and Reset and Clear local memory are named as moved: "
+  check(mt.present.join(",") === "mtCopy" && mt.gone.length === 0 && mt.moved,
+    "the panel's copy is wired, and Reset and Clear local memory are named as moved: "
     + JSON.stringify({ present: mt.present, gone: mt.gone, moved: mt.moved }));
   /* At 1280 x 880 the panel still fits on one screen: the screen host's scroll height against
      its client height. At 959 x 586, which is a 1438 x 879 window
@@ -609,7 +609,7 @@ const t0 = Date.now();
   check(!!mtWide && mtWide[2] <= mtWide[3] + 1 && !!mtFloor && mtFloor.ok,
     "the maintenance panel fits at 1280 x 880 without scrolling, and at 959 x 586 its own scroll reaches the last action: "
     + JSON.stringify({ wide: mtWide, floor: mtFloor }));
-  await p.evaluate(() => { const b = document.getElementById("mtClose"); if (b) b.click(); });
+  await p.evaluate(() => { const x = document.querySelector("#tabsBar .tab.on .tab-x"); if (x) x.click(); });
   await sleep(500);
   clean(e, "the maintenance panel");
 

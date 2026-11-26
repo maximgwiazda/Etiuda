@@ -605,7 +605,7 @@ try {
     }
 
     /* Close screen back to desk */
-    await p.evaluate(() => { const b = document.getElementById("mtClose"); if (b) b.click(); });
+    await p.evaluate(() => { const x = document.querySelector("#tabsBar .tab.on .tab-x"); if (x) x.click(); });
     await sleep(120);
   };
 

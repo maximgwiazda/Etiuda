@@ -100,7 +100,7 @@ async function main() {
       await within(page.keyboard.up("Shift"), 5000);
       await within(page.keyboard.up("Control"), 5000);
       await sleep(800);
-      const mt = await within(page.evaluate(() => !!document.getElementById("mtEject")), 10000);
+      const mt = await within(page.evaluate(() => !!document.getElementById("mtCopy")), 10000);
       check(mt === true, "1d and Ctrl+Shift+M opens the maintenance screen: " + JSON.stringify(mt));
     }
   } finally {

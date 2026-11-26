@@ -321,10 +321,12 @@ const UNDOS = [
     document.getElementById("eClearGo").click();
     return { name: "cleared", bub: "#eUndo", ctl: "#mgBring" };
   }],
-  ["Catalog ejected", () => {
-    openMaintenance();
-    document.getElementById("mtEject").click();
-    return { name: "ejected", bub: "#eUndo", ctl: "#mtEject" };
+  ["Catalog ejected", async () => {
+    openManage();
+    const sec = document.querySelector('button[data-lm="data"]'); if (sec) sec.click();
+    await new Promise(r => setTimeout(r, 300));
+    document.querySelector("button[data-ec-eject]").click();
+    return { name: "ejected", bub: "#eUndo", ctl: "#mgBring" };
   }],
 ];
 async function runUndos(page, label, only) {

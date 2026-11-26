@@ -4577,7 +4577,6 @@ body.e-first-signin .stage>.dotfield{content-visibility:hidden}
   .sx.lm-mt .mt-h{padding:6px 8px}
   .sx.lm-mt .sx-page{padding:16px 20px 20px}
   .sx.lm-mt .mt-row{padding:4px 12px;font-size:12px}
-  .sx.lm-mt .screen-actions{padding:8px 20px 10px}
 }
 /* ---------- The bubble ---------- */
 /*@BUBBLE-BEGIN*/
@@ -35585,150 +35584,6 @@ What is typed here stays in this browser.`;
     return { ok: true, count, files: res.saved || [], dir: res.dir || "" };
   }
 
-  // src/modules/local-memory.js
-  var local_memory_exports = {};
-  __export(local_memory_exports, {
-    askClearLocal: () => askClearLocal,
-    bringBackCleared: () => bringBackCleared,
-    clearLocalMemory: () => clearLocalMemory,
-    clearedHeld: () => clearedHeld,
-    ejectCatalog: () => ejectCatalog
-  });
-  function catalogKeep() {
-    return [E_CATALOG_STORE, E_CATALOG_KEY, nsKey("Sample"), nsKey("DeskMark"), nsKey("CatalogTrust"), nsKey("CatalogSigner"), nsKey("CatalogSignerPub"), nsKey("CatalogFrom")];
-  }
-  var CLEAR_KEEP_LAYER = ["Stats", "Days", "Exported", "LooseId", "Shared", "SharedOwn", "SharedFile", "EditionMarks"];
-  var CLEAR_KEEP_PACK = ["v", "intentKeys", "baseCards", "baseMacros", "useCounts", "useAt", "intentCounts", "searchMisses", "langs", "days", "dayIds", "daysSince"];
-  function packKept(raw, keep) {
-    let p = null;
-    try {
-      p = JSON.parse(raw);
-    } catch (e) {
-      p = null;
-    }
-    if (!p || typeof p !== "object" || Array.isArray(p)) return null;
-    const o = {};
-    keep.forEach((k) => {
-      if (k in p) o[k] = p[k];
-    });
-    return JSON.stringify(o);
-  }
-  function keepKeys(keys) {
-    try {
-      hooks.flushPillState();
-    } catch (e) {
-    }
-    flushStats();
-    clearTimeout(tabSaveTimer);
-    try {
-      saveTabSession();
-    } catch (e) {
-    }
-    const was = { keys: {}, tabs: ssGet(TAB_KEY) };
-    keys.forEach((k) => {
-      was.keys[k] = lsGet(k);
-    });
-    return was;
-  }
-  function putBack(was) {
-    Object.keys(was.keys).forEach((k) => {
-      const v = was.keys[k];
-      if (v == null) lsDel(k);
-      else lsSet(k, v);
-    });
-    if (was.tabs != null) ssSet(TAB_KEY, was.tabs);
-    else ssDel(TAB_KEY);
-    edCatalogTaken(false);
-    hooks.restartDesk();
-  }
-  var clearedHold = null;
-  function clearedHeld() {
-    return !!clearedHold;
-  }
-  function clearLocalMemory() {
-    const from = originOf(document.getElementById("mgWipe"), () => document.getElementById("mgBring"));
-    let keep = { layer: [], pack: [] };
-    keep = { layer: CLEAR_KEEP_LAYER, pack: CLEAR_KEEP_PACK };
-    const spaces = [E_NS].concat(eLayers());
-    const keys = [];
-    spaces.forEach((ns) => LAYER_KEYS.forEach((n) => {
-      if (keep.layer.indexOf(n) < 0 && lsGet(ns + n) != null) keys.push(ns + n);
-    }));
-    const was = keepKeys(keys);
-    keys.forEach((k) => {
-      const half = /Pack$/.test(k) ? packKept(was.keys[k], keep.pack) : null;
-      if (half != null) lsSet(k, half);
-      else lsDel(k);
-    });
-    if (!clearedHold) clearedHold = was;
-    edCatalogTaken(false);
-    hooks.restartDesk();
-    offerUndo("Local changes cleared", () => {
-      if (clearedHold === was) clearedHold = null;
-      putBack(was);
-    }, null, from);
-  }
-  function bringBackCleared() {
-    const was = clearedHold;
-    if (!was) return false;
-    clearedHold = null;
-    putBack(was);
-    return true;
-  }
-  function askClearLocal() {
-    const was = document.getElementById("eClearAsk");
-    if (was) was.remove();
-    const el = document.createElement("div");
-    el.className = "bub bub-ask e-undo e-clear-ask";
-    el.id = "eClearAsk";
-    el.setAttribute("role", "alertdialog");
-    el.setAttribute("data-side", "none");
-    el.setAttribute("aria-labelledby", "eClearAskT");
-    el.innerHTML = '<h3 id="eClearAskT">' + esc(t("Clear local changes?")) + "</h3><p>" + esc(t("Every change made to the content on this computer goes: your edits to cards, your own cards and intents, changes to categories, roles and variables, and stars, hidden cards and the order of cards. The catalog is left as delivered.")) + "</p>" + (eHasBranch() ? "<p>" + esc(t("On a team, the changes this desk shared with the team's lead go too, any the lead has not yet reviewed included.")) + "</p>" : "") + "<p>" + esc(t("The catalog file, the team, the licence, the folder setting and the agent's name stay. Undo brings the changes back on this desk until Etiuda closes; after a restart, nothing comes back.")) + '</p><div class="tour-actions"><button type="button" class="btn" id="eClearGo">' + esc(t("Clear local changes")) + '</button><button type="button" class="btn primary" id="eClearStay">' + esc(t("Cancel")) + "</button></div>";
-    document.body.appendChild(el);
-    hangBubble(el, () => document.getElementById("mgWipe"));
-    el.querySelector("#eClearGo").onclick = () => {
-      dismissNode(el);
-      clearLocalMemory();
-    };
-    el.querySelector("#eClearStay").onclick = () => dismissNode(el);
-    el.addEventListener("keydown", (e) => {
-      if (e.key !== "Escape") return;
-      e.preventDefault();
-      e.stopPropagation();
-      dismissNode(el);
-    });
-    try {
-      el.querySelector("#eClearStay").focus({ preventScroll: true });
-    } catch (_) {
-    }
-  }
-  function ejectKeys() {
-    return catalogKeep().concat([nsKey("CatalogNo"), nsKey("CatalogFile"), nsKey("CatalogFileAt")]);
-  }
-  function ejectCatalog(e) {
-    const at = e && e.currentTarget && e.currentTarget.nodeType === 1 ? e.currentTarget : null;
-    const from = originOf(at, () => document.getElementById("catNow"));
-    const keys = ejectKeys();
-    const was = keepKeys(keys);
-    keys.forEach((k) => lsDel(k));
-    ssDel(TAB_KEY);
-    if (typeof eCatalogEject === "function") eCatalogEject();
-    edCatalogTaken(false);
-    hooks.restartDesk();
-    offerUndo("Catalog ejected", () => undoEject(was), null, from);
-  }
-  function undoEject(was) {
-    const put = was.keys[E_CATALOG_STORE];
-    if (put != null && (!lsSet(E_CATALOG_STORE, put, true) || lsGet(E_CATALOG_STORE) !== put)) {
-      toastRefusal(catalogStoreRefusal(eDeskFileShown()));
-      return false;
-    }
-    putBack(was);
-    if (typeof tellTaken === "function" && typeof storedCatalog === "function") tellTaken(storedCatalog());
-    return true;
-  }
-
   // src/modules/theme.js
   var theme_exports = {};
   __export(theme_exports, {
@@ -36319,17 +36174,10 @@ What is typed here stays in this browser.`;
     html += "</div>";
     return html;
   }
-  function wireMaintenanceActions(root, closeFn) {
+  function wireMaintenanceActions(root) {
     const $q = (s) => root ? root.querySelector(s) : $(s);
-    const ej = $q("#mtEject");
-    if (ej) ej.onclick = ejectCatalog;
     const cp = $q("#mtCopy");
     if (cp) cp.onclick = () => copy(mtReportText(), "Report copied");
-    const cls = $q("#mtClose");
-    if (cls) cls.onclick = () => {
-      if (closeFn) closeFn();
-      else dismissModal();
-    };
   }
   var MT_MOVED = "Reset defaults is in Settings, under Data and defaults, and Clear local changes is in the Library, under Catalog & data.";
   var mtOn = "health";
@@ -36482,7 +36330,7 @@ What is typed here stays in this browser.`;
   }
   function mtShellHtml() {
     const pages = mtPages(), page = pages.filter((p) => p.key === mtOn)[0] || pages[0];
-    return '<div class="sx lm lm-mt mt-screen" data-page="' + esc(page.key) + '"><div class="lm-split"><nav class="sx-nav" aria-label="' + esc(t("Maintenance")) + '"><h1>' + esc(t("Maintenance")) + '</h1><div class="sx-secs" id="mtSecs">' + mtNavHtml() + '</div><div class="sx-foot"><button type="button" class="sx-maint" id="mtSettings">' + lmIcon("general") + esc(t("Settings")) + '</button></div></nav><div class="sx-page" id="mtPage"><div class="sx-crumb">' + esc(t("Maintenance")) + '</div><h2 id="mtTitle" data-i18n-skip>' + esc(page.name) + '</h2><p class="lede" id="mtLede" data-i18n-skip>' + esc(page.key === "health" ? "" : mtLede()[page.key] || "") + "</p>" + mtMaintBody() + mtResetRow() + '<p class="mt-moved sx-note" id="mtMoved">' + esc(t(MT_MOVED)) + ' <button type="button" class="btn" id="mtOpenData">' + esc(t("Open Data and defaults")) + '</button></p></div></div><div class="screen-actions"><div class="mf-left"><button type="button" class="btn danger" id="mtEject">' + esc(t("Eject catalog")) + '</button></div><button type="button" class="btn" id="mtCopy" title="' + esc(t("Copy the report: counts and environment only, never your content")) + '">' + esc(t("Copy report")) + '</button><button type="button" class="btn primary" id="mtClose">' + esc(t("Done")) + "</button></div></div>";
+    return '<div class="sx lm lm-mt mt-screen" data-page="' + esc(page.key) + '"><div class="lm-split"><nav class="sx-nav" aria-label="' + esc(t("Maintenance")) + '"><h1>' + esc(t("Maintenance")) + '</h1><div class="sx-secs" id="mtSecs">' + mtNavHtml() + '</div><div class="sx-foot"><button type="button" class="sx-maint" id="mtCopy" title="' + esc(t("Copy the report: counts and environment only, never your content")) + '">' + lmIcon("statistics") + esc(t("Copy report")) + '</button></div></nav><div class="sx-page" id="mtPage"><div class="sx-crumb">' + esc(t("Maintenance")) + '</div><h2 id="mtTitle" data-i18n-skip>' + esc(page.name) + '</h2><p class="lede" id="mtLede" data-i18n-skip>' + esc(page.key === "health" ? "" : mtLede()[page.key] || "") + "</p>" + mtMaintBody() + mtResetRow() + '<p class="mt-moved sx-note" id="mtMoved">' + esc(t(MT_MOVED)) + ' <button type="button" class="btn" id="mtOpenData">' + esc(t("Open Data and defaults")) + "</button></p></div></div></div>";
   }
   function wireMtShell(root) {
     if (!root || typeof root.querySelectorAll !== "function") return;
@@ -36507,10 +36355,6 @@ What is typed here stays in this browser.`;
     buttons.forEach((b) => {
       b.onclick = () => show(b.getAttribute("data-mt"));
     });
-    const gear = root.querySelector("#mtSettings");
-    if (gear) gear.onclick = () => {
-      if (typeof hooks.openSettings === "function") hooks.openSettings();
-    };
     const data = root.querySelector("#mtOpenData");
     if (data) data.onclick = () => {
       if (typeof hooks.openSettings === "function") hooks.openSettings("data");
@@ -36522,7 +36366,7 @@ What is typed here stays in this browser.`;
     title: () => t("Maintenance"),
     render: (host, closeFn) => {
       host.innerHTML = mtShellHtml();
-      wireMaintenanceActions(host, closeFn);
+      wireMaintenanceActions(host);
       wireMtShell(host.querySelector ? host.querySelector(".sx.lm-mt") : null);
       hugDottedGround(host);
     }
@@ -38227,6 +38071,150 @@ What is typed here stays in this browser.`;
     paintLibrary: () => paintLibrary,
     wireManageDrag: () => wireManageDrag
   });
+
+  // src/modules/local-memory.js
+  var local_memory_exports = {};
+  __export(local_memory_exports, {
+    askClearLocal: () => askClearLocal,
+    bringBackCleared: () => bringBackCleared,
+    clearLocalMemory: () => clearLocalMemory,
+    clearedHeld: () => clearedHeld,
+    ejectCatalog: () => ejectCatalog
+  });
+  function catalogKeep() {
+    return [E_CATALOG_STORE, E_CATALOG_KEY, nsKey("Sample"), nsKey("DeskMark"), nsKey("CatalogTrust"), nsKey("CatalogSigner"), nsKey("CatalogSignerPub"), nsKey("CatalogFrom")];
+  }
+  var CLEAR_KEEP_LAYER = ["Stats", "Days", "Exported", "LooseId", "Shared", "SharedOwn", "SharedFile", "EditionMarks"];
+  var CLEAR_KEEP_PACK = ["v", "intentKeys", "baseCards", "baseMacros", "useCounts", "useAt", "intentCounts", "searchMisses", "langs", "days", "dayIds", "daysSince"];
+  function packKept(raw, keep) {
+    let p = null;
+    try {
+      p = JSON.parse(raw);
+    } catch (e) {
+      p = null;
+    }
+    if (!p || typeof p !== "object" || Array.isArray(p)) return null;
+    const o = {};
+    keep.forEach((k) => {
+      if (k in p) o[k] = p[k];
+    });
+    return JSON.stringify(o);
+  }
+  function keepKeys(keys) {
+    try {
+      hooks.flushPillState();
+    } catch (e) {
+    }
+    flushStats();
+    clearTimeout(tabSaveTimer);
+    try {
+      saveTabSession();
+    } catch (e) {
+    }
+    const was = { keys: {}, tabs: ssGet(TAB_KEY) };
+    keys.forEach((k) => {
+      was.keys[k] = lsGet(k);
+    });
+    return was;
+  }
+  function putBack(was) {
+    Object.keys(was.keys).forEach((k) => {
+      const v = was.keys[k];
+      if (v == null) lsDel(k);
+      else lsSet(k, v);
+    });
+    if (was.tabs != null) ssSet(TAB_KEY, was.tabs);
+    else ssDel(TAB_KEY);
+    edCatalogTaken(false);
+    hooks.restartDesk();
+  }
+  var clearedHold = null;
+  function clearedHeld() {
+    return !!clearedHold;
+  }
+  function clearLocalMemory() {
+    const from = originOf(document.getElementById("mgWipe"), () => document.getElementById("mgBring"));
+    let keep = { layer: [], pack: [] };
+    keep = { layer: CLEAR_KEEP_LAYER, pack: CLEAR_KEEP_PACK };
+    const spaces = [E_NS].concat(eLayers());
+    const keys = [];
+    spaces.forEach((ns) => LAYER_KEYS.forEach((n) => {
+      if (keep.layer.indexOf(n) < 0 && lsGet(ns + n) != null) keys.push(ns + n);
+    }));
+    const was = keepKeys(keys);
+    keys.forEach((k) => {
+      const half = /Pack$/.test(k) ? packKept(was.keys[k], keep.pack) : null;
+      if (half != null) lsSet(k, half);
+      else lsDel(k);
+    });
+    if (!clearedHold) clearedHold = was;
+    edCatalogTaken(false);
+    hooks.restartDesk();
+    offerUndo("Local changes cleared", () => {
+      if (clearedHold === was) clearedHold = null;
+      putBack(was);
+    }, null, from);
+  }
+  function bringBackCleared() {
+    const was = clearedHold;
+    if (!was) return false;
+    clearedHold = null;
+    putBack(was);
+    return true;
+  }
+  function askClearLocal() {
+    const was = document.getElementById("eClearAsk");
+    if (was) was.remove();
+    const el = document.createElement("div");
+    el.className = "bub bub-ask e-undo e-clear-ask";
+    el.id = "eClearAsk";
+    el.setAttribute("role", "alertdialog");
+    el.setAttribute("data-side", "none");
+    el.setAttribute("aria-labelledby", "eClearAskT");
+    el.innerHTML = '<h3 id="eClearAskT">' + esc(t("Clear local changes?")) + "</h3><p>" + esc(t("Every change made to the content on this computer goes: your edits to cards, your own cards and intents, changes to categories, roles and variables, and stars, hidden cards and the order of cards. The catalog is left as delivered.")) + "</p>" + (eHasBranch() ? "<p>" + esc(t("On a team, the changes this desk shared with the team's lead go too, any the lead has not yet reviewed included.")) + "</p>" : "") + "<p>" + esc(t("The catalog file, the team, the licence, the folder setting and the agent's name stay. Undo brings the changes back on this desk until Etiuda closes; after a restart, nothing comes back.")) + '</p><div class="tour-actions"><button type="button" class="btn" id="eClearGo">' + esc(t("Clear local changes")) + '</button><button type="button" class="btn primary" id="eClearStay">' + esc(t("Cancel")) + "</button></div>";
+    document.body.appendChild(el);
+    hangBubble(el, () => document.getElementById("mgWipe"));
+    el.querySelector("#eClearGo").onclick = () => {
+      dismissNode(el);
+      clearLocalMemory();
+    };
+    el.querySelector("#eClearStay").onclick = () => dismissNode(el);
+    el.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      dismissNode(el);
+    });
+    try {
+      el.querySelector("#eClearStay").focus({ preventScroll: true });
+    } catch (_) {
+    }
+  }
+  function ejectKeys() {
+    return catalogKeep().concat([nsKey("CatalogNo"), nsKey("CatalogFile"), nsKey("CatalogFileAt")]);
+  }
+  function ejectCatalog(e) {
+    const at = e && e.currentTarget && e.currentTarget.nodeType === 1 ? e.currentTarget : null;
+    const from = originOf(at, () => document.getElementById("catNow"));
+    const keys = ejectKeys();
+    const was = keepKeys(keys);
+    keys.forEach((k) => lsDel(k));
+    ssDel(TAB_KEY);
+    if (typeof eCatalogEject === "function") eCatalogEject();
+    edCatalogTaken(false);
+    hooks.restartDesk();
+    offerUndo("Catalog ejected", () => undoEject(was), null, from);
+  }
+  function undoEject(was) {
+    const put = was.keys[E_CATALOG_STORE];
+    if (put != null && (!lsSet(E_CATALOG_STORE, put, true) || lsGet(E_CATALOG_STORE) !== put)) {
+      toastRefusal(catalogStoreRefusal(eDeskFileShown()));
+      return false;
+    }
+    putBack(was);
+    if (typeof tellTaken === "function" && typeof storedCatalog === "function") tellTaken(storedCatalog());
+    return true;
+  }
 
   // src/modules/catalog-offer.js
   var catalog_offer_exports = {};
@@ -41313,8 +41301,8 @@ What is typed here stays in this browser.`;
         paintLibrary();
       });
     }
-    const mt = page.querySelector("#libMaint");
-    if (mt) mt.onclick = () => openMaintenance();
+    const st = page.querySelector("#libSettings");
+    if (st) st.onclick = () => hooks.openSettings();
     const at = page.querySelector("#libPage");
     if (at && typeof at.addEventListener === "function") {
       at.addEventListener("scroll", () => {
@@ -41609,7 +41597,7 @@ What is typed here stays in this browser.`;
     ].join("");
     const kept = !isHist && libDrawn && libDrawn.key === key && libDrawn.page.isConnected === false ? libDrawn.page : null;
     if (kept) host.replaceChildren(kept);
-    else host.innerHTML = '<div class="sx lm lm-lib lib-screen lib-list' + (isHist ? " is-history" : "") + '" tabindex="-1"><div class="lm-split"><nav class="sx-nav" aria-label="' + esc(t("Library")) + '">' + libraryHeadHtml() + '<label class="sx-search">' + lmIcon("search") + '<input type="search" id="libSearch" autocomplete="off" spellcheck="false" placeholder="' + esc(libFind()) + '" aria-label="' + esc(libFind()) + '" value="' + esc(libQuery) + '"></label><div class="sx-secs" id="libSecs">' + libNavHtml() + '</div><div class="sx-foot"><button type="button" class="sx-maint" id="libMaint">' + lmIcon("statistics") + esc(t("Maintenance")) + " <kbd>" + esc(formatActionChord("maintenance")) + "</kbd></button></div></nav>" + (isHist ? '<div class="sx-page" id="libPage"><div class="sx-crumb">' + esc(t("Library")) + " · <span data-i18n-skip>" + esc(t("Saved copies")) + '</span></div><div class="screen-head"><h2>' + esc(t("Saved copies")) + '</h2></div><div class="sx-card"><div id="ehView"></div></div></div>' : '<div class="sx-page" id="libPage"><div class="sx-crumb">' + esc(t("Library")) + (name ? " · <span data-i18n-skip>" + esc(name) + "</span>" : "") + '</div><h2 id="libTitle" data-i18n-skip></h2><p class="lede" id="libLede" data-i18n-skip></p><div class="sx-card">' + bodyHtml + "</div></div>") + "</div>" + (isHist ? '<div class="screen-actions"><div class="mf-left"></div><button type="button" class="btn primary" id="ehClose">' + esc(t("Back to the Library")) + "</button></div>" : "") + "</div>";
+    else host.innerHTML = '<div class="sx lm lm-lib lib-screen lib-list' + (isHist ? " is-history" : "") + '" tabindex="-1"><div class="lm-split"><nav class="sx-nav" aria-label="' + esc(t("Library")) + '">' + libraryHeadHtml() + '<label class="sx-search">' + lmIcon("search") + '<input type="search" id="libSearch" autocomplete="off" spellcheck="false" placeholder="' + esc(libFind()) + '" aria-label="' + esc(libFind()) + '" value="' + esc(libQuery) + '"></label><div class="sx-secs" id="libSecs">' + libNavHtml() + '</div><div class="sx-foot"><button type="button" class="sx-maint" id="libSettings">' + lmIcon("general") + esc(t("Settings")) + "</button></div></nav>" + (isHist ? '<div class="sx-page" id="libPage"><div class="sx-crumb">' + esc(t("Library")) + " · <span data-i18n-skip>" + esc(t("Saved copies")) + '</span></div><div class="screen-head"><h2>' + esc(t("Saved copies")) + '</h2></div><div class="sx-card"><div id="ehView"></div></div></div>' : '<div class="sx-page" id="libPage"><div class="sx-crumb">' + esc(t("Library")) + (name ? " · <span data-i18n-skip>" + esc(name) + "</span>" : "") + '</div><h2 id="libTitle" data-i18n-skip></h2><p class="lede" id="libLede" data-i18n-skip></p><div class="sx-card">' + bodyHtml + "</div></div>") + "</div>" + (isHist ? '<div class="screen-actions"><div class="mf-left"></div><button type="button" class="btn primary" id="ehClose">' + esc(t("Back to the Library")) + "</button></div>" : "") + "</div>";
     const page = kept || host.querySelector(".lib-list");
     libDrawn = isHist ? null : { key, page };
     if (kept) {
@@ -43091,7 +43079,7 @@ What is typed here stays in this browser.`;
     return document.getElementById("screenHost");
   }
   function settingsScreenHtml() {
-    return '<div class="sx"><nav class="sx-nav" aria-label="' + esc(t("Settings")) + '"><h1>' + esc(t("Settings")) + '</h1><label class="sx-search">' + sxIcon("search") + '<input type="search" id="sxSearch" autocomplete="off" spellcheck="false" placeholder="' + esc(t("Search settings")) + '" aria-label="' + esc(t("Search settings")) + '" value="' + esc(sxQuery) + '"></label><div class="sx-secs" id="sxSecs">' + settingsNavHtml(navOn()) + '</div><div class="sx-foot"><button type="button" class="sx-maint" id="sxMaint">' + sxIcon("statistics") + esc(t("Maintenance")) + " <kbd>" + esc(formatActionChord("maintenance")) + '</kbd></button></div></nav><div class="sx-page" id="setBody"></div></div>';
+    return '<div class="sx"><nav class="sx-nav" aria-label="' + esc(t("Settings")) + '"><h1>' + esc(t("Settings")) + '</h1><label class="sx-search">' + sxIcon("search") + '<input type="search" id="sxSearch" autocomplete="off" spellcheck="false" placeholder="' + esc(t("Search settings")) + '" aria-label="' + esc(t("Search settings")) + '" value="' + esc(sxQuery) + '"></label><div class="sx-secs" id="sxSecs">' + settingsNavHtml(navOn()) + '</div><div class="sx-foot"><button type="button" class="sx-maint" id="sxLibrary">' + sxIcon("cards") + esc(t("Library")) + '</button></div></nav><div class="sx-page" id="setBody"></div></div>';
   }
   var sxEscWired = false;
   function onSectionEscape(e) {
@@ -43142,8 +43130,8 @@ What is typed here stays in this browser.`;
         paintSettings();
       });
     }
-    const mt = host.querySelector("#sxMaint");
-    if (mt) mt.onclick = () => openMaintenance();
+    const lib = host.querySelector("#sxLibrary");
+    if (lib) lib.onclick = () => hooks.openManage();
     paintSettings();
   }
   function paintNav() {

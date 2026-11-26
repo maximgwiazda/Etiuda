@@ -546,8 +546,8 @@ await checkAsync("L8 the Maintenance tab lists its sections and shows one page, 
   return !!now && now.getAttribute("data-page") === other.getAttribute("data-mt")
     && !!title && title.textContent === want
     && !!host().querySelector(".mt-grid") && nsec >= 6
-    && !!host().querySelector("#mtEject") && !!host().querySelector("#mtCopy")
-    && !!host().querySelector("#mtClose") && !!host().querySelector("#mtMoved")
+    && !host().querySelector("#mtEject") && !!host().querySelector("#mtCopy")
+    && !host().querySelector("#mtClose") && !!host().querySelector("#mtMoved")
     || JSON.stringify({ page: now && now.getAttribute("data-page"), want: other.getAttribute("data-mt"),
       title: title && title.textContent, nsec });
 });
@@ -612,10 +612,10 @@ await checkAsync("L11 Saved copies preserves the Library navigation rail, and op
   door.click();
   await settle();
 
-  /* Left rail (#libSecs, #libSearch, #libMaint) must be preserved in .sx-nav */
+  /* Left rail (#libSecs, #libSearch, #libSettings) must be preserved in .sx-nav */
   const nav = host().querySelector(".sx-nav");
   const secs = host().querySelector("#libSecs");
-  const maint = host().querySelector("#libMaint");
+  const maint = host().querySelector("#libSettings");
   const railKept = !!nav && !!secs && !!maint;
 
   /* #ehView is present */

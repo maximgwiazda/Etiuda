@@ -6445,7 +6445,7 @@ const CARD_B = {
       const gone = h => h.indexOf("mtClear") < 0 && h.indexOf("mtShortcuts") < 0 && h.indexOf(">Clear local") < 0 && h.indexOf(">Reset shortcuts<") < 0;
       const all = SET.settingsBodyHtml();
       return (typeof MN.openMaintenanceModal !== "function"
-        && gone(tab) && tab.indexOf(said) >= 0 && tab.indexOf('id="mtEject"') >= 0
+        && gone(tab) && tab.indexOf(said) >= 0 && tab.indexOf('id="mtEject"') < 0 && tab.indexOf('id="mtCopy"') >= 0
         && all.indexOf('id="setClear"') < 0 && all.indexOf(">Clear local") < 0 && all.indexOf('id="setReset"') >= 0
         && all.indexOf('id="setResetKeys"') >= 0) || "tab " + tab.slice(-300);
     });
