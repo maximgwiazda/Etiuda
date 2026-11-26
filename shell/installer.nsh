@@ -547,8 +547,11 @@
     StrCpy $R5 ""
   ${EndIf}
   StrCpy $R7 0
+  # EACH cmd.exe LINE IS WRAPPED IN ONE MORE PAIR OF QUOTES: cmd.exe strips the first and the last quote of a line after /C that opens
+  # with one, and without the pair the rest does not parse: a running program read as closed and the close line never ran.
+  # tests/installer-mends.mjs im8 runs these lines as nsExec passes them.
   ${Do}
-    nsExec::Exec `"$SYSDIR\cmd.exe" /C "$SYSDIR\tasklist.exe" $R5/FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\""`
+    nsExec::Exec `"$SYSDIR\cmd.exe" /C ""$SYSDIR\tasklist.exe" $R5/FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\"""` ; plant:close-sees-program
     Pop $R8
     ${If} $R8 != 0
       ${ExitDo}
@@ -557,7 +560,7 @@
       DetailPrint "$R6"
       # Only this account's own copy is asked to close; another person's is never ended. With none of its own open there
       # is nothing to wait for, so the run goes straight to Retry, or to 1618 when silent.
-      nsExec::Exec `"$SYSDIR\cmd.exe" /C "$SYSDIR\tasklist.exe" /FI "USERNAME eq %USERNAME%" /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\""`
+      nsExec::Exec `"$SYSDIR\cmd.exe" /C ""$SYSDIR\tasklist.exe" /FI "USERNAME eq %USERNAME%" /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\"""`
       Pop $R8
       ${If} $R8 == 0
         ${If} ${FileExists} "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
@@ -577,7 +580,7 @@
             Pop $R8
           ${EndIf}
         !endif
-        nsExec::Exec `"$SYSDIR\cmd.exe" /C "$SYSDIR\taskkill.exe" /IM "${APP_EXECUTABLE_FILENAME}" /FI "USERNAME eq %USERNAME%"` ; plant:installer-asks-close
+        nsExec::Exec `"$SYSDIR\cmd.exe" /C ""$SYSDIR\taskkill.exe" /IM "${APP_EXECUTABLE_FILENAME}" /FI "USERNAME eq %USERNAME%""` ; plant:installer-asks-close
         Pop $R8
       ${Else}
         StrCpy $R7 20
@@ -617,6 +620,14 @@
     SetOutPath $TEMP
     Push $INSTDIR
     Call un.etiudaRemoveTree
+    # A FOLDER THE REMOVAL COULD NOT TAKE (a file in it held open) is named, and the uninstall stops with 2 before electron-builder's
+    # section removes the shortcuts and the registration, so the entry stays in Apps to be run again, never a success.
+    ${If} ${FileExists} "$INSTDIR"
+      DetailPrint `"$INSTDIR" is still there: a file in it is in use.`
+      MessageBox MB_OK|MB_ICONSTOP "$(etiudaUninstallLeft)" /SD IDOK
+      SetErrorLevel 2 # plant:uninstall-left-code
+      Abort # plant:uninstall-left-stops
+    ${EndIf}
     # The copy an update set aside beside the folder (etiudaSwap) goes with it, where it still holds the program.
     !ifdef ETIUDA_ASIDE_SUFFIX
       ${If} ${FileExists} "$INSTDIR${ETIUDA_ASIDE_SUFFIX}\${APP_EXECUTABLE_FILENAME}"
@@ -1945,6 +1956,7 @@ Var RemoveDataBox
     !endif
     LangString etiudaSetupNotFinished ${ID} "Instalacja programu ${PRODUCT_NAME} nie została ukończona. Pomóc może ponowne uruchomienie instalatora; jeśli znów się zatrzyma, ten kod pomoże ustalić przyczynę: $2."
 
+    LangString etiudaUninstallLeft ${ID} "Część plików programu ${PRODUCT_NAME} jest wciąż w użyciu, więc folder $INSTDIR na razie zostaje. Po ponownym uruchomieniu komputera wystarczy jeszcze raz usunąć program ${PRODUCT_NAME} w Ustawieniach systemu Windows." ; placeholder: Claudette
     LangString RemoveDataBox ${ID} "Usuń także dane z tego komputera"
     LangString RemoveDataLine ${ID} "Usuwa również dane Etiudy z tego komputera: ustawienia, rozmowy, licencję, własne karty i gwiazdki oraz miejsce tego stanowiska w zespole, więc zapieczętowany katalog otworzy się dopiero po nowym zaproszeniu od lidera zespołu. Pliki katalogów zostają."
   !else
@@ -1964,6 +1976,7 @@ Var RemoveDataBox
     !endif
     LangString etiudaSetupNotFinished ${ID} "The installation of ${PRODUCT_NAME} did not finish. Running the installer again may help; if it stops again, this code helps find the cause: $2."
 
+    LangString etiudaUninstallLeft ${ID} "Some of ${PRODUCT_NAME}'s files are still in use, so the folder $INSTDIR stays for now. Once the computer has restarted, removing ${PRODUCT_NAME} again in Windows Settings finishes the job." ; placeholder: Claudette
     LangString RemoveDataBox ${ID} "Remove my data"
     LangString RemoveDataLine ${ID} "Also removes Etiuda's data on this computer: settings, conversations, the licence, own cards and stars, and this desk's place on its team, so a sealed catalog opens again only after a new invitation from the team's lead. The catalog files stay."
   !endif

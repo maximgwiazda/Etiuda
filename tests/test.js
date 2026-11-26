@@ -4643,7 +4643,9 @@ function installerUpdateTests() {
   const PL_RETRY = "Program ${PRODUCT_NAME} jest uruchomiony. Po jego zamknięciu wystarczy wybrać Ponów.";
   const asks = text => {
     const m = macro(text, "customCheckAppRunning");
-    return [!!m, /nsExec::Exec `"\$SYSDIR\\cmd\.exe" \/C "\$SYSDIR\\taskkill\.exe" \/IM "\$\{APP_EXECUTABLE_FILENAME\}" \/FI "USERNAME eq %USERNAME%"`/.test(m),
+    /* WAS: /C "$SYSDIR\taskkill.exe" ... "USERNAME eq %USERNAME%", which cmd.exe strips of its first and last quote and cannot
+       parse, so taskkill never ran. NOW: the line after /C in one more pair (installer-mends im8 runs it). */
+    return [!!m, /nsExec::Exec `"\$SYSDIR\\cmd\.exe" \/C ""\$SYSDIR\\taskkill\.exe" \/IM "\$\{APP_EXECUTABLE_FILENAME\}" \/FI "USERNAME eq %USERNAME%""`/.test(m),
       !/\/F\b|Stop-Process|KILL_PROCESS|-Force/.test(m), /DetailPrint "\$R6"/.test(m),
       /MessageBox MB_RETRYCANCEL\|MB_ICONEXCLAMATION "\$R9" \/SD IDCANCEL IDRETRY`/.test(m), /SetErrorLevel 1618\r?\n\s*Quit\b/.test(m)];
   };

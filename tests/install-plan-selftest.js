@@ -660,7 +660,9 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
      request only ever to the installing account's own. */
   const closeCheck = text => {
     const m = macro(text, "customCheckAppRunning");
-    const look = m.match(/nsExec::Exec `"\$SYSDIR\\cmd\.exe" \/C "\$SYSDIR\\tasklist\.exe" [^`]*`/g) || [];
+    /* WAS: /C "$SYSDIR\tasklist.exe" ..., which cmd.exe strips of its first and last quote and cannot then parse. NOW: the whole
+       line after /C in one more pair (installer-mends im8 runs it). */
+    const look = m.match(/nsExec::Exec `"\$SYSDIR\\cmd\.exe" \/C ""\$SYSDIR\\tasklist\.exe" [^`]*""`/g) || [];
     const scope = /StrCpy \$R5 `\/FI "USERNAME eq %USERNAME%" `\s+\$\{If\} \$installMode == "all"\s+StrCpy \$R5 ""\s+\$\{EndIf\}/.test(m);
     const sees = look.length === 2 && look[0].indexOf('"$SYSDIR\\tasklist.exe" $R5/FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}"') > -1
       && look[1].indexOf('"$SYSDIR\\tasklist.exe" /FI "USERNAME eq %USERNAME%" /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}"') > -1;
@@ -1657,7 +1659,8 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     const m = code(macro(nsh, "customCheckAppRunning"));
     const own = at(m, "/FI \"USERNAME eq %USERNAME%\" /FI \"IMAGENAME eq");
     const from = own < 0 ? -1 : m.indexOf("${If} ${FileExists} \"$INSTDIR\\${APP_EXECUTABLE_FILENAME}\"", own);
-    const to2 = m.indexOf("nsExec::Exec `\"$SYSDIR\\cmd.exe\" /C \"$SYSDIR\\taskkill.exe\"", from);
+    /* WAS: /C "$SYSDIR\taskkill.exe". NOW: /C ""$SYSDIR\taskkill.exe" ...", the pair cmd.exe takes away (installer-mends im8). */
+    const to2 = m.indexOf("nsExec::Exec `\"$SYSDIR\\cmd.exe\" /C \"\"$SYSDIR\\taskkill.exe\"", from);
     return from > -1 && to2 > from ? m.slice(from, to2) : "";
   };
   const closesThrough = nsh => {
