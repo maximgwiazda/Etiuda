@@ -1913,12 +1913,13 @@ try {
       + " (so the reply does not move, and the digit covers none of its letters: the row's left padding, 18 px, holds its 14 px cap and a gap), the markup carrying the digit"
       + " (was: the whole Ctrl+digit in a 50 px column in the flow, which moved the reply 60 px): " + J4c({ n: nR, held: nHeldR, li: sheetOf(doc, "#rows li") }));
     const wordsOf = pl => { document.getElementById("pax").value = ""; SYSTEM[0] = pl ? "pl-PL" : "en-US"; const o = pickAnswer("open", { profiles: 1 }); SYSTEM[0] = "en-US";
-      return { label: o.profiles && o.profiles.labels && o.profiles.labels.suggest, keys: o.words && o.words.suggestKeys, nums: o.words && o.words.keyNumbers }; };
+      return { label: o.profiles && o.profiles.labels && o.profiles.labels.suggest, keys: o.words && o.words.suggestKeys, nums: o.words && o.words.keyNumbers, copy: o.words && o.words.keyCopy }; };
     const wEn = wordsOf(false), wPl = wordsOf(true);
     check(wEn.label === "Suggested intents" && wEn.keys === "Alt+1 to Alt+5 show an intent's replies"
       && wPl.label === "Proponowane intencje" && wPl.keys === "Alt+1 do Alt+5 pokazują odpowiedzi danej intencji"
-      && wEn.nums === "{KEY} shows numbers" && wPl.nums === "{KEY} pokazuje numery",
-      "4col4 the column's heading says what it shows, \"Suggested intents\" (was \"Suggested\"), its one line of keys, and the foot's hint for the numbers, in both languages (placeholders for the copywriter): " + J4c({ wEn, wPl }));
+      && wEn.nums === "{KEY} shows numbers" && wPl.nums === "{KEY} pokazuje numery"
+      && wEn.copy === "{KEY} copies or pastes" && wPl.copy === "{KEY} kopiuje lub wkleja",
+      "4col4 the column's heading says what it shows, \"Suggested intents\" (was \"Suggested\"), its one line of keys, and the foot's hints for the numbers and for Enter (was: copies, and pastes where it can), in both languages (placeholders for the copywriter): " + J4c({ wEn, wPl }));
     const legendRun = async scriptText => {
       const keysEl = { innerHTML: "", textContent: "" };
       let onOpen = null;
@@ -1931,10 +1932,10 @@ try {
       onOpen(JSON.stringify({ rows: pRows, words: { keyCopy: "{KEY} copies", keyOther: "{KEY} in PL", keyClose: "{KEY} closes", keyNumbers: "{KEY} shows numbers" } }));
       return keysEl.innerHTML;
     };
-    const wantLegend = "<span><kbd>Enter</kbd> copies</span><span><kbd>Shift+Enter</kbd> in PL</span><span><kbd>Ctrl</kbd> shows numbers</span><span><kbd>Esc</kbd> closes</span>";
+    const wantLegend = "<span><kbd>Enter</kbd> copies</span><span><kbd>Shift+Enter</kbd> in PL</span><span><kbd>Ctrl</kbd> shows numbers</span>";
     const legendOn = await legendRun(script);
     check(legendOn === wantLegend,
-      "4hold4 the foot's one line of keys gains a Ctrl key cap and the hint for the numbers (the desk's words), before Esc, on the same line: " + J4c(legendOn));
+      "4hold4 the foot's one line of keys gains a Ctrl key cap and the hint for the numbers (the desk's words) on the same line, and has no Esc hint although its word is given (was: Esc closes last): " + J4c(legendOn));
     const countRun = async (scriptText, clientW) => {
       const cEl = { textContent: "", classList: { toggle() {} }, style: {}, scrollWidth: 109, clientWidth: clientW };
       let onOpen = null;
@@ -1947,11 +1948,21 @@ try {
       onOpen(JSON.stringify({ rows: pRows, count: "50 of 273 replies", words: {} }));
       return cEl.style.visibility;
     };
+    const legendWith = async w => { const keysEl = { innerHTML: "" }; let onOpen = null;
+      const q3 = { value: "", placeholder: "", focus() {}, setAttribute() {}, addEventListener() {} };
+      const box3 = { parentNode: null, set innerHTML(v) {}, get innerHTML() { return ""; }, setAttribute() {}, addEventListener() {}, querySelectorAll: () => [] };
+      new Function("window", "document", script)({ E_PICK: { find: () => Promise.resolve("{}"), copy() {}, close() {}, ready() {}, onOpen: fn => { onOpen = fn; } } },
+        { getElementById: id => (id === "q" ? q3 : id === "rows" ? box3 : id === "keys" ? keysEl : null), documentElement: { style: { setProperty() {} }, dataset: {}, classList: { toggle() {} }, lang: "" } });
+      onOpen(JSON.stringify({ rows: pRows, words: w }));
+      return keysEl.innerHTML.replace(/<[^>]*>/g, ""); };
+    const fullWords = pl => { SYSTEM[0] = pl ? "pl-PL" : "en-US"; const o = pickAnswer("open", {}).words; SYSTEM[0] = "en-US"; return o; };
+    const footEn = await legendWith(fullWords(false)), footPl = await legendWith(fullWords(true));
     const countSeen = [await countRun(script, 4), await countRun(script, 60), await countRun(script, 109)];
     const footOk = d => prop(sheetOf(d, "footer"), "gap") === "8px" && prop(sheetOf(d, "#keys"), "gap") === "9px" && prop(sheetOf(d, "#keys kbd"), "margin-right") === "4px";
-    check(J4c(countSeen) === J4c(["hidden", "", ""]) && footOk(doc),
-      "4hold6 the foot's four hints stand whole at 600 px (its gaps 8 and 9 px, the key cap's margin 4, so the line is not clipped), and the count, which gives way to them, is"
-      + " hidden once it is left under 40 px rather than showing a stray character: " + J4c(countSeen) + " " + J4c({ footer: sheetOf(doc, "footer"), keys: sheetOf(doc, "#keys") }));
+    check(J4c(countSeen) === J4c(["hidden", "", ""]) && footOk(doc) && footEn.length <= 66 && footPl.length <= 66 && footPl.indexOf("Esc") < 0,
+      "4hold6 the foot's hints stand whole at 600 px (its gaps 8 and 9 px, the key cap's margin 4, so the line is not clipped), and the count, which gives way to them, is"
+      + " hidden once it is left under 40 px rather than showing a stray character; and the hints are short enough for the count to show whole at 600 px in both languages:"
+      + " the line's text is at most 66 characters, with no Esc (the shots measure the fit: Polish, the longer, has 4 px to spare at 66; was: the long Enter hint and Esc): " + J4c({ footEn, footPl }) + " " + J4c(countSeen) + " " + J4c({ footer: sheetOf(doc, "footer"), keys: sheetOf(doc, "#keys") }));
     if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  4col3 and 4hold3, the plants (ETIUDA_PLANTS=off)");
     else {
       const sLines = script.split("\n");
@@ -2582,7 +2593,7 @@ try {
   CM.setContentLangs(["en"]);
   const wOne = pickAnswer("open").words.keyOther;
   CM.setContentLangs(langsWere);
-  check(w7.keyCopy === "{KEY} copies, and pastes where it can" && w7.keyOther === "{KEY} in PL" && wPl === "{KEY} in EN" && wOne === "" && w7.keyClose === "{KEY} closes"
+  check(w7.keyCopy === "{KEY} copies or pastes" && w7.keyOther === "{KEY} in PL" && wPl === "{KEY} in EN" && wOne === "" && w7.keyClose === "{KEY} closes"
     && w7.pasted === "Pasted" && w7.copied === "Copied, press Ctrl+V" && w7.who === "Etiuda fills the reply in for this conversation",
     "7c the page is given the words for its keys and its note, the other language named by its code, and none where there is one: "
     + JSON.stringify([w7.keyCopy, w7.keyOther, wPl, wOne, w7.keyClose, w7.pasted, w7.copied]));
@@ -2652,10 +2663,10 @@ try {
   const afterNone = els7.count.textContent;
   open7(JSON.stringify({ rows: grp, words: Object.assign({}, W7, { keyOther: "" }), count: "5 replies", who: "" }));
   const lone = [els7.keys.innerHTML, els7.who.hidden];
-  check(foot[0] === "5 replies" && foot[1] === "<span><kbd>Enter</kbd> copies</span><span><kbd>Shift+Enter</kbd> in PL</span><span><kbd>Esc</kbd> closes</span>"
+  check(foot[0] === "5 replies" && foot[1] === "<span><kbd>Enter</kbd> copies</span><span><kbd>Shift+Enter</kbd> in PL</span>"
     && foot[2] === false && foot[3] === "Filled for" && foot[4] && afterFind === "1 reply" && afterNone === ""
-    && lone[0] === "<span><kbd>Enter</kbd> copies</span><span><kbd>Esc</kbd> closes</span>" && lone[1] === true,
-    "7f under the list the count follows what is found and the keys are shown as they work, Shift+Enter only where there is another"
+    && lone[0] === "<span><kbd>Enter</kbd> copies</span>" && lone[1] === true,
+    "7f under the list the count follows what is found and the keys are shown as they work (Esc no longer among them, so the count has the room; was: Esc closes last), Shift+Enter only where there is another"
     + " language; the chip names the conversation the reply is filled for, and hides where there is none: " + JSON.stringify([foot, afterFind, afterNone, lone]));
 
   const twenty = Array.from({ length: 20 }, (_, i) => row("p" + i, 0));
