@@ -85,7 +85,7 @@ function wireHeaderMenus(){
     if(act==="settings") menuScreen(hooks.openSettings);
     else if(act==="manage") menuScreen(hooks.openManage);
     else if(act==="tour") menuScreen(hooks.startTour);
-    else if(act==="about") menuScreen(openAbout);
+    else if(act==="about") menuScreen(openAbout); /* plant:menu-about-settings */
     else if(act==="rail"){ toggleRail(); }
     else if(act==="pills"){ togglePills(); }
     else if(act==="picker"){ closeSettingsMenu(); eOpenPicker(); }

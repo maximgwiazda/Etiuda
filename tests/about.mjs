@@ -1,5 +1,5 @@
-/* The About, as the program ships it: engine/etiuda.html's own app script run in a vm, its About
- * opened over a stand-in of the dialog, every screen read back as text in both languages.
+/* The About, as the program ships it: engine/etiuda.html's own app script run in a vm, its About page
+ * (a category of Settings, aboutPageHtml) read back as text in both languages.
  *
  *   node tests/about.mjs           exit code is the number of failed checks, capped at 63
  *
@@ -24,7 +24,7 @@ import { createRequire } from "node:module";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 14;
+const EXPECTED = 16;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -150,8 +150,8 @@ const words = html => String(html)
 const inLang = lang => { ctx.lsSet("eUiLang", lang); };
 const click = id => { const el = ids[id] || card.querySelector("#" + id); if (!el || typeof el.onclick !== "function") return false; el.onclick({ preventDefault() {} }); return true; };
 
-const ready = !loaded && typeof ctx.openAbout === "function" && typeof ctx.grabDom === "function";
-check(ready, "0a the program's app script runs in bare node and offers openAbout" + (loaded ? ": it threw " + loaded : ""));
+const ready = !loaded && typeof ctx.aboutPageHtml === "function" && typeof ctx.grabDom === "function";
+check(ready, "0a the program's app script runs in bare node and offers the About page" + (loaded ? ": it threw " + loaded : ""));
 if (ready) {
   try {
     ctx.grabDom();
@@ -161,31 +161,28 @@ if (ready) {
     const keyed = s => s.split("{KEY1}").join(chord("nextCopy1")).split("{KEY4}").join(chord("nextCopy4"));
     const builtIso = ctx.E_BUILT;
 
-    /* ---- 1. the About helper --------------------------------------------------------------- */
-    const aboutIn = lang => {
-      inLang(lang); ctx.openAbout();
-      const r = ROWS[lang], day = dayOf(builtIso, lang);
-      const want = terms => [r.name, String(ctx.E_VERSION), r.cap].concat(day ? [r.built.split("{DATE}").join(day)] : [])
-        .concat([r.head]).concat(...r.items.map(it => [keyed(it[0]), it[1]]))
-        .concat([r.licTitle, terms, r.licButton, r.credit, r.licensor, r.maker, r.earlier, r.close]).join(" ");
-      const got = words(markup);
-      const which = r.terms.findIndex(tm => want(tm) === got);
-      return { got, which, want: want(r.terms[0]), x: (ids.modalX && ids.modalX.getAttribute("aria-label"))
-        || ((/id="modalX"[^>]*aria-label="([^"]*)"/.exec(markup) || [])[1]) || null, html: markup };
+    /* ---- 1. the page: what stands in it, in each language ---------------------------------- */
+    const pageIn = (lang, open) => {
+      inLang(lang);
+      for (const id of ["about-earlier", "about-licence"]) { if (open) ctx.accOpen.add(id); else ctx.accOpen.delete(id); }
+      return String(ctx.aboutPageHtml(null));
     };
-
-    /* ---- 2. Earlier versions of Etiuda, and back ------------------------------------------- */
-    const earlierIn = lang => {
-      inLang(lang); ctx.openAbout();
-      const went = click("aboutEarlier");
-      const r = ROWS[lang], got = words(markup), want = [r.earlier, r.e4[0], r.e4[1], r.back].join(" ");
-      const back = ids.aboutBack ? (click("aboutBack"), words(markup)) : "";
-      return { went, ok: got === want, got, want, back: back === aboutIn(lang).got && back.indexOf(r.head) > -1 };
+    const foldOf = (html, id) => { const m = new RegExp('<details class="acc" data-acc="' + id + '"[\\s\\S]*?</details>').exec(html); return m ? m[0] : ""; };
+    const topIn = lang => {
+      const html = pageIn(lang), r = ROWS[lang], day = dayOf(builtIso, lang);
+      const want = [r.name, String(ctx.E_VERSION), r.cap].concat(day ? [r.built.split("{DATE}").join(day)] : [])
+        .concat([r.head]).concat(...r.items.map(it => [keyed(it[0]), it[1]])).join(" ");
+      const got = words(html.slice(0, html.indexOf("<details")));
+      return { ok: got === want, got, want };
     };
+    for (const [lang, id] of [["en", "1a"], ["pl", "1b"]]) {
+      const x = topIn(lang);
+      check(x.ok, id + " the page opens on the name, the version, its caption and day, and what is new, in " + lang + ": rows 1 to 7 and 11 to 13"
+        + (x.ok ? "" : ": got " + JSON.stringify(x.got.slice(0, 300)) + " against " + JSON.stringify(x.want)));
+    }
     /* ---- 1. the credit: three lines a <br> apart, the licensor second, its NIP held to its number --------------- */
     const creditIn = lang => {
-      inLang(lang); ctx.openAbout();
-      const m = /<p class="about-credit"[^>]*>([\s\S]*?)<\/p>/.exec(markup);
+      const m = /<p class="about-credit"[^>]*>([\s\S]*?)<\/p>/.exec(pageIn(lang));
       return m ? m[1].split("<br>").map(s => s.replace(/<[^>]+>/g, "").trim()) : null;
     };
     const cen = creditIn("en"), cpl = creditIn("pl");
@@ -193,11 +190,21 @@ if (ready) {
           && c[2] === ROWS[l].maker),
       "1c the credit is three lines in each language, the licensor second, NIP and its number joined by a no-break space: "
       + JSON.stringify([cen, cpl]));
+
+    /* ---- 2. Earlier versions of Etiuda, a fold of the page ---------------------------------- */
+    const earlierIn = lang => {
+      const f = foldOf(pageIn(lang, true), "about-earlier"), r = ROWS[lang];
+      const want = [r.earlier, r.e4[0], r.e4[1]].join(" ");
+      return { ok: words(f) === want, got: words(f), want };
+    };
     const een = earlierIn("en"), epl = earlierIn("pl");
     for (const [e, lang, id] of [[een, "en", "2a"], [epl, "pl", "2b"]])
-      check(e.went && e.ok, id + " its footer's left button opens Earlier versions of Etiuda in " + lang + ": rows E1, E4 and E5"
+      check(e.ok, id + " its fold holds Earlier versions of Etiuda in " + lang + ": rows E1, E4 and E5"
         + (e.ok ? "" : ": got " + JSON.stringify(e.got.slice(0, 300)) + " against " + JSON.stringify(e.want)));
-    check(een.back && epl.back, "2c and its Back button returns to the About in both languages");
+    check(["en", "pl"].every(l => { const h = pageIn(l); return /<details class="acc" data-acc="about-earlier"(?![^>]*\sopen)/.test(h)
+      && /<details class="acc" data-acc="about-licence"(?![^>]*\sopen)/.test(h); })
+      && /<details class="acc" data-acc="about-earlier" open/.test(pageIn("en", true)),
+      "2c both folds stand shut until opened, and stand open as they were left");
     {
       const dated = [{ v: "2.0.0", built: "2026-10-05", items: [{ title: "Signed by the team's lead.", body: "x" }] }];
       const got = l => { inLang(l); return typeof ctx.aboutEarlierHtml === "function" ? words(ctx.aboutEarlierHtml(dated)) : ""; };
@@ -231,22 +238,20 @@ if (ready) {
       return { title: paras[0], rest: paras.slice(1).join(" ") };
     };
     const licenceIn = lang => {
-      inLang(lang); ctx.openAbout();
-      const went = click("aboutLicence"), a = agreement(lang), html = markup;
-      const title = words((/<span class="modal-t">([\s\S]*?)<\/span>/.exec(html) || [])[1] || "");
-      const body = words(html.replace(/<h2[\s\S]*?<\/h2>/, "").replace(/<div class="modal-actions">[\s\S]*$/, ""));
-      const back = ids.aboutBack ? (click("aboutBack"), words(markup).indexOf(ROWS[lang].head) > -1) : false;
-      return { went, title, body, a, html, back };
+      const f = foldOf(pageIn(lang, true), "about-licence"), a = agreement(lang), r = ROWS[lang];
+      const head = words(f.slice(0, f.indexOf('<div class="acc-body">')));
+      const body = words(f.slice(f.indexOf('<div class="acc-body">')));
+      return { head, body, a, html: f, r };
     };
     const len = licenceIn("en"), lpl = licenceIn("pl");
     for (const [l, lang, id] of [[len, "en", "5a"], [lpl, "pl", "5b"]])
-      check(l.went && l.title === l.a.title && l.body === l.a.rest,
-        id + " Read the licence opens the agreement in " + lang + " inside the program, word for word shell/license_" + lang + ".txt: title "
-        + JSON.stringify(l.title) + ", " + l.body.length + " characters against " + l.a.rest.length);
-    check(![len.html, lpl.html].some(h => /<a\b|<iframe|<img|\ssrc=|\shref=/i.test(h.replace(/<h2[\s\S]*?<\/h2>/, "")))
+      check(l.head === [l.r.licTitle, l.r.terms[0]].join(" ") && l.body === l.a.rest,
+        id + " the licence fold carries the agreement in " + lang + " inside the program, word for word shell/license_" + lang + ".txt: heading "
+        + JSON.stringify(l.head) + ", " + l.body.length + " characters against " + l.a.rest.length);
+    check(![len.html, lpl.html].some(h => /<a\b|<iframe|<img|\ssrc=|\shref=/i.test(h))
       && typeof ctx.fetch === "undefined" && typeof ctx.XMLHttpRequest === "undefined" && typeof ctx.WebSocket === "undefined",
-      "5c with no network to reach: the page holds no link, frame or image, and it was read where fetch, XMLHttpRequest and WebSocket do not exist");
-    check(len.back && lpl.back, "5d and its Back button returns to the About");
+      "5c with no network to reach: the fold holds no link, frame or image, and it was read where fetch, XMLHttpRequest and WebSocket do not exist");
+    check(len.a.title === ROWS.en.licTitle, "5d the agreement's own title is the fold's heading, so the body does not say it twice");
     {
       let files = [];
       try { files = (await import(pathToFileURL(path.join(ROOT, "electron-builder.js")).href)).default.files || []; } catch (e) { files = []; }

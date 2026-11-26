@@ -22,10 +22,10 @@ import { armSearch, clearSearchMeaning } from "./search-meaning.js";
 import { hooks } from "./hooks.js";
 import { lapseNote, keptApartNotes, relayElsewhereNote, folderHeldNote, teamLeads, teamPolicySaid, relayDesk, keySignHtml, forgetTeamLead, onJoinPainted } from "./team-join.js";
 import { pack } from "./pack.js";
-import { openScreenTab, registerScreen, screenOn, clearScreenOn } from "./screen-tabs.js";
-import { openAbout } from "./about.js";
+import { openScreenTab, registerScreen, screenOn } from "./screen-tabs.js";
+import { aboutPageHtml } from "./about.js";
 import { openUpdatePage, updateAbout } from "./update-offer.js";
-import { openMaintenance } from "./maintenance.js";
+import { accOpen } from "./dialog.js";
 import { E_VERSION } from "./env.js";
 import { sxIcon } from "./sx-icons.js";
 import { focusKey, focusSame, originOf } from "./dom.js";
@@ -771,16 +771,7 @@ function dataGroups(){
 }
 function aboutGroups(){
   /* Under a host, the running release over what the latest look found, and the release page's button while an offer stands. */
-  const up=updateAbout(E_VERSION);
-  const see=up && up.offer ? '<button type="button" class="btn" id="setUpdateSee" data-e-open="update" title="'+esc(t("Opens the page of this release"))+'">'+esc(t("See what's new"))+'</button>' : "";
-  return [{rows:[
-    row("about","about","Etiuda",up ? up.lines.join("\n") : E_VERSION,
-      see+'<button type="button" class="btn" id="setAbout" title="'+esc(t("This version of Etiuda, what is new in it, and its licence"))+'">'+esc(t("About Etiuda"))+'</button>'),
-    row("tour","forward",t("Show tour…"),t("The tour of Etiuda's controls, one at a time"),
-      '<button type="button" class="btn" id="setTour">'+esc(t("Show tour…"))+'</button>'),
-    row("maintenance","statistics",t("Maintenance"),t("What this computer reports, and ways to set things right."),
-      '<button type="button" class="btn" id="setMaint">'+esc(t("Open"))+'</button>'+keysHtml(formatActionChord("maintenance")))
-  ]}];
+  return [{rows:[{key:"about", html:aboutPageHtml(updateAbout(E_VERSION))}]}]; /* plant:about-in-settings */
 }
 function notificationsGroups(){
   const h=eHost();
@@ -815,7 +806,7 @@ function settingsSections(){
     {id:"notifications", icon:"notifications", name:t("Notifications"), lede:t("What the app tells you, also while its window is closed."), groups:notificationsGroups()},
     {id:"teams", icon:"teams", name:t("Teams and keys"), lede:t("The team this desk is on, and how its changes reach the team."), groups:teamsG, off:!teamsG.some(g=>g.rows.length) /* plant:team-off-section */},
     {id:"data", icon:"data", name:t("Data and defaults"), lede:t("Putting settings back, and what the app keeps on this computer."), groups:dataGroups()},
-    {id:"about", icon:"about", name:t("About"), lede:t("The version, the licence and the tour."), groups:aboutGroups()},
+    {id:"about", icon:"about", name:t("About"), lede:t("The version, what is new in it, and the licence.") /* words: placeholder */, groups:aboutGroups()},
     {id:"ai", icon:"ai", name:t("AI"), lede:aiLede(), groups:aiGroups()}
   ].filter(s=>s.off || s.groups.some(g=>g.rows.length));
 }
@@ -1120,11 +1111,11 @@ function wirePage(box){
   const act=(id,fn)=>{ const b=box.querySelector(id); if(b) b.onclick=fn; };
   act("#setReset",resetAllSettings);
   act("#setResetKeys",resetShortcuts);
-  act("#setAbout",()=>openAbout());
   act("#setUpdateSee",()=>openUpdatePage());
-  /* The tour runs on the conversation, so the conversation comes forward and the tab stays for coming back. */
-  act("#setTour",()=>{ clearScreenOn(); hooks.startTour(); });
-  act("#setMaint",()=>openMaintenance());
+  box.querySelectorAll("details.acc[data-acc^=about-]").forEach(d=>d.addEventListener("toggle",()=>{
+    const k=d.getAttribute("data-acc");
+    if(d.open) accOpen.add(k); else accOpen.delete(k);
+  }));
   box.querySelectorAll(".set-seg").forEach(sbox=>{
     sbox.querySelectorAll("button").forEach(b=>{
       b.onclick=()=>{

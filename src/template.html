@@ -3295,11 +3295,13 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
    dark the quiet version of it. */
 .btn.danger{color:#c44;border-color:color-mix(in srgb,#c44 47%,var(--bg))}
 /* About Etiuda dialog, and the pages it opens */
-.modal-card.about-modal,.modal-card.about-page{max-width:520px}
 /* Light and OPEN, not bold: the one place the product says its own name was the heaviest
    text in the app. 350 + tracking gives the presence the bold was for. 350 needs Segoe UI
    Variable (Win11); older systems snap to 400 - degrades to plainer, never to broken. */
-.modal-card.about-modal h2{font-weight:350;font-size:37px;letter-spacing:.8px;margin-bottom:2px}
+.about-in{padding:6px 4px}
+.about-in .acc-note{font:12.5px var(--sans);letter-spacing:0;text-transform:none;white-space:normal;text-align:right}
+.about-top{display:flex;align-items:center;gap:12px;margin:0 0 2px}
+.about-name{font-weight:350;font-size:37px;letter-spacing:.8px;line-height:1.1}
 /* The header's pairing, one size up. Reuses .brand-tile, so the svg spans the box and its viewBox sets the
    figure at 88%, as in the header; about.js holds the same cut under a mask id of its own. NO PLATE:
    the mark alone, in --mark-ink rather than --accent so that moving the accent never retints it,
@@ -3310,6 +3312,7 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
   position:relative;top:3px}
 /* The version at display size, its caption beside it on the number's baseline. */
 .about-ver{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;margin:4px 0 14px}
+.about-ver .about-see{margin-left:auto;align-self:center;white-space:nowrap} /* plant:about-see-right */
 .about-num{font-size:54px;font-weight:300;line-height:1;letter-spacing:.5px;color:var(--ink)}
 .about-cap{font-size:13px;line-height:1.55;color:var(--dim)}
 .about-h{margin:0 0 8px}
@@ -3318,11 +3321,6 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
 .about-new li::before{content:"";position:absolute;left:6px;top:7px;width:8px;height:8px;border-radius:50%;
   background:var(--accent)}
 .about-new b{color:var(--ink);font-weight:600}
-.about-lic{display:flex;align-items:center;gap:12px;padding:11px 14px;border:1px solid var(--line);
-  border-radius:10px;background:var(--bg)}
-.about-lic-t{flex:1 1 auto;min-width:0;font-size:13.5px;color:var(--ink)}
-.about-lic-t small{display:block;font-size:12.5px;line-height:1.5;color:var(--dim)}
-.about-lic .btn{flex:0 0 auto;white-space:nowrap}
 .about-credit{margin:14px 0 2px;font-size:12.5px;line-height:1.6;color:var(--dim)}
 .about-legal{font-size:13px;line-height:1.6;color:var(--dim)}
 .about-legal p{margin:0 0 10px}

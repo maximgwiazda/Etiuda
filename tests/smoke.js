@@ -1089,7 +1089,7 @@ const t0 = Date.now();
     document.documentElement.dataset.theme = "light"; await new Promise(r => setTimeout(r, 150)); const l = bg();
     document.body.classList.add("glass-off"); await new Promise(r => setTimeout(r, 100));
     const off = getComputedStyle(document.body).getPropertyValue("--glass-mid-filter").trim();   // the docked panel is solid, so the token the switch sets on body is what to read
-    openAbout(); await new Promise(r => setTimeout(r, 300));
+    openCardEditor(null); await new Promise(r => setTimeout(r, 300));
     const scrimOff = getComputedStyle(document.querySelector(".modal-bg")).backdropFilter;
     document.body.classList.remove("glass-off"); await new Promise(r => setTimeout(r, 100));
     const scrimOn = getComputedStyle(document.querySelector(".modal-bg")).backdropFilter;
@@ -1109,13 +1109,13 @@ const t0 = Date.now();
   const aboutMark = await p.evaluate(async () => {
     const read = async theme => {
       document.documentElement.dataset.theme = theme; await new Promise(r => setTimeout(r, 150));
-      openAbout(); await new Promise(r => setTimeout(r, 250));
+      openSettings("about"); await new Promise(r => setTimeout(r, 250));
       const el = document.querySelector(".about-tile"), svg = el.querySelector("svg");
       const out = { bg: getComputedStyle(el).backgroundColor,
         grounds: svg.querySelectorAll("rect,circle,ellipse,polygon").length,
         paths: svg.querySelectorAll("path").length,
         fill: getComputedStyle(svg.querySelector("path")).fill };
-      dismissModal(); await new Promise(r => setTimeout(r, 200));
+      closeScreenTab("settings"); await new Promise(r => setTimeout(r, 200));
       return out;
     };
     const dark = await read("dark"), light = await read("light");
@@ -1246,9 +1246,9 @@ const t0 = Date.now();
       setUiLang(l); await new Promise(r => setTimeout(r, 400));
       const screen = document.body.innerText;
       openAbout(); await new Promise(r => setTimeout(r, 250));
-      const sub = (document.querySelector(".about-modal .about-credit").innerText || "").split("\n");
-      const all = document.querySelector(".about-modal").innerText;
-      dismissModal(); await new Promise(r => setTimeout(r, 200));
+      const sub = (document.querySelector(".about-in .about-credit").innerText || "").split("\n");
+      const all = document.querySelector(".about-in").innerText;
+      closeScreenTab("settings"); await new Promise(r => setTimeout(r, 200));
       return { screen, last: (sub[sub.length - 3] || "").trim(), licensor: (sub[sub.length - 2] || "").trim(),
         maker: sub[sub.length - 1].trim(), all };
     };

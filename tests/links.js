@@ -222,7 +222,7 @@ function buildApp() {
     await p.evaluate(async (l) => {
       setUiLang(l); await new Promise(r => setTimeout(r, 400));
       openAbout(); await new Promise(r => setTimeout(r, 400));
-      const a = document.querySelector(".about-modal .about-credit a");
+      const a = document.querySelector(".about-in .about-credit a");
       /* Scrolled into view first, as a person scrolls to it: the maker line sits at the foot of About's body, which scrolls
          under the actions row at a 720 px window (first runner run, 2026-11-13: the click landed on aboutEarlier). The hit
          check below stays as it is, so a link the row still covers once in view stays red. */
@@ -230,11 +230,11 @@ function buildApp() {
     }, lang);
     const made = await p.evaluate(() => { const a = document.getElementById("lkAbout");
       return a ? { href: a.href, target: a.target, rel: a.rel } : null; });
-    if (!made) { check(false, leg + "  About's maker line in " + lang + " holds no link to press"); await p.evaluate(() => dismissModal()); continue; }
+    if (!made) { check(false, leg + "  About's maker line in " + lang + " holds no link to press"); await p.evaluate(() => closeScreenTab("settings")); continue; }
     r = await act(click("lkAbout"));
     check(made.target === "_blank" && r.handed.length === 1 && r.handed[0] === "https://stardustcore.com/",
       leg + "  a real click on About's Stardust link in " + lang + " hands the company's address: " + JSON.stringify(made) + ", " + say(r));
-    await p.evaluate(() => { const a = document.getElementById("lkAbout"); if (a) a.removeAttribute("id"); dismissModal(); });
+    await p.evaluate(() => { const a = document.getElementById("lkAbout"); if (a) a.removeAttribute("id"); closeScreenTab("settings"); });
     await sleep(300);
   }
   await p.evaluate(() => { setUiLang("en"); });

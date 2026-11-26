@@ -1,9 +1,9 @@
-import { dismissModal, openDialog } from "./dialog.js";
+import { accHtml } from "./dialog.js";
+import { hooks } from "./hooks.js";
 import { E_BUILT, E_VERSION } from "./env.js";
 import { formatActionChord } from "./shortcuts.js";
-import { t, tc, uiLang } from "./ui-lang.js";
+import { t, uiLang } from "./ui-lang.js";
 import { esc } from "./esc.js";
-import { $ } from "./dom.js";
 
 /* About's mark: the header's cut byte for byte but for its mask's id, depth-about. A mask that sits in the header's
    svg is hidden with it while the canvas paints the turn, and a hidden mask paints nothing, so About carries its own. */
@@ -64,68 +64,39 @@ function aboutCredit(lang){
     .join('<a href="'+STARDUST_URL+'" target="_blank" rel="noopener">Stardust</a>');
   return "© 2026 Max Gwiazda. "+esc(TRADEMARK[lang]||TRADEMARK.en)+"<br>"+esc(LICENSOR[lang]||LICENSOR.en)+"<br>"+maker;
 }
-/* A page within the About: its X, Escape and Back all return there. */
-function aboutPage(title, body){
-  openDialog({
-    cls: "about-page",
-    title: title,
-    back: openAbout,
-    body: body,
-    actions: '<button type="button" class="btn primary" id="aboutBack">'+esc(tc("about","Back"))+'</button>',
-    wire: ()=>{
-      const b=$("#aboutBack");
-      if(b){ b.onclick=()=>dismissModal(); try{ b.focus(); }catch(_){} }
-    }
-  });
-}
-function openEarlier(){
-  aboutPage("Earlier versions of Etiuda", aboutEarlierHtml(ABOUT_EARLIER));
-}
-/* The agreement's first line is its title, the rest its paragraphs; a paragraph that opens on a
-   heading of four words or fewer ("Seats.") sets it in bold. */
-function openLicence(){
+/* The agreement's first line is its title, the rest its paragraphs; a paragraph that opens on a heading of four words or fewer
+   ("Seats.") sets it in bold. The title stands in the fold's own heading, so the body is the rest. */
+function aboutLegalHtml(){
   const paras=String(EULA[uiLang()]||EULA.en).split(/\n\s*\n/).map(p=>p.replace(/\s+/g," ").trim()).filter(Boolean);
-  const title=paras.shift()||"";
-  aboutPage(title, '<div class="about-legal" data-i18n-skip>'+paras.map(p=>{
+  paras.shift();
+  return '<div class="about-legal" data-i18n-skip>'+paras.map(p=>{
     const m=/^([^.,]+\.) (.+)$/.exec(p);
     return '<p>'+(m && m[1].split(" ").length<=4 ? '<b>'+esc(m[1])+'</b> '+esc(m[2]) : esc(p))+'</p>';
-  }).join("")+'</div>');
+  }).join("")+'</div>';
 }
-function openAbout(){
+/* ABOUT IS A PAGE OF SETTINGS' ABOUT CATEGORY, not a window: the mark and name, the version with its build day (and, where an update is
+   offered, See what's new at the end of that row), what is new, Earlier versions and the licence folded open in place, and the credit.
+   `up` is update-offer.js updateAbout's answer, null in a browser. */
+function aboutPageHtml(up){
   const lang=uiLang(), day=aboutDay(E_BUILT);
-  const cap=esc(t("the version on this computer"))+(day ? '<br>'+esc(t("Built on {DATE}").split("{DATE}").join(day)) : "");
-  openDialog({
-    cls: "about-modal",
-    title: "Etiuda",
-    lead: '<span class="brand-tile about-tile" aria-hidden="true">'+TILE_MARK+'</span>',
-    body: '<div class="about-ver" data-i18n-skip><span class="about-num">'+esc(E_VERSION)+'</span>'
-        +'<span class="about-cap">'+cap+'</span></div>'
-      +'<h3 class="about-h">'+esc(t("New in this version"))+'</h3>'
-      +'<ul class="about-new" data-i18n-skip>'+ABOUT_NEW.map(aboutItemHtml).join("")+'</ul>'
-      +'<div class="about-lic" data-i18n-skip><span class="about-lic-t">'+esc(t("Etiuda End-User Licence Agreement"))
-        +'<small>'+esc(TERMS[lang]||TERMS.en)+'</small></span>'
-        +'<button type="button" class="btn" id="aboutLicence">'+esc(t("Read the licence"))+'</button></div>'
-      +'<p class="about-credit" data-i18n-skip>'+aboutCredit(lang)+'</p>',
-    actions: '<div class="mf-left"><button type="button" class="btn" id="aboutEarlier">'+esc(t("Earlier versions of Etiuda"))+'</button></div>'
-      +'<button type="button" class="btn primary" id="aboutClose">'+esc(t("Close"))+'</button>',
-    wire: ()=>{
-      // The X is named for a screen reader as the Close beside it.
-      const x=$("#modalX");
-      if(x) x.setAttribute("aria-label", t("Close"));
-      const lic=$("#aboutLicence"), earlier=$("#aboutEarlier"), closeBtn=$("#aboutClose");
-      if(lic) lic.onclick=openLicence;
-      if(earlier) earlier.onclick=openEarlier;
-      if(closeBtn){
-        /* Just dismissModal - the modifier class is the opener's business (openDialog resets
-           the card's class list). */
-        closeBtn.onclick=()=>dismissModal();
-        try{ closeBtn.focus(); }catch(_){}
-      }
-    }
-  });
+  const cap=esc(t("the version on this computer"))+(day ? '<br>'+esc(t("Built on {DATE}").split("{DATE}").join(day)) : "")
+    +(up && up.lines && up.lines[1] ? '<br>'+esc(up.lines[1]) : "");
+  const see=up && up.offer ? '<button type="button" class="btn about-see" id="setUpdateSee" data-e-open="update" title="'+esc(t("Opens the page of this release"))+'">'
+    +esc(t("See what's new"))+'</button>' : "";
+  return '<div class="about-in" data-i18n-skip>'
+    +'<div class="about-top"><span class="brand-tile about-tile" aria-hidden="true">'+TILE_MARK+'</span><span class="about-name">Etiuda</span></div>'
+    +'<div class="about-ver"><span class="about-num">'+esc(E_VERSION)+'</span><span class="about-cap">'+cap+'</span>'+see+'</div>'
+    +'<h3 class="about-h">'+esc(t("New in this version"))+'</h3>'
+    +'<ul class="about-new">'+ABOUT_NEW.map(aboutItemHtml).join("")+'</ul>'
+    +accHtml("about-earlier", t("Earlier versions of Etiuda"), aboutEarlierHtml(ABOUT_EARLIER))
+    +accHtml("about-licence", t("Etiuda End-User Licence Agreement"), aboutLegalHtml(), TERMS[lang]||TERMS.en)
+    +'<p class="about-credit">'+aboutCredit(lang)+'</p></div>';
 }
+/* The Menu's About, and anything else that names it: Settings, at its About category. */
+function openAbout(){ hooks.openSettings("about"); }
 
 export {
   aboutEarlierHtml,
+  aboutPageHtml,
   openAbout
 };
