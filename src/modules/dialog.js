@@ -666,6 +666,7 @@ function edMarks(){
   });
   if(!edPlaceKind && modalCard) modalCard.classList.remove("ed-min","ed-unsaved");
   const up=n>0 && !modalEl.hidden;
+  const showing=!!edPlaceKind && !modalEl.hidden && !edRest && !edHeld && !edShow;
   const fab=document.getElementById("edFab");
   if(fab){
     fab.hidden=!up;
@@ -677,7 +678,7 @@ function edMarks(){
     fab.title=say;
     fab.setAttribute("aria-label", say);
   }
-  if(document.body) document.body.classList.toggle("ed-up", up && !edRest && !edHeld && !edShow && !!edPlaceKind);
+  if(document.body) document.body.classList.toggle("ed-up", showing); /* plant:ed-up-class */
 }
 /* ---- THE SHOWCASE: every minimised editor at ED_SHOW_S, side by side over the dim, the last used ringed, the ones showing hidden
    meanwhile. A press on one, its digit, or Enter on the ringed one brings that one back; a short Esc or a press on the dim leaves. */
@@ -838,7 +839,24 @@ function edRestore(){
   if(edRest) edFocusOn((h.desk && document.contains(h.desk)) ? h.desk : null);
   else edFocusOn((h.focus && modalCard.contains(h.focus)) ? h.focus : modalCard);
 }
+/* THE ACTION BUTTONS JOIN FROM THE LEFT: the stack packs from its right edge, and a button that appears takes the place left of every
+   one standing, so none that stood moves. Each arrival takes the next order. */
+function wireFabArrival(){
+  const stack=document.getElementById("fabStack");
+  if(!stack || typeof MutationObserver!=="function") return;
+  const fabs=()=>Array.prototype.slice.call(stack.querySelectorAll(".fab"));
+  const shown=el=>!el.hidden && (!el.classList.contains("fab-clear") || el.classList.contains("on"));
+  const was=new Map();
+  let n=0;
+  fabs().forEach(el=>{ el.style.order=String(++n); was.set(el, shown(el)); });
+  new MutationObserver(()=>fabs().forEach(el=>{
+    const now=shown(el);
+    if(now && !was.get(el)) el.style.order=String(++n); /* plant:fab-arrival-order */
+    was.set(el, now);
+  })).observe(stack,{attributes:true, subtree:true, attributeFilter:["hidden","class"]});
+}
 function wireEditorRest(){
+  wireFabArrival();
   const bg=modalEl.querySelector(".modal-bg");
   /* The desk was dimmed when it was clicked, so the click was not aimed: it minimises every editor and does nothing else; over
      the showcase it only leaves the showcase. */
@@ -855,6 +873,13 @@ function wireEditorRest(){
   },true);
   const fab=document.getElementById("edFab");
   if(fab) fab.addEventListener("click",()=>edFabPress());
+  /* The stack stands over the editors' dim. An action of its own that is not the editors' (their button, and Add, which opens one) sends
+     them to their button first, then goes on: the capture phase runs before the button's own press. */
+  const stack=document.getElementById("fabStack");
+  if(stack) stack.addEventListener("click",e=>{
+    const b=e.target.closest ? e.target.closest(".fab") : null;
+    if(b && b.id!=="edFab" && b.id!=="addCardFab") edToDesk(); /* plant:fab-unrelated-rests */
+  },true);
   /* Gone, the entry has no Save, Reset or Delete, whatever an editor does to its buttons later. */
   modalCard.addEventListener("click",e=>{
     if(edGone && e.target.closest && e.target.closest(ED_LOCKS)){ e.preventDefault(); e.stopPropagation(); return; }

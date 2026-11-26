@@ -4956,9 +4956,8 @@ body.e-take-drag .modal-card.ed-modal{translate:0 28px;scale:.985}
   pointer-events:none}
 .fab-badge:empty{display:none}
 .fab-eds.unsaved .fab-badge{background:var(--flag);color:#fff}
-/* While editors show, the stack rises above their dim with the editors' button alone in it. */
+/* While editors show, the stack rises above their dim, every button in it within reach. */
 body.ed-up .fab-stack{z-index:201}
-body.ed-up .fab-stack > :not(#edFab){visibility:hidden}
 #nextDock{z-index:60;padding:8px 6px 6px;animation:eModalCardIn var(--m-reveal) var(--m-ease) both}
 .nd-top{display:flex;align-items:baseline;gap:8px;min-width:0;padding:2px 8px 6px}
 .nd-after{flex:none;font:600 11.5px var(--sans);letter-spacing:.6px;text-transform:uppercase;color:var(--dim)}
@@ -22614,6 +22613,7 @@ What is typed here stays in this browser.`;
     });
     if (!edPlaceKind && modalCard) modalCard.classList.remove("ed-min", "ed-unsaved");
     const up = n > 0 && !modalEl.hidden;
+    const showing = !!edPlaceKind && !modalEl.hidden && !edRest && !edHeld && !edShow;
     const fab = document.getElementById("edFab");
     if (fab) {
       fab.hidden = !up;
@@ -22624,7 +22624,7 @@ What is typed here stays in this browser.`;
       fab.title = say;
       fab.setAttribute("aria-label", say);
     }
-    if (document.body) document.body.classList.toggle("ed-up", up && !edRest && !edHeld && !edShow && !!edPlaceKind);
+    if (document.body) document.body.classList.toggle("ed-up", showing);
   }
   function edShowOpen() {
     const list2 = edMinList();
@@ -22826,7 +22826,25 @@ What is typed here stays in this browser.`;
     if (edRest) edFocusOn(h.desk && document.contains(h.desk) ? h.desk : null);
     else edFocusOn(h.focus && modalCard.contains(h.focus) ? h.focus : modalCard);
   }
+  function wireFabArrival() {
+    const stack = document.getElementById("fabStack");
+    if (!stack || typeof MutationObserver !== "function") return;
+    const fabs = () => Array.prototype.slice.call(stack.querySelectorAll(".fab"));
+    const shown2 = (el) => !el.hidden && (!el.classList.contains("fab-clear") || el.classList.contains("on"));
+    const was = /* @__PURE__ */ new Map();
+    let n = 0;
+    fabs().forEach((el) => {
+      el.style.order = String(++n);
+      was.set(el, shown2(el));
+    });
+    new MutationObserver(() => fabs().forEach((el) => {
+      const now = shown2(el);
+      if (now && !was.get(el)) el.style.order = String(++n);
+      was.set(el, now);
+    })).observe(stack, { attributes: true, subtree: true, attributeFilter: ["hidden", "class"] });
+  }
   function wireEditorRest() {
+    wireFabArrival();
     const bg = modalEl.querySelector(".modal-bg");
     if (bg) bg.addEventListener("pointerdown", (e) => {
       if (e.button !== 0) return;
@@ -22846,6 +22864,11 @@ What is typed here stays in this browser.`;
     }, true);
     const fab = document.getElementById("edFab");
     if (fab) fab.addEventListener("click", () => edFabPress());
+    const stack = document.getElementById("fabStack");
+    if (stack) stack.addEventListener("click", (e) => {
+      const b = e.target.closest ? e.target.closest(".fab") : null;
+      if (b && b.id !== "edFab" && b.id !== "addCardFab") edToDesk();
+    }, true);
     modalCard.addEventListener("click", (e) => {
       if (edGone && e.target.closest && e.target.closest(ED_LOCKS)) {
         e.preventDefault();
