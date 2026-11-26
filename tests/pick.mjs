@@ -39,7 +39,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 170 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 13);
+const EXPECTED = 173 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 14);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1821,7 +1821,7 @@ try {
       const key = (k, code, mods) => { let prevented = false;
         L.keydown(Object.assign({ key: k, code: code, ctrlKey: false, altKey: false, metaKey: false, shiftKey: false, preventDefault() { prevented = true; } }, mods || {}));
         return prevented; };
-      onOpen(JSON.stringify({ rows: pRows, suggest: CHIPS.slice(0, 5), words: { suggest: "Suggested", suggestTip: "tip" } }));
+      onOpen(JSON.stringify({ rows: pRows, suggest: CHIPS.slice(0, 5), words: { suggest: "Suggested intents", suggestTip: "tip", suggestKeys: "Alt keys" } }));
       await tick(5);
       const chips = () => host.el ? host.el.children.filter(c => c.tagName === "button") : [];
       const alt = [];
@@ -1840,14 +1840,16 @@ try {
       key("ArrowUp", "ArrowUp"); key("ArrowUp", "ArrowUp"); const afterUp = mark();
       key("ArrowRight", "ArrowRight"); const afterRight = mark(); key("ArrowRight", "ArrowRight"); const afterWrap = mark(); key("ArrowLeft", "ArrowLeft"); key("ArrowLeft", "ArrowLeft"); const afterLeft = mark();
       return { alt, ignored, clicked, afterRight0, afterUp, afterRight, afterWrap, afterLeft, keys: chips().map(c => c.getAttribute("aria-keyshortcuts")),
-        names: chips().map(c => c.textContent), label: host.el.children[0] && host.el.children[0].textContent };
+        names: chips().map(c => c.textContent), label: host.el.children[0] && host.el.children[0].children[1] && host.el.children[0].children[1].textContent,
+        hint: (host.el.children.find(c => c.className === "sg-hint") || {}).textContent };
     };
     const J4c = JSON.stringify;
     const chipsOn = await chipRun(script);
     const wantAlt = [[1, "take t:post", true], [2, "take t:lamp", true], [3, "take t:wick", true], [4, "take t:glass", true], [5, "take t:oil", true], [6, "", false]];
     check(J4c(chipsOn.alt) === J4c(wantAlt) && J4c(chipsOn.keys) === J4c(["Alt+1", "Alt+2", "Alt+3", "Alt+4", "Alt+5"])
-      && J4c(chipsOn.names) === J4c(["Post", "Lamps", "Wicks", "Glass", "Lamp oil"]) && chipsOn.label === "Suggested",
-      "4chips1 five chips under the label, and Alt+1 to Alt+5 take chip 1 to 5 as the key's own act, Alt+6 taking nothing: " + J4c(chipsOn));
+      && J4c(chipsOn.names) === J4c(["Post", "Lamps", "Wicks", "Glass", "Lamp oil"]) && chipsOn.label === "Suggested intents" && chipsOn.hint === "Alt keys",
+      "4chips1 five suggestions under the label (the desk's words, in a span beside the spark, and its one line of keys), and Alt+1 to Alt+5 take 1 to 5"
+      + " as the key's own act, Alt+6 taking nothing (was: label \"Suggested\" in the label's own text, no line of keys): " + J4c(chipsOn));
     check(chipsOn.ignored.length === 0 && J4c(chipsOn.clicked) === J4c(["take t:lamp"]) && chipsOn.afterRight0 === "falsefalsefalsefalsefalse"
       && chipsOn.afterUp === "falsefalsefalsetruefalse" && chipsOn.afterRight === "falsefalsefalsefalsetrue" && chipsOn.afterWrap === "truefalsefalsefalsefalse" && chipsOn.afterLeft === "falsefalsefalsetruefalse",
       "4chips2 Alt with Ctrl or Shift, or over a typed query, takes nothing; a click takes the chip as the row's Enter does; with a chip marked the"
@@ -1855,35 +1857,84 @@ try {
     const sheetOf = (d, sel) => { const i = d.indexOf("\n" + sel + "{"); return i < 0 ? "" : d.slice(i + sel.length + 2, d.indexOf("}", i)); };
     const prop = (r, name) => { const m = new RegExp("(?:^|;)" + name + ":([^;]*)").exec(r); return m ? m[1].trim() : ""; };
     const px = v => parseFloat(v) || 0;
-    const wrapOk = d => { const sgR = sheetOf(d, "#sg"), labR = sheetOf(d, "#sg .sg-lab"), btnR = sheetOf(d, "#sg button");
-      return /^flex$/.test(prop(sgR, "display")) && prop(sgR, "flex-wrap") === "wrap" && prop(sgR, "flex-direction") === "" && !/width:100%/.test(btnR)
-        && /max-width:calc\(33\.3+% - \d+px\)/.test(btnR) && prop(labR, "flex") === "0 0 100%"; };
-    check(wrapOk(doc),
-      "4chips3 the band is a wrapping row: each chip as wide as its words (never the full width), at most a third of the band so two lines hold"
-      + " five, the label on a line of its own: " + J4c({ sg: sheetOf(doc, "#sg"), lab: sheetOf(doc, "#sg .sg-lab"), btn: sheetOf(doc, "#sg button") }));
+    /* THE COLUMN (Max's choice of variant B): the replies sit in a split with the suggestions beside them, 168 px wide, a hairline between,
+       each suggestion a full-width row of its own; nothing is capped to a band any more. */
+    const colOk = d => { const spR = sheetOf(d, "#sp"), sgR = sheetOf(d, "#sg"), btnR = sheetOf(d, "#sg button");
+      return /<div id="sp"><ul id="rows"/.test(d) && prop(spR, "display") === "flex" && prop(spR, "flex-direction") === ""
+        && prop(sgR, "flex") === "0 0 168px" && prop(sgR, "flex-direction") === "column" && /(^|;)border-right:1px solid/.test(sgR)
+        && prop(sgR, "max-height") === "" && prop(btnR, "width") === "100%" && !/max-width/.test(btnR); };
+    check(colOk(doc),
+      "4col1 the suggested intents are a column beside the replies: a split holds both, the column 168 px with a hairline on its right, each intent a"
+      + " full-width row, no band cap and no third-of-the-band chip width (was: a wrapping band, 4chips3): "
+      + J4c({ sp: sheetOf(doc, "#sp"), sg: sheetOf(doc, "#sg"), btn: sheetOf(doc, "#sg button") }));
     const mainSrc = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
     const size = /const PICK_SIZE = \{ width: (\d+), height: (\d+) \}/.exec(mainSrc);
-    const sgR = sheetOf(doc, "#sg"), labR = sheetOf(doc, "#sg .sg-lab"), btnR = sheetOf(doc, "#sg button"), bodyR = sheetOf(doc, "body"),
+    const sgR = sheetOf(doc, "#sg"), bodyR = sheetOf(doc, "body"), spR = sheetOf(doc, "#sp"),
       topR = sheetOf(doc, "#top"), rowR = sheetOf(doc, "#rows li"), footR = sheetOf(doc, "footer");
-    const chipH = px(prop(btnR, "height")), gap = px(prop(sgR, "gap")), lab = px(prop(labR, "line-height"));
-    const band = lab + gap + 2 * chipH + gap, pad = px(prop(bodyR, "padding")), bodyGap = px(prop(bodyR, "gap")), top = px(prop(topR, "flex").split(" ")[2]);
+    const pad = px(prop(bodyR, "padding")), bodyGap = px(prop(bodyR, "gap")), top = px(prop(topR, "flex").split(" ")[2]), rowH = px(prop(rowR, "height"));
     const foot = px(prop(footR, "padding").split(" ")[0]) + 1 + Math.ceil(px(prop(footR, "font-size")) * 1.35);
-    const room = (size ? +size[2] : 0) - 2 * pad - top - band - foot - 3 * bodyGap, rowH = px(prop(rowR, "height"));
-    check(!!size && +size[1] === 600 && +size[2] === 424 && prop(sgR, "max-height") === band + "px" && chipH > 0 && rowH === 36 && room >= 7 * rowH,
-      "4chips4 at the fixed 600 by 424 the band is two lines at most and seven whole replies show beneath it: window " + J4c(size && size.slice(1, 3))
-      + ", band " + band + " (cap " + prop(sgR, "max-height") + "), room for the replies " + room + " against " + 7 * rowH);
-    if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  4chips5 the chips' two plants (ETIUDA_PLANTS=off)");
+    const room = (size ? +size[2] : 0) - 2 * pad - top - foot - 2 * bodyGap, across = (size ? +size[1] : 0) - 2 * pad - px(prop(sgR, "flex").split(" ")[2]) - px(prop(spR, "gap"));
+    check(!!size && +size[1] === 600 && +size[2] === 424 && rowH === 36 && room >= 9 * rowH && across >= 400 && across === 600 - 2 * pad - 168 - 8,
+      "4col2 at the fixed 600 by 424 nine whole replies show beside the column, each row 400 px or more across (was: seven whole under a band, 4chips4): window "
+      + J4c(size && size.slice(1, 3)) + ", room for the replies " + room + " against " + 9 * rowH + ", across " + across);
+    const wantHoldOn = ["ctrl:true", "ctrl:false", "ctrl:true", "ctrl:false", "ctrl:true", "ctrl:false"];
+    const holdRun = async scriptText => {
+      const dl = {}, wl = {}, toggles = [];
+      let cuts = 0, onOpen = null;
+      const q3 = { value: "", placeholder: "", focus() {}, setAttribute() {}, addEventListener() {} };
+      const box3 = { parentNode: null, set innerHTML(v) {}, get innerHTML() { return ""; }, setAttribute() {}, addEventListener() {}, querySelectorAll: () => { cuts++; return []; } };
+      const W = { E_PICK: { find: () => Promise.resolve("{}"), copy() {}, close() {}, ready() {}, onOpen: fn => { onOpen = fn; } }, addEventListener: (t, fn) => { wl[t] = fn; } };
+      const D = { getElementById: id => (id === "q" ? q3 : id === "rows" ? box3 : null), addEventListener: (t, fn) => { dl[t] = fn; },
+        documentElement: { style: { setProperty() {} }, dataset: {}, classList: { toggle: (c, on) => { if (c === "ctrl") toggles.push(c + ":" + !!on); } }, lang: "" } };
+      new Function("window", "document", scriptText)(W, D);
+      const seen = [];
+      const ev = (type, key, ctrl) => dl[type] && dl[type]({ key: key, code: /^\d$/.test(key) ? "Digit" + key : "", ctrlKey: ctrl, altKey: false, metaKey: false, shiftKey: false, preventDefault() {} });
+      onOpen(JSON.stringify({ rows: pRows }));
+      seen.push(toggles.join());
+      const cut0 = cuts; ev("keydown", "Control", true); const cutOnPress = cuts - cut0;
+      ev("keydown", "1", true); ev("keyup", "1", true); seen.push(toggles.join());
+      ev("keyup", "Control", false);
+      ev("keydown", "Control", true); if (wl.blur) wl.blur();
+      ev("keydown", "Control", true); onOpen(JSON.stringify({ rows: pRows }));
+      return { toggles, seen, cutOnPress, hasBlur: typeof wl.blur === "function", hasKeys: typeof dl.keydown === "function" && typeof dl.keyup === "function" };
+    };
+    const holdOk = r => J4c(r.toggles) === J4c(wantHoldOn) && r.seen[0] === "" && r.seen[1] === "ctrl:true" && r.cutOnPress >= 1 && r.hasBlur && r.hasKeys;
+    const holdOn = await holdRun(script);
+    check(holdOk(holdOn),
+      "4hold1 Ctrl held draws the hints and Ctrl released takes them away, and nothing else moves: the class is on at a Ctrl press, stays on through Ctrl+1 (a digit"
+      + " pressed and let go with Ctrl down), is off at the Ctrl release, at the window losing focus and at a new opening, and the cut marks are measured again at"
+      + " each change: " + J4c(holdOn));
+    const nR = sheetOf(doc, ".n"), nHeldR = sheetOf(doc, ":root.ctrl .n");
+    const nOk = d => prop(sheetOf(d, ".n"), "display") === "none" && prop(sheetOf(d, ":root.ctrl .n"), "display") === "flex";
+    check(nOk(doc) && /<kbd>'?\s*\+?\s*key|'<kbd>' \+ key/.test(script),
+      "4hold2 the number column of a row is not drawn at rest, so the reply has its width, and is drawn while the page's root wears ctrl; the markup still carries the"
+      + " key (every row's Ctrl+digit stays what 4e to 4g and the shape check read): " + J4c({ n: nR, held: nHeldR }));
+    const wordsOf = pl => { document.getElementById("pax").value = ""; SYSTEM[0] = pl ? "pl-PL" : "en-US"; const o = pickAnswer("open", { profiles: 1 }); SYSTEM[0] = "en-US";
+      return { label: o.profiles && o.profiles.labels && o.profiles.labels.suggest, keys: o.words && o.words.suggestKeys }; };
+    const wEn = wordsOf(false), wPl = wordsOf(true);
+    check(wEn.label === "Suggested intents" && wEn.keys === "Alt+1 to Alt+5 show an intent's replies"
+      && wPl.label === "Proponowane intencje" && wPl.keys === "Alt+1 do Alt+5 pokazują odpowiedzi danej intencji",
+      "4col4 the column's heading says what it shows, \"Suggested intents\" (was \"Suggested\"), and its one line of keys, in both languages (placeholders for the copywriter): " + J4c({ wEn, wPl }));
+    if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  4col3 and 4hold3, the plants (ETIUDA_PLANTS=off)");
     else {
       const sLines = script.split("\n");
       const altHits = sLines.filter(l => l.indexOf("plant:pick-chip-alt") >= 0).length;
-      const wrapLines = mainSrc.split("\n").filter(l => l.indexOf("plant:pick-chip-wrap") >= 0);
       const noAlt = sLines.map(l => (l.indexOf("plant:pick-chip-alt") >= 0 ? l.replace("e.altKey &&", "false &&") : l)).join("\n");
       const planted = await chipRun(noAlt);
-      const noWrap = doc.replace("\n#sg{" + sgR + "}", "\n#sg{" + sgR.replace("flex-wrap:wrap", "flex-wrap:nowrap") + "}");
-      check(altHits === 1 && noAlt !== script && J4c(planted.alt) !== J4c(wantAlt) && wrapLines.length === 1 && wrapLines[0].indexOf("flex-wrap:wrap") >= 0
-        && noWrap !== doc && !wrapOk(noWrap) && wrapOk(doc),
-        "4chips5 rewriting plant:pick-chip-alt leaves Alt+n taking nothing, and rewriting plant:pick-chip-wrap (the band's wrapping) is what 4chips3 reads red: "
-        + J4c({ altHits, wrapHits: wrapLines.length, alt: planted.alt }));
+      const colLines = mainSrc.split("\n").filter(l => l.indexOf("plant:pick-column") >= 0);
+      const rowCol = doc.replace("\n#sg{" + sgR + "}", "\n#sg{" + sgR.replace("flex-direction:column", "flex-direction:row") + "}");
+      check(altHits === 1 && noAlt !== script && J4c(planted.alt) !== J4c(wantAlt) && colLines.length === 1 && colLines[0].indexOf("flex-direction:column") >= 0
+        && rowCol !== doc && !colOk(rowCol) && colOk(doc),
+        "4col3 rewriting plant:pick-chip-alt leaves Alt+n taking nothing, and rewriting plant:pick-column (the column's direction) is what 4col1 reads red: "
+        + J4c({ altHits, columnHits: colLines.length, alt: planted.alt }));
+      const holdLines = sLines.filter(l => l.indexOf("plant:pick-ctrl-hold") >= 0), hideLines = mainSrc.split("\n").filter(l => l.indexOf("plant:pick-ctrl-hide") >= 0);
+      const noHold = sLines.map(l => (l.indexOf("plant:pick-ctrl-hold") >= 0 ? l.replace("holdCtrl(!!(e && e.ctrlKey))", "holdCtrl(false)") : l)).join("\n");
+      const shown = doc.replace("\n.n{" + nR + "}", "\n.n{" + nR.replace("display:none", "display:flex") + "}");
+      const heldPlant = await holdRun(noHold);
+      check(holdLines.length === 1 && holdLines[0].indexOf("holdCtrl(!!(e && e.ctrlKey))") >= 0 && noHold !== script && !holdOk(heldPlant) && holdOk(holdOn)
+        && hideLines.length === 1 && hideLines[0].indexOf("display:none") >= 0 && shown !== doc && !nOk(shown) && nOk(doc),
+        "4hold3 rewriting plant:pick-ctrl-hold (the key read) leaves the hints where Ctrl never shows them, and rewriting plant:pick-ctrl-hide (the number column hidden at rest)"
+        + " is what 4hold2 reads red: " + J4c({ holdHits: holdLines.length, hideHits: hideLines.length, toggles: heldPlant.toggles }));
     }
   }
 
