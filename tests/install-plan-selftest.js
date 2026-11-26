@@ -2131,12 +2131,40 @@ function turnHazard(src) {
       const v = set[1].replace(/\$/g, "\\$"), test = new RegExp("^(\\$\\{(If|IfNot|OrIf|AndIf)\\}\\s+" + v + "\\s|StrCmp\\s+" + v + "\\s)");
       const first = rec.findIndex((l) => new RegExp(v + "(?!\\w)").test(l));
       guarded = first > -1 && first < i && test.test(rec[first]);
+      if (guarded) r.guardVar = set[1];
     }
     r.guard = guarded ? "guarded" : "unguarded";
     if (!guarded) r.faults.push("the \"already installed\" question is not guarded to once per run");
   }
   r.ok = !r.faults.length;
   return r;
+}
+/* The script under test less one part of the mend, whatever its form: the defines and custom-page LEAVE that attach the kill in the hook
+   macro (installer: customPageAfterChangeDir; uninstaller: customUnWelcomePage), or every line of RecogniseExistingInstallation that names
+   the guard's variable. Read from what turnHazard found, so a mend in another form is stripped as surely as the synthetic one. */
+function turnStrip(src, part) {
+  const r = turnHazard(src);
+  const lines = String(src).split(/\r?\n/), out = [];
+  const macro = part === "installer" ? "customPageAfterChangeDir" : part === "uninstaller" ? "customUnWelcomePage" : "";
+  const names = part === "installer" ? r.installerKill : part === "uninstaller" ? r.uninstallerKill : [];
+  const v = part === "guard" ? r.guardVar : "";
+  let inMacro = false, inRec = false;
+  for (const raw of lines) {
+    const l = raw.trim();
+    if (/^!macro\s+/.test(l)) inMacro = macro && l.split(/\s+/)[1] === macro;
+    else if (/^!macroend\b/.test(l)) inMacro = false;
+    if (/^Function\s+RecogniseExistingInstallation\b/.test(l)) inRec = true;
+    else if (/^FunctionEnd\b/.test(l)) inRec = false;
+    if (inMacro) {
+      const d = /^!define\s+MUI_PAGE_CUSTOMFUNCTION_(PRE|SHOW|LEAVE)\s+(\S+)/.exec(l);
+      if (d && names.indexOf(d[2]) > -1) continue;
+      const c = /^((?:Uninst)?Page\s+custom\s+\S+)\s+(\S+)/.exec(l);
+      if (c && names.indexOf(c[2]) > -1) { out.push(c[1]); continue; }
+    }
+    if (inRec && v && raw.indexOf(v) > -1 && new RegExp(v.replace(/\$/g, "\\$") + "(?!\\w)").test(raw)) continue;
+    out.push(raw);
+  }
+  return out.join("\n");
 }
 /* A mended copy of a script, for the rows' controls: the timer killed on the Installing and Uninstalling pages and restarted on Finish,
    and the question asked once. Written here, not taken from any mend. */
@@ -2161,12 +2189,15 @@ const T18_FILE = path.join(__dirname, "..", "shell", "installer.nsh"), T18_NAME 
   ok(r.ok, "18a " + T18_NAME + ": the turning timer is killed before the install and the uninstall sections start, no section starts one, and the"
     + " \"already installed\" question is guarded to once per run: " + JSON.stringify({ timer: r.timer, installerKill: r.installerKill, uninstallerKill: r.uninstallerKill,
       sectionCreates: r.sectionCreates, finishRestart: r.finishRestart, guard: r.guard, faults: r.faults }));
-  const m = (d) => turnHazard(turnMended(T18, d));
-  ok(m().ok, "18a control: the same script with the timer killed on the Installing and Uninstalling pages and the question guarded reads green");
-  ok(!m({ installer: true }).ok && m({ installer: true }).faults.length === 1, "18a control: without the installer's kill, red in that row alone");
-  ok(!m({ uninstaller: true }).ok && m({ uninstaller: true }).faults.length === 1, "18a control: without the uninstaller's kill, red in that row alone");
-  ok(!m({ guard: true }).ok && m({ guard: true }).faults.length === 1, "18a control: without the once-per-run guard, red in that row alone");
-  ok(!m({ sectionTimer: true }).ok && m({ sectionTimer: true }).faults.length === 1, "18a control: a timer started from customInstall reads red");
+  /* The controls start from the script under test where it is mended, or from a synthetic mend of it where it is not, and take each part
+     out of that script itself. */
+  const base = r.ok ? T18 : turnMended(T18), b = turnHazard(base);
+  ok(b.ok, "18a control: the base the controls cut from reads green (" + (r.ok ? "the script under test" : "a synthetic mend of it") + ")");
+  const cut = (part) => turnHazard(turnStrip(base, part));
+  ok(!cut("installer").ok && cut("installer").faults.length === 1, "18a control: the installer's kill taken out of it (" + b.installerKill.join(",") + "), red in that row alone");
+  ok(!cut("uninstaller").ok && cut("uninstaller").faults.length === 1, "18a control: the uninstaller's kill taken out of it (" + b.uninstallerKill.join(",") + "), red in that row alone");
+  ok(!cut("guard").ok && cut("guard").faults.length === 1, "18a control: the once-per-run guard taken out of it (" + (b.guardVar || "-") + "), red in that row alone");
+  ok(!turnHazard(base + "\n!macro customInstall\nGetFunctionAddress $0 TurnTick\nnsDialogs::CreateTimer $0 33\n!macroend\n").ok, "18a control: a timer started from customInstall reads red");
 }
 
 console.log("\n#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);
