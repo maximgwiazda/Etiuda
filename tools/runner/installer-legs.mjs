@@ -2057,7 +2057,10 @@ function rnrLeft(dir, prog, product) {
   if (dir && fs.existsSync(dir)) left.push("the install folder " + dir + " (" + (() => { try { return fs.readdirSync(dir).length; } catch (e) { return "?"; } })() + " entries)");
   for (const k of [KU.uninstall, KM.uninstall].map(regKey)) if (present(k)) left.push("the uninstall entry " + k);
   const installKeys = [KU.install, KM.install].map(regKey).filter(present);
-  const pend = valueOf(RNR_PENDING, "PendingFileRenameOperations");
+  /* Read here, not through the guard: the guard is the tested tree's own tests/install-guard.cjs, which reads only Software keys,
+     and this one read-only query is the leg's. */
+  const pendRun = spawnSync("reg", ["query", RNR_PENDING, "/v", "PendingFileRenameOperations"], { encoding: "utf8", windowsHide: true, timeout: 30000 });
+  const pend = pendRun.status === 0 ? (G.regValues(String(pendRun.stdout).split(String.fromCharCode(10)).map((l) => l.trimEnd()).filter(Boolean).join(String.fromCharCode(10))).PendingFileRenameOperations || "") : "";
   const entries = pend ? pend.split(/\\0/).filter(Boolean) : [];
   const naming = entries.filter((e) => (dir && e.toLowerCase().indexOf(dir.toLowerCase()) > -1) || e.toLowerCase().indexOf(String(product).toLowerCase()) > -1);
   if (naming.length) left.push("PendingFileRenameOperations names " + naming.length + ": " + few(naming));
