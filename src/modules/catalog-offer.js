@@ -176,7 +176,7 @@ function ecInUseHtml(){
    the glyph and its bubble alone. */
 function ecSigHtml(state,print,team){
   const word=!team ? "" : state===V2_SIG_VALID ? "Signed by the lead" : state===V2_SIG_NONE ? "Not signed" : "";
-  return '<span class="ec-sig">'+trustKeyHtml(state||"",print||"")+(word?'<span class="ec-sigw">'+esc(t(word))+'</span>':'')+'</span>';
+  return '<span class="ec-sig'+(state||word?'':' none')+'">'+trustKeyHtml(state||"",print||"")+(word?'<span class="ec-sigw">'+esc(t(word))+'</span>':'')+'</span>';
 }
 function ecRowHtml(o){
   return '<div class="ec-row'+(o.loaded?" is-loaded":"")+'"'+(o.file?' data-ec-file="'+esc(o.file)+'"':'')+'>'

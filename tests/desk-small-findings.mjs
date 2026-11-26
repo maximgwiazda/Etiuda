@@ -299,12 +299,12 @@ try {
   const sf12ok = r => {
     const a = r[0], b = r[1];
     const beside = a.dir === "row" && a.key.l >= a.priv.r + 8 && a.key.l <= a.priv.r + 24 && Math.abs((a.key.t + a.key.b) / 2 - (a.priv.t + a.priv.b) / 2) <= 2;
-    const empty = b.sig.w === 0 && Math.abs(b.whose.w - b.priv.w) <= 1;
+    const empty = b.sig.w === 0 && b.key.w === 0;
     return beside && empty;
   };
   {
     const r = await sf12run();
-    check(sf12ok(r), "sf12a a signed catalog's key stands 8 to 24 px right of its Private switch on the switch's line, and an empty key leaves the switch alone in its cell", r);
+    check(sf12ok(r), "sf12a a signed catalog's key stands 8 to 24 px right of its Private switch on the switch's line, and an empty key takes no room", r);
   }
   domPlants.push(["sf12b lifting plant:ec-whose-row turns sf12a red", async lab => {
     const htmlPath = path.join(lab, "ec-whose-row.html");
