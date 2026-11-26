@@ -696,6 +696,14 @@ UI_STRINGS.pl={
   "Click, then press the new key combo":"Kliknij, a następnie naciśnij nową kombinację klawiszy",
   "Press keys…":"Naciśnij klawisze…",
   "Fixed keys":"Klawisze stałe",
+  "From any program":"Z dowolnego programu", /* words: placeholder */
+  "Every day":"Na co dzień", /* words: placeholder */
+  "Tabs and the customer":"Rozmowy i klient", /* words: placeholder */
+  "Finding a card":"Szukanie karty", /* words: placeholder */
+  "Editing the catalog":"Edycja katalogu", /* words: placeholder */
+  "Panels":"Panele", /* words: placeholder */
+  "Team and seat":"Zespół i miejsce", /* words: placeholder */
+  "Buying":"Zakup", /* words: placeholder */
   "The grammar the rest stands on: Esc is how key capture itself cancels, arrows and Enter keep their native meanings, and a held Ctrl is a hold, not a chord.":"Zasady, na których opiera się reszta: Esc anuluje samo przechwytywanie klawiszy, strzałki i Enter zachowują swoje zwykłe znaczenie, a przytrzymany Ctrl to przytrzymanie, nie skrót.",
   "Keep current":"Zachowaj obecny",
   "Load it":"Wczytaj",

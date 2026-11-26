@@ -293,7 +293,7 @@ function signinHeldTo(m){
 function lockedHtml(value){
   return '<span class="sgn-val">'+esc(value)+'</span><span class="sgn-lock">'+ICON_LOCK+esc(t("Set by your organisation"))+'</span>';
 }
-function accountCardHtml(v){
+function accountCardHtml(v, you){
   /* Machine policy has not answered: the card says the desk waits for it, and offers nothing to sign in with. */
   if(signinWaiting(v)){ const s=signinWaitingWords(); return '<div class="sgn-top col"><p class="sgn-say" data-signin-waiting><b>'+esc(s[0])+'</b><span>'+esc(s[1])+'</span></p></div>'; } /* plant:card-waiting */
   /* The desk's key not kept by a non-persistent profile (section 12): the card says so and offers nothing that would make a new desk. */
@@ -309,6 +309,7 @@ function accountCardHtml(v){
     if(told && told.kind==="pressed") h+=say(told.say)+signinActsHtml(told.acts);
     if(v.ask) h+=say(signinSay("ask", v))+signinProvidersHtml(v.offered, true);
     else if(told && told.kind!=="pressed") h+=say(told.say)+(told.providers ? signinProvidersHtml(v.offered, true) : "");
+    if(you) h+='<div class="sgn-you">'+you+'</div>';
     if(!keeps) h+='<p class="sgn-ft">'+esc(t("Signing out ends this computer's sign-in and frees its place among the account's three; the seat stays the account's. The team's catalog and personal cards stay on the computer."))+'</p>';
     return h+'</div>';
   }
@@ -370,9 +371,13 @@ function accountGroups(){
   const name=row("name","user",t("Name customers see"),"",'<input type="text" id="setAgentName" autocomplete="off" spellcheck="false"'
     +' placeholder="'+esc(t("first name"))+'" value="'+esc(agentName())+'">');
   const v=signinNow(), groups=[];
-  if(signinShown(v) || signinManaged(v)) groups.push({rows:[], after:accountCardHtml(v)}); /* plant:account-managed-closed */
   const stranded=signinStranded(v) && !signinWaiting(v);
-  const rows=[name], buy=!stranded && (buyOffered() || buyPays(v)) && !v.busy && !signinManaged(v) /* plant:buy-page-managed */
+  const card=signinShown(v) || signinManaged(v); /* plant:account-managed-closed */
+  /* Signed in, the name stands inside the identity card, under who is signed in. */
+  const named=card && !stranded && v.signedIn && !signinChoosingNow(); /* plant:account-name-card */
+  if(card) groups.push(named ? {rows:[name], within:inner=>accountCardHtml(v, inner)} : {rows:[], after:accountCardHtml(v)});
+  let checked=null;
+  const rows=named ? [] : [name], status=[], buying=[], buy=!stranded && (buyOffered() || buyPays(v)) && !v.busy && !signinManaged(v) /* plant:buy-page-managed */
     && !v.licenceManaged; /* plant:account-buy-managed */
   /* A managed tenant's account: nothing to buy, and who holds the licence instead (the copywriter's placeholder words). */
   const held=!stranded && v.licenceManaged ? row("buy","forward",t("Licence for one person"),t("Your organisation holds the Etiuda licence for this account, so there is nothing to buy here."),"") : null;
@@ -383,39 +388,43 @@ function accountGroups(){
     /* A press at a door the shell refused is said on the team's row, where it was pressed. */
     const doorSaid=signinDoorRefusedNow() ? signinSay("door", v)[0] : "";
     const teamNamed=(teamLeads().find(x=>x && !x.removed && x.team)||{});
-    rows.push(p.team ? row("team","people",t("Team"),doorSaid||(p.team.lead?t("Led by {LEAD}").split("{LEAD}").join(p.team.lead):""),val(teamNamed.team||p.teamName))
+    status.push(p.team ? row("team","people",t("Team"),doorSaid||(p.team.lead?t("Led by {LEAD}").split("{LEAD}").join(p.team.lead):""),val(teamNamed.team||p.teamName))
       : v.doors.length && v.seat==="held" ? row("team","people",t("A team on this licence"),doorSaid||t("This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation."),signinDoorsHtml(v.doors))
       : v.deskOnly && v.seat==="held" ? row("team","people",t("Working without a team"),doorSaid||t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed."),"") /* plant:account-desk-only */
       : row("team","people",t("No team yet"),doorSaid||(signinManaged(v)?t("No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself."):t("No team has admitted this account yet. A lead can invite it by its email address or send a link; the invitation then appears here with one Join.")),"")); /* plant:no-team-managed */
     /* A managed computer shows the provider it is held to. */
-    if(v.managed && v.managed.provider) rows.push(row("signin","user",t("Sign-in"),"",lockedHtml(signinHeldTo(v.managed))));
+    if(v.managed && v.managed.provider) status.push(row("signin","user",t("Sign-in"),"",lockedHtml(signinHeldTo(v.managed))));
     /* The invitations waiting, each with its Join (board 1017), and a Join that waits for the lead's confirm. */
-    v.invited.forEach(x=>rows.push(row("invited","people",t("Invitation"),signinInvitedLine(x),
+    v.invited.forEach(x=>status.push(row("invited","people",t("Invitation"),signinInvitedLine(x),
       '<button type="button" class="btn primary" data-signin-act="join" data-signin-invite="'+esc(String(x.n))+'">'+esc(t("Join"))+'</button>')));
-    if(signinJoinRefusedNow()) rows.push({key:"joinno", html:signinJoinRefusedHtml()});
-    if(v.joinWait){ const w=signinJoinWaitWords(v); rows.push(row("joinwait","people",w[0],w[1],"")); }
+    if(signinJoinRefusedNow()) status.push({key:"joinno", html:signinJoinRefusedHtml()});
+    if(v.joinWait){ const w=signinJoinWaitWords(v); status.push(row("joinwait","people",w[0],w[1],"")); }
     const ds=deskDoorState(v);
     if(ds.state==="ended" || ds.state==="working"){ /* plant:account-seat-state */
       const seatPair=deskDoorLines(ds), seatShort=deskSeatShort(ds);
-      rows.push({key:"seat", icon:"check", dot:ds.state==="ended", /* plant:account-seat-dot */
+      status.push({key:"seat", icon:"check", dot:ds.state==="ended", /* plant:account-seat-dot */
         title:seatShort ? t("Seat") : seatPair[0], /* plant:account-seat-title */
         hint:seatPair[1], ctl:seatShort ? val(seatShort) : ""}); /* plant:account-seat-short */
     }
-    else if(signinNoSeat(v)) rows.push(row("seat","check",t("Seat"),join(signinSay(v.refused, v, p)),""));
-    else if(v.seat==="none") rows.push(row("seat","check",t("Seat"),join(signinSay("nolicence", v)),""));
-    else rows.push(row("seat","check",t("Seat"),v.seat==="lapsed" ? join(signinSay("lapsed", v)) : t("On up to three computers; this is one of them."),""));
-    if(cause) rows.push(row("cause","check",t("Licence"),cause,""));
-    if(buy) rows.push(buyRow(v));
-    else if(held) rows.push(held);
+    else if(signinNoSeat(v)) status.push(row("seat","check",t("Seat"),join(signinSay(v.refused, v, p)),""));
+    else if(v.seat==="none") status.push(row("seat","check",t("Seat"),join(signinSay("nolicence", v)),""));
+    else status.push(row("seat","check",t("Seat"),v.seat==="lapsed" ? join(signinSay("lapsed", v)) : t("On up to three computers; this is one of them."),""));
+    if(cause) status.push(row("cause","check",t("Licence"),cause,""));
+    if(buy) buying.push(buyRow(v));
+    else if(held) buying.push(held);
     const payHeld=v.buy && v.buy.held ? payHeldRow(v.buy.held) : null;
-    if(payHeld) rows.push(payHeld);
-    rows.push(row("checked","clock",t("Last checked"),v.reached ? "" : t("The sign-in service cannot be reached just now. Etiuda keeps working with the catalog it has."),
-      (v.at ? val(signinWhen(v.at)) : "")+'<button type="button" class="btn" data-signin-act="check">'+esc(signinCheckWords("check", t("Check now")))+'</button>'));
+    if(payHeld) buying.push(payHeld);
+    checked=row("checked","clock",t("Last checked"),v.reached ? "" : t("The sign-in service cannot be reached just now. Etiuda keeps working with the catalog it has."),
+      (v.at ? val(signinWhen(v.at)) : "")+'<button type="button" class="btn" data-signin-act="check">'+esc(signinCheckWords("check", t("Check now")))+'</button>');
   } else if(buy && !v.signedIn) rows.push(buyRow(v));
   else if(held && !v.signedIn) rows.push(held);
-  groups.push({rows});
+  if(rows.length) groups.push({rows});
   const s=!stranded && v.signedIn && !signinChoosingNow() ? syncNow() : null; /* plant:account-stranded-sync */
-  if(s && s.shown) groups.push({rows:[syncRow(s, v.signedIn)]});
+  if(s && s.shown) status.push(syncRow(s, v.signedIn));
+  if(checked) status.push(checked);
+  const statusHead=t("Team and seat"); /* plant:account-status */
+  if(status.length) groups.push({head:statusHead, rows:status, cls:"sx-tri"});
+  if(buying.length) groups.push({head:t("Buying"), rows:buying});
   return groups;
 }
 /* SYNC ACROSS COMPUTERS, a card of its own: the line says how it stands, and the switch is drawn only where it can act; one policy
@@ -579,8 +588,8 @@ function layoutGroups(){
 function keysGroups(){
   const hk=hotkeyRowHtml();
   return [
-    hk ? {rows:[{key:"hotkey", html:hk}]} : null,
-    {rows:[{key:"shortcuts", html:'<div class="sc-list" id="scListInline"></div>'}]},
+    hk ? {head:t("From any program"), rows:[{key:"hotkey", html:hk}]} : null,
+    {rows:[{key:"shortcuts", html:'<div class="sc-list sc-groups" id="scListInline"></div>'}]},
     {after:'<div class="sx-note"><span>'+esc(t("A shortcut can be changed to an F key or a combination with Ctrl or Alt, since keys needed for typing stay with typing; the keys Etiuda itself needs are shown as fixed."))+'</span>'
       +'<button type="button" class="btn" id="setResetKeys">'+esc(t("Reset shortcuts"))+'</button></div>', rows:[]}
   ].filter(Boolean);
@@ -810,9 +819,11 @@ function settingsSections(){
     {id:"ai", icon:"ai", name:t("AI"), lede:aiLede(), groups:aiGroups()}
   ].filter(s=>s.off || s.groups.some(g=>g.rows.length));
 }
+/* A group may draw its own card around its rows (`within`, given the rows' markup), and may name a class for the plain one. */
 function groupHtml(g){
+  const inner=g.rows.map(rowHtml).join("");
   return '<div class="sx-group">'+(g.head?'<h3>'+esc(g.head)+'</h3>':'')
-    +(g.rows.length?'<div class="sx-card">'+g.rows.map(rowHtml).join("")+'</div>':'')+(g.after||"")+'</div>';
+    +(g.rows.length?(g.within?g.within(inner):'<div class="sx-card'+(g.cls?' '+g.cls:'')+'">'+inner+'</div>'):'')+(g.after||"")+'</div>';
 }
 /* Every row of every section, the whole screen's controls in one reading. */
 function settingsBodyHtml(){

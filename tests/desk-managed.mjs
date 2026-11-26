@@ -765,8 +765,8 @@ if (!PLANTS_OFF && S) {
     "    case \"seat-removed\":\n      { const c=\"\";"], "seatRemovedContact", "signin");
   await plantPage("mmp47", ["    case \"signin-notallowed\": /* plant:unmanaged-contact */\n      { const c=v && v.managed ? v.managed.contact : \"\";",
     "    case \"signin-notallowed\":\n      { const c=\"\";"], "unmanagedContact", "signin");
-  await plantPage("mmp48", ["  if(signinShown(v) || signinManaged(v)) groups.push({rows:[], after:accountCardHtml(v)}); /* plant:account-managed-closed */",
-    "  if(signinShown(v)) groups.push({rows:[], after:accountCardHtml(v)});"], "managedClosedAccount", "settings");
+  await plantPage("mmp48", ["  const card=signinShown(v) || signinManaged(v); /* plant:account-managed-closed */",
+    "  const card=signinShown(v);"], "managedClosedAccount", "settings");
   await plantPage("mmp49", ["  const closed=!v.signedIn && !v.offered.length; /* plant:managed-closed-line */",
     "  const closed=false;"], "managedClosedAccount", "settings");
   await plantPage("mmp50", ["  if(v.said===\"signin-other\") return {kind:\"pressed\", say:signinSay(\"signin-other\", v), acts:[{act:\"choose\", label:t(\"Try again\"), solid:true}]}; /* plant:told-other */",

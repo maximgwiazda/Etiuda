@@ -4132,6 +4132,28 @@ body.e-first-signin .stage>.dotfield{content-visibility:hidden}
 .sx .sc-list>.sc-row:first-child{border-top:0}
 .sx .sc-sep{margin:0;padding:12px 16px 6px;border-top:1px solid var(--line)}
 .sx-note{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:8px 2px 0;color:var(--dim);font-size:12.5px}
+/* THE SHORTCUTS BY TASK: each group one card of ruled rows, two rows to a line where the group is wide, read left then right.
+   The card the settings group draws around the list is only a frame, and the fixed keys' line stands after the last group. */
+.sx .sx-card:has(>.sc-groups){background:none;border:0;box-shadow:none;overflow:visible;display:block}
+.sc-group{margin:0 0 22px;container:scgroup / inline-size}
+.sc-group>h3{margin:0 0 8px}
+.sx .sc-groups>.sc-sep{margin:0;padding:0 2px 4px;border-top:0}
+.sx .sc-groups>.sc-sep small{max-width:70em}
+@container scgroup (min-width:840px){
+  .sx .sc-list.sc-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sx .sc-list.sc-two>.sc-row:nth-child(-n+2){border-top:0}
+  .sx .sc-list.sc-two>.sc-row:nth-child(2n){border-left:1px solid var(--line)}
+}
+/* ACCOUNT: the name stands inside the identity card; the state is three tiles to a line with when it was last checked under them. */
+.sgn-you{margin:14px 0 0;padding:12px 0 0;border-top:1px solid var(--line)}
+.sx:not(.lm) .sgn-top .sgn-you>.set-row{min-height:0;padding:0;border:0;background:none}
+.sgn-you>.set-row .set-ctl input{max-width:320px}
+.sgn-top .sgn-you + .sgn-ft{margin-top:12px}
+.sx:not(.lm) .sx-tiles .sx-card.sx-tri{grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr))}
+.sx:not(.lm) .sx-tiles .sx-card.sx-tri>.set-row[data-row=checked]{grid-column:1/-1;min-height:0;padding-top:8px;padding-bottom:8px;
+  background:transparent;border-color:transparent}
+.sx:not(.lm) .sx-tiles .sx-card.sx-tri>.set-row:not([data-row=checked]){align-content:flex-start}
+.sx:not(.lm) .sx-tiles .sx-card.sx-tri>.set-row:not([data-row=checked])>.set-ctl{margin-left:42px}
 .sx-keys{display:inline-flex;gap:4px}
 .sx-keys kbd{font:600 12px var(--sans);padding:3px 8px;border-bottom-width:2px;border-radius:5px;background:var(--panel);color:var(--ink)}
 .sx-none{margin:12px 0;color:var(--dim)}
@@ -4206,7 +4228,7 @@ body.e-first-signin .stage>.dotfield{content-visibility:hidden}
 .sx:not(.lm) .sx-tiles .sx-card>.set-row,.sx:not(.lm) .sx-tiles .sx-card>.set-row:first-child{background:var(--panel);
   border:1px solid var(--line);border-radius:10px;min-height:76px}
 /* The shortcuts list is one card of ruled rows, in this section as on All settings. The rows keep .sx .sc-row. */
-.sx:not(.lm) .sx-tiles .sx-card:has(.sc-list){display:block;background:var(--panel);border:1px solid var(--line);
+.sx:not(.lm) .sx-tiles .sx-card:has(>.sc-list:not(.sc-groups)){display:block;background:var(--panel);border:1px solid var(--line);
   border-radius:var(--radius-sm);overflow:hidden}
 @container sxpage (max-width:720px){
   .sx:not(.lm) .sx-look{grid-template-columns:minmax(0,1fr)}
@@ -8783,6 +8805,22 @@ What is typed here stays in this browser.`;
     "Click, then press the new key combo": "Kliknij, a następnie naciśnij nową kombinację klawiszy",
     "Press keys…": "Naciśnij klawisze…",
     "Fixed keys": "Klawisze stałe",
+    "From any program": "Z dowolnego programu",
+    /* words: placeholder */
+    "Every day": "Na co dzień",
+    /* words: placeholder */
+    "Tabs and the customer": "Rozmowy i klient",
+    /* words: placeholder */
+    "Finding a card": "Szukanie karty",
+    /* words: placeholder */
+    "Editing the catalog": "Edycja katalogu",
+    /* words: placeholder */
+    "Panels": "Panele",
+    /* words: placeholder */
+    "Team and seat": "Zespół i miejsce",
+    /* words: placeholder */
+    "Buying": "Zakup",
+    /* words: placeholder */
     "The grammar the rest stands on: Esc is how key capture itself cancels, arrows and Enter keep their native meanings, and a held Ctrl is a hold, not a chord.": "Zasady, na których opiera się reszta: Esc anuluje samo przechwytywanie klawiszy, strzałki i Enter zachowują swoje zwykłe znaczenie, a przytrzymany Ctrl to przytrzymanie, nie skrót.",
     "Keep current": "Zachowaj obecny",
     "Load it": "Wczytaj",
@@ -21926,6 +21964,7 @@ What is typed here stays in this browser.`;
   // src/modules/shortcuts-list.js
   var shortcuts_list_exports = {};
   __export(shortcuts_list_exports, {
+    SC_GROUPS: () => SC_GROUPS,
     scBeginCapture: () => scBeginCapture,
     scCaptureId: () => scCaptureId,
     scCaptureSlot: () => scCaptureSlot,
@@ -21946,19 +21985,32 @@ What is typed here stays in this browser.`;
   function shortcutsShown(q) {
     return SC_DEFS.filter((d) => scMatch(d, q)).length;
   }
+  var SC_GROUPS = [
+    { head: "Every day", ids: ["copy", "copyOther", "navUp", "navDown", "nextCopy1", "nextCopy2", "nextCopy3", "nextCopy4", "langToggle", "selectSearch", "escape", "undo"] },
+    { head: "Tabs and the customer", ids: ["tabNext", "tabPrev", "tabNew", "focusPax", "focusRole"] },
+    { head: "Finding a card", ids: ["navPillLeft", "navPillRight", "navPillFirst", "navPillLast", "allCats", "clearIntent", "markTop", "markBottom", "lanes", "expandPills", "toggleRail", "togglePills"] },
+    { head: "Editing the catalog", ids: ["newCard", "rename", "edPrevEntry", "edNextEntry", "edPrevLang", "edNextLang", "edSwitch"] },
+    { head: "Panels", ids: ["quickFacts", "openMenu", "maintenance"] }
+  ];
   function shortcutsListHtml(q) {
     const bind = (d, slot) => {
-      const fixed2 = !!d.fixed, listening = scCaptureId === d.id && scCaptureSlot === slot;
+      const fixed = !!d.fixed, listening = scCaptureId === d.id && scCaptureSlot === slot;
       const c = slot === 2 ? scChord2(d.id) : scChord(d.id), empty = !c || !c.code && !c.key;
       const shown2 = slot === 2 ? formatChord(c) : formatActionChord(d.id);
-      return '<button type="button" class="sc-bind' + (fixed2 ? " fixed" : "") + (listening ? " listening" : "") + (slot === 2 ? " sc-alt" : "") + (empty ? " sc-empty" : "") + (shown2.length > 7 ? " sc-long" : "") + '" data-bind="' + esc(d.id) + '" data-slot="' + slot + '"' + (fixed2 ? " disabled" : ' title="' + esc(t(slot === 2 ? "An alternative: click, then press the key combo" : "Click, then press the new key combo")) + '"') + ">" + (listening ? esc(t("Press keys…")) : empty ? esc(t("none")) : esc(shown2)) + "</button>";
+      return '<button type="button" class="sc-bind' + (fixed ? " fixed" : "") + (listening ? " listening" : "") + (slot === 2 ? " sc-alt" : "") + (empty ? " sc-empty" : "") + (shown2.length > 7 ? " sc-long" : "") + '" data-bind="' + esc(d.id) + '" data-slot="' + slot + '"' + (fixed ? " disabled" : ' title="' + esc(t(slot === 2 ? "An alternative: click, then press the key combo" : "Click, then press the new key combo")) + '"') + ">" + (listening ? esc(t("Press keys…")) : empty ? esc(t("none")) : esc(shown2)) + "</button>";
     };
     const row2 = (d) => {
       const chg = d.newKey ? '<span class="chg">' + esc(t("new key")) + "</span>" : "";
       return '<div class="sc-row" data-sc="' + esc(d.id) + '"><div class="sc-label">' + esc(t(d.label)) + (d.hint ? "<small>" + esc(t(d.hint)) + "</small>" : "") + "</div>" + chg + '<div class="sc-binds">' + bind(d, 1) + (d.fixed ? "" : bind(d, 2)) + "</div></div>";
     };
-    const fixed = SC_DEFS.filter((d) => d.fixed && scMatch(d, q));
-    return SC_DEFS.filter((d) => !d.fixed && scMatch(d, q)).map(row2).join("") + (fixed.length ? '<div class="sc-sep">' + esc(t("Fixed keys")) + "<small>" + esc(t("The grammar the rest stands on: Esc is how key capture itself cancels, arrows and Enter keep their native meanings, and a held Ctrl is a hold, not a chord.")) + "</small></div>" + fixed.map(row2).join("") : "");
+    const groups = SC_GROUPS;
+    const named2 = new Set([].concat(...groups.map((g) => g.ids)));
+    const rest = SC_DEFS.filter((d) => !named2.has(d.id)).map((d) => d.id);
+    const body = groups.map((g, i) => {
+      const rows = (i === groups.length - 1 ? g.ids.concat(rest) : g.ids).map((id) => SC_DEFS.find((d) => d.id === id)).filter((d) => d && scMatch(d, q));
+      return rows.length ? '<div class="sc-group"><h3>' + esc(t(g.head)) + '</h3><div class="sx-card sc-card"><div class="sc-list sc-two">' + rows.map(row2).join("") + "</div></div></div>" : "";
+    }).join("");
+    return body + (SC_DEFS.some((d) => d.fixed && scMatch(d, q)) ? '<div class="sc-sep">' + esc(t("Fixed keys")) + "<small>" + esc(t("The grammar the rest stands on: Esc is how key capture itself cancels, arrows and Enter keep their native meanings, and a held Ctrl is a hold, not a chord.")) + "</small></div>" : "");
   }
   var scCaptureId = null;
   var scCaptureSlot = 1;
@@ -42400,7 +42452,7 @@ What is typed here stays in this browser.`;
   function lockedHtml(value) {
     return '<span class="sgn-val">' + esc(value) + '</span><span class="sgn-lock">' + ICON_LOCK2 + esc(t("Set by your organisation")) + "</span>";
   }
-  function accountCardHtml(v) {
+  function accountCardHtml(v, you) {
     if (signinWaiting(v)) {
       const s = signinWaitingWords();
       return '<div class="sgn-top col"><p class="sgn-say" data-signin-waiting><b>' + esc(s[0]) + "</b><span>" + esc(s[1]) + "</span></p></div>";
@@ -42417,6 +42469,7 @@ What is typed here stays in this browser.`;
       if (told && told.kind === "pressed") h2 += say(told.say) + signinActsHtml(told.acts);
       if (v.ask) h2 += say(signinSay("ask", v)) + signinProvidersHtml(v.offered, true);
       else if (told && told.kind !== "pressed") h2 += say(told.say) + (told.providers ? signinProvidersHtml(v.offered, true) : "");
+      if (you) h2 += '<div class="sgn-you">' + you + "</div>";
       if (!keeps) h2 += '<p class="sgn-ft">' + esc(t("Signing out ends this computer's sign-in and frees its place among the account's three; the seat stays the account's. The team's catalog and personal cards stay on the computer.")) + "</p>";
       return h2 + "</div>";
     }
@@ -42486,33 +42539,36 @@ What is typed here stays in this browser.`;
   function accountGroups() {
     const name = row("name", "user", t("Name customers see"), "", '<input type="text" id="setAgentName" autocomplete="off" spellcheck="false" placeholder="' + esc(t("first name")) + '" value="' + esc(agentName()) + '">');
     const v = signinNow(), groups = [];
-    if (signinShown(v) || signinManaged(v)) groups.push({ rows: [], after: accountCardHtml(v) });
     const stranded = signinStranded(v) && !signinWaiting(v);
-    const rows = [name], buy = !stranded && (buyOffered() || buyPays(v)) && !v.busy && !signinManaged(v) && !v.licenceManaged;
+    const card = signinShown(v) || signinManaged(v);
+    const named2 = card && !stranded && v.signedIn && !signinChoosingNow();
+    if (card) groups.push(named2 ? { rows: [name], within: (inner) => accountCardHtml(v, inner) } : { rows: [], after: accountCardHtml(v) });
+    let checked = null;
+    const rows = named2 ? [] : [name], status = [], buying = [], buy = !stranded && (buyOffered() || buyPays(v)) && !v.busy && !signinManaged(v) && !v.licenceManaged;
     const held = !stranded && v.licenceManaged ? row("buy", "forward", t("Licence for one person"), t("Your organisation holds the Etiuda licence for this account, so there is nothing to buy here."), "") : null;
     const cause = v.cause === "own-licence" ? t("Your organisation's licence follows the roles its IT department assigns, and this account has none, so it keeps its seat on the licence bought before.") : v.cause === "assigned" ? t("Your organisation has given this account a role, so it uses the organisation's licence; its seat on the licence bought before is not used meanwhile.") : "";
     if (!stranded && v.signedIn && !signinChoosingNow()) {
       const p = signinParts(v), val = (x) => '<span class="sgn-val">' + esc(x) + "</span>", join = (pair) => pair[0] + " " + pair[1];
       const doorSaid = signinDoorRefusedNow() ? signinSay("door", v)[0] : "";
       const teamNamed = teamLeads().find((x) => x && !x.removed && x.team) || {};
-      rows.push(p.team ? row("team", "people", t("Team"), doorSaid || (p.team.lead ? t("Led by {LEAD}").split("{LEAD}").join(p.team.lead) : ""), val(teamNamed.team || p.teamName)) : v.doors.length && v.seat === "held" ? row("team", "people", t("A team on this licence"), doorSaid || t("This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation."), signinDoorsHtml(v.doors)) : v.deskOnly && v.seat === "held" ? row("team", "people", t("Working without a team"), doorSaid || t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed."), "") : row("team", "people", t("No team yet"), doorSaid || (signinManaged(v) ? t("No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself.") : t("No team has admitted this account yet. A lead can invite it by its email address or send a link; the invitation then appears here with one Join.")), ""));
-      if (v.managed && v.managed.provider) rows.push(row("signin", "user", t("Sign-in"), "", lockedHtml(signinHeldTo(v.managed))));
-      v.invited.forEach((x) => rows.push(row(
+      status.push(p.team ? row("team", "people", t("Team"), doorSaid || (p.team.lead ? t("Led by {LEAD}").split("{LEAD}").join(p.team.lead) : ""), val(teamNamed.team || p.teamName)) : v.doors.length && v.seat === "held" ? row("team", "people", t("A team on this licence"), doorSaid || t("This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation."), signinDoorsHtml(v.doors)) : v.deskOnly && v.seat === "held" ? row("team", "people", t("Working without a team"), doorSaid || t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed."), "") : row("team", "people", t("No team yet"), doorSaid || (signinManaged(v) ? t("No team has admitted this account yet. Once a lead admits it, the catalog arrives by itself.") : t("No team has admitted this account yet. A lead can invite it by its email address or send a link; the invitation then appears here with one Join.")), ""));
+      if (v.managed && v.managed.provider) status.push(row("signin", "user", t("Sign-in"), "", lockedHtml(signinHeldTo(v.managed))));
+      v.invited.forEach((x) => status.push(row(
         "invited",
         "people",
         t("Invitation"),
         signinInvitedLine(x),
         '<button type="button" class="btn primary" data-signin-act="join" data-signin-invite="' + esc(String(x.n)) + '">' + esc(t("Join")) + "</button>"
       )));
-      if (signinJoinRefusedNow()) rows.push({ key: "joinno", html: signinJoinRefusedHtml() });
+      if (signinJoinRefusedNow()) status.push({ key: "joinno", html: signinJoinRefusedHtml() });
       if (v.joinWait) {
         const w = signinJoinWaitWords(v);
-        rows.push(row("joinwait", "people", w[0], w[1], ""));
+        status.push(row("joinwait", "people", w[0], w[1], ""));
       }
       const ds = deskDoorState(v);
       if (ds.state === "ended" || ds.state === "working") {
         const seatPair = deskDoorLines(ds), seatShort = deskSeatShort(ds);
-        rows.push({
+        status.push({
           key: "seat",
           icon: "check",
           dot: ds.state === "ended",
@@ -42522,26 +42578,30 @@ What is typed here stays in this browser.`;
           hint: seatPair[1],
           ctl: seatShort ? val(seatShort) : ""
         });
-      } else if (signinNoSeat(v)) rows.push(row("seat", "check", t("Seat"), join(signinSay(v.refused, v, p)), ""));
-      else if (v.seat === "none") rows.push(row("seat", "check", t("Seat"), join(signinSay("nolicence", v)), ""));
-      else rows.push(row("seat", "check", t("Seat"), v.seat === "lapsed" ? join(signinSay("lapsed", v)) : t("On up to three computers; this is one of them."), ""));
-      if (cause) rows.push(row("cause", "check", t("Licence"), cause, ""));
-      if (buy) rows.push(buyRow(v));
-      else if (held) rows.push(held);
+      } else if (signinNoSeat(v)) status.push(row("seat", "check", t("Seat"), join(signinSay(v.refused, v, p)), ""));
+      else if (v.seat === "none") status.push(row("seat", "check", t("Seat"), join(signinSay("nolicence", v)), ""));
+      else status.push(row("seat", "check", t("Seat"), v.seat === "lapsed" ? join(signinSay("lapsed", v)) : t("On up to three computers; this is one of them."), ""));
+      if (cause) status.push(row("cause", "check", t("Licence"), cause, ""));
+      if (buy) buying.push(buyRow(v));
+      else if (held) buying.push(held);
       const payHeld = v.buy && v.buy.held ? payHeldRow(v.buy.held) : null;
-      if (payHeld) rows.push(payHeld);
-      rows.push(row(
+      if (payHeld) buying.push(payHeld);
+      checked = row(
         "checked",
         "clock",
         t("Last checked"),
         v.reached ? "" : t("The sign-in service cannot be reached just now. Etiuda keeps working with the catalog it has."),
         (v.at ? val(signinWhen(v.at)) : "") + '<button type="button" class="btn" data-signin-act="check">' + esc(signinCheckWords("check", t("Check now"))) + "</button>"
-      ));
+      );
     } else if (buy && !v.signedIn) rows.push(buyRow(v));
     else if (held && !v.signedIn) rows.push(held);
-    groups.push({ rows });
+    if (rows.length) groups.push({ rows });
     const s = !stranded && v.signedIn && !signinChoosingNow() ? syncNow() : null;
-    if (s && s.shown) groups.push({ rows: [syncRow(s, v.signedIn)] });
+    if (s && s.shown) status.push(syncRow(s, v.signedIn));
+    if (checked) status.push(checked);
+    const statusHead = t("Team and seat");
+    if (status.length) groups.push({ head: statusHead, rows: status, cls: "sx-tri" });
+    if (buying.length) groups.push({ head: t("Buying"), rows: buying });
     return groups;
   }
   var syncRowLine = "";
@@ -42807,8 +42867,8 @@ What is typed here stays in this browser.`;
   function keysGroups() {
     const hk = hotkeyRowHtml();
     return [
-      hk ? { rows: [{ key: "hotkey", html: hk }] } : null,
-      { rows: [{ key: "shortcuts", html: '<div class="sc-list" id="scListInline"></div>' }] },
+      hk ? { head: t("From any program"), rows: [{ key: "hotkey", html: hk }] } : null,
+      { rows: [{ key: "shortcuts", html: '<div class="sc-list sc-groups" id="scListInline"></div>' }] },
       { after: '<div class="sx-note"><span>' + esc(t("A shortcut can be changed to an F key or a combination with Ctrl or Alt, since keys needed for typing stay with typing; the keys Etiuda itself needs are shown as fixed.")) + '</span><button type="button" class="btn" id="setResetKeys">' + esc(t("Reset shortcuts")) + "</button></div>", rows: [] }
     ].filter(Boolean);
   }
@@ -43065,7 +43125,8 @@ What is typed here stays in this browser.`;
     ].filter((s) => s.off || s.groups.some((g) => g.rows.length));
   }
   function groupHtml(g) {
-    return '<div class="sx-group">' + (g.head ? "<h3>" + esc(g.head) + "</h3>" : "") + (g.rows.length ? '<div class="sx-card">' + g.rows.map(rowHtml).join("") + "</div>" : "") + (g.after || "") + "</div>";
+    const inner = g.rows.map(rowHtml).join("");
+    return '<div class="sx-group">' + (g.head ? "<h3>" + esc(g.head) + "</h3>" : "") + (g.rows.length ? g.within ? g.within(inner) : '<div class="sx-card' + (g.cls ? " " + g.cls : "") + '">' + inner + "</div>" : "") + (g.after || "") + "</div>";
   }
   function settingsBodyHtml() {
     return settingsSections().map((s) => s.groups.map(groupHtml).join("")).join("");

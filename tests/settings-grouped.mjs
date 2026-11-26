@@ -105,8 +105,8 @@ try {
 
   const fixedIds = SC.SC_DEFS.filter(d => d.fixed).map(d => d.id);
   const sepAt = html.indexOf('class="sc-sep"'), lastGroupAt = html.lastIndexOf('<div class="sc-group"');
-  const fixedRows = fixedIds.map(id => new RegExp('<div class="sc-row"[^>]*data-sc="' + id + '">[\\s\\S]*?</div></div></div>').exec(html.slice(0, sepAt < 0 ? html.length : sepAt)));
-  check(sepAt > lastGroupAt && sepAt > 0 && fixedRows.every(m => m && m[0].indexOf("sc-alt") < 0 && (m[0].match(/class="sc-bind/g) || []).length === 1),
+  const fixedRows = fixedIds.map(id => new RegExp('<div class="sc-row"[^>]*data-sc="' + id + '">[\\s\\S]*?</button></div></div>').exec(html.slice(0, sepAt < 0 ? html.length : sepAt)));
+  check(sepAt > lastGroupAt && sepAt > 0 && fixedRows.every(m => m && m[0].indexOf("sc-alt") < 0 && (m[0].match(/<button/g) || []).length === 1),
     "dgr3 the " + fixedIds.length + " fixed keys stand in their groups with one greyed key and no second slot, and the fixed keys' line follows the last group: " + fixedRows.filter(Boolean).length + " found");
 
   const found = SL.shortcutsListHtml("copy");
@@ -159,20 +159,20 @@ try {
     skip("dgr14 lifting plant:account-status turns dgr6 red");
   } else {
     const listText = source("shortcuts-list.js");
-    const gAnchor = "const grouped=!q || true; /* plant:keys-groups */";
-    const lifted = await planted(listText, gAnchor, "const grouped=false;");
+    const gAnchor = "const groups=SC_GROUPS; /* plant:keys-groups */";
+    const lifted = await planted(listText, gAnchor, "const groups=[{head:\"All\", ids:SC_DEFS.map(d=>d.id)}];");
     hostOn({});
     let liftedHtml = "";
     try { liftedHtml = lifted.shortcutsListHtml(""); } finally { hostOff(); }
     check(heads(liftedHtml).join("|") !== HEADS.join("|"), "dgr12 lifting plant:keys-groups turns dgr2 red: " + heads(liftedHtml).length + " headings");
     const setText = source("settings.js");
-    const nAnchor = "const named=full && card; /* plant:account-name-card */";
+    const nAnchor = "const named=card && !stranded && v.signedIn && !signinChoosingNow(); /* plant:account-name-card */";
     const noName = await accountWith(SIGNED, () => planted(setText, nAnchor, "const named=false;"));
     const liftedCard = (groupsOf(noName)[0] || { html: "" }).html;
     check(liftedCard.indexOf('id="setAgentName"') < 0, "dgr13 lifting plant:account-name-card turns dgr5 red: the card holds the field " + (liftedCard.indexOf('id="setAgentName"') >= 0));
     const sAnchor = "const statusHead=t(\"Team and seat\"); /* plant:account-status */";
     const noHead = await accountWith(SIGNED, () => planted(setText, sAnchor, "const statusHead=\"\";"));
-    check(!(groupsOf(noHead).filter(g => g.head)[0] || { head: "" }).head, "dgr14 lifting plant:account-status turns dgr6 red: the state group's heading is \"" + ((groupsOf(noHead).filter(g => g.head)[0] || { head: "" }).head) + "\"");
+    check(!groupsOf(noHead).some(g => g.head === "Team and seat"), "dgr14 lifting plant:account-status turns dgr6 red: the headings are " + JSON.stringify(groupsOf(noHead).map(g => g.head)));
   }
 } catch (e) {
   failed++;

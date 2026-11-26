@@ -4132,6 +4132,28 @@ body.e-first-signin .stage>.dotfield{content-visibility:hidden}
 .sx .sc-list>.sc-row:first-child{border-top:0}
 .sx .sc-sep{margin:0;padding:12px 16px 6px;border-top:1px solid var(--line)}
 .sx-note{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:8px 2px 0;color:var(--dim);font-size:12.5px}
+/* THE SHORTCUTS BY TASK: each group one card of ruled rows, two rows to a line where the group is wide, read left then right.
+   The card the settings group draws around the list is only a frame, and the fixed keys' line stands after the last group. */
+.sx .sx-card:has(>.sc-groups){background:none;border:0;box-shadow:none;overflow:visible;display:block}
+.sc-group{margin:0 0 22px;container:scgroup / inline-size}
+.sc-group>h3{margin:0 0 8px}
+.sx .sc-groups>.sc-sep{margin:0;padding:0 2px 4px;border-top:0}
+.sx .sc-groups>.sc-sep small{max-width:70em}
+@container scgroup (min-width:840px){
+  .sx .sc-list.sc-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sx .sc-list.sc-two>.sc-row:nth-child(-n+2){border-top:0}
+  .sx .sc-list.sc-two>.sc-row:nth-child(2n){border-left:1px solid var(--line)}
+}
+/* ACCOUNT: the name stands inside the identity card; the state is three tiles to a line with when it was last checked under them. */
+.sgn-you{margin:14px 0 0;padding:12px 0 0;border-top:1px solid var(--line)}
+.sx:not(.lm) .sgn-top .sgn-you>.set-row{min-height:0;padding:0;border:0;background:none}
+.sgn-you>.set-row .set-ctl input{max-width:320px}
+.sgn-top .sgn-you + .sgn-ft{margin-top:12px}
+.sx:not(.lm) .sx-tiles .sx-card.sx-tri{grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr))}
+.sx:not(.lm) .sx-tiles .sx-card.sx-tri>.set-row[data-row=checked]{grid-column:1/-1;min-height:0;padding-top:8px;padding-bottom:8px;
+  background:transparent;border-color:transparent}
+.sx:not(.lm) .sx-tiles .sx-card.sx-tri>.set-row:not([data-row=checked]){align-content:flex-start}
+.sx:not(.lm) .sx-tiles .sx-card.sx-tri>.set-row:not([data-row=checked])>.set-ctl{margin-left:42px}
 .sx-keys{display:inline-flex;gap:4px}
 .sx-keys kbd{font:600 12px var(--sans);padding:3px 8px;border-bottom-width:2px;border-radius:5px;background:var(--panel);color:var(--ink)}
 .sx-none{margin:12px 0;color:var(--dim)}
@@ -4206,7 +4228,7 @@ body.e-first-signin .stage>.dotfield{content-visibility:hidden}
 .sx:not(.lm) .sx-tiles .sx-card>.set-row,.sx:not(.lm) .sx-tiles .sx-card>.set-row:first-child{background:var(--panel);
   border:1px solid var(--line);border-radius:10px;min-height:76px}
 /* The shortcuts list is one card of ruled rows, in this section as on All settings. The rows keep .sx .sc-row. */
-.sx:not(.lm) .sx-tiles .sx-card:has(.sc-list){display:block;background:var(--panel);border:1px solid var(--line);
+.sx:not(.lm) .sx-tiles .sx-card:has(>.sc-list:not(.sc-groups)){display:block;background:var(--panel);border:1px solid var(--line);
   border-radius:var(--radius-sm);overflow:hidden}
 @container sxpage (max-width:720px){
   .sx:not(.lm) .sx-look{grid-template-columns:minmax(0,1fr)}

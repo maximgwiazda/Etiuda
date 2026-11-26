@@ -9,6 +9,14 @@ import { foldAccents } from "./words.js";
 function scFold(s){ return foldAccents(s); }
 function scMatch(d,q){ return !q || scFold(t(d.label)+" "+(d.hint?t(d.hint):"")).indexOf(q)>=0; }
 function shortcutsShown(q){ return SC_DEFS.filter(d=>scMatch(d,q)).length; }
+/* The task groups the list stands in, each shortcut once and the fixed ones in their task; tests/settings-grouped.mjs holds it. */
+const SC_GROUPS=[
+  {head:"Every day", ids:["copy","copyOther","navUp","navDown","nextCopy1","nextCopy2","nextCopy3","nextCopy4","langToggle","selectSearch","escape","undo"]},
+  {head:"Tabs and the customer", ids:["tabNext","tabPrev","tabNew","focusPax","focusRole"]},
+  {head:"Finding a card", ids:["navPillLeft","navPillRight","navPillFirst","navPillLast","allCats","clearIntent","markTop","markBottom","lanes","expandPills","toggleRail","togglePills"]},
+  {head:"Editing the catalog", ids:["newCard","rename","edPrevEntry","edNextEntry","edPrevLang","edNextLang","edSwitch"]},
+  {head:"Panels", ids:["quickFacts","openMenu","maintenance"]}
+];
 function shortcutsListHtml(q){
   const bind=(d,slot)=>{
     const fixed=!!d.fixed, listening=scCaptureId===d.id&&scCaptureSlot===slot;
@@ -27,15 +35,18 @@ function shortcutsListHtml(q){
         (d.hint?'<small>'+esc(t(d.hint))+'</small>':'')+
       '</div>'+chg+'<div class="sc-binds">'+bind(d,1)+(d.fixed?"":bind(d,2))+'</div></div>';
   };
-  /* Rebindable rows first, fixed rows grouped under their own separator - the split is the
-     explanation a per-row tooltip could not give: tooltips on disabled buttons never reach
-     keyboard or touch users, and the WHY is one fact shared by all of these, so it is said
-     once, visibly, where the group starts. Render-level split only; SC_DEFS keeps its order. */
-  const fixed=SC_DEFS.filter(d=>d.fixed && scMatch(d,q));
-  return SC_DEFS.filter(d=>!d.fixed && scMatch(d,q)).map(row).join("")+
-    (fixed.length ? '<div class="sc-sep">'+esc(t("Fixed keys"))+
-      '<small>'+esc(t("The grammar the rest stands on: Esc is how key capture itself cancels, arrows and Enter keep their native meanings, and a held Ctrl is a hold, not a chord."))+'</small>'+
-    '</div>'+fixed.map(row).join("") : "");
+  /* Each task group is one card of ruled rows; a fixed key stands in its task with its one greyed key, and what they have in
+     common is said once, visibly, after the last group: tooltips on disabled buttons never reach keyboard or touch users.
+     A shortcut no group names joins the last, so one added without a group is still on the list. Render-level only. */
+  const groups=SC_GROUPS; /* plant:keys-groups */
+  const named=new Set([].concat(...groups.map(g=>g.ids)));
+  const rest=SC_DEFS.filter(d=>!named.has(d.id)).map(d=>d.id);
+  const body=groups.map((g,i)=>{
+    const rows=(i===groups.length-1 ? g.ids.concat(rest) : g.ids).map(id=>SC_DEFS.find(d=>d.id===id)).filter(d=>d && scMatch(d,q));
+    return rows.length ? '<div class="sc-group"><h3>'+esc(t(g.head))+'</h3><div class="sx-card sc-card"><div class="sc-list sc-two">'+rows.map(row).join("")+'</div></div></div>' : "";
+  }).join("");
+  return body+(SC_DEFS.some(d=>d.fixed && scMatch(d,q)) ? '<div class="sc-sep">'+esc(t("Fixed keys"))+
+    '<small>'+esc(t("The grammar the rest stands on: Esc is how key capture itself cancels, arrows and Enter keep their native meanings, and a held Ctrl is a hold, not a chord."))+'</small></div>' : "");
 }
 /* The capture state is the list's rather than the chord model's: what it is listening
    for, and for which of the two slots. */
@@ -72,6 +83,7 @@ function scStopCapture(){ scCaptureId=null; }
 function scListShown(){ return typeof document!=="undefined" && !!document.getElementById("scListInline"); }
 
 export {
+  SC_GROUPS,
   scCaptureId,
   scCaptureSlot,
   scBeginCapture,
