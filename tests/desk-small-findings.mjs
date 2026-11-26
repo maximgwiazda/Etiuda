@@ -24,7 +24,7 @@ E.ensureOutputs();
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ENGINE_URL = "file:///" + path.join(ROOT, "engine", "etiuda.html").replace(/\\/g, "/");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 16;
+const EXPECTED = 18;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -48,18 +48,19 @@ async function buildLiftedHtml(relMod, tag, outPath) {
   const plantAt = lines.findIndex(l => whole.test(l));
   if (plantAt < 0) return -1;
   lines.splice(plantAt, 1);
-  const liftedSource = lines.join("\n");
+  const fromTemplate = relMod === "src/template.html";
+  const liftedSource = fromTemplate ? "" : lines.join("\n");
   const filterRe = new RegExp(relMod.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\//g, "[\\\\/]") + "$");
   const built = await esbuild.build({
     ...OPTIONS,
     entryPoints: [path.join(ROOT, "src", "main.js")],
-    plugins: [{ name: "lift-plant-" + tag, setup(b) { b.onLoad({ filter: filterRe }, () => ({ contents: liftedSource, loader: "js" })); } }]
+    plugins: fromTemplate ? [] : [{ name: "lift-plant-" + tag, setup(b) { b.onLoad({ filter: filterRe }, () => ({ contents: liftedSource, loader: "js" })); } }]
   });
   const js = built.outputFiles[0].text
     .split('"@E_BUILT@"').join('"2026-11-26"')
     .split('"@EULA_EN@"').join('""')
     .split('"@EULA_PL@"').join('""');
-  const template = fs.readFileSync(path.join(ROOT, "src", "template.html"), "utf8");
+  const template = fromTemplate ? lines.join("\n") : fs.readFileSync(path.join(ROOT, "src", "template.html"), "utf8");
   fs.writeFileSync(outPath, template.replace("/*@APP*/\n", () => js), "utf8");
   return plantAt;
 }
@@ -269,6 +270,47 @@ try {
       if (await buildLiftedHtml(file, tag, htmlPath) < 0) return false;
       return !judge(await sf7run("file:///" + htmlPath.replace(/\\\\/g, "/")));
     }]);
+
+  /* sf12: the signed or unsigned key sits beside the Library row's Private switch, to its right, on the switch's line; an empty key takes
+     no room (finding 12). */
+  const sf12run = async url => {
+    const { ctx, page } = await launchDeskPage(browser, { url, width: 1400 });
+    await page.evaluate(() => { openManage(); });
+    await sleep(500);
+    const r = await page.evaluate(() => {
+      const sw = '<label class="ec-priv"><input type="checkbox" class="ec-priv-sw" role="switch"><span>Private</span></label>';
+      const rows = [{ name: "Signed.ec", teamHtml: sw, trust: "valid", print: "0123456789abcdef", meta: "5 cards" }, { name: "Plain.ec", teamHtml: sw, trust: "", meta: "5 cards" }];
+      const box = document.createElement("div");
+      box.id = "mgCatList"; box.className = "ec-list"; box.style.cssText = "position:fixed;left:20px;top:80px;width:1100px;z-index:9999";
+      box.innerHTML = rows.map(o => ecRowHtml(o)).join("");
+      document.body.appendChild(box);
+      const m = el => { const b = el.getBoundingClientRect(); return { l: b.left, r: b.right, t: b.top, b: b.bottom, w: b.width, h: b.height }; };
+      const out = [];
+      box.querySelectorAll(".ec-row").forEach(row => {
+        const priv = row.querySelector(".ec-priv"), key = row.querySelector(".ec-key"), whose = row.querySelector(".ec-whose"), sig = row.querySelector(".ec-sig");
+        out.push({ priv: m(priv), key: key ? m(key) : null, sig: sig ? m(sig) : null, whose: m(whose), dir: getComputedStyle(whose).flexDirection });
+      });
+      box.remove();
+      return out;
+    });
+    await ctx.close();
+    return r;
+  };
+  const sf12ok = r => {
+    const a = r[0], b = r[1];
+    const beside = a.dir === "row" && a.key.l >= a.priv.r + 8 && a.key.l <= a.priv.r + 24 && Math.abs((a.key.t + a.key.b) / 2 - (a.priv.t + a.priv.b) / 2) <= 2;
+    const empty = b.sig.w === 0 && Math.abs(b.whose.w - b.priv.w) <= 1;
+    return beside && empty;
+  };
+  {
+    const r = await sf12run();
+    check(sf12ok(r), "sf12a a signed catalog's key stands 8 to 24 px right of its Private switch on the switch's line, and an empty key leaves the switch alone in its cell", r);
+  }
+  domPlants.push(["sf12b lifting plant:ec-whose-row turns sf12a red", async lab => {
+    const htmlPath = path.join(lab, "ec-whose-row.html");
+    if (await buildLiftedHtml("src/template.html", "ec-whose-row", htmlPath) < 0) return false;
+    return !sf12ok(await sf12run("file:///" + htmlPath.replace(/\\\\/g, "/")));
+  }]);
 
   for (const [label, fn] of domPlants) {
     if (PLANTS_OFF) notRun(label + " (ETIUDA_PLANTS=off)");

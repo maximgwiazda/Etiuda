@@ -1464,6 +1464,7 @@ export {
   paintCatPrivate,
   paintCatWaiting,
   rowShareParts,
+  ecRowHtml,
   loadCatalogFromFolder,
   onCatalogListing,
   listingNoticeFiles,
