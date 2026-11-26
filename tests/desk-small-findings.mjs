@@ -24,7 +24,7 @@ E.ensureOutputs();
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ENGINE_URL = "file:///" + path.join(ROOT, "engine", "etiuda.html").replace(/\\/g, "/");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 23;
+const EXPECTED = 26;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -86,6 +86,7 @@ async function launchDeskPage(browser, cfg) {
       onSignin: () => () => {},
       onDeskSynced: fn => { window.__onDeskSynced = fn; },
     };
+    if (c.update) window.E_HOST.updateState = () => c.update;
     if (c.check != null) window.E_HOST.signinCheck = () => { window.__checks++; return new Promise(r => setTimeout(() => r(window.__signinState), c.check)); };
   }, cfg, seat);
   await page.goto(cfg.url || ENGINE_URL, { waitUntil: "load", timeout: 30000 });
@@ -375,6 +376,64 @@ try {
       return !sf8ok(await sf8run("file:///" + htmlPath.replace(/\\\\/g, "/")));
     }]);
 
+  /* sf15: About lives wholly in Settings' About category; the window is gone; the tour and Maintenance have no way in from it
+     (finding 15). The window's own parts, moved in: the mark and name, the version and its day, what is new, the licence, the credit. */
+  const sf15run = async (url, offer) => {
+    const { ctx, page } = await launchDeskPage(browser, { url, width: 1280, height: 900, update: offer });
+    await page.evaluate(() => { openSettings("about"); });
+    await sleep(500);
+    const read = () => page.evaluate(() => {
+      const host = document.getElementById("screenHost"), box = host.querySelector(".about-in");
+      const txt = sel => { const e = box && box.querySelector(sel); return e ? e.textContent.trim() : ""; };
+      const folds = box ? [...box.querySelectorAll("details")].map(d => ({ label: (d.querySelector("summary") || {}).textContent.trim(), open: d.open })) : [];
+      const see = host.querySelector("#setUpdateSee"), num = box && box.querySelector(".about-num");
+      return {
+        here: !!box, mark: !!(box && box.querySelector(".about-tile svg")), name: txt(".about-name"), version: txt(".about-num"), cap: txt(".about-cap"),
+        newHead: txt(".about-h"), news: box ? box.querySelectorAll(".about-new li").length : 0, folds,
+        credit: txt(".about-credit"), stardust: !!(box && box.querySelector(".about-credit a[href]")),
+        tour: !!host.querySelector("#setTour") || /Show tour/.test(host.textContent), maint: !!host.querySelector("#setMaint") || !!host.querySelector('[data-row="maintenance"]'),
+        windowBtn: !!host.querySelector("#setAbout"), openAboutFn: typeof openAbout, modalShown: !document.getElementById("modal").hidden,
+        seeAtRight: !!see && !!num && see.getBoundingClientRect().left > num.getBoundingClientRect().right
+          && Math.abs((see.getBoundingClientRect().top + see.getBoundingClientRect().bottom) / 2 - (num.getBoundingClientRect().top + num.getBoundingClientRect().bottom) / 2) < 60
+          && see.getBoundingClientRect().right > host.getBoundingClientRect().right - 80,
+        see: !!see
+      };
+    });
+    const first = await read();
+    await page.evaluate(() => { for (const s of document.querySelectorAll(".about-in details > summary")) s.click(); });
+    await sleep(200);
+    const opened = await page.evaluate(() => [...document.querySelectorAll(".about-in details")].map(d => ({ open: d.open, body: d.textContent.length })));
+    const legal = await page.evaluate(() => !!document.querySelector(".about-in .about-legal"));
+    await ctx.close();
+    return { first, opened, legal };
+  };
+  const sf15ok = r => {
+    const f = r.first;
+    return f.here && f.mark && f.name === "Etiuda" && f.version.length > 0 && /the version on this computer/.test(f.cap) && f.newHead === "New in this version" && f.news >= 4
+      && f.folds.length === 2 && f.folds[0].label === "Earlier versions of Etiuda" && /End-User Licence Agreement/.test(f.folds[1].label) && !f.folds[0].open && !f.folds[1].open
+      && r.opened.every(o => o.open) && r.legal && /Max Gwiazda/.test(f.credit) && f.stardust
+      && !f.tour && !f.maint && !f.windowBtn && f.openAboutFn === "undefined" && !f.modalShown;
+  };
+  {
+    const r = await sf15run();
+    check(sf15ok(r), "sf15a About stands in Settings' About category with the mark and name, the version and its day, what is new, Earlier versions and the licence folded and opening in place, and the credit; no Show tour, no Maintenance, no window", r);
+  }
+  {
+    const { ctx, page } = await launchDeskPage(browser, { width: 1280, height: 900 });
+    await page.click("#settingsBtn");
+    await sleep(250);
+    await page.evaluate(() => { const b = document.querySelector('[data-act="about"]'); if (b) b.click(); });
+    await sleep(500);
+    const via = await page.evaluate(() => ({ cat: !!document.querySelector('#screenHost .sx-sec.on[data-sx="about"]'), here: !!document.querySelector("#screenHost .about-in"), modal: !document.getElementById("modal").hidden }));
+    await ctx.close();
+    check(via.cat && via.here && !via.modal, "sf15b the Menu's About opens Settings at its About category, and no window", via);
+  }
+  {
+    /* An update offered: See what's new stands at the right end of the version's row; none offered, no button. */
+    const o = await sf15run(undefined, { offer: "9.9.9", look: "read" });
+    check(o.first.see && o.first.seeAtRight && !(await sf15run()).first.see,
+      "sf15c with an update offered See what's new stands at the right end of the version's row, and with none it is not there", { see: o.first.see, right: o.first.seeAtRight });
+  }
   for (const [label, fn] of domPlants) {
     if (PLANTS_OFF) notRun(label + " (ETIUDA_PLANTS=off)");
     else {
