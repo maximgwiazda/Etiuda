@@ -507,12 +507,19 @@ const runLine = (line, image, perUser) => {
 const sees = text => {
   const lines = closeLines(text), finds = lines.filter(l => l.indexOf("tasklist.exe") > -1), kills = lines.filter(l => l.indexOf("taskkill.exe") > -1);
   const me = path.basename(process.execPath), none = "etiuda-im8-no-such-image.exe";
-  const found = finds.map(l => [runLine(l, me, true).exit, runLine(l, me, false).exit, runLine(l, none, true).exit]);
+  /* WAS: two tasklist lines, each finding this node and no missing image. NOW: three; the new one, another account's copy (looked
+     for first, install-plan-selftest 13i), is the line the others are not: with the account's own name in the other's place it
+     finds this node, and it finds a service account's svchost.exe, which always runs, and never this node itself. */
+  const ne = finds.filter(l => l.indexOf("USERNAME ne %USERNAME%") > -1), rest = finds.filter(l => l.indexOf("USERNAME ne %USERNAME%") < 0);
+  const found = rest.map(l => [runLine(l, me, true).exit, runLine(l, me, false).exit, runLine(l, none, true).exit]);
+  const others = ne.map(l => [runLine(l, "svchost.exe", true).exit, runLine(l, me, true).exit, runLine(l.replace("USERNAME ne ", "USERNAME eq "), me, true).exit,
+    runLine(l, none, true).exit]);
   /* taskkill answers a name nothing runs under with its own message (128, or 0 with "No tasks" under a filter); cmd's "cannot find
      the path" or "directory name is invalid" means taskkill never ran. */
   const killed = kills.map(l => runLine(l, none, true)).map(r => !/cannot find the path|directory name is invalid|is not recognized/i.test(r.out) && (r.exit === 128 || r.exit === 0));
-  return { ok: finds.length === 2 && kills.length === 1 && found.every(f => f[0] === 0 && f[1] === 0 && f[2] === 1) && killed.every(Boolean),
-    finds: finds.length, kills: kills.length, found, killed };
+  return { ok: finds.length === 3 && ne.length === 1 && kills.length === 1 && found.every(f => f[0] === 0 && f[1] === 0 && f[2] === 1)
+      && others.every(o => o[0] === 0 && o[1] === 1 && o[2] === 0 && o[3] === 1) && killed.every(Boolean),
+    finds: finds.length, kills: kills.length, found, others, killed };
 };
 if (process.platform !== "win32") { notRun += 2; console.log("  --   im8 not run: cmd.exe and tasklist are Windows's"); }
 else {

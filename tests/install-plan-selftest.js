@@ -665,9 +665,12 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
        line after /C in one more pair (installer-mends im8 runs it). */
     const look = m.match(/nsExec::Exec `"\$SYSDIR\\cmd\.exe" \/C ""\$SYSDIR\\tasklist\.exe" [^`]*""`/g) || [];
     const scope = /StrCpy \$R5 `\/FI "USERNAME eq %USERNAME%" `\s+\$\{If\} \$installMode == "all"\s+StrCpy \$R5 ""\s+\$\{EndIf\}/.test(m);
-    const sees = look.length === 2 && look[0].indexOf('"$SYSDIR\\tasklist.exe" $R5/FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}"') > -1
-      && look[1].indexOf('"$SYSDIR\\tasklist.exe" /FI "USERNAME eq %USERNAME%" /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}"') > -1;
-    const ownAt = look[1] ? m.indexOf(look[1]) : -1, close = m.indexOf("--update-close"), kill = m.indexOf('"$SYSDIR\\taskkill.exe"');
+    /* WAS: two tasklist lines, any session's and this account's own. NOW: three, the second another account's (13i), the third
+       this account's own. */
+    const sees = look.length === 3 && look[0].indexOf('"$SYSDIR\\tasklist.exe" $R5/FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}"') > -1
+      && look[1].indexOf('"$SYSDIR\\tasklist.exe" /FI "USERNAME ne %USERNAME%" /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}"') > -1
+      && look[2].indexOf('"$SYSDIR\\tasklist.exe" /FI "USERNAME eq %USERNAME%" /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}"') > -1;
+    const ownAt = look[2] ? m.indexOf(look[2]) : -1, close = m.indexOf("--update-close"), kill = m.indexOf('"$SYSDIR\\taskkill.exe"');
     const onlyOwn = ownAt > -1 && close > ownAt && kill > close
       && /Pop \$R8\s+\$\{If\} \$R8 == 0\s+\$\{If\} \$\{FileExists\}/.test(m.slice(ownAt))
       && /"\$SYSDIR\\taskkill\.exe" \/IM "\$\{APP_EXECUTABLE_FILENAME\}" \/FI "USERNAME eq %USERNAME%"/.test(m) && (m.match(/taskkill/g) || []).length === 1;
@@ -681,6 +684,32 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
   ok(!closeCheck(NSH.replace('"$SYSDIR\\taskkill.exe" /IM "${APP_EXECUTABLE_FILENAME}" /FI "USERNAME eq %USERNAME%"', '"$SYSDIR\\taskkill.exe" /IM "${APP_EXECUTABLE_FILENAME}"')),
     "13c control: the close request sent to every account's copy reads red");
   ok(!closeCheck(NSH.replace(/\$\{Else\}(\s+)StrCpy \$R7 20(\s+\$\{EndIf\})/, "${Else}$1Nop$2")), "13c control: waiting on another person's copy reads red");
+
+  /* 13i. Another account's copy is looked for before anything is closed. At the base the close request, the USERNAME-filtered
+     taskkill and the program's own wait all came first, and the refusal for another account's copy after them: a person's open
+     work was closed for an install that then ended 1618. Now, in an all-users install, the look comes first and a copy found
+     goes straight to the box or the 1618, with the person's own copy still open; the sentence the box says is unchanged (1152b). */
+  const otherFirst = text => {
+    const m = macro(text, "customCheckAppRunning").split(/\r?\n/).map(l => l.trim().replace(/\s+[#;] ?plant:\S+$/, "")).filter(l => l && !/^[#;]/.test(l)).join("\n");
+    const block = /\$\{If\} \$R7 == 0\n\$\{If\} \$installMode == "all"\nnsExec::Exec `"\$SYSDIR\\cmd\.exe" \/C ""\$SYSDIR\\tasklist\.exe" \/FI "USERNAME ne %USERNAME%" \/FI "IMAGENAME eq \$\{APP_EXECUTABLE_FILENAME\}" \/FO CSV \/NH \| "\$SYSDIR\\findstr\.exe" \/B \/I \/C:"\\"\$\{APP_EXECUTABLE_FILENAME\}\\"""`\nPop \$R8\n\$\{If\} \$R8 == 0\nStrCpy \$R7 20\n\$\{EndIf\}\n\$\{EndIf\}\n\$\{EndIf\}\n\$\{If\} \$R7 == 0\nDetailPrint "\$R6"\n/.exec(m);
+    if (!block) return false;
+    const at = block.index, closing = [m.indexOf("--update-close"), m.indexOf('"$SYSDIR\\taskkill.exe"'), m.indexOf('"$SYSDIR\\tasklist.exe" /FI "USERNAME eq %USERNAME%"')];
+    return closing.every(i => i > at) && (m.match(/USERNAME ne %USERNAME%/g) || []).length === 1;
+  };
+  ok(otherFirst(NSH), "13i an all-users install looks for another account's copy before it asks or closes anything, and one found ends the run at the box or"
+    + " the 1618 with this account's own copy still open");
+  const lines13i = NSH.split("\n"), ne13i = lines13i.findIndex(l => l.indexOf("USERNAME ne %USERNAME%") > -1), plant13i = lines13i.findIndex(l => l.indexOf("plant:other-account-first") > -1);
+  ok(ne13i > -1 && plant13i === ne13i && !otherFirst(lines13i.filter((l, i) => i !== plant13i).join("\n")), "13i control: plant:other-account-first lifted reads red");
+  ok(!otherFirst(NSH.replace(/(USERNAME )ne( %USERNAME%" \/FI "IMAGENAME eq)/, "$1eq$2")), "13i control: the look for this account's own copy in its place reads red");
+  ok(!otherFirst(NSH.replace(/(USERNAME ne [^\n]*\n\s*Pop \$R8\n\s*\$\{If\} \$R8 == 0\n\s*)StrCpy \$R7 20/, "$1Nop")), "13i control: a copy found and nothing ended reads red");
+  {
+    /* The look moved to the foot of the loop, after the close, reads red: the base's order. */
+    const nsx = NSH.split("\n"), a = nsx.findIndex(l => l.indexOf("USERNAME ne %USERNAME%") > -1);
+    const head = a - 2, tail = a + 6;
+    const moved = nsx.slice(0, head).concat(nsx.slice(tail + 1)), at = moved.findIndex(l => /^\s*IntOp \$R7 \$R7 \+ 1$/.test(l));
+    ok(a > -1 && at > -1 && !otherFirst(moved.slice(0, at).concat(nsx.slice(head, tail + 1), moved.slice(at)).join("\n")),
+      "13i control: the look moved after the close reads red");
+  }
 
   /* Stage 3. The link follows the mode as the .ec type does: SHELL_CONTEXT is HKLM for all users and HKCU for one. */
   const OPEN = '`"$INSTDIR\\${APP_EXECUTABLE_FILENAME}" "%1"`';
