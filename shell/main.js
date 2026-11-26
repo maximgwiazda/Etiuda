@@ -14255,6 +14255,7 @@ function pickerDoc() {
     + '#sg button{box-sizing:border-box;display:block;flex:0 0 auto;width:100%;min-height:30px;margin:0;padding:5px 8px;border:0;'
     + 'border-radius:var(--radius-sm);background:transparent;color:var(--ink);font:600 13px/1.25 var(--sans);text-align:left;'
     + 'overflow-wrap:anywhere;cursor:default}\n'
+    + '#sg button::first-letter{text-transform:uppercase}\n'
     + '#sg button:hover{background:color-mix(in srgb,var(--accent) 10%,transparent)}\n'
     + '#sg button.on{background:color-mix(in srgb,var(--accent) 20%,transparent);color:var(--accent)}\n'
     + '#sg button.picked{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}\n'
