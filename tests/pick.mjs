@@ -39,7 +39,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 174 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 15);
+const EXPECTED = 175 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 15);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1907,10 +1907,10 @@ try {
     const nR = sheetOf(doc, ".n"), nHeldR = sheetOf(doc, ":root.ctrl .n");
     const nOk = d => prop(sheetOf(d, ".n"), "display") === "none" && prop(sheetOf(d, ".n"), "flex") === "" && prop(sheetOf(d, ":root.ctrl .n"), "display") === "flex"
       && prop(sheetOf(d, ":root.ctrl .n"), "position") === "absolute" && prop(sheetOf(d, "#rows li"), "position") === "relative"
-      && prop(sheetOf(d, "#rows li"), "padding") === "0 10px 0 14px" && prop(sheetOf(d, ".n kbd"), "padding") === "0 3px";
+      && prop(sheetOf(d, "#rows li"), "padding") === "0 10px 0 18px" && prop(sheetOf(d, ".n kbd"), "padding") === "0 3px";
     check(nOk(doc) && script.indexOf("'<kbd>' + key + '</kbd>'") > -1 && script.indexOf('const key = r.again ? "0" : (++n <= 9 ? String(n) : "")') > -1,
       "4hold2 the number of a row is not drawn at rest, and while the page's root wears ctrl it is drawn as the digit alone over the row's left edge, out of the flow"
-      + " (so the reply does not move, and the digit covers none of its letters: the row's left padding holds it), the markup carrying the digit"
+      + " (so the reply does not move, and the digit covers none of its letters: the row's left padding, 18 px, holds its 14 px cap and a gap), the markup carrying the digit"
       + " (was: the whole Ctrl+digit in a 50 px column in the flow, which moved the reply 60 px): " + J4c({ n: nR, held: nHeldR, li: sheetOf(doc, "#rows li") }));
     const wordsOf = pl => { document.getElementById("pax").value = ""; SYSTEM[0] = pl ? "pl-PL" : "en-US"; const o = pickAnswer("open", { profiles: 1 }); SYSTEM[0] = "en-US";
       return { label: o.profiles && o.profiles.labels && o.profiles.labels.suggest, keys: o.words && o.words.suggestKeys, nums: o.words && o.words.keyNumbers }; };
@@ -1935,6 +1935,23 @@ try {
     const legendOn = await legendRun(script);
     check(legendOn === wantLegend,
       "4hold4 the foot's one line of keys gains a Ctrl key cap and the hint for the numbers (the desk's words), before Esc, on the same line: " + J4c(legendOn));
+    const countRun = async (scriptText, clientW) => {
+      const cEl = { textContent: "", classList: { toggle() {} }, style: {}, scrollWidth: 109, clientWidth: clientW };
+      let onOpen = null;
+      const q3 = { value: "", placeholder: "", focus() {}, setAttribute() {}, addEventListener() {} };
+      const box3 = { parentNode: null, set innerHTML(v) {}, get innerHTML() { return ""; }, setAttribute() {}, addEventListener() {}, querySelectorAll: () => [] };
+      const W = { E_PICK: { find: () => Promise.resolve("{}"), copy() {}, close() {}, ready() {}, onOpen: fn => { onOpen = fn; } } };
+      const D = { getElementById: id => (id === "q" ? q3 : id === "rows" ? box3 : id === "count" ? cEl : null),
+        documentElement: { style: { setProperty() {} }, dataset: {}, classList: { toggle() {} }, lang: "" } };
+      new Function("window", "document", scriptText)(W, D);
+      onOpen(JSON.stringify({ rows: pRows, count: "50 of 273 replies", words: {} }));
+      return cEl.style.visibility;
+    };
+    const countSeen = [await countRun(script, 4), await countRun(script, 60), await countRun(script, 109)];
+    const footOk = d => prop(sheetOf(d, "footer"), "gap") === "8px" && prop(sheetOf(d, "#keys"), "gap") === "9px" && prop(sheetOf(d, "#keys kbd"), "margin-right") === "4px";
+    check(J4c(countSeen) === J4c(["hidden", "", ""]) && footOk(doc),
+      "4hold6 the foot's four hints stand whole at 600 px (its gaps 8 and 9 px, the key cap's margin 4, so the line is not clipped), and the count, which gives way to them, is"
+      + " hidden once it is left under 40 px rather than showing a stray character: " + J4c(countSeen) + " " + J4c({ footer: sheetOf(doc, "footer"), keys: sheetOf(doc, "#keys") }));
     if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  4col3 and 4hold3, the plants (ETIUDA_PLANTS=off)");
     else {
       const sLines = script.split("\n");
@@ -1955,10 +1972,13 @@ try {
       const inFlow = doc.replace("\n:root.ctrl .n{" + nHeld + "}", "\n:root.ctrl .n{" + nHeld.replace("position:absolute", "position:static") + "}");
       const keyLines = sLines.filter(l => l.indexOf("plant:pick-keys-ctrl") >= 0);
       const noKey = sLines.map(l => (l.indexOf("plant:pick-keys-ctrl") >= 0 ? l.replace('["Ctrl", words.keyNumbers], ', "") : l)).join("\n");
+      const goneLines = sLines.filter(l => l.indexOf("plant:pick-count-gone") >= 0);
+      const noGone = sLines.map(l => (l.indexOf("plant:pick-count-gone") >= 0 ? l.replace("count.clientWidth < 40", "count.clientWidth < 0") : l)).join("\n");
       check(overLines.length === 1 && overLines[0].indexOf("position:absolute") >= 0 && inFlow !== doc && !nOk(inFlow) && nOk(doc)
-        && keyLines.length === 1 && noKey !== script && (await legendRun(noKey)) !== wantLegend && legendOn === wantLegend,
+        && keyLines.length === 1 && noKey !== script && (await legendRun(noKey)) !== wantLegend && legendOn === wantLegend
+        && goneLines.length === 1 && noGone !== script && J4c([await countRun(noGone, 4)]) !== J4c(["hidden"]) && J4c(countSeen) === J4c(["hidden", "", ""]),
         "4hold5 rewriting plant:pick-ctrl-over (the digit over the edge, out of the flow) is what 4hold2 reads red, and rewriting plant:pick-keys-ctrl (the foot's Ctrl hint)"
-        + " is what 4hold4 reads red: " + J4c({ overHits: overLines.length, keyHits: keyLines.length }));
+        + " is what 4hold4 reads red, and rewriting plant:pick-count-gone (the count hidden under 40 px) is what 4hold6 reads red: " + J4c({ overHits: overLines.length, keyHits: keyLines.length, goneHits: goneLines.length }));
       check(holdLines.length === 1 && holdLines[0].indexOf("holdCtrl(!!(e && e.ctrlKey))") >= 0 && noHold !== script && !holdOk(heldPlant) && holdOk(holdOn)
         && hideLines.length === 1 && hideLines[0].indexOf("display:none") >= 0 && shown !== doc && !nOk(shown) && nOk(doc),
         "4hold3 rewriting plant:pick-ctrl-hold (the key read) leaves the hints where Ctrl never shows them, and rewriting plant:pick-ctrl-hide (the number column hidden at rest)"
