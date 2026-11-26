@@ -1,5 +1,6 @@
 /* Board 974, C12, the desk's half. An admitted desk whose team lists a catalog the lead has not
- * published says so on the team row Settings already shows, and stops once that edition is in the mirror.
+ * published says so on the team row Settings already shows, and stops once that edition is in the mirror. A team that lists
+ * no catalog yet (made on its own, a catalog put on it later) says the same plainly, 2026-11-26.
  *
  *     node tests/desk-first-edition.mjs
  */
@@ -19,7 +20,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Every reg call is answered by the stand-in, the policy key as not there, so no read of this machine's registry fails into a wait
    for machine policy (tests/reg-stand.cjs; review 09, finding 4). */
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 2;
+const EXPECTED = 3;
 const EN = "This desk waits for the team's lead to publish a first edition.";
 const EN_HTML = "This desk waits for the team&#39;s lead to publish a first edition.";
 const PL = "To stanowisko czeka na pierwsze wydanie od lidera zespołu.";
@@ -88,9 +89,9 @@ const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
 const RT = crypto.randomBytes(16).toString("hex");
 const CATALOG = "wick-board";
 
-function teamFile() {
+function teamFile(cats) {
   return sign({
-    format: 1, kind: "etiuda-team", id: TEAM, catalogs: [CATALOG],
+    format: 1, kind: "etiuda-team", id: TEAM, catalogs: cats || [CATALOG],
     lead: { keyId: LEAD.keyId, public: LEAD.public },
     sealed: true, epoch: 1, roster: [], channel: { kind: "relay", rt: RT, url: "https://etiuda.dev/relay/v1" }
   }, pair.privateKey, LEAD.keyId);
@@ -163,7 +164,7 @@ async function main() {
      desk follows a relay team pinned by invitation and the row is read from that team's relay mirror. */
   const mirror = path.join(ud, "relay", RT);
   fs.mkdirSync(mirror, { recursive: true });
-  fs.writeFileSync(path.join(mirror, "etiuda-team.json"), JSON.stringify(teamFile()), "utf8");
+  fs.writeFileSync(path.join(mirror, "etiuda-team.json"), JSON.stringify(teamFile([])), "utf8");
   fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({
     kind: "etiuda-desk", schema: 1,
     keys: { eCatalogFolder: own, eUiLang: "en" },
@@ -174,9 +175,16 @@ async function main() {
     teamShown: { [TEAM]: { lead: "Ada Quay", folder: mirror, relay: "etiuda.dev" } }
   }), "utf8");
 
+  let empty = null, enEmpty = "", plEmpty = "";
   let waiting = null, landed = null, en = "", pl = "", enAfter = "", plAfter = "", err = "";
   try {
     const desk = loadDesk(ud);
+    /* A team with no catalog listed yet: the lead made it on its own and has put nothing on it. */
+    empty = await desk.ask("etiuda:team-join", "leads");
+    pageReady();
+    enEmpty = await paint(desk, "en");
+    plEmpty = await paint(desk, "pl");
+    fs.writeFileSync(path.join(mirror, "etiuda-team.json"), JSON.stringify(teamFile()), "utf8");
     waiting = await desk.ask("etiuda:team-join", "leads");
     pageReady();
     en = await paint(desk, "en");
@@ -189,6 +197,11 @@ async function main() {
     err = e && e.stack ? e.stack.split("\n").slice(0, 4).join(" | ") : String(e);
   }
 
+  const erow = empty && Array.isArray(empty.leads) ? empty.leads.filter(l => l && l.team === TEAM)[0] : null;
+  check(!!erow && erow.admitted === true && erow.awaitsEdition === true && enEmpty.indexOf(EN_HTML) >= 0 && plEmpty.indexOf(PL) >= 0 && !err,
+    "974c12e an admitted desk on a team that lists no catalog yet says plainly that it waits for a first edition, in English and in Polish: "
+    + "flag " + (erow && erow.awaitsEdition) + ", en " + (enEmpty.indexOf(EN_HTML) >= 0) + ", pl " + (plEmpty.indexOf(PL) >= 0)
+    + (err ? " " + err : ""));
   const row = waiting && Array.isArray(waiting.leads) ? waiting.leads.filter(l => l && l.team === TEAM)[0] : null;
   const shown = !!row && row.admitted === true && row.removed !== true && row.awaitsEdition === true
     && en.indexOf(EN_HTML) >= 0 && pl.indexOf(PL) >= 0;
