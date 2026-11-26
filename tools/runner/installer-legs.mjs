@@ -1825,6 +1825,8 @@ public static class RW {
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
   [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, int m, IntPtr w, IntPtr l);
   [DllImport("user32.dll")] public static extern bool IsHungAppWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr h, int m, IntPtr w, IntPtr l);
+  [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr h, int i);
   [DllImport("user32.dll")] public static extern IntPtr SendMessageTimeout(IntPtr h, int m, IntPtr w, IntPtr l, int flags, int ms, out IntPtr r);
   public static bool Answers(IntPtr h, int ms) { IntPtr r; return SendMessageTimeout(h, 0, IntPtr.Zero, IntPtr.Zero, 0x0002, ms, out r) != IntPtr.Zero; }
   public static List<IntPtr> Tops() { var l = new List<IntPtr>(); EnumWindows((h, p) => { l.Add(h); return true; }, IntPtr.Zero); return l; }
@@ -1834,13 +1836,28 @@ public static class RW {
 }
 "@
 function Click($b) { [void][RW]::PostMessage($b, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero) }
+# THE PAGE, named in the sample: the header's title and subtitle (1037, 1038) and the inner page's controls, so a stall says where it is.
+function PageOf($h) {
+  $hdr = @(); $ctl = @(); $radios = @()
+  foreach ($k in [RW]::Kids($h)) {
+    $id = [RW]::GetDlgCtrlID($k); $c = [RW]::Class($k)
+    if (($id -eq 1037 -or $id -eq 1038) -and [RW]::GetParent($k) -eq $h) { $hdr += [RW]::Text($k) }
+    if ([RW]::GetParent($k) -ne $h -and [RW]::IsWindowVisible($k) -and ($c -eq "Button" -or $c -eq "Edit" -or $c -eq "Static")) {
+      $st = [int][RW]::SendMessage($k, 0x00F0, [IntPtr]::Zero, [IntPtr]::Zero)
+      $tx = [RW]::Text($k); if ($tx.Length -gt 40) { $tx = $tx.Substring(0, 40) }
+      if ($c -eq "Button" -and $tx) { $ctl += ($tx + "=" + $st) ; $bs = [RW]::GetWindowLong($k, -16) -band 0xF; if ($bs -eq 4 -or $bs -eq 9) { $radios += [pscustomobject]@{ h = $k; text = $tx; state = $st } } }
+      elseif ($c -eq "Edit") { $ctl += ("edit:" + $tx) }
+    }
+  }
+  [pscustomobject]@{ sig = ($hdr -join " / "); controls = ($ctl -join "; "); buttons = $radios }
+}
 $leaf = ""; if ($Exe) { $leaf = [IO.Path]::GetFileName($Exe) }
-$answeredSame = 0; $retries = 0; $lastPress = @{}; $seen = @{}; $lastPids = "-"; $t0 = Get-Date
+$pageSeen = @{}; $pagePress = @{}; $answeredSame = 0; $retries = 0; $lastPress = @{}; $seen = @{}; $lastPids = "-"; $t0 = Get-Date
 while (-not (Test-Path -LiteralPath $Stop) -and ((Get-Date) - $t0).TotalSeconds -lt $Seconds) {
   $rows = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
     ($_.ExecutablePath -and $Exe -and $_.ExecutablePath -ieq $Exe) -or ($leaf -and $_.Name -ieq $leaf) -or ($_.Name -match '^(old-uninstaller|Au_|Un_[A-Z])') })
   $setup = @($rows | Where-Object { ($_.ExecutablePath -and $Exe -and $_.ExecutablePath -ieq $Exe) -or ($leaf -and $_.Name -ieq $leaf) })
-  $wins = @(); $press = @(); $new = @(); $hungNow = @()
+  $wins = @(); $press = @(); $new = @(); $hungNow = @(); $o2page = @()
   foreach ($h in [RW]::Tops()) {
     if (-not [RW]::IsWindowVisible($h)) { continue }
     $t = [RW]::Text($h)
@@ -1866,7 +1883,28 @@ while (-not (Test-Path -LiteralPath $Stop) -and ((Get-Date) - $t0).TotalSeconds 
     if ($lastPress.ContainsKey($key) -and ($now - $lastPress[$key]).TotalSeconds -lt 2.5) { continue }
     if ($isWizard) {
       $b = $btn[1]
-      if ($b -and [RW]::IsWindowVisible($b) -and [RW]::IsWindowEnabled($b)) { Click $b; $lastPress[$key] = $now; $press += ("wizard " + [RW]::Text($b)) }
+      $pg = PageOf $h
+      if ($pageSeen[$key] -ne $pg.sig) { $pageSeen[$key] = $pg.sig; $pagePress[$key] = 0; $o2page += ($pg.sig + " [" + $pg.controls + "]") }
+      if ($b -and [RW]::IsWindowVisible($b) -and [RW]::IsWindowEnabled($b)) {
+        # The wizard's own forward control, id 1, whatever its label (Next, I Agree, Install, Finish). A page it does not leave after two
+        # presses gets what a person would give it, in turn: an option chosen where none is (this account's, where offered), the dialog's
+        # own IDOK command, then Enter.
+        $n = [int]$pagePress[$key]; $pagePress[$key] = $n + 1; $how = "id1"
+        if ($n -ge 2) {
+          $step = ($n - 2) % 3
+          if ($step -eq 0) {
+            $opts = @($pg.buttons)
+            if ($opts.Count -and -not @($opts | Where-Object { $_.state -eq 1 }).Count) {
+              $pick = @($opts | Where-Object { $_.text -match "only for me|tylko dla mnie|current user" } | Select-Object -First 1)
+              if (-not $pick.Count) { $pick = @($opts | Select-Object -First 1) }
+              Click $pick[0].h; Start-Sleep -Milliseconds 400; $how = "chose " + $pick[0].text
+            }
+            Click $b
+          } elseif ($step -eq 1) { [void][RW]::PostMessage($h, 0x0111, [IntPtr]1, $b); $how = "WM_COMMAND IDOK" }
+          else { [void][RW]::PostMessage($b, 0x0100, [IntPtr]0x0D, [IntPtr]1); [void][RW]::PostMessage($b, 0x0101, [IntPtr]0x0D, [IntPtr]0xC0000001); $how = "Enter" }
+        } else { Click $b }
+        $lastPress[$key] = $now; $press += ("wizard " + [RW]::Text($b) + " (" + $how + ") on " + $pg.sig)
+      }
     } elseif ($msg -match "already installed|zainstalowan") {
       if ($answeredSame -lt 1 -and $btn[1]) { Click $btn[1]; $answeredSame++; $lastPress[$key] = $now; $press += "box OK, the first already-installed box" }
     } elseif ($msg -match "is running|uruchomiony|cannot be closed|nie mo") {
@@ -1889,6 +1927,7 @@ while (-not (Test-Path -LiteralPath $Stop) -and ((Get-Date) - $t0).TotalSeconds 
   }
   if ($new.Count) { $o.new = $new }
   if ($press.Count) { $o.pressed = $press }
+  if ($o2page.Count) { $o.page = $o2page }
   Add-Content -LiteralPath $Out -Value (ConvertTo-Json -InputObject $o -Compress -Depth 6) -Encoding UTF8
   Start-Sleep -Milliseconds 700
 }
@@ -1922,7 +1961,7 @@ function rnrRead(file) {
 function rnrJudge(samples, opts) {
   const o = opts || {};
   let maxSetup = 0, maxWins = 0, maxWpp = 0, hungSamples = 0;
-  const series = [], boxes = [], pressed = [], hungTitles = [];
+  const series = [], boxes = [], pressed = [], hungTitles = [], pages = [];
   for (const s of samples) {
     const sp = s.setup | 0, w = s.wins | 0;
     if (sp > maxSetup) maxSetup = sp;
@@ -1933,6 +1972,7 @@ function rnrJudge(samples, opts) {
     if (last && last[0] === k) last[1]++; else series.push([k, 1]);
     for (const nw of s.new || []) if (nw && nw.kind === "box" && nw.text && boxes.indexOf(nw.text.slice(0, 70)) < 0) boxes.push(nw.text.slice(0, 70));
     for (const p of s.pressed || []) pressed.push(p);
+    for (const p of s.page || []) pages.push(p);
   }
   const faults = [];
   if (o.setupRules) {
@@ -1941,7 +1981,7 @@ function rnrJudge(samples, opts) {
     if (maxWpp > 1) faults.push(maxWpp + " Setup windows in one process");
   }
   if (hungSamples && (o.setupRules || o.hungRule)) faults.push("a window stopped responding in " + hungSamples + " sample(s): " + hungTitles.slice(0, 3).join(", "));
-  return { n: samples.length, maxSetup, maxWins, maxWpp, hungSamples, series: series.map(([k, n]) => k + "x" + n).join(",") || "none", boxes, pressed, faults };
+  return { n: samples.length, pages, maxSetup, maxWins, maxWpp, hungSamples, series: series.map(([k, n]) => k + "x" + n).join(",") || "none", boxes, pressed, faults };
 }
 /* The extra processes a phase saw, as "name<-parent name" for each pid that was not the first Setup: who started the second one. */
 function rnrSpawners(samples, firstPid) {
@@ -1991,7 +2031,8 @@ async function rnrRun(rec, leg, tag, exe, args, o) {
   rec.f(tag + "-s", seconds); rec.f(tag + "-exit", exited ? code : "running"); rec.f(tag + "-samples", j.n);
   rec.f(tag + "-max", j.maxSetup + "/" + j.maxWins); rec.f(tag + "-series", j.series);
   if (j.boxes.length) rec.f(tag + "-boxes", j.boxes.join(" | "));
-  if (j.pressed.length) rec.f(tag + "-pressed", j.pressed.length + ":" + j.pressed.slice(-3).join(";"));
+  if (j.pressed.length) rec.f(tag + "-pressed", j.pressed.length + ":" + j.pressed.slice(-2).join(";"));
+  if (j.pages.length) rec.f(tag + "-pages", j.pages.length + ":" + j.pages.slice(-2).join(" >> ").slice(0, 400));
   const extra = rnrSpawners(samples, child.pid);
   if (extra.length) rec.f(tag + "-procs", few(extra));
   const faults = j.faults.slice();
