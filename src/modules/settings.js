@@ -31,7 +31,7 @@ import { sxIcon } from "./sx-icons.js";
 import { focusKey, focusSame, originOf } from "./dom.js";
 import { orgModel, orgRanks, orgSaid, rewordSent, syncOrgMark } from "./org-model.js";
 import { rewordState, rewordSwitchSet } from "./card-reword.js";
-import { SIGNIN_NAMES, signinNow, signinShown, signinParts, signinSay, signinNoSeat, signinTold, signinActsHtml, signinWhen, signinProvidersHtml, signinIdentHtml, signinInvitedLine, signinJoinRefusedNow, signinJoinRefusedHtml, signinJoinWaitWords, signinChoosingNow, signinDoorsHtml, signinDoorRefusedNow,
+import { SIGNIN_NAMES, signinCheckWords, signinNow, signinShown, signinParts, signinSay, signinNoSeat, signinTold, signinActsHtml, signinWhen, signinProvidersHtml, signinIdentHtml, signinInvitedLine, signinJoinRefusedNow, signinJoinRefusedHtml, signinJoinWaitWords, signinChoosingNow, signinDoorsHtml, signinDoorRefusedNow,
   signinAct, signinStart, signinOnChange, signinPreviewHtml, signinLinkHtml, signinLinkSelect, signinManaged, signinKeepsAccount,
   signinCapHolds, signinStranded, signinStrandedWords, signinWaiting, signinWaitingWords, syncNow, syncLine, syncSet, syncOnChange, syncOpened, syncConsent, askSyncWhose,
   deskDoorState, deskDoorLines, deskSeatShort, buyOffered } from "./signin.js";
@@ -410,7 +410,7 @@ function accountGroups(){
     const payHeld=v.buy && v.buy.held ? payHeldRow(v.buy.held) : null;
     if(payHeld) rows.push(payHeld);
     rows.push(row("checked","clock",t("Last checked"),v.reached ? "" : t("The sign-in service cannot be reached just now. Etiuda keeps working with the catalog it has."),
-      (v.at ? val(signinWhen(v.at)) : "")+'<button type="button" class="btn" data-signin-act="check">'+esc(t("Check now"))+'</button>'));
+      (v.at ? val(signinWhen(v.at)) : "")+'<button type="button" class="btn" data-signin-act="check">'+esc(signinCheckWords("check", t("Check now")))+'</button>'));
   } else if(buy && !v.signedIn) rows.push(buyRow(v));
   else if(held && !v.signedIn) rows.push(held);
   groups.push({rows});

@@ -24,7 +24,7 @@ E.ensureOutputs();
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ENGINE_URL = "file:///" + path.join(ROOT, "engine", "etiuda.html").replace(/\\/g, "/");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 1;
+const EXPECTED = 3;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -102,12 +102,12 @@ const plantLab = PLANTS_OFF ? "" : fs.mkdtempSync(path.join(os.tmpdir(), "etiuda
 
 try {
   /* sf9: Check now answers where the person looks (finding 9). The press shows a checking state, then the result, then rests. */
-  {
+  const sf9run = async url => {
     const read = page => page.evaluate(() => {
       const b = document.querySelector('.set-row[data-row="checked"] [data-signin-act="check"]');
       return { label: b ? b.textContent : "", n: window.__checks };
     });
-    const { ctx, page } = await launchDeskPage(browser, { check: 300 });
+    const { ctx, page } = await launchDeskPage(browser, { check: 300, url });
     await page.evaluate(() => { hooks.openSettings("account"); });
     await sleep(350);
     const rest = await read(page);
@@ -118,10 +118,20 @@ try {
     const after = await read(page);
     await sleep(4300);
     const later = await read(page);
-    check(rest.label === "Check now" && during.label === "Checking" && during.n === 1 && after.label === "Checked" && later.label === "Check now",
-      "sf9a Check now in Account reads Checking while it asks, Checked once it has answered, and Check now again after", { rest, during, after, later });
     await ctx.close();
+    return { rest, during, after, later };
+  };
+  const sf9ok = r => r.rest.label === "Check now" && r.during.label === "Checking" && r.during.n === 1 && r.after.label === "Checked" && r.later.label === "Check now";
+  {
+    const r = await sf9run();
+    check(sf9ok(r), "sf9a Check now in Account reads Checking while it asks, Checked once it has answered, and Check now again after", r);
   }
+  for (const [tag, id] of [["check-busy", "sf9b"], ["check-done", "sf9c"]])
+    domPlants.push([id + " lifting plant:" + tag + " turns sf9a red", async lab => {
+      const htmlPath = path.join(lab, tag + ".html");
+      if (await buildLiftedHtml("src/modules/signin.js", tag, htmlPath) < 0) return false;
+      return !sf9ok(await sf9run("file:///" + htmlPath.replace(/\\/g, "/")));
+    }]);
 
   for (const [label, fn] of domPlants) {
     if (PLANTS_OFF) notRun(label + " (ETIUDA_PLANTS=off)");

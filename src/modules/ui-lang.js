@@ -450,6 +450,8 @@ UI_STRINGS.pl={
   "Names the tab after the customer's first name, or New chat while there is none.":"Nadaje rozmowie imię klienta, a dopóki go nie ma, nazwę Nowa rozmowa.",
   "Open the Menu":"Otwórz Menu",
   "Name customers see":"Nazwa widoczna dla klientów",
+  "Checking":"Sprawdzanie",
+  "Checked":"Sprawdzono",
   "Personal":"Osobiste",
   "Later":"Później",
   "Etiuda {VERSION} is available":"Dostępna jest Etiuda {VERSION}",

@@ -542,12 +542,37 @@ function doorBandState(v){
     text:named(named(t("Seat ended {ENDED} · Etiuda stops {DATE}"),"{ENDED}",ended),"{DATE}",until),
     tip:named(t("This account's seat has ended; Etiuda stops on {DATE}."),"{DATE}",until)};
 }
+/* CHECK NOW ANSWERS where it is pressed: its own label reads Checking while the shell asks and Checked for a moment after, so a press
+   that finds nothing new still shows it was heard. The label alone changes; the act and the button stay. */
+let signinCheckState="", signinCheckTimer=0;
+const SIGNIN_CHECK_SHOWN_MS=700, SIGNIN_CHECKED_MS=4000;
+function signinCheckWords(act, label){
+  return act==="check" ? (signinCheckState==="busy" ? t("Checking") : signinCheckState==="done" ? t("Checked") : label) : label;
+}
+function signinCheckSet(state){
+  signinCheckState=state;
+  if(signinOpen) paintSigninPanel();
+  signinTell();
+}
+function signinCheckPress(){
+  if(signinCheckState==="busy") return;
+  clearTimeout(signinCheckTimer);
+  signinCheckSet("busy"); /* plant:check-busy */
+  const began=Date.now();
+  signinCall("signinCheck").then(v=>{
+    setTimeout(()=>{
+      if(v) signinChanged(v, false);
+      signinCheckSet(signinV.reached ? "done" : ""); /* plant:check-done */
+      signinCheckTimer=setTimeout(()=>signinCheckSet(""), SIGNIN_CHECKED_MS);
+    }, Math.max(0, SIGNIN_CHECK_SHOWN_MS-(Date.now()-began)));
+  });
+}
 function doorPress(label, solid, act){
   const buy=act==="buy"?' data-e-open="buy"':'';
-  return '<button type="button" class="btn'+(solid?" primary":"")+'" data-signin-act="'+esc(act)+'"'+buy+'>'+esc(label)+'</button>';
+  return '<button type="button" class="btn'+(solid?" primary":"")+'" data-signin-act="'+esc(act)+'"'+buy+'>'+esc(signinCheckWords(act, label))+'</button>';
 }
 function doorTextPress(label, act){
-  return '<button type="button" class="door-text" data-signin-act="'+esc(act)+'">'+esc(label)+'</button>';
+  return '<button type="button" class="door-text" data-signin-act="'+esc(act)+'">'+esc(signinCheckWords(act, label))+'</button>';
 }
 function doorScreen(leftBody, rightInner, foot){
   return '<div class="fs-grid"><div class="fs-left"><div class="fs-left-in"><div class="fs-body">'
@@ -794,12 +819,12 @@ function signinDoorsHtml(doors){
     +'<button type="button" class="btn primary" data-signin-act="door" data-signin-door="'+esc(String(d.n))+'">'+esc(t("Ask to join"))+'</button></div>').join("");
 }
 function signinActsHtml(acts){
-  return '<div class="sgn-acts">'+acts.map(a=>'<button type="button" class="btn'+(a.solid?' primary':'')+'" data-signin-act="'+esc(a.act)+'">'+esc(a.label)+'</button>').join("")+'</div>';
+  return '<div class="sgn-acts">'+acts.map(a=>'<button type="button" class="btn'+(a.solid?' primary':'')+'" data-signin-act="'+esc(a.act)+'">'+esc(signinCheckWords(a.act, a.label))+'</button>').join("")+'</div>';
 }
 /* State 4: the way on and Buy on their own row, then the quiet presses under the rule. */
 function signinEndedActsHtml(acts){
   const on=acts.filter(a=>a.solid||a.act==="buy"), rest=acts.filter(a=>!(a.solid||a.act==="buy"));
-  const btn=a=>'<button type="button" class="btn'+(a.solid?' primary':'')+'" data-signin-act="'+esc(a.act)+'">'+esc(a.label)+'</button>';
+  const btn=a=>'<button type="button" class="btn'+(a.solid?' primary':'')+'" data-signin-act="'+esc(a.act)+'">'+esc(signinCheckWords(a.act, a.label))+'</button>';
   return '<div class="door-on-row">'+on.map(btn).join("")+'</div><div class="sgn-acts">'+rest.map(btn).join("")+'</div>';
 }
 /* The preview's line, as the panel and Account draw it, its first sentence the bold one; "" outside the preview. */
@@ -960,7 +985,7 @@ function signinAct(act, btn){
   if(act==="choose"){ signinChoosing=true; signinV=Object.assign({}, signinV, {said:""}); paintSigninPanel(); if(firstSigninOpen) paintFirstSignin(); signinTell(); return; }
   if(act==="stop"){ signinCall("signinStop"); return; }
   if(act==="again"){ signinCall("signinAgain"); return; }
-  if(act==="check"){ signinCall("signinCheck").then(v=>{ if(v) signinChanged(v, false); }); return; }
+  if(act==="check"){ signinCheckPress(); return; }
   if(act==="out"){ signinCall("signinOut").then(v=>{ if(v) signinChanged(v, false); }); return; }
   if(act==="door"){
     const n=Number(btn && btn.getAttribute ? btn.getAttribute("data-signin-door") : NaN);
@@ -1295,6 +1320,7 @@ export {
   whenDoorLowers,
   paintFirstSignin,
   signinAct,
+  signinCheckWords,
   signinActsHtml,
   signinChanged,
   signinChoosingNow,

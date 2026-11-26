@@ -8535,6 +8535,8 @@ What is typed here stays in this browser.`;
     "Names the tab after the customer's first name, or New chat while there is none.": "Nadaje rozmowie imię klienta, a dopóki go nie ma, nazwę Nowa rozmowa.",
     "Open the Menu": "Otwórz Menu",
     "Name customers see": "Nazwa widoczna dla klientów",
+    "Checking": "Sprawdzanie",
+    "Checked": "Sprawdzono",
     "Personal": "Osobiste",
     "Later": "Później",
     "Etiuda {VERSION} is available": "Dostępna jest Etiuda {VERSION}",
@@ -31038,12 +31040,37 @@ What is typed here stays in this browser.`;
       tip: named(t("This account's seat has ended; Etiuda stops on {DATE}."), "{DATE}", until)
     };
   }
+  var signinCheckState = "";
+  var signinCheckTimer = 0;
+  var SIGNIN_CHECK_SHOWN_MS = 700;
+  var SIGNIN_CHECKED_MS = 4e3;
+  function signinCheckWords(act, label2) {
+    return act === "check" ? signinCheckState === "busy" ? t("Checking") : signinCheckState === "done" ? t("Checked") : label2 : label2;
+  }
+  function signinCheckSet(state) {
+    signinCheckState = state;
+    if (signinOpen) paintSigninPanel();
+    signinTell();
+  }
+  function signinCheckPress() {
+    if (signinCheckState === "busy") return;
+    clearTimeout(signinCheckTimer);
+    signinCheckSet("busy");
+    const began = Date.now();
+    signinCall("signinCheck").then((v) => {
+      setTimeout(() => {
+        if (v) signinChanged(v, false);
+        signinCheckSet(signinV.reached ? "done" : "");
+        signinCheckTimer = setTimeout(() => signinCheckSet(""), SIGNIN_CHECKED_MS);
+      }, Math.max(0, SIGNIN_CHECK_SHOWN_MS - (Date.now() - began)));
+    });
+  }
   function doorPress(label2, solid, act) {
     const buy = act === "buy" ? ' data-e-open="buy"' : "";
-    return '<button type="button" class="btn' + (solid ? " primary" : "") + '" data-signin-act="' + esc(act) + '"' + buy + ">" + esc(label2) + "</button>";
+    return '<button type="button" class="btn' + (solid ? " primary" : "") + '" data-signin-act="' + esc(act) + '"' + buy + ">" + esc(signinCheckWords(act, label2)) + "</button>";
   }
   function doorTextPress(label2, act) {
-    return '<button type="button" class="door-text" data-signin-act="' + esc(act) + '">' + esc(label2) + "</button>";
+    return '<button type="button" class="door-text" data-signin-act="' + esc(act) + '">' + esc(signinCheckWords(act, label2)) + "</button>";
   }
   function doorScreen(leftBody, rightInner, foot) {
     return '<div class="fs-grid"><div class="fs-left"><div class="fs-left-in"><div class="fs-body">' + firstSigninMarkHtml() + leftBody + "</div>" + (foot || "") + '</div></div><div class="fs-right"><div class="fs-right-in">' + rightInner + "</div></div></div>";
@@ -31318,11 +31345,11 @@ What is typed here stays in this browser.`;
     return doors.map((d) => '<div class="sgn-code" data-signin-door-row><span class="k">' + esc(d.host) + "</span><code>" + esc(d.print) + '</code><button type="button" class="btn primary" data-signin-act="door" data-signin-door="' + esc(String(d.n)) + '">' + esc(t("Ask to join")) + "</button></div>").join("");
   }
   function signinActsHtml(acts) {
-    return '<div class="sgn-acts">' + acts.map((a) => '<button type="button" class="btn' + (a.solid ? " primary" : "") + '" data-signin-act="' + esc(a.act) + '">' + esc(a.label) + "</button>").join("") + "</div>";
+    return '<div class="sgn-acts">' + acts.map((a) => '<button type="button" class="btn' + (a.solid ? " primary" : "") + '" data-signin-act="' + esc(a.act) + '">' + esc(signinCheckWords(a.act, a.label)) + "</button>").join("") + "</div>";
   }
   function signinEndedActsHtml(acts) {
     const on = acts.filter((a) => a.solid || a.act === "buy"), rest = acts.filter((a) => !(a.solid || a.act === "buy"));
-    const btn = (a) => '<button type="button" class="btn' + (a.solid ? " primary" : "") + '" data-signin-act="' + esc(a.act) + '">' + esc(a.label) + "</button>";
+    const btn = (a) => '<button type="button" class="btn' + (a.solid ? " primary" : "") + '" data-signin-act="' + esc(a.act) + '">' + esc(signinCheckWords(a.act, a.label)) + "</button>";
     return '<div class="door-on-row">' + on.map(btn).join("") + '</div><div class="sgn-acts">' + rest.map(btn).join("") + "</div>";
   }
   function signinPreviewHtml(v) {
@@ -31537,9 +31564,7 @@ What is typed here stays in this browser.`;
       return;
     }
     if (act === "check") {
-      signinCall("signinCheck").then((v) => {
-        if (v) signinChanged(v, false);
-      });
+      signinCheckPress();
       return;
     }
     if (act === "out") {
@@ -42433,7 +42458,7 @@ What is typed here stays in this browser.`;
         "clock",
         t("Last checked"),
         v.reached ? "" : t("The sign-in service cannot be reached just now. Etiuda keeps working with the catalog it has."),
-        (v.at ? val(signinWhen(v.at)) : "") + '<button type="button" class="btn" data-signin-act="check">' + esc(t("Check now")) + "</button>"
+        (v.at ? val(signinWhen(v.at)) : "") + '<button type="button" class="btn" data-signin-act="check">' + esc(signinCheckWords("check", t("Check now"))) + "</button>"
       ));
     } else if (buy && !v.signedIn) rows.push(buyRow(v));
     else if (held && !v.signedIn) rows.push(held);
