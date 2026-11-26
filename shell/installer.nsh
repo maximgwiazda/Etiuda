@@ -556,6 +556,17 @@
     ${If} $R8 != 0
       ${ExitDo}
     ${EndIf}
+    # Another account's copy is looked for before anything is closed: found, the run goes straight to Retry, or to 1618 when
+    # silent, with the person's own copy still open. A per-user install never sees another account's, so it does not look.
+    ${If} $R7 == 0
+      ${If} $installMode == "all"
+        nsExec::Exec `"$SYSDIR\cmd.exe" /C ""$SYSDIR\tasklist.exe" /FI "USERNAME ne %USERNAME%" /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\"""` ; plant:other-account-first
+        Pop $R8
+        ${If} $R8 == 0
+          StrCpy $R7 20
+        ${EndIf}
+      ${EndIf}
+    ${EndIf}
     ${If} $R7 == 0
       DetailPrint "$R6"
       # Only this account's own copy is asked to close; another person's is never ended. With none of its own open there

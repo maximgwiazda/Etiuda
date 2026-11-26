@@ -86,7 +86,8 @@ failing the run. A deployment tool that names a folder inside or above the regis
 no longer registered, to be removed by hand.
 
 An all-users install looks for an open copy in every session, and asks only the installing account's own copy to
-close: another person's is never closed, so the run ends with 1618 and the deployment tool tries again later. A
+close: another person's is never closed, so the run ends with 1618 and the deployment tool tries again later. That
+look comes first, before anything is asked or closed, so the installing account's own copy stays open when it ends. A
 per-user install looks in its own account alone, since another account's copy runs from that account's own folder.
 An all-users install started already elevated, with no person's own instance to act through, leaves that account's
 per-user copy to its own uninstaller, run silently as that account the next time it signs in, keeping its data.

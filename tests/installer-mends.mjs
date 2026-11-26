@@ -29,6 +29,7 @@
  *   im8 THE CLOSE STEP SEES THE PROGRAM: customCheckAppRunning's command lines, run through cmd.exe as nsExec passes them
  *       (Windows alone, else not run)
  *       a  each tasklist line finds a program that runs (this node, for this account) and finds nothing for an image that does not
+ *          (the line for another account's copy finds a service account's svchost.exe and never this node)
  *       b  the close line reaches taskkill itself
  *   im10 THE ACCOUNT TEST OF tools/patch-nsis.cjs FIX 5 RUNS: its whoami | findstr line, through cmd.exe as nsExec passes it,
  *       hands whoami's output to findstr (Windows alone, else not run)
