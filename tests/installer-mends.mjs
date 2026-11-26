@@ -526,25 +526,28 @@ else {
 }
 
 /* ---- im10: tools/patch-nsis.cjs fix 5's account test, run as nsExec runs it ----
-   The line findstr reads whoami's SID through; any SID starts S-1-5-, and none S-9-9-9, so the pair tells a whoami that ran from a
-   line cmd.exe could not parse. */
+   The line findstr reads whoami's SID through: with this account's own SID in the system account's place it is found, and S-9-9-9
+   is not, which tells a whoami that ran from a line cmd.exe could not parse. */
 const PATCH = read("tools/patch-nsis.cjs");
 const whoamiOf = text => {
   const src = String(text).split("\n").find(l => l.indexOf("whoami.exe") > -1 && /^\s*"/.test(l)) || "";
-  let s = ""; try { s = JSON.parse(src.trim().replace(/,$/, "")); } catch (e) { s = ""; }
+  let s = ""; try { s = JSON.parse(src.trim().replace(/\s*\/\*[^*]*\*\/$/, "").replace(/,$/, "")); } catch (e) { s = ""; }
   return (/^\s*nsExec::Exec `(.*)`$/.exec(s) || [])[1] || "";
 };
 const whoamiRuns = text => {
   const line = whoamiOf(text);
   if (!line || line.indexOf("S-1-5-18") < 0) return { ok: false, line };
-  const any = runLine(line.split("S-1-5-18").join("S-1-5-"), "", false), none = runLine(line.split("S-1-5-18").join("S-9-9-9"), "", false);
+  const me = spawnSync(path.join(SYS, "whoami.exe"), ["/user", "/FO", "CSV", "/NH"], { encoding: "utf8", windowsHide: true });
+  const sid = (/"(S-1-[0-9-]+)"/.exec(String(me.stdout || "")) || [])[1] || "";
+  if (!sid) return { ok: false, why: "whoami gave no SID of its own" };
+  const any = runLine(line.split("S-1-5-18").join(sid), "", false), none = runLine(line.split("S-1-5-18").join("S-9-9-9"), "", false);
   return { ok: any.exit === 0 && none.exit === 1, any: any.exit, none: none.exit, said: any.out.trim().slice(0, 80) };
 };
 if (process.platform !== "win32") { notRun += 1; console.log("  --   im10 not run: cmd.exe and whoami are Windows's"); }
 else {
   const w10 = whoamiRuns(PATCH);
   check(w10.ok, "im10a tools/patch-nsis.cjs fix 5's account test, run through cmd.exe as nsExec passes it, hands whoami's SID to findstr:"
-    + " a pattern every SID holds is found and one none holds is not", JSON.stringify(w10));
+    + " this account's SID put in the system account's place is found, and one nobody holds is not", JSON.stringify(w10));
   const bare = PATCH.replace(/(nsExec::Exec `\\"\$SYSDIR\\\\cmd\.exe\\" \/C )\\"(\\"\$SYSDIR\\\\whoami\.exe[^`]*)\\"`/, "$1$2`");
   check(bare !== PATCH && !whoamiRuns(bare).ok, "im10 control: the line without the outer pair of quotes cmd.exe takes away reads red");
 }
