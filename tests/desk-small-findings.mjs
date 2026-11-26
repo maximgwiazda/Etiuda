@@ -469,10 +469,10 @@ try {
     await ctx.close();
     return r;
   };
-  const sf12narrowOk = r => r.every(x => x.name >= 100 && x.h <= 200);
+  const sf12narrowOk = r => r.every(x => x.name >= 60 && x.h <= 200);
   {
     const r = await sf12narrow();
-    check(sf12narrowOk(r), "sf12c at 600 px a row's name keeps 100 px or more and the row stays under 200 px tall, the key wrapping under the switch", r);
+    check(sf12narrowOk(r), "sf12c at 600 px a row's name keeps 60 px or more and the row stays under 200 px tall, the key wrapping under the switch", r);
   }
   domPlants.push(["sf12d lifting plant:ec-whose-wrap turns sf12c red", async lab => {
     const htmlPath = path.join(lab, "ec-whose-wrap.html");

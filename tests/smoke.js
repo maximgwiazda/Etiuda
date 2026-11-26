@@ -578,8 +578,7 @@ const t0 = Date.now();
   const mtFloor = await p.evaluate(() => {
     const host = document.getElementById("screenHost");
     const page = host && !host.hidden ? host.querySelector(".mt-screen") : null;
-    const buttons = page ? page.querySelectorAll(".screen-actions button") : [];
-    const last = buttons.length ? buttons[buttons.length - 1] : null;
+    const last = page ? page.querySelector("#mtCopy") : null;
     if (!page || !last) return { ok: false, why: "no page" };
     let sc = last.parentElement;
     while (sc && sc !== document.documentElement) {
@@ -587,7 +586,11 @@ const t0 = Date.now();
       if (oy === "auto" || oy === "scroll") break;
       sc = sc.parentElement;
     }
-    if (!sc || sc === document.documentElement) return { ok: false, why: "no scroller" };
+    if (!sc || sc === document.documentElement) {
+      const w = last.getBoundingClientRect();
+      return { ok: w.width > 0 && w.top >= 0 && w.bottom <= innerHeight && w.left >= 0 && w.right <= innerWidth, id: "window", btn: last.id,
+        b: [Math.round(w.top), Math.round(w.bottom)], vis: [0, innerHeight] };
+    }
     sc.scrollTop = sc.scrollHeight;
     const b = last.getBoundingClientRect();
     const r = sc.getBoundingClientRect();
@@ -758,8 +761,7 @@ const t0 = Date.now();
   const took = await p.evaluate(() => document.activeElement && document.activeElement.id);
   await p.keyboard.press("Escape"); await sleep(400);
   const kept = await tourShot();
-  await p.evaluate(() => { const btn = document.getElementById("settingsBtn"); if (btn) btn.click();
-    const item = document.querySelector('#settingsMenu [data-act="about"]'); if (item) item.click(); });
+  await p.evaluate(() => { openCardEditor(null); });
   await sleep(900);
   const behind = await p.evaluate(() => ({ lib: !document.getElementById("modal").hidden,
     z: getComputedStyle(document.getElementById("tourRoot")).zIndex }));
@@ -772,7 +774,7 @@ const t0 = Date.now();
     + " keyboard, and the click and an Escape there leave the bubble up on its step (" + JSON.stringify({ under: under.page, took, up: kept.up, at: kept.at }) + ")");
   check(behind.lib && behind.z === "190" && front === "240",
     "a window opened over the page takes the bubble behind it, and closing it brings the bubble back (z "
-    + behind.z + " with About open, " + front + " after)");
+    + behind.z + " with an editor open, " + front + " after)");
   clean(e, "the tour");
 
   /* Interface language both ways, with the dialogs opened in Polish.
