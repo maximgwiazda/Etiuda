@@ -612,10 +612,10 @@ async function runSuite(browser, enginePath, opts = {}) {
       await page.keyboard.press("Enter");
       await sleep(80);
       const afterE = await page.evaluate(() => ({
-        modalOpen: !document.getElementById("modal")?.hidden,
+        modalOpen: !!document.querySelector("#screenHost .about-in"),
         menuOpen: !document.getElementById("settingsMenu")?.hidden
       }));
-      if (afterE.modalOpen) { await page.keyboard.press("Escape").catch(() => {}); await sleep(60); }
+      if (afterE.modalOpen) { await page.evaluate(() => { const x = document.querySelector("#tabsBar .tab.on .tab-x"); if (x) x.click(); }); await sleep(60); }
 
       await page.focus("#settingsBtn");
       await page.keyboard.press("Enter");
@@ -629,10 +629,10 @@ async function runSuite(browser, enginePath, opts = {}) {
       await page.keyboard.press("Space");
       await sleep(80);
       const afterS = await page.evaluate(() => ({
-        modalOpen: !document.getElementById("modal")?.hidden,
+        modalOpen: !!document.querySelector("#screenHost .about-in"),
         menuOpen: !document.getElementById("settingsMenu")?.hidden
       }));
-      if (afterS.modalOpen) { await page.keyboard.press("Escape").catch(() => {}); await sleep(60); }
+      if (afterS.modalOpen) { await page.evaluate(() => { const x = document.querySelector("#tabsBar .tab.on .tab-x"); if (x) x.click(); }); await sleep(60); }
 
       rec(
         afterE.modalOpen && !afterE.menuOpen && afterS.modalOpen && !afterS.menuOpen,

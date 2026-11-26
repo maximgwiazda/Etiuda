@@ -326,7 +326,7 @@ const UNDOS = [
     const sec = document.querySelector('button[data-lm="data"]'); if (sec) sec.click();
     await new Promise(r => setTimeout(r, 300));
     document.querySelector("button[data-ec-eject]").click();
-    return { name: "ejected", bub: "#eUndo", ctl: "#mgBring" };
+    return { name: "ejected", bub: "#eUndo", ctl: "#catNow" };
   }],
 ];
 async function runUndos(page, label, only) {

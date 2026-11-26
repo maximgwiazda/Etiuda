@@ -1212,7 +1212,7 @@ UI_STRINGS.pl={
   "What the app tells you, also while its window is closed.":"O czym program powiadamia, także gdy jego okno jest zamknięte.",
   "The team this desk is on, and how its changes reach the team.":"Zespół tego stanowiska i sposób, w jaki jego zmiany trafiają do zespołu.",
   "Putting settings back, and what the app keeps on this computer.":"Przywracanie ustawień i to, co program przechowuje na tym komputerze.",
-  "The version, the licence and the tour.":"Wersja, licencja i przewodnik.",
+  "The version, what is new in it, and the licence.":"Wersja, co w niej nowego i licencja.",
   "A shortcut can be changed to an F key or a combination with Ctrl or Alt, since keys needed for typing stay with typing; the keys Etiuda itself needs are shown as fixed.":"Skrót można zmienić na klawisz F albo połączenie z Ctrl lub Alt, bo klawisze potrzebne do pisania zostają do pisania; klawisze, których Etiuda potrzebuje sama, są oznaczone jako stałe.",
   "Puts every setting back as it ships. Cards and your edits are not touched.":"Przywraca wszystkie ustawienia do stanu wyjściowego. Karty i własne zmiany zostają bez zmian.",
   "What this computer reports, and ways to set things right.":"Co raportuje ten komputer i jak przywrócić porządek.",

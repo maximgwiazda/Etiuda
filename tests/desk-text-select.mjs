@@ -568,12 +568,14 @@ try {
   await page.click("#modalX");
   await page.waitForFunction(() => document.getElementById("modal").hidden, { timeout: 10000 });
 
-  // 9. About modal
+  // 9. About, a category of Settings, its folds open
   await openMenuItem(page, "about");
-  await page.waitForFunction(() => !document.getElementById("modal").hidden, { timeout: 10000 });
-  recordWalk(await auditScreen(page, "About", ["#modalCard"]));
-  await page.click("#aboutClose");
-  await page.waitForFunction(() => document.getElementById("modal").hidden, { timeout: 10000 });
+  await page.waitForFunction(() => !!document.querySelector("#screenHost .about-in"), { timeout: 10000 });
+  await page.evaluate(() => { document.querySelectorAll("#screenHost .about-in details").forEach(d => { d.open = true; }); });
+  await sleep(60);
+  recordWalk(await auditScreen(page, "About", ["#screenHost"]));
+  await page.evaluate(() => { const x = document.querySelector("#tabsBar .tab.on .tab-x"); if (x) x.click(); });
+  await page.waitForFunction(() => !document.querySelector("#screenHost .about-in") || document.getElementById("screenHost").hidden, { timeout: 10000 });
 
   // 8. Tour
   await openMenuItem(page, "tour");
