@@ -6716,9 +6716,10 @@ function teamStateMirror(team) {
   }
   return "";
 }
-/* True while the team's file lists a catalog the mirror holds no edition of. An edition is a catalog file there,
-   signed so this desk accepts it. The head's announcement is not one: the file is. An empty list, or a team file
-   that is not whole under the pinned lead, says nothing. */
+/* True while the team's file lists a catalog the mirror holds no edition of, or lists no catalog yet (a team is made on
+   its own and a catalog put on it later, so a desk may join before anything is published). An edition is a catalog file
+   there, signed so this desk accepts it. The head's announcement is not one: the file is. A team file that is not whole
+   under the pinned lead says nothing. */
 function awaitsFirstEdition(team) {
   const pin = pinTrusted(team);
   if (!pin) return false;
@@ -6727,7 +6728,8 @@ function awaitsFirstEdition(team) {
   const doc = teamTextChosen(root).doc;
   if (!doc || !teamWhole(doc) || String(doc.id) !== team || !doc.lead
     || doc.lead.keyId !== pin.keyId || doc.lead.public !== pin.public
-    || !Array.isArray(doc.catalogs) || !doc.catalogs.length) return false;
+    || !Array.isArray(doc.catalogs)) return false;
+  if (!doc.catalogs.length) return true;
   const have = new Set();
   for (const f of ecFilesIn(root)) {
     let facts = null;
