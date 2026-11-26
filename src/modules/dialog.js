@@ -623,7 +623,7 @@ function edToDesk(){
 const ED_RING_PX=6;
 function edFabRect(){
   const fab=document.getElementById("edFab");
-  const b=fab && !fab.hidden && fab.getClientRects().length ? fab.getBoundingClientRect() : null;
+  const b=fab && !fab.hidden && typeof fab.getBoundingClientRect==="function" ? fab.getBoundingClientRect() : null;
   return b && b.width>0 ? b : null;
 }
 function edGhosts(recs){

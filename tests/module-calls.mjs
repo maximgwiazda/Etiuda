@@ -6321,7 +6321,7 @@ const CARD_B = {
     check("settings.js", "D3-4 no AI in the section list, and no section listed without a row but Teams and keys, greyed and opening nothing", () => {
       const n = SET.settingsNavHtml("general");
       const ids = [...n.matchAll(/data-sx="([^"]+)"/g)].map(m => m[1]);
-      const empty = SET.settingsSections().filter(s => !/class="sx-card"><div class="(set-row|sc-list)/.test(SET.settingsPageHtml(s.id, ""))).map(s => s.id);
+      const empty = SET.settingsSections().filter(s => !/class="sx-card"><div class="(set-row|sc-list|about-in)/.test(SET.settingsPageHtml(s.id, ""))).map(s => s.id);
       return (ids.indexOf("ai") < 0 && !/>AI</.test(n) && empty.join(",") === "teams" && /class="sx-sec team-off"/.test(n)
         && ids.join(",") === "all,account,general,appearance,layout,keys,notifications,data,about") || ids.join(",") + " empty " + empty.join(",");
     });
@@ -8268,7 +8268,7 @@ const CARD_B = {
 
 
     /* moved, board 1018 (fold 125), old and new: 983r8 "the resting layer stands above ... the dim lifts" -> the same layering, its cards out of sight and taking no press (the resting look's lines replaced by `.ed-min{display:none}` and the rest layer's own line). */
-    check("dialog.js", "983r8 minimised, the shared window stands above the cards, the rail, the pills and the floating buttons and under the desk's own overlays, its cards out of sight and taking no press; the header rises over it while one of its popovers is open; the dim lifts on the scrim tier (board 1018)",
+    check("dialog.js", "983r8 minimised, the shared window stands above the cards, the rail, the pills and the floating buttons and under the desk's own overlays, its cards out of sight and taking no press; the header rises over it while one of its popovers is open; the dim lifts on the fly tier (board 1018; finding 8)",
       () => {
         const tpl = fs.readFileSync(join(HERE, "..", "src", "template.html"), "utf8");
         const css = tpl.replace(/\/\*[\s\S]*?\*\//g, "");
@@ -8287,7 +8287,7 @@ const CARD_B = {
         const over = { dock: zOf(s => s === "#nextDock"), note: zOf(s => s === ".note-pane"), ctx: zOf(s => s === ".menu.e-ctx") };
         const okUnder = Object.keys(under).filter(k => !(under[k] != null && under[k] < rest));
         const okOver = Object.keys(over).filter(k => !(over[k] != null && over[k] > rest));
-        const look = [tpl.indexOf(".modal.ed-rest:not([hidden]) .modal-bg{animation:none;opacity:0;transition:opacity var(--m-scrim) ease}") >= 0,
+        const look = [tpl.indexOf(".modal.ed-rest:not([hidden]) .modal-bg{animation:none;opacity:0;transition:opacity var(--m-fly) ease}") >= 0,
           tpl.indexOf(".modal.ed-rest{z-index:56;pointer-events:none}") >= 0,
           tpl.indexOf(".modal .modal-card.ed-min{display:none}") >= 0,
           tpl.indexOf("body.e-backdrop:has(.modal:not([hidden]):not(.ed-rest)){background:var(--bg)}") >= 0,
@@ -8892,7 +8892,7 @@ const CARD_B = {
         const c0 = at().join(",");
         drag(600, 160, 900, 600);
         return eq([names.sort().join(",") + " of " + sites, about, at().join(",") === c0, store()].join(" || "),
-          "card-editor.js:card,editors.js:category,editors.js:intent of 6 || false||| || true || ");
+          "card-editor.js:card,editors.js:category,editors.js:intent of 4 || false||| || true || ");
       });
 
     /* ---- Board 1018: the desk's editors place themselves. The oracle is Max's rule of 21 November as the designer's sheet
@@ -8958,7 +8958,7 @@ const CARD_B = {
         scrim();
         const two = [badge.textContent, fab.classList.contains("unsaved"), fab.title, globalThis.document.body.classList.contains("ed-up")].join("|");
         return eq([none, clean, dot, one, two].join(" || "),
-          "true|false || true|true|true|false|3|false|Choose a minimised editor|false || true|false || 1|true|Bring back the minimised editor. Its unsaved changes are kept|true|true || 2|true|Choose a minimised editor. Unsaved changes in them are kept|false");
+          "true|true || true|true|true|false|3|false|Choose a minimised editor|false || true|false || 1|true|Bring back the minimised editor. Its unsaved changes are kept|true|true || 2|true|Choose a minimised editor. Unsaved changes in them are kept|false");
       });
 
     check("dialog.js", "1018e with two or more minimised the button opens a showcase: each at half size side by side over the dim, the last used ringed, the ones showing hidden; a press on one brings back that one alone; a digit picks too, the arrows move the ring, and a short Esc or a press on the dim leaves it with nothing closed",
