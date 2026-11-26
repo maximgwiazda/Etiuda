@@ -2039,6 +2039,136 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     "17a control: with perMachine true there is no choice to name, and the leg reads red rather than pass on words alone");
 }
 
+/* ---- 18. no installer script on the window thread while a section runs --------------------------------------------
+   The turning sidebar and header run a timer (nsDialogs::CreateTimer, TurnTick) on the window thread, and NSIS runs the install and
+   uninstall sections on a second thread over the same stack and registers; with a long loop in the section the two collide (the desk's
+   Setup hung, Studio's re-entered the "already installed" box until it crashed). Held by reading, timing-free: in the installer and in
+   the uninstaller, every timer the script creates is killed by a callback that runs before the section starts (the Installing page's
+   PRE or SHOW, set by the defines left at the end of customPageAfterChangeDir for the installer or customUnWelcomePage for the
+   uninstaller, or the LEAVE of the last page those macros insert), nothing a section runs creates one, and the "already installed"
+   question is asked at most once per run (a variable of its own, not a register, tested at its first use and set before the MessageBox). Restarting on the Finish page (customFinishPage,
+   customUninstallPage) is read and reported. Comment lines are skipped; ${TURN_PFX} is read as "" and "un.", as TurnEmit inserts it. */
+function turnHazard(src) {
+  const lines = String(src).split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !/^[#;]/.test(l));
+  const macros = {}, funcs = {}, sections = [];
+  for (let i = 0; i < lines.length; i++) {
+    let m = /^!macro\s+(\S+)/.exec(lines[i]);
+    if (m) { const body = []; for (i++; i < lines.length && !/^!macroend\b/.test(lines[i]); i++) body.push(lines[i]); macros[m[1]] = body; }
+  }
+  const addFunc = (name, body) => {
+    const variants = /\$\{TURN_PFX\}/.test(name + body.join("\n")) ? ["", "un."] : [null];
+    for (const v of variants) {
+      const sub = (s) => (v === null ? s : s.replace(/\$\{TURN_PFX\}/g, v));
+      funcs[sub(name)] = body.map(sub);
+    }
+  };
+  for (let i = 0; i < lines.length; i++) {
+    let m = /^Function\s+(\S+)/.exec(lines[i]);
+    if (m) { const body = []; for (i++; i < lines.length && !/^FunctionEnd\b/.test(lines[i]); i++) body.push(lines[i]); addFunc(m[1], body); continue; }
+    m = /^Section\b/.exec(lines[i]);
+    if (m) { const body = []; for (i++; i < lines.length && !/^SectionEnd\b/.test(lines[i]); i++) body.push(lines[i]); sections.push(body); }
+  }
+  /* What a body reaches: its lines, the functions it calls and the macros it inserts, transitively. */
+  const reach = (body, seen) => {
+    const s = seen || new Set(), out = [];
+    for (const l of body) {
+      out.push(l);
+      const c = /^Call\s+(\S+)/.exec(l), mi = /^!insertmacro\s+(\S+)/.exec(l);
+      const key = c ? "f:" + c[1] : mi ? "m:" + mi[1] : "";
+      if (!key || s.has(key)) continue;
+      s.add(key);
+      const next = c ? funcs[c[1]] : macros[mi[1]];
+      if (next) out.push(...reach(next, s));
+    }
+    return out;
+  };
+  const kills = (name) => !!funcs[name] && reach(funcs[name]).some((l) => /nsDialogs::KillTimer\b/.test(l));
+  const creates = (body) => reach(body).some((l) => /nsDialogs::CreateTimer\b|user32::SetTimer\b/i.test(l));
+  /* The pages a hook macro inserts, in order, each with its callbacks, and the defines left after the last one (they go to the next page). */
+  const pagesOf = (macro) => {
+    const pages = [];
+    let pend = {};
+    for (const l of macros[macro] || []) {
+      const d = /^!define\s+MUI_PAGE_CUSTOMFUNCTION_(PRE|SHOW|LEAVE)\s+(\S+)/.exec(l);
+      if (d) { pend[d[1].toLowerCase()] = d[2]; continue; }
+      if (/^!insertmacro\s+MUI_(UN)?PAGE_(?!INIT\b)\w+/.test(l)) { pages.push(pend); pend = {}; continue; }
+      const c = /^(?:Uninst)?Page\s+custom\s+(\S+)(?:\s+(\S+))?/.exec(l);
+      if (c) { pages.push({ pre: c[1], leave: c[2] }); pend = {}; }
+    }
+    return { pages, trailing: pend };
+  };
+  const killersBefore = (macro) => {
+    const p = pagesOf(macro), cands = [p.trailing.pre, p.trailing.show];
+    if (p.pages.length) cands.push(p.pages[p.pages.length - 1].leave);
+    return cands.filter(Boolean).filter(kills);
+  };
+  const finishRestarts = (macro, trailingToo) => {
+    const p = pagesOf(macro), cands = [];
+    for (const pg of p.pages) cands.push(pg.pre, pg.show);
+    if (trailingToo) cands.push(p.trailing.pre, p.trailing.show);
+    return cands.filter(Boolean).some((n) => funcs[n] && creates(funcs[n]));
+  };
+  const timer = lines.some((l) => /nsDialogs::CreateTimer\b|user32::SetTimer\b/i.test(l));
+  const r = { timer, installerKill: killersBefore("customPageAfterChangeDir"), uninstallerKill: killersBefore("customUnWelcomePage"),
+    sectionCreates: [], finishRestart: { installer: finishRestarts("customFinishPage", false), uninstaller: finishRestarts("customUninstallPage", true) },
+    guard: "n/a", faults: [] };
+  const sectionSide = sections.map((b, i) => ["Section#" + (i + 1), b])
+    .concat(Object.keys(macros).filter((n) => /^custom(Install|UnInstall|RemoveFiles|CheckAppRunning|UnInstallCheck\w*)$/.test(n)).map((n) => [n, macros[n]]));
+  for (const [n, b] of sectionSide) if (creates(b)) r.sectionCreates.push(n);
+  if (timer) {
+    if (!r.installerKill.length) r.faults.push("the installer's timer runs on into the Installing page: no callback before the section kills it");
+    if (!r.uninstallerKill.length) r.faults.push("the uninstaller's timer runs on into the Uninstalling page: no callback before the section kills it");
+  }
+  if (r.sectionCreates.length) r.faults.push("a section starts a timer: " + r.sectionCreates.join(", "));
+  const rec = funcs.RecogniseExistingInstallation;
+  if (rec) {
+    const box = rec.findIndex((l) => /^MessageBox\b/.test(l));
+    let guarded = false;
+    if (box > -1) for (let i = 0; i < box && !guarded; i++) {
+      const set = /^StrCpy\s+(\$\w+)\s+"?[^"\s]+"?\s*$/.exec(rec[i]);
+      if (!set) continue;
+      if (/^\$R?\d$/.test(set[1])) continue;
+      const v = set[1].replace(/\$/g, "\\$"), test = new RegExp("^(\\$\\{(If|IfNot|OrIf|AndIf)\\}\\s+" + v + "\\s|StrCmp\\s+" + v + "\\s)");
+      const first = rec.findIndex((l) => new RegExp(v + "(?!\\w)").test(l));
+      guarded = first > -1 && first < i && test.test(rec[first]);
+    }
+    r.guard = guarded ? "guarded" : "unguarded";
+    if (!guarded) r.faults.push("the \"already installed\" question is not guarded to once per run");
+  }
+  r.ok = !r.faults.length;
+  return r;
+}
+/* A mended copy of a script, for the rows' controls: the timer killed on the Installing and Uninstalling pages and restarted on Finish,
+   and the question asked once. Written here, not taken from any mend. */
+function turnMended(src, drop) {
+  const d = drop || {};
+  let s = String(src);
+  const KILL = ["Function RnrStopTurn", "Push $0", "GetFunctionAddress $0 TurnTick", "nsDialogs::KillTimer $0", "Pop $0", "FunctionEnd",
+    "Function un.RnrStopTurn", "Push $0", "GetFunctionAddress $0 un.TurnTick", "nsDialogs::KillTimer $0", "Pop $0", "FunctionEnd",
+    "Function RnrRestartTurn", "StrCpy $TurnReady \"\"", "Call TurnPrepare", "FunctionEnd"];
+  s += "\n" + KILL.join("\n") + "\n";
+  if (!d.installer) s += "!macro customPageAfterChangeDir\n!define MUI_PAGE_CUSTOMFUNCTION_SHOW RnrStopTurn\n!macroend\n";
+  s += "!macro customFinishPage\n!define MUI_PAGE_CUSTOMFUNCTION_SHOW RnrRestartTurn\n!insertmacro MUI_PAGE_FINISH\n!macroend\n";
+  if (!d.uninstaller) s = s.replace(/(!macro customUnWelcomePage[\s\S]*?)(\n\s*!macroend)/, "$1\n!define MUI_PAGE_CUSTOMFUNCTION_SHOW un.RnrStopTurn$2");
+  if (!d.guard) s = s.replace(/(\n\s*Function RecogniseExistingInstallation\s*\n)/, "$1${If} $RnrAsked == \"1\"\nReturn\n${EndIf}\nStrCpy $RnrAsked \"1\"\n");
+  if (d.sectionTimer) s += "!macro customInstall\nGetFunctionAddress $0 TurnTick\nnsDialogs::CreateTimer $0 33\n!macroend\n";
+  return s;
+}
+const T18_FILE = path.join(__dirname, "..", "shell", "installer.nsh"), T18_NAME = "shell/installer.nsh";
+{
+  const T18 = fs.readFileSync(T18_FILE, "utf8");
+  const r = turnHazard(T18);
+  ok(r.ok, "18a " + T18_NAME + ": the turning timer is killed before the install and the uninstall sections start, no section starts one, and the"
+    + " \"already installed\" question is guarded to once per run: " + JSON.stringify({ timer: r.timer, installerKill: r.installerKill, uninstallerKill: r.uninstallerKill,
+      sectionCreates: r.sectionCreates, finishRestart: r.finishRestart, guard: r.guard, faults: r.faults }));
+  const m = (d) => turnHazard(turnMended(T18, d));
+  ok(m().ok, "18a control: the same script with the timer killed on the Installing and Uninstalling pages and the question guarded reads green");
+  ok(!m({ installer: true }).ok && m({ installer: true }).faults.length === 1, "18a control: without the installer's kill, red in that row alone");
+  ok(!m({ uninstaller: true }).ok && m({ uninstaller: true }).faults.length === 1, "18a control: without the uninstaller's kill, red in that row alone");
+  ok(!m({ guard: true }).ok && m({ guard: true }).faults.length === 1, "18a control: without the once-per-run guard, red in that row alone");
+  ok(!m({ sectionTimer: true }).ok && m({ sectionTimer: true }).faults.length === 1, "18a control: a timer started from customInstall reads red");
+}
+
 console.log("\n#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);
 console.log("install-plan-selftest " + (fails ? "FAILED " + fails + " of " : "passed ") + checks + " check(s)");
 process.exit(fails ? Math.min(fails, 63) : 0);

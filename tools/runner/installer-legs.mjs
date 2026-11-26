@@ -1793,7 +1793,12 @@ async function pfDotdot() {
                               for the tray's Quit, which this runner cannot reach).
      reinstall-no-reboot-ask  the program is still running in its tray when the uninstall starts; any box the uninstaller shows about
                               it is answered as a person would (the program quit, then Retry; an OK box, OK).
-   IT FAILS ON: a Setup not finished within RNR_BOUND_S (a hang); more than one Setup process (by the setup file's path or name) or
+   The uninstall and the second install are repeated RNR_CYCLES times (ETIUDA_RNR_CYCLES, 5 unless set), every install interactive with the
+   turning animation running, never /S, since the fault is a race; the first cycle with a fault is the last.
+   IT FAILS ON: a Setup not finished within RNR_BOUND_S (a hang); a Setup or Uninstall window that stops responding (IsHungAppWindow,
+   or a wizard that does not answer WM_NULL within 5 s, SMTO_ABORTIFHUNG); a Setup that ends with an exception (an exit code of
+   0xC0000000 or above, such as c000041d) or that Windows Error Reporting logs as crashed or hung (Application log, 1000 and 1002);
+   more than one visible Setup window in one process; more than one Setup process (by the setup file's path or name) or
    more than one visible top-level window with "Setup" in its title at any sample, one sample a second; and, before the second
    install, anything the uninstall left: a running process of the program, the install folder, the uninstall entry (either scope),
    a PendingFileRenameOperations entry naming the folder or the product. The first install and the uninstall are held to the same
@@ -1802,6 +1807,7 @@ async function pfDotdot() {
    as rnr-<leg>-<phase>.jsonl beside legs.txt, which is where the program that started an extra Setup is read. A storm is cut short
    at RNR_STORM_CAP of either count, so the runner survives it; the leg stops by pid what the setup file and the uninstaller ran. */
 const RNR_BOUND_S = 300, RNR_STORM_CAP = 6;
+const RNR_CYCLES = Math.max(1, Math.min(20, parseInt(process.env.ETIUDA_RNR_CYCLES || "5", 10) || 5));
 const RNR_PS = String.raw`param([string]$Exe, [string]$Title, [string]$Product, [string]$Out, [string]$Stop, [string]$Drive, [string]$App, [int]$Seconds = 400)
 $ErrorActionPreference = "Continue"
 Add-Type -TypeDefinition @"
@@ -1818,6 +1824,9 @@ public static class RW {
   [DllImport("user32.dll")] public static extern IntPtr GetParent(IntPtr h);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
   [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, int m, IntPtr w, IntPtr l);
+  [DllImport("user32.dll")] public static extern bool IsHungAppWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern IntPtr SendMessageTimeout(IntPtr h, int m, IntPtr w, IntPtr l, int flags, int ms, out IntPtr r);
+  public static bool Answers(IntPtr h, int ms) { IntPtr r; return SendMessageTimeout(h, 0, IntPtr.Zero, IntPtr.Zero, 0x0002, ms, out r) != IntPtr.Zero; }
   public static List<IntPtr> Tops() { var l = new List<IntPtr>(); EnumWindows((h, p) => { l.Add(h); return true; }, IntPtr.Zero); return l; }
   public static List<IntPtr> Kids(IntPtr top) { var l = new List<IntPtr>(); EnumChildWindows(top, (h, p) => { l.Add(h); return true; }, IntPtr.Zero); return l; }
   public static string Text(IntPtr h) { var s = new StringBuilder(2048); GetWindowText(h, s, s.Capacity); return s.ToString(); }
@@ -1831,7 +1840,7 @@ while (-not (Test-Path -LiteralPath $Stop) -and ((Get-Date) - $t0).TotalSeconds 
   $rows = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
     ($_.ExecutablePath -and $Exe -and $_.ExecutablePath -ieq $Exe) -or ($leaf -and $_.Name -ieq $leaf) -or ($_.Name -match '^(old-uninstaller|Au_|Un_[A-Z])') })
   $setup = @($rows | Where-Object { ($_.ExecutablePath -and $Exe -and $_.ExecutablePath -ieq $Exe) -or ($leaf -and $_.Name -ieq $leaf) })
-  $wins = @(); $press = @(); $new = @()
+  $wins = @(); $press = @(); $new = @(); $hungNow = @()
   foreach ($h in [RW]::Tops()) {
     if (-not [RW]::IsWindowVisible($h)) { continue }
     $t = [RW]::Text($h)
@@ -1846,8 +1855,11 @@ while (-not (Test-Path -LiteralPath $Stop) -and ((Get-Date) - $t0).TotalSeconds 
     }
     $key = [string][int64]$h
     $short = $msg; if ($short.Length -gt 160) { $short = $short.Substring(0, 160) }
-    $w = [ordered]@{ hwnd = [int64]$h; pid = [int]$wp; title = $t; kind = $(if ($isWizard) { "wizard" } else { "box" }); text = $short }
+    $hung = [RW]::IsHungAppWindow($h)
+    if (-not $hung -and $isWizard) { $hung = -not [RW]::Answers($h, 5000) }
+    $w = [ordered]@{ hwnd = [int64]$h; pid = [int]$wp; title = $t; kind = $(if ($isWizard) { "wizard" } else { "box" }); text = $short; hung = [bool]$hung }
     $wins += $w
+    if ($hung) { $hungNow += $key }
     if (-not $seen.ContainsKey($key)) { $seen[$key] = 1; $new += $w }
     if ($Drive -eq "none" -or -not $t.Contains($Product)) { continue }
     $now = Get-Date
@@ -1867,7 +1879,9 @@ while (-not (Test-Path -LiteralPath $Stop) -and ((Get-Date) - $t0).TotalSeconds 
     }
   }
   $pids = (@($rows | ForEach-Object { [string]$_.ProcessId }) | Sort-Object) -join ","
-  $o = [ordered]@{ t = [math]::Round(((Get-Date) - $t0).TotalSeconds, 1); setup = $setup.Count; others = $rows.Count - $setup.Count; wins = $wins.Count }
+  $wpp = 0; foreach ($g in @($wins | Group-Object -Property { $_.pid })) { if ($g.Count -gt $wpp) { $wpp = $g.Count } }
+  $o = [ordered]@{ t = [math]::Round(((Get-Date) - $t0).TotalSeconds, 1); setup = $setup.Count; others = $rows.Count - $setup.Count; wins = $wins.Count; wpp = $wpp; hung = $hungNow.Count }
+  if ($hungNow.Count) { $o.hungTitles = @($wins | Where-Object { $_.hung } | ForEach-Object { $_.title + " (" + $_.pid + ")" }) }
   if ($pids -ne $lastPids) {
     $o.procs = @($rows | ForEach-Object { $cl = [string]$_.CommandLine; if ($cl.Length -gt 220) { $cl = $cl.Substring(0, 220) }
       [ordered]@{ pid = [int]$_.ProcessId; ppid = [int]$_.ParentProcessId; name = [string]$_.Name; cmd = $cl } })
@@ -1879,6 +1893,22 @@ while (-not (Test-Path -LiteralPath $Stop) -and ((Get-Date) - $t0).TotalSeconds 
   Start-Sleep -Milliseconds 700
 }
 `;
+const RNR_WER_PS = String.raw`param([string]$Since, [string]$Names)
+$names = $Names.Split(",") | Where-Object { $_ }
+$rows = @()
+try { $ev = Get-WinEvent -FilterHashtable @{ LogName = "Application"; StartTime = [datetime]::Parse($Since).ToLocalTime(); Id = 1000, 1001, 1002 } -ErrorAction Stop } catch { $ev = @() }
+foreach ($e in $ev) { $m = [string]$e.Message; foreach ($n in $names) { if ($m.IndexOf($n, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+  $code = ""; $x = [regex]::Match($m, "0x[cC][0-9a-fA-F]{7}"); if ($x.Success) { $code = $x.Value }
+  $rows += [pscustomobject]@{ id = $e.Id; name = $n; code = $code; msg = $m.Substring(0, [Math]::Min(160, $m.Length)) }; break } } }
+ConvertTo-Json -InputObject @($rows) -Compress
+`;
+function rnrWer(since, names) {
+  const f = path.join(LAB, "q-rnr-wer.ps1");
+  if (!fs.existsSync(f)) fs.writeFileSync(f, RNR_WER_PS.replace(/\r?\n/g, "\r\n"), "utf8");
+  const r = spawnSync("powershell.exe", PS_HEAD.concat([f, "-Since", since, "-Names", names.join(",")]), { encoding: "utf8", windowsHide: true, timeout: 120000 });
+  try { const v = JSON.parse(String(r.stdout || "").trim() || "[]"); return Array.isArray(v) ? v : [v]; } catch (e) { return [{ id: 0, name: "-", code: "", msg: "the Application log could not be read: " + oneLine(r.stderr) }]; }
+}
+const rnrCrashCode = (code) => (typeof code === "number" && (code >>> 0) >= 0xC0000000 ? "0x" + (code >>> 0).toString(16) : "");
 const RNR_FILE = () => { const f = path.join(LAB, "q-rnr-watch.ps1"); if (!fs.existsSync(f)) fs.writeFileSync(f, RNR_PS.replace(/\r?\n/g, "\r\n"), "utf8"); return f; };
 
 /* The pure parts: the samples of one phase off their file, and what they say. */
@@ -1891,12 +1921,14 @@ function rnrRead(file) {
 }
 function rnrJudge(samples, opts) {
   const o = opts || {};
-  let maxSetup = 0, maxWins = 0;
-  const series = [], boxes = [], pressed = [];
+  let maxSetup = 0, maxWins = 0, maxWpp = 0, hungSamples = 0;
+  const series = [], boxes = [], pressed = [], hungTitles = [];
   for (const s of samples) {
     const sp = s.setup | 0, w = s.wins | 0;
     if (sp > maxSetup) maxSetup = sp;
     if (w > maxWins) maxWins = w;
+    if ((s.wpp | 0) > maxWpp) maxWpp = s.wpp | 0;
+    if ((s.hung | 0) > 0) { hungSamples++; for (const t of s.hungTitles || []) if (hungTitles.indexOf(t) < 0) hungTitles.push(t); }
     const k = sp + "/" + w, last = series[series.length - 1];
     if (last && last[0] === k) last[1]++; else series.push([k, 1]);
     for (const nw of s.new || []) if (nw && nw.kind === "box" && nw.text && boxes.indexOf(nw.text.slice(0, 70)) < 0) boxes.push(nw.text.slice(0, 70));
@@ -1906,8 +1938,10 @@ function rnrJudge(samples, opts) {
   if (o.setupRules) {
     if (maxSetup > 1) faults.push(maxSetup + " Setup processes at once");
     if (maxWins > 1) faults.push(maxWins + " Setup windows at once");
+    if (maxWpp > 1) faults.push(maxWpp + " Setup windows in one process");
   }
-  return { n: samples.length, maxSetup, maxWins, series: series.map(([k, n]) => k + "x" + n).join(",") || "none", boxes, pressed, faults };
+  if (hungSamples && (o.setupRules || o.hungRule)) faults.push("a window stopped responding in " + hungSamples + " sample(s): " + hungTitles.slice(0, 3).join(", "));
+  return { n: samples.length, maxSetup, maxWins, maxWpp, hungSamples, series: series.map(([k, n]) => k + "x" + n).join(",") || "none", boxes, pressed, faults };
 }
 /* The extra processes a phase saw, as "name<-parent name" for each pid that was not the first Setup: who started the second one. */
 function rnrSpawners(samples, firstPid) {
@@ -1929,7 +1963,7 @@ async function rnrRun(rec, leg, tag, exe, args, o) {
   let watcherGone = false;
   watcher.on("exit", () => { watcherGone = true; });
   for (let i = 0; i < 20 && !fs.existsSync(out); i++) await sleep(500);
-  const t0 = Date.now();
+  const t0 = Date.now(), since = new Date(t0 - 2000).toISOString();
   const child = spawn(exe, args, { windowsHide: false, stdio: "ignore" });
   let code = null, exited = false;
   child.on("exit", (c) => { code = c; exited = true; });
@@ -1953,7 +1987,7 @@ async function rnrRun(rec, leg, tag, exe, args, o) {
   for (const s of samples) for (const p of s.procs || []) if (/^(old-uninstaller|Au_|Un_[A-Z])/i.test(p.name)) ran[p.pid] = true;
   for (const pid of Object.keys(ran)) E.killTree(Number(pid));
   try { fs.copyFileSync(out, path.join(OUT, path.basename(out))); } catch (e) { /* no samples written */ }
-  const j = rnrJudge(samples, { setupRules: o.setupRules });
+  const j = rnrJudge(samples, { setupRules: o.setupRules, hungRule: o.hungRule });
   rec.f(tag + "-s", seconds); rec.f(tag + "-exit", exited ? code : "running"); rec.f(tag + "-samples", j.n);
   rec.f(tag + "-max", j.maxSetup + "/" + j.maxWins); rec.f(tag + "-series", j.series);
   if (j.boxes.length) rec.f(tag + "-boxes", j.boxes.join(" | "));
@@ -1961,6 +1995,13 @@ async function rnrRun(rec, leg, tag, exe, args, o) {
   const extra = rnrSpawners(samples, child.pid);
   if (extra.length) rec.f(tag + "-procs", few(extra));
   const faults = j.faults.slice();
+  const crash = exited ? rnrCrashCode(code) : "";
+  if (crash) faults.push(o.what + " ended with exception " + crash);
+  const names = [path.basename(exe), "Un_A.exe", "Au_.exe", "old-uninstaller.exe"].concat(o.procExe ? [path.basename(o.procExe)] : []);
+  const wer = rnrWer(since, names).filter((w) => w.id === 1000 || w.id === 1002 || /^0x[cC]/.test(w.code || ""));
+  if (wer.length) { rec.f(tag + "-wer", wer.map((w) => w.id + ":" + w.name + (w.code ? ":" + w.code : "")).join(",")); faults.push("Windows Error Reporting logged " + wer.map((w) => (w.id === 1002 ? "a hang of " : "a crash of ") + w.name + (w.code ? " (" + w.code + ")" : "")).join(", ")); }
+  if (j.maxWpp > 1) rec.f(tag + "-per-process", j.maxWpp);
+  if (j.hungSamples) rec.f(tag + "-hung", j.hungSamples);
   if (storm) faults.push("a storm, cut short at " + RNR_STORM_CAP + " after " + seconds + " s");
   else if (!finished) faults.push(o.what + " had not finished after " + RNR_BOUND_S + " s");
   return { faults, finished, storm, code, exited, samples };
@@ -1983,20 +2024,18 @@ function rnrLeft(dir, prog, product) {
 }
 
 /** The program as a person leaves it after the Finish page: started by the page's Run box, or by the leg where that box started nothing. */
-async function rnrStartProgram(rec, prog, tag) {
+async function rnrSettle(prog) {
   for (let i = 0; i < 30 && !procsOf(prog).length; i++) await sleep(1000);
-  if (procsOf(prog).length) { rec.f(tag + "-start", "finish-page"); }
-  else {
-    const ud = path.join(process.env.APPDATA, T.packageName), docs = path.join(LAB, tag + "-documents");
+  if (!procsOf(prog).length) {
+    const ud = path.join(process.env.APPDATA, T.packageName), docs = path.join(LAB, "app-documents");
     fs.mkdirSync(docs, { recursive: true });
     const args = ["--user-data-dir=" + ud], opts = { stdio: "ignore", windowsHide: false, env: Object.assign({}, process.env, { ETIUDA_TEST_DOCUMENTS: docs }) };
     const no = E.shellLaunchRefusal(WHO, args, opts);
-    if (no) throw new NoVerdict("the program's start is refused: " + no[0]);
+    if (no) return 0; /* the program in its tray is optional: the sequence is measured without it */
     E.shellLaunch(WHO, prog, args, opts);
-    rec.f(tag + "-start", "leg");
   }
   await sleep(20000);
-  return rec.f(tag + "-procs-up", procsOf(prog).length);
+  return procsOf(prog).length;
 }
 
 async function reinstallNoReboot(rec, ask) {
@@ -2023,35 +2062,37 @@ async function reinstallNoReboot(rec, ask) {
     if (faults.length) { rec.end(false, faults.join("; ")); return; }
     throw new NoVerdict("the first install, driven through its pages, left no program (exit " + i1.code + "); the pages pressed are in rnr-" + leg + "-install1.jsonl");
   }
-
-  /* 2. the program, as a person leaves it, then quit (main) or left running (ask) */
-  await rnrStartProgram(rec, prog, "app");
-  if (!ask) {
-    spawnSync(prog, ["--update-close"], { stdio: "ignore", windowsHide: true, timeout: 20000 });
-    for (let i = 0; i < 20 && procsOf(prog).length; i++) await sleep(1000);
-    rec.f("app-quit", procsOf(prog).length ? "still-running" : "quit");
+  /* 2. then, RNR_CYCLES times (a race wants repeats): the program as the Finish page left it, quit (main) or left running (ask), the
+     uninstall from the Apps entry through its pages, what it left, and the same Setup again through its pages. The first cycle with a
+     fault is the last, so its records are the clean evidence. */
+  let cycles = 0;
+  for (let c = 1; c <= RNR_CYCLES && !faults.length; c++) {
+    cycles = c;
+    const p = "c" + c + "-";
+    rec.f(p + "app-procs", await rnrSettle(prog));
+    if (!ask) {
+      spawnSync(prog, ["--update-close"], { stdio: "ignore", windowsHide: true, timeout: 20000 });
+      for (let i = 0; i < 20 && procsOf(prog).length; i++) await sleep(1000);
+      rec.f(p + "app-quit", procsOf(prog).length ? "still-running" : "quit");
+    }
+    const entry = valueOf(regKey(KU.uninstall), "UninstallString") || valueOf(regKey(KM.uninstall), "UninstallString");
+    const un = exeOf(entry);
+    if (!un || !fs.existsSync(un)) { faults.push("cycle " + c + ": no uninstaller named by the Apps entry (" + oneLine(entry) + ")"); break; }
+    const unArgs = entry.slice(entry.indexOf(un) + un.length + 1).trim().split(/\s+/).filter(Boolean);
+    const unDone = (smp) => { const last = smp.slice(-3); return last.length === 3 && (last[0].t | 0) >= 5 && last.every((x) => (x.wins | 0) === 0 && (x.others | 0) === 0 && (x.setup | 0) === 0); };
+    const u = await rnrRun(rec, leg, p + "uninstall", un, unArgs, { title: "Uninstall", product, drive: "uninstall", procExe: un, app: prog, setupRules: false, hungRule: true, what: "the uninstall", finished: unDone });
+    faults.push(...u.faults.map((f) => "cycle " + c + " uninstall: " + f));
+    await sleep(3000);
+    const left = rnrLeft(dir, prog, product);
+    rec.f(p + "left", left.left.length); rec.f(p + "pending-renames", left.pending); rec.f(p + "install-keys-left", left.installKeys.length);
+    faults.push(...left.left.map((f) => "cycle " + c + " left by the uninstall: " + f));
+    const i2 = await rnrRun(rec, leg, p + "install", exe, [], setupOpts);
+    faults.push(...i2.faults.map((f) => "cycle " + c + " reinstall: " + f));
+    if (!fs.existsSync(prog) && !faults.length) faults.push("cycle " + c + " reinstall: no program at " + prog);
   }
-
-  /* 3. the uninstall, from the Apps entry, through its pages */
-  const entry = valueOf(regKey(KU.uninstall), "UninstallString") || valueOf(regKey(KM.uninstall), "UninstallString");
-  const un = exeOf(entry);
-  if (!un || !fs.existsSync(un)) throw new NoVerdict("no uninstaller named by the Apps entry (" + oneLine(entry) + ")");
-  const unArgs = entry.slice(entry.indexOf(un) + un.length + 1).trim().split(/\s+/).filter(Boolean);
-  rec.f("un-args", unArgs.join(" ") || "-");
-  const unDone = (s) => { const last = s.slice(-3); return last.length === 3 && (last[0].t | 0) >= 5 && last.every((x) => (x.wins | 0) === 0 && (x.others | 0) === 0 && (x.setup | 0) === 0); };
-  const u = await rnrRun(rec, leg, "uninstall", un, unArgs, { title: "Uninstall", product, drive: "uninstall", procExe: un, app: prog, setupRules: false, what: "the uninstall", finished: unDone });
-  faults.push(...u.faults.map((f) => "uninstall: " + f));
-  await sleep(3000);
-  const left = rnrLeft(dir, prog, product);
-  rec.f("left", left.left.length); rec.f("pending-renames", left.pending); rec.f("install-keys-left", left.installKeys.length);
-  faults.push(...left.left.map((f) => "left by the uninstall: " + f));
-
-  /* 4. the same Setup again, no reboot */
-  const i2 = await rnrRun(rec, leg, "install2", exe, [], setupOpts);
-  faults.push(...i2.faults.map((f) => "second install: " + f));
-  rec.f("install2-program", yes(fs.existsSync(prog) || !!(userDir() || machineDir())));
+  rec.f("cycles", cycles + "/" + RNR_CYCLES);
   rec.end(!faults.length, faults.length ? faults.join("; ")
-    : "installed through its pages, started, " + (ask ? "uninstalled with the program running in its tray" : "quit, uninstalled") + " from the Apps entry, and installed again without a reboot: one Setup process and one Setup window at every sample, each phase finished within " + RNR_BOUND_S + " s, nothing left between");
+    : "installed through its pages, then " + RNR_CYCLES + " times " + (ask ? "uninstalled with the program running in its tray" : "quit and uninstalled") + " from the Apps entry and installed again through its pages without a reboot: one Setup process and one Setup window at every sample, no window stopped responding, no exception, each phase within " + RNR_BOUND_S + " s, nothing left between");
 }
 
 /* ---- the run ------------------------------------------------------------------------------------------------------- */
