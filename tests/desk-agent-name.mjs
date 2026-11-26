@@ -27,7 +27,7 @@ const UI_LANG = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"),
 const SETTINGS_SRC = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"), "utf8");
 const ENGINE_URL = "file:///" + path.join(ROOT, "engine", "etiuda.html").replace(/\\/g, "/");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 33;
+const EXPECTED = 41;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -78,9 +78,11 @@ function loadShell(swap, opt) {
     "function signinAgentNameFirstLetter(",
     "function signinAgentNameClean(",
     "function signinAgentNameFromClaims(",
+    "function signinAccountNameFromClaims(",
     "function signinAgentAutoRead(",
     "function signinCanFillAgentName(",
     "function signinNameTake(",
+    "function signinNameForget(",
   ];
   let body = names.map(d => decl(MAIN, d)).join("\n");
   if (swap) {
@@ -95,7 +97,7 @@ function loadShell(swap, opt) {
   };
   const code = "let deskKeys = " + (o.desk === undefined ? "{}" : JSON.stringify(o.desk)) + ", deskWritten = false;\n"
     + body + "\n"
-    + "return { signinClaims, signinAgentNameFromClaims, signinCanFillAgentName, signinNameTake, "
+    + "return { signinClaims, signinAgentNameFromClaims, signinAccountNameFromClaims, signinCanFillAgentName, signinNameTake, signinNameForget, "
     + "getDesk: () => deskKeys, setDesk: d => { deskKeys = d; } };";
   const fn = new Function("readDesk", "saveDeskFile", "deskText", "deskSyncedTell", "console", code);
   const api = fn(
@@ -228,19 +230,19 @@ const parse = c => (sh ? sh.api.signinAgentNameFromClaims(c) : null);
     "an2a sign-in fills empty desk name, records provenance, saves desk, and notifies renderer", { ok, d, told });
 }
 {
-  const s = sh ? loadShell(null, { desk: { eAgent: "Zofia" } }) : null;
+  const s = sh ? loadShell(null, { desk: { eAgent: "Zofia", eAccountName: "Marek Zieli\u0144ski" } }) : null;
   const took = s ? s.api.signinNameTake(jwt({ given_name: "Marek", family_name: "Zieli\u0144ski" })) : true;
   check(!!s && took === false && s.api.getDesk().eAgent === "Zofia" && s.st.saves === 0,
     "an2b pre-existing typed name without provenance is never replaced", s && s.api.getDesk());
 }
 {
-  const s = sh ? loadShell(null, { desk: { eAgent: "Marek", eAgentAuto: "typed" } }) : null;
+  const s = sh ? loadShell(null, { desk: { eAgent: "Marek", eAgentAuto: "typed", eAccountName: "Alicja Bia\u0142a" } }) : null;
   const took = s ? s.api.signinNameTake(jwt({ given_name: "Alicja", family_name: "Bia\u0142a" })) : true;
   check(!!s && took === false && s.api.getDesk().eAgent === "Marek" && s.st.saves === 0,
     "an2c name edited by agent (marked typed) is never replaced on renewal or another account", s && s.api.getDesk());
 }
 {
-  const s = sh ? loadShell(null, { desk: { eAgent: "", eAgentAuto: "typed" } }) : null;
+  const s = sh ? loadShell(null, { desk: { eAgent: "", eAgentAuto: "typed", eAccountName: "Marek Zieli\u0144ski" } }) : null;
   const took = s ? s.api.signinNameTake(jwt({ given_name: "Marek", family_name: "Zieli\u0144ski" })) : true;
   check(!!s && took === false && s.api.getDesk().eAgent === "" && s.st.saves === 0,
     "an2d name cleared on purpose is not refilled at renewal or later sign-in", s && s.api.getDesk());
@@ -294,6 +296,47 @@ const parse = c => (sh ? sh.api.signinAgentNameFromClaims(c) : null);
       && stillAuto && editedTyped && backTyped && clearedTyped && laterNotTyped;
   }
   check(hasFns && ok, "an2g agent.js distinguishes desk-filled from typed/cleared and Later", { hasFns, ok });
+}
+
+/* Part 2b: the account's own name, in full, kept beside the customer-facing one and never taken from it */
+{
+  const s = sh ? loadShell(null, { desk: {} }) : null;
+  const ok = !!s && s.api.signinNameTake(jwt({ given_name: "Marek", family_name: "Zieli\u0144ski" })) === true;
+  const d = s ? s.api.getDesk() : {};
+  const told = s && s.st.tells.length === 1 ? s.st.tells[0].keys : null;
+  check(ok && d.eAccountName === "Marek Zieli\u0144ski" && d.eAgent === "Marek Z." && s.st.saves === 1
+    && !!told && told.eAccountName === "Marek Zieli\u0144ski",
+    "an5a sign-in keeps the account's full name beside the abbreviated reply name, in one save, and tells the page", { ok, d, told });
+}
+{
+  const s = sh ? loadShell(null, { desk: { eAgent: "Marek", eAgentAuto: "typed" } }) : null;
+  const took = s ? s.api.signinNameTake(jwt({ given_name: "Alicja", family_name: "Bia\u0142a" })) : true;
+  const d = s ? s.api.getDesk() : {};
+  check(!!s && took === false && d.eAgent === "Marek" && d.eAgentAuto === "typed" && d.eAccountName === "Alicja Bia\u0142a" && s.st.saves === 1,
+    "an5b a typed reply name stays as typed while the account's full name is still kept", d);
+}
+{
+  const s = sh ? loadShell(null, { desk: {} }) : null;
+  const claims = [{ given_name: "Marek", family_name: "Zieli\u0144ski" }, { name: "Alicja Bia\u0142a (Support)" }, { name: "Borys" }, { iss: "x", sub: "1" },
+    { given_name: "Piotr", family_name: "D\u0105b (External)" }];
+  const got = s ? claims.map(c => s.api.signinAccountNameFromClaims(c)) : [];
+  check(got.join("|") === "Marek Zieli\u0144ski|Alicja Bia\u0142a|Borys||Piotr D\u0105b",
+    "an5c the account's name is the given and family names in full, else the display name, brackets dropped, empty where none arrives", got);
+}
+{
+  const s = sh ? loadShell(null, { desk: { eAccountName: "Marek Zieli\u0144ski" } }) : null;
+  const took = s ? s.api.signinNameTake(jwt({ given_name: "Marek", family_name: "Zieli\u0144ski" })) : false;
+  const none = s ? s.api.signinNameTake(jwt({ iss: "x", sub: "1" })) : true;
+  check(!!s && took === true && none === false && s.api.getDesk().eAccountName === "Marek Zieli\u0144ski" && s.st.saves === 1,
+    "an5d a token with no name leaves the kept full name alone, and a name already kept is not written again", s && s.api.getDesk());
+}
+{
+  const s = sh ? loadShell(null, { desk: { eAgent: "Marek Z.", eAccountName: "Marek Zieli\u0144ski" } }) : null;
+  if (s) s.api.signinNameForget();
+  const d = s ? s.api.getDesk() : {};
+  const told = s && s.st.tells.length === 1 ? s.st.tells[0].keys : null;
+  check(!!s && !("eAccountName" in d) && d.eAgent === "Marek Z." && !!told && told.eAccountName === null,
+    "an5e leaving the account forgets its full name and leaves the reply name", { d, told });
 }
 
 /* Part 3: Copywriter's bytes & one-time blue bubble in Settings, Account */
@@ -470,6 +513,36 @@ try {
       && afterClear.a === "" && afterClear.auto === "typed",
       "an3f Settings field edits and clears as typed, and bubble closes when leaving Account",
       { upAtOpen, goneOnLeave, afterEdit, afterClear });
+    await ctx.close();
+  }
+
+  /* an5f to an5h: the account card's heading is the account's own name in full; the field below it keeps the reply name, under its new label */
+  {
+    const { ctx, page } = await launchDeskPage(browser, {
+      desk: { eUiLang: "en", eAgent: "Marek Z.", eAgentAuto: JSON.stringify({ name: "Marek Z.", form: "initial" }), eAccountName: "Marek Zieli\u0144ski", eAgentNoteSeen: "1" }
+    });
+    await page.evaluate(() => { hooks.openSettings("account"); });
+    await sleep(350);
+    const info = await page.evaluate(() => {
+      const h = document.querySelector(".sgn-top .sgn-id b"), av = document.querySelector(".sgn-top .sgn-av");
+      const row = document.querySelector('.set-row[data-row="name"] .set-label');
+      return { head: h ? h.textContent : "", initial: av ? av.textContent : "", label: row ? row.textContent : "",
+        field: (document.getElementById("setAgentName") || {}).value };
+    });
+    check(info.head === "Marek Zieli\u0144ski" && info.initial === "M" && info.field === "Marek Z.",
+      "an5f the account card's heading is the account's full name while the reply name field keeps the abbreviated one", info);
+    check(info.label === "Name customers see",
+      "an5g the reply name field is labelled Name customers see", info);
+    await ctx.close();
+  }
+  {
+    const { ctx, page } = await launchDeskPage(browser, {
+      desk: { eUiLang: "en", eAgent: "Marek Z.", eAgentAuto: "typed", eAgentNoteSeen: "1" }
+    });
+    await page.evaluate(() => { hooks.openSettings("account"); });
+    await sleep(350);
+    const head = await page.evaluate(() => { const h = document.querySelector(".sgn-top .sgn-id b"); return h ? h.textContent : ""; });
+    check(head === "Marek Z.", "an5h with no account name kept the heading falls back to the reply name as before", head);
     await ctx.close();
   }
 
