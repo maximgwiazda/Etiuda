@@ -25,8 +25,10 @@
  *   ild7        every section of the three screens: no word stands on the dots without a ground of its own
  *   ilh1..ilh5  the designer's like-for-like items Max approved: each rail's head is Studio's small capitals label, the row at
  *               its foot a row with its icon and its keys plain, and a new key's tag Studio's small pill beside the keys
- *   ilk1, ilk2  the keyboard shortcuts, in that section and in All settings, light and dark: one card of ruled rows, as
- *               Studio's card of rows (a row's top line, no gap, no radius of its own)
+ *   ilk1, ilk2  the keyboard shortcuts, in that section and in All settings, light and dark: each task group one card of ruled
+ *               rows, as Studio's card of rows (a row's top line, no gap, no radius of its own); the rows of a group may stand
+ *               two to a line where the group is wide (MOVED: the sentence was "the shortcuts stand in one card", the list
+ *               having been one card before it was grouped by task)
  *   ilw1, ilw2  a plain button inside a white card wears Studio's thin edge and white face, on the light theme only;
  *               the toolbar's button keeps its grey fill, and a primary or danger button keeps its own colour
  *   ild1..ild6  Settings, the Library and Maintenance, light and dark: the page is dotted as Studio's is, measured as the
@@ -402,11 +404,14 @@ try {
     const got = await p.evaluate(() => {
       const alpha = (bg) => { if (!bg || bg === "transparent") return 0; const m = /\/\s*([\d.]+)\)$/.exec(bg) || /rgba\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\)/.exec(bg); return m ? parseFloat(m[1]) : 1; };
       const read = (root) => {
-        const rows = [...root.querySelectorAll(".sc-row")].filter((r) => r.offsetParent !== null);
+        const first = [...root.querySelectorAll(".sc-card")].find((c) => c.offsetParent !== null);
+        const rows = first ? [...first.querySelectorAll(".sc-row")].filter((r) => r.offsetParent !== null) : [];
         if (rows.length < 2) return { n: rows.length };
         const list = rows[0].closest(".sc-list"), card = rows[0].closest(".sx-card");
-        const lcs = getComputedStyle(list), cs = getComputedStyle(rows[1]), ccs = card ? getComputedStyle(card) : null;
-        const a = rows[0].getBoundingClientRect(), b = rows[1].getBoundingClientRect();
+        const lcs = getComputedStyle(list), cs = getComputedStyle(under), ccs = card ? getComputedStyle(card) : null;
+        /* the row under the first in its own column, wherever the group stands one or two to a line */
+        const a = rows[0].getBoundingClientRect(), under = rows.slice(1).find((r) => Math.abs(r.getBoundingClientRect().left - a.left) < 2) || rows[1];
+        const b = under.getBoundingClientRect();
         let beside = 0;
         for (let i = 0; i < Math.min(rows.length, 6); i++) for (let j = i + 1; j < Math.min(rows.length, 6); j++) {
           const A = rows[i].getBoundingClientRect(), B = rows[j].getBoundingClientRect();
@@ -430,9 +435,9 @@ try {
       return { keys, all };
     });
     const ruled = (x) => x && x.n >= 8 && x.gap === "0px" && x.radius === "0px" && x.top === "1px" && x.side === "0px"
-      && x.topColor === x.line && x.firstTop === "0px" && x.vGap === 0 && x.beside === 0 && x.oneCard && !x.cardBare && x.cardIsPanel;
+      && x.topColor === x.line && x.firstTop === "0px" && x.vGap === 0 && x.oneCard && !x.cardBare && x.cardIsPanel;
     check(ruled(got.keys) && ruled(got.all),
-      "ilk" + (theme === "light" ? "1" : "2") + " " + theme + ": the shortcuts stand in one card, a later row ruled by a top line, no gap and no radius of its own, in the section and in All settings",
+      "ilk" + (theme === "light" ? "1" : "2") + " " + theme + ": a shortcuts group stands in one card, a later row ruled by a top line, no gap and no radius of its own, in the section and in All settings",
       got);
     await closePage(p);
   }
