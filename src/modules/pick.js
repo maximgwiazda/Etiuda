@@ -216,9 +216,10 @@ function pickWords(){
           empty:wholeThingEmpty() ? t("Etiuda is ready for its first replies.") : t("Nothing here yet."),
           who:t("Etiuda fills the reply in for this conversation"),
           langTitle:t("Click to switch replies to the next language"),
-          keyCopy:t("{KEY} copies, and pastes where it can"), keyOther:other ? t("{KEY} in {LANG}").split("{LANG}").join(other) : "",
+          keyCopy:t("{KEY} copies or pastes"), keyOther:other ? t("{KEY} in {LANG}").split("{LANG}").join(other) : "",
           keyClose:t("{KEY} closes"), pasted:t("Pasted"), copied:t("Copied, press Ctrl+V"),
           selected:t("The words you selected. Type to change them."),
+          suggestKeys:t("Alt+1 to Alt+5 show an intent's replies"), keyNumbers:t("{KEY} shows numbers"),
           /* Your own words, shown only where the shell offers a reword; {ADDRESS} is the host it names. */
           rwHead:t("Your own words?"), rwSpelling:t("Fix spelling"), rwShorter:t("Shorter"), rwFriendlier:t("Friendlier"),
           rwFormal:t("More formal"), rwIntoPl:t("Into Polish"), rwIntoEn:t("Into English"), rwLangs:CONTENT_LANGS.slice(),
@@ -359,7 +360,7 @@ function suggestModel(){
   if(typeof eSuggestStandIn === "function") eSuggestStandIn();
   cachedModelKey = key;
   cachedModel = buildSuggestModel(suggestCatalog(), {
-    suggest:t("Suggested"),
+    suggest:t("Suggested intents"),
     suggestTip:t("Intents suggested from the text selected before Quick replies opened. None is chosen until one is clicked.")
   });
   return cachedModel;

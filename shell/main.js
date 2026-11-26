@@ -13380,6 +13380,7 @@ function pickClipText(text, platform) {
 function pickPage() {
   const P = window.E_PICK, q = document.getElementById("q"), box = document.getElementById("rows");
   if (!P || !q || !box) return;
+  const split = document.getElementById("sp");
   const who = document.getElementById("who"), count = document.getElementById("count"), keys = document.getElementById("keys"), langBtn = document.getElementById("lang");
   let rows = [], last = null, words = {}, chords = {}, at = 0, asked = 0, said = "", sent = null, closing = false;
   let suggest = [], sgAt = -1, picked = [];
@@ -13627,6 +13628,7 @@ function pickPage() {
   const ICON_STAMP = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false" fill="none" stroke="currentColor"'
     + ' stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10.2 12.5l.6-4.2a2.6 2.6 0 1 1 3.4 0l.6 4.2"/>'
     + '<path d="M5 17v-2.5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2V17z" fill="currentColor"/><path d="M6 20.5h13"/></svg>';
+  const ICON_SPARK = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="currentColor"><path d="M8 1.5l1.4 3.9 3.9 1.4-3.9 1.4L8 12.1 6.6 8.2 2.7 6.8l3.9-1.4zM12.8 10.6l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z"/></svg>';
   const stamp = () => '<span class="st" title="' + esc(words.stamp) + '">' + ICON_STAMP + '</span>';
   /* THE TOUR'S STEP FOR THIS WINDOW, while the desk's tour stands on it: the family's bubble above the search box, its
      pointer on the box's centre, and the room it takes, which the shell adds above the rows. Its words are the desk's;
@@ -13773,6 +13775,7 @@ function pickPage() {
     if (rwOnly) rwOnly.hidden = !on || rwMode !== "only";
     if (top) top.hidden = rwMode === "only";
     box.hidden = showing;
+    if (split) split.hidden = showing;
     if (sg) sg.hidden = showing;
     if (count) count.hidden = showing;
     if (selNote && rwMode === "only") selNote.hidden = true;
@@ -13817,10 +13820,15 @@ function pickPage() {
       el.id = "sg";
       el.setAttribute("role", "group");
       if (words.suggestTip) { el.setAttribute("aria-label", words.suggestTip); el.title = words.suggestTip; }
-      const lab = document.createElement("div");
+      const lab = document.createElement("div"), spark = document.createElement("span"), head = document.createElement("span"), keysNote = document.createElement("div");
       lab.className = "sg-lab";
-      lab.textContent = words.suggest || "";
+      spark.className = "sg-ic";
+      spark.innerHTML = ICON_SPARK;
+      lab.appendChild(spark);
+      lab.appendChild(head);
       el.appendChild(lab);
+      keysNote.className = "sg-hint";
+      el.appendChild(keysNote);
       el.addEventListener("mousedown", ev => {
         const b = ev.target && ev.target.closest && ev.target.closest("button");
         if (b) ev.preventDefault();
@@ -13832,8 +13840,9 @@ function pickPage() {
       });
       box.parentNode.insertBefore(el, box);
     }
-    const lab = el.querySelector ? el.querySelector(".sg-lab") : (el.children && el.children[0]);
-    if (lab) lab.textContent = words.suggest || "";
+    const lab = el.children && el.children[0], note = el.children && el.children[1];
+    if (lab && lab.children && lab.children[1]) lab.children[1].textContent = words.suggest || "";
+    if (note) { note.textContent = words.suggestKeys || ""; note.hidden = !words.suggestKeys; }
     const old = el.querySelectorAll ? [...el.querySelectorAll("button")] : [];
     old.forEach(b => { if (b.remove) b.remove(); });
     suggest.forEach((s, i) => {
@@ -13854,6 +13863,21 @@ function pickPage() {
       el.appendChild(b);
     });
   }
+  const cutMarks = () => box.querySelectorAll(".t,.x").forEach(el => el.classList.toggle("cut", el.scrollWidth > el.clientWidth + 1));
+  /* THE DIGITS OF THE NUMBERED ROWS ARE DRAWN WHILE CTRL IS HELD, over the row's left edge and out of its flow, so no reply moves. The
+     window's losing focus and a new opening clear it: a Ctrl released while the window was away is never heard. */
+  let ctrlOn = false;
+  const holdCtrl = on => {
+    if (on === ctrlOn) return;
+    ctrlOn = on;
+    document.documentElement.classList.toggle("ctrl", on);
+  };
+  if (typeof document.addEventListener === "function") {
+    const sync = e => holdCtrl(!!(e && e.ctrlKey)); /* plant:pick-ctrl-hold */
+    document.addEventListener("keydown", sync, true);
+    document.addEventListener("keyup", sync, true);
+  }
+  if (typeof window.addEventListener === "function") window.addEventListener("blur", () => holdCtrl(false));
   const paint = keyed => {
     const all = list();
     if (at >= all.length) at = all.length ? all.length - 1 : 0;
@@ -13862,7 +13886,7 @@ function pickPage() {
       const grouped = same(all[i - 1], r) || same(r, all[i + 1]);
       const head = grouped && !same(all[i - 1], r)
         ? '<li class="grp" role="presentation"><span class="t">' + esc(r.t) + '</span>' + (r.commits ? stamp() : '') + '</li>' : '';
-      const key = r.again ? "Ctrl+0" : (++n <= 9 ? "Ctrl+" + n : "");
+      const key = r.again ? "0" : (++n <= 9 ? String(n) : "");
       const replyOn = sgAt < 0 && i === at;
       const cls = (grouped ? ["in"] : []).concat(replyOn ? ["on"] : []);
       return head + '<li role="option" id="r' + i + '" data-i="' + i + '"' + (cls.length ? ' class="' + cls.join(" ") + '"' : '')
@@ -13880,9 +13904,14 @@ function pickPage() {
     box.scrollTop = keep;
     q.setAttribute("aria-activedescendant", sgAt >= 0 ? "s" + sgAt : (all.length ? "r" + at : ""));
     paintStrip();
-    box.querySelectorAll(".t,.x").forEach(el => el.classList.toggle("cut", el.scrollWidth > el.clientWidth + 1));
-    /* The count gives way where the foot is short, fading at its right; the key hints always stand whole. */
-    if (count) { count.textContent = all.length ? said : ""; if (count.classList) count.classList.toggle("cut", count.scrollWidth > count.clientWidth + 1); }
+    cutMarks();
+    /* The count gives way where the foot is short, fading at its right and gone under 40 px; the key hints always stand whole. */
+    if (count) {
+      count.textContent = all.length ? said : "";
+      const clipped = count.scrollWidth > count.clientWidth + 1;
+      if (count.classList) count.classList.toggle("cut", clipped);
+      if (count.style) count.style.visibility = clipped && count.clientWidth < 40 ? "hidden" : ""; /* plant:pick-count-gone */
+    }
     /* A key that moved the mark brings it into view, and its group's title with it at the top; the pointer's mark
        scrolls nothing. */
     const on = keyed && box.querySelector ? box.querySelector("li.on") : null;
@@ -13910,7 +13939,7 @@ function pickPage() {
       keys.innerHTML = [enter, esc2].filter(Boolean).map(h => '<span>' + h + '</span>').join("");
       return;
     }
-    keys.innerHTML = [["Enter", words.keyCopy], ["Shift+Enter", words.keyOther], ["Esc", words.keyClose]]
+    keys.innerHTML = [["Enter", words.keyCopy], ["Shift+Enter", words.keyOther], ["Ctrl", words.keyNumbers]] /* plant:pick-keys-ctrl */
       .filter(k => k[1]).map(k => '<span>' + esc(k[1]).split("{KEY}").join('<kbd>' + k[0] + '</kbd>') + '</span>').join("");
   };
   const matchChord = (e, c) => {
@@ -14014,6 +14043,7 @@ function pickPage() {
     root.dataset.theme = look.theme || "";
     root.classList.toggle("glass", !!look.glass);
     root.classList.toggle("still", !!look.still);
+    holdCtrl(false);
     words = o.words || {};
     chords = o.chords || {};
     chosen = typeof o.selected === "string" ? o.selected : ""; /* plant:pick-selected-box */
@@ -14259,17 +14289,23 @@ function pickerDoc() {
     + '#lang:hover{color:var(--ink);border-color:var(--line-strong)}\n'
     + '#lang:focus{border-bottom-color:var(--accent);box-shadow:inset 0 -1px 0 var(--accent)}\n'
     + '#lang[hidden]{display:none}\n'
-    + '#sg{flex:0 0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:4px;min-width:0;max-height:70px;overflow:hidden}\n' /* plant:pick-chip-wrap */
-    + '#sg .sg-lab{box-sizing:border-box;flex:0 0 100%;padding:0 2px;line-height:14px;color:var(--dim);font-size:12px}\n'
-    + '#sg button{box-sizing:border-box;display:block;flex:0 0 auto;max-width:calc(33.3% - 3px);height:24px;margin:0;padding:0 10px;'
-    + 'border:1px solid var(--line-strong);border-radius:var(--radius-sm);background:var(--field);color:var(--ink);font:600 13px/22px var(--sans);'
-    + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default}\n'
-    + '#sg button:hover{border-color:var(--accent)}\n'
-    + '#sg button.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 20%,transparent);color:var(--accent)}\n'
-    + '#sg button.picked{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}\n'
+    + '#sp{flex:1 1 auto;min-height:0;display:flex;gap:8px}\n'
+    + '#sg{flex:0 0 168px;box-sizing:border-box;display:flex;flex-direction:column;gap:2px;min-width:0;padding:2px 8px 0 0;' /* plant:pick-column */
+    + 'border-right:1px solid var(--line);overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}\n'
+    + '#sg .sg-lab{display:flex;align-items:center;gap:5px;padding:2px 8px 6px;color:var(--accent);font-size:12px}\n'
+    + '#sg .sg-ic{display:flex;flex:0 0 auto}\n'
+    + '#sg button{box-sizing:border-box;display:block;flex:0 0 auto;width:100%;min-height:30px;margin:0;padding:5px 8px;border:0;'
+    + 'border-radius:var(--radius-sm);background:transparent;color:var(--ink);font:600 13px/1.25 var(--sans);text-align:left;'
+    + 'overflow-wrap:anywhere;cursor:default}\n'
+    + '#sg button::first-letter{text-transform:uppercase}\n'
+    + '#sg button:hover{background:color-mix(in srgb,var(--accent) 10%,transparent)}\n'
+    + '#sg button.on{background:color-mix(in srgb,var(--accent) 20%,transparent);color:var(--accent)}\n'
+    + '#sg button.picked{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}\n'
     + '#sg button.picked.on{background:color-mix(in srgb,var(--accent) 28%,transparent);color:var(--accent)}\n'
+    + '#sg .sg-hint{order:9;margin-top:auto;padding:8px;color:var(--dim);font-size:11.5px;line-height:1.35}\n'
+    + '#sg ~ #rows li:not(.grp) .t{max-width:52%}\n'
     + '#sel{flex:0 0 auto;padding:0 12px;color:var(--dim);font-size:12px}\n#sel[hidden]{display:none}\n'
-    + '#top[hidden],#rows[hidden],#count[hidden],#sg[hidden],#rw[hidden],#rwo[hidden],#rwr[hidden],.rw-h[hidden],.rw-lab[hidden],'
+    + '#top[hidden],#sp[hidden],#rows[hidden],#count[hidden],#sg[hidden],#rw[hidden],#rwo[hidden],#rwr[hidden],.rw-h[hidden],.rw-lab[hidden],'
     + '.rw-words[hidden],.rw-act[hidden],.rw-out[hidden],.rw-line[hidden]{display:none}\n'
     + '#rwo,#rwr{display:flex;flex-direction:column;gap:6px;min-width:0;padding:6px 10px 0;outline:none}\n'
     + '#rwo{flex:0 0 auto}\n#rwr{flex:1 1 auto;min-height:0;overflow-y:auto}\n'
@@ -14287,16 +14323,18 @@ function pickerDoc() {
     + '.rw-acts button.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent)}\n'
     + '.rw-acts button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}\n'
     + '.rw-acts kbd{color:var(--dim)}\n'
-    + '#rows{flex:1 1 auto;min-height:0;margin:0;padding:0;list-style:none;overflow-x:hidden;overflow-y:auto;'
+    + '#rows{flex:1 1 auto;min-width:0;min-height:0;margin:0;padding:0;list-style:none;overflow-x:hidden;overflow-y:auto;'
     + 'overscroll-behavior:contain;scrollbar-width:thin}\n'
-    + '#rows li{display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:var(--radius-sm);'
+    + '#rows li{position:relative;display:flex;align-items:center;gap:10px;height:36px;padding:0 10px 0 18px;border-radius:var(--radius-sm);'
     + 'white-space:nowrap;transition:background-color .1s}\n'
     + '#rows li.on{background:color-mix(in srgb,var(--accent) 20%,transparent)}\n'
     + '#rows li.on .t,#rows li.on .n,#rows li.on .g{color:var(--accent)}\n'
     + '#rows li.grp{height:24px;align-items:flex-end;padding-bottom:2px;font-size:12.5px}\n'
     + '#rows li.grp .t{max-width:none;color:var(--dim)}\n'
     + '#rows li.in{padding-left:24px}\n'
-    + '.n{flex:0 0 50px;display:flex;font:10.5px var(--mono);color:var(--dim)}\n'
+    + '.n{display:none;font:10.5px var(--mono);color:var(--dim)}\n' /* plant:pick-ctrl-hide */
+    + ':root.ctrl .n{display:flex;position:absolute;left:0;top:50%;transform:translateY(-50%);z-index:1}\n' /* plant:pick-ctrl-over */
+    + '.n kbd{padding:0 3px}\n'
     + 'kbd{font:10.5px var(--mono);padding:0 4px;border:1px solid var(--line-strong);border-radius:4px}\n'
     + '.t{flex:0 1 auto;max-width:45%;display:flex;align-items:center;gap:6px;overflow:hidden;font-weight:600}\n'
     + '.t svg{flex:0 0 auto}\n'
@@ -14306,9 +14344,9 @@ function pickerDoc() {
     + '.st{flex:0 0 auto;display:flex;color:var(--warn)}\n'
     + '.g{flex:0 0 auto;font:10px var(--mono);color:var(--dim)}\n'
     + '#rows li.none{height:auto;padding:14px 12px;color:var(--dim);white-space:normal}\n'
-    + 'footer{flex:0 0 auto;display:flex;align-items:center;gap:14px;padding:6px 10px 0;border-top:1px solid var(--line);'
+    + 'footer{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:6px 10px 0;border-top:1px solid var(--line);'
     + 'color:var(--dim);font-size:12px;white-space:nowrap;overflow:hidden}\n'
-    + '#count{margin-right:auto;flex:0 1 auto;min-width:0;overflow:hidden}\n#keys{display:flex;flex:0 0 auto;gap:14px}\n#keys kbd{margin-right:5px}\n'
+    + '#count{margin-right:auto;flex:0 1 auto;min-width:0;overflow:hidden}\n#keys{display:flex;flex:0 0 auto;gap:9px}\n#keys kbd{margin-right:4px}\n'
     + ':root{--bub:#2563eb;--bub-ink:#fff;--bub-dim:rgba(255,255,255,.92);--bub-shadow:rgba(37,99,235,.32);--sans-display:var(--sans)}\n'
     + '.bub{position:fixed;box-sizing:border-box;overflow:visible;padding:12px 14px;background:var(--bub);color:var(--bub-ink);'
     + 'border-radius:14px;filter:drop-shadow(0 10px 22px var(--bub-shadow))}\n'
@@ -14340,7 +14378,7 @@ function pickerDoc() {
     + '<div class="rw-line"></div></div>\n'
     + '<div id="rwr" role="status" hidden><div class="rw-lab"></div><div class="rw-words rw-text"></div><div class="rw-act"></div>'
     + '<div class="rw-out rw-text"></div><div class="rw-line"></div></div>\n'
-    + '<ul id="rows" role="listbox"></ul>\n'
+    + '<div id="sp"><ul id="rows" role="listbox"></ul></div>\n'
     + '<div id="rw" hidden><span class="rw-h"></span><span class="rw-acts" role="group"></span><div class="rw-line"></div></div>\n'
     + '<footer><span id="count" aria-live="polite"></span><span id="keys"></span></footer>\n'
     + '<script>' + PICK_SCRIPT + '</script>\n';

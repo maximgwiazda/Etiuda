@@ -39,7 +39,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 170 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 13);
+const EXPECTED = 175 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 15);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1821,7 +1821,7 @@ try {
       const key = (k, code, mods) => { let prevented = false;
         L.keydown(Object.assign({ key: k, code: code, ctrlKey: false, altKey: false, metaKey: false, shiftKey: false, preventDefault() { prevented = true; } }, mods || {}));
         return prevented; };
-      onOpen(JSON.stringify({ rows: pRows, suggest: CHIPS.slice(0, 5), words: { suggest: "Suggested", suggestTip: "tip" } }));
+      onOpen(JSON.stringify({ rows: pRows, suggest: CHIPS.slice(0, 5), words: { suggest: "Suggested intents", suggestTip: "tip", suggestKeys: "Alt keys" } }));
       await tick(5);
       const chips = () => host.el ? host.el.children.filter(c => c.tagName === "button") : [];
       const alt = [];
@@ -1840,14 +1840,16 @@ try {
       key("ArrowUp", "ArrowUp"); key("ArrowUp", "ArrowUp"); const afterUp = mark();
       key("ArrowRight", "ArrowRight"); const afterRight = mark(); key("ArrowRight", "ArrowRight"); const afterWrap = mark(); key("ArrowLeft", "ArrowLeft"); key("ArrowLeft", "ArrowLeft"); const afterLeft = mark();
       return { alt, ignored, clicked, afterRight0, afterUp, afterRight, afterWrap, afterLeft, keys: chips().map(c => c.getAttribute("aria-keyshortcuts")),
-        names: chips().map(c => c.textContent), label: host.el.children[0] && host.el.children[0].textContent };
+        names: chips().map(c => c.textContent), label: host.el.children[0] && host.el.children[0].children[1] && host.el.children[0].children[1].textContent,
+        hint: (host.el.children.find(c => c.className === "sg-hint") || {}).textContent };
     };
     const J4c = JSON.stringify;
     const chipsOn = await chipRun(script);
     const wantAlt = [[1, "take t:post", true], [2, "take t:lamp", true], [3, "take t:wick", true], [4, "take t:glass", true], [5, "take t:oil", true], [6, "", false]];
     check(J4c(chipsOn.alt) === J4c(wantAlt) && J4c(chipsOn.keys) === J4c(["Alt+1", "Alt+2", "Alt+3", "Alt+4", "Alt+5"])
-      && J4c(chipsOn.names) === J4c(["Post", "Lamps", "Wicks", "Glass", "Lamp oil"]) && chipsOn.label === "Suggested",
-      "4chips1 five chips under the label, and Alt+1 to Alt+5 take chip 1 to 5 as the key's own act, Alt+6 taking nothing: " + J4c(chipsOn));
+      && J4c(chipsOn.names) === J4c(["Post", "Lamps", "Wicks", "Glass", "Lamp oil"]) && chipsOn.label === "Suggested intents" && chipsOn.hint === "Alt keys",
+      "4chips1 five suggestions under the label (the desk's words, in a span beside the spark, and its one line of keys), and Alt+1 to Alt+5 take 1 to 5"
+      + " as the key's own act, Alt+6 taking nothing (was: label \"Suggested\" in the label's own text, no line of keys): " + J4c(chipsOn));
     check(chipsOn.ignored.length === 0 && J4c(chipsOn.clicked) === J4c(["take t:lamp"]) && chipsOn.afterRight0 === "falsefalsefalsefalsefalse"
       && chipsOn.afterUp === "falsefalsefalsetruefalse" && chipsOn.afterRight === "falsefalsefalsefalsetrue" && chipsOn.afterWrap === "truefalsefalsefalsefalse" && chipsOn.afterLeft === "falsefalsefalsetruefalse",
       "4chips2 Alt with Ctrl or Shift, or over a typed query, takes nothing; a click takes the chip as the row's Enter does; with a chip marked the"
@@ -1855,35 +1857,143 @@ try {
     const sheetOf = (d, sel) => { const i = d.indexOf("\n" + sel + "{"); return i < 0 ? "" : d.slice(i + sel.length + 2, d.indexOf("}", i)); };
     const prop = (r, name) => { const m = new RegExp("(?:^|;)" + name + ":([^;]*)").exec(r); return m ? m[1].trim() : ""; };
     const px = v => parseFloat(v) || 0;
-    const wrapOk = d => { const sgR = sheetOf(d, "#sg"), labR = sheetOf(d, "#sg .sg-lab"), btnR = sheetOf(d, "#sg button");
-      return /^flex$/.test(prop(sgR, "display")) && prop(sgR, "flex-wrap") === "wrap" && prop(sgR, "flex-direction") === "" && !/width:100%/.test(btnR)
-        && /max-width:calc\(33\.3+% - \d+px\)/.test(btnR) && prop(labR, "flex") === "0 0 100%"; };
-    check(wrapOk(doc),
-      "4chips3 the band is a wrapping row: each chip as wide as its words (never the full width), at most a third of the band so two lines hold"
-      + " five, the label on a line of its own: " + J4c({ sg: sheetOf(doc, "#sg"), lab: sheetOf(doc, "#sg .sg-lab"), btn: sheetOf(doc, "#sg button") }));
+    /* THE COLUMN (Max's choice of variant B): the replies sit in a split with the suggestions beside them, 168 px wide, a hairline between,
+       each suggestion a full-width row of its own; nothing is capped to a band any more. */
+    const colOk = d => { const spR = sheetOf(d, "#sp"), sgR = sheetOf(d, "#sg"), btnR = sheetOf(d, "#sg button");
+      return /<div id="sp"><ul id="rows"/.test(d) && prop(spR, "display") === "flex" && prop(spR, "flex-direction") === ""
+        && prop(sgR, "flex") === "0 0 168px" && prop(sgR, "flex-direction") === "column" && /(^|;)border-right:1px solid/.test(sgR)
+        && prop(sgR, "max-height") === "" && prop(btnR, "width") === "100%" && !/max-width/.test(btnR); };
+    check(colOk(doc),
+      "4col1 the suggested intents are a column beside the replies: a split holds both, the column 168 px with a hairline on its right, each intent a"
+      + " full-width row, no band cap and no third-of-the-band chip width (was: a wrapping band, 4chips3): "
+      + J4c({ sp: sheetOf(doc, "#sp"), sg: sheetOf(doc, "#sg"), btn: sheetOf(doc, "#sg button") }));
     const mainSrc = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
     const size = /const PICK_SIZE = \{ width: (\d+), height: (\d+) \}/.exec(mainSrc);
-    const sgR = sheetOf(doc, "#sg"), labR = sheetOf(doc, "#sg .sg-lab"), btnR = sheetOf(doc, "#sg button"), bodyR = sheetOf(doc, "body"),
+    const sgR = sheetOf(doc, "#sg"), bodyR = sheetOf(doc, "body"), spR = sheetOf(doc, "#sp"),
       topR = sheetOf(doc, "#top"), rowR = sheetOf(doc, "#rows li"), footR = sheetOf(doc, "footer");
-    const chipH = px(prop(btnR, "height")), gap = px(prop(sgR, "gap")), lab = px(prop(labR, "line-height"));
-    const band = lab + gap + 2 * chipH + gap, pad = px(prop(bodyR, "padding")), bodyGap = px(prop(bodyR, "gap")), top = px(prop(topR, "flex").split(" ")[2]);
+    const pad = px(prop(bodyR, "padding")), bodyGap = px(prop(bodyR, "gap")), top = px(prop(topR, "flex").split(" ")[2]), rowH = px(prop(rowR, "height"));
     const foot = px(prop(footR, "padding").split(" ")[0]) + 1 + Math.ceil(px(prop(footR, "font-size")) * 1.35);
-    const room = (size ? +size[2] : 0) - 2 * pad - top - band - foot - 3 * bodyGap, rowH = px(prop(rowR, "height"));
-    check(!!size && +size[1] === 600 && +size[2] === 424 && prop(sgR, "max-height") === band + "px" && chipH > 0 && rowH === 36 && room >= 7 * rowH,
-      "4chips4 at the fixed 600 by 424 the band is two lines at most and seven whole replies show beneath it: window " + J4c(size && size.slice(1, 3))
-      + ", band " + band + " (cap " + prop(sgR, "max-height") + "), room for the replies " + room + " against " + 7 * rowH);
-    if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  4chips5 the chips' two plants (ETIUDA_PLANTS=off)");
+    const room = (size ? +size[2] : 0) - 2 * pad - top - foot - 2 * bodyGap, across = (size ? +size[1] : 0) - 2 * pad - px(prop(sgR, "flex").split(" ")[2]) - px(prop(spR, "gap"));
+    check(!!size && +size[1] === 600 && +size[2] === 424 && rowH === 36 && room >= 9 * rowH && across >= 400 && across === 600 - 2 * pad - 168 - 8,
+      "4col2 at the fixed 600 by 424 nine whole replies show beside the column, each row 400 px or more across (was: seven whole under a band, 4chips4): window "
+      + J4c(size && size.slice(1, 3)) + ", room for the replies " + room + " against " + 9 * rowH + ", across " + across);
+    const wantHoldOn = ["ctrl:true", "ctrl:false", "ctrl:true", "ctrl:false", "ctrl:true", "ctrl:false"];
+    const holdRun = async scriptText => {
+      const dl = {}, wl = {}, toggles = [];
+      let cuts = 0, onOpen = null;
+      const q3 = { value: "", placeholder: "", focus() {}, setAttribute() {}, addEventListener() {} };
+      const box3 = { parentNode: null, set innerHTML(v) {}, get innerHTML() { return ""; }, setAttribute() {}, addEventListener() {}, querySelectorAll: () => { cuts++; return []; } };
+      const W = { E_PICK: { find: () => Promise.resolve("{}"), copy() {}, close() {}, ready() {}, onOpen: fn => { onOpen = fn; } }, addEventListener: (t, fn) => { wl[t] = fn; } };
+      const D = { getElementById: id => (id === "q" ? q3 : id === "rows" ? box3 : null), addEventListener: (t, fn) => { dl[t] = fn; },
+        documentElement: { style: { setProperty() {} }, dataset: {}, classList: { toggle: (c, on) => { if (c === "ctrl") toggles.push(c + ":" + !!on); } }, lang: "" } };
+      new Function("window", "document", scriptText)(W, D);
+      const seen = [];
+      const ev = (type, key, ctrl) => dl[type] && dl[type]({ key: key, code: /^\d$/.test(key) ? "Digit" + key : "", ctrlKey: ctrl, altKey: false, metaKey: false, shiftKey: false, preventDefault() {} });
+      onOpen(JSON.stringify({ rows: pRows }));
+      seen.push(toggles.join());
+      const cut0 = cuts; ev("keydown", "Control", true); const cutOnPress = cuts - cut0;
+      ev("keydown", "1", true); ev("keyup", "1", true); seen.push(toggles.join());
+      ev("keyup", "Control", false);
+      ev("keydown", "Control", true); if (wl.blur) wl.blur();
+      ev("keydown", "Control", true); onOpen(JSON.stringify({ rows: pRows }));
+      return { toggles, seen, cutOnPress, hasBlur: typeof wl.blur === "function", hasKeys: typeof dl.keydown === "function" && typeof dl.keyup === "function" };
+    };
+    const holdOk = r => J4c(r.toggles) === J4c(wantHoldOn) && r.seen[0] === "" && r.seen[1] === "ctrl:true" && r.cutOnPress === 0 && r.hasBlur && r.hasKeys;
+    const holdOn = await holdRun(script);
+    check(holdOk(holdOn),
+      "4hold1 Ctrl held draws the hints and Ctrl released takes them away, and nothing else moves: the class is on at a Ctrl press, stays on through Ctrl+1 (a digit"
+      + " pressed and let go with Ctrl down), is off at the Ctrl release, at the window losing focus and at a new opening, and nothing is measured again, since the replies do not"
+      + " move (was: the cut marks measured again at each change): " + J4c(holdOn));
+    const nR = sheetOf(doc, ".n"), nHeldR = sheetOf(doc, ":root.ctrl .n");
+    const nOk = d => prop(sheetOf(d, ".n"), "display") === "none" && prop(sheetOf(d, ".n"), "flex") === "" && prop(sheetOf(d, ":root.ctrl .n"), "display") === "flex"
+      && prop(sheetOf(d, ":root.ctrl .n"), "position") === "absolute" && prop(sheetOf(d, "#rows li"), "position") === "relative"
+      && prop(sheetOf(d, "#rows li"), "padding") === "0 10px 0 18px" && prop(sheetOf(d, ".n kbd"), "padding") === "0 3px";
+    check(nOk(doc) && script.indexOf("'<kbd>' + key + '</kbd>'") > -1 && script.indexOf('const key = r.again ? "0" : (++n <= 9 ? String(n) : "")') > -1,
+      "4hold2 the number of a row is not drawn at rest, and while the page's root wears ctrl it is drawn as the digit alone over the row's left edge, out of the flow"
+      + " (so the reply does not move, and the digit covers none of its letters: the row's left padding, 18 px, holds its 14 px cap and a gap), the markup carrying the digit"
+      + " (was: the whole Ctrl+digit in a 50 px column in the flow, which moved the reply 60 px): " + J4c({ n: nR, held: nHeldR, li: sheetOf(doc, "#rows li") }));
+    const wordsOf = pl => { document.getElementById("pax").value = ""; SYSTEM[0] = pl ? "pl-PL" : "en-US"; const o = pickAnswer("open", { profiles: 1 }); SYSTEM[0] = "en-US";
+      return { label: o.profiles && o.profiles.labels && o.profiles.labels.suggest, keys: o.words && o.words.suggestKeys, nums: o.words && o.words.keyNumbers, copy: o.words && o.words.keyCopy }; };
+    const wEn = wordsOf(false), wPl = wordsOf(true);
+    check(wEn.label === "Suggested intents" && wEn.keys === "Alt+1 to Alt+5 show an intent's replies"
+      && wPl.label === "Proponowane intencje" && wPl.keys === "Alt+1 do Alt+5 pokazują odpowiedzi danej intencji"
+      && wEn.nums === "{KEY} shows numbers" && wPl.nums === "{KEY} pokazuje numery"
+      && wEn.copy === "{KEY} copies or pastes" && wPl.copy === "{KEY} kopiuje lub wkleja",
+      "4col4 the column's heading says what it shows, \"Suggested intents\" (was \"Suggested\"), its one line of keys, and the foot's hints for the numbers and for Enter (was: copies, and pastes where it can), in both languages (placeholders for the copywriter): " + J4c({ wEn, wPl }));
+    const legendRun = async scriptText => {
+      const keysEl = { innerHTML: "", textContent: "" };
+      let onOpen = null;
+      const q3 = { value: "", placeholder: "", focus() {}, setAttribute() {}, addEventListener() {} };
+      const box3 = { parentNode: null, set innerHTML(v) {}, get innerHTML() { return ""; }, setAttribute() {}, addEventListener() {}, querySelectorAll: () => [] };
+      const W = { E_PICK: { find: () => Promise.resolve("{}"), copy() {}, close() {}, ready() {}, onOpen: fn => { onOpen = fn; } } };
+      const D = { getElementById: id => (id === "q" ? q3 : id === "rows" ? box3 : id === "keys" ? keysEl : null),
+        documentElement: { style: { setProperty() {} }, dataset: {}, classList: { toggle() {} }, lang: "" } };
+      new Function("window", "document", scriptText)(W, D);
+      onOpen(JSON.stringify({ rows: pRows, words: { keyCopy: "{KEY} copies", keyOther: "{KEY} in PL", keyClose: "{KEY} closes", keyNumbers: "{KEY} shows numbers" } }));
+      return keysEl.innerHTML;
+    };
+    const wantLegend = "<span><kbd>Enter</kbd> copies</span><span><kbd>Shift+Enter</kbd> in PL</span><span><kbd>Ctrl</kbd> shows numbers</span>";
+    const legendOn = await legendRun(script);
+    check(legendOn === wantLegend,
+      "4hold4 the foot's one line of keys gains a Ctrl key cap and the hint for the numbers (the desk's words) on the same line, and has no Esc hint although its word is given (was: Esc closes last): " + J4c(legendOn));
+    const countRun = async (scriptText, clientW) => {
+      const cEl = { textContent: "", classList: { toggle() {} }, style: {}, scrollWidth: 109, clientWidth: clientW };
+      let onOpen = null;
+      const q3 = { value: "", placeholder: "", focus() {}, setAttribute() {}, addEventListener() {} };
+      const box3 = { parentNode: null, set innerHTML(v) {}, get innerHTML() { return ""; }, setAttribute() {}, addEventListener() {}, querySelectorAll: () => [] };
+      const W = { E_PICK: { find: () => Promise.resolve("{}"), copy() {}, close() {}, ready() {}, onOpen: fn => { onOpen = fn; } } };
+      const D = { getElementById: id => (id === "q" ? q3 : id === "rows" ? box3 : id === "count" ? cEl : null),
+        documentElement: { style: { setProperty() {} }, dataset: {}, classList: { toggle() {} }, lang: "" } };
+      new Function("window", "document", scriptText)(W, D);
+      onOpen(JSON.stringify({ rows: pRows, count: "50 of 273 replies", words: {} }));
+      return cEl.style.visibility;
+    };
+    const legendWith = async w => { const keysEl = { innerHTML: "" }; let onOpen = null;
+      const q3 = { value: "", placeholder: "", focus() {}, setAttribute() {}, addEventListener() {} };
+      const box3 = { parentNode: null, set innerHTML(v) {}, get innerHTML() { return ""; }, setAttribute() {}, addEventListener() {}, querySelectorAll: () => [] };
+      new Function("window", "document", script)({ E_PICK: { find: () => Promise.resolve("{}"), copy() {}, close() {}, ready() {}, onOpen: fn => { onOpen = fn; } } },
+        { getElementById: id => (id === "q" ? q3 : id === "rows" ? box3 : id === "keys" ? keysEl : null), documentElement: { style: { setProperty() {} }, dataset: {}, classList: { toggle() {} }, lang: "" } });
+      onOpen(JSON.stringify({ rows: pRows, words: w }));
+      return keysEl.innerHTML.replace(/<[^>]*>/g, ""); };
+    const fullWords = pl => { SYSTEM[0] = pl ? "pl-PL" : "en-US"; const o = pickAnswer("open", {}).words; SYSTEM[0] = "en-US"; return o; };
+    const footEn = await legendWith(fullWords(false)), footPl = await legendWith(fullWords(true));
+    const countSeen = [await countRun(script, 4), await countRun(script, 60), await countRun(script, 109)];
+    const footOk = d => prop(sheetOf(d, "footer"), "gap") === "8px" && prop(sheetOf(d, "#keys"), "gap") === "9px" && prop(sheetOf(d, "#keys kbd"), "margin-right") === "4px";
+    check(J4c(countSeen) === J4c(["hidden", "", ""]) && footOk(doc) && footEn.length <= 67 && footPl.length <= 67 && footPl.indexOf("Esc") < 0,
+      "4hold6 the foot's hints stand whole at 600 px (its gaps 8 and 9 px, the key cap's margin 4, so the line is not clipped), and the count, which gives way to them, is"
+      + " hidden once it is left under 40 px rather than showing a stray character; and the hints are short enough for the count to show whole at 600 px in both languages:"
+      + " the line's text is at most 67 characters, with no Esc (the shots measure the fit: Polish, the longer, has 4 px to spare at 67; was: the long Enter hint and Esc): " + J4c({ footEn, footPl }) + " " + J4c(countSeen) + " " + J4c({ footer: sheetOf(doc, "footer"), keys: sheetOf(doc, "#keys") }));
+    if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  4col3 and 4hold3, the plants (ETIUDA_PLANTS=off)");
     else {
       const sLines = script.split("\n");
       const altHits = sLines.filter(l => l.indexOf("plant:pick-chip-alt") >= 0).length;
-      const wrapLines = mainSrc.split("\n").filter(l => l.indexOf("plant:pick-chip-wrap") >= 0);
       const noAlt = sLines.map(l => (l.indexOf("plant:pick-chip-alt") >= 0 ? l.replace("e.altKey &&", "false &&") : l)).join("\n");
       const planted = await chipRun(noAlt);
-      const noWrap = doc.replace("\n#sg{" + sgR + "}", "\n#sg{" + sgR.replace("flex-wrap:wrap", "flex-wrap:nowrap") + "}");
-      check(altHits === 1 && noAlt !== script && J4c(planted.alt) !== J4c(wantAlt) && wrapLines.length === 1 && wrapLines[0].indexOf("flex-wrap:wrap") >= 0
-        && noWrap !== doc && !wrapOk(noWrap) && wrapOk(doc),
-        "4chips5 rewriting plant:pick-chip-alt leaves Alt+n taking nothing, and rewriting plant:pick-chip-wrap (the band's wrapping) is what 4chips3 reads red: "
-        + J4c({ altHits, wrapHits: wrapLines.length, alt: planted.alt }));
+      const colLines = mainSrc.split("\n").filter(l => l.indexOf("plant:pick-column") >= 0);
+      const rowCol = doc.replace("\n#sg{" + sgR + "}", "\n#sg{" + sgR.replace("flex-direction:column", "flex-direction:row") + "}");
+      check(altHits === 1 && noAlt !== script && J4c(planted.alt) !== J4c(wantAlt) && colLines.length === 1 && colLines[0].indexOf("flex-direction:column") >= 0
+        && rowCol !== doc && !colOk(rowCol) && colOk(doc),
+        "4col3 rewriting plant:pick-chip-alt leaves Alt+n taking nothing, and rewriting plant:pick-column (the column's direction) is what 4col1 reads red: "
+        + J4c({ altHits, columnHits: colLines.length, alt: planted.alt }));
+      const holdLines = sLines.filter(l => l.indexOf("plant:pick-ctrl-hold") >= 0), hideLines = mainSrc.split("\n").filter(l => l.indexOf("plant:pick-ctrl-hide") >= 0);
+      const noHold = sLines.map(l => (l.indexOf("plant:pick-ctrl-hold") >= 0 ? l.replace("holdCtrl(!!(e && e.ctrlKey))", "holdCtrl(false)") : l)).join("\n");
+      const shown = doc.replace("\n.n{" + nR + "}", "\n.n{" + nR.replace("display:none", "display:flex") + "}");
+      const heldPlant = await holdRun(noHold);
+      const overLines = mainSrc.split("\n").filter(l => l.indexOf("plant:pick-ctrl-over") >= 0), nHeld = sheetOf(doc, ":root.ctrl .n");
+      const inFlow = doc.replace("\n:root.ctrl .n{" + nHeld + "}", "\n:root.ctrl .n{" + nHeld.replace("position:absolute", "position:static") + "}");
+      const keyLines = sLines.filter(l => l.indexOf("plant:pick-keys-ctrl") >= 0);
+      const noKey = sLines.map(l => (l.indexOf("plant:pick-keys-ctrl") >= 0 ? l.replace(', ["Ctrl", words.keyNumbers]', "") : l)).join("\n");
+      const goneLines = sLines.filter(l => l.indexOf("plant:pick-count-gone") >= 0);
+      const noGone = sLines.map(l => (l.indexOf("plant:pick-count-gone") >= 0 ? l.replace("count.clientWidth < 40", "count.clientWidth < 0") : l)).join("\n");
+      check(overLines.length === 1 && overLines[0].indexOf("position:absolute") >= 0 && inFlow !== doc && !nOk(inFlow) && nOk(doc)
+        && keyLines.length === 1 && noKey !== script && (await legendRun(noKey)) !== wantLegend && legendOn === wantLegend
+        && goneLines.length === 1 && noGone !== script && J4c([await countRun(noGone, 4)]) !== J4c(["hidden"]) && J4c(countSeen) === J4c(["hidden", "", ""]),
+        "4hold5 rewriting plant:pick-ctrl-over (the digit over the edge, out of the flow) is what 4hold2 reads red, and rewriting plant:pick-keys-ctrl (the foot's Ctrl hint)"
+        + " is what 4hold4 reads red, and rewriting plant:pick-count-gone (the count hidden under 40 px) is what 4hold6 reads red: " + J4c({ overHits: overLines.length, keyHits: keyLines.length, goneHits: goneLines.length }));
+      check(holdLines.length === 1 && holdLines[0].indexOf("holdCtrl(!!(e && e.ctrlKey))") >= 0 && noHold !== script && !holdOk(heldPlant) && holdOk(holdOn)
+        && hideLines.length === 1 && hideLines[0].indexOf("display:none") >= 0 && shown !== doc && !nOk(shown) && nOk(doc),
+        "4hold3 rewriting plant:pick-ctrl-hold (the key read) leaves the hints where Ctrl never shows them, and rewriting plant:pick-ctrl-hide (the number column hidden at rest)"
+        + " is what 4hold2 reads red: " + J4c({ holdHits: holdLines.length, hideHits: hideLines.length, toggles: heldPlant.toggles }));
     }
   }
 
@@ -2483,7 +2593,7 @@ try {
   CM.setContentLangs(["en"]);
   const wOne = pickAnswer("open").words.keyOther;
   CM.setContentLangs(langsWere);
-  check(w7.keyCopy === "{KEY} copies, and pastes where it can" && w7.keyOther === "{KEY} in PL" && wPl === "{KEY} in EN" && wOne === "" && w7.keyClose === "{KEY} closes"
+  check(w7.keyCopy === "{KEY} copies or pastes" && w7.keyOther === "{KEY} in PL" && wPl === "{KEY} in EN" && wOne === "" && w7.keyClose === "{KEY} closes"
     && w7.pasted === "Pasted" && w7.copied === "Copied, press Ctrl+V" && w7.who === "Etiuda fills the reply in for this conversation",
     "7c the page is given the words for its keys and its note, the other language named by its code, and none where there is one: "
     + JSON.stringify([w7.keyCopy, w7.keyOther, wPl, wOne, w7.keyClose, w7.pasted, w7.copied]));
@@ -2520,9 +2630,9 @@ try {
     : ((/<kbd>([^<]*)<\/kbd>/.exec(li) || [])[1] || "-") + (/class="in/.test(li) ? " in " + ((/<span class="g">([^<]*)</.exec(li) || [])[1]) : "")
       + (/class="in[^"]*"/.test(li) && /<span class="t">/.test(li) ? " TITLE-AGAIN" : ""))).join(" | ");
   const ctrl2 = key7("2", "Digit2", { ctrlKey: true });
-  check(shape === "Ctrl+0 | head:T g+st | Ctrl+1 in 1/3 | Ctrl+2 in 2/3 | Ctrl+3 in 3/3 | Ctrl+4" && ctrl2 === '{"id":"g","vi":1}',
-    "7d a card of several replies is one group, its title and stamp once over its replies, each by its tag; every row shows its key as Ctrl"
-    + " and its digit, the reply copied last Ctrl+0, and Ctrl+2 takes the row that shows it: " + shape + " / " + ctrl2);
+  check(shape === "0 | head:T g+st | 1 in 1/3 | 2 in 2/3 | 3 in 3/3 | 4" && ctrl2 === '{"id":"g","vi":1}',
+    "7d a card of several replies is one group, its title and stamp once over its replies, each by its tag; every row carries its digit (the page draws it"
+    + " over the row while Ctrl is held; was: Ctrl and the digit in the markup), the reply copied last 0, and Ctrl+2 takes the row that shows it: " + shape + " / " + ctrl2);
 
   openWith(grp, { last: row("a", 0), count: "5 replies", who: "Marta", name: "Marta" });
   const sEnterRest = key7("Enter", "Enter", { shiftKey: true });
@@ -2553,10 +2663,10 @@ try {
   const afterNone = els7.count.textContent;
   open7(JSON.stringify({ rows: grp, words: Object.assign({}, W7, { keyOther: "" }), count: "5 replies", who: "" }));
   const lone = [els7.keys.innerHTML, els7.who.hidden];
-  check(foot[0] === "5 replies" && foot[1] === "<span><kbd>Enter</kbd> copies</span><span><kbd>Shift+Enter</kbd> in PL</span><span><kbd>Esc</kbd> closes</span>"
+  check(foot[0] === "5 replies" && foot[1] === "<span><kbd>Enter</kbd> copies</span><span><kbd>Shift+Enter</kbd> in PL</span>"
     && foot[2] === false && foot[3] === "Filled for" && foot[4] && afterFind === "1 reply" && afterNone === ""
-    && lone[0] === "<span><kbd>Enter</kbd> copies</span><span><kbd>Esc</kbd> closes</span>" && lone[1] === true,
-    "7f under the list the count follows what is found and the keys are shown as they work, Shift+Enter only where there is another"
+    && lone[0] === "<span><kbd>Enter</kbd> copies</span>" && lone[1] === true,
+    "7f under the list the count follows what is found and the keys are shown as they work (Esc no longer among them, so the count has the room; was: Esc closes last), Shift+Enter only where there is another"
     + " language; the chip names the conversation the reply is filled for, and hides where there is none: " + JSON.stringify([foot, afterFind, afterNone, lone]));
 
   const twenty = Array.from({ length: 20 }, (_, i) => row("p" + i, 0));
@@ -2565,9 +2675,9 @@ try {
   for (let i = 0; i < 3; i++) { key7("PageDown", "PageDown"); pages.push((/id="r(\d+)"[^>]*class="on"/.exec(els7.rows.innerHTML) || [])[1]); }
   const bottom = key7("Enter", "Enter");
   for (let i = 0; i < 3; i++) { key7("PageUp", "PageUp"); pages.push((/id="r(\d+)"[^>]*class="on"/.exec(els7.rows.innerHTML) || [])[1]); }
-  const chips = (els7.rows.innerHTML.match(/<kbd>Ctrl\+\d<\/kbd>/g) || []).length;
+  const chips = (els7.rows.innerHTML.match(/<kbd>\d<\/kbd>/g) || []).length;
   check(pages.join(",") === "8,16,19,11,3,0" && bottom === '{"id":"p19","vi":0}' && chips === 9,
-    "7g Page Down and Page Up move the mark eight rows and stop at either end, and only the first nine rows carry a key: "
+    "7g Page Down and Page Up move the mark eight rows and stop at either end, and only the first nine rows carry a digit (was: Ctrl and a digit): "
     + pages.join(",") + ", " + bottom + ", " + chips + " key(s)");
 
   /* THE HOTKEY MADE KNOWN: a combination another program holds is said when the desk is up, with the way to another. */

@@ -9337,7 +9337,7 @@ What is typed here stays in this browser.`;
     "{SHOWN} of {COUNT}": "{SHOWN} z {COUNT}",
     "Etiuda fills the reply in for this conversation": "Etiuda dopasuje odpowiedź do tej rozmowy",
     "Click to switch replies to the next language": "Kliknięcie przełącza odpowiedzi na następny język",
-    "{KEY} copies, and pastes where it can": "{KEY} wkleja lub kopiuje",
+    "{KEY} copies or pastes": "{KEY} kopiuje lub wkleja",
     "{KEY} in {LANG}": "{KEY} w języku {LANG}",
     "{KEY} closes": "{KEY} zamyka",
     "Pasted": "Wklejono",
@@ -9352,7 +9352,9 @@ What is typed here stays in this browser.`;
     "Quick replies": "Szybkie odpowiedzi",
     "A word finds the reply. <kbd>Enter</kbd> copies it, and pastes it into the window you were in wherever Windows allows. <kbd>Esc</kbd> closes Quick replies.": "Wystarczy wpisać słowo. <kbd>Enter</kbd> kopiuje odpowiedź i wkleja ją do poprzedniego okna, jeśli Windows na to pozwala. <kbd>Esc</kbd> zamyka Szybkie odpowiedzi.",
     "{KEY} opens Quick replies over any program, beside the pointer. To try it, press {KEY} or click <b>Quick replies</b> here.": "{KEY} otwiera Szybkie odpowiedzi nad każdym programem, obok wskaźnika. Aby spróbować, proszę nacisnąć {KEY} albo kliknąć tu <b>Szybkie odpowiedzi</b>.",
-    "Suggested": "Propozycje",
+    "Suggested intents": "Proponowane intencje",
+    "{KEY} shows numbers": "{KEY} pokazuje numery",
+    "Alt+1 to Alt+5 show an intent's replies": "Alt+1 do Alt+5 pokazują odpowiedzi danej intencji",
     "Intents suggested from the text selected before Quick replies opened. None is chosen until one is clicked.": "Intencje zaproponowane na podstawie tekstu zaznaczonego przed otwarciem Szybkich odpowiedzi. Żadna nie jest wybrana, dopóki się jej nie kliknie.",
     "Suggestions taken: {N}": "Wybrane propozycje: {N}",
     "Openings with suggestions: {N}": "Otwarcia z propozycjami: {N}",
@@ -46822,12 +46824,14 @@ What is typed here stays in this browser.`;
       empty: wholeThingEmpty() ? t("Etiuda is ready for its first replies.") : t("Nothing here yet."),
       who: t("Etiuda fills the reply in for this conversation"),
       langTitle: t("Click to switch replies to the next language"),
-      keyCopy: t("{KEY} copies, and pastes where it can"),
+      keyCopy: t("{KEY} copies or pastes"),
       keyOther: other ? t("{KEY} in {LANG}").split("{LANG}").join(other) : "",
       keyClose: t("{KEY} closes"),
       pasted: t("Pasted"),
       copied: t("Copied, press Ctrl+V"),
       selected: t("The words you selected. Type to change them."),
+      suggestKeys: t("Alt+1 to Alt+5 show an intent's replies"),
+      keyNumbers: t("{KEY} shows numbers"),
       /* Your own words, shown only where the shell offers a reword; {ADDRESS} is the host it names. */
       rwHead: t("Your own words?"),
       rwSpelling: t("Fix spelling"),
@@ -46974,7 +46978,7 @@ What is typed here stays in this browser.`;
     if (typeof eSuggestStandIn === "function") eSuggestStandIn();
     cachedModelKey = key;
     cachedModel = buildSuggestModel(suggestCatalog(), {
-      suggest: t("Suggested"),
+      suggest: t("Suggested intents"),
       suggestTip: t("Intents suggested from the text selected before Quick replies opened. None is chosen until one is clicked.")
     });
     return cachedModel;
