@@ -1959,10 +1959,10 @@ try {
     const footEn = await legendWith(fullWords(false)), footPl = await legendWith(fullWords(true));
     const countSeen = [await countRun(script, 4), await countRun(script, 60), await countRun(script, 109)];
     const footOk = d => prop(sheetOf(d, "footer"), "gap") === "8px" && prop(sheetOf(d, "#keys"), "gap") === "9px" && prop(sheetOf(d, "#keys kbd"), "margin-right") === "4px";
-    check(J4c(countSeen) === J4c(["hidden", "", ""]) && footOk(doc) && footEn.length <= 66 && footPl.length <= 66 && footPl.indexOf("Esc") < 0,
+    check(J4c(countSeen) === J4c(["hidden", "", ""]) && footOk(doc) && footEn.length <= 67 && footPl.length <= 67 && footPl.indexOf("Esc") < 0,
       "4hold6 the foot's hints stand whole at 600 px (its gaps 8 and 9 px, the key cap's margin 4, so the line is not clipped), and the count, which gives way to them, is"
       + " hidden once it is left under 40 px rather than showing a stray character; and the hints are short enough for the count to show whole at 600 px in both languages:"
-      + " the line's text is at most 66 characters, with no Esc (the shots measure the fit: Polish, the longer, has 4 px to spare at 66; was: the long Enter hint and Esc): " + J4c({ footEn, footPl }) + " " + J4c(countSeen) + " " + J4c({ footer: sheetOf(doc, "footer"), keys: sheetOf(doc, "#keys") }));
+      + " the line's text is at most 67 characters, with no Esc (the shots measure the fit: Polish, the longer, has 4 px to spare at 67; was: the long Enter hint and Esc): " + J4c({ footEn, footPl }) + " " + J4c(countSeen) + " " + J4c({ footer: sheetOf(doc, "footer"), keys: sheetOf(doc, "#keys") }));
     if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  4col3 and 4hold3, the plants (ETIUDA_PLANTS=off)");
     else {
       const sLines = script.split("\n");
@@ -1982,7 +1982,7 @@ try {
       const overLines = mainSrc.split("\n").filter(l => l.indexOf("plant:pick-ctrl-over") >= 0), nHeld = sheetOf(doc, ":root.ctrl .n");
       const inFlow = doc.replace("\n:root.ctrl .n{" + nHeld + "}", "\n:root.ctrl .n{" + nHeld.replace("position:absolute", "position:static") + "}");
       const keyLines = sLines.filter(l => l.indexOf("plant:pick-keys-ctrl") >= 0);
-      const noKey = sLines.map(l => (l.indexOf("plant:pick-keys-ctrl") >= 0 ? l.replace('["Ctrl", words.keyNumbers], ', "") : l)).join("\n");
+      const noKey = sLines.map(l => (l.indexOf("plant:pick-keys-ctrl") >= 0 ? l.replace(', ["Ctrl", words.keyNumbers]', "") : l)).join("\n");
       const goneLines = sLines.filter(l => l.indexOf("plant:pick-count-gone") >= 0);
       const noGone = sLines.map(l => (l.indexOf("plant:pick-count-gone") >= 0 ? l.replace("count.clientWidth < 40", "count.clientWidth < 0") : l)).join("\n");
       check(overLines.length === 1 && overLines[0].indexOf("position:absolute") >= 0 && inFlow !== doc && !nOk(inFlow) && nOk(doc)

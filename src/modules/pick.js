@@ -216,7 +216,7 @@ function pickWords(){
           empty:wholeThingEmpty() ? t("Etiuda is ready for its first replies.") : t("Nothing here yet."),
           who:t("Etiuda fills the reply in for this conversation"),
           langTitle:t("Click to switch replies to the next language"),
-          keyCopy:t("{KEY} copies, and pastes where it can"), keyOther:other ? t("{KEY} in {LANG}").split("{LANG}").join(other) : "",
+          keyCopy:t("{KEY} copies or pastes"), keyOther:other ? t("{KEY} in {LANG}").split("{LANG}").join(other) : "",
           keyClose:t("{KEY} closes"), pasted:t("Pasted"), copied:t("Copied, press Ctrl+V"),
           selected:t("The words you selected. Type to change them."),
           suggestKeys:t("Alt+1 to Alt+5 show an intent's replies"), keyNumbers:t("{KEY} shows numbers"),

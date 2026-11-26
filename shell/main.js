@@ -13901,7 +13901,7 @@ function pickPage() {
       keys.innerHTML = [enter, esc2].filter(Boolean).map(h => '<span>' + h + '</span>').join("");
       return;
     }
-    keys.innerHTML = [["Enter", words.keyCopy], ["Shift+Enter", words.keyOther], ["Ctrl", words.keyNumbers], ["Esc", words.keyClose]] /* plant:pick-keys-ctrl */
+    keys.innerHTML = [["Enter", words.keyCopy], ["Shift+Enter", words.keyOther], ["Ctrl", words.keyNumbers]] /* plant:pick-keys-ctrl */
       .filter(k => k[1]).map(k => '<span>' + esc(k[1]).split("{KEY}").join('<kbd>' + k[0] + '</kbd>') + '</span>').join("");
   };
   const matchChord = (e, c) => {
