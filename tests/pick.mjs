@@ -39,7 +39,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 173 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 14);
+const EXPECTED = 174 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 15);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1898,23 +1898,43 @@ try {
       ev("keydown", "Control", true); onOpen(JSON.stringify({ rows: pRows }));
       return { toggles, seen, cutOnPress, hasBlur: typeof wl.blur === "function", hasKeys: typeof dl.keydown === "function" && typeof dl.keyup === "function" };
     };
-    const holdOk = r => J4c(r.toggles) === J4c(wantHoldOn) && r.seen[0] === "" && r.seen[1] === "ctrl:true" && r.cutOnPress >= 1 && r.hasBlur && r.hasKeys;
+    const holdOk = r => J4c(r.toggles) === J4c(wantHoldOn) && r.seen[0] === "" && r.seen[1] === "ctrl:true" && r.cutOnPress === 0 && r.hasBlur && r.hasKeys;
     const holdOn = await holdRun(script);
     check(holdOk(holdOn),
       "4hold1 Ctrl held draws the hints and Ctrl released takes them away, and nothing else moves: the class is on at a Ctrl press, stays on through Ctrl+1 (a digit"
-      + " pressed and let go with Ctrl down), is off at the Ctrl release, at the window losing focus and at a new opening, and the cut marks are measured again at"
-      + " each change: " + J4c(holdOn));
+      + " pressed and let go with Ctrl down), is off at the Ctrl release, at the window losing focus and at a new opening, and nothing is measured again, since the replies do not"
+      + " move (was: the cut marks measured again at each change): " + J4c(holdOn));
     const nR = sheetOf(doc, ".n"), nHeldR = sheetOf(doc, ":root.ctrl .n");
-    const nOk = d => prop(sheetOf(d, ".n"), "display") === "none" && prop(sheetOf(d, ":root.ctrl .n"), "display") === "flex";
-    check(nOk(doc) && /<kbd>'?\s*\+?\s*key|'<kbd>' \+ key/.test(script),
-      "4hold2 the number column of a row is not drawn at rest, so the reply has its width, and is drawn while the page's root wears ctrl; the markup still carries the"
-      + " key (every row's Ctrl+digit stays what 4e to 4g and the shape check read): " + J4c({ n: nR, held: nHeldR }));
+    const nOk = d => prop(sheetOf(d, ".n"), "display") === "none" && prop(sheetOf(d, ".n"), "flex") === "" && prop(sheetOf(d, ":root.ctrl .n"), "display") === "flex"
+      && prop(sheetOf(d, ":root.ctrl .n"), "position") === "absolute" && prop(sheetOf(d, "#rows li"), "position") === "relative"
+      && prop(sheetOf(d, "#rows li"), "padding") === "0 10px 0 14px" && prop(sheetOf(d, ".n kbd"), "padding") === "0 3px";
+    check(nOk(doc) && script.indexOf("'<kbd>' + key + '</kbd>'") > -1 && script.indexOf('const key = r.again ? "0" : (++n <= 9 ? String(n) : "")') > -1,
+      "4hold2 the number of a row is not drawn at rest, and while the page's root wears ctrl it is drawn as the digit alone over the row's left edge, out of the flow"
+      + " (so the reply does not move, and the digit covers none of its letters: the row's left padding holds it), the markup carrying the digit"
+      + " (was: the whole Ctrl+digit in a 50 px column in the flow, which moved the reply 60 px): " + J4c({ n: nR, held: nHeldR, li: sheetOf(doc, "#rows li") }));
     const wordsOf = pl => { document.getElementById("pax").value = ""; SYSTEM[0] = pl ? "pl-PL" : "en-US"; const o = pickAnswer("open", { profiles: 1 }); SYSTEM[0] = "en-US";
-      return { label: o.profiles && o.profiles.labels && o.profiles.labels.suggest, keys: o.words && o.words.suggestKeys }; };
+      return { label: o.profiles && o.profiles.labels && o.profiles.labels.suggest, keys: o.words && o.words.suggestKeys, nums: o.words && o.words.keyNumbers }; };
     const wEn = wordsOf(false), wPl = wordsOf(true);
     check(wEn.label === "Suggested intents" && wEn.keys === "Alt+1 to Alt+5 show an intent's replies"
-      && wPl.label === "Proponowane intencje" && wPl.keys === "Alt+1 do Alt+5 pokazują odpowiedzi danej intencji",
-      "4col4 the column's heading says what it shows, \"Suggested intents\" (was \"Suggested\"), and its one line of keys, in both languages (placeholders for the copywriter): " + J4c({ wEn, wPl }));
+      && wPl.label === "Proponowane intencje" && wPl.keys === "Alt+1 do Alt+5 pokazują odpowiedzi danej intencji"
+      && wEn.nums === "{KEY} shows numbers" && wPl.nums === "{KEY} pokazuje numery",
+      "4col4 the column's heading says what it shows, \"Suggested intents\" (was \"Suggested\"), its one line of keys, and the foot's hint for the numbers, in both languages (placeholders for the copywriter): " + J4c({ wEn, wPl }));
+    const legendRun = async scriptText => {
+      const keysEl = { innerHTML: "", textContent: "" };
+      let onOpen = null;
+      const q3 = { value: "", placeholder: "", focus() {}, setAttribute() {}, addEventListener() {} };
+      const box3 = { parentNode: null, set innerHTML(v) {}, get innerHTML() { return ""; }, setAttribute() {}, addEventListener() {}, querySelectorAll: () => [] };
+      const W = { E_PICK: { find: () => Promise.resolve("{}"), copy() {}, close() {}, ready() {}, onOpen: fn => { onOpen = fn; } } };
+      const D = { getElementById: id => (id === "q" ? q3 : id === "rows" ? box3 : id === "keys" ? keysEl : null),
+        documentElement: { style: { setProperty() {} }, dataset: {}, classList: { toggle() {} }, lang: "" } };
+      new Function("window", "document", scriptText)(W, D);
+      onOpen(JSON.stringify({ rows: pRows, words: { keyCopy: "{KEY} copies", keyOther: "{KEY} in PL", keyClose: "{KEY} closes", keyNumbers: "{KEY} shows numbers" } }));
+      return keysEl.innerHTML;
+    };
+    const wantLegend = "<span><kbd>Enter</kbd> copies</span><span><kbd>Shift+Enter</kbd> in PL</span><span><kbd>Ctrl</kbd> shows numbers</span><span><kbd>Esc</kbd> closes</span>";
+    const legendOn = await legendRun(script);
+    check(legendOn === wantLegend,
+      "4hold4 the foot's one line of keys gains a Ctrl key cap and the hint for the numbers (the desk's words), before Esc, on the same line: " + J4c(legendOn));
     if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  4col3 and 4hold3, the plants (ETIUDA_PLANTS=off)");
     else {
       const sLines = script.split("\n");
@@ -1931,6 +1951,14 @@ try {
       const noHold = sLines.map(l => (l.indexOf("plant:pick-ctrl-hold") >= 0 ? l.replace("holdCtrl(!!(e && e.ctrlKey))", "holdCtrl(false)") : l)).join("\n");
       const shown = doc.replace("\n.n{" + nR + "}", "\n.n{" + nR.replace("display:none", "display:flex") + "}");
       const heldPlant = await holdRun(noHold);
+      const overLines = mainSrc.split("\n").filter(l => l.indexOf("plant:pick-ctrl-over") >= 0), nHeld = sheetOf(doc, ":root.ctrl .n");
+      const inFlow = doc.replace("\n:root.ctrl .n{" + nHeld + "}", "\n:root.ctrl .n{" + nHeld.replace("position:absolute", "position:static") + "}");
+      const keyLines = sLines.filter(l => l.indexOf("plant:pick-keys-ctrl") >= 0);
+      const noKey = sLines.map(l => (l.indexOf("plant:pick-keys-ctrl") >= 0 ? l.replace('["Ctrl", words.keyNumbers], ', "") : l)).join("\n");
+      check(overLines.length === 1 && overLines[0].indexOf("position:absolute") >= 0 && inFlow !== doc && !nOk(inFlow) && nOk(doc)
+        && keyLines.length === 1 && noKey !== script && (await legendRun(noKey)) !== wantLegend && legendOn === wantLegend,
+        "4hold5 rewriting plant:pick-ctrl-over (the digit over the edge, out of the flow) is what 4hold2 reads red, and rewriting plant:pick-keys-ctrl (the foot's Ctrl hint)"
+        + " is what 4hold4 reads red: " + J4c({ overHits: overLines.length, keyHits: keyLines.length }));
       check(holdLines.length === 1 && holdLines[0].indexOf("holdCtrl(!!(e && e.ctrlKey))") >= 0 && noHold !== script && !holdOk(heldPlant) && holdOk(holdOn)
         && hideLines.length === 1 && hideLines[0].indexOf("display:none") >= 0 && shown !== doc && !nOk(shown) && nOk(doc),
         "4hold3 rewriting plant:pick-ctrl-hold (the key read) leaves the hints where Ctrl never shows them, and rewriting plant:pick-ctrl-hide (the number column hidden at rest)"
@@ -2571,9 +2599,9 @@ try {
     : ((/<kbd>([^<]*)<\/kbd>/.exec(li) || [])[1] || "-") + (/class="in/.test(li) ? " in " + ((/<span class="g">([^<]*)</.exec(li) || [])[1]) : "")
       + (/class="in[^"]*"/.test(li) && /<span class="t">/.test(li) ? " TITLE-AGAIN" : ""))).join(" | ");
   const ctrl2 = key7("2", "Digit2", { ctrlKey: true });
-  check(shape === "Ctrl+0 | head:T g+st | Ctrl+1 in 1/3 | Ctrl+2 in 2/3 | Ctrl+3 in 3/3 | Ctrl+4" && ctrl2 === '{"id":"g","vi":1}',
-    "7d a card of several replies is one group, its title and stamp once over its replies, each by its tag; every row shows its key as Ctrl"
-    + " and its digit, the reply copied last Ctrl+0, and Ctrl+2 takes the row that shows it: " + shape + " / " + ctrl2);
+  check(shape === "0 | head:T g+st | 1 in 1/3 | 2 in 2/3 | 3 in 3/3 | 4" && ctrl2 === '{"id":"g","vi":1}',
+    "7d a card of several replies is one group, its title and stamp once over its replies, each by its tag; every row carries its digit (the page draws it"
+    + " over the row while Ctrl is held; was: Ctrl and the digit in the markup), the reply copied last 0, and Ctrl+2 takes the row that shows it: " + shape + " / " + ctrl2);
 
   openWith(grp, { last: row("a", 0), count: "5 replies", who: "Marta", name: "Marta" });
   const sEnterRest = key7("Enter", "Enter", { shiftKey: true });
