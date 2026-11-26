@@ -3,7 +3,7 @@
 import { markCutText } from "./cut-text.js";
 import { ICON_CHEVRON_R, ICON_MIN, ICON_X } from "./icons.js";
 import { mgOpen } from "./app-state.js";
-import { animateModalHeightFrom, animatePinnedHeight, cutLeaves, dismissNode, mgAccordion, mgPinCard, mgReduceMotion } from "./motion.js";
+import { animateModalHeightFrom, animatePinnedHeight, cutLeaves, dismissNode, mgAccordion, mgPinCard, mgReduceMotion, M_MS, E_EASE, E_FLY } from "./motion.js";
 import { formatActionChord } from "./shortcuts.js";
 import { scStopCapture } from "./shortcuts-list.js";
 import { offerUndo, t, tc, translateTree } from "./ui-lang.js";
@@ -610,35 +610,114 @@ function edToDesk(){
   if(edRest || edShow || !edPlaceKind || modalEl.hidden || openCover()) return false;
   const at=document.activeElement;
   edEdFocus=(at && modalCard.contains(at) && at!==modalCard) ? at : null;
+  const flying=edGhosts(edWins.filter(r=>!r.min));
   edWins.forEach(r=>{ r.min=true; });
   edRestStart();
+  edFlyOut(flying); /* plant:fly-out */
   return true;
+}
+/* THE FLIGHT. A minimising editor shrinks to its button's size and travels to its place on M_MS.fly, accelerating (E_FLY), its corners
+   rounding and its body fading over the last 45% of the way; the button rings once on arrival. Bringing it back is the same path
+   reversed on E_EASE. What flies is a copy standing where the editor stood, since the editor itself is out of sight the moment it is
+   minimised. Under quiet motion there is no flight: the copy fades on the reveal tier and the button rings. */
+const ED_RING_PX=6;
+function edFabRect(){
+  const fab=document.getElementById("edFab");
+  const b=fab && !fab.hidden && fab.getClientRects().length ? fab.getBoundingClientRect() : null;
+  return b && b.width>0 ? b : null;
+}
+function edGhosts(recs){
+  if(typeof Element==="undefined" || !Element.prototype.animate) return [];
+  const out=[];
+  recs.forEach(r=>{
+    const el=edElOf(r);
+    const b=el && !el.hidden && el.getClientRects().length ? el.getBoundingClientRect() : null;
+    if(!b || !(b.width>0)) return;
+    const g=el.cloneNode(true);
+    g.removeAttribute("id");
+    Array.prototype.forEach.call(g.querySelectorAll("[id]"), n=>n.removeAttribute("id"));
+    g.classList.remove("ed-min","ed-shell","ed-back","ed-off","ed-pick");
+    g.classList.add("ed-ghost");
+    g.setAttribute("aria-hidden","true");
+    g.inert=true;
+    const st=g.style;
+    st.position="fixed"; st.margin="0"; st.left=b.left+"px"; st.top=b.top+"px"; st.width=b.width+"px"; st.height=b.height+"px";
+    st.maxHeight="none"; st.animation="none"; st.transformOrigin="0 0"; st.pointerEvents="none"; st.zIndex="210";
+    out.push({g, b});
+  });
+  return out;
+}
+function edRing(){
+  const fab=document.getElementById("edFab");
+  if(!fab || !fab.animate) return;
+  fab.animate([{boxShadow:"0 0 0 0 color-mix(in srgb,var(--accent) 55%,transparent)"},
+    {boxShadow:"0 0 0 "+ED_RING_PX+"px color-mix(in srgb,var(--accent) 0%,transparent)"}],{duration:M_MS.celebrate, easing:E_EASE});
+}
+function edFlyOut(ghosts){
+  if(!ghosts.length) return;
+  const to=edFabRect(), still=mgReduceMotion();
+  ghosts.forEach(({g, b})=>{
+    if(!to){ return; }
+    modalEl.appendChild(g);
+    const done=()=>{ g.remove(); };
+    let run;
+    if(still) run=g.animate([{opacity:1},{opacity:0}],{duration:M_MS.reveal, easing:E_EASE, fill:"forwards"});
+    else{
+      const sx=to.width/b.width, sy=to.height/b.height;
+      const pose="translate("+(to.left-b.left)+"px,"+(to.top-b.top)+"px) scale("+sx+","+sy+")";
+      const was=getComputedStyle(g).borderRadius;
+      const round=(to.width/2/sx)+"px / "+(to.height/2/sy)+"px";
+      run=g.animate([{transform:"none", opacity:1, borderRadius:was},{opacity:1, offset:.55},{transform:pose, opacity:0, borderRadius:round}],
+        {duration:M_MS.fly, easing:E_FLY, fill:"forwards"});
+    }
+    run.onfinish=done; run.oncancel=done;
+    setTimeout(done, M_MS.fly+M_MS.reveal+200);
+  });
+  const arrive=still ? M_MS.reveal : M_MS.fly;
+  if(to) setTimeout(edRing, arrive); /* plant:fly-ring */
+}
+function edFlyIn(el, from){
+  if(!el || !from || !el.animate) return;
+  const b=el.getBoundingClientRect();
+  if(!(b.width>0)) return;
+  if(mgReduceMotion()){ el.animate([{opacity:0},{opacity:1}],{duration:M_MS.reveal, easing:E_EASE, fill:"backwards"}); return; }
+  const sx=from.width/b.width, sy=from.height/b.height;
+  const pose="translate("+(from.left-b.left)+"px,"+(from.top-b.top)+"px) scale("+sx+","+sy+")";
+  const was=getComputedStyle(el).borderRadius;
+  const round=(from.width/2/sx)+"px / "+(from.height/2/sy)+"px";
+  el.animate([{transform:pose, opacity:0, borderRadius:round, transformOrigin:"0 0"},{opacity:1, offset:.45},{transform:"none", opacity:1, borderRadius:was, transformOrigin:"0 0"}],
+    {duration:M_MS.fly, easing:E_EASE, fill:"backwards"});
 }
 /* The editor in hand to the button; the most recent still showing comes forward, else the desk does. */
 function edMinimise(){
   if(!edActiveWin || !edPlaceKind || modalEl.hidden || edRest || edShow || edHeld) return false;
   const next=edHist.filter(r=>r!==edActiveWin && !r.min).pop();
   if(!next) return edToDesk();
+  const flying=edGhosts([edActiveWin]);
   edActiveWin.min=true;
   edActivate(next, true);
+  edFlyOut(flying);
   return true;
 }
 /* Back from the desk, the caret where it was. */
 function edToFront(){
   if(!edRest) return false;
+  const from=edFabRect();
   const at=document.activeElement;
   if(at && at!==document.body && !modalCard.contains(at)) edDeskFocus=at;
   edRestEnd();
   edRefreshNow();
   edPlaceSync();
   edFocusOn((edEdFocus && modalCard.contains(edEdFocus)) ? edEdFocus : modalCard);
+  edFlyIn(modalCard, from); /* plant:fly-in */
   return true;
 }
 /* One minimised editor shown again, the others left where they are. */
 function edBringUp(rec){
   if(!rec || edWins.indexOf(rec)<0) return false;
+  const from=edFabRect();
   rec.min=false;
-  if(rec!==edActiveWin){ edActivate(rec, true); return true; }
+  if(rec!==edActiveWin){ edActivate(rec, true); edFlyIn(modalCard, from); return true; }
   if(edRest) return edToFront();
   edPlaceSync();
   return true;

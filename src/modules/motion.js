@@ -13,7 +13,9 @@ const E_SPRING="linear(0,0.0773,0.2255,0.3951,0.5568,0.6956,0.806,0.8883,0.9458,
 /* THE TIERS, by what moves rather than how far. The sheet's :root carries the same numbers as
    --m-* for everything CSS runs, and tests/motion-tokens.js holds the two equal. */
 const M_MS={tone:100, reveal:120, move:180, surface:180, scrim:160, resize:200, dismiss:80,
-  travel:371, celebrate:420, wash:500, roll:300, nudge:2000};
+  travel:371, celebrate:420, wash:500, roll:300, nudge:2000, fly:240};
+/* An editor flying into its button accelerates into it, the one place the curve above is not the curve: coming back is E_EASE. */
+const E_FLY="cubic-bezier(.4,0,1,1)";
 const E_SPRING_MS=M_MS.travel;
 
 /* How many cards a FLIP may transform at once. Here beside the curve because two surfaces
@@ -292,6 +294,7 @@ export {
   dismissCopy,
   cutLeaves,
   E_EASE,
+  E_FLY,
   E_SPRING,
   E_SPRING_MS,
   M_MS,

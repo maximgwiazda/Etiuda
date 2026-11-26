@@ -3014,7 +3014,8 @@ html.e-arrived #pillsSlot{transition:opacity var(--m-surface) var(--m-ease)}
 .modal-note-dot{flex:0 0 auto;width:7px;height:7px;border-radius:50%;background:var(--warn);transform:translateY(-1px)}
 .modal-card:has(.modal-body):has(> .modal-note) h2{border-bottom:0}
 .modal-card:has(.modal-body) > .modal-note{border-bottom:1px solid var(--line)}
-.modal.ed-rest:not([hidden]) .modal-bg{animation:none;opacity:0;transition:opacity var(--m-scrim) ease}
+.modal.ed-rest:not([hidden]) .modal-bg{animation:none;opacity:0;transition:opacity var(--m-fly) ease}
+.modal.ed-win:not([hidden]) .modal-bg{animation-duration:var(--m-fly)}
 /* An editor's scrim takes the click over the band too, which brings the desk in front (the band's rule above). */
 body.e-host .modal.ed-win:not(.ed-rest) .modal-bg{app-region:no-drag;-webkit-app-region:no-drag}
 /* THE OTHER EDITORS (dialog.js, edShelve) stand at their places above the scrim and under the one in hand; a
@@ -4593,13 +4594,13 @@ body.e-first-signin .stage>.dotfield{content-visibility:hidden}
    so a rule written with the tiers needs no guard of its own. */
 :root{--m-tone:100ms; --m-reveal:120ms; --m-move:180ms; --m-surface:180ms; --m-scrim:160ms;
   --m-resize:200ms; --m-dismiss:80ms; --m-travel:371ms; --m-celebrate:420ms; --m-wash:500ms;
-  --m-roll:300ms; --m-nudge:2s;
+  --m-roll:300ms; --m-nudge:2s; --m-fly:240ms;
   --m-ease:cubic-bezier(.2,.7,.3,1);
   --m-spring:linear(0,0.0773,0.2255,0.3951,0.5568,0.6956,0.806,0.8883,0.9458,0.9832,1.0055,1.0169,
     1.0212,1.0211,1.0186,1.0151,1.0115,1.0082,1.0054,1.0033,1.0018,1.0008,1.0001,1)}
 :root.e-still{--m-tone:0s; --m-reveal:0s; --m-move:0s; --m-surface:0s; --m-scrim:0s;
   --m-resize:0s; --m-dismiss:0s; --m-travel:0s; --m-celebrate:0s; --m-wash:0s; --m-roll:0s;
-  --m-nudge:0s}
+  --m-nudge:0s; --m-fly:0s}
 :root.e-still *,:root.e-still *::before,:root.e-still *::after{animation:none!important}
 /* THE FILL, cobalt in BOTH themes and the same blue as --accent-fill, written out because this span
    is published to host pages that carry none of the engine's tokens. A host redeclares the
@@ -7570,6 +7571,7 @@ What is typed here stays in this browser.`;
   __export(motion_exports, {
     CARD_MOVE_MAX: () => CARD_MOVE_MAX,
     E_EASE: () => E_EASE,
+    E_FLY: () => E_FLY,
     E_SPRING: () => E_SPRING,
     E_SPRING_MS: () => E_SPRING_MS,
     M_MS: () => M_MS,
@@ -7777,8 +7779,10 @@ What is typed here stays in this browser.`;
     celebrate: 420,
     wash: 500,
     roll: 300,
-    nudge: 2e3
+    nudge: 2e3,
+    fly: 240
   };
+  var E_FLY = "cubic-bezier(.4,0,1,1)";
   var E_SPRING_MS = M_MS.travel;
   var CARD_MOVE_MAX = 40;
   var mgPendingH = null;
@@ -22549,35 +22553,134 @@ What is typed here stays in this browser.`;
     if (edRest || edShow || !edPlaceKind || modalEl.hidden || openCover()) return false;
     const at = document.activeElement;
     edEdFocus = at && modalCard.contains(at) && at !== modalCard ? at : null;
+    const flying = edGhosts(edWins.filter((r) => !r.min));
     edWins.forEach((r) => {
       r.min = true;
     });
     edRestStart();
+    edFlyOut(flying);
     return true;
+  }
+  var ED_RING_PX = 6;
+  function edFabRect() {
+    const fab = document.getElementById("edFab");
+    const b = fab && !fab.hidden && fab.getClientRects().length ? fab.getBoundingClientRect() : null;
+    return b && b.width > 0 ? b : null;
+  }
+  function edGhosts(recs) {
+    if (typeof Element === "undefined" || !Element.prototype.animate) return [];
+    const out = [];
+    recs.forEach((r) => {
+      const el = edElOf(r);
+      const b = el && !el.hidden && el.getClientRects().length ? el.getBoundingClientRect() : null;
+      if (!b || !(b.width > 0)) return;
+      const g = el.cloneNode(true);
+      g.removeAttribute("id");
+      Array.prototype.forEach.call(g.querySelectorAll("[id]"), (n) => n.removeAttribute("id"));
+      g.classList.remove("ed-min", "ed-shell", "ed-back", "ed-off", "ed-pick");
+      g.classList.add("ed-ghost");
+      g.setAttribute("aria-hidden", "true");
+      g.inert = true;
+      const st = g.style;
+      st.position = "fixed";
+      st.margin = "0";
+      st.left = b.left + "px";
+      st.top = b.top + "px";
+      st.width = b.width + "px";
+      st.height = b.height + "px";
+      st.maxHeight = "none";
+      st.animation = "none";
+      st.transformOrigin = "0 0";
+      st.pointerEvents = "none";
+      st.zIndex = "210";
+      out.push({ g, b });
+    });
+    return out;
+  }
+  function edRing() {
+    const fab = document.getElementById("edFab");
+    if (!fab || !fab.animate) return;
+    fab.animate([
+      { boxShadow: "0 0 0 0 color-mix(in srgb,var(--accent) 55%,transparent)" },
+      { boxShadow: "0 0 0 " + ED_RING_PX + "px color-mix(in srgb,var(--accent) 0%,transparent)" }
+    ], { duration: M_MS.celebrate, easing: E_EASE });
+  }
+  function edFlyOut(ghosts) {
+    if (!ghosts.length) return;
+    const to = edFabRect(), still = mgReduceMotion();
+    ghosts.forEach(({ g, b }) => {
+      if (!to) {
+        return;
+      }
+      modalEl.appendChild(g);
+      const done = () => {
+        g.remove();
+      };
+      let run;
+      if (still) run = g.animate([{ opacity: 1 }, { opacity: 0 }], { duration: M_MS.reveal, easing: E_EASE, fill: "forwards" });
+      else {
+        const sx = to.width / b.width, sy = to.height / b.height;
+        const pose = "translate(" + (to.left - b.left) + "px," + (to.top - b.top) + "px) scale(" + sx + "," + sy + ")";
+        const was = getComputedStyle(g).borderRadius;
+        const round = to.width / 2 / sx + "px / " + to.height / 2 / sy + "px";
+        run = g.animate(
+          [{ transform: "none", opacity: 1, borderRadius: was }, { opacity: 1, offset: 0.55 }, { transform: pose, opacity: 0, borderRadius: round }],
+          { duration: M_MS.fly, easing: E_FLY, fill: "forwards" }
+        );
+      }
+      run.onfinish = done;
+      run.oncancel = done;
+      setTimeout(done, M_MS.fly + M_MS.reveal + 200);
+    });
+    const arrive = still ? M_MS.reveal : M_MS.fly;
+    if (to) setTimeout(edRing, arrive);
+  }
+  function edFlyIn(el, from) {
+    if (!el || !from || !el.animate) return;
+    const b = el.getBoundingClientRect();
+    if (!(b.width > 0)) return;
+    if (mgReduceMotion()) {
+      el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: M_MS.reveal, easing: E_EASE, fill: "backwards" });
+      return;
+    }
+    const sx = from.width / b.width, sy = from.height / b.height;
+    const pose = "translate(" + (from.left - b.left) + "px," + (from.top - b.top) + "px) scale(" + sx + "," + sy + ")";
+    const was = getComputedStyle(el).borderRadius;
+    const round = from.width / 2 / sx + "px / " + from.height / 2 / sy + "px";
+    el.animate(
+      [{ transform: pose, opacity: 0, borderRadius: round, transformOrigin: "0 0" }, { opacity: 1, offset: 0.45 }, { transform: "none", opacity: 1, borderRadius: was, transformOrigin: "0 0" }],
+      { duration: M_MS.fly, easing: E_EASE, fill: "backwards" }
+    );
   }
   function edMinimise() {
     if (!edActiveWin || !edPlaceKind || modalEl.hidden || edRest || edShow || edHeld) return false;
     const next = edHist.filter((r) => r !== edActiveWin && !r.min).pop();
     if (!next) return edToDesk();
+    const flying = edGhosts([edActiveWin]);
     edActiveWin.min = true;
     edActivate(next, true);
+    edFlyOut(flying);
     return true;
   }
   function edToFront() {
     if (!edRest) return false;
+    const from = edFabRect();
     const at = document.activeElement;
     if (at && at !== document.body && !modalCard.contains(at)) edDeskFocus = at;
     edRestEnd();
     edRefreshNow();
     edPlaceSync();
     edFocusOn(edEdFocus && modalCard.contains(edEdFocus) ? edEdFocus : modalCard);
+    edFlyIn(modalCard, from);
     return true;
   }
   function edBringUp(rec) {
     if (!rec || edWins.indexOf(rec) < 0) return false;
+    const from = edFabRect();
     rec.min = false;
     if (rec !== edActiveWin) {
       edActivate(rec, true);
+      edFlyIn(modalCard, from);
       return true;
     }
     if (edRest) return edToFront();
