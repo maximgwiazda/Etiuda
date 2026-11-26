@@ -328,6 +328,11 @@
   FunctionEnd
 
   Function RecogniseExistingInstallation
+    # ONE QUESTION PER RUN, whatever calls this.
+    ${If} $RecogniseAsked == "1"
+      Return # plant:recognise-once
+    ${EndIf}
+    StrCpy $RecogniseAsked "1"
     Push $0
     Push $1
     Push $R1
@@ -845,6 +850,7 @@ Var etiudaOldDir
 Var etiudaOldUserDir
 Var etiudaDropRoot
 Var etiudaDropList
+Var etiudaRenameTries
 # Every folder below is removed by the walk that never enters a link (customHeader's ${ETIUDA_REMOVE_TREE}, through
 # etiudaRemoveTree): beside a folder a non-administrator may write, or read from HKCU, each may hold one. This compiles the
 # walk into the installer as well.
@@ -1087,9 +1093,10 @@ Var etiudaDropList
   Pop $0
 !macroend
 
-# One folder renamed, tried 30 times 2 s apart as a locked extract is, then Retry or Cancel; $0 answers "moved" or not.
+# One folder renamed, tried 30 times 2 s apart as a locked extract is, then Retry or Cancel; $0 answers "moved" or not. The count
+# is a variable nothing else writes, so the wait ends at the box, about a minute in, whatever the run's registers hold.
 !macro etiudaRenameRetry FROM TO
-  StrCpy $0 0
+  StrCpy $etiudaRenameTries 0
   ${Do}
     ClearErrors
     Rename "${FROM}" "${TO}"
@@ -1097,11 +1104,11 @@ Var etiudaDropList
       StrCpy $0 "moved"
       ${ExitDo}
     ${EndIf}
-    IntOp $0 $0 + 1
-    ${If} $0 < 30
+    IntOp $etiudaRenameTries $etiudaRenameTries + 1 # plant:rename-own-count
+    ${If} $etiudaRenameTries < 30
       Sleep 2000
     ${ElseIf} ${Cmd} `MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)" /SD IDCANCEL IDRETRY`
-      StrCpy $0 0
+      StrCpy $etiudaRenameTries 0
     ${Else}
       StrCpy $0 "stuck"
       ${ExitDo}
@@ -1613,12 +1620,48 @@ FunctionEnd
 !endif
 !include "${BUILD_RESOURCES_DIR}\installer\turning.nsh"
 
+# ONE SETUP AT A TIME. electron-builder's guard (installer.nsi) refuses a second copy only on ERROR_ALREADY_EXISTS, and a mutex
+# an elevated copy holds answers an unelevated one ERROR_ACCESS_DENIED, which that guard lets through; this refuses on either, as
+# the guard does: the running copy brought forward, exit 1618. The inner, elevated half of a run is that run, and is let be.
+!macro etiudaOneSetup
+  ${IfNot} ${UAC_IsInnerInstance}
+    Push $0
+    Push $1
+    Push $2
+    System::Call 'kernel32::CreateMutex(p 0, i 0, t "${APP_GUID}.etiuda-setup") p .r1 ?e'
+    Pop $0
+    ${If} $0 = 183
+    ${OrIf} $0 = 5 # plant:one-setup-denied
+      StrLen $0 "$(^SetupCaption)"
+      IntOp $0 $0 + 1
+      StrCpy $1 ""
+      ${Do}
+        FindWindow $1 "#32770" "" "" $1
+        ${If} $1 == 0
+          ${ExitDo}
+        ${EndIf}
+        System::Call 'user32::GetWindowText(p r1, t .r2, i r0)'
+        ${If} $2 == "$(^SetupCaption)"
+          System::Call 'user32::SetForegroundWindow(p r1)'
+          ${ExitDo}
+        ${EndIf}
+      ${Loop}
+      SetErrorLevel 1618
+      Quit # plant:one-setup-quits
+    ${EndIf}
+    Pop $2
+    Pop $1
+    Pop $0
+  ${EndIf}
+!macroend
+
 !macro customInit
   StrCpy $etiudaFinishText "$(MUI_TEXT_FINISH_INFO_TEXT)"
   # "/D=C:\Apps\Etiuda\" keeps its backslash: GetDParameter (multiUser.nsh) copies it into $INSTDIR past NSIS's own trim, and
   # $appExe, the etiuda: command and InstallLocation would carry "\\", which the uninstaller's compare then misses. Trimmed
   # once here, in .onInit after initMultiUser has read /D, before any page and the install section, silent or not.
   !insertmacro etiudaTrimSlashes $INSTDIR
+  !insertmacro etiudaOneSetup
   ${IfNot} ${Silent}
     ${IfNot} ${UAC_IsInnerInstance}
       Call RecogniseExistingInstallation
@@ -1666,6 +1709,7 @@ Var TurnReady
 !ifndef BUILD_UNINSTALLER
 Var InstalledVersion
 Var RecogniseMsg
+Var RecogniseAsked
 # THE FINISH PAGE'S TEXT, Modern UI's own unless etiudaOldUserCopy left a per-user copy to its next sign-in. With the Run box on
 # the page the label is 195 by 40 dialog units, about five lines, so the case's text replaces the whole of it rather than adding.
 Var etiudaFinishText
@@ -1696,6 +1740,34 @@ Var RemoveDataBox
     StrCpy $TurnKind ""
     StrCpy $TurnBmp 0
     ${If} ${FileExists} "$PLUGINSDIR\turn\sidebar-000.bmp"
+      Push $0
+      GetFunctionAddress $0 ${TURN_PFX}TurnTick
+      nsDialogs::CreateTimer $0 ${TURN_INTERVAL}
+      Pop $0
+    ${EndIf}
+  FunctionEnd
+
+  # NO TICK WHILE A SECTION RUNS: NSIS runs the sections on a second thread, and its script engine is not safe on two threads at
+  # once (one stack, one set of registers, one plug-in state). The files page stops the timer and shows the still before that
+  # thread starts, and the timer starts again only once the work is done (customPageAfterChangeDir, customUninstallPage, below).
+  Function ${TURN_PFX}TurnStill
+    Push $0
+    StrCpy $TurnReady "0"
+    GetFunctionAddress $0 ${TURN_PFX}TurnTick
+    nsDialogs::KillTimer $0 # plant:turn-still-kills
+    Pop $0
+    Call ${TURN_PFX}TurnPage
+    ${If} $TurnKind != ""
+      StrCpy $TurnKey $TurnNext
+      StrCpy $TurnFrame 0
+      Call ${TURN_PFX}TurnPaint
+    ${EndIf}
+  FunctionEnd
+
+  Function ${TURN_PFX}TurnResume
+    ${If} $TurnReady != "1"
+    ${AndIf} ${FileExists} "$PLUGINSDIR\turn\sidebar-000.bmp"
+      StrCpy $TurnReady "1"
       Push $0
       GetFunctionAddress $0 ${TURN_PFX}TurnTick
       nsDialogs::CreateTimer $0 ${TURN_INTERVAL}
@@ -1804,6 +1876,10 @@ Var RemoveDataBox
   FunctionEnd
 
   Function ${TURN_PFX}TurnTick
+    # A tick already queued when TurnStill ran does nothing.
+    ${If} $TurnReady != "1"
+      Return # plant:turn-tick-stopped
+    ${EndIf}
     Push $0
     Push $1
     Call ${TURN_PFX}TurnPage
@@ -1995,8 +2071,21 @@ Var RemoveDataBox
       StrCpy $RemoveMyData "0"
     ${EndIf}
     Pop $0
+    # The last page before the uninstall's files page, which the template's install-mode page (a custom page, no section) alone
+    # stands between: the turning stops here, as the installer's does on its files page.
+    Call un.TurnStill # plant:turn-unfiles-still
   FunctionEnd
   UninstPage custom un.RemoveDataCreate un.RemoveDataLeave
+!macroend
+
+# THE FILES PAGE RUNS WITH THE TURNING STILL (TurnStill, in TurnEmit). electron-builder inserts the first macro straight before
+# MUI_PAGE_INSTFILES and the second between MUI_UNPAGE_INSTFILES and MUI_UNPAGE_FINISH, so each define is that page's own.
+!macro customPageAfterChangeDir
+  !define MUI_PAGE_CUSTOMFUNCTION_SHOW TurnStill # plant:turn-files-still
+  !define MUI_PAGE_CUSTOMFUNCTION_LEAVE TurnResume # plant:turn-files-resume
+!macroend
+!macro customUninstallPage
+  !define MUI_PAGE_CUSTOMFUNCTION_SHOW un.TurnResume # plant:turn-unfinish-resume
 !macroend
 
 # The folder page's warning for an all-users install into a folder ordinary users can change: its macros only, which
