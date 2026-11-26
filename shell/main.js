@@ -13826,14 +13826,13 @@ function pickPage() {
     });
   }
   const cutMarks = () => box.querySelectorAll(".t,.x").forEach(el => el.classList.toggle("cut", el.scrollWidth > el.clientWidth + 1));
-  /* THE KEYS OF THE NUMBERED ROWS ARE DRAWN WHILE CTRL IS HELD, so a reply has the width the numbers would take. The window's
-     losing focus and a new opening clear it: a Ctrl released while the window was away is never heard. */
+  /* THE DIGITS OF THE NUMBERED ROWS ARE DRAWN WHILE CTRL IS HELD, over the row's left edge and out of its flow, so no reply moves. The
+     window's losing focus and a new opening clear it: a Ctrl released while the window was away is never heard. */
   let ctrlOn = false;
   const holdCtrl = on => {
     if (on === ctrlOn) return;
     ctrlOn = on;
     document.documentElement.classList.toggle("ctrl", on);
-    cutMarks();
   };
   if (typeof document.addEventListener === "function") {
     const sync = e => holdCtrl(!!(e && e.ctrlKey)); /* plant:pick-ctrl-hold */
@@ -13849,7 +13848,7 @@ function pickPage() {
       const grouped = same(all[i - 1], r) || same(r, all[i + 1]);
       const head = grouped && !same(all[i - 1], r)
         ? '<li class="grp" role="presentation"><span class="t">' + esc(r.t) + '</span>' + (r.commits ? stamp() : '') + '</li>' : '';
-      const key = r.again ? "Ctrl+0" : (++n <= 9 ? "Ctrl+" + n : "");
+      const key = r.again ? "0" : (++n <= 9 ? String(n) : "");
       const replyOn = sgAt < 0 && i === at;
       const cls = (grouped ? ["in"] : []).concat(replyOn ? ["on"] : []);
       return head + '<li role="option" id="r' + i + '" data-i="' + i + '"' + (cls.length ? ' class="' + cls.join(" ") + '"' : '')
@@ -13897,7 +13896,7 @@ function pickPage() {
       keys.innerHTML = [enter, esc2].filter(Boolean).map(h => '<span>' + h + '</span>').join("");
       return;
     }
-    keys.innerHTML = [["Enter", words.keyCopy], ["Shift+Enter", words.keyOther], ["Esc", words.keyClose]]
+    keys.innerHTML = [["Enter", words.keyCopy], ["Shift+Enter", words.keyOther], ["Ctrl", words.keyNumbers], ["Esc", words.keyClose]] /* plant:pick-keys-ctrl */
       .filter(k => k[1]).map(k => '<span>' + esc(k[1]).split("{KEY}").join('<kbd>' + k[0] + '</kbd>') + '</span>').join("");
   };
   const matchChord = (e, c) => {
@@ -14283,15 +14282,16 @@ function pickerDoc() {
     + '.rw-acts kbd{color:var(--dim)}\n'
     + '#rows{flex:1 1 auto;min-width:0;min-height:0;margin:0;padding:0;list-style:none;overflow-x:hidden;overflow-y:auto;'
     + 'overscroll-behavior:contain;scrollbar-width:thin}\n'
-    + '#rows li{display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:var(--radius-sm);'
+    + '#rows li{position:relative;display:flex;align-items:center;gap:10px;height:36px;padding:0 10px 0 14px;border-radius:var(--radius-sm);'
     + 'white-space:nowrap;transition:background-color .1s}\n'
     + '#rows li.on{background:color-mix(in srgb,var(--accent) 20%,transparent)}\n'
     + '#rows li.on .t,#rows li.on .n,#rows li.on .g{color:var(--accent)}\n'
     + '#rows li.grp{height:24px;align-items:flex-end;padding-bottom:2px;font-size:12.5px}\n'
     + '#rows li.grp .t{max-width:none;color:var(--dim)}\n'
     + '#rows li.in{padding-left:24px}\n'
-    + '.n{display:none;flex:0 0 50px;font:10.5px var(--mono);color:var(--dim)}\n' /* plant:pick-ctrl-hide */
-    + ':root.ctrl .n{display:flex}\n'
+    + '.n{display:none;font:10.5px var(--mono);color:var(--dim)}\n' /* plant:pick-ctrl-hide */
+    + ':root.ctrl .n{display:flex;position:absolute;left:0;top:50%;transform:translateY(-50%);z-index:1}\n' /* plant:pick-ctrl-over */
+    + '.n kbd{padding:0 3px}\n'
     + 'kbd{font:10.5px var(--mono);padding:0 4px;border:1px solid var(--line-strong);border-radius:4px}\n'
     + '.t{flex:0 1 auto;max-width:45%;display:flex;align-items:center;gap:6px;overflow:hidden;font-weight:600}\n'
     + '.t svg{flex:0 0 auto}\n'

@@ -2644,9 +2644,9 @@ try {
   for (let i = 0; i < 3; i++) { key7("PageDown", "PageDown"); pages.push((/id="r(\d+)"[^>]*class="on"/.exec(els7.rows.innerHTML) || [])[1]); }
   const bottom = key7("Enter", "Enter");
   for (let i = 0; i < 3; i++) { key7("PageUp", "PageUp"); pages.push((/id="r(\d+)"[^>]*class="on"/.exec(els7.rows.innerHTML) || [])[1]); }
-  const chips = (els7.rows.innerHTML.match(/<kbd>Ctrl\+\d<\/kbd>/g) || []).length;
+  const chips = (els7.rows.innerHTML.match(/<kbd>\d<\/kbd>/g) || []).length;
   check(pages.join(",") === "8,16,19,11,3,0" && bottom === '{"id":"p19","vi":0}' && chips === 9,
-    "7g Page Down and Page Up move the mark eight rows and stop at either end, and only the first nine rows carry a key: "
+    "7g Page Down and Page Up move the mark eight rows and stop at either end, and only the first nine rows carry a digit (was: Ctrl and a digit): "
     + pages.join(",") + ", " + bottom + ", " + chips + " key(s)");
 
   /* THE HOTKEY MADE KNOWN: a combination another program holds is said when the desk is up, with the way to another. */

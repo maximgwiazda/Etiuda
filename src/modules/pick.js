@@ -219,7 +219,7 @@ function pickWords(){
           keyCopy:t("{KEY} copies, and pastes where it can"), keyOther:other ? t("{KEY} in {LANG}").split("{LANG}").join(other) : "",
           keyClose:t("{KEY} closes"), pasted:t("Pasted"), copied:t("Copied, press Ctrl+V"),
           selected:t("The words you selected. Type to change them."),
-          suggestKeys:t("Alt+1 to Alt+5 show an intent's replies"),
+          suggestKeys:t("Alt+1 to Alt+5 show an intent's replies"), keyNumbers:t("{KEY} shows numbers"),
           /* Your own words, shown only where the shell offers a reword; {ADDRESS} is the host it names. */
           rwHead:t("Your own words?"), rwSpelling:t("Fix spelling"), rwShorter:t("Shorter"), rwFriendlier:t("Friendlier"),
           rwFormal:t("More formal"), rwIntoPl:t("Into Polish"), rwIntoEn:t("Into English"), rwLangs:CONTENT_LANGS.slice(),
