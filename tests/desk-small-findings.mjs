@@ -24,7 +24,7 @@ E.ensureOutputs();
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ENGINE_URL = "file:///" + path.join(ROOT, "engine", "etiuda.html").replace(/\\/g, "/");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 3;
+const EXPECTED = 7;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -132,6 +132,51 @@ try {
       if (await buildLiftedHtml("src/modules/signin.js", tag, htmlPath) < 0) return false;
       return !sf9ok(await sf9run("file:///" + htmlPath.replace(/\\/g, "/")));
     }]);
+
+  /* sf11: Maintenance loses its bottom bar and its Eject catalog; Copy report stands at the foot of its left panel; Settings and the
+     Library cross-link in the place Maintenance's button held (finding 11). */
+  {
+    const { ctx, page } = await launchDeskPage(browser, {});
+    await page.evaluate(() => { openMaintenance(); });
+    await sleep(400);
+    const mt = await page.evaluate(() => {
+      const host = document.getElementById("screenHost");
+      const copy = host.querySelector("#mtCopy"), foot = host.querySelector(".sx-nav .sx-foot");
+      return {
+        bar: !!host.querySelector(".screen-actions"), eject: !!host.querySelector("#mtEject"), done: !!host.querySelector("#mtClose"),
+        settings: !!host.querySelector("#mtSettings"), copyInFoot: !!copy && !!foot && foot.contains(copy), copyLabel: copy ? copy.textContent.trim() : ""
+      };
+    });
+    check(!mt.bar && !mt.eject && !mt.done && !mt.settings && mt.copyInFoot && mt.copyLabel === "Copy report",
+      "sf11a Maintenance has no bottom bar, no Eject catalog, no Done and no Settings button, and Copy report stands in its left panel's foot", mt);
+    await page.evaluate(() => { document.getElementById("mtCopy").click(); });
+    await sleep(300);
+    const told = await page.evaluate(() => /Report copied/.test(document.body.textContent));
+    check(told, "sf11b Copy report in the left panel's foot still copies the report and says so", told);
+
+    await page.evaluate(() => { openSettings(); });
+    await sleep(400);
+    const st = await page.evaluate(() => {
+      const host = document.getElementById("screenHost"), b = host.querySelector(".sx-nav .sx-foot button");
+      return { maint: !!host.querySelector("#sxMaint"), id: b ? b.id : "", label: b ? b.textContent.trim() : "" };
+    });
+    await page.evaluate(() => { document.querySelector("#screenHost .sx-nav .sx-foot button").click(); });
+    await sleep(500);
+    const inLib = await page.evaluate(() => !!document.querySelector("#screenHost .lib-screen"));
+    check(!st.maint && st.id === "sxLibrary" && st.label === "Library" && inLib,
+      "sf11c Settings' left panel foot holds a Library button, not Maintenance's, and it opens the Library", { st, inLib });
+
+    const lb = await page.evaluate(() => {
+      const host = document.getElementById("screenHost"), b = host.querySelector(".sx-nav .sx-foot button");
+      return { maint: !!host.querySelector("#libMaint"), id: b ? b.id : "", label: b ? b.textContent.trim() : "" };
+    });
+    await page.evaluate(() => { document.querySelector("#screenHost .sx-nav .sx-foot button").click(); });
+    await sleep(500);
+    const inSet = await page.evaluate(() => !!document.querySelector("#screenHost #setBody"));
+    check(!lb.maint && lb.id === "libSettings" && lb.label === "Settings" && inSet,
+      "sf11d the Library's left panel foot holds a Settings button, not Maintenance's, and it opens Settings", { lb, inSet });
+    await ctx.close();
+  }
 
   for (const [label, fn] of domPlants) {
     if (PLANTS_OFF) notRun(label + " (ETIUDA_PLANTS=off)");
