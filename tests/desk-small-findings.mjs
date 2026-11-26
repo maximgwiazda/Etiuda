@@ -18,13 +18,13 @@ import puppeteer from "puppeteer-core";
 
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
-const { seatedView } = require("./seat-page.js");
+const { seatedView, seatPage } = require("./seat-page.js");
 E.ensureOutputs();
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ENGINE_URL = "file:///" + path.join(ROOT, "engine", "etiuda.html").replace(/\\/g, "/");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 10;
+const EXPECTED = 16;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -89,6 +89,30 @@ async function launchDeskPage(browser, cfg) {
   }, cfg, seat);
   await page.goto(cfg.url || ENGINE_URL, { waitUntil: "load", timeout: 30000 });
   await page.waitForFunction(() => !!document.getElementById("settingsBtn"), { timeout: 15000 });
+  return { ctx, page };
+}
+
+const SAMPLE = JSON.parse(fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8"));
+/* A seated desk page with the sample catalog taken: the cards listed, the tour and the name asked already. */
+async function sampleDeskPage(browser, cfg) {
+  const ctx = await browser.createBrowserContext();
+  const page = await ctx.newPage();
+  await page.setViewport({ width: cfg.width || 1280, height: cfg.height || 860, deviceScaleFactor: 1 });
+  await page.evaluateOnNewDocument(() => {
+    let desk = { eTourDone_v3: "1", eTourInvite_v3: "1", eFirstSigninSeen: "1", eAgent: "Bench Agent", eNameAsked: "1", eTheme: "light", eUiLang: "en", eStill: "1", eRail: "1" };
+    window.E_HOST = {
+      deskRead: () => JSON.stringify(desk), deskSave: t => { desk = JSON.parse(t); return true; }, deskWrite: t => { desk = JSON.parse(t); return Promise.resolve(true); },
+      deskPatch: (t, now) => { const p = JSON.parse(t); Object.keys(p).forEach(k => { if (p[k] === null) delete desk[k]; else desk[k] = p[k]; }); return now ? true : Promise.resolve(true); },
+      onDeskSynced: () => {}
+    };
+  });
+  await seatPage(page);
+  await E.seedCatalog(page, SAMPLE);
+  await page.goto(cfg.url || ENGINE_URL, { waitUntil: "load", timeout: 60000 });
+  await page.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
+  if (await page.$("#ecYes")) { await page.click("#ecYes"); await page.waitForNavigation({ waitUntil: "load", timeout: 15000 }).catch(() => null); }
+  await page.waitForFunction(() => document.querySelectorAll("#list .card").length > 0 && !document.getElementById("ecYes") && !document.querySelector(".e-launch-veil"), { timeout: 30000 });
+  await page.evaluate(() => document.documentElement.classList.add("e-still"));
   return { ctx, page };
 }
 
@@ -189,6 +213,61 @@ try {
       const htmlPath = path.join(lab, tag + ".html");
       if (await buildLiftedHtml(file, tag, htmlPath) < 0) return false;
       return !judge(await sf11run("file:///" + htmlPath.replace(/\\/g, "/")));
+    }]);
+
+  /* sf7 and sf21: the action buttons (findings 7 and 21). A button that arrives joins from the left and none that stood moves; the stack
+     stays reachable over the editors' dim; an action unrelated to the editors minimises them first, one that is theirs does not. */
+  const sf7run = async url => {
+    const { ctx, page } = await sampleDeskPage(browser, { url });
+    const first = await page.evaluate(() => [...document.querySelectorAll("#list .card[data-id]")].slice(0, 1).map(c => c.dataset.id)[0]);
+    const boxes = () => page.evaluate(() => {
+      const r = id => { const el = document.getElementById(id); const b = el.getBoundingClientRect(); return el.hidden || !b.width ? null : Math.round(b.left); };
+      return { ed: r("edFab"), add: r("addCardFab") };
+    });
+    const settleFrames = () => page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 120)))));
+    await settleFrames();
+    const before = await boxes();
+    await page.evaluate(id => openCardEditor(id), first);
+    await page.waitForFunction(() => !!document.getElementById("meSave"), { timeout: 10000 });
+    await sleep(250);
+    /* sf21a: over the open editor's dim, the stack's add button is what a press at its centre meets */
+    const reach = await page.evaluate(() => {
+      const el = document.getElementById("addCardFab"), b = el.getBoundingClientRect();
+      const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+      return { shown: !el.hidden && b.width > 0, hit: !!hit && (hit === el || el.contains(hit)) };
+    });
+    await page.evaluate(() => document.getElementById("modalMin").click());
+    await sleep(350);
+    await settleFrames();
+    const after = await boxes();
+    /* sf21b: with the editor back, the Clear intents button's press minimises it; the add button's does not */
+    await page.evaluate(() => document.getElementById("edFab").click());
+    await sleep(350);
+    const shownBack = await page.evaluate(() => !edResting() && modalFront());
+    await page.evaluate(() => document.getElementById("addCardFab").click());
+    await sleep(350);
+    const afterAdd = await page.evaluate(() => edResting());
+    await page.evaluate(() => { document.getElementById("clearIntentsFab").click(); });
+    await sleep(350);
+    const afterClear = await page.evaluate(() => edResting());
+    await ctx.close();
+    return { before, reach, after, shownBack, afterAdd, afterClear };
+  };
+  const sf7ok = r => r.before.add !== null && r.after.ed !== null && r.after.add === r.before.add && r.after.ed < r.after.add;
+  const sf21aok = r => r.reach.shown && r.reach.hit;
+  const sf21bok = r => r.shownBack && r.afterAdd === false && r.afterClear === true;
+  {
+    const r = await sf7run();
+    check(sf7ok(r), "sf7a the editors' button arrives to the left of the add button, which stays where it stood", { before: r.before, after: r.after });
+    check(sf21aok(r), "sf21a over an open editor's dim the action buttons are reachable: a press at the add button's centre meets it", r.reach);
+    check(sf21bok(r), "sf21b the add button, which opens an editor, leaves the editors showing; the Clear intents button minimises them first", { shownBack: r.shownBack, afterAdd: r.afterAdd, afterClear: r.afterClear });
+  }
+  for (const [file, tag, id, judge] of [["src/modules/dialog.js", "fab-arrival-order", "sf7b", sf7ok], ["src/modules/dialog.js", "ed-up-class", "sf21c", sf21aok],
+    ["src/modules/dialog.js", "fab-unrelated-rests", "sf21d", sf21bok]])
+    domPlants.push([id + " lifting plant:" + tag + " turns its check red", async lab => {
+      const htmlPath = path.join(lab, tag + ".html");
+      if (await buildLiftedHtml(file, tag, htmlPath) < 0) return false;
+      return !judge(await sf7run("file:///" + htmlPath.replace(/\\\\/g, "/")));
     }]);
 
   for (const [label, fn] of domPlants) {
