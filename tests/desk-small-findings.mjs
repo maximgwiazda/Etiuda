@@ -24,7 +24,7 @@ E.ensureOutputs();
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ENGINE_URL = "file:///" + path.join(ROOT, "engine", "etiuda.html").replace(/\\/g, "/");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 18;
+const EXPECTED = 23;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -99,6 +99,7 @@ async function sampleDeskPage(browser, cfg) {
   const ctx = await browser.createBrowserContext();
   const page = await ctx.newPage();
   await page.setViewport({ width: cfg.width || 1280, height: cfg.height || 860, deviceScaleFactor: 1 });
+  await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: cfg.reduced ? "reduce" : "no-preference" }]);
   await page.evaluateOnNewDocument(() => {
     let desk = { eTourDone_v3: "1", eTourInvite_v3: "1", eFirstSigninSeen: "1", eAgent: "Bench Agent", eNameAsked: "1", eTheme: "light", eUiLang: "en", eStill: "1", eRail: "1" };
     window.E_HOST = {
@@ -113,7 +114,7 @@ async function sampleDeskPage(browser, cfg) {
   await page.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   if (await page.$("#ecYes")) { await page.click("#ecYes"); await page.waitForNavigation({ waitUntil: "load", timeout: 15000 }).catch(() => null); }
   await page.waitForFunction(() => document.querySelectorAll("#list .card").length > 0 && !document.getElementById("ecYes") && !document.querySelector(".e-launch-veil"), { timeout: 30000 });
-  await page.evaluate(() => document.documentElement.classList.add("e-still"));
+  if (cfg.still !== false) await page.evaluate(() => document.documentElement.classList.add("e-still"));
   return { ctx, page };
 }
 
@@ -311,6 +312,68 @@ try {
     if (await buildLiftedHtml("src/template.html", "ec-whose-row", htmlPath) < 0) return false;
     return !sf12ok(await sf12run("file:///" + htmlPath.replace(/\\\\/g, "/")));
   }]);
+
+  /* sf8: minimising an editor shows where it goes (finding 8). It flies into its action button on the fly tier and E_FLY, the dim lifts on
+     the same tier, the button rings once; bringing it back is the path reversed on the engine's curve; under quiet motion the copy only
+     fades on the reveal tier and the button rings. */
+  const sf8run = async (url, reduced) => {
+    const { ctx, page } = await sampleDeskPage(browser, { url, still: false, reduced });
+    const first = await page.evaluate(() => document.querySelector("#list .card[data-id]").dataset.id);
+    await page.evaluate(id => openCardEditor(id), first);
+    await page.waitForFunction(() => !!document.getElementById("meSave"), { timeout: 10000 });
+    await sleep(450);
+    const readGhost = () => page.evaluate(() => {
+      const g = document.querySelector(".ed-ghost");
+      const anims = document.getAnimations().filter(a => a.effect && a.effect.target && a.effect.target.classList && a.effect.target.classList.contains("ed-ghost"));
+      const a = anims[0];
+      const frames = a ? a.effect.getKeyframes() : [];
+      const t = a ? a.effect.getTiming() : {};
+      const bg = document.querySelector("#modal .modal-bg");
+      return { ghosts: document.querySelectorAll(".ed-ghost").length, inModal: !!g && !!g.closest("#modal"), duration: t.duration, easing: t.easing,
+        moves: frames.some(f => f.transform && f.transform !== "none" && /scale/.test(f.transform)),
+        fadesFrom: frames.filter(f => f.opacity !== undefined).map(f => [Number(f.computedOffset.toFixed(2)), Number(f.opacity)]),
+        dim: bg ? getComputedStyle(bg).transitionDuration : "" };
+    });
+    const readRing = () => page.evaluate(() => {
+      const fab = document.getElementById("edFab");
+      const a = fab.getAnimations().filter(x => x.effect && x.effect.getKeyframes().some(f => f.boxShadow));
+      return { n: a.length, duration: a[0] ? a[0].effect.getTiming().duration : 0 };
+    });
+    await page.evaluate(() => document.getElementById("modalMin").click());
+    await sleep(40);
+    const during = await readGhost();
+    await sleep(reduced ? 150 : 270);
+    const ring = await readRing();
+    await sleep(500);
+    const after = await readGhost();
+    let back = null;
+    await page.evaluate(() => document.getElementById("edFab").click());
+    await sleep(40);
+    back = await page.evaluate(() => {
+      const a = document.getAnimations().filter(x => !(x instanceof CSSAnimation) && x.effect && x.effect.target === document.getElementById("modalCard"))[0];
+      const t = a ? a.effect.getTiming() : {}, f = a ? a.effect.getKeyframes() : [];
+      return { duration: t.duration, easing: t.easing, from: f[0] && f[0].transform ? String(f[0].transform) : "", fade: f.map(x => x.opacity).join(",") };
+    });
+    await ctx.close();
+    return { during, ring, after, back };
+  };
+  const sf8ok = r => r.during.ghosts === 1 && r.during.inModal && r.during.duration === 240 && r.during.easing === "cubic-bezier(0.4, 0, 1, 1)" && r.during.moves
+    && r.during.fadesFrom.some(p => p[0] === 0.55 && p[1] === 1) && r.during.fadesFrom.some(p => p[0] === 1 && p[1] === 0)
+    && r.during.dim === "0.24s" && r.after.ghosts === 0 && r.ring.n === 1 && r.ring.duration === 420
+    && r.back.duration === 240 && r.back.easing === "cubic-bezier(0.2, 0.7, 0.3, 1)" && /scale\(/.test(r.back.from);
+  const sf8quiet = r => r.during.ghosts === 1 && r.during.duration === 120 && !r.during.moves && r.after.ghosts === 0 && r.ring.n === 1;
+  {
+    const r = await sf8run();
+    check(sf8ok(r), "sf8a Minimise flies a copy into the button on 240 ms and cubic-bezier(.4,0,1,1), fading over the last 45%, the dim lifting on 240 ms, the button ringing once, and bringing it back on 240 ms and the engine's curve", r);
+    const q = await sf8run(undefined, true);
+    check(sf8quiet(q), "sf8b under quiet motion the copy only fades on 120 ms, with no travel, and the button rings", q);
+  }
+  for (const [tag, id] of [["fly-out", "sf8c"], ["fly-ring", "sf8d"], ["fly-in", "sf8e"]])
+    domPlants.push([id + " lifting plant:" + tag + " turns sf8a red", async lab => {
+      const htmlPath = path.join(lab, tag + ".html");
+      if (await buildLiftedHtml("src/modules/dialog.js", tag, htmlPath) < 0) return false;
+      return !sf8ok(await sf8run("file:///" + htmlPath.replace(/\\\\/g, "/")));
+    }]);
 
   for (const [label, fn] of domPlants) {
     if (PLANTS_OFF) notRun(label + " (ETIUDA_PLANTS=off)");
