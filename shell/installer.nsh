@@ -1657,11 +1657,11 @@ FunctionEnd
 
 !macro customInit
   StrCpy $etiudaFinishText "$(MUI_TEXT_FINISH_INFO_TEXT)"
+  !insertmacro etiudaOneSetup
   # "/D=C:\Apps\Etiuda\" keeps its backslash: GetDParameter (multiUser.nsh) copies it into $INSTDIR past NSIS's own trim, and
   # $appExe, the etiuda: command and InstallLocation would carry "\\", which the uninstaller's compare then misses. Trimmed
   # once here, in .onInit after initMultiUser has read /D, before any page and the install section, silent or not.
   !insertmacro etiudaTrimSlashes $INSTDIR
-  !insertmacro etiudaOneSetup
   ${IfNot} ${Silent}
     ${IfNot} ${UAC_IsInnerInstance}
       Call RecogniseExistingInstallation

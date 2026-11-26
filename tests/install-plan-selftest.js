@@ -1142,7 +1142,8 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     const guarded = /\$\{If\} \$\{FileExists\} "\$etiudaBase\\\$\{APP_EXECUTABLE_FILENAME\}"\n\s*!insertmacro etiudaRenameRetry "\$etiudaBase" "\$etiudaAside"\n\s*\$\{If\} \$0 != "moved"\n[\s\S]*?!insertmacro etiudaStageAbort\n\s*SetErrorLevel 1618\n\s*Quit\n\s*\$\{EndIf\}\n\s*StrCpy \$etiudaAsideMade "1"/.test(m);
     const restore = /!insertmacro etiudaRenameRetry "\$etiudaStage" "\$etiudaBase"\n\s*\$\{If\} \$0 != "moved"\n\s*\$\{If\} \$etiudaAsideMade == "1"\n\s*!insertmacro etiudaRenameRetry "\$etiudaAside" "\$etiudaBase"\n\s*\$\{If\} \$0 != "moved"\n[\s\S]*?SetErrorLevel 2\n\s*Quit\n\s*\$\{EndIf\}\n\s*StrCpy \$etiudaAsideMade "0"\n\s*\$\{EndIf\}\n[\s\S]*?!insertmacro etiudaStageAbort\n\s*SetErrorLevel 1618\n\s*Quit\b/.test(m);
     const r = code(macro(nsh, "etiudaRenameRetry"));
-    const tries = /Rename "\$\{FROM\}" "\$\{TO\}"/.test(r) && /\$\{If\} \$0 < 30\n\s*Sleep 2000/.test(r)
+    /* WAS: the count kept in $0. NOW: in $etiudaRenameTries, which nothing else writes, so no other code can reset the wait. */
+    const tries = /Rename "\$\{FROM\}" "\$\{TO\}"/.test(r) && /\$\{If\} \$etiudaRenameTries < 30\n\s*Sleep 2000/.test(r)
       && /MessageBox MB_RETRYCANCEL\|MB_ICONEXCLAMATION "\$\(appCannotBeClosed\)" \/SD IDCANCEL IDRETRY/.test(r);
     return cwd > -1 && cwd < aside && aside < into && into < back && guarded && restore && tries;
   };
