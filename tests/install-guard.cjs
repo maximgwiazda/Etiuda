@@ -35,7 +35,9 @@ const regRun = args => {
 };
 /* A key this file builds, and nothing else, is asked of reg: exit 1 then means absent, which reg cannot otherwise say
    apart from a malformed name except in a localised message. */
-const KEY_OK = /^HK(CU|LM)\\Software(\\[A-Za-z0-9 ._{}()-]+)+$/i;
+/* Read only: the uninstall and install keys under Software, and the one system key that lists files waiting on a reboot's
+   delete (PendingFileRenameOperations), which the reinstall leg reads to see what an uninstall left. */
+const KEY_OK = /^(HK(CU|LM)\\Software(\\[A-Za-z0-9 ._{}()-]+)+|HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager)$/i;
 const tidy = text => String(text).replace(/\r/g, "").split("\n").map(l => l.replace(/\s+$/, "")).filter(Boolean).join("\n");
 function regQuery(key, run, value) {
   if (!KEY_OK.test(key)) throw new Error("install guard: " + JSON.stringify(key) + " is not a key it reads");
