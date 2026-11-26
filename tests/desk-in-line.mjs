@@ -456,7 +456,7 @@ try {
         return { w: cs.borderTopWidth, borderAlpha: alpha(cs.borderTopColor), c: cs.borderTopColor, bg: cs.backgroundColor,
           color: cs.color, text: (el.textContent || "").trim().slice(0, 24) };
       };
-      openSettings("about");
+      openSettings("data");
       const cardBtn = [...document.querySelectorAll("#setBody .sx-card .btn")].find((b) => b.offsetParent !== null
         && !b.classList.contains("primary") && !b.classList.contains("danger"));
       const tool = document.querySelector("#theme");

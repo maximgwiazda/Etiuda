@@ -54,8 +54,8 @@ function aboutItemHtml(it){
 }
 /** The Earlier versions page: a version headed by its number and its day, the 1.x line on its own. */
 function aboutEarlierHtml(list){
-  return list.map(r=>(r.v ? '<h3 class="about-h">'+esc(t("{VERSION}, built on {DATE}").split("{VERSION}").join(r.v)
-      .split("{DATE}").join(aboutDay(r.built)))+'</h3>' : "")
+  return list.map(r=>(r.v ? '<p class="about-h" role="heading" aria-level="3">'+esc(t("{VERSION}, built on {DATE}").split("{VERSION}").join(r.v)
+      .split("{DATE}").join(aboutDay(r.built)))+'</p>' : "")
     +'<ul class="about-new" data-i18n-skip>'+r.items.map(aboutItemHtml).join("")+'</ul>').join("");
 }
 /* The credit: copyright and the trademark notice, the licensor, then the maker line, whose {STARDUST} becomes the link. */
@@ -86,7 +86,7 @@ function aboutPageHtml(up){
   return '<div class="about-in" data-i18n-skip>'
     +'<div class="about-top"><span class="brand-tile about-tile" aria-hidden="true">'+TILE_MARK+'</span><span class="about-name">Etiuda</span></div>'
     +'<div class="about-ver"><span class="about-num">'+esc(E_VERSION)+'</span><span class="about-cap">'+cap+'</span>'+see+'</div>'
-    +'<h3 class="about-h">'+esc(t("New in this version"))+'</h3>'
+    +'<p class="about-h" role="heading" aria-level="3">'+esc(t("New in this version"))+'</p>'
     +'<ul class="about-new">'+ABOUT_NEW.map(aboutItemHtml).join("")+'</ul>'
     +accHtml("about-earlier", t("Earlier versions of Etiuda"), aboutEarlierHtml(ABOUT_EARLIER))
     +accHtml("about-licence", t("Etiuda End-User Licence Agreement"), aboutLegalHtml(), TERMS[lang]||TERMS.en)

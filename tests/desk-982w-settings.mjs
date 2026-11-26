@@ -106,7 +106,7 @@ async function readPage(page) {
     const h2 = box && box.querySelector("h2");
     const lede = box && box.querySelector("p");
     const current = nav ? [...nav.querySelectorAll("button")].filter(b => b.getAttribute("aria-current") === "page") : [];
-    const rail = nav ? [...nav.querySelectorAll("button")].map(b => b.textContent.trim()).filter(t => t && t.indexOf("Maintenance") !== 0) : [];
+    const rail = nav ? [...nav.querySelectorAll("button")].map(b => b.textContent.trim()).filter(t => t && t.indexOf("Maintenance") !== 0 && t !== "Library") : [];
     return {
       h2: h2 ? h2.textContent.trim() : "",
       lede: lede ? lede.textContent.trim() : "",

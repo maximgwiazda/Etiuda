@@ -3311,7 +3311,7 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
 .about-tile{width:40px;height:40px;flex:0 0 auto;color:var(--mark-ink);
   position:relative;top:3px}
 /* The version at display size, its caption beside it on the number's baseline. */
-.about-ver{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;margin:4px 0 14px}
+.about-ver{display:flex;flex-wrap:wrap;align-items:baseline;gap:12px 14px;margin:4px 0 14px}
 .about-ver .about-see{margin-left:auto;align-self:center;white-space:nowrap} /* plant:about-see-right */
 .about-num{font-size:54px;font-weight:300;line-height:1;letter-spacing:.5px;color:var(--ink)}
 .about-cap{font-size:13px;line-height:1.55;color:var(--dim)}
@@ -30068,7 +30068,7 @@ What is typed here stays in this browser.`;
     return "<li><b>" + esc(keyed) + "</b> " + esc(t(it.body)) + "</li>";
   }
   function aboutEarlierHtml(list2) {
-    return list2.map((r) => (r.v ? '<h3 class="about-h">' + esc(t("{VERSION}, built on {DATE}").split("{VERSION}").join(r.v).split("{DATE}").join(aboutDay(r.built))) + "</h3>" : "") + '<ul class="about-new" data-i18n-skip>' + r.items.map(aboutItemHtml).join("") + "</ul>").join("");
+    return list2.map((r) => (r.v ? '<p class="about-h" role="heading" aria-level="3">' + esc(t("{VERSION}, built on {DATE}").split("{VERSION}").join(r.v).split("{DATE}").join(aboutDay(r.built))) + "</p>" : "") + '<ul class="about-new" data-i18n-skip>' + r.items.map(aboutItemHtml).join("") + "</ul>").join("");
   }
   function aboutCredit(lang2) {
     const maker = esc(MAKER[lang2] || MAKER.en).split("{STARDUST}").join('<a href="' + STARDUST_URL + '" target="_blank" rel="noopener">Stardust</a>');
@@ -30086,7 +30086,7 @@ What is typed here stays in this browser.`;
     const lang2 = uiLang(), day = aboutDay(E_BUILT);
     const cap = esc(t("the version on this computer")) + (day ? "<br>" + esc(t("Built on {DATE}").split("{DATE}").join(day)) : "") + (up && up.lines && up.lines[1] ? "<br>" + esc(up.lines[1]) : "");
     const see = up && up.offer ? '<button type="button" class="btn about-see" id="setUpdateSee" data-e-open="update" title="' + esc(t("Opens the page of this release")) + '">' + esc(t("See what's new")) + "</button>" : "";
-    return '<div class="about-in" data-i18n-skip><div class="about-top"><span class="brand-tile about-tile" aria-hidden="true">' + TILE_MARK + '</span><span class="about-name">Etiuda</span></div><div class="about-ver"><span class="about-num">' + esc(E_VERSION) + '</span><span class="about-cap">' + cap + "</span>" + see + '</div><h3 class="about-h">' + esc(t("New in this version")) + '</h3><ul class="about-new">' + ABOUT_NEW.map(aboutItemHtml).join("") + "</ul>" + accHtml("about-earlier", t("Earlier versions of Etiuda"), aboutEarlierHtml(ABOUT_EARLIER)) + accHtml("about-licence", t("Etiuda End-User Licence Agreement"), aboutLegalHtml(), TERMS[lang2] || TERMS.en) + '<p class="about-credit">' + aboutCredit(lang2) + "</p></div>";
+    return '<div class="about-in" data-i18n-skip><div class="about-top"><span class="brand-tile about-tile" aria-hidden="true">' + TILE_MARK + '</span><span class="about-name">Etiuda</span></div><div class="about-ver"><span class="about-num">' + esc(E_VERSION) + '</span><span class="about-cap">' + cap + "</span>" + see + '</div><p class="about-h" role="heading" aria-level="3">' + esc(t("New in this version")) + '</p><ul class="about-new">' + ABOUT_NEW.map(aboutItemHtml).join("") + "</ul>" + accHtml("about-earlier", t("Earlier versions of Etiuda"), aboutEarlierHtml(ABOUT_EARLIER)) + accHtml("about-licence", t("Etiuda End-User Licence Agreement"), aboutLegalHtml(), TERMS[lang2] || TERMS.en) + '<p class="about-credit">' + aboutCredit(lang2) + "</p></div>";
   }
   function openAbout() {
     hooks.openSettings("about");
