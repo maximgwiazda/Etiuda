@@ -367,7 +367,7 @@ function buyRow(v){
 }
 function accountGroups(){
   /* NO LINE UNDER THE NAME: the placeholder names the field and the cards show what the name does. */
-  const name=row("name","user",t("Your name"),"",'<input type="text" id="setAgentName" autocomplete="off" spellcheck="false"'
+  const name=row("name","user",t("Name customers see"),"",'<input type="text" id="setAgentName" autocomplete="off" spellcheck="false"'
     +' placeholder="'+esc(t("first name"))+'" value="'+esc(agentName())+'">');
   const v=signinNow(), groups=[];
   if(signinShown(v) || signinManaged(v)) groups.push({rows:[], after:accountCardHtml(v)}); /* plant:account-managed-closed */

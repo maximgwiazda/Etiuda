@@ -8534,7 +8534,7 @@ What is typed here stays in this browser.`;
     "Use the automatic name": "Przywróć nazwę automatyczną",
     "Names the tab after the customer's first name, or New chat while there is none.": "Nadaje rozmowie imię klienta, a dopóki go nie ma, nazwę Nowa rozmowa.",
     "Open the Menu": "Otwórz Menu",
-    "Your name": "Imię agenta",
+    "Name customers see": "Nazwa widoczna dla klientów",
     "Personal": "Osobiste",
     "Later": "Później",
     "Etiuda {VERSION} is available": "Dostępna jest Etiuda {VERSION}",
@@ -12959,7 +12959,7 @@ What is typed here stays in this browser.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-11-23";
+  var E_BUILT = "2026-11-26";
 
   // src/modules/affinity.js
   var affinity_exports = {};
@@ -13211,6 +13211,7 @@ What is typed here stays in this browser.`;
   // src/modules/agent.js
   var agent_exports = {};
   __export(agent_exports, {
+    accountName: () => accountName,
     agentName: () => agentName,
     agentNameNote: () => agentNameNote,
     agentParts: () => agentParts,
@@ -15831,6 +15832,10 @@ What is typed here stays in this browser.`;
   function agentName() {
     const v = lsGet(E_AGENT_KEY);
     return v != null ? String(v) : "";
+  }
+  function accountName() {
+    const v = lsGet("eAccountName");
+    return v != null ? String(v).trim() : "";
   }
   function setAgentName(v) {
     lsSet(E_AGENT_KEY, String(v || ""));
@@ -30766,7 +30771,8 @@ What is typed here stays in this browser.`;
   }
   var named = (s, k, v) => String(s).split(k).join(v);
   function signinParts(v) {
-    const name = String(agentName() || "").trim(), prov = SIGNIN_NAMES[v.signedIn] || "";
+    const prov = SIGNIN_NAMES[v.signedIn] || "", signed = String(agentName() || "").trim();
+    const name = accountName() || signed;
     const team = signinTeam();
     return {
       initial: name ? name[0].toUpperCase() : "",
@@ -42376,7 +42382,7 @@ What is typed here stays in this browser.`;
     );
   }
   function accountGroups() {
-    const name = row("name", "user", t("Your name"), "", '<input type="text" id="setAgentName" autocomplete="off" spellcheck="false" placeholder="' + esc(t("first name")) + '" value="' + esc(agentName()) + '">');
+    const name = row("name", "user", t("Name customers see"), "", '<input type="text" id="setAgentName" autocomplete="off" spellcheck="false" placeholder="' + esc(t("first name")) + '" value="' + esc(agentName()) + '">');
     const v = signinNow(), groups = [];
     if (signinShown(v) || signinManaged(v)) groups.push({ rows: [], after: accountCardHtml(v) });
     const stranded = signinStranded(v) && !signinWaiting(v);

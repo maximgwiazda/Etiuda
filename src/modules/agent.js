@@ -37,6 +37,8 @@ const E_AGENT_KEY="eAgent";
 const E_AGENT_AUTO_KEY="eAgentAuto";
 const E_AGENT_NOTE_SEEN="eAgentNoteSeen";
 function agentName(){ const v=lsGet(E_AGENT_KEY); return v!=null?String(v):""; }
+/* The signed-in account's own name in full, kept by the shell beside the reply name and gone with the account. */
+function accountName(){ const v=lsGet("eAccountName"); return v!=null?String(v).trim():""; }
 function setAgentName(v){ lsSet(E_AGENT_KEY,String(v||"")); renderFillsSoon(); }
 function readAgentAuto(){
   const raw=lsGet(E_AGENT_AUTO_KEY);
@@ -213,6 +215,7 @@ export {
   wirePaxFill,
   agentParts,
   agentName,
+  accountName,
   setAgentName,
   typeAgentName,
   agentNameNote,

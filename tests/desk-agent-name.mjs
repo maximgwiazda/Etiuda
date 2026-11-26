@@ -27,7 +27,7 @@ const UI_LANG = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"),
 const SETTINGS_SRC = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"), "utf8");
 const ENGINE_URL = "file:///" + path.join(ROOT, "engine", "etiuda.html").replace(/\\/g, "/");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 41;
+const EXPECTED = 45;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -339,6 +339,13 @@ const parse = c => (sh ? sh.api.signinAgentNameFromClaims(c) : null);
     "an5e leaving the account forgets its full name and leaves the reply name", { d, told });
 }
 
+{
+  const at = MAIN.indexOf("function signinLeave(");
+  const body = at < 0 ? "" : MAIN.slice(at, MAIN.indexOf("\n}", at));
+  check(/typeof signinNameForget === "function"\) signinNameForget\(\)/.test(body),
+    "an5k signinLeave, the one place Sign out and a switch of account both pass, forgets the account's full name");
+}
+
 /* Part 3: Copywriter's bytes & one-time blue bubble in Settings, Account */
 {
   const hasUiStrings = UI_LANG.includes(JSON.stringify(COPY_EN.title) + ":" + JSON.stringify(COPY_PL.title))
@@ -549,7 +556,7 @@ try {
   /* Part 4: Plants for 1, 2, 5, and 6 */
   const shellPlants = [
     ["an4a plant agent-name-fill turns sign-in fill red", () => {
-      const p = loadShell(["const next = Object.assign({}, deskKeys, { eAgent: picked.name, eAgentAuto: auto }); /* plant:agent-name-fill */", "const next = Object.assign({}, deskKeys, { eAgentAuto: auto });"], { desk: {} });
+      const p = loadShell(["      patch.eAgent = picked.name; /* plant:agent-name-fill */\n", ""], { desk: {} });
       p.api.signinNameTake(jwt({ given_name: "Marek", family_name: "Zieli\u0144ski" }));
       return p.api.getDesk().eAgent !== "Marek Z.";
     }],
@@ -582,6 +589,17 @@ try {
       const p = loadShell(["if (given && family) { /* plant:agent-name-claims */", "if (false) {"], {});
       const r = p.api.signinAgentNameFromClaims({ given_name: "Marek", family_name: "Zieli\u0144ski", name: "Zieli\u0144ski, Marek" });
       return !r || r.name !== "Marek Z.";
+    }],
+    ["an5i plant account-name-take turns the kept full name red", () => {
+      const p = loadShell(["if (account && deskKeys.eAccountName !== account) patch.eAccountName = account; /* plant:account-name-take */", ""], { desk: {} });
+      p.api.signinNameTake(jwt({ given_name: "Marek", family_name: "Zielinski" }));
+      return p.api.getDesk().eAccountName !== "Marek Zielinski";
+    }],
+    ["an5j plant name-forget-leave turns the account's departure red", () => {
+      const at = MAIN.indexOf("function signinLeave(");
+      const body = MAIN.slice(at, MAIN.indexOf("\n}", at));
+      const planted = body.split("signinNameForget(); /* plant:name-forget-leave */").join("");
+      return body.indexOf("signinNameForget();") > 0 && planted.indexOf("signinNameForget();") < 0;
     }],
   ];
 
@@ -663,6 +681,20 @@ try {
       return line !== COPY_EN.whole.replace("{NAME}", "Borys");
     }],
   ];
+
+  domPlants.push(["an5l lifting plant:account-name-heading puts the reply name back in the heading", async lab => {
+    const htmlPath = path.join(lab, "account-heading.html");
+    if (await buildLiftedHtml("src/modules/signin.js", "account-name-heading", htmlPath) < 0) return false;
+    const { ctx, page } = await launchDeskPage(browser, {
+      url: "file:///" + htmlPath.replace(/\\/g, "/"),
+      desk: { eUiLang: "en", eAgent: "Marek Z.", eAgentAuto: "typed", eAccountName: "Marek Zieli\u0144ski", eAgentNoteSeen: "1" }
+    });
+    await page.evaluate(() => { hooks.openSettings("account"); });
+    await sleep(250);
+    const head = await page.evaluate(() => { const h = document.querySelector(".sgn-top .sgn-id b"); return h ? h.textContent : ""; });
+    await ctx.close();
+    return head !== "Marek Zieli\u0144ski";
+  }]);
 
   const plantLab = PLANTS_OFF ? "" : fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-agent-name-plant-"));
   try {

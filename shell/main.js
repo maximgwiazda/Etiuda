@@ -9813,6 +9813,16 @@ function signinAgentNameFromClaims(claims) {
   if (!init) return { name: s, form: "whole" };
   return { name: (words[0] + " " + init + ".").slice(0, 120), form: "initial" };
 }
+/* The account's own name from an ID token's claims, in full: given and family where both arrive, else the display name; "" where none.
+   It heads the account card and is never the reply name (signinAgentNameFromClaims), which abbreviates. */
+function signinAccountNameFromClaims(claims) {
+  if (!claims || typeof claims !== "object") return "";
+  const given = typeof claims.given_name === "string" ? signinAgentNameClean(claims.given_name) : "";
+  const family = typeof claims.family_name === "string" ? signinAgentNameClean(claims.family_name) : "";
+  const display = typeof claims.name === "string" ? signinAgentNameClean(claims.name) : "";
+  if (given && family) return (SIGNIN_NOSPACE_SCRIPT.test(given) || SIGNIN_NOSPACE_SCRIPT.test(family) ? display || given + " " + family : given + " " + family).slice(0, 120);
+  return display || given || family;
+}
 function signinAgentAutoRead(raw) {
   if (typeof raw !== "string" || !raw || raw === "typed") return null;
   try {
@@ -11594,6 +11604,7 @@ function signinLeave(s, me, sent) {
     try { unlinkOwn(path.join(catalogFolder(), "desks", me.id, SEAT_NAME)); } catch { /* not written, or the folder is away */ } /* plant:signout-unlink-own */
   }
   s.held = null;
+  if (typeof signinNameForget === "function") signinNameForget(); /* plant:name-forget-leave */
   if (typeof signinRelaySeatClear === "function") signinRelaySeatClear("out"); /* plant:relay-seat-leave */
   storeForget();
   /* Signed out, the account's organisation no longer stands in for this desk: Buy, which needs no sign-in, is offered again. */
@@ -11699,24 +11710,51 @@ function armSigninRenew() {
   if (signinTimer.unref) signinTimer.unref();
 }
 /* Fills desk.json's eAgent from a signed-in ID token when the agent has neither typed nor cleared a name,
-   marking eAgentAuto so later renewals or account switches know it came from the desk. */
+   marking eAgentAuto so later renewals or account switches know it came from the desk. The account's full name is kept beside it
+   as eAccountName whatever the reply name's state; true where the reply name was filled. */
 function signinNameTake(idToken) {
-  const picked = signinAgentNameFromClaims(signinClaims(String(idToken || "")));
-  if (!picked || !picked.name) return false;
+  const claims = signinClaims(String(idToken || ""));
+  const picked = signinAgentNameFromClaims(claims), account = signinAccountNameFromClaims(claims);
+  if (!account && (!picked || !picked.name)) return false;
   if (deskKeys === undefined) deskKeys = readDesk();
-  if (!signinCanFillAgentName(deskKeys)) return false;
-  const auto = JSON.stringify({ name: picked.name, form: picked.form });
-  if (deskKeys.eAgent === picked.name && deskKeys.eAgentAuto === auto) return false;
-  const next = Object.assign({}, deskKeys, { eAgent: picked.name, eAgentAuto: auto }); /* plant:agent-name-fill */
+  const patch = {};
+  if (account && deskKeys.eAccountName !== account) patch.eAccountName = account; /* plant:account-name-take */
+  let filled = false;
+  if (picked && picked.name && signinCanFillAgentName(deskKeys)) {
+    const auto = JSON.stringify({ name: picked.name, form: picked.form });
+    if (!(deskKeys.eAgent === picked.name && deskKeys.eAgentAuto === auto)) {
+      patch.eAgent = picked.name; /* plant:agent-name-fill */
+      patch.eAgentAuto = auto;
+      filled = true;
+    }
+  }
+  const keys = Object.keys(patch);
+  if (!keys.length) return false;
+  const next = Object.assign({}, deskKeys, patch);
   try {
     saveDeskFile(deskText(next));
     deskKeys = next;
     deskWritten = true;
-    deskSyncedTell({ eAgent: picked.name, eAgentAuto: auto }, { eAgent: {}, eAgentAuto: {} });
-    return true;
+    deskSyncedTell(patch, Object.fromEntries(keys.map(k => [k, {}])));
+    return filled;
   } catch (e) {
     console.error("etiuda: the desk could not be written - " + e.message);
     return false;
+  }
+}
+/* Leaving an account takes its full name off the desk, so the next account never shows it; the reply name is the agent's own and stays. */
+function signinNameForget() {
+  if (deskKeys === undefined) deskKeys = readDesk();
+  if (!Object.prototype.hasOwnProperty.call(deskKeys, "eAccountName")) return;
+  const next = Object.assign({}, deskKeys);
+  delete next.eAccountName;
+  try {
+    saveDeskFile(deskText(next));
+    deskKeys = next;
+    deskWritten = true;
+    deskSyncedTell({ eAccountName: null }, { eAccountName: {} });
+  } catch (e) {
+    console.error("etiuda: the desk could not be written - " + e.message);
   }
 }
 

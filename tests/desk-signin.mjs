@@ -6058,10 +6058,10 @@ check(readers.join() === "signin.js" && /function signinShown\(v\)\{ return !!\(
 const acctAt = SETTINGS.indexOf('{id:"account", icon:"user", name:t("Account")'), genAt = SETTINGS.indexOf('{id:"general", icon:"general"');
 const general = (() => { const a = SETTINGS.indexOf("function generalGroups(){"); return a < 0 ? "" : SETTINGS.slice(a, SETTINGS.indexOf("\n}", a)); })();
 const account = (() => { const a = SETTINGS.indexOf("function accountGroups(){"); return a < 0 ? "" : SETTINGS.slice(a, SETTINGS.indexOf("\n}", a)); })();
-check(acctAt > 0 && genAt > acctAt && SETTINGS.lastIndexOf("{id:", acctAt - 1) < SETTINGS.indexOf("function settingsSections(){") && /row\("name","user",t\("Your name"\)/.test(account)
+check(acctAt > 0 && genAt > acctAt && SETTINGS.lastIndexOf("{id:", acctAt - 1) < SETTINGS.indexOf("function settingsSections(){") && /row\("name","user",t\("Name customers see"\)/.test(account)
   && !/setAgentName/.test(general) && !/Team sign-in|signinRow|wireSigninRow/.test(SETTINGS),
   "ds5d Account is Settings' first section and holds the agent's name, which General no longer does; the team's sign-in row is gone");
-check(/^\s*"Your name":/m.test(fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8")) && /id="setAgentName"/.test(account)
+check(/^\s*"Name customers see":/m.test(fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8")) && /id="setAgentName"/.test(account)
   && /const n=box\.querySelector\("#setAgentName"\)|box\.querySelector\("#setAgentName"\)/.test(SETTINGS),
   "ds5e the name field keeps its id and its wiring, so it is stored on the keystroke as before");
 

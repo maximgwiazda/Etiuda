@@ -8,7 +8,7 @@ const $=s=>typeof document==="undefined" ? null : $dom(s);
 import { eHost, eOpenSetAside } from "./host.js";
 import { esc } from "./esc.js";
 import { t, uiLang, hugDottedGround } from "./ui-lang.js";
-import { agentName } from "./agent.js";
+import { agentName, accountName } from "./agent.js";
 import { teamLeads } from "./team-join.js";
 import { hooks } from "./hooks.js";
 import { catalogLoaded } from "./catalog-boot.js";
@@ -323,10 +323,11 @@ function signinTeam(){
   return l ? {lead:String(l.lead||""), team:String(l.team||"")} : null;
 }
 const named=(s,k,v)=>String(s).split(k).join(v);
-/* The parts every form draws from: who (the initial, the person's own name, the provider's name), the team. Nothing in it
-   came from the provider but which provider it is. */
+/* The parts every form draws from: who (the initial, the account's own name in full where the sign-in brought one, else the name replies
+   are signed with, the provider's name), the team. */
 function signinParts(v){
-  const name=String(agentName()||"").trim(), prov=SIGNIN_NAMES[v.signedIn]||"";
+  const prov=SIGNIN_NAMES[v.signedIn]||"", signed=String(agentName()||"").trim();
+  const name=accountName() || signed; /* plant:account-name-heading */
   const team=signinTeam();
   return {
     initial: name ? name[0].toUpperCase() : "",

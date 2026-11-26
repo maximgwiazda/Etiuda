@@ -449,7 +449,7 @@ UI_STRINGS.pl={
   "Use the automatic name":"Przywróć nazwę automatyczną",
   "Names the tab after the customer's first name, or New chat while there is none.":"Nadaje rozmowie imię klienta, a dopóki go nie ma, nazwę Nowa rozmowa.",
   "Open the Menu":"Otwórz Menu",
-  "Your name":"Imię agenta",
+  "Name customers see":"Nazwa widoczna dla klientów",
   "Personal":"Osobiste",
   "Later":"Później",
   "Etiuda {VERSION} is available":"Dostępna jest Etiuda {VERSION}",
