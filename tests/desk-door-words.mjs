@@ -951,7 +951,7 @@ if (!PLANTS_OFF) {
     ["if(ds.state===\"ended\" || ds.state===\"working\"){ /* plant:account-seat-state */", "if(false){"],
     "account_en");
   await plant("ddp11", SETTINGS_PATH,
-    ["rows.push({key:\"seat\", icon:\"check\", dot:ds.state===\"ended\", /* plant:account-seat-dot */", "rows.push({key:\"seat\", icon:\"check\", dot:false,"],
+    ["status.push({key:\"seat\", icon:\"check\", dot:ds.state===\"ended\", /* plant:account-seat-dot */", "status.push({key:\"seat\", icon:\"check\", dot:false,"],
     "account_en");
   await plant("ddp12", SETTINGS_PATH,
     ["+'<p class=\"sgn-cap\">'+esc(t(\"This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The licence service keeps the account's name and address, and shows them only to the leads and administrator of the licence it asks to join.\"))+'</p></div>'; /* plant:account-privacy-full */", "+'<p class=\"sgn-cap\">'+esc(t(\"This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev.\"))+'</p></div>';"],

@@ -6048,7 +6048,8 @@ check(outside.slice().sort().join() === expectOutside.slice().sort().join(),
 const modules = fs.readdirSync(path.join(ROOT, "src", "modules")).filter(n => n.endsWith(".js"));
 const readers = modules.filter(n => /\bsignin(State|Stop|Out|Check|Again)\b|\bsignIn\(|onSignin/.test(fs.readFileSync(path.join(ROOT, "src", "modules", n), "utf8")));
 check(readers.join() === "signin.js" && /function signinShown\(v\)\{ return !!\(v && \(v\.offered\.length \|\| v\.signedIn \|\| signinWaiting\(v\) \|\| signinStranded\(v\)\)\); \}/.test(PAGE)
-  && /if\(signinShown\(v\) \|\| signinManaged\(v\)\) groups\.push/.test(SETTINGS),
+  /* MOVED: the card's line was `if(signinShown(v) || signinManaged(v)) groups.push`; the same test is now the line that names the card, which also decides whether the name stands in it */
+  && /const card=signinShown\(v\) \|\| signinManaged\(v\);/.test(SETTINGS),
   "ds5b on the page only signin.js asks the shell, and with nothing offered and no wait for machine policy (tests/desk-managed.mjs mm-p8)"
   + " neither the door nor Account's card is drawn: " + readers.join(","));
 /* RETIRED, P3 (the folder syncer is gone): ds5c, "a folder team's mirror carries desks/<id>/seat.json to the share", which asked the syncer's

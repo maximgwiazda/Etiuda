@@ -408,10 +408,10 @@ try {
         const rows = first ? [...first.querySelectorAll(".sc-row")].filter((r) => r.offsetParent !== null) : [];
         if (rows.length < 2) return { n: rows.length };
         const list = rows[0].closest(".sc-list"), card = rows[0].closest(".sx-card");
-        const lcs = getComputedStyle(list), cs = getComputedStyle(under), ccs = card ? getComputedStyle(card) : null;
         /* the row under the first in its own column, wherever the group stands one or two to a line */
         const a = rows[0].getBoundingClientRect(), under = rows.slice(1).find((r) => Math.abs(r.getBoundingClientRect().left - a.left) < 2) || rows[1];
         const b = under.getBoundingClientRect();
+        const lcs = getComputedStyle(list), cs = getComputedStyle(under), ccs = card ? getComputedStyle(card) : null;
         let beside = 0;
         for (let i = 0; i < Math.min(rows.length, 6); i++) for (let j = i + 1; j < Math.min(rows.length, 6); j++) {
           const A = rows[i].getBoundingClientRect(), B = rows[j].getBoundingClientRect();

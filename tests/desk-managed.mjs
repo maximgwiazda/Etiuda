@@ -724,8 +724,8 @@ if (!PLANTS_OFF && S) {
   await plantShell("mmp42", ["  if (m && m.waiting === true) return !!st.held; /* plant:kept-waits */", "  /* plant:kept-waits */"], "waits");
   await plantShell("mmp20", ["return !!was && !signinSame(was, String(sub)); /* plant:other-same */", "return !signinSame(was, String(sub));"], "keeps");
   plantText("mmp21", ["  if (signinAccountKept(s)) return signinView(); /* plant:out-managed */", ""], wiringHolds);
-  await plantPage("mmp22", ["  const rows=[name], buy=!stranded && buyOffered() && !v.busy && !signinManaged(v) /* plant:buy-page-managed */", "  const rows=[name], buy=!stranded && buyOffered() && !v.busy"], "m1", "settings");
-  await plantPage("mmp23", ["    rows.push(row(\"checked\",\"clock\",", "    if(!signinManaged(v)) rows.push(row(\"checked\",\"clock\","], "m2", "settings");
+  await plantPage("mmp22", ["  const rows=named ? [] : [name], status=[], buying=[], buy=!stranded && (buyOffered() || buyPays(v)) && !v.busy && !signinManaged(v) /* plant:buy-page-managed */", "  const rows=named ? [] : [name], status=[], buying=[], buy=!stranded && (buyOffered() || buyPays(v)) && !v.busy"], "m1", "settings");
+  await plantPage("mmp23", ["    checked=row(\"checked\",\"clock\",", "    checked=signinManaged(v) ? null : row(\"checked\",\"clock\","], "m2", "settings");
   await plantPage("mmp24", ["function signinCapHolds(v){ return !(v && v.managed && (v.managed.on || v.managed.provider || !v.managed.personal)); } /* plant:cap-holds */",
     "function signinCapHolds(v){ return true; }"], "m3", "signin");
   await plantPage("mmp25", ["(c ? named(t(\"To ask for access: {CONTACT}.\"),\"{CONTACT}\",c) : t(\"Its IT department can: asking them to assign the account is enough.\")) /* plant:refused-contact */",
