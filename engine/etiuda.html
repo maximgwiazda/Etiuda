@@ -9349,7 +9349,8 @@ What is typed here stays in this browser.`;
     "Quick replies": "Szybkie odpowiedzi",
     "A word finds the reply. <kbd>Enter</kbd> copies it, and pastes it into the window you were in wherever Windows allows. <kbd>Esc</kbd> closes Quick replies.": "Wystarczy wpisać słowo. <kbd>Enter</kbd> kopiuje odpowiedź i wkleja ją do poprzedniego okna, jeśli Windows na to pozwala. <kbd>Esc</kbd> zamyka Szybkie odpowiedzi.",
     "{KEY} opens Quick replies over any program, beside the pointer. To try it, press {KEY} or click <b>Quick replies</b> here.": "{KEY} otwiera Szybkie odpowiedzi nad każdym programem, obok wskaźnika. Aby spróbować, proszę nacisnąć {KEY} albo kliknąć tu <b>Szybkie odpowiedzi</b>.",
-    "Suggested": "Propozycje",
+    "Suggested intents": "Proponowane intencje",
+    "Alt+1 to Alt+5 show an intent's replies": "Alt+1 do Alt+5 pokazują odpowiedzi danej intencji",
     "Intents suggested from the text selected before Quick replies opened. None is chosen until one is clicked.": "Intencje zaproponowane na podstawie tekstu zaznaczonego przed otwarciem Szybkich odpowiedzi. Żadna nie jest wybrana, dopóki się jej nie kliknie.",
     "Suggestions taken: {N}": "Wybrane propozycje: {N}",
     "Openings with suggestions: {N}": "Otwarcia z propozycjami: {N}",
@@ -12959,7 +12960,7 @@ What is typed here stays in this browser.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-11-23";
+  var E_BUILT = "2026-11-26";
 
   // src/modules/affinity.js
   var affinity_exports = {};
@@ -46748,6 +46749,7 @@ What is typed here stays in this browser.`;
       pasted: t("Pasted"),
       copied: t("Copied, press Ctrl+V"),
       selected: t("The words you selected. Type to change them."),
+      suggestKeys: t("Alt+1 to Alt+5 show an intent's replies"),
       /* Your own words, shown only where the shell offers a reword; {ADDRESS} is the host it names. */
       rwHead: t("Your own words?"),
       rwSpelling: t("Fix spelling"),
@@ -46894,7 +46896,7 @@ What is typed here stays in this browser.`;
     if (typeof eSuggestStandIn === "function") eSuggestStandIn();
     cachedModelKey = key;
     cachedModel = buildSuggestModel(suggestCatalog(), {
-      suggest: t("Suggested"),
+      suggest: t("Suggested intents"),
       suggestTip: t("Intents suggested from the text selected before Quick replies opened. None is chosen until one is clicked.")
     });
     return cachedModel;
