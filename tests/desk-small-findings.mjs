@@ -24,7 +24,7 @@ E.ensureOutputs();
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ENGINE_URL = "file:///" + path.join(ROOT, "engine", "etiuda.html").replace(/\\/g, "/");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 29;
+const EXPECTED = 31;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -446,6 +446,39 @@ try {
       if (await buildLiftedHtml(file, tag, htmlPath) < 0) return false;
       return !(await judge("file:///" + htmlPath.replace(/\\\\/g, "/")));
     }]);
+
+  /* sf12c: on a narrow window the row's cells give way as they did: the name keeps its room (the key beside the switch must wrap under it
+     where the cell is short, not squeeze the name to nothing). */
+  const sf12narrow = async url => {
+    const { ctx, page } = await launchDeskPage(browser, { url, width: 600 });
+    await page.evaluate(() => { openManage(); });
+    await sleep(500);
+    const r = await page.evaluate(() => {
+      const sw = '<label class="ec-priv"><input type="checkbox" class="ec-priv-sw" role="switch"><span>Private</span></label>';
+      const team = '<span class="ec-team"><span>Team catalog</span></span>';
+      const rows = [{ name: "Returns and refunds.ec", teamHtml: team, trust: "valid", print: "0123456789abcdef", team: true, ed: "rev 14", cnt: "96 cards 31 intents" },
+        { name: "Gift orders.ec", teamHtml: sw, trust: "valid", print: "0123456789abcdef", ed: "rev 1", cnt: "248 cards 75 intents" }];
+      const box = document.createElement("div");
+      box.id = "mgCatList"; box.className = "ec-list"; box.style.cssText = "position:fixed;left:260px;top:80px;width:330px;z-index:9999";
+      box.innerHTML = rows.map(o => ecRowHtml(o)).join("");
+      document.body.appendChild(box);
+      const out = [...box.querySelectorAll(".ec-row")].map(row => ({ name: Math.round(row.querySelector(".ec-name").getBoundingClientRect().width), h: Math.round(row.getBoundingClientRect().height) }));
+      box.remove();
+      return out;
+    });
+    await ctx.close();
+    return r;
+  };
+  const sf12narrowOk = r => r.every(x => x.name >= 100 && x.h <= 200);
+  {
+    const r = await sf12narrow();
+    check(sf12narrowOk(r), "sf12c at 600 px a row's name keeps 100 px or more and the row stays under 200 px tall, the key wrapping under the switch", r);
+  }
+  domPlants.push(["sf12d lifting plant:ec-whose-wrap turns sf12c red", async lab => {
+    const htmlPath = path.join(lab, "ec-whose-wrap.html");
+    if (await buildLiftedHtml("src/template.html", "ec-whose-wrap", htmlPath) < 0) return false;
+    return !sf12narrowOk(await sf12narrow("file:///" + htmlPath.replace(/\\\\/g, "/")));
+  }]);
 
   for (const [label, fn] of domPlants) {
     if (PLANTS_OFF) notRun(label + " (ETIUDA_PLANTS=off)");
